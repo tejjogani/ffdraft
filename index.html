@@ -1,9 +1,310 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8">
-<title>Yahoo Fantasy Football 2026 — Auction Draft Guide</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="refresh" content="0; url=guide.pdf">
-<style>body{font-family:system-ui;margin:0}iframe{border:0;width:100vw;height:100vh}</style>
-</head><body>
-<iframe src="guide.pdf" title="Draft Guide"></iframe>
-<noscript><a href="guide.pdf">Open the draft guide</a></noscript>
-</body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2026 Yahoo Fantasy Football — Auction Draft War Room</title>
+<style>
+  :root{
+    --ink:#161a22; --muted:#5b6572; --line:#e4e7ec; --line2:#f0f2f5; --paper:#fafbfc; --card:#fff;
+    --purple:#6001d2; --purple-wash:#f2ecff; --money:#157347;
+    --qb:#b7791f; --rb:#157347; --wr:#1d4ed8; --te:#7c3aed;
+    --mono:ui-monospace,"SF Mono",Menlo,monospace; --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--sans);color:var(--ink);background:var(--paper);line-height:1.55;font-size:15.5px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:960px;margin:0 auto;padding:0 18px 80px}
+  a{color:var(--purple)}
+  header.hero{background:linear-gradient(135deg,#2a0a5e,#6001d2);color:#fff;padding:34px 0 30px;margin-bottom:8px}
+  header.hero .wrap{padding-bottom:0}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#d9c7ff;margin:0}
+  h1{font-size:clamp(28px,5vw,44px);line-height:1.03;letter-spacing:-.02em;margin:8px 0 6px;font-weight:800}
+  .meta{color:#e6dcff;font-size:14.5px;margin:0}
+  .plan{margin-top:16px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:12px;padding:12px 16px;font-size:15.5px}
+  .plan b{color:#fff}
+  .pdfbtn{display:inline-block;margin-top:14px;background:#fff;color:var(--purple);font-weight:700;text-decoration:none;padding:8px 14px;border-radius:9px;font-size:14px}
+  nav.toc{position:sticky;top:0;z-index:5;background:rgba(250,251,252,.94);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);margin-bottom:26px}
+  nav.toc .wrap{padding:9px 18px;display:flex;gap:6px 14px;flex-wrap:wrap;font-size:13px}
+  nav.toc a{color:var(--muted);text-decoration:none;white-space:nowrap}
+  nav.toc a:hover{color:var(--purple)}
+  section{margin-top:34px;scroll-margin-top:52px}
+  h2{font-size:22px;letter-spacing:-.01em;margin:0 0 4px;display:flex;align-items:center;gap:10px}
+  h2 .num{font-family:var(--mono);font-size:13px;color:#fff;background:var(--purple);border-radius:7px;padding:3px 8px}
+  .note{color:var(--muted);font-size:14px;margin:4px 0 14px;max-width:70ch}
+  .callout{background:var(--purple-wash);border:1px solid #e2d5ff;border-radius:10px;padding:12px 15px;font-size:14.5px;margin:14px 0}
+  .callout b{color:#4a0aa0}
+  .tw{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+  table{border-collapse:collapse;width:100%;min-width:520px;font-size:14.5px}
+  th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--line2);vertical-align:top}
+  thead th{background:#f6f7f9;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700;border-bottom:1px solid var(--line)}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover td{background:#fcfbff}
+  td.name{font-weight:600;white-space:nowrap}
+  td.team{font-family:var(--mono);font-size:12.5px;color:var(--muted)}
+  td.buy,td.max,td.tgt{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+  td.max{font-weight:700;color:var(--money)}
+  th.max{color:var(--money)}
+  .rank{font-family:var(--mono);color:var(--muted);width:2ch}
+  .chip{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;color:#fff;border-radius:6px;padding:2px 8px;text-transform:uppercase}
+  .qb{background:var(--qb)}.rb{background:var(--rb)}.wr{background:var(--wr)}.te{background:var(--te)}
+  ul.check{list-style:none;padding:0;margin:0}
+  ul.check li{padding:7px 0 7px 30px;position:relative;border-top:1px solid var(--line2)}
+  ul.check li:first-child{border-top:0}
+  ul.check li::before{content:"▢";position:absolute;left:4px;color:var(--purple);font-size:15px}
+  ul.src{font-size:13.5px;color:var(--muted)}
+  ul.src li{margin:4px 0}
+  footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);color:var(--muted);font-size:13px;font-family:var(--mono)}
+  code.fmt{display:block;background:#161a22;color:#dfe8e6;font-family:var(--mono);font-size:13px;padding:12px 14px;border-radius:10px;overflow-x:auto;white-space:pre-wrap}
+</style>
+</head>
+<body>
+
+<header class="hero"><div class="wrap">
+  <p class="eyebrow">Auction Draft War Room</p>
+  <h1>2026 Yahoo Fantasy Football</h1>
+  <p class="meta">12-team &bull; $200 salary cap &bull; Half-PPR &bull; Superflex &bull; draft-day guide &bull; Aug. 29, 2026</p>
+  <div class="plan"><b>The one-sentence plan:</b> Buy two usable starting QBs without overpaying, acquire one premium RB and one premium WR, stay price-disciplined, and let the room’s mistakes create discounts for you.</div>
+  <a class="pdfbtn" href="guide.pdf">↓ PDF version</a>
+</div></header>
+
+<nav class="toc"><div class="wrap">
+  <a href="#rules">Rules</a><a href="#budget">Budget</a><a href="#qb">QBs</a><a href="#rb">RBs</a>
+  <a href="#wr">WRs</a><a href="#te">TEs</a><a href="#builds">Builds</a><a href="#nom">Nomination</a>
+  <a href="#dash">Live dashboard</a><a href="#appendix">Appendix</a><a href="#checklist">Checklist</a>
+</div></nav>
+
+<div class="wrap">
+
+<section id="rules">
+  <h2><span class="num">1</span> Keep this open during the draft</h2>
+  <div class="tw"><table>
+    <thead><tr><th>Rule</th><th>What to do</th></tr></thead>
+    <tbody>
+      <tr><td class="name">Nomination</td><td>Nominate at $1 almost always. Early: nominate expensive stars you can live without. Late: nominate players you actually want.</td></tr>
+      <tr><td class="name">Bidding</td><td>Before you click Bid, know your max. At max + $1, stop. You did not “lose” — you saved your budget.</td></tr>
+      <tr><td class="name">Superflex</td><td>Plan to start a second QB in Q/W/R/T. In a 12-team league, QB scarcity is real.</td></tr>
+      <tr><td class="name">K / DEF</td><td>$1 each. Do not spend meaningful capital here.</td></tr>
+      <tr><td class="name">Bench</td><td>Prefer upside RB/WR and possibly QB3 over safe low-ceiling veterans.</td></tr>
+      <tr><td class="name">Budget floor</td><td>Always keep at least $1 for every empty roster slot.</td></tr>
+      <tr><td class="name">Endgame</td><td>Do not finish with $10–$20 unused. Unspent auction dollars score zero.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><b>Fast decision rule:</b> Current bid ≤ 85% of your max → bid comfortably. 86–100% → bid only if roster need is real. Above max → stop, unless a position is about to become scarce, in which case allow only a small <b>+$2 to +$4</b> scarcity premium.</div>
+</section>
+
+<section id="budget">
+  <h2><span class="num">2</span> Budget target</h2>
+  <div class="tw"><table>
+    <thead><tr><th>Bucket</th><th class="max">Target</th><th>Working range</th></tr></thead>
+    <tbody>
+      <tr><td class="name">QB1</td><td class="max">$32</td><td class="buy">$25–$40</td></tr>
+      <tr><td class="name">QB2</td><td class="max">$23</td><td class="buy">$17–$30</td></tr>
+      <tr><td class="name">RB1</td><td class="max">$30</td><td class="buy">$25–$40</td></tr>
+      <tr><td class="name">RB2</td><td class="max">$16</td><td class="buy">$10–$22</td></tr>
+      <tr><td class="name">WR1</td><td class="max">$30</td><td class="buy">$25–$40</td></tr>
+      <tr><td class="name">WR2</td><td class="max">$16</td><td class="buy">$10–$22</td></tr>
+      <tr><td class="name">TE</td><td class="max">$7</td><td class="buy">$3–$12</td></tr>
+      <tr><td class="name">Flex</td><td class="max">$12</td><td class="buy">$6–$18</td></tr>
+      <tr><td class="name">Bench ×5</td><td class="max">$22</td><td class="buy">$1–$6 each</td></tr>
+      <tr><td class="name">K + DEF</td><td class="max">$2</td><td class="buy">$1 each</td></tr>
+      <tr><td class="name">Flex reserve</td><td class="max">$10</td><td>Move to the best bargains</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="qb">
+  <h2><span class="num">3</span> <span class="chip qb">QB</span> Player board — Quarterbacks</h2>
+  <p class="note">Working maximums for this specific draft — blending 2026 Superflex/half-PPR consensus, auction anchors, QB scarcity, and a $200 cap. If the room is dramatically different, update live.</p>
+  <div class="tw"><table>
+    <thead><tr><th class="rank">#</th><th>Quarterback</th><th>Team</th><th>Good buy</th><th class="max">Max</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td class="rank">1</td><td class="name">Josh Allen</td><td class="team">BUF</td><td class="buy">$42–$46</td><td class="max">$50</td><td>Elite anchor</td></tr>
+      <tr><td class="rank">2</td><td class="name">Lamar Jackson</td><td class="team">BAL</td><td class="buy">$32–$35</td><td class="max">$39</td><td>Elite; rushing floor</td></tr>
+      <tr><td class="rank">3</td><td class="name">Drake Maye</td><td class="team">NE</td><td class="buy">$29–$32</td><td class="max">$35</td><td>Elite/near-elite</td></tr>
+      <tr><td class="rank">4</td><td class="name">Jayden Daniels</td><td class="team">WAS</td><td class="buy">$28–$31</td><td class="max">$34</td><td>High-upside QB1</td></tr>
+      <tr><td class="rank">5</td><td class="name">Joe Burrow</td><td class="team">CIN</td><td class="buy">$27–$30</td><td class="max">$33</td><td>Strong QB1</td></tr>
+      <tr><td class="rank">6</td><td class="name">Jalen Hurts</td><td class="team">PHI</td><td class="buy">$27–$30</td><td class="max">$33</td><td>Strong QB1</td></tr>
+      <tr><td class="rank">7</td><td class="name">Trevor Lawrence</td><td class="team">JAC</td><td class="buy">$22–$25</td><td class="max">$28</td><td>Good value QB1/2</td></tr>
+      <tr><td class="rank">8</td><td class="name">Justin Herbert</td><td class="team">LAC</td><td class="buy">$21–$24</td><td class="max">$27</td><td>Preferred QB2 value</td></tr>
+      <tr><td class="rank">9</td><td class="name">Brock Purdy</td><td class="team">SF</td><td class="buy">$21–$24</td><td class="max">$27</td><td>Preferred QB2 value</td></tr>
+      <tr><td class="rank">10</td><td class="name">Caleb Williams</td><td class="team">CHI</td><td class="buy">$21–$24</td><td class="max">$27</td><td>Upside QB2</td></tr>
+      <tr><td class="rank">11</td><td class="name">Dak Prescott</td><td class="team">DAL</td><td class="buy">$20–$23</td><td class="max">$26</td><td>Stable QB2</td></tr>
+      <tr><td class="rank">12</td><td class="name">Baker Mayfield</td><td class="team">TB</td><td class="buy">$16–$20</td><td class="max">$22</td><td>Later QB2</td></tr>
+      <tr><td class="rank">13</td><td class="name">Kyler Murray</td><td class="team">ARI</td><td class="buy">$15–$19</td><td class="max">$21</td><td>Later QB2</td></tr>
+      <tr><td class="rank">14</td><td class="name">C.J. Stroud</td><td class="team">HOU</td><td class="buy">$13–$17</td><td class="max">$19</td><td>Discount target</td></tr>
+      <tr><td class="rank">15</td><td class="name">Sam Darnold</td><td class="team">SEA</td><td class="buy">$8–$12</td><td class="max">$14</td><td>Emergency QB2 / QB3</td></tr>
+      <tr><td class="rank">16</td><td class="name">Daniel Jones</td><td class="team">IND</td><td class="buy">$7–$11</td><td class="max">$13</td><td>Emergency QB2 / QB3</td></tr>
+      <tr><td class="rank">17</td><td class="name">Cam Ward</td><td class="team">TEN</td><td class="buy">$6–$10</td><td class="max">$12</td><td>Upside QB3</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><b>QB goal:</b> best outcome is roughly <b>$50–$65 total</b> for QB1 + QB2. Paying $65–$72 can still work if one is elite. Avoid spending ~$90–$100 on two QBs unless the rest of the room has created absurd bargains elsewhere.</div>
+</section>
+
+<section id="rb">
+  <h2><span class="num">4</span> <span class="chip rb">RB</span> Player board — Running Backs</h2>
+  <div class="tw"><table>
+    <thead><tr><th class="rank">#</th><th>Running back</th><th>Team</th><th>Good buy</th><th class="max">Max</th></tr></thead>
+    <tbody>
+      <tr><td class="rank">1</td><td class="name">Jahmyr Gibbs</td><td class="team">DET</td><td class="buy">$43–$47</td><td class="max">$50</td></tr>
+      <tr><td class="rank">2</td><td class="name">Bijan Robinson</td><td class="team">ATL</td><td class="buy">$41–$45</td><td class="max">$48</td></tr>
+      <tr><td class="rank">3</td><td class="name">Christian McCaffrey</td><td class="team">SF</td><td class="buy">$36–$40</td><td class="max">$44</td></tr>
+      <tr><td class="rank">4</td><td class="name">Jonathan Taylor</td><td class="team">IND</td><td class="buy">$34–$38</td><td class="max">$41</td></tr>
+      <tr><td class="rank">5</td><td class="name">James Cook III</td><td class="team">BUF</td><td class="buy">$29–$33</td><td class="max">$36</td></tr>
+      <tr><td class="rank">6</td><td class="name">Chase Brown</td><td class="team">CIN</td><td class="buy">$27–$31</td><td class="max">$34</td></tr>
+      <tr><td class="rank">7</td><td class="name">Kenneth Walker III</td><td class="team">KC</td><td class="buy">$25–$29</td><td class="max">$32</td></tr>
+      <tr><td class="rank">8</td><td class="name">De'Von Achane</td><td class="team">MIA</td><td class="buy">$25–$29</td><td class="max">$32</td></tr>
+      <tr><td class="rank">9</td><td class="name">Omarion Hampton</td><td class="team">LAC</td><td class="buy">$23–$27</td><td class="max">$30</td></tr>
+      <tr><td class="rank">10</td><td class="name">Saquon Barkley</td><td class="team">PHI</td><td class="buy">$24–$28</td><td class="max">$31</td></tr>
+      <tr><td class="rank">11</td><td class="name">Ashton Jeanty</td><td class="team">LV</td><td class="buy">$22–$26</td><td class="max">$29</td></tr>
+      <tr><td class="rank">12</td><td class="name">Derrick Henry</td><td class="team">BAL</td><td class="buy">$20–$24</td><td class="max">$27</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">Buy one premium option if the price is fair, then stay flexible on RB2. Do not force two expensive RBs in a Superflex auction.</p>
+</section>
+
+<section id="wr">
+  <h2><span class="num">5</span> <span class="chip wr">WR</span> Player board — Wide Receivers</h2>
+  <div class="tw"><table>
+    <thead><tr><th class="rank">#</th><th>Wide receiver</th><th>Team</th><th>Good buy</th><th class="max">Max</th></tr></thead>
+    <tbody>
+      <tr><td class="rank">1</td><td class="name">Puka Nacua</td><td class="team">LAR</td><td class="buy">$40–$44</td><td class="max">$47</td></tr>
+      <tr><td class="rank">2</td><td class="name">Ja'Marr Chase</td><td class="team">CIN</td><td class="buy">$40–$44</td><td class="max">$48</td></tr>
+      <tr><td class="rank">3</td><td class="name">Amon-Ra St. Brown</td><td class="team">DET</td><td class="buy">$36–$40</td><td class="max">$43</td></tr>
+      <tr><td class="rank">4</td><td class="name">Jaxon Smith-Njigba</td><td class="team">SEA</td><td class="buy">$35–$39</td><td class="max">$42</td></tr>
+      <tr><td class="rank">5</td><td class="name">CeeDee Lamb</td><td class="team">DAL</td><td class="buy">$31–$35</td><td class="max">$38</td></tr>
+      <tr><td class="rank">6</td><td class="name">Justin Jefferson</td><td class="team">MIN</td><td class="buy">$31–$35</td><td class="max">$38</td></tr>
+      <tr><td class="rank">7</td><td class="name">Drake London</td><td class="team">ATL</td><td class="buy">$27–$31</td><td class="max">$34</td></tr>
+      <tr><td class="rank">8</td><td class="name">A.J. Brown</td><td class="team">NE</td><td class="buy">$25–$29</td><td class="max">$32</td></tr>
+      <tr><td class="rank">9</td><td class="name">Nico Collins</td><td class="team">HOU</td><td class="buy">$24–$28</td><td class="max">$31</td></tr>
+      <tr><td class="rank">10</td><td class="name">George Pickens</td><td class="team">DAL</td><td class="buy">$21–$25</td><td class="max">$28</td></tr>
+      <tr><td class="rank">11</td><td class="name">Chris Olave</td><td class="team">NO</td><td class="buy">$19–$23</td><td class="max">$26</td></tr>
+      <tr><td class="rank">12</td><td class="name">Rashee Rice</td><td class="team">KC</td><td class="buy">$18–$22</td><td class="max">$25</td></tr>
+      <tr><td class="rank">13</td><td class="name">Malik Nabers</td><td class="team">NYG</td><td class="buy">$17–$21</td><td class="max">$24</td></tr>
+      <tr><td class="rank">14</td><td class="name">DeVonta Smith</td><td class="team">PHI</td><td class="buy">$15–$19</td><td class="max">$22</td></tr>
+      <tr><td class="rank">15</td><td class="name">Zay Flowers</td><td class="team">BAL</td><td class="buy">$15–$19</td><td class="max">$22</td></tr>
+      <tr><td class="rank">16</td><td class="name">Tee Higgins</td><td class="team">CIN</td><td class="buy">$14–$18</td><td class="max">$21</td></tr>
+      <tr><td class="rank">17</td><td class="name">Ladd McConkey</td><td class="team">LAC</td><td class="buy">$13–$17</td><td class="max">$20</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note">Because half-PPR still rewards receptions, a premium WR is valuable — but WR depth is usually better than QB depth. Let an overpriced WR go if similar tiers remain.</p>
+</section>
+
+<section id="te">
+  <h2><span class="num">6</span> <span class="chip te">TE</span> Player board — Tight Ends</h2>
+  <div class="tw"><table>
+    <thead><tr><th class="rank">#</th><th>Tight end</th><th>Team</th><th>Good buy</th><th class="max">Max</th></tr></thead>
+    <tbody>
+      <tr><td class="rank">1</td><td class="name">Brock Bowers</td><td class="team">LV</td><td class="buy">$12–$16</td><td class="max">$19</td></tr>
+      <tr><td class="rank">2</td><td class="name">Trey McBride</td><td class="team">ARI</td><td class="buy">$10–$14</td><td class="max">$17</td></tr>
+      <tr><td class="rank">3</td><td class="name">Colston Loveland</td><td class="team">CHI</td><td class="buy">$6–$9</td><td class="max">$11</td></tr>
+      <tr><td class="rank">4</td><td class="name">Tyler Warren</td><td class="team">IND</td><td class="buy">$6–$9</td><td class="max">$11</td></tr>
+      <tr><td class="rank">5</td><td class="name">Tucker Kraft</td><td class="team">GB</td><td class="buy">$3–$6</td><td class="max">$8</td></tr>
+      <tr><td class="rank">6</td><td class="name">Sam LaPorta</td><td class="team">DET</td><td class="buy">$3–$6</td><td class="max">$8</td></tr>
+      <tr><td class="rank">7</td><td class="name">Harold Fannin Jr.</td><td class="team">CLE</td><td class="buy">$2–$5</td><td class="max">$7</td></tr>
+      <tr><td class="rank">8</td><td class="name">Kyle Pitts Sr.</td><td class="team">ATL</td><td class="buy">$2–$5</td><td class="max">$7</td></tr>
+      <tr><td class="rank">9</td><td class="name">George Kittle</td><td class="team">SF</td><td class="buy">$2–$4</td><td class="max">$6</td></tr>
+      <tr><td class="rank">10</td><td class="name">Travis Kelce</td><td class="team">KC</td><td class="buy">$2–$4</td><td class="max">$6</td></tr>
+      <tr><td class="rank">11</td><td class="name">Dalton Kincaid</td><td class="team">BUF</td><td class="buy">$1–$3</td><td class="max">$5</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><b>TE rule:</b> don’t chase an elite TE just because the top names disappear. If Bowers/McBride get expensive, pivot to a $3–$8 tier and spend the savings at QB/RB/WR.</div>
+</section>
+
+<section id="builds">
+  <h2><span class="num">7</span> Roster combinations that work</h2>
+  <p class="note">Portfolio shapes, not fixed shopping lists — names are interchangeable within a tier. This shows what a healthy $200 allocation can look like.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Build</th><th>Example allocation</th><th class="max">Total</th><th>When it works</th></tr></thead>
+    <tbody>
+      <tr><td class="name">A. Balanced <span class="chip" style="background:var(--money)">Preferred</span></td><td>Lamar $34 + Herbert $23 + James Cook $31 + RB2 $16 + Amon-Ra $37 + WR2 $16 + TE $6 + Flex $12 + bench $22 + K/DEF $2</td><td class="max">$199</td><td>Strong everywhere; easiest build to execute.</td></tr>
+      <tr><td class="name">B. Elite QB anchor</td><td>Allen $45 + Purdy $23 + RB1 $28 + RB2 $14 + WR1 $31 + WR2 $15 + TE $5 + Flex $12 + bench $25 + K/DEF $2</td><td class="max">$200</td><td>Allen premium without destroying depth.</td></tr>
+      <tr><td class="name">C. Two value QBs</td><td>Burrow $29 + Herbert $23 + Gibbs $46 + RB2 $13 + WR1 $30 + WR2 $15 + TE $5 + Flex $12 + bench $25 + K/DEF $2</td><td class="max">$200</td><td>Spend QB savings on one true RB star.</td></tr>
+      <tr><td class="name">D. WR-heavy</td><td>Maye $31 + Lawrence $24 + RB1 $27 + RB2 $14 + Chase $43 + WR2 $17 + TE $5 + Flex $13 + bench $24 + K/DEF $2</td><td class="max">$200</td><td>Useful if elite WRs are cheaper than elite RBs.</td></tr>
+      <tr><td class="name">E. Room goes crazy early</td><td>QB1 $28 + QB2 $22 + RB1 $28 + RB2 $18 + WR1 $29 + WR2 $19 + TE $7 + Flex $15 + bench $32 + K/DEF $2</td><td class="max">$200</td><td>Wait, then overwhelm cash-poor opponents in the middle/endgame.</td></tr>
+      <tr><td class="name">F. Stars-and-scrubs</td><td>Elite QB $45 + elite RB/WR $45 + QB2 $22 + premium RB/WR $30 + remaining starters $35 + bench/K/DEF $23</td><td class="max">$200</td><td>High ceiling, but only if stars are at or below fair value; less forgiving.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><b>Combination rules:</b> QB1 + QB2 → $50–$65 total ($65–$72 fine if one is elite). Secure at least one premium RB or WR (~$28–$45). Don’t require both premium RB <em>and</em> WR if the room prices them irrationally — take the discounted side. Avoid stacking two very expensive players at the same replaceable position unless both are discounts. By 6–7 core players, keep enough cash to win late $5–$15 auctions, not just $1 fill-ins.</div>
+</section>
+
+<section id="nom">
+  <h2><span class="num">8</span> Nomination strategy</h2>
+  <div class="tw"><table>
+    <thead><tr><th>Draft phase</th><th>Nominate</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td class="name">First ~25%</td><td>Popular expensive stars you do NOT need</td><td>$1 nomination. Forces competitors to reveal willingness to pay and drains budgets if they overbid.</td></tr>
+      <tr><td class="name">Middle</td><td>Positions your opponents still need</td><td>Can trigger bidding wars and improve later prices at the positions you actually want.</td></tr>
+      <tr><td class="name">When you see a bargain tier</td><td>A player you want</td><td>$1 nomination. If demand is weak, you can capture him cheaply.</td></tr>
+      <tr><td class="name">Late</td><td>Your actual targets</td><td>Budgets are constrained. Know every opponent’s max possible bid.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><b>Opening price:</b> default opening nomination = $1. The opening price is not your valuation — starting at $1 maximizes information and lets the room set the price. Only open higher late if you know the room cannot meaningfully contest it.</div>
+</section>
+
+<section id="dash">
+  <h2><span class="num">9</span> Live auction dashboard — what to track</h2>
+  <div class="tw"><table>
+    <thead><tr><th>Track</th><th>Signal</th><th>Your response</th></tr></thead>
+    <tbody>
+      <tr><td class="name">QB count</td><td>How many usable starting QBs remain vs. teams needing QB2</td><td>If remaining QBs ≤ needy teams + 2, become more aggressive. Allow a small scarcity premium.</td></tr>
+      <tr><td class="name">Money</td><td>Each manager’s remaining $</td><td>If you have more buying power than all interested rivals, do not bid against yourself.</td></tr>
+      <tr><td class="name">Roster needs</td><td>Who still needs QB/RB/WR/TE</td><td>Low demand = wait for discounts. High demand + thin supply = act.</td></tr>
+      <tr><td class="name">Observed inflation</td><td>Sale price vs. this sheet’s max</td><td>If the first 5–10 stars sell 15–25% above anchors, switch to a patience/value build.</td></tr>
+      <tr><td class="name">Observed deflation</td><td>Stars repeatedly sell below anchors</td><td>Stop waiting. Buy discounted elite talent.</td></tr>
+      <tr><td class="name">Your spend</td><td>Remaining $ and empty spots</td><td>Max legal bid = remaining money − $1 for every other empty slot.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note" style="margin-top:14px"><b>When to message during the draft — send this format:</b></p>
+  <code class="fmt">PLAYER: ___ | CURRENT BID: $___ | MY MONEY: $___ | MY ROSTER: ___ | NOTABLE SALES: ___</code>
+  <p class="note">Reply comes fast: <b>BID TO $X / STOP / NOMINATE X / WAIT.</b></p>
+</section>
+
+<section id="appendix">
+  <h2><span class="num">10</span> Appendix — why these players and prices?</h2>
+  <p class="note">Not a prediction that a player will outperform — a decision framework. Auction value = football projection + market structure.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Data input</th><th>What it tells us</th><th>How it affects the sheet</th></tr></thead>
+    <tbody>
+      <tr><td class="name">2026 Half-PPR consensus rankings</td><td>Cross-expert ordering of RB/WR/TE talent + expected production</td><td>Defines player tiers and substitutes rather than relying on one analyst.</td></tr>
+      <tr><td class="name">2026 Superflex consensus rankings</td><td>How QB value changes when a second QB can start</td><td>Raises QB priority materially vs. ordinary 1-QB fantasy.</td></tr>
+      <tr><td class="name">Auction market values</td><td>What comparable $200 auction rooms are paying</td><td>Provides a market anchor so “good player” doesn’t become “pay any price.”</td></tr>
+      <tr><td class="name">Projected points / replacement value</td><td>How much a player adds above the next usable alternative</td><td>Explains why scarce positions can be worth more despite similar raw rankings.</td></tr>
+      <tr><td class="name">Positional scarcity</td><td>How many viable starters exist vs. 12 roster demands</td><td>Most important live adjustment for QB2 in this league.</td></tr>
+      <tr><td class="name">Injury / uncertainty</td><td>Probability that projected role or availability changes</td><td>Reason to avoid blindly paying a full premium for fragile/uncertain profiles.</td></tr>
+      <tr><td class="name">Live room behavior</td><td>Actual sale prices and remaining budgets in your friends’ draft</td><td>Overrides static estimates when the local market is clearly inflated or deflated.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="note" style="margin-top:14px"><b>Source snapshot (checked Aug. 29, 2026):</b></p>
+  <ul class="src">
+    <li>FantasyPros — 2026 Half-PPR Expert Consensus Rankings</li>
+    <li>FantasyPros — 2026 Half-PPR Superflex Expert Consensus Rankings</li>
+    <li>FantasyPros — 2026 positional RB/WR/TE/QB rankings</li>
+    <li>DraftSharks — 2026 Half-PPR Superflex auction values &amp; 3D valuation methodology</li>
+    <li>DraftSharks — 2026 Superflex Half-PPR rankings / 3D values</li>
+    <li>CBS Sports — 2026 Fantasy Football draft prep, mocks, sleepers &amp; auction guidance</li>
+  </ul>
+  <div class="callout"><b>Important limitation:</b> published auction values are model/market anchors and may assume slightly different roster templates. Your exact Yahoo scoring + Superflex roster, plus the live behavior of the other 11 managers, should override any static dollar estimate. The “Max” column is a working <em>stop price</em>, not a promise of true value.</div>
+</section>
+
+<section id="checklist">
+  <h2><span class="num">11</span> Final 60-second checklist</h2>
+  <ul class="check">
+    <li>Open the Yahoo draft room 10–15 minutes early.</li>
+    <li>Keep this guide open beside it.</li>
+    <li>Plan for two starting QBs — but don’t panic-buy the first two nominated.</li>
+    <li>Nominate $1 early. Use stars you can happily let others overpay for.</li>
+    <li>Before every bid, look at the Max column.</li>
+    <li>If a player goes above Max and alternatives remain: <b>STOP</b>.</li>
+    <li>Watch remaining QB supply and teams still needing QB2.</li>
+    <li>Watch opponents’ remaining cash — late buying power is leverage.</li>
+    <li>$1 kicker. $1 defense.</li>
+    <li>Use nearly all $200 by the end.</li>
+    <li>Send the live format above whenever the room changes materially.</li>
+  </ul>
+</section>
+
+<footer>2026 Yahoo Auction Draft War Room &bull; Aug. 29, 2026 &bull; Values are decision anchors, not guarantees &bull; adjust to the room</footer>
+
+</div>
+</body>
+</html>
