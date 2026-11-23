@@ -51,7 +51,8 @@ export function meshSdf(
     return v === 0 ? 1e-9 : v
   }
   const H = block * h
-  const reach = H * Math.sqrt(3) * 0.5 + h
+  // Generous margin: smooth unions and varying sections are only roughly 1-Lipschitz.
+  const reach = (H * Math.sqrt(3) * 0.5 + h) * 1.6
   const local = new Float64Array((block + 1) ** 3)
   const ids = new Float64Array((block + 1) ** 3)
 
