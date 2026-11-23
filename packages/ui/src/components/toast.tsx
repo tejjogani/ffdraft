@@ -24,8 +24,10 @@ export const toast = (o: ToastOptions): string =>
     actionProps: o.action ? { children: o.action.label, onClick: o.action.onClick } : undefined,
   })
 
-toast.error = (title: ReactNode, description?: ReactNode) => toast({ title, description, type: 'error' })
-toast.success = (title: ReactNode, description?: ReactNode) => toast({ title, description, type: 'success' })
+toast.error = (title: ReactNode, description?: ReactNode) =>
+  toast({ title, description, type: 'error' })
+toast.success = (title: ReactNode, description?: ReactNode) =>
+  toast({ title, description, type: 'success' })
 toast.dismiss = (id: string) => manager.close(id)
 
 export function ToastProvider({ children }: { children: ReactNode }) {

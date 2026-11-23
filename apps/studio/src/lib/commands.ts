@@ -54,12 +54,17 @@ export function registerCommands(commands: Command[]): () => void {
 export function useRegisterCommands(commands: Command[]): void {
   const latest = useRef(commands)
   latest.current = commands
-  const signature = commands.map((c) => `${c.id}\u0000${c.title}\u0000${c.shortcut ?? ''}`).join('\u0001')
+  const signature = commands
+    .map((c) => `${c.id}\u0000${c.title}\u0000${c.shortcut ?? ''}`)
+    .join('\u0001')
   // biome-ignore lint/correctness/useExhaustiveDependencies: `signature` captures everything the registry shows
   useEffect(
     () =>
       registerCommands(
-        latest.current.map((c) => ({ ...c, run: () => latest.current.find((x) => x.id === c.id)?.run() })),
+        latest.current.map((c) => ({
+          ...c,
+          run: () => latest.current.find((x) => x.id === c.id)?.run(),
+        })),
       ),
     [signature],
   )

@@ -5,11 +5,13 @@ import { THEME_STORAGE_KEY } from './theme-boot'
 export type ThemePreference = 'system' | 'light' | 'dark'
 export type ResolvedTheme = 'light' | 'dark'
 
-const media = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)') : null
+const media =
+  typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)') : null
 const listeners = new Set<() => void>()
 let preference: ThemePreference = readStored<ThemePreference>(THEME_STORAGE_KEY, 'system')
 
-const resolve = (p: ThemePreference): ResolvedTheme => (p === 'system' ? (media?.matches ? 'dark' : 'light') : p)
+const resolve = (p: ThemePreference): ResolvedTheme =>
+  p === 'system' ? (media?.matches ? 'dark' : 'light') : p
 
 function apply() {
   if (typeof document !== 'undefined') document.documentElement.dataset.theme = resolve(preference)
@@ -33,7 +35,14 @@ const subscribe = (l: () => void) => {
 const snapshot = () => `${preference}|${resolve(preference)}`
 
 /** The theme preference (persisted, follows the system by default) and what it resolves to. */
-export function useTheme(): { preference: ThemePreference; resolved: ResolvedTheme; setTheme: typeof setTheme } {
-  const [p, r] = useSyncExternalStore(subscribe, snapshot).split('|') as [ThemePreference, ResolvedTheme]
+export function useTheme(): {
+  preference: ThemePreference
+  resolved: ResolvedTheme
+  setTheme: typeof setTheme
+} {
+  const [p, r] = useSyncExternalStore(subscribe, snapshot).split('|') as [
+    ThemePreference,
+    ResolvedTheme,
+  ]
   return { preference: p, resolved: r, setTheme }
 }

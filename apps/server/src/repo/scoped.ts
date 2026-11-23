@@ -1,4 +1,4 @@
-import { type SQL, and, count, eq } from 'drizzle-orm'
+import { and, count, eq, type SQL } from 'drizzle-orm'
 import type { PgColumn, PgTable, SelectedFields } from 'drizzle-orm/pg-core'
 import type { Db } from '../db/client'
 
@@ -102,6 +102,9 @@ export class ScopedTable<T extends PgTable, K extends keyof T['$inferInsert'] & 
   }
 
   async delete(cond: SQL): Promise<T['$inferSelect'][]> {
-    return (await this.#db.delete(this.table).where(this.where(cond)).returning()) as T['$inferSelect'][]
+    return (await this.#db
+      .delete(this.table)
+      .where(this.where(cond))
+      .returning()) as T['$inferSelect'][]
   }
 }

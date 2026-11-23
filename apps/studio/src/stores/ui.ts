@@ -29,7 +29,10 @@ export const useUI = create<UIState>()(
     }),
     {
       name: 'pave:ui',
-      partialize: (s) => ({ sidebarCollapsed: s.sidebarCollapsed, expandedCollections: s.expandedCollections }),
+      partialize: (s) => ({
+        sidebarCollapsed: s.sidebarCollapsed,
+        expandedCollections: s.expandedCollections,
+      }),
     },
   ),
 )

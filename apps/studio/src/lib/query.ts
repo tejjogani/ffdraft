@@ -10,9 +10,9 @@ import { toast } from '@pave/ui'
 import {
   MutationCache,
   QueryClient,
+  queryOptions,
   type UseMutationOptions,
   type UseQueryOptions,
-  queryOptions,
   useMutation,
   useQuery,
 } from '@tanstack/react-query'
@@ -47,7 +47,8 @@ const DOMAIN_QUERIES: Record<string, QueryName[]> = {
 /** Refresh everything a command (or a server event named like one) may have changed. */
 export function invalidateFor(client: QueryClient, commandOrDomain: string): void {
   const domain = commandOrDomain.split('.')[0]!
-  for (const q of DOMAIN_QUERIES[domain] ?? []) void client.invalidateQueries({ queryKey: rpcKey(q) })
+  for (const q of DOMAIN_QUERIES[domain] ?? [])
+    void client.invalidateQueries({ queryKey: rpcKey(q) })
 }
 
 export const queryClient = new QueryClient({
@@ -56,7 +57,8 @@ export const queryClient = new QueryClient({
       staleTime: 15_000,
       refetchOnWindowFocus: false,
       // Client errors (auth, validation, not found) won't fix themselves on retry.
-      retry: (count, e) => !(e instanceof RpcError && e.status >= 400 && e.status < 500) && count < 2,
+      retry: (count, e) =>
+        !(e instanceof RpcError && e.status >= 400 && e.status < 500) && count < 2,
     },
   },
   mutationCache: new MutationCache({
@@ -79,12 +81,19 @@ export function useRpc<N extends QueryName, TData = CommandOutput<N>>(
   input: CommandInput<N>,
   options?: Omit<UseQueryOptions<CommandOutput<N>, RpcError, TData>, 'queryKey' | 'queryFn'>,
 ) {
-  return useQuery({ ...rpcQuery(name, input), ...options } as UseQueryOptions<CommandOutput<N>, RpcError, TData>)
+  return useQuery({ ...rpcQuery(name, input), ...options } as UseQueryOptions<
+    CommandOutput<N>,
+    RpcError,
+    TData
+  >)
 }
 
 export function useRpcMutation<N extends MutationName, TContext = unknown>(
   name: N,
-  options?: Omit<UseMutationOptions<CommandOutput<N>, RpcError, CommandInput<N>, TContext>, 'mutationFn'>,
+  options?: Omit<
+    UseMutationOptions<CommandOutput<N>, RpcError, CommandInput<N>, TContext>,
+    'mutationFn'
+  >,
 ) {
   return useMutation({
     ...options,

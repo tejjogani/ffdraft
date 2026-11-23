@@ -29,8 +29,9 @@ export interface SelectProps<V extends string> {
   'aria-label'?: string
 }
 
-const isGrouped = <V extends string>(o: SelectOption<V>[] | SelectGroup<V>[]): o is SelectGroup<V>[] =>
-  o.length > 0 && 'options' in o[0]!
+const isGrouped = <V extends string>(
+  o: SelectOption<V>[] | SelectGroup<V>[],
+): o is SelectGroup<V>[] => o.length > 0 && 'options' in o[0]!
 
 export function Select<V extends string>({
   value,
@@ -86,12 +87,22 @@ export function Select<V extends string>({
             <Base.List>
               {groups.map((g, gi) => (
                 <Base.Group key={g.label || gi}>
-                  {g.label && <Base.GroupLabel className={floatingLabel}>{g.label}</Base.GroupLabel>}
+                  {g.label && (
+                    <Base.GroupLabel className={floatingLabel}>{g.label}</Base.GroupLabel>
+                  )}
                   {g.options.map((o) => (
-                    <Base.Item key={o.value} value={o.value} className={cn(floatingItem, 'pr-7 relative')}>
+                    <Base.Item
+                      key={o.value}
+                      value={o.value}
+                      className={cn(floatingItem, 'pr-7 relative')}
+                    >
                       {o.icon}
                       <Base.ItemText className="truncate">{o.label}</Base.ItemText>
-                      {o.hint && <span className="ml-auto pl-4 text-xs text-fg-subtle tabular">{o.hint}</span>}
+                      {o.hint && (
+                        <span className="ml-auto pl-4 text-xs text-fg-subtle tabular">
+                          {o.hint}
+                        </span>
+                      )}
                       <Base.ItemIndicator className="absolute right-2">
                         <Check aria-hidden />
                       </Base.ItemIndicator>

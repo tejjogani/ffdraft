@@ -36,7 +36,10 @@ export function Segmented<V extends string>({
         if (next !== undefined) onChange(next as V)
       }}
       aria-label={aria['aria-label']}
-      className={cn('inline-flex shrink-0 items-center gap-px rounded-sm bg-bg-muted p-0.5', className)}
+      className={cn(
+        'inline-flex shrink-0 items-center gap-px rounded-sm bg-bg-muted p-0.5',
+        className,
+      )}
     >
       {options.map(({ value: v, label, icon: Icon }) => (
         <Toggle

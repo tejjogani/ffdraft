@@ -142,7 +142,9 @@ export const asset = pgTable(
     id: text('id').primaryKey(),
     orgId: orgId(),
     sha256: text('sha256').notNull(),
-    kind: text('kind').$type<'image' | 'mesh' | 'render' | 'video' | 'document' | 'archive'>().notNull(),
+    kind: text('kind')
+      .$type<'image' | 'mesh' | 'render' | 'video' | 'document' | 'archive'>()
+      .notNull(),
     mime: text('mime').notNull(),
     name: text('name').notNull(),
     bytes: integer('bytes').notNull(),
@@ -231,7 +233,10 @@ export const renderJob = pgTable(
     createdAt: at('created_at'),
     finishedAt: timestamp('finished_at', { withTimezone: true }),
   },
-  (t) => [index('render_job_org_idx').on(t.orgId, t.createdAt), index('render_job_piece_idx').on(t.pieceId)],
+  (t) => [
+    index('render_job_org_idx').on(t.orgId, t.createdAt),
+    index('render_job_piece_idx').on(t.pieceId),
+  ],
 )
 
 export const brandModel = pgTable('brand_model', {
@@ -318,7 +323,9 @@ export const agentRun = pgTable(
     /** Design version the model saw, so the run can be replayed. */
     baseSeq: integer('base_seq'),
     model: text('model').notNull(),
-    status: text('status').$type<'running' | 'done' | 'failed' | 'canceled' | 'awaiting-approval'>().notNull(),
+    status: text('status')
+      .$type<'running' | 'done' | 'failed' | 'canceled' | 'awaiting-approval'>()
+      .notNull(),
     tokensIn: integer('tokens_in').notNull().default(0),
     tokensOut: integer('tokens_out').notNull().default(0),
     tokensCacheRead: integer('tokens_cache_read').notNull().default(0),
@@ -328,7 +335,10 @@ export const agentRun = pgTable(
     startedAt: at('started_at'),
     endedAt: timestamp('ended_at', { withTimezone: true }),
   },
-  (t) => [index('agent_run_org_idx').on(t.orgId, t.startedAt), index('agent_run_piece_idx').on(t.pieceId)],
+  (t) => [
+    index('agent_run_org_idx').on(t.orgId, t.startedAt),
+    index('agent_run_piece_idx').on(t.pieceId),
+  ],
 )
 
 export const agentStep = pgTable(

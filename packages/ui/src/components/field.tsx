@@ -16,7 +16,12 @@ export function Field({ label, hint, children, layout = 'stack', className }: Fi
   const control = typeof children === 'function' ? children(id) : children
   if (layout === 'row')
     return (
-      <div className={cn('grid min-h-8 grid-cols-[minmax(96px,34%)_1fr] items-center gap-3', className)}>
+      <div
+        className={cn(
+          'grid min-h-8 grid-cols-[minmax(96px,34%)_1fr] items-center gap-3',
+          className,
+        )}
+      >
         <label htmlFor={id} className="truncate text-sm text-fg-muted">
           {label}
         </label>

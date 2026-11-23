@@ -26,7 +26,10 @@ const MIGRATIONS = fileURLToPath(new URL('../../drizzle', import.meta.url))
  * Opens the database and applies pending migrations. With a URL it uses Postgres; otherwise
  * embedded PGlite persisted under `dataDir`, or in memory when `dataDir` is null.
  */
-export async function openDatabase(opts: { url: string | null; dataDir: string | null }): Promise<Database> {
+export async function openDatabase(opts: {
+  url: string | null
+  dataDir: string | null
+}): Promise<Database> {
   if (opts.url) {
     const pool = new pg.Pool({ connectionString: opts.url })
     const db = drizzleNodePg(pool, { schema })

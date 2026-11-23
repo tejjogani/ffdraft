@@ -41,7 +41,8 @@ export const useAssistant = create<AssistantState>()(
       open: (request) => set({ isOpen: true, request: request ? { ...request, id: ++seq } : null }),
       close: () => set({ isOpen: false }),
       toggle: () => set((s) => ({ isOpen: !s.isOpen })),
-      setWidth: (width) => set({ width: Math.round(Math.min(DOCK_MAX, Math.max(DOCK_MIN, width))) }),
+      setWidth: (width) =>
+        set({ width: Math.round(Math.min(DOCK_MAX, Math.max(DOCK_MIN, width))) }),
       clearRequest: () => set({ request: null }),
     }),
     { name: 'pave:assistant', partialize: (s) => ({ isOpen: s.isOpen, width: s.width }) },

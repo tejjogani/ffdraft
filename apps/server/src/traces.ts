@@ -8,6 +8,7 @@ import type { Ctx } from './context'
 import * as t from './db/schema'
 import { notFound } from './errors'
 import { createId } from './ids'
+import { ensure, getBoard, getPiece, getRun, getThread } from './lookups'
 import { fromMicros, toMicros } from './usage'
 
 type RunStatus = Run['status']
@@ -37,7 +38,12 @@ export const toRun = (r: typeof t.agentRun.$inferSelect): Run => ({
   userId: r.userId,
   model: r.model,
   status: r.status,
-  tokens: { input: r.tokensIn, output: r.tokensOut, cacheRead: r.tokensCacheRead, cacheWrite: r.tokensCacheWrite },
+  tokens: {
+    input: r.tokensIn,
+    output: r.tokensOut,
+    cacheRead: r.tokensCacheRead,
+    cacheWrite: r.tokensCacheWrite,
+  },
   costUsd: fromMicros(r.costMicros),
   startedAt: r.startedAt.toISOString(),
   endedAt: r.endedAt?.toISOString() ?? null,
@@ -62,6 +68,8 @@ export async function createThread(
   ctx: Ctx,
   input: { title: string; pieceId?: string | null; boardId?: string | null },
 ): Promise<Thread> {
+  await ensure(getPiece, ctx, input.pieceId)
+  await ensure(getBoard, ctx, input.boardId)
   const row = await ctx.repo.threads.insert({
     id: createId('th'),
     userId: ctx.user.id,
@@ -83,6 +91,9 @@ export async function startRun(
     baseSeq?: number | null
   },
 ): Promise<Run> {
+  await ensure(getThread, ctx, input.threadId)
+  await ensure(getPiece, ctx, input.pieceId)
+  await ensure(getRun, ctx, input.parentRunId)
   const row = await ctx.repo.runs.insert({
     id: createId('run'),
     userId: ctx.user.id,
@@ -114,6 +125,7 @@ export async function addStep(
     startedAt?: Date
   },
 ): Promise<Step> {
+  await getRun(ctx, runId)
   const row = await ctx.repo.steps.insert({
     id: createId('stp'),
     runId,
@@ -134,10 +146,18 @@ export async function addStep(
 /** Appends a verbatim message (provider-native content blocks) to a thread. */
 export async function addMessage(
   ctx: Ctx,
-  input: { threadId: string; runId?: string | null; role: Message['role']; content: Message['content'] },
+  input: {
+    threadId: string
+    runId?: string | null
+    role: Message['role']
+    content: Message['content']
+  },
 ): Promise<Message> {
+  await ensure(getRun, ctx, input.runId)
   return ctx.repo.transaction(async (tx) => {
-    const [thread] = await tx.threads.update(eq(t.thread.id, input.threadId), { updatedAt: new Date() })
+    const [thread] = await tx.threads.update(eq(t.thread.id, input.threadId), {
+      updatedAt: new Date(),
+    })
     if (!thread) throw notFound('Thread', input.threadId)
     const row = await tx.messages.insert({
       id: createId('msg'),
@@ -153,7 +173,12 @@ export async function addMessage(
 export async function finishRun(
   ctx: Ctx,
   runId: string,
-  input: { status: Exclude<RunStatus, 'running'>; tokens?: Tokens; costUsd?: number; error?: string | null },
+  input: {
+    status: Exclude<RunStatus, 'running'>
+    tokens?: Tokens
+    costUsd?: number
+    error?: string | null
+  },
 ): Promise<Run> {
   const [row] = await ctx.repo.runs.update(eq(t.agentRun.id, runId), {
     status: input.status,

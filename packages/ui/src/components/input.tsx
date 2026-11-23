@@ -43,6 +43,7 @@ export function Textarea({ className, bare, minRows = 2, onInput, ...props }: Te
     el.style.height = `${el.scrollHeight}px`
   }
   // Re-fit whenever the value changes from outside (e.g. a server refresh).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the value is the trigger, not an input to `fit`
   useLayoutEffect(fit, [props.value])
   return (
     <textarea

@@ -19,7 +19,14 @@ export interface ChipProps extends ComponentProps<'span'> {
 }
 
 /** A compact label. Rounded-sm, not a pill: the interface avoids pill-everything. */
-export function Chip({ tone = 'neutral', icon, outline, className, children, ...props }: ChipProps) {
+export function Chip({
+  tone = 'neutral',
+  icon,
+  outline,
+  className,
+  children,
+  ...props
+}: ChipProps) {
   return (
     <span
       className={cn(
@@ -52,12 +59,24 @@ export function Badge({ children, className }: { children: ReactNode; className?
 /** The AI mark: a small four-point spark filled with the reserved shimmer. */
 export function AiMark({ className }: { className?: string }) {
   return (
-    <span aria-hidden className={cn('ai-gradient inline-block size-3 shrink-0 [mask:var(--ai-spark)_center/contain_no-repeat]', className)} />
+    <span
+      aria-hidden
+      className={cn(
+        'ai-gradient inline-block size-3 shrink-0 [mask:var(--ai-spark)_center/contain_no-repeat]',
+        className,
+      )}
+    />
   )
 }
 
 /** Marks agent-made things. The shimmer lives in the 1 px border, never behind the text. */
-export function AiChip({ children = 'AI', className }: { children?: ReactNode; className?: string }) {
+export function AiChip({
+  children = 'AI',
+  className,
+}: {
+  children?: ReactNode
+  className?: string
+}) {
   return (
     <span className={cn('ai-gradient inline-flex shrink-0 rounded-xs p-px select-none', className)}>
       <span className="inline-flex h-4.5 items-center gap-1 rounded-[3px] bg-bg px-1.5 text-2xs font-medium text-fg">
@@ -87,7 +106,14 @@ export function ProgressRing({ step, of, className, dashed }: ProgressRingProps)
       {done ? (
         <>
           <circle cx="7" cy="7" r="6" fill="currentColor" />
-          <path d="M4.4 7.2 6.2 9l3.4-3.6" fill="none" stroke="var(--bg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M4.4 7.2 6.2 9l3.4-3.6"
+            fill="none"
+            stroke="var(--bg)"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </>
       ) : (
         <>

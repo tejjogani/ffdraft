@@ -23,18 +23,25 @@ const sizes: Record<ButtonSize, string> = {
   sm: 'h-7 px-2.5',
   md: 'h-8 px-3',
 }
+const squareSizes: Record<ButtonSize, string> = { sm: 'size-7', md: 'size-8' }
 
 /** Classes for anything that should look like a button (e.g. router links). */
 export const buttonClass = ({
   variant = 'secondary',
   size = 'md',
-}: { variant?: ButtonVariant; size?: ButtonSize } = {}): string =>
-  cn(base, variants[variant], sizes[size])
+  square = false,
+}: {
+  variant?: ButtonVariant
+  size?: ButtonSize
+  square?: boolean
+} = {}): string => cn(base, variants[variant], square ? squareSizes[size] : sizes[size])
 
 export interface ButtonProps extends ComponentProps<'button'> {
   variant?: ButtonVariant
   size?: ButtonSize
   icon?: LucideIcon
+  /** Icon-only and square; pass `aria-label`. */
+  square?: boolean
   /** Trailing content such as a <Kbd/>. */
   trailing?: ReactNode
 }
@@ -43,6 +50,7 @@ export function Button({
   variant = 'secondary',
   size = 'md',
   icon: Icon,
+  square,
   trailing,
   className,
   children,
@@ -50,7 +58,11 @@ export function Button({
   ...props
 }: ButtonProps) {
   return (
-    <button type={type} className={cn(buttonClass({ variant, size }), className)} {...props}>
+    <button
+      type={type}
+      className={cn(buttonClass({ variant, size, square }), className)}
+      {...props}
+    >
       {Icon && <Icon aria-hidden />}
       {children}
       {trailing}

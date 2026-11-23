@@ -9,7 +9,9 @@ export default defineConfig({
     tailwindcss(),
     {
       name: 'pave-theme-boot',
-      transformIndexHtml: () => [{ tag: 'script', children: themeBootScript, injectTo: 'head-prepend' }],
+      transformIndexHtml: () => [
+        { tag: 'script', children: themeBootScript, injectTo: 'head-prepend' },
+      ],
     },
   ],
   server: {

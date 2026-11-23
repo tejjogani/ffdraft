@@ -1,7 +1,7 @@
 import { Dialog as Base } from '@base-ui/react/dialog'
 import { Command } from 'cmdk'
 import { ArrowRight, type LucideIcon, Search } from 'lucide-react'
-import { type ReactNode, isValidElement, useEffect, useMemo, useState } from 'react'
+import { isValidElement, type ReactNode, useEffect, useMemo, useState } from 'react'
 import { cn } from '../cn'
 import { readStored, writeStored } from '../storage'
 import { floatingItem } from './floating'
@@ -34,10 +34,14 @@ const RECENTS_KEY = 'pave:palette-recents'
 const MAX_RECENTS = 5
 
 const renderIcon = (icon: PaletteItem['icon']) =>
-  !icon ? null : isValidElement(icon) ? icon : (() => {
-    const Icon = icon as LucideIcon
-    return <Icon aria-hidden />
-  })()
+  !icon
+    ? null
+    : isValidElement(icon)
+      ? icon
+      : (() => {
+          const Icon = icon as LucideIcon
+          return <Icon aria-hidden />
+        })()
 
 /** ⌘K. Grouped, fuzzy, with recents when the query is empty and a fallback when nothing matches. */
 export function CommandPalette({
@@ -135,7 +139,9 @@ export function CommandPalette({
                   </button>
                 </Command.Empty>
               ) : (
-                <Command.Empty className="px-2 py-6 text-center text-sm text-fg-subtle">No results</Command.Empty>
+                <Command.Empty className="px-2 py-6 text-center text-sm text-fg-subtle">
+                  No results
+                </Command.Empty>
               )}
               {!query && recentItems.length > 0 && (
                 <Command.Group heading="Recent" className={groupClass}>

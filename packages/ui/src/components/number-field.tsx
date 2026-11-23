@@ -98,7 +98,9 @@ export function NumberField({
             unit ? 'pr-1' : 'pr-2.5',
           )}
         />
-        {unit && <span className="pr-2.5 font-mono text-2xs text-fg-subtle select-none">{unit}</span>}
+        {unit && (
+          <span className="pr-2.5 font-mono text-2xs text-fg-subtle select-none">{unit}</span>
+        )}
       </Base.Group>
     </Base.Root>
   )

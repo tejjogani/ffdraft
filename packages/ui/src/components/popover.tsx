@@ -15,7 +15,16 @@ export interface PopoverProps {
   title?: string
 }
 
-export function Popover({ trigger, children, side = 'bottom', align = 'start', open, onOpenChange, className, title }: PopoverProps) {
+export function Popover({
+  trigger,
+  children,
+  side = 'bottom',
+  align = 'start',
+  open,
+  onOpenChange,
+  className,
+  title,
+}: PopoverProps) {
   return (
     <Base.Root open={open} onOpenChange={onOpenChange && ((o) => onOpenChange(o))}>
       <Base.Trigger render={trigger} />

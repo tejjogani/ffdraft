@@ -13,7 +13,8 @@ export type Shell = 'web' | 'desktop'
 const nav = typeof navigator !== 'undefined' ? navigator : undefined
 const ua = nav?.userAgent ?? ''
 const platformHint =
-  (nav as (Navigator & { userAgentData?: { platform?: string } }) | undefined)?.userAgentData?.platform ??
+  (nav as (Navigator & { userAgentData?: { platform?: string } }) | undefined)?.userAgentData
+    ?.platform ??
   nav?.platform ??
   ua
 

@@ -27,7 +27,13 @@ export interface TabsProps<V extends string> {
   children?: ReactNode
 }
 
-export function Tabs<V extends string>({ value, onChange, items, className, children }: TabsProps<V>) {
+export function Tabs<V extends string>({
+  value,
+  onChange,
+  items,
+  className,
+  children,
+}: TabsProps<V>) {
   return (
     <Base.Root value={value} onValueChange={(v) => onChange?.(v as V)} className={className}>
       <Base.List className={tabListClass}>
@@ -53,7 +59,15 @@ export function Tabs<V extends string>({ value, onChange, items, className, chil
   )
 }
 
-export function TabPanel({ value, children, className }: { value: string; children: ReactNode; className?: string }) {
+export function TabPanel({
+  value,
+  children,
+  className,
+}: {
+  value: string
+  children: ReactNode
+  className?: string
+}) {
   return (
     <Base.Panel value={value} className={cn('outline-none', className)}>
       {children}

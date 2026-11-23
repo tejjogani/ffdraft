@@ -1,0 +1,53 @@
+const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto', style: 'short' })
+const STEPS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ['second', 60],
+  ['minute', 60],
+  ['hour', 24],
+  ['day', 7],
+  ['week', 4.35],
+  ['month', 12],
+  ['year', Number.POSITIVE_INFINITY],
+]
+
+/** "just now", "5 min. ago", "yesterday", "3 wk. ago". */
+export function relativeTime(iso: string, now = Date.now()): string {
+  let delta = (new Date(iso).getTime() - now) / 1000
+  if (Math.abs(delta) < 45) return 'just now'
+  for (const [unit, size] of STEPS) {
+    if (Math.abs(delta) < size) return rtf.format(Math.round(delta), unit)
+    delta /= size
+  }
+  return ''
+}
+
+export const dateTime = (iso: string): string =>
+  new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+
+export const shortDate = (iso: string): string =>
+  new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+
+const usdFmt = new Intl.NumberFormat(undefined, {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+})
+const usdSmall = new Intl.NumberFormat(undefined, {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 3,
+  maximumFractionDigits: 4,
+})
+export const usd = (v: number): string =>
+  (v !== 0 && Math.abs(v) < 0.1 ? usdSmall : usdFmt).format(v)
+
+export const num = (v: number, digits = 2): string =>
+  v.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: 0 })
+
+export const grams = (v: number): string => `${num(v, v < 10 ? 2 : 1)} g`
+export const carats = (v: number): string => `${num(v, 2)} ct`
+export const mm = (v: number): string => `${num(v, 2)} mm`
+export const compact = (v: number): string =>
+  v.toLocaleString(undefined, { notation: 'compact', maximumFractionDigits: 1 })
+
+export const plural = (n: number, one: string, many = `${one}s`): string =>
+  `${num(n, 0)} ${n === 1 ? one : many}`

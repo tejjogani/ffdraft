@@ -26,4 +26,5 @@ export interface Ctx {
 export const publish = (ctx: Ctx, event: ServerEvent): void => ctx.events.publish(ctx.orgId, event)
 
 /** The run an agent actor belongs to, for attributing usage and generated content. */
-export const actorRunId = (actor: Actor): string | null => (actor.type === 'agent' ? actor.runId : null)
+export const actorRunId = (actor: Actor): string | null =>
+  actor.type === 'agent' ? actor.runId : null

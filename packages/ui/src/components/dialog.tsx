@@ -22,7 +22,16 @@ export interface DialogProps {
 }
 
 /** Centred modal on a frosted surface. */
-export function Dialog({ open, onOpenChange, trigger, title, description, children, footer, className }: DialogProps) {
+export function Dialog({
+  open,
+  onOpenChange,
+  trigger,
+  title,
+  description,
+  children,
+  footer,
+  className,
+}: DialogProps) {
   return (
     <Base.Root open={open} onOpenChange={onOpenChange && ((o) => onOpenChange(o))}>
       {trigger && <Base.Trigger render={trigger} />}
@@ -37,7 +46,11 @@ export function Dialog({ open, onOpenChange, trigger, title, description, childr
           )}
         >
           <Base.Title className="text-base font-medium">{title}</Base.Title>
-          {description && <Base.Description className="mt-1 text-sm text-fg-muted">{description}</Base.Description>}
+          {description && (
+            <Base.Description className="mt-1 text-sm text-fg-muted">
+              {description}
+            </Base.Description>
+          )}
           {children && <div className="mt-4">{children}</div>}
           {footer && <div className="mt-5 flex justify-end gap-2">{footer}</div>}
         </Base.Popup>
@@ -59,7 +72,15 @@ export interface SheetProps {
 }
 
 /** A full-height side panel over the content, for detail views that don't deserve a page. */
-export function Sheet({ open, onOpenChange, trigger, title, children, side = 'right', className }: SheetProps) {
+export function Sheet({
+  open,
+  onOpenChange,
+  trigger,
+  title,
+  children,
+  side = 'right',
+  className,
+}: SheetProps) {
   return (
     <Base.Root open={open} onOpenChange={onOpenChange && ((o) => onOpenChange(o))}>
       {trigger && <Base.Trigger render={trigger} />}

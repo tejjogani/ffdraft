@@ -1,0 +1,1 @@
+core contract stable 2026-11-23T20:05:47Z: read src/core.ts header; register features in src/features/index.ts and exporters in src/export/index.ts (gems/, geometry/sweep.ts and text.ts are still landing)

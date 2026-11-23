@@ -3,19 +3,39 @@ import { Separator as BaseSeparator } from '@base-ui/react/separator'
 import type { ReactNode } from 'react'
 import { cn } from '../cn'
 
-export function Separator({ orientation = 'horizontal', className }: { orientation?: 'horizontal' | 'vertical'; className?: string }) {
+export function Separator({
+  orientation = 'horizontal',
+  className,
+}: {
+  orientation?: 'horizontal' | 'vertical'
+  className?: string
+}) {
   return (
     <BaseSeparator
       orientation={orientation}
-      className={cn('shrink-0 bg-line', orientation === 'horizontal' ? 'h-px w-full' : 'h-4 w-px', className)}
+      className={cn(
+        'shrink-0 bg-line',
+        orientation === 'horizontal' ? 'h-px w-full' : 'h-4 w-px',
+        className,
+      )}
     />
   )
 }
 
-export function ScrollArea({ children, className, viewportClassName }: { children: ReactNode; className?: string; viewportClassName?: string }) {
+export function ScrollArea({
+  children,
+  className,
+  viewportClassName,
+}: {
+  children: ReactNode
+  className?: string
+  viewportClassName?: string
+}) {
   return (
     <BaseScroll.Root className={cn('relative min-h-0 overflow-hidden', className)}>
-      <BaseScroll.Viewport className={cn('size-full overscroll-contain outline-none', viewportClassName)}>
+      <BaseScroll.Viewport
+        className={cn('size-full overscroll-contain outline-none', viewportClassName)}
+      >
         {children}
       </BaseScroll.Viewport>
       <BaseScroll.Scrollbar
@@ -37,9 +57,28 @@ export function Skeleton({ className }: { className?: string }) {
 
 export function Spinner({ className, label = 'Loading' }: { className?: string; label?: string }) {
   return (
-    <svg viewBox="0 0 16 16" role="status" aria-label={label} className={cn('size-4 animate-spin text-fg-subtle', className)}>
-      <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeOpacity="0.25" strokeWidth="1.5" />
-      <path d="M14 8a6 6 0 0 0-6-6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <svg
+      viewBox="0 0 16 16"
+      role="status"
+      aria-label={label}
+      className={cn('size-4 animate-spin text-fg-subtle', className)}
+    >
+      <circle
+        cx="8"
+        cy="8"
+        r="6"
+        fill="none"
+        stroke="currentColor"
+        strokeOpacity="0.25"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M14 8a6 6 0 0 0-6-6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
     </svg>
   )
 }
@@ -67,7 +106,11 @@ export function Swatch({ color, kind = 'flat', size = 'md', className, title }: 
     <span
       title={title}
       aria-hidden={!title}
-      className={cn('inline-block shrink-0 rounded-full shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)]', swatchSizes[size], className)}
+      className={cn(
+        'inline-block shrink-0 rounded-full shadow-[inset_0_0_0_1px_rgba(0,0,0,0.12)]',
+        swatchSizes[size],
+        className,
+      )}
       style={{ backgroundColor: color, backgroundImage: shading }}
     />
   )

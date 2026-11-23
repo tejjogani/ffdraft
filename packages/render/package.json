@@ -10,7 +10,9 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "demo": "vite demo"
+    "setup:blender": "node ../../workers/render/setup.mjs",
+    "demo": "vite demo",
+    "shots": "tsx scripts/blender-shots.ts"
   },
   "dependencies": {
     "@pave/kernel": "workspace:*",

@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 /** Content-addressed bytes, keyed by their SHA-256 (lowercase hex). Writes are idempotent. */
 export interface BlobStore {
   put(sha256: string, bytes: Uint8Array): Promise<void>
-  get(sha256: string): Promise<Uint8Array | null>
+  get(sha256: string): Promise<Uint8Array<ArrayBuffer> | null>
 }
 
 const exists = (path: string) =>
@@ -41,7 +41,7 @@ export class FsBlobStore implements BlobStore {
     }
   }
 
-  async get(sha256: string): Promise<Uint8Array | null> {
+  async get(sha256: string): Promise<Uint8Array<ArrayBuffer> | null> {
     try {
       return await readFile(this.#path(sha256))
     } catch (err) {

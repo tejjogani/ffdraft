@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { extname } from 'node:path'
-import { ASSET_KINDS, type Asset } from '@pave/schema'
+import type { ASSET_KINDS, Asset } from '@pave/schema'
 import { and, eq } from 'drizzle-orm'
 import sharp from 'sharp'
 import type { Ctx } from '../context'
@@ -13,7 +13,7 @@ export type AssetKind = (typeof ASSET_KINDS)[number]
 export interface NewAsset {
   bytes: Uint8Array
   name: string
-  /** Detected from the bytes for images; otherwise taken from here or the file extension. */
+  /** Detected from the bytes for images, else from a known file extension, else taken from here. */
   mime?: string
   /** Defaults to what the bytes or extension say (`image`, `mesh`, …). */
   kind?: AssetKind
@@ -62,7 +62,11 @@ async function imageInfo(bytes: Uint8Array) {
     if (!mime) return null
     // EXIF orientations 5–8 are stored rotated a quarter turn.
     const swap = (m.orientation ?? 1) >= 5
-    return { mime, width: (swap ? m.height : m.width) ?? null, height: (swap ? m.width : m.height) ?? null }
+    return {
+      mime,
+      width: (swap ? m.height : m.width) ?? null,
+      height: (swap ? m.width : m.height) ?? null,
+    }
   } catch {
     return null
   }
@@ -70,7 +74,7 @@ async function imageInfo(bytes: Uint8Array) {
 
 /** Strips any directory part a client sent and bounds the length. */
 const cleanName = (name: string) =>
-  (name.split(/[\\/]/).pop() ?? '').replace(/[\u0000-\u001f]/g, '').slice(0, 200) || 'file'
+  (name.split(/[\\/]/).pop() ?? '').replace(/\p{Cc}/gu, '').slice(0, 200) || 'file'
 
 export const assetUrl = (id: string) => `/api/assets/${id}`
 
@@ -98,7 +102,7 @@ export async function putAsset(ctx: Ctx, input: NewAsset): Promise<Asset> {
   const name = cleanName(input.name)
   const byExt = EXTENSIONS[extname(name).toLowerCase()]
   const image = await imageInfo(input.bytes)
-  const mime = image?.mime ?? input.mime ?? byExt?.mime ?? 'application/octet-stream'
+  const mime = image?.mime ?? byExt?.mime ?? input.mime ?? 'application/octet-stream'
   const kind = input.kind ?? (image ? 'image' : (byExt?.kind ?? 'document'))
   const hash = await storeBlob(ctx, input.bytes, mime)
   const row = await ctx.repo.assets.insert({
@@ -121,16 +125,22 @@ export async function getAssetRow(ctx: Ctx, id: string): Promise<AssetRow> {
   return row
 }
 
-async function readBlob(ctx: Ctx, hash: string): Promise<Uint8Array> {
+async function readBlob(ctx: Ctx, hash: string): Promise<Uint8Array<ArrayBuffer>> {
   const bytes = await ctx.blobs.get(hash)
   if (!bytes) throw new Error(`Blob ${hash} is missing from the blob store`)
   return bytes
 }
 
+export const assetBytes = (ctx: Ctx, asset: AssetRow): Promise<Uint8Array<ArrayBuffer>> =>
+  readBlob(ctx, asset.sha256)
+
 /** The asset's bytes; 404 unless it belongs to the caller's org. */
-export async function readAsset(ctx: Ctx, id: string): Promise<{ asset: AssetRow; bytes: Uint8Array }> {
+export async function readAsset(
+  ctx: Ctx,
+  id: string,
+): Promise<{ asset: AssetRow; bytes: Uint8Array<ArrayBuffer> }> {
   const asset = await getAssetRow(ctx, id)
-  return { asset, bytes: await readBlob(ctx, asset.sha256) }
+  return { asset, bytes: await assetBytes(ctx, asset) }
 }
 
 /** A WebP thumbnail at least `width` px wide (never upscaled), cached as its own blob. */
@@ -138,18 +148,29 @@ export async function readThumbnail(
   ctx: Ctx,
   asset: AssetRow,
   width: number,
-): Promise<{ bytes: Uint8Array; mime: string; sha256: string }> {
+): Promise<{ bytes: Uint8Array<ArrayBuffer>; mime: string; sha256: string }> {
   const w = THUMB_WIDTHS.find((x) => x >= width) ?? THUMB_WIDTHS[THUMB_WIDTHS.length - 1]!
   const variant = `w${w}`
   const cached = await ctx.repo.assetVariants.first(
     and(eq(t.assetVariant.assetId, asset.id), eq(t.assetVariant.variant, variant)),
   )
-  if (cached) return { bytes: await readBlob(ctx, cached.sha256), mime: cached.mime, sha256: cached.sha256 }
+  if (cached)
+    return { bytes: await readBlob(ctx, cached.sha256), mime: cached.mime, sha256: cached.sha256 }
 
   const original = await readBlob(ctx, asset.sha256)
-  const bytes = await sharp(original).rotate().resize({ width: w, withoutEnlargement: true }).webp({ quality: 82 }).toBuffer()
+  const bytes = await sharp(original)
+    .rotate()
+    .resize({ width: w, withoutEnlargement: true })
+    .webp({ quality: 82 })
+    .toBuffer()
   const mime = 'image/webp'
   const hash = await storeBlob(ctx, bytes, mime)
-  await ctx.repo.assetVariants.insertIfAbsent({ assetId: asset.id, variant, sha256: hash, mime, bytes: bytes.byteLength })
+  await ctx.repo.assetVariants.insertIfAbsent({
+    assetId: asset.id,
+    variant,
+    sha256: hash,
+    mime,
+    bytes: bytes.byteLength,
+  })
   return { bytes, mime, sha256: hash }
 }

@@ -22,8 +22,8 @@ import type {
   RenderJob,
   SearchResult,
 } from '@pave/schema'
-import { NotConfiguredError } from './errors'
 import type { NewAsset } from './assets/assets'
+import { NotConfiguredError } from './errors'
 import type { NewUsage } from './usage'
 
 /** A file produced or consumed by a service. */
@@ -63,7 +63,11 @@ export type PortraitView = BrandModel['portraits'][number]['view']
 
 export interface GeometryService extends Service {
   /** Facts of a design: masses, stones, bounds and manufacturability diagnostics. */
-  evaluate(design: Design, opts: { detail: 'draft' | 'production' }, sctx: ServiceContext): Promise<EvaluationSummary>
+  evaluate(
+    design: Design,
+    opts: { detail: 'draft' | 'production' },
+    sctx: ServiceContext,
+  ): Promise<EvaluationSummary>
   export(
     design: Design,
     opts: { format: ExportFormat; stones: boolean },
@@ -95,7 +99,12 @@ export type RenderJobPatch = Partial<Pick<RenderJob, 'status' | 'progress' | 'as
 
 export interface RenderQueue extends Service {
   /** Accept a queued job and return promptly; report progress through `handle`. */
-  submit(job: RenderJob, piece: Piece, handle: JobHandle<RenderJobPatch>, sctx: ServiceContext): Promise<void>
+  submit(
+    job: RenderJob,
+    piece: Piece,
+    handle: JobHandle<RenderJobPatch>,
+    sctx: ServiceContext,
+  ): Promise<void>
   cancel(jobId: string, sctx: ServiceContext): Promise<void>
 }
 
@@ -116,7 +125,9 @@ export interface OnModelService extends Service {
   ): Promise<void>
 }
 
-export type ProductionPackagePatch = Partial<Pick<ProductionPackage, 'status' | 'assetId' | 'manifest'>>
+export type ProductionPackagePatch = Partial<
+  Pick<ProductionPackage, 'status' | 'assetId' | 'manifest'>
+>
 
 export interface ProductionService extends Service {
   /** Accept a queued package build and return promptly; report progress through `handle`. */
@@ -138,31 +149,26 @@ export interface Services {
 }
 export type ServiceName = keyof Services
 
-const missing = (service: ServiceName, message: string) => () =>
-  Promise.reject(new NotConfiguredError(service, message))
+const NOT_CONFIGURED: Record<ServiceName, string> = {
+  geometry:
+    'No geometry kernel is configured on this server, so CAD cannot be evaluated or exported.',
+  search: 'No image search providers are configured on this server.',
+  imageGen: 'No image generation provider is configured on this server.',
+  renderQueue: 'No render queue is configured on this server.',
+  onModel: 'No on-model imaging provider is configured on this server.',
+  production: 'No production packager is configured on this server.',
+}
+
+const missing = (service: ServiceName) => () =>
+  Promise.reject(new NotConfiguredError(service, NOT_CONFIGURED[service]))
 
 const DEFAULTS: Services = {
-  geometry: {
-    evaluate: missing('geometry', 'No geometry kernel is configured, so CAD cannot be evaluated.'),
-    export: missing('geometry', 'No geometry kernel is configured, so CAD cannot be exported.'),
-  },
-  search: {
-    search: missing('search', 'No image search providers are configured.'),
-  },
-  imageGen: {
-    generate: missing('imageGen', 'No image generation provider is configured.'),
-  },
-  renderQueue: {
-    submit: missing('renderQueue', 'No render queue is configured.'),
-    cancel: missing('renderQueue', 'No render queue is configured.'),
-  },
-  onModel: {
-    portraits: missing('onModel', 'No on-model imaging provider is configured, so portraits cannot be generated.'),
-    submitShot: missing('onModel', 'No on-model imaging provider is configured, so shots cannot be created.'),
-  },
-  production: {
-    submit: missing('production', 'No production packager is configured.'),
-  },
+  geometry: { evaluate: missing('geometry'), export: missing('geometry') },
+  search: { search: missing('search') },
+  imageGen: { generate: missing('imageGen') },
+  renderQueue: { submit: missing('renderQueue'), cancel: missing('renderQueue') },
+  onModel: { portraits: missing('onModel'), submitShot: missing('onModel') },
+  production: { submit: missing('production') },
 }
 
 const NO_CAPABILITIES: Capabilities = {
@@ -198,8 +204,8 @@ export class ServiceRegistry {
   }
 
   /** Like {@link get}, but refuses up front — for handlers that persist rows before delegating. */
-  require<K extends ServiceName>(name: K, message: string): Services[K] {
-    if (!this.isConfigured(name)) throw new NotConfiguredError(name, message)
+  require<K extends ServiceName>(name: K): Services[K] {
+    if (!this.isConfigured(name)) throw new NotConfiguredError(name, NOT_CONFIGURED[name])
     return this.#impls[name]
   }
 

@@ -67,7 +67,9 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): Config {
       .map((s) => s.trim())
       .filter(Boolean),
     seed: e.PAVE_SEED ?? true,
-    studioDist: e.PAVE_STUDIO_DIST ? resolve(e.PAVE_STUDIO_DIST) : join(REPO_ROOT, 'apps', 'studio', 'dist'),
+    studioDist: e.PAVE_STUDIO_DIST
+      ? resolve(e.PAVE_STUDIO_DIST)
+      : join(REPO_ROOT, 'apps', 'studio', 'dist'),
     maxUploadBytes: Math.round(e.PAVE_MAX_UPLOAD_MB * 1024 * 1024),
     validateOutputs: !production,
     logRequests: !production && e.NODE_ENV !== 'test',

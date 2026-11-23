@@ -10,7 +10,12 @@ export interface AvatarProps {
   className?: string
 }
 
-const sizes = { xs: 'size-4 text-[8px]', sm: 'size-5 text-[9px]', md: 'size-6 text-2xs', lg: 'size-9 text-sm' }
+const sizes = {
+  xs: 'size-4 text-[8px]',
+  sm: 'size-5 text-[9px]',
+  md: 'size-6 text-2xs',
+  lg: 'size-9 text-sm',
+}
 
 const initials = (name: string) =>
   name

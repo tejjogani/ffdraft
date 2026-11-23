@@ -23,7 +23,15 @@ export interface MenuProps {
 const popupClass = (className?: string) =>
   cn(floatingSurface, 'min-w-52 max-h-(--available-height) overflow-y-auto p-1', className)
 
-export function Menu({ trigger, children, side = 'bottom', align = 'start', open, onOpenChange, className }: MenuProps) {
+export function Menu({
+  trigger,
+  children,
+  side = 'bottom',
+  align = 'start',
+  open,
+  onOpenChange,
+  className,
+}: MenuProps) {
   return (
     <Base.Root open={open} onOpenChange={onOpenChange && ((o) => onOpenChange(o))}>
       <Base.Trigger render={trigger} />
@@ -69,7 +77,16 @@ export interface MenuItemProps {
   render?: ReactElement
 }
 
-export function MenuItem({ children, icon: Icon, leading, shortcut, onClick, disabled, danger, render }: MenuItemProps) {
+export function MenuItem({
+  children,
+  icon: Icon,
+  leading,
+  shortcut,
+  onClick,
+  disabled,
+  danger,
+  render,
+}: MenuItemProps) {
   return (
     <Base.Item
       onClick={onClick}
@@ -126,7 +143,11 @@ export interface MenuRadioGroupProps<V extends string> {
   children: ReactNode
 }
 
-export function MenuRadioGroup<V extends string>({ value, onChange, children }: MenuRadioGroupProps<V>) {
+export function MenuRadioGroup<V extends string>({
+  value,
+  onChange,
+  children,
+}: MenuRadioGroupProps<V>) {
   return (
     <Base.RadioGroup value={value} onValueChange={(v) => onChange(v as V)}>
       {children}
@@ -134,9 +155,17 @@ export function MenuRadioGroup<V extends string>({ value, onChange, children }: 
   )
 }
 
-export function MenuRadioItem({ value, children, icon: Icon }: { value: string; children: ReactNode; icon?: LucideIcon }) {
+export function MenuRadioItem({
+  value,
+  children,
+  icon: Icon,
+}: {
+  value: string
+  children: ReactNode
+  icon?: LucideIcon
+}) {
   return (
-    <Base.RadioItem value={value} closeOnClick={false} className={cn(floatingItem, 'pr-7 relative')}>
+    <Base.RadioItem value={value} className={cn(floatingItem, 'pr-7 relative')}>
       {Icon && <Icon aria-hidden />}
       <span className="flex-1">{children}</span>
       <Base.RadioItemIndicator className="absolute right-2 flex">

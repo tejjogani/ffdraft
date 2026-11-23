@@ -3,7 +3,7 @@
  * types from the command registry in @pave/schema; nothing else in the studio calls fetch for
  * JSON (auth goes through `postJson` too).
  */
-import type { CommandInput, CommandName, CommandOutput, commands } from '@pave/schema'
+import type { CommandInput, CommandName, CommandOutput } from '@pave/schema'
 
 export class RpcError extends Error {
   override readonly name = 'RpcError'
@@ -32,7 +32,8 @@ export async function postJson<T>(url: string, body: unknown): Promise<T> {
   const text = await res.text()
   const json = text ? safeParse(text) : null
   if (!res.ok) {
-    const err = (json as { error?: { code?: string; message?: string }; message?: string } | null) ?? {}
+    const err =
+      (json as { error?: { code?: string; message?: string }; message?: string } | null) ?? {}
     throw new RpcError(
       err.error?.code ?? (res.status === 401 ? 'unauthorized' : 'http_error'),
       err.error?.message ?? err.message ?? res.statusText ?? 'Request failed',
@@ -55,8 +56,35 @@ export const rpc = {
     postJson<CommandOutput<N>>(`/api/rpc/${name}`, input),
 }
 
-type Kind<N extends CommandName> = (typeof commands)[N]['kind']
-export type QueryName = { [N in CommandName]: Kind<N> extends 'query' ? N : never }[CommandName]
-export type MutationName = { [N in CommandName]: Kind<N> extends 'mutation' ? N : never }[CommandName]
+/**
+ * Read-only commands. `CommandDef.kind` is typed as the union, so this can't be derived from
+ * types alone; `rpc.test.ts` checks it against the registry's runtime `kind`.
+ */
+export const QUERY_NAMES = [
+  'session.get',
+  'org.members',
+  'org.settings.get',
+  'collections.list',
+  'pieces.list',
+  'pieces.get',
+  'design.history',
+  'design.evaluate',
+  'boards.list',
+  'boards.get',
+  'references.search',
+  'renders.list',
+  'renders.get',
+  'models.list',
+  'shots.list',
+  'production.list',
+  'threads.list',
+  'threads.get',
+  'traces.runs',
+  'traces.run',
+  'usage.summary',
+] as const satisfies readonly CommandName[]
+
+export type QueryName = (typeof QUERY_NAMES)[number]
+export type MutationName = Exclude<CommandName, QueryName>
 
 export const isUnauthorized = (e: unknown): boolean => e instanceof RpcError && e.status === 401
