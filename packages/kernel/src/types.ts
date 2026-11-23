@@ -12,6 +12,7 @@ import type {
   GemDims,
   GemMaterialId,
   MetalId,
+  Op,
   PlatingId,
 } from '@pave/schema'
 
@@ -31,6 +32,11 @@ export interface Bounds {
 export interface Part {
   id: string
   nodeId: string
+  /**
+   * Changes exactly when this part's geometry or alloy changes. A viewer that already holds
+   * (`id`, `rev`) can keep its buffers; the Worker client does not re-send such parts.
+   */
+  rev: string
   name: string
   material: MetalId
   finish: FinishId
@@ -89,6 +95,8 @@ export interface Diagnostic {
   /** The measured value and the threshold it was compared to, in mm. */
   value?: number
   limit?: number
+  /** A one-click repair, when the fix is unambiguous: apply `ops` to the design. */
+  fix?: { label: string; ops: Op[] }
 }
 
 export interface Report {
@@ -155,4 +163,6 @@ export interface Kernel {
   export(design: Design, format: ExportFormat, options?: ExportOptions): Promise<ExportResult>
   /** Node kinds this build can evaluate; the UI only offers these. */
   readonly kinds: readonly string[]
+  /** Export formats this build can write; the UI only offers these. */
+  readonly formats: readonly ExportFormat[]
 }

@@ -4,7 +4,7 @@ import { ArrowRight, type LucideIcon, Search } from 'lucide-react'
 import { isValidElement, type ReactNode, useEffect, useMemo, useState } from 'react'
 import { cn } from '../cn'
 import { readStored, writeStored } from '../storage'
-import { floatingItem } from './floating'
+import { floatingRow } from './floating'
 import { Kbd } from './kbd'
 
 export interface PaletteItem {
@@ -26,7 +26,7 @@ export interface CommandPaletteProps {
   /** Groups are shown in this order; unlisted groups follow. */
   groupOrder?: string[]
   placeholder?: string
-  /** What to offer when nothing matches, e.g. "Ask the assistant". */
+  /** Offered for any typed query (and the only option when nothing matches), e.g. “Ask the assistant”. */
   fallback?: (query: string) => { title: string; icon?: ReactNode; onSelect: () => void } | null
 }
 
@@ -89,7 +89,10 @@ export function CommandPalette({
       value={prefix + item.id}
       keywords={[item.title, ...(item.keywords ?? [])]}
       onSelect={() => run(item)}
-      className={cn(floatingItem, 'h-8 data-[selected=true]:bg-bg-active')}
+      className={cn(
+        floatingRow,
+        'h-8 data-[selected=true]:bg-bg-active data-[disabled=true]:opacity-40',
+      )}
     >
       {renderIcon(item.icon)}
       <span className="min-w-0 flex-1 truncate">{item.title}</span>
@@ -123,26 +126,9 @@ export function CommandPalette({
               <Kbd>Esc</Kbd>
             </div>
             <Command.List className="max-h-[min(420px,60vh)] scroll-py-2 overflow-y-auto p-1.5">
-              {fb ? (
-                <Command.Empty className="p-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onOpenChange(false)
-                      fb.onSelect()
-                    }}
-                    className={cn(floatingItem, 'h-8 bg-bg-active')}
-                  >
-                    {fb.icon}
-                    <span className="min-w-0 flex-1 truncate text-left">{fb.title}</span>
-                    <ArrowRight aria-hidden />
-                  </button>
-                </Command.Empty>
-              ) : (
-                <Command.Empty className="px-2 py-6 text-center text-sm text-fg-subtle">
-                  No results
-                </Command.Empty>
-              )}
+              <Command.Empty className="px-2 py-6 text-center text-sm text-fg-subtle">
+                No results
+              </Command.Empty>
               {!query && recentItems.length > 0 && (
                 <Command.Group heading="Recent" className={groupClass}>
                   {recentItems.map((i) => row(i, 'recent:'))}
@@ -153,6 +139,24 @@ export function CommandPalette({
                   {list.map((i) => row(i))}
                 </Command.Group>
               ))}
+              {fb && (
+                // Always offered while typing, last; it is the only match when nothing else is.
+                <Command.Group heading="Ask" forceMount className={groupClass}>
+                  <Command.Item
+                    forceMount
+                    value={`fallback:${query}`}
+                    onSelect={() => {
+                      onOpenChange(false)
+                      fb.onSelect()
+                    }}
+                    className={cn(floatingRow, 'h-8 data-[selected=true]:bg-bg-active')}
+                  >
+                    {fb.icon}
+                    <span className="min-w-0 flex-1 truncate">{fb.title}</span>
+                    <ArrowRight aria-hidden />
+                  </Command.Item>
+                </Command.Group>
+              )}
             </Command.List>
             <div className="flex h-9 items-center gap-4 border-t border-glass-line px-4 text-2xs text-fg-subtle">
               <span className="flex items-center gap-1.5">

@@ -12,9 +12,12 @@
   },
   "dependencies": {
     "@pave/schema": "workspace:*",
+    "fflate": "^0.8.3",
+    "jpeg-js": "^0.4.4",
     "manifold-3d": "^3.5.5",
     "opentype.js": "^2.0.0",
     "replicad": "^1.2.1",
-    "replicad-opencascadejs": "^1.2.1"
+    "replicad-opencascadejs": "^1.2.1",
+    "rhino3dm": "^8.35.0"
   }
 }

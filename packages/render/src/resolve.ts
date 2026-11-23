@@ -12,7 +12,7 @@ import { LOOKS } from './looks'
 import { gemKey, gemMaterial, metalKey, metalMaterial, type ResolvedMaterial } from './materials'
 import { resolveOutput } from './quality'
 import { resolveRig } from './rig'
-import { boundsRadius, type SceneSubject, subjectOf } from './subject'
+import { boundsCenter, boundsRadius, type SceneSubject, subjectOf } from './subject'
 import { RESOLVED_SCENE_VERSION, type ResolvedScene } from './types'
 
 function resolveMaterials(scene: RenderScene, subject: SceneSubject) {
@@ -45,12 +45,13 @@ export function resolveScene(scene: RenderScene, input: Evaluation | SceneSubjec
   const camera = resolveCamera(scene.camera, subject, output.width / output.height)
   if (scene.animation?.type === 'rack-focus') camera.fStop ??= RACK_FOCUS_FSTOP
 
-  const rig = resolveRig(look, scene.environment, scene.sparkle, camera.target, radius, camera.azimuth)
+  const rig = resolveRig(look, scene.environment, scene.sparkle, camera.target, radius, camera)
   const floorZ = subject.bounds.min[2]
 
   return {
     version: RESOLVED_SCENE_VERSION,
     look: scene.look,
+    subject: { center: boundsCenter(subject.bounds), radius },
     color: { view: look.view, exposure: look.exposure },
     camera,
     rig,

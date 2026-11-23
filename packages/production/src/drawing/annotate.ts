@@ -25,7 +25,7 @@ const NOTE: TextStyle = { size: 6 }
 const NOTE_SUB: TextStyle = { size: 5.25, color: '#65635f' }
 const BADGE: TextStyle = { size: 5.5, weight: 'semibold' }
 
-const FIRST_TIER = 6
+const FIRST_TIER = 7
 const TIER = 5.5
 const GAP = 0.8
 const OVERSHOOT = 1.2
@@ -99,9 +99,13 @@ export function layoutView(input: LayoutInput): ViewLayout {
     const horizontal = a.axis === 'h'
     const lo = Math.min(horizontal ? pa[0] : pa[1], horizontal ? pb[0] : pb[1])
     const hi = Math.max(horizontal ? pa[0] : pa[1], horizontal ? pb[0] : pb[1])
-    const textW = measure(a.text, DIM_TEXT) + (a.caption ? measure(a.caption, CAPTION) + 1 : 0)
+    const textW = measure(a.text, DIM_TEXT)
+    const captionW = a.caption ? measure(a.caption, CAPTION) : 0
     const inside = hi - lo >= textW + 2 * ARROW + 1.5
-    const extent = inside ? { lo: lo - 0.5, hi: hi + 0.5 } : { lo: lo - ARROW - 1, hi: hi + textW + ARROW + 2 }
+    const mid = (lo + hi) / 2
+    const extent = inside
+      ? { lo: Math.min(lo - 0.5, mid - captionW / 2), hi: Math.max(hi + 0.5, mid + captionW / 2) }
+      : { lo: lo - ARROW - 1, hi: hi + Math.max(textW, captionW) + ARROW + 2 }
     const side = tiers[a.side]
     let tier = side.findIndex((t) => t.every((o) => extent.hi < o.lo || extent.lo > o.hi))
     if (tier < 0) {
@@ -118,7 +122,7 @@ export function layoutView(input: LayoutInput): ViewLayout {
           : a.side === 'right'
             ? geometry.maxX + off
             : geometry.minX - off
-    linearDim(items, a, pa, pb, at, lo, hi, inside, textW, measure, grow, growText)
+    linearDim(items, a, pa, pb, at, lo, hi, inside, textW, captionW, grow, growText)
   }
 
   // ── Leader notes, in columns left and right of the dimensions ──
@@ -167,7 +171,7 @@ function linearDim(
   hi: number,
   inside: boolean,
   textW: number,
-  measure: MeasureText,
+  captionW: number,
   grow: (x: number, y: number) => void,
   growText: (x: number, y: number, w: number, size: number, anchor: 'start' | 'middle' | 'end') => void,
 ) {
@@ -196,25 +200,36 @@ function linearDim(
     grow(e[0]!, e[1]!)
     grow(e[2]!, e[3]!)
   }
-  const valueW = measure(a.text, DIM_TEXT)
-  // Text sits above the line (horizontal) or to its left reading upward (vertical).
+  // Value above the line (horizontal) or left of it reading upward (vertical); the caption
+  // mirrors it on the other side of the line, so it never pushes the value outside.
+  const capOff = 0.8 + capHeight(CAPTION.size)
   if (h) {
     const y = at - 0.8
-    const x0 = inside ? (lo + hi) / 2 - textW / 2 : hi + ARROW + 1.5
-    items.push({ t: 'text', x: x0, y, text: a.text, style: DIM_TEXT })
-    if (a.caption) items.push({ t: 'text', x: x0 + valueW + 1, y, text: a.caption, style: CAPTION })
-    growText(x0, y, textW, DIM_TEXT.size, 'start')
+    const cx = inside ? (lo + hi) / 2 : hi + ARROW + 1.5 + Math.max(textW, captionW) / 2
+    items.push({ t: 'text', x: cx, y, text: a.text, style: DIM_TEXT, anchor: 'middle' })
+    growText(cx, y, textW, DIM_TEXT.size, 'middle')
+    if (a.caption) {
+      items.push({ t: 'text', x: cx, y: at + capOff, text: a.caption, style: CAPTION, anchor: 'middle' })
+      growText(cx, at + capOff, captionW, CAPTION.size, 'middle')
+    }
   } else {
     const x = at - 0.8
-    const y0 = inside ? (lo + hi) / 2 + textW / 2 : lo - ARROW - 1.5
-    items.push({ t: 'text', x, y: y0, text: a.text, style: DIM_TEXT, rotate: 90 })
-    if (a.caption) items.push({ t: 'text', x, y: y0 - valueW - 1, text: a.caption, style: CAPTION, rotate: 90 })
-    grow(x - capHeight(DIM_TEXT.size), y0 - textW)
-    grow(x, y0)
+    const cy = inside ? (lo + hi) / 2 : lo - ARROW - 1.5 - Math.max(textW, captionW) / 2
+    items.push({ t: 'text', x, y: cy, text: a.text, style: DIM_TEXT, anchor: 'middle', rotate: 90 })
+    grow(x - capHeight(DIM_TEXT.size), cy - textW / 2)
+    grow(x, cy + textW / 2)
+    if (a.caption) {
+      items.push({ t: 'text', x: at + capOff, y: cy, text: a.caption, style: CAPTION, anchor: 'middle', rotate: 90 })
+      grow(at + capOff, cy - captionW / 2)
+      grow(at + capOff - capHeight(CAPTION.size), cy + captionW / 2)
+    }
   }
 }
 
-/** Where a radial leader leaving `anchor` (away from `centre`) clears the geometry box. */
+/**
+ * The knee of a radial leader: it leaves `anchor` straight away from `centre` until it clears
+ * the geometry box, but never more than a short run, then turns horizontal to the text.
+ */
 function radialElbow(anchor: P2, centre: P2, side: 'left' | 'right', g: Box2): P2 {
   let dx = anchor[0] - centre[0]
   let dy = anchor[1] - centre[1]
@@ -222,9 +237,9 @@ function radialElbow(anchor: P2, centre: P2, side: 'left' | 'right', g: Box2): P
   dx /= l
   dy /= l
   const targetX = side === 'left' ? g.minX - 2 : g.maxX + 2
-  if (dx === 0 || Math.sign(targetX - anchor[0]) !== Math.sign(dx)) return [anchor[0] + dx * 3, anchor[1] + dy * 3]
-  const t = (targetX - anchor[0]) / dx
-  return [targetX, anchor[1] + dy * t]
+  const reach = dx !== 0 && Math.sign(targetX - anchor[0]) === Math.sign(dx) ? (targetX - anchor[0]) / dx : 3
+  const t = Math.min(reach, 7)
+  return [anchor[0] + dx * t, anchor[1] + dy * t]
 }
 
 function leaderNote(
@@ -269,8 +284,8 @@ function leaderNote(
 
 /** Cutting-plane line A–A: chain line with heavy ends and arrows showing the viewing direction. */
 function cutline(x: number, g: Box2, label: string, items: Item[], grow: (x: number, y: number) => void) {
-  const y0 = g.minY - 4
-  const y1 = g.maxY + 4
+  const y0 = g.minY - 3
+  const y1 = g.maxY + 3
   items.push({ t: 'lines', pen: 'cut', lines: [[x, y0, x, y1]] })
   for (const y of [y0, y1]) {
     // Section A–A looks toward −X, i.e. to the left on the front view.

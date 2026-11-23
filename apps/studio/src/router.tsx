@@ -6,17 +6,12 @@ import {
   Outlet,
   redirect,
 } from '@tanstack/react-router'
+import { lazy } from 'react'
 import { Root } from './app/Shell'
-import { PieceDesign } from './features/cad'
-import { BoardPage, BoardsPage } from './features/ideate'
-import { ModelPage, ModelsPage, PieceOnModel } from './features/models'
-import { PieceProduction } from './features/production'
-import { PieceRender, RendersPage } from './features/render'
-import { PieceSourcing, SourcingPage } from './features/sourcing'
 import { AcceptInvitePage } from './pages/auth/AcceptInvitePage'
 import { HomePage } from './pages/home/HomePage'
 import { LIBRARY_TABS, LibraryPage, type LibraryTab } from './pages/library/LibraryPage'
-import { NotFound } from './pages/NotFound'
+import { NotFound, RouteError } from './pages/NotFound'
 import { PieceHistory } from './pages/piece/PieceHistory'
 import { PieceOverview } from './pages/piece/PieceOverview'
 import { PiecePage, PieceTab } from './pages/piece/PiecePage'
@@ -28,6 +23,27 @@ import { PrivacySettings } from './pages/settings/PrivacySettings'
 import { SettingsLayout } from './pages/settings/SettingsLayout'
 import { TraceDetail, TracesSettings } from './pages/settings/TracesSettings'
 import { UsageSettings } from './pages/settings/UsageSettings'
+
+// Feature folders load on demand: the CAD and render workspaces bring heavy 3D dependencies.
+const PieceDesign = lazy(async () => ({ default: (await import('./features/cad')).PieceDesign }))
+const PieceRender = lazy(async () => ({ default: (await import('./features/render')).PieceRender }))
+const RendersPage = lazy(async () => ({ default: (await import('./features/render')).RendersPage }))
+const BoardsPage = lazy(async () => ({ default: (await import('./features/ideate')).BoardsPage }))
+const BoardPage = lazy(async () => ({ default: (await import('./features/ideate')).BoardPage }))
+const ModelsPage = lazy(async () => ({ default: (await import('./features/models')).ModelsPage }))
+const ModelPage = lazy(async () => ({ default: (await import('./features/models')).ModelPage }))
+const PieceOnModel = lazy(async () => ({
+  default: (await import('./features/models')).PieceOnModel,
+}))
+const PieceSourcing = lazy(async () => ({
+  default: (await import('./features/sourcing')).PieceSourcing,
+}))
+const SourcingPage = lazy(async () => ({
+  default: (await import('./features/sourcing')).SourcingPage,
+}))
+const PieceProduction = lazy(async () => ({
+  default: (await import('./features/production')).PieceProduction,
+}))
 
 const pick = <T extends string>(values: readonly T[], v: unknown): T | undefined =>
   values.includes(v as T) ? (v as T) : undefined
@@ -73,7 +89,7 @@ const pieceRoute = createRoute({
 /** Piece tabs. `bleed` tabs fill the page edge to edge; the others sit in a centred column. */
 const pieceTab = (
   path: string,
-  Component: (p: { pieceId: string }) => React.ReactNode,
+  Component: React.ComponentType<{ pieceId: string }>,
   bleed = false,
 ) =>
   createRoute({
@@ -89,7 +105,7 @@ const pieceTab = (
     },
   })
 
-const ideasRoute = route('/ideas', BoardsPage)
+const ideasRoute = route('/ideas', () => <BoardsPage />)
 const boardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/ideas/$boardId',
@@ -150,10 +166,10 @@ const routeTree = rootRoute.addChildren([
   ]),
   ideasRoute,
   boardRoute,
-  route('/renders', RendersPage),
-  route('/models', ModelsPage),
+  route('/renders', () => <RendersPage />),
+  route('/models', () => <ModelsPage />),
   modelRoute,
-  route('/sourcing', SourcingPage),
+  route('/sourcing', () => <SourcingPage />),
   libraryRoute,
   settingsRoute.addChildren([
     createRoute({
@@ -175,7 +191,12 @@ const routeTree = rootRoute.addChildren([
   inviteRoute,
 ])
 
-export const router = createRouter({ routeTree, defaultPreload: 'intent', scrollRestoration: true })
+export const router = createRouter({
+  routeTree,
+  defaultPreload: 'intent',
+  scrollRestoration: true,
+  defaultErrorComponent: RouteError,
+})
 
 declare module '@tanstack/react-router' {
   interface Register {

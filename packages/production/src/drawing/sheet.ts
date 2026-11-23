@@ -14,6 +14,8 @@ import { sceneBodies } from './scene'
 import { sliceBodies } from './section'
 import { VIEWS, type ViewId } from './views'
 
+const HIDDEN_LINE_STONE_LIMIT = 24
+
 export const VIEW_ORDER: readonly ViewId[] = ['front', 'side', 'top', 'section', 'iso']
 
 export interface DrawingSet {
@@ -36,6 +38,9 @@ export function buildDrawingSet(evaluation: Evaluation, facts: PieceFacts, opts:
   const timings: Partial<Record<ViewId, number>> = {}
   const res = opts.resolution ?? 2048
   let loops: Float32Array[] = []
+  // Hidden lines only on the principal orthographic views, and only while they stay legible:
+  // behind a pavé field they would be hundreds of dashed seats.
+  const showHidden = evaluation.stones.length <= HIDDEN_LINE_STONE_LIMIT
   for (const id of VIEW_ORDER) {
     const t0 = performance.now()
     if (id === 'section') {
@@ -44,8 +49,7 @@ export function buildDrawingSet(evaluation: Evaluation, facts: PieceFacts, opts:
       loops = cut.loops
       views.section = hiddenLines(bodies, VIEWS.section, { resolution: res, extra: cut.world })
     } else {
-      // Hidden lines only on the principal orthographic views; pictorials stay clean.
-      views[id] = hiddenLines(bodies, VIEWS[id], { resolution: res, hidden: id !== 'iso' })
+      views[id] = hiddenLines(bodies, VIEWS[id], { resolution: res, hidden: id !== 'iso' && showHidden })
     }
     timings[id] = performance.now() - t0
   }
@@ -77,7 +81,8 @@ interface Placed {
   layout: ViewLayout
   dx: number
   dy: number
-  label: string
+  /** Baseline of the view label, shared along a row. */
+  labelY: number
 }
 
 /** Lays out the general arrangement inside a frame; returns the sheet and the scale chosen. */
@@ -88,7 +93,7 @@ export function composeArrangement(
   title: TitleInfo,
 ): { sheet: Sheet; scale: number } {
   const avail = { width: frame.width, height: frame.height - TITLE_H - 16 }
-  let best: { placed: Placed[]; scale: number; w: number; h: number } | null = null
+  let best: ReturnType<typeof arrange> | null = null
   for (const s of SCALES) {
     for (const isoScale of [s, s * 0.6]) {
       const r = arrange(set, measure, s, isoScale, avail.width)
@@ -97,12 +102,13 @@ export function composeArrangement(
     }
     if (best && best.w <= avail.width && best.h <= avail.height) break
   }
-  const { placed, scale, w } = best!
+  const { placed, scale, isoScale, w } = best!
   const ox = (frame.width - w) / 2
   const items: Item[] = []
   for (const p of placed) {
     items.push(...translate(p.layout.items, p.dx + ox, p.dy + 4))
-    items.push(viewLabel(p, ox, 4))
+    const own = p.layout.id === 'iso' && isoScale !== scale ? isoScale : null
+    items.push(viewLabel(p, labelFor(p.layout.id, own), ox, 4))
   }
   items.push(...titleBlock(title, scale, frame.width, frame.height - TITLE_H, measure))
   return { sheet: { width: frame.width, height: frame.height, items }, scale }
@@ -117,62 +123,58 @@ function arrange(set: DrawingSet, measure: MeasureText, s: number, isoScale: num
   const side = lay('side')
   const top = lay('top')
   const extras = [lay('section'), lay('iso', isoScale)].filter((v): v is ViewLayout => !!v)
-  const LABEL_H = 7
+  // Every assignment of the free views (section, iso) to the top, middle or a third row; the
+  // shortest arrangement that fits the width wins.
+  let best: ReturnType<typeof rows> | null = null
+  for (let code = 0; code < 3 ** extras.length; code++) {
+    const rowOf = extras.map((_, i) => Math.floor(code / 3 ** i) % 3)
+    const r = rows(front, side, top, extras, rowOf)
+    if (r.w > maxW && best) continue
+    if (!best || (r.w <= maxW && (best.w > maxW || r.h < best.h))) best = r
+  }
+  return { ...best!, scale: s, isoScale }
+}
 
+type Cell = { layout: ViewLayout; x: number }
+
+function rows(front: ViewLayout, side: ViewLayout | null, top: ViewLayout | null, extras: ViewLayout[], rowOf: number[]) {
+  const LABEL_H = 7
   // Column 1 shares the model x-origin between top and front (projection alignment).
   const colL = Math.max(-front.box.minX, top ? -top.box.minX : 0)
   const colR = Math.max(front.box.maxX, top ? top.box.maxX : 0)
-  type Cell = { layout: ViewLayout; x: number }
-  const rowA: Cell[] = top ? [{ layout: top, x: colL }] : []
-  const rowB: Cell[] = [{ layout: front, x: colL }]
-  let wA = top ? colL + colR : 0
-  let wB = colL + colR
-  if (side) {
-    rowB.push({ layout: side, x: wB + GAP - side.box.minX })
-    wB += GAP + side.box.maxX - side.box.minX
+  const grid: Cell[][] = [top ? [{ layout: top, x: colL }] : [], [{ layout: front, x: colL }], []]
+  const width = [top ? colL + colR : 0, colL + colR, 0]
+  const append = (r: number, v: ViewLayout) => {
+    const gap = width[r]! > 0 ? GAP : 0
+    grid[r]!.push({ layout: v, x: width[r]! + gap - v.box.minX })
+    width[r]! += gap + v.box.maxX - v.box.minX
   }
-  const rowC: Cell[] = []
-  let wC = 0
-  for (const v of extras) {
-    const vw = v.box.maxX - v.box.minX
-    if (wB + GAP + vw <= maxW) {
-      rowB.push({ layout: v, x: wB + GAP - v.box.minX })
-      wB += GAP + vw
-    } else if (wA + (wA ? GAP : 0) + vw <= maxW) {
-      rowA.push({ layout: v, x: wA + (wA ? GAP : 0) - v.box.minX })
-      wA += (wA ? GAP : 0) + vw
-    } else {
-      rowC.push({ layout: v, x: wC + (wC ? GAP : 0) - v.box.minX })
-      wC += (wC ? GAP : 0) + vw
-    }
-  }
+  if (side) append(1, side)
+  extras.forEach((v, i) => append(rowOf[i]!, v))
+  // The third row has no projection ties: centre it.
+  const shift = (Math.max(...width) - width[2]!) / 2
+  for (const c of grid[2]!) c.x += shift
   // Rows align on the model origin, so front and side share heights (projection alignment).
-  const rowSpan = (row: Cell[]) => ({
-    top: Math.min(...row.map((c) => c.layout.box.minY)),
-    bottom: Math.max(...row.map((c) => c.layout.box.maxY)),
-  })
   const placed: Placed[] = []
   let y = 0
-  for (const row of [rowA, rowB, rowC]) {
+  for (const row of grid) {
     if (!row.length) continue
-    const span = rowSpan(row)
-    for (const c of row) {
-      placed.push({ layout: c.layout, dx: c.x, dy: y - span.top, label: labelFor(c.layout.id, c.layout === extras.find((e) => e.id === 'iso') && isoScale !== s ? isoScale : null) })
-    }
-    y += span.bottom - span.top + LABEL_H + GAP
+    const topY = Math.min(...row.map((c) => c.layout.box.minY))
+    const bottom = Math.max(...row.map((c) => c.layout.box.maxY))
+    for (const c of row) placed.push({ layout: c.layout, dx: c.x, dy: y - topY, labelY: y + bottom - topY + 5 })
+    y += bottom - topY + LABEL_H + GAP
   }
-  return { placed, scale: s, w: Math.max(wA, wB, wC), h: y - GAP }
+  return { placed, w: Math.max(...width), h: y - GAP }
 }
 
 const labelFor = (id: ViewId, ownScale: number | null) =>
   `${VIEWS[id].title}${ownScale ? ` · ${scaleLabel(ownScale)}` : ''}`
 
-function viewLabel(p: Placed, ox: number, oy: number): Item {
+function viewLabel(p: Placed, label: string, ox: number, oy: number): Item {
   const g = p.layout.geometry
-  const b = p.layout.box
-  const text = p.label.toUpperCase()
+  const text = label.toUpperCase()
   const x = p.dx + ox + (g.minX + g.maxX) / 2
-  const y = p.dy + oy + b.maxY + 5
+  const y = p.labelY + oy
   return { t: 'text', x, y, text, style: LABEL, anchor: 'middle' }
 }
 
@@ -215,7 +217,7 @@ export function composeViewSheet(set: DrawingSet, id: ViewId, scale: number, mea
   const dx = (width - (b.maxX - b.minX)) / 2 - b.minX
   const dy = margin - b.minY
   const items = translate(layout.items, dx, dy)
-  items.push(viewLabel({ layout, dx, dy, label: labelFor(id, null) }, 0, 0))
+  items.push(viewLabel({ layout, dx, dy, labelY: dy + b.maxY + 5 }, labelFor(id, null), 0, 0))
   items.push(...titleBlock(title, scale, width - 16, contentH, measure).map((it) => translate([it], 8, 0)[0]!))
   return { width, height, items }
 }
@@ -247,9 +249,9 @@ function titleBlock(t: TitleInfo, scale: number, width: number, y: number, measu
     const maxW = c.x1 - c.x0 - 4
     items.push({ t: 'text', x: c.x0 + 2, y: c.y0 + (tall ? 9.6 : 7.4), text: fit(c.value, style, maxW, measure), style })
   }
-  items.push(...projectionSymbol(col(0.84) + 12, y + row + 4.6))
+  items.push(...projectionSymbol(col(0.84) + 13, y + row + 5.9))
   // Scale bar and the shrinkage statement sit just above the block.
-  items.push(...scaleBar(scale, 0, y - 4))
+  items.push(...scaleBar(scale, 1, y - 4))
   items.push({
     t: 'text',
     x: width,

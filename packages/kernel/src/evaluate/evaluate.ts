@@ -143,7 +143,7 @@ export class Evaluator {
     if (cache.assembly?.key !== key) {
       cache.assembly?.value.dispose()
       cache.assembly = null
-      cache.assembly = { key, value: assembleProduction(design, results, QUALITY.production) }
+      cache.assembly = { key, value: assembleProduction(design, results, QUALITY.production, key) }
     }
     return cache.assembly.value
   }

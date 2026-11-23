@@ -3,7 +3,8 @@
  * handles for solids — tessellation, transforms, booleans, integral properties — lives here so
  * features never see an untyped WASM object or an opaque `WebAssembly.Exception`.
  */
-import { type Shape3D, cast, makeCompound, measureArea, measureVolume } from 'replicad'
+import { type AnyShape, type Shape3D, cast, makeCompound, measureArea } from 'replicad'
+import type { TopoDS_Shape } from 'replicad-opencascadejs'
 import type { Mat4 } from '../geometry/vec'
 import { runtime } from '../runtime/index'
 import type { Bounds, MeshData } from '../types'
@@ -41,6 +42,18 @@ export function scoped<T>(fn: (own: <D extends Deletable>(d: D) => D) => T): T {
   }
 }
 
+/**
+ * Wraps a raw OpenCascade shape in its replicad class and frees the raw handle (replicad's
+ * `cast` keeps a typed copy, so the untyped original would otherwise wait for the GC).
+ */
+export function wrapShape<T extends AnyShape>(raw: TopoDS_Shape): T {
+  try {
+    return cast(raw) as T
+  } finally {
+    raw.delete()
+  }
+}
+
 /** Triangulates a B-rep. Vertices are per face with surface normals, so edges stay crisp. */
 export function tessellateShape(shape: Shape3D, quality: Quality): MeshData {
   const { oc } = runtime()
@@ -68,12 +81,24 @@ export function transformShape(shape: Shape3D, m: Mat4): Shape3D {
       m[1]!, m[5]!, m[9]!, m[13]!,
       m[2]!, m[6]!, m[10]!, m[14]!,
     ) // biome-ignore format: matrix rows
-    const builder = own(new oc.BRepBuilderAPI_Transform(shape.wrapped, trsf, true))
-    return cast(builder.Shape()) as Shape3D
+    // copy = false: rigid moves share the geometry (and its cached triangulation).
+    const builder = own(new oc.BRepBuilderAPI_Transform(shape.wrapped, trsf, false))
+    return wrapShape<Shape3D>(builder.Shape())
   })
 }
 
-export const shapeVolume = (shape: Shape3D): number => measureVolume(shape)
+/**
+ * Signed volume of a B-rep. Uses OpenCascade's adaptive integrator: the default fixed-order
+ * Gauss rule is off by up to 0.5 % on B-spline faces, which is real money in gold.
+ */
+export function shapeVolume(shape: Shape3D): number {
+  const { oc } = runtime()
+  return scoped((own) => {
+    const props = own(new oc.GProp_GProps())
+    oc.BRepGProp.VolumeProperties(shape.wrapped, props, 1e-6, false, false)
+    return props.Mass()
+  })
+}
 export const shapeArea = (shape: Shape3D): number => measureArea(shape)
 
 export function shapeBounds(shape: Shape3D): Bounds {

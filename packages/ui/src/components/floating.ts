@@ -10,9 +10,12 @@ export const floatingSurface =
   'data-ending-style:opacity-0 data-ending-style:scale-[0.97] data-ending-style:duration-100'
 
 /** A row inside a floating list: menu items, select options, palette results. */
-export const floatingItem =
+export const floatingRow =
   'flex h-7 w-full items-center gap-2 rounded-md px-2 text-sm text-fg outline-none select-none ' +
-  'data-highlighted:bg-bg-active data-disabled:opacity-40 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-muted'
+  '[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-muted'
+
+/** A floating row driven by Base UI's highlight/disabled attributes. */
+export const floatingItem = `${floatingRow} data-highlighted:bg-bg-active data-disabled:opacity-40`
 
 export const floatingLabel = 'px-2 pt-2 pb-1 text-2xs font-medium text-fg-subtle select-none'
 

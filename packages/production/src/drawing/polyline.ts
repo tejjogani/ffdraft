@@ -74,7 +74,7 @@ export function polylineLength(pts: ArrayLike<number>): number {
   return len
 }
 
-/** Douglas–Peucker (iterative). */
+/** Douglas–Peucker (iterative), with point-to-segment distances. */
 export function simplify(pts: ArrayLike<number>, tol: number): Float32Array {
   const n = pts.length / 2
   if (n <= 2) return Float32Array.from(pts)
@@ -87,13 +87,15 @@ export function simplify(pts: ArrayLike<number>, tol: number): Float32Array {
     const ay = pts[i * 2 + 1]!
     const dx = pts[j * 2]! - ax
     const dy = pts[j * 2 + 1]! - ay
-    const l = Math.hypot(dx, dy)
+    const l2 = dx * dx + dy * dy
     let worst = -1
     let wi = -1
     for (let k = i + 1; k < j; k++) {
       const ex = pts[k * 2]! - ax
       const ey = pts[k * 2 + 1]! - ay
-      const dist = l > 1e-12 ? Math.abs(ex * dy - ey * dx) / l : Math.hypot(ex, ey)
+      // Distance to the chord segment, not its line: polylines may double back on themselves.
+      const t = l2 > 1e-24 ? Math.max(0, Math.min(1, (ex * dx + ey * dy) / l2)) : 0
+      const dist = Math.hypot(ex - dx * t, ey - dy * t)
       if (dist > worst) {
         worst = dist
         wi = k

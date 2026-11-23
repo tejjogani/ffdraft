@@ -9,7 +9,7 @@ import {
   sketchEllipse,
 } from 'replicad'
 import { type BuildContext, defineFeature, metalOf, runtime, solidFromBrep } from '../core'
-import { cast } from 'replicad'
+import { wrapShape } from '../solid/occt'
 
 /** An ellipse (or circle) with the given X and Y diameters on the plane z = `z`. */
 function ellipseSketch(dx: number, dy: number, z: number): Sketch {
@@ -22,7 +22,7 @@ function torus(diameter: number, tube: number): Shape3D {
   const minor = Math.min(tube, diameter / 2 - 1e-3) / 2
   const maker = new oc.BRepPrimAPI_MakeTorus(diameter / 2 - minor, minor)
   try {
-    return cast(maker.Shape()) as Shape3D
+    return wrapShape<Shape3D>(maker.Shape())
   } finally {
     maker.delete()
   }

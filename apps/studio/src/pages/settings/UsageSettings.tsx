@@ -51,7 +51,11 @@ export function UsageSettings() {
               {usd(usage.data.totalUsd)}
             </div>
           </div>
-          <DailyBars data={usage.data.byDay} days={Number(days)} />
+          {usage.data.totalUsd > 0 ? (
+            <DailyBars data={usage.data.byDay} days={Number(days)} />
+          ) : (
+            <p className="text-sm text-fg-subtle">No spend in this period.</p>
+          )}
           <section className="mt-10">
             <h2 className="mb-2 text-sm font-medium">By meter</h2>
             {usage.data.byMeter.length === 0 ? (
@@ -154,11 +158,11 @@ function DailyBars({ data, days }: { data: { day: string; costUsd: number }[]; d
   }, [data, days])
   const max = Math.max(...series.map((d) => d.costUsd), 0.01)
   return (
-    <figure aria-label="Spend per day">
+    <figure aria-label="Spend per day" className="pt-5">
       <div className="relative h-44">
         <div className="pointer-events-none absolute inset-x-0 top-0 border-t border-dashed border-line" />
         <div className="pointer-events-none absolute inset-x-0 top-1/2 border-t border-dashed border-line" />
-        <span className="absolute top-1 right-0 font-mono text-2xs text-fg-subtle tabular">
+        <span className="absolute -top-5 left-0 font-mono text-2xs text-fg-subtle tabular">
           {usd(max)}
         </span>
         <div className="absolute inset-0 flex items-end gap-0.5 border-b border-line-strong">
@@ -178,7 +182,7 @@ function DailyBars({ data, days }: { data: { day: string; costUsd: number }[]; d
                 role="img"
               >
                 <div
-                  className="w-full rounded-t-[4px] bg-fg-subtle transition-colors duration-120 group-hover:bg-fg"
+                  className="w-full rounded-t-[4px] bg-fg-faint transition-colors duration-120 group-hover:bg-fg-muted"
                   style={{ height: d.costUsd ? `max(2px, ${(d.costUsd / max) * 100}%)` : 0 }}
                 />
               </div>

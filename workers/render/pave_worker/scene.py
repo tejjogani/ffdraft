@@ -112,7 +112,14 @@ def _panel(p: Panel, rig: bpy.types.Object, pivot: Vec3, material: bpy.types.Mat
     x, y, z, qw = p["quaternion"]
     obj.rotation_mode = "QUATERNION"
     obj.rotation_quaternion = Quaternion((qw, x, y, z))
+    # The rig is studio equipment, seen only in reflections and refractions — as in the
+    # viewport, where it exists only in the PMREM. It casts no shadows (a card's shadow on the
+    # catcher would read as dirt), and black flags are invisible to diffuse rays, so they draw
+    # dark edges in metal without darkening the floor.
     obj.visible_camera = False
+    obj.visible_shadow = False
+    if max(p["radiance"]) == 0:
+        obj.visible_diffuse = False
 
 
 def _sparkle(i: int, s: Sparkle, rig: bpy.types.Object, pivot: Vec3, gems: bpy.types.Collection) -> None:
@@ -205,6 +212,9 @@ def build_ground(g: Ground, center: Vec3) -> list[bpy.types.Object]:
     if kind == "shadow":
         obj = _plane("ground", g["z"], g["size"], (center[0], center[1]))
         obj.is_shadow_catcher = True
+        # Camera-only: a shadow, not a lit white floor the metal and stones would reflect.
+        # The look's ambient nadir stands in for floor bounce, exactly as in the viewport.
+        obj.visible_diffuse = obj.visible_glossy = obj.visible_transmission = False
         obj.data.materials.append(_principled("ground", (0.8, 0.8, 0.8), 1.0))
         return [obj]
     if kind == "reflective":

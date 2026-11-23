@@ -8,7 +8,6 @@ const SUGGESTIONS = [
   '1.5 ct oval, hidden halo, 18k yellow',
   'Turn a logo into an iced pendant',
   'Men’s signet with family crest',
-  'Stackable eternity bands in three golds',
 ]
 
 interface Attachment {
@@ -52,9 +51,9 @@ export function Composer() {
     <div>
       <form
         onSubmit={onSubmit}
-        className="rounded-xl bg-line-strong p-px shadow-sm transition-[background] duration-180 focus-within:ai-gradient"
+        className="rounded-[13px] bg-line-strong p-px shadow-sm transition-[background] duration-180 focus-within:ai-gradient"
       >
-        <div className="rounded-[11px] bg-bg">
+        <div className="rounded-lg bg-bg">
           <Textarea
             bare
             minRows={3}

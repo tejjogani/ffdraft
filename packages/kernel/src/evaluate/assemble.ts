@@ -20,6 +20,7 @@ import {
 import { boundsOverlap, mergeTessellations, unionBounds } from '../solid/meshing'
 import type { Bounds, Part } from '../types'
 import { labelOf } from './build'
+import { hashString } from './hash'
 
 export interface Assembly {
   parts: ScenePart[]
@@ -78,6 +79,7 @@ function fusedVolume(solids: readonly Solid[], quality: Quality): number {
 function partOf(
   id: string,
   nodeId: string,
+  rev: string,
   name: string,
   spec: MetalSpec,
   solids: readonly Solid[],
@@ -88,6 +90,7 @@ function partOf(
   return {
     id,
     nodeId,
+    rev,
     name,
     ...spec,
     mesh: tessellation.mesh,
@@ -138,6 +141,7 @@ export function assembleDraft(
             part: partOf(
               i === 0 ? result.id : `${result.id}#${i}`,
               result.id,
+              hashString(key),
               labelOf(result.node),
               specOf(group[0]!.body),
               solids,
@@ -173,6 +177,8 @@ export function assembleProduction(
   design: Design,
   results: ReadonlyMap<string, NodeResult>,
   quality: Quality,
+  /** Hash of everything that went into this assembly; the parts' `rev`. */
+  rev: string,
 ): Assembly {
   const { manifold: mf } = runtime()
   const consumed = consumedBy(results)
@@ -259,6 +265,7 @@ export function assembleProduction(
         const part = partOf(
           `${material}:${i}`,
           first?.id ?? material,
+          rev,
           kept.length === 1 || !first ? METALS[material].label : labelOf(first.node),
           group.spec,
           [solid],

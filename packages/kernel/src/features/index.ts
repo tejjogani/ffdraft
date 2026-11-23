@@ -6,6 +6,9 @@
  * ../core.ts for the contract) and add it to this list.
  */
 import type { AnyFeature } from '../core'
+import { gem } from './gem'
+import { meshBody } from './meshBody'
 import { primitive } from './primitive'
+import { ringShank } from './ringShank'
 
-export const FEATURES: readonly AnyFeature[] = [primitive]
+export const FEATURES: readonly AnyFeature[] = [ringShank, gem, primitive, meshBody]

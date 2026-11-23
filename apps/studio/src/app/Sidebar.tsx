@@ -100,7 +100,7 @@ export function Sidebar() {
   return (
     <aside
       aria-label="Sidebar"
-      className="glass flex h-full w-[248px] shrink-0 flex-col rounded-none border-0 border-r border-glass-line"
+      className="glass-pane flex h-full w-[248px] shrink-0 flex-col border-r border-glass-line"
     >
       <div className="app-drag h-(--chrome-top) shrink-0" />
       <div className="flex items-center gap-1 px-2">
@@ -174,6 +174,7 @@ function WorkspaceSwitcher() {
       trigger={
         <button
           type="button"
+          aria-label={`Workspace: ${name}`}
           className="app-no-drag flex h-8 min-w-0 flex-1 items-center gap-2 rounded-sm px-1.5 text-sm font-medium text-fg outline-none hover:bg-bg-hover data-popup-open:bg-bg-active"
         >
           <Avatar
@@ -324,7 +325,7 @@ function CollectionRow({ collection: c }: { collection: Collection }) {
             }}
           >
             <span className="flex-1 truncate">{c.name}</span>
-            <span className="hover-reveal text-xs text-fg-subtle tabular group-hover:mr-6">
+            <span className="hover-reveal text-xs text-fg-subtle tabular group-focus-within:mr-6 group-hover:mr-6">
               {c.pieceCount}
             </span>
           </Link>

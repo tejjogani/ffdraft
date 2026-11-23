@@ -9,8 +9,6 @@ interface Integration {
   title: string
   description: string
   icon: LucideIcon
-  /** The environment variable that enables it, for self-hosters. */
-  env: string
 }
 
 const INTEGRATIONS: Integration[] = [
@@ -19,42 +17,36 @@ const INTEGRATIONS: Integration[] = [
     title: 'Assistant',
     description: 'Plans pieces, edits CAD and runs tools on your behalf.',
     icon: Sparkles,
-    env: 'ANTHROPIC_API_KEY',
   },
   {
     key: 'imageSearch',
     title: 'Image search',
     description: 'Reference search across the web and open museum collections.',
     icon: Search,
-    env: 'BRAVE_API_KEY',
   },
   {
     key: 'imageGeneration',
     title: 'Image generation',
     description: 'Concept images conditioned on your moodboards.',
     icon: ImagePlus,
-    env: 'FAL_KEY',
   },
   {
     key: 'mesh3d',
     title: '3D generation',
     description: 'Sculpted bodies from images or prompts for iced pieces.',
     icon: Box,
-    env: 'MESHY_API_KEY',
   },
   {
     key: 'blender',
     title: 'Blender',
     description: 'Photoreal renders through a local or cloud Blender worker.',
     icon: Blend,
-    env: 'BLENDER_PATH',
   },
   {
     key: 'sourcing',
     title: 'Diaex sourcing',
     description: 'Live stone inventory matched to your designs’ lots.',
     icon: Gem,
-    env: 'DIAEX_API_KEY',
   },
 ]
 
@@ -71,7 +63,7 @@ export function IntegrationsSettings() {
         <InlineError message="Capabilities unavailable." />
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {INTEGRATIONS.map(({ key, title, description, icon: Icon, env }) => {
+          {INTEGRATIONS.map(({ key, title, description, icon: Icon }) => {
             const value = capabilities[key]
             const providers = Array.isArray(value) ? value : []
             const connected = Array.isArray(value) ? value.length > 0 : value
@@ -102,13 +94,7 @@ export function IntegrationsSettings() {
                       'Ready'
                     )
                   ) : (
-                    <span>
-                      Add{' '}
-                      <code className="rounded-xs bg-bg-muted px-1 py-0.5 font-mono text-2xs text-fg-muted">
-                        {env}
-                      </code>{' '}
-                      to the server’s environment.
-                    </span>
+                    'Add its API key to the server’s environment to enable it.'
                   )}
                 </div>
               </article>

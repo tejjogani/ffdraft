@@ -1,5 +1,5 @@
 import { Select as Base } from '@base-ui/react/select'
-import { Check, ChevronsUpDown } from 'lucide-react'
+import { Check, ChevronDown, ChevronsUpDown } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cn } from '../cn'
 import { floatingItem, floatingLabel, floatingSurface } from './floating'
@@ -56,7 +56,7 @@ export function Select<V extends string>({
       <Base.Trigger
         aria-label={aria['aria-label']}
         className={cn(
-          'group/sel flex min-w-0 items-center gap-2 rounded-sm text-sm text-fg outline-none select-none',
+          'group flex min-w-0 items-center gap-2 rounded-sm text-sm text-fg outline-none select-none',
           'transition-[background-color,box-shadow] duration-120',
           'focus-visible:shadow-[inset_0_0_0_1px_var(--select),0_0_0_3px_var(--select-soft)]',
           variant === 'default'
@@ -72,8 +72,10 @@ export function Select<V extends string>({
             {current?.label ?? placeholder}
           </span>
         </span>
-        {variant === 'default' && (
+        {variant === 'default' ? (
           <ChevronsUpDown className="size-3.5 shrink-0 text-fg-subtle" aria-hidden />
+        ) : (
+          <ChevronDown className="hover-reveal -ml-1 size-3 shrink-0 text-fg-subtle" aria-hidden />
         )}
       </Base.Trigger>
       <Base.Portal>

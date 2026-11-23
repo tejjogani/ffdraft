@@ -14,6 +14,12 @@ export default defineConfig({
       ],
     },
   ],
+  build: {
+    rolldownOptions: {
+      // Dependencies change less often than app code; a separate chunk keeps them cached.
+      output: { advancedChunks: { groups: [{ name: 'vendor', test: /node_modules/ }] } },
+    },
+  },
   server: {
     port: 5173,
     proxy: { '/api': { target: 'http://localhost:8787', changeOrigin: false } },

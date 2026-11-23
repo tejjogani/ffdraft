@@ -121,10 +121,11 @@ export function hiddenLines(bodies: readonly SceneBody[], view: ViewDef, opts: H
   if (!Number.isFinite(minX)) return { metal: [], stones: [], hidden: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } }
 
   const px = Math.max(maxX - minX, maxY - minY, 1e-3) / res
-  const ox = minX - 2 * px
-  const oy = minY - 2 * px
-  const W = Math.ceil((maxX - minX) / px) + 5
-  const H = Math.ceil((maxY - minY) / px) + 5
+  // A three-pixel apron keeps every neighbourhood lookup inside the buffer.
+  const ox = minX - 3 * px
+  const oy = minY - 3 * px
+  const W = Math.ceil((maxX - minX) / px) + 7
+  const H = Math.ceil((maxY - minY) / px) + 7
   const depth = new Float32Array(W * H).fill(Number.NEGATIVE_INFINITY)
   const back = Number.isFinite(clip) ? new Uint8Array(W * H) : null
 
@@ -137,9 +138,12 @@ export function hiddenLines(bodies: readonly SceneBody[], view: ViewDef, opts: H
 
   const cand = new Buf()
   const cls: number[] = []
-  const add = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, c: number) => {
+  /** Per candidate: neighbourhood radius in pixels for the visibility test. */
+  const reach: number[] = []
+  const add = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, c: number, r = 1) => {
     cand.push6(x0, y0, z0, x1, y1, z1)
     cls.push(c)
+    reach.push(r)
   }
 
   bodies.forEach((b, bi) => {
@@ -171,13 +175,13 @@ export function hiddenLines(bodies: readonly SceneBody[], view: ViewDef, opts: H
 
   const out = [new SegmentBuffer(), new SegmentBuffer(), new SegmentBuffer()] as const
   const eps = 2.5 * px
-  const visibleAt = (x: number, y: number, z: number): boolean => {
+  const visibleAt = (x: number, y: number, z: number, r: number): boolean => {
     const i = Math.floor((x - ox) / px)
     const j = Math.floor((y - oy) / px)
     let m = Number.POSITIVE_INFINITY
-    for (let dj = -1; dj <= 1; dj++) {
+    for (let dj = -r; dj <= r; dj++) {
       const row = (j + dj) * W
-      for (let di = -1; di <= 1; di++) {
+      for (let di = -r; di <= r; di++) {
         const d = depth[row + i + di]
         if (d !== undefined && d < m) m = d
       }
@@ -213,9 +217,10 @@ export function hiddenLines(bodies: readonly SceneBody[], view: ViewDef, opts: H
     if (len < 0.05) continue
     const n = Math.max(1, Math.ceil(len / 0.7))
     if (states.length < n + 1) states = new Uint8Array((n + 1) * 2)
+    const r = reach[s]!
     for (let k = 0; k <= n; k++) {
       const t = k / n
-      states[k] = visibleAt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, z0 + (z1 - z0) * t) ? 1 : 0
+      states[k] = visibleAt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, z0 + (z1 - z0) * t, r) ? 1 : 0
     }
     // A lone sample disagreeing with both neighbours is depth-buffer noise, not an occluder.
     for (let k = 1; k < n; k++) if (states[k - 1] === states[k + 1] && states[k] !== states[k - 1]) states[k] = states[k - 1]!
@@ -258,10 +263,14 @@ function traceContours(
   idx: Uint32Array,
   normals: Float32Array,
   view: ViewDef,
-  add: (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, c: number) => void,
+  add: (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, c: number, r?: number) => void,
 ) {
   const [tx, ty, tz] = view.toward
-  const g = (v: number) => normals[v * 3]! * tx + normals[v * 3 + 1]! * ty + normals[v * 3 + 2]! * tz
+  // Offset the zero level: a flat face seen exactly edge-on has n·v ≈ 0 everywhere, and noise
+  // would scatter contour fragments over it. With the offset it reads as back-facing and the
+  // contour lands cleanly where its fillet turns toward the viewer.
+  const tau = 2e-3
+  const g = (v: number) => normals[v * 3]! * tx + normals[v * 3 + 1]! * ty + normals[v * 3 + 2]! * tz - tau
   const pts: number[] = []
   for (let f = 0; f < idx.length; f += 3) {
     const a = idx[f]!
@@ -286,7 +295,9 @@ function traceContours(
         pp[lo * 3 + 2]! + (pp[hi * 3 + 2]! - pp[lo * 3 + 2]!) * t,
       )
     }
-    if (pts.length === 6) add(pts[0]!, pts[1]!, pts[2]!, pts[3]!, pts[4]!, pts[5]!, METAL)
+    // Interpolated contours sit up to a couple of pixels inside the true silhouette, where the
+    // surface itself would occlude them; widen their neighbourhood to see past it.
+    if (pts.length === 6) add(pts[0]!, pts[1]!, pts[2]!, pts[3]!, pts[4]!, pts[5]!, METAL, 2)
   }
 }
 

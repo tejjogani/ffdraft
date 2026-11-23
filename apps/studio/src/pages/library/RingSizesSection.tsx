@@ -8,6 +8,7 @@ import {
 import { NumberField, Select } from '@pave/ui'
 import { useState } from 'react'
 import { SectionTitle } from '../../components/Page'
+import { Stat, StatGrid } from '../../components/Stats'
 import { DataTable, Td } from './table'
 
 const SYSTEM_LABEL: Record<RingSizeSystem, string> = {
@@ -51,17 +52,17 @@ export function RingSizesSection() {
           />
           {system === 'uk' && <span className="text-sm text-fg-muted">= {ukLetter(value)}</span>}
         </div>
-        <dl className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-md bg-line sm:grid-cols-6">
-          <Cell label="Inner ⌀" value={`${d.toFixed(2)} mm`} />
-          <Cell label="Circumference" value={`${(d * Math.PI).toFixed(1)} mm`} />
+        <StatGrid className="mt-5 sm:grid-cols-6">
+          <Stat label="Inner ⌀" value={`${d.toFixed(2)} mm`} />
+          <Stat label="Circumference" value={`${(d * Math.PI).toFixed(1)} mm`} />
           {(['us', 'uk', 'eu', 'jp'] as const).map((s) => (
-            <Cell
+            <Stat
               key={s}
               label={SYSTEM_LABEL[s]}
               value={formatRingSize(ringSizeFromDiameter(d, s)).replace(/^[A-Z]{2} /, '')}
             />
           ))}
-        </dl>
+        </StatGrid>
       </section>
       <section>
         <SectionTitle>Size chart</SectionTitle>
@@ -100,15 +101,6 @@ export function RingSizesSection() {
           })}
         </DataTable>
       </section>
-    </div>
-  )
-}
-
-function Cell({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-bg px-3 py-2.5">
-      <dt className="text-2xs text-fg-subtle">{label}</dt>
-      <dd className="mt-0.5 font-mono text-sm tabular">{value}</dd>
     </div>
   )
 }

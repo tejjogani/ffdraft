@@ -3,6 +3,7 @@ import { AiMark, Chip, type ChipTone, EmptyState, InlineError, Skeleton } from '
 import { Link } from '@tanstack/react-router'
 import { ChevronRight, Wrench } from 'lucide-react'
 import { useState } from 'react'
+import { Stat, StatGrid } from '../../components/Stats'
 import { compact, dateTime, relativeTime, usd } from '../../lib/format'
 import { useRpc } from '../../lib/query'
 import { SettingsTitle } from './SettingsLayout'
@@ -98,7 +99,7 @@ export function TraceDetail({ runId }: { runId: string }) {
         title="Run"
         description={`${run.model} · started ${dateTime(run.startedAt)}`}
       />
-      <dl className="mb-8 grid grid-cols-2 gap-px overflow-hidden rounded-md bg-line sm:grid-cols-5">
+      <StatGrid className="mb-8 sm:grid-cols-5">
         <Stat label="Status" value={STATUS_LABEL[run.status]} />
         <Stat label="Duration" value={duration(run)} />
         <Stat
@@ -107,7 +108,7 @@ export function TraceDetail({ runId }: { runId: string }) {
         />
         <Stat label="Cache read" value={compact(run.tokens.cacheRead)} />
         <Stat label="Cost" value={usd(run.costUsd)} />
-      </dl>
+      </StatGrid>
       {run.pieceId && (
         <p className="-mt-4 mb-8 text-sm text-fg-muted">
           Worked on{' '}
@@ -187,15 +188,6 @@ function Json({ label, value }: { label: string; value: unknown }) {
       <pre className="max-h-64 overflow-auto rounded-md bg-bg-subtle p-2.5 font-mono text-2xs leading-4 text-fg-muted shadow-[inset_0_0_0_1px_var(--line)]">
         {JSON.stringify(value, null, 2)}
       </pre>
-    </div>
-  )
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-bg px-3 py-2.5">
-      <dt className="text-2xs text-fg-subtle">{label}</dt>
-      <dd className="mt-0.5 font-mono text-sm tabular">{value}</dd>
     </div>
   )
 }

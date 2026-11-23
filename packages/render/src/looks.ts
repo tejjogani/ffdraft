@@ -35,6 +35,12 @@ export interface RigPanel {
   kelvin?: number
   /** Radiance multipliers at the bottom and top edge, for gradient strips. */
   gradient?: [bottom: number, top: number]
+  /**
+   * Measure elevation from the camera's instead of the horizon, keeping the card on the lens
+   * axis at any preset. A black card there stands in for the photographer and lens, whose
+   * reflection is what draws a brilliant's dark arrows and contrast pattern.
+   */
+  followCamera?: boolean
 }
 
 export interface RigSparkle {
@@ -77,6 +83,9 @@ export interface Look {
   sparkle: RigSparkle
 }
 
+/** Black card on the lens axis (see `followCamera`), about 13° across. */
+const LENS_FLAG: RigPanel = { id: 'lens-flag', azimuth: 0, elevation: 0, distance: 6, size: [1.4, 1.4], radiance: 0, followCamera: true }
+
 const SPARKLE: RigSparkle = {
   count: 6,
   spread: 70,
@@ -102,17 +111,21 @@ const grey = (v: number): Rgb => [v, v, v]
 export const LOOKS: Record<LookId, Look> = {
   'studio-soft': {
     label: 'Studio soft',
-    description: 'Large overhead softbox and two gradient strips on a pale grey gradient. Even, forgiving, true colour.',
+    description: 'A white light tent: overhead softbox, two gradient strips and dark cards for edge definition, on a pale grey gradient. Even, forgiving, true colour.',
     view: 'neutral',
     exposure: 0,
     panels: [
-      { id: 'top', azimuth: 0, elevation: 78, distance: 6, size: [7, 7], radiance: 3.2 },
-      { id: 'key', azimuth: -65, elevation: 22, distance: 5, size: [1.6, 7], radiance: 5, gradient: [0.25, 1] },
-      { id: 'fill', azimuth: 70, elevation: 18, distance: 5, size: [1.6, 7], radiance: 3.2, gradient: [0.25, 1] },
-      { id: 'front', azimuth: 0, elevation: 4, distance: 7, size: [9, 1.4], radiance: 1.2 },
-      { id: 'rim', azimuth: 180, elevation: 30, distance: 6, size: [6, 1.4], radiance: 2.5 },
+      { id: 'top', azimuth: 0, elevation: 78, distance: 6, size: [5, 5], radiance: 4 },
+      { id: 'key', azimuth: -65, elevation: 22, distance: 5, size: [1.6, 7], radiance: 6, gradient: [0.3, 1] },
+      { id: 'fill', azimuth: 70, elevation: 18, distance: 5, size: [1.6, 7], radiance: 4, gradient: [0.3, 1] },
+      { id: 'card-left', azimuth: -30, elevation: 6, distance: 4, size: [1.2, 5], radiance: 0 },
+      { id: 'card-right', azimuth: 35, elevation: 6, distance: 4, size: [1.2, 5], radiance: 0 },
+      { id: 'card-back', azimuth: 180, elevation: 10, distance: 5, size: [3, 3], radiance: 0 },
+      { id: 'front', azimuth: 0, elevation: 2, distance: 7, size: [10, 1.2], radiance: 2.4 },
+      LENS_FLAG,
     ],
-    ambient: { zenith: 0.5, horizon: 0.3, nadir: 0.06 },
+    // The tent: bright all round, with floor bounce from below (research §3 catalogue white).
+    ambient: { zenith: 1.0, horizon: 0.85, nadir: 0.5 },
     background: { kind: 'gradient', top: grey(0.97), bottom: grey(0.86) },
     ground: DEFAULT_GROUNDS.shadow,
     sparkle: SPARKLE,
@@ -129,6 +142,7 @@ export const LOOKS: Record<LookId, Look> = {
       { id: 'flag-left', azimuth: -20, elevation: 25, distance: 4, size: [2.5, 6], radiance: 0 },
       { id: 'flag-right', azimuth: 40, elevation: 25, distance: 4, size: [2.5, 6], radiance: 0 },
       { id: 'rim', azimuth: 180, elevation: 35, distance: 6, size: [5, 0.8], radiance: 5 },
+      LENS_FLAG,
     ],
     ambient: { zenith: 0.12, horizon: 0.06, nadir: 0.01 },
     background: { kind: 'gradient', top: grey(0.2), bottom: grey(0.07) },
@@ -141,12 +155,15 @@ export const LOOKS: Record<LookId, Look> = {
     view: 'neutral',
     exposure: 0,
     panels: [
-      { id: 'top', azimuth: 0, elevation: 75, distance: 6, size: [5, 5], radiance: 3.5 },
-      { id: 'rim-left', azimuth: -135, elevation: 20, distance: 5, size: [1, 6], radiance: 7, gradient: [0.2, 1] },
-      { id: 'rim-right', azimuth: 135, elevation: 20, distance: 5, size: [1, 6], radiance: 7, gradient: [0.2, 1] },
-      { id: 'front', azimuth: 0, elevation: 15, distance: 7, size: [6, 1.2], radiance: 1.8 },
+      { id: 'top', azimuth: 0, elevation: 70, distance: 6, size: [7, 5], radiance: 5 },
+      { id: 'side-left', azimuth: -80, elevation: 20, distance: 5, size: [2, 7], radiance: 5, gradient: [0.15, 1] },
+      { id: 'side-right', azimuth: 80, elevation: 20, distance: 5, size: [2, 7], radiance: 5, gradient: [0.15, 1] },
+      { id: 'rim-left', azimuth: -140, elevation: 20, distance: 5, size: [1.2, 6], radiance: 8, gradient: [0.2, 1] },
+      { id: 'rim-right', azimuth: 140, elevation: 20, distance: 5, size: [1.2, 6], radiance: 8, gradient: [0.2, 1] },
+      { id: 'front', azimuth: 0, elevation: 4, distance: 7, size: [10, 1.4], radiance: 2.5 },
+      LENS_FLAG,
     ],
-    ambient: { zenith: 0.08, horizon: 0.04, nadir: 0 },
+    ambient: { zenith: 0.1, horizon: 0.05, nadir: 0 },
     background: { kind: 'solid', color: grey(0) },
     ground: DEFAULT_GROUNDS.reflective,
     sparkle: { ...SPARKLE, radiance: 600 },
@@ -157,10 +174,11 @@ export const LOOKS: Record<LookId, Look> = {
     view: 'agx',
     exposure: 0,
     panels: [
-      { id: 'sun', azimuth: -50, elevation: 55, distance: 12, size: [0.5, 0.5], radiance: 900, kelvin: 5200 },
+      { id: 'sun', azimuth: -50, elevation: 50, distance: 12, size: [0.5, 0.5], radiance: 900, kelvin: 5200 },
       { id: 'window', azimuth: 60, elevation: 25, distance: 6, size: [5, 4], radiance: 2.5, kelvin: 7000 },
+      LENS_FLAG,
     ],
-    ambient: { zenith: 1.4, horizon: 0.9, nadir: 0.25, kelvin: 8500 },
+    ambient: { zenith: 0.8, horizon: 0.55, nadir: 0.3, kelvin: 8500 },
     background: { kind: 'gradient', top: [0.93, 0.95, 0.97], bottom: [0.85, 0.87, 0.88] },
     ground: DEFAULT_GROUNDS.shadow,
     sparkle: { ...SPARKLE, count: 4 },
@@ -175,6 +193,7 @@ export const LOOKS: Record<LookId, Look> = {
       { id: 'top', azimuth: 20, elevation: 80, distance: 6, size: [4, 4], radiance: 3, kelvin: 4200 },
       { id: 'card', azimuth: 80, elevation: 15, distance: 4.5, size: [2.5, 6], radiance: 2.2, kelvin: 3800, gradient: [1, 0.15] },
       { id: 'flag', azimuth: 25, elevation: 20, distance: 4, size: [2, 5], radiance: 0 },
+      LENS_FLAG,
     ],
     ambient: { zenith: 0.35, horizon: 0.25, nadir: 0.08, kelvin: 4000 },
     background: { kind: 'gradient', top: [0.95, 0.9, 0.82], bottom: [0.84, 0.76, 0.66] },
@@ -192,9 +211,10 @@ export const LOOKS: Record<LookId, Look> = {
       { id: 'right', azimuth: 80, elevation: 15, distance: 5, size: [1.4, 7], radiance: 4, gradient: [0.3, 1] },
       { id: 'card-left', azimuth: -35, elevation: 10, distance: 4, size: [1.5, 5], radiance: 0 },
       { id: 'card-right', azimuth: 35, elevation: 10, distance: 4, size: [1.5, 5], radiance: 0 },
-      { id: 'front', azimuth: 0, elevation: 3, distance: 7, size: [8, 1], radiance: 1.5 },
+      { id: 'front', azimuth: 0, elevation: 2, distance: 7, size: [10, 1.2], radiance: 2.4 },
+      LENS_FLAG,
     ],
-    ambient: { zenith: 0.6, horizon: 0.45, nadir: 0.1 },
+    ambient: { zenith: 1.1, horizon: 0.95, nadir: 0.6 },
     background: { kind: 'solid', color: grey(1) },
     ground: DEFAULT_GROUNDS.shadow,
     sparkle: SPARKLE,

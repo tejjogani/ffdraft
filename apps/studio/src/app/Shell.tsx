@@ -1,6 +1,7 @@
 import { Button, EmptyState, Spinner } from '@pave/ui'
 import { Outlet } from '@tanstack/react-router'
 import { AnimatePresence, MotionConfig, motion } from 'motion/react'
+import { Suspense } from 'react'
 import { useShortcutListener } from '../lib/commands'
 import { useServerEvents } from '../lib/events'
 import { useRpc } from '../lib/query'
@@ -55,7 +56,8 @@ function Shell() {
   const collapsed = useUI((s) => s.sidebarCollapsed)
   const dockOpen = useAssistant((s) => s.isOpen)
   return (
-    <div className="flex h-dvh overflow-hidden bg-bg">
+    // The muted backdrop is what the frosted sidebar sits on (on desktop, the window vibrancy).
+    <div className="flex h-dvh overflow-hidden bg-bg-muted">
       <AnimatePresence initial={false}>
         {!collapsed && (
           <motion.div
@@ -70,8 +72,10 @@ function Shell() {
           </motion.div>
         )}
       </AnimatePresence>
-      <main id="main" className="relative flex min-w-0 flex-1 flex-col overflow-y-auto">
-        <Outlet />
+      <main id="main" className="relative flex min-w-0 flex-1 flex-col overflow-y-auto bg-bg">
+        <Suspense fallback={null}>
+          <Outlet />
+        </Suspense>
       </main>
       <AnimatePresence initial={false}>{dockOpen && <AssistantDock key="dock" />}</AnimatePresence>
       <Palette />

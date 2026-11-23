@@ -191,10 +191,8 @@ function pendantAnnotations(input: AnnotationInput, out: Annotation[], L: (mm: n
 function stoneAnnotations(input: AnnotationInput, out: Annotation[], L: (mm: number) => string) {
   const { evaluation, facts } = input
   const viewId: ViewId = facts.ring ? 'top' : 'front'
-  const lines = input.views[viewId]
-  if (!lines) return
+  if (!input.views[viewId]) return
   const view = VIEWS[viewId]
-  const cx = (lines.bounds.minX + lines.bounds.maxX) / 2
 
   evaluation.report.lots.forEach((lot, i) => {
     const members = stonesOfLot(lot, evaluation.stones)
@@ -216,12 +214,13 @@ function stoneAnnotations(input: AnnotationInput, out: Annotation[], L: (mm: num
     const isCentre = lot.role === 'center' && facts.centre?.instance?.id === rep.id
     const size =
       lot.cut === 'round' ? `${DIAMETER}${L(lot.width)}` : `${L(lot.length)} × ${L(lot.width)}`
-    const what = `${GEM_CUTS[lot.cut].label.toLowerCase()} ${GEM_MATERIALS[lot.stone].label.toLowerCase()}`
     const head = lot.count > 1 ? `${lot.count} × ${size}` : size
     const ct = lot.count > 1 ? `${fmtCarat(lot.caratTotal)} total` : fmtCarat(lot.caratEach)
-    // Big stones get the leader on their girdle; melee on the stone centre.
+    // Callouts gather on the side without vertical dimensions: right of a ring's plan view,
+    // left of a pendant's front view. Big stones get the leader on their girdle, melee on the
+    // stone centre.
     const radius = lot.width / 2
-    const right = c[0] >= cx
+    const right = !!facts.ring
     const angle = right ? Math.PI / 4 : (3 * Math.PI) / 4
     const anchor: P2 = isCentre || lot.width >= 3 ? [c[0] + radius * Math.cos(angle), c[1] + radius * Math.sin(angle)] : [c[0], c[1]]
     out.push({
@@ -232,7 +231,7 @@ function stoneAnnotations(input: AnnotationInput, out: Annotation[], L: (mm: num
       head: lot.width >= 3 ? 'arrow' : 'dot',
       side: right ? 'right' : 'left',
       badge: lotKey(i),
-      lines: [head, `${what}, ${ct}`, `${lot.setting} setting`],
+      lines: [head, `${GEM_MATERIALS[lot.stone].label}, ${GEM_CUTS[lot.cut].label.toLowerCase()}`, `${ct} · ${lot.setting}`],
     })
     if (isCentre && lot.cut !== 'round') centreStoneDims(input, rep, out, L)
   })

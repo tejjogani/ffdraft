@@ -95,11 +95,16 @@ export function useRpcMutation<N extends MutationName, TContext = unknown>(
     'mutationFn'
   >,
 ) {
+  const mutationKey = ['rpc', name]
   return useMutation({
     ...options,
+    mutationKey,
     mutationFn: (input: CommandInput<N>) => rpc.call(name, input),
     onSettled: (...args) => {
-      invalidateFor(queryClient, name as CommandName)
+      // With several edits in flight, refetching after the first would overwrite the later
+      // optimistic values with stale server state; refresh once, after the last one.
+      if (queryClient.isMutating({ mutationKey }) === 1)
+        invalidateFor(queryClient, name as CommandName)
       return options?.onSettled?.(...args)
     },
   })

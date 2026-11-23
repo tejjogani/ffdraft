@@ -49,7 +49,7 @@ export function PieceTable({
                   className="flex min-w-0 items-center gap-2.5 font-medium text-fg outline-offset-2"
                 >
                   <span className="stage flex size-6 shrink-0 items-center justify-center rounded-xs shadow-[0_0_0_1px_var(--line)]">
-                    <KindGlyph kind={p.kind} className="w-4 text-fg-muted" />
+                    <KindGlyph kind={p.kind} className="w-6 text-fg-muted" />
                   </span>
                   <span className="truncate">{p.title || 'Untitled'}</span>
                 </Link>

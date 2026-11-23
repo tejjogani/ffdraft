@@ -6,16 +6,22 @@ import { add, lookAtQuat, orbitDirection, scale, type Vec3 } from './math'
 import type { ResolvedPanel, ResolvedRig, ResolvedSparkle } from './types'
 
 const WHITE: Rgb = [1, 1, 1]
+
+interface CameraAngles {
+  azimuth: number
+  elevation: number
+}
 const tint = (kelvin: number | undefined): Rgb => (kelvin ? kelvinToRgb(kelvin) : WHITE)
 
 /** Golden-ratio sequence: an even, deterministic spread of sparkle elevations. */
 const PHI = 0.6180339887
 
-function panel(p: RigPanel, target: Vec3, radius: number, cameraAzimuth: number, intensity: number): ResolvedPanel {
-  const azimuth = cameraAzimuth + p.azimuth
-  const position = add(target, scale(orbitDirection(azimuth, p.elevation), p.distance * radius))
+function panel(p: RigPanel, target: Vec3, radius: number, camera: CameraAngles, intensity: number): ResolvedPanel {
+  const azimuth = camera.azimuth + p.azimuth
+  const elevation = Math.min(90, p.elevation + (p.followCamera ? camera.elevation : 0))
+  const position = add(target, scale(orbitDirection(azimuth, elevation), p.distance * radius))
   // Overhead panels have no "up"; orient their height edge away from the camera.
-  const up: Vec3 = p.elevation > 85 ? orbitDirection(cameraAzimuth + 180, 0) : [0, 0, 1]
+  const up: Vec3 = elevation > 85 ? orbitDirection(camera.azimuth + 180, 0) : [0, 0, 1]
   return {
     id: p.id,
     position,
@@ -49,15 +55,15 @@ export function resolveRig(
   sparkleAmount: number,
   target: Vec3,
   radius: number,
-  cameraAzimuth: number,
+  camera: CameraAngles,
 ): ResolvedRig {
   const k = environment.intensity
   const ambient = tint(look.ambient.kelvin)
   return {
     pivot: target,
     rotation: environment.rotation,
-    panels: look.panels.map((p) => panel(p, target, radius, cameraAzimuth, k)),
-    sparkles: sparkles(look, target, radius, cameraAzimuth, sparkleAmount * k),
+    panels: look.panels.map((p) => panel(p, target, radius, camera, k)),
+    sparkles: sparkles(look, target, radius, camera.azimuth, sparkleAmount * k),
     ambient: {
       zenith: mulRgb(ambient, look.ambient.zenith * k),
       horizon: mulRgb(ambient, look.ambient.horizon * k),

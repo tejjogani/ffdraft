@@ -99,7 +99,7 @@ function Templates() {
                   className="group flex items-center gap-3 rounded-lg p-1.5 pr-3 text-left transition-colors duration-120 hover:bg-bg-hover disabled:opacity-60"
                 >
                   <span className="stage flex size-12 shrink-0 items-center justify-center rounded-md shadow-[0_0_0_1px_var(--line)]">
-                    <KindGlyph kind={buildDesign(t.spec).kind} className="w-8 text-fg-muted" />
+                    <KindGlyph kind={buildDesign(t.spec).kind} className="w-11 text-fg-muted" />
                   </span>
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium text-fg">

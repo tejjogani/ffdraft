@@ -120,6 +120,8 @@ export interface ResolvedOutput {
 export interface ResolvedScene {
   version: typeof RESOLVED_SCENE_VERSION
   look: LookId
+  /** Bounds centre and half-diagonal (mm): the scale for clip planes, shadows and capture. */
+  subject: { center: Vec3; radius: number }
   color: { view: ViewTransform; exposure: number }
   camera: ResolvedCamera
   rig: ResolvedRig

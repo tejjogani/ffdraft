@@ -46,9 +46,12 @@ export function meshSdf(
   const positions: number[] = []
   const indices: number[] = []
   const vertexOf = new Map<number, number>()
+  // Keep samples off zero so no two crossings coincide (coincident vertices are non-manifold
+  // once an STL loses its indices); the surface moves by at most a micron.
+  const floor = 1e-3 * h
   const value = (i: number, j: number, k: number) => {
     const v = sdf(min[0] + i * h, min[1] + j * h, min[2] + k * h)
-    return v === 0 ? 1e-9 : v
+    return Math.abs(v) < floor ? (v < 0 ? -floor : floor) : v
   }
   const H = block * h
   // Generous margin: smooth unions and varying sections are only roughly 1-Lipschitz.
@@ -91,7 +94,7 @@ export function meshSdf(
   }
 
   const normals = new Float32Array(positions.length)
-  const e = h * 0.5
+  const e = h * 0.01
   for (let v = 0; v < positions.length; v += 3) {
     const x = positions[v]!
     const y = positions[v + 1]!

@@ -80,6 +80,66 @@ const QUALITY_UP: Record<RenderScene['output']['quality'], RenderScene['output']
 
 const r2 = (n: number) => Math.round(n * 100) / 100
 
+function framingIssues(
+  [x0, y0, x1, y1]: [number, number, number, number],
+  scene: RenderScene,
+  focal: (k: number) => SceneAdjustment,
+): RenderIssue[] {
+  const issues: RenderIssue[] = []
+  const fill = Math.max(x1 - x0, y1 - y0)
+  const margin = Math.min(x0, y0, 1 - x1, 1 - y1)
+  if (margin <= 0.002) {
+    issues.push({
+      code: 'framing.cropped',
+      severity: 'error',
+      message: 'The piece touches the frame edge and is cropped.',
+      value: r2(margin),
+      limit: CHECKS.minMargin,
+      adjust: [focal(CHECKS.fillTarget / Math.max(fill, 1))],
+    })
+  } else if (fill > CHECKS.fill[1]) {
+    issues.push({
+      code: 'framing.large',
+      severity: 'warning',
+      message: `The piece fills ${Math.round(fill * 100)}% of the frame; aim for 55–75%.`,
+      value: r2(fill),
+      limit: CHECKS.fill[1],
+      adjust: [focal(CHECKS.fillTarget / fill)],
+    })
+  } else if (margin < CHECKS.minMargin) {
+    issues.push({
+      code: 'framing.margin',
+      severity: 'warning',
+      message: 'The piece sits too close to the frame edge.',
+      value: r2(margin),
+      limit: CHECKS.minMargin,
+      adjust: [focal(0.9)],
+    })
+  }
+  if (fill < CHECKS.fill[0]) {
+    issues.push({
+      code: 'framing.small',
+      severity: 'warning',
+      message: `The piece fills only ${Math.round(fill * 100)}% of the frame; aim for 55–75%.`,
+      value: r2(fill),
+      limit: CHECKS.fill[0],
+      adjust: [focal(CHECKS.fillTarget / fill)],
+    })
+  }
+  const offset = Math.hypot((x0 + x1) / 2 - 0.5, (y0 + y1) / 2 - 0.5)
+  if (offset > CHECKS.maxCentreOffset) {
+    issues.push({
+      code: 'framing.offCentre',
+      severity: 'warning',
+      message: 'The piece is off-centre. Presets centre it automatically; a custom camera needs a new target.',
+      value: r2(offset),
+      limit: CHECKS.maxCentreOffset,
+      adjust: scene.camera.preset === 'custom' ? [{ path: 'camera.preset', value: 'hero' }] : [],
+    })
+  }
+  return issues
+}
+
 export function assessRender(m: RenderMetrics, scene: RenderScene): RenderIssue[] {
   const issues: RenderIssue[] = []
   const issue = (i: RenderIssue) => issues.push(i)
@@ -106,58 +166,8 @@ export function assessRender(m: RenderMetrics, scene: RenderScene): RenderIssue[
     return issues
   }
 
-  const [x0, y0, x1, y1] = box
-  const fill = Math.max(x1 - x0, y1 - y0)
-  const margin = Math.min(x0, y0, 1 - x1, 1 - y1)
-  if (margin <= 0.002) {
-    issue({
-      code: 'framing.cropped',
-      severity: 'error',
-      message: 'The piece touches the frame edge and is cropped.',
-      value: r2(margin),
-      limit: CHECKS.minMargin,
-      adjust: [focal(CHECKS.fillTarget / Math.max(fill, 1))],
-    })
-  } else if (fill > CHECKS.fill[1]) {
-    issue({
-      code: 'framing.large',
-      severity: 'warning',
-      message: `The piece fills ${Math.round(fill * 100)}% of the frame; aim for 55–75%.`,
-      value: r2(fill),
-      limit: CHECKS.fill[1],
-      adjust: [focal(CHECKS.fillTarget / fill)],
-    })
-  } else if (margin < CHECKS.minMargin) {
-    issue({
-      code: 'framing.margin',
-      severity: 'warning',
-      message: 'The piece sits too close to the frame edge.',
-      value: r2(margin),
-      limit: CHECKS.minMargin,
-      adjust: [focal(0.9)],
-    })
-  }
-  if (fill < CHECKS.fill[0]) {
-    issue({
-      code: 'framing.small',
-      severity: 'warning',
-      message: `The piece fills only ${Math.round(fill * 100)}% of the frame; aim for 55–75%.`,
-      value: r2(fill),
-      limit: CHECKS.fill[0],
-      adjust: [focal(CHECKS.fillTarget / fill)],
-    })
-  }
-  const offset = Math.hypot((x0 + x1) / 2 - 0.5, (y0 + y1) / 2 - 0.5)
-  if (offset > CHECKS.maxCentreOffset) {
-    issue({
-      code: 'framing.offCentre',
-      severity: 'warning',
-      message: 'The piece is off-centre. Presets centre it automatically; a custom camera needs a new target.',
-      value: r2(offset),
-      limit: CHECKS.maxCentreOffset,
-      adjust: scene.camera.preset === 'custom' ? [{ path: 'camera.preset', value: 'hero' }] : [],
-    })
-  }
+  // A macro crops the piece on purpose; framing checks would only fight it.
+  if (scene.camera.preset !== 'macro') issues.push(...framingIssues(box, scene, focal))
 
   if (m.clippedPct > CHECKS.maxClippedPct) {
     issue({

@@ -249,10 +249,16 @@
 /* Frosted surface for floating layers. Falls back to a near-opaque fill when the user asks for
    reduced transparency or the browser lacks backdrop-filter. */
 @utility glass {
+  @apply glass-pane;
+  border: 1px solid var(--glass-line);
+}
+
+/* The same frosted fill without the surrounding border, for docked panes (the sidebar) that
+   draw a single edge hairline instead. */
+@utility glass-pane {
   background: var(--glass);
   backdrop-filter: blur(24px) saturate(170%);
   -webkit-backdrop-filter: blur(24px) saturate(170%);
-  border: 1px solid var(--glass-line);
   @supports not (backdrop-filter: blur(1px)) {
     background: var(--bg-subtle);
   }

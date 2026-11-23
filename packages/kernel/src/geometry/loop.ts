@@ -145,3 +145,23 @@ export function bezierPoint([p0, p1, p2, p3]: Bezier2, t: number): Vec2 {
     a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1],
   ]
 }
+
+/**
+ * A cubic that leaves `p0` along `d0` and arrives at `p3` along `d3` (unit directions): the
+ * tangent-continuous blend used for softened corners. Handle lengths follow the circular-arc
+ * rule, so equal-length blends through 90° are quarter circles.
+ */
+export function blendSegment(p0: Vec2, d0: Vec2, p3: Vec2, d3: Vec2): Bezier2 {
+  const chord = Math.hypot(p3[0] - p0[0], p3[1] - p0[1])
+  const turn = Math.acos(Math.min(1, Math.max(-1, d0[0] * d3[0] + d0[1] * d3[1])))
+  const k = turn < 1e-6 ? 1 / 3 : ((2 / 3) * Math.tan(turn / 4)) / Math.sin(turn / 2)
+  const h = chord * k
+  return [p0, [p0[0] + d0[0] * h, p0[1] + d0[1] * h], [p3[0] - d3[0] * h, p3[1] - d3[1] * h], p3]
+}
+
+/** Unit tangent of a segment at its start (t = 0) or end (t = 1). */
+export function segmentTangent(seg: Bezier2, atEnd: boolean): Vec2 {
+  const [a, b] = atEnd ? [seg[2], seg[3]] : [seg[0], seg[1]]
+  const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1
+  return [(b[0] - a[0]) / l, (b[1] - a[1]) / l]
+}

@@ -12,17 +12,19 @@ export type Shell = 'web' | 'desktop'
 
 const nav = typeof navigator !== 'undefined' ? navigator : undefined
 const ua = nav?.userAgent ?? ''
-const platformHint =
+// Every source we have, since each can be empty or frozen depending on browser and shell.
+const hints = [
   (nav as (Navigator & { userAgentData?: { platform?: string } }) | undefined)?.userAgentData
-    ?.platform ??
-  nav?.platform ??
-  ua
+    ?.platform,
+  nav?.platform,
+  ua,
+].join(' ')
 
-export const platform: Platform = /mac|iphone|ipad/i.test(platformHint)
+export const platform: Platform = /mac|iphone|ipad/i.test(hints)
   ? 'mac'
-  : /win/i.test(platformHint)
+  : /\bwin(dows|32|64)?\b/i.test(hints)
     ? 'windows'
-    : /linux|x11|cros/i.test(platformHint)
+    : /linux|x11|cros/i.test(hints)
       ? 'linux'
       : 'other'
 

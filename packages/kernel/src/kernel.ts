@@ -30,6 +30,7 @@ export function createKernel(): LocalKernel {
 
   return {
     kinds: evaluator.kinds,
+    formats: [...exporters.keys()],
     ready: async () => {
       await loadRuntime()
     },

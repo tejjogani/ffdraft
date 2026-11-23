@@ -15,13 +15,14 @@ import {
   MenuSeparator,
   MenuSub,
   Skeleton,
+  Spinner,
   Swatch,
   tabClass,
   tabListClass,
 } from '@pave/ui'
 import { Link, Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { Copy, Folder, FolderInput, MoreHorizontal, Trash2 } from 'lucide-react'
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, Suspense, useEffect, useState } from 'react'
 import { KindGlyph } from '../../components/KindGlyph'
 import { Column, PageHeader } from '../../components/Page'
 import { StagePicker } from '../../components/StageChip'
@@ -77,13 +78,13 @@ export function PiecePage({ id }: { id: string }) {
   const p = piece.data
   return (
     <div className="flex min-h-full flex-col">
-      <PieceHeader piece={p} title={bleed} />
+      <PieceHeader piece={p} />
       {!bleed && (
         <Column className="pb-0!">{p ? <PieceHero piece={p} /> : <HeroSkeleton />}</Column>
       )}
-      <div className={cn('sticky top-11 z-10 bg-bg', bleed ? 'px-4' : '')}>
+      <div className="sticky top-11 z-10 bg-bg">
         <div className={bleed ? '' : 'mx-auto w-full max-w-[880px] px-6 sm:px-12'}>
-          <nav aria-label="Piece sections" className={tabListClass}>
+          <nav aria-label="Piece sections" className={cn(tabListClass, bleed && 'px-4')}>
             {TABS.map((t) => (
               <Link
                 key={t.to}
@@ -114,8 +115,9 @@ export function PiecePage({ id }: { id: string }) {
 
 /** Wraps each tab: workspaces fill the remaining page; documents sit in the reading column. */
 export function PieceTab({ bleed, children }: { bleed: boolean; children: ReactNode }) {
-  if (bleed) return <div className="relative min-h-0 flex-1">{children}</div>
-  return <Column className="pt-8">{children}</Column>
+  const content = <Suspense fallback={<Spinner className="mx-auto mt-16" />}>{children}</Suspense>
+  if (bleed) return <div className="relative min-h-0 flex-1">{content}</div>
+  return <Column className="pt-8">{content}</Column>
 }
 
 function PieceStage({ piece }: { piece: Piece }) {
@@ -125,7 +127,7 @@ function PieceStage({ piece }: { piece: Piece }) {
   )
 }
 
-function PieceHeader({ piece, title }: { piece: Piece | undefined; title: boolean }) {
+function PieceHeader({ piece }: { piece: Piece | undefined }) {
   const collections = useRpc('collections.list', {})
   const collection = collections.data?.find((c) => c.id === piece?.collectionId)
   const navigate = useNavigate()
@@ -173,7 +175,6 @@ function PieceHeader({ piece, title }: { piece: Piece | undefined; title: boolea
             : { label: 'Pieces', link: { to: '/pieces' } },
           { label: piece ? piece.title || 'Untitled' : '…' },
         ]}
-        className={title ? 'border-b border-line' : undefined}
         actions={
           piece && (
             <>
@@ -238,8 +239,8 @@ function PieceHero({ piece }: { piece: Piece }) {
 
   return (
     <div className="pt-12 pb-5">
-      <div className="stage mb-5 flex h-[60px] w-12 items-center justify-center rounded-md shadow-[0_0_0_1px_var(--line)]">
-        <KindGlyph kind={piece.kind} className="w-9 text-fg-muted" />
+      <div className="stage mb-5 flex h-[70px] w-14 items-center justify-center overflow-hidden rounded-md shadow-[0_0_0_1px_var(--line)]">
+        <KindGlyph kind={piece.kind} className="w-16 shrink-0 text-fg-muted" />
       </div>
       <input
         value={title}
@@ -330,7 +331,7 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
 function HeroSkeleton() {
   return (
     <div className="pt-12 pb-5">
-      <Skeleton className="mb-5 h-[60px] w-12 rounded-md" />
+      <Skeleton className="mb-5 h-[70px] w-14 rounded-md" />
       <Skeleton className="h-11 w-2/3" />
       <Skeleton className="mt-5 h-6 w-1/2" />
     </div>

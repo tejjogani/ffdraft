@@ -16,6 +16,7 @@ const fixture = (): Evaluation => ({
     {
       id: 'shank',
       nodeId: 'n-shank',
+      rev: 'r1',
       name: 'Shank',
       material: 'au18k-yellow',
       finish: 'polished',
