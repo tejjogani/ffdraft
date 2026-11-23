@@ -1,0 +1,2 @@
+# Blender as a Python module (GPL-3.0). Python 3.13 only; see docs/research/03-rendering.md §0.
+bpy==5.3.0

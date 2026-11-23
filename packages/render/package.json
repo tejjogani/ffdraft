@@ -1,0 +1,26 @@
+{
+  "name": "@pave/render",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./three": "./src/three/index.ts",
+    "./node": "./src/node/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "demo": "vite demo"
+  },
+  "dependencies": {
+    "@pave/kernel": "workspace:*",
+    "@pave/schema": "workspace:*",
+    "three": "0.187.0",
+    "three-mesh-bvh": "0.9.18"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/three": "0.187.0",
+    "vite": "8.3.8"
+  }
+}
