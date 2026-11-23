@@ -13,6 +13,7 @@ import {
   assembleProduction,
 } from './assemble'
 import { buildNode, disposeResult } from './build'
+import { manufacturabilityDiagnostics } from '../dfm/index'
 import { stoneDiagnostics } from './diagnostics'
 import { combineHashes, hashNode } from './hash'
 import { buildReport } from './report'
@@ -115,7 +116,7 @@ export class Evaluator {
     const diagnostics: Diagnostic[] = [
       ...[...results.values()].flatMap((r) => r.diagnostics),
       ...stoneDiagnostics(stones),
-    ].sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level])
+    ]
 
     const evaluation: Evaluation = {
       detail,
@@ -124,10 +125,19 @@ export class Evaluator {
       gemMeshes,
       report: buildReport(design, assembly.parts, stones),
       diagnostics,
-      ms: performance.now() - started,
+      ms: 0,
       timings,
     }
-    return { design, detail, quality, nodes: results, parts: assembly.parts, stones, evaluation }
+    const scene: Scene = { design, detail, quality, nodes: results, parts: assembly.parts, stones, evaluation }
+    if (detail === 'production') {
+      // Whole-piece manufacturability checks need the fused bodies, so they run here only.
+      const checkStarted = performance.now()
+      diagnostics.push(...manufacturabilityDiagnostics(scene))
+      timings['@dfm'] = performance.now() - checkStarted
+    }
+    diagnostics.sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level])
+    evaluation.ms = performance.now() - started
+    return scene
   }
 
   private assemble(

@@ -65,36 +65,54 @@ function collisions(scene: Scene, gems: readonly Manifold[]): Diagnostic[] {
   return out
 }
 
-/** Stones whose volume is buried in production metal beyond what claws and bezel lips cover. */
+/**
+ * Stones whose volume is buried in production metal beyond what claws and bezel lips cover.
+ * All stones are cut against the metal in one boolean; the pieces are given back to the stone
+ * whose centre is nearest.
+ */
 function buried(scene: Scene, gems: readonly Manifold[], profile: DfmProfile): Diagnostic[] {
   const metal = scene.parts.flatMap((p) => (p.fused ? [p.fused.manifold(scene.quality)] : []))
   if (metal.length === 0) return []
   const { manifold: mf } = runtime()
   const all = mf.Manifold.union(metal)
+  const stones = mf.Manifold.compose([...gems])
+  const shared = stones.intersect(all)
+  const pieces = shared.decompose()
   try {
+    const volumes = new Float64Array(gems.length)
+    for (const piece of pieces) {
+      const box = piece.boundingBox()
+      const c = [0, 1, 2].map((k) => (box.min[k]! + box.max[k]!) / 2)
+      let best = 0
+      let bestD = Infinity
+      scene.stones.forEach((s, i) => {
+        const o = s.stone.frame.origin
+        const d = (o[0] - c[0]!) ** 2 + (o[1] - c[1]!) ** 2 + (o[2] - c[2]!) ** 2
+        if (d < bestD) {
+          bestD = d
+          best = i
+        }
+      })
+      volumes[best]! += piece.volume()
+    }
     return scene.stones.flatMap((stone, i) => {
-      const inMetal = gems[i]!.intersect(all)
-      try {
-        const fraction = inMetal.volume() / gems[i]!.volume()
-        return fraction > profile.stoneInMetal
-          ? [
-              {
-                level: 'warning' as const,
-                code: 'stone.inMetal',
-                nodeId: stone.instance.nodeId,
-                message: `${Math.round(fraction * 100)} % of stone ${stone.instance.id} is inside metal: it needs a seat (or a setting) before it can be set.`,
-                at: [...stone.stone.frame.origin] as [number, number, number],
-                value: fraction,
-                limit: profile.stoneInMetal,
-              },
-            ]
-          : []
-      } finally {
-        inMetal.delete()
-      }
+      const fraction = volumes[i]! / gems[i]!.volume()
+      return fraction > profile.stoneInMetal
+        ? [
+            {
+              level: 'warning' as const,
+              code: 'stone.inMetal',
+              nodeId: stone.instance.nodeId,
+              message: `${Math.round(fraction * 100)} % of stone ${stone.instance.id} is inside metal: it needs a seat (or a setting) before it can be set.`,
+              at: [...stone.stone.frame.origin] as [number, number, number],
+              value: fraction,
+              limit: profile.stoneInMetal,
+            },
+          ]
+        : []
     })
   } finally {
-    if (metal.length > 0) all.delete()
+    for (const m of [all, stones, shared, ...pieces]) m.delete()
   }
 }
 

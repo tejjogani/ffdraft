@@ -318,14 +318,13 @@ export function transformTriangles(m: Mat4, tris: IndexedTriangles): IndexedTria
 }
 
 export function transformTessellation(m: Mat4, t: Tessellation): Tessellation {
-  const mirror = isMirror(m)
-  const normals = transformTriples(m, t.mesh.normals, true)
-  if (mirror) for (let i = 0; i < normals.length; i++) normals[i] = -normals[i]!
+  // A similarity's linear part is orthogonal up to scale, so it maps normals to normals — for
+  // a mirror too; only the winding has to be reversed.
   return {
     mesh: {
       positions: transformTriples(m, t.mesh.positions, false),
-      normals,
-      indices: orientIndices(t.mesh.indices, mirror),
+      normals: transformTriples(m, t.mesh.normals, true),
+      indices: orientIndices(t.mesh.indices, isMirror(m)),
     },
     edges: transformTriples(m, t.edges, false),
   }

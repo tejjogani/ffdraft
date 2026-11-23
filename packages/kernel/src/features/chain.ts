@@ -19,6 +19,7 @@ import {
   type Vec3,
 } from '../core'
 import { IDENTITY, multiply, translation } from '../geometry/vec'
+import { unionBounds } from '../solid/meshing'
 import { booleanShapes } from '../solid/occt'
 import { manifoldFromTriangles, trianglesFromManifold } from '../solid/solid'
 import { sweepAlong } from './chain/centreline'
@@ -155,7 +156,13 @@ function planFor(node: ChainNode): ChainPlan {
  * Where the chain's low point goes: resting in its bail's opening, or (no bail, or the bail is
  * not available) centred on the origin.
  */
-function anchor(node: ChainNode, ctx: BuildContext, path: ChainPath, halfUp: number): Mat4 {
+function anchor(
+  node: ChainNode,
+  ctx: BuildContext,
+  path: ChainPath,
+  halfUp: number,
+  bend: number,
+): Mat4 {
   const bail = node.through ? ctx.tryInput(node.through) : null
   if (node.through && !bail)
     ctx.report({
@@ -175,7 +182,10 @@ function anchor(node: ChainNode, ctx: BuildContext, path: ChainPath, halfUp: num
           b.solid.manifold(ctx.quality).rayCast([x, y, z], [x, y, z + 1e3])[0]?.position[2] ?? z,
       ),
     )
-    const lift = Math.max(0, top - z - halfUp - BAIL_CLEARANCE)
+    // The chain stays curved across the bail's width, so it sags below the top at its edges.
+    const box = unionBounds(bail.bodies.map((b) => b.solid.bounds()))
+    const sag = ((box.max[0] - box.min[0]) / 2) ** 2 / (2 * bend)
+    const lift = Math.max(0, top - z - halfUp - BAIL_CLEARANCE - sag)
     const low = path.closed ? path.at(0).point : path.at(path.length / 2).point
     return translation([x - low[0], y - low[1], z - low[2] + lift])
   }
@@ -233,7 +243,13 @@ export const chain = defineFeature('chain', (node, ctx) => {
   const bend = Math.max(plan.minBend, node.through ? Math.max(6, 3 * plan.linkLength) : 25)
   const path = draped ? drapePath(length, bend) : straightPath(length)
   const frames = linkFrames(path, centres, Math.min(...plan.pitches) / 2)
-  const place = anchor(node, ctx, path, draped ? plan.half.y : plan.half.z)
+  const place = anchor(
+    node,
+    ctx,
+    path,
+    draped ? plan.half.y : plan.half.z,
+    draped ? bend : Infinity,
+  )
 
   const instances: Instance[] = frames.map((frame, k) => {
     const { template, orient } = plan.period[k % plan.period.length]!

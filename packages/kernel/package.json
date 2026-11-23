@@ -21,6 +21,7 @@
     "rhino3dm": "^8.35.0"
   },
   "devDependencies": {
+    "vite": "^8.3.8",
     "zod": "^4.6.7"
   }
 }

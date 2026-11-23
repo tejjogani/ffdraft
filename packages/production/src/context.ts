@@ -3,8 +3,8 @@
  * @pave/sourcing, paired with what the design says about supply and provenance. Every output
  * reads from this, so the BOM, stones.csv, cost estimate and spec sheet agree to the gram.
  */
-import type { Part, StoneLot } from '@pave/kernel/types'
-import { type GemMaterialId, gemDims, type StoneSourcing } from '@pave/schema'
+import type { Evaluation, Part, StoneLot } from '@pave/kernel/types'
+import { type Design, type GemMaterialId, gemDims, type StoneSourcing } from '@pave/schema'
 import {
   type MetalRequirement,
   metalRequirements,
@@ -51,6 +51,11 @@ export interface PackageContext {
   emptyParts: string[]
   /** Casting groups in evaluation order: one STL and one BOM line each. */
   groups: CastingGroup[]
+  /**
+   * The piece as drawn and dimensioned: the evaluation without chains (a chain is a finding,
+   * specified by style and length, not a dimensioned view), with bounds to match.
+   */
+  drawn: Evaluation
   facts: PieceFacts
   profile: ManufacturerProfile
   sku: string
@@ -83,6 +88,8 @@ export function createContext(raw: BuildInput): PackageContext {
     .map((p) => p.id)
   const input: BuildInput = { ...raw, evaluation: { ...raw.evaluation, parts } }
   const { design, evaluation, options } = input
+  const groups = castingGroups(parts)
+  const drawn = withoutChains(evaluation, design, groups)
   const profile = resolveProfile(options.manufacturerProfile)
   const requirements = stoneRequirements(design, evaluation.report)
   const lots = evaluation.report.lots.map((lot, i): LotInfo => {
@@ -106,8 +113,9 @@ export function createContext(raw: BuildInput): PackageContext {
   return {
     input,
     emptyParts,
-    groups: castingGroups(parts),
-    facts: pieceFacts(design, evaluation),
+    groups,
+    drawn,
+    facts: pieceFacts(design, drawn),
     profile,
     sku,
     stem: skuSlug(sku),
@@ -116,6 +124,38 @@ export function createContext(raw: BuildInput): PackageContext {
     lots,
     metals: metalRequirements(evaluation.report, profile.castingAllowancePct),
   }
+}
+
+/** Groups of many identical bodies are chain links, whatever node the kernel files them under. */
+const LINKS = 8
+
+function withoutChains(evaluation: Evaluation, design: Design, groups: CastingGroup[]): Evaluation {
+  const chains = new Set(design.order.filter((id) => design.nodes[id]?.kind === 'chain'))
+  const links = new Set(
+    groups
+      .filter((g) => chains.has(g.key) || (g.identical && g.count > LINKS))
+      .flatMap((g) => g.parts),
+  )
+  if (!links.size) return evaluation
+  const parts = evaluation.parts.filter((p) => !links.has(p))
+  const min: [number, number, number] = [Infinity, Infinity, Infinity]
+  const max: [number, number, number] = [-Infinity, -Infinity, -Infinity]
+  const grow = (v: readonly number[]) => {
+    for (let a = 0; a < 3; a++) {
+      min[a] = Math.min(min[a]!, v[a]!)
+      max[a] = Math.max(max[a]!, v[a]!)
+    }
+  }
+  for (const p of parts) {
+    grow(p.bounds.min)
+    grow(p.bounds.max)
+  }
+  for (const s of evaluation.stones) {
+    const r = Math.max(s.dims.length, s.dims.width) / 2
+    grow([s.matrix[12]! - r, s.matrix[13]! - r, s.matrix[14]! - r])
+    grow([s.matrix[12]! + r, s.matrix[13]! + r, s.matrix[14]! + r])
+  }
+  return { ...evaluation, parts, report: { ...evaluation.report, bounds: { min, max } } }
 }
 
 function castingGroups(parts: readonly Part[]): CastingGroup[] {

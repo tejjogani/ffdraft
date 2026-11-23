@@ -83,7 +83,7 @@ export interface TitleInfo {
 }
 
 /** ISO 5455 enlargement scales plus the in-between ratios jewellers use on A4. */
-const SCALES = [10, 5, 4, 3, 2.5, 2, 1.5, 1, 0.5] as const
+const SCALES = [10, 5, 4, 3, 2.5, 2, 1.5, 1, 0.5, 0.25, 0.2] as const
 const GAP = 9
 const TITLE_H = 21
 const LABEL: TextStyle = { size: 6, weight: 'medium', color: INK.muted, tracking: 0.08 }

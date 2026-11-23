@@ -65,7 +65,7 @@ export async function buildProductionPackage(input: BuildInput): Promise<Product
   const root = bundleRoot(ctx.sku, revision)
 
   const drawings = await time('drawings', () =>
-    buildDrawingSet(evaluation, ctx.facts, { units: ctx.units, stampLocation: stampLocation(ctx) }),
+    buildDrawingSet(ctx.drawn, ctx.facts, { units: ctx.units, stampLocation: stampLocation(ctx) }),
   )
   const cad = await time('cad', () => exportCad(ctx))
   const dfm = await time('dfm', () => runDfm(ctx, cad.stls))
