@@ -128,6 +128,7 @@ function part(id: string, name: string, mesh: MeshData, metal: Look3): Part {
   return {
     id,
     nodeId: id,
+    rev: `${id}@1`,
     name,
     ...metal,
     mesh,

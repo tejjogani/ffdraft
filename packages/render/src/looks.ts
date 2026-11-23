@@ -83,8 +83,8 @@ export interface Look {
   sparkle: RigSparkle
 }
 
-/** Black card on the lens axis (see `followCamera`), about 13° across. */
-const LENS_FLAG: RigPanel = { id: 'lens-flag', azimuth: 0, elevation: 0, distance: 6, size: [1.4, 1.4], radiance: 0, followCamera: true }
+/** Black card on the lens axis (see `followCamera`), about 19° across — a viewer's head. */
+const LENS_FLAG: RigPanel = { id: 'lens-flag', azimuth: 0, elevation: 0, distance: 6, size: [2, 2], radiance: 0, followCamera: true }
 
 const SPARKLE: RigSparkle = {
   count: 6,
@@ -175,10 +175,10 @@ export const LOOKS: Record<LookId, Look> = {
     exposure: 0,
     panels: [
       { id: 'sun', azimuth: -50, elevation: 50, distance: 12, size: [0.5, 0.5], radiance: 900, kelvin: 5200 },
-      { id: 'window', azimuth: 60, elevation: 25, distance: 6, size: [5, 4], radiance: 2.5, kelvin: 7000 },
+      { id: 'window', azimuth: 60, elevation: 25, distance: 6, size: [5, 4], radiance: 2.5, kelvin: 6500 },
       LENS_FLAG,
     ],
-    ambient: { zenith: 0.8, horizon: 0.55, nadir: 0.3, kelvin: 8500 },
+    ambient: { zenith: 0.8, horizon: 0.55, nadir: 0.3, kelvin: 6800 },
     background: { kind: 'gradient', top: [0.93, 0.95, 0.97], bottom: [0.85, 0.87, 0.88] },
     ground: DEFAULT_GROUNDS.shadow,
     sparkle: { ...SPARKLE, count: 4 },

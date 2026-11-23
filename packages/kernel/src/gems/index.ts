@@ -159,18 +159,39 @@ function facetedMesh(facets: readonly Facet[]): MeshData {
     // Fan from the first vertex — except tables, which can be concave (a heart's cleft) but
     // are star-shaped about their centroid.
     if (facet.kind === 'table')
-      points.unshift([0, 1, 2].map((k) => points.reduce((sum, p) => sum + p[k]!, 0) / points.length) as unknown as Vec3, )
-    const base = positions.length / 3
-    for (const p of points) {
-      positions.push(p[0], p[1], p[2])
-      normals.push(normal[0], normal[1], normal[2])
-    }
+      points.unshift([0, 1, 2].map((k) => points.reduce((sum, p) => sum + p[k]!, 0) / points.length) as unknown as Vec3)
+    const planar = points.every((p) => Math.abs(dot(normal, sub(p, points[0]!))) < 1e-6)
     const last = facet.kind === 'table' ? points.length : points.length - 1
+    const triangles: [Vec3, Vec3, Vec3][] = []
     for (let i = 1; i < last; i++) {
       const j = i + 1 < points.length ? i + 1 : 1
       // Skip slivers (collinear girdle points on straight sides).
       const area = cross(sub(points[i]!, points[0]!), sub(points[j]!, points[0]!))
-      if (Math.hypot(area[0], area[1], area[2]) > 1e-12) indices.push(base, base + i, base + j)
+      if (Math.hypot(area[0], area[1], area[2]) > 1e-12) triangles.push([points[0]!, points[i]!, points[j]!])
+    }
+    if (planar) {
+      // One set of vertices and one normal for the whole facet.
+      const base = positions.length / 3
+      const index = new Map<Vec3, number>()
+      for (const triangle of triangles)
+        for (const p of triangle) {
+          if (!index.has(p)) {
+            index.set(p, base + index.size)
+            positions.push(p[0], p[1], p[2])
+            normals.push(normal[0], normal[1], normal[2])
+          }
+          indices.push(index.get(p)!)
+        }
+    } else {
+      // A folded facet: each triangle is flat on its own.
+      for (const triangle of triangles) {
+        const n = polygonNormal(triangle)
+        for (const p of triangle) {
+          indices.push(positions.length / 3)
+          positions.push(p[0], p[1], p[2])
+          normals.push(n[0], n[1], n[2])
+        }
+      }
     }
   }
   return {

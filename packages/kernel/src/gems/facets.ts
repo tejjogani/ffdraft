@@ -134,17 +134,21 @@ function brilliantHalf(
     // round-brilliant relation between facet length and height on the main facet's plane.
     const t = apexScale * c
     const lambda = (1 - (t + reach * (1 - t)) * c) / (1 - apexScale)
-    const z = girdleZ + (apexZ - girdleZ) * Math.min(0.95, Math.max(0.05, lambda))
     const brk = outlinePoint(o, o.breaks[k]!)
-    const met = meetAt(a.plane, b.plane, z)
-    // Planes of mains on the same straight side never meet; aim between table edge and girdle.
-    const aim: Vec3 = [
+    // Where the point would be without the planarity constraint: between apex edge and girdle.
+    const aimAt = (z: number): Vec3 => [
       (apex[k]![0] + apex[(k + 1) % K]![0]) / 4 + brk[0] / 2,
       (apex[k]![1] + apex[(k + 1) % K]![1]) / 4 + brk[1] / 2,
       z,
     ]
-    const ok = met && Math.hypot(met[0] - aim[0], met[1] - aim[1]) < 0.35
-    mid.push(ok ? met : aim)
+    const height = (f: number) => girdleZ + (apexZ - girdleZ) * f
+    const met = lambda > 0.08 && lambda < 0.92 ? meetAt(a.plane, b.plane, height(lambda)) : null
+    // Widely spaced mains (a princess has four) or a concave outline (a heart's cleft) put the
+    // planes' meeting point outside the stone; those kites are folded along their diagonal
+    // instead of planar.
+    const fallback = aimAt(height(crown ? 0.6 : 0.78))
+    const ok = met && Math.hypot(met[0] - fallback[0], met[1] - fallback[1]) < 0.12
+    mid.push(ok ? met : fallback)
   }
 
   const facets: Facet[] = []

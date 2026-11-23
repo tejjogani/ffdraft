@@ -3,7 +3,7 @@ import type { Manifold } from 'manifold-3d'
 import type { Solid } from '../core'
 import { circleLoop } from '../geometry/loop'
 import { placeLoop, poleSection, sweepSolid } from '../geometry/sweep'
-import { type Vec3, addScaled, frameFromZ, normalize, sub } from '../geometry/vec'
+import { type Vec3, addScaled, cross, frameFromZ, normalize, sub } from '../geometry/vec'
 import { parseSvgPath } from '../mesh/outline/svgPath'
 import { runtime } from '../runtime/index'
 import { QUALITY } from '../solid/solid'
@@ -51,8 +51,9 @@ export function bezierTube(p: readonly [Vec3, Vec3, Vec3, Vec3], r0: number, r1:
     return [0, 1, 2].map((k) => a * p[0][k]! + b * p[1][k]! + c * p[2][k]! + d * p[3][k]!) as unknown as Vec3
   }
   const tangent = (t: number): Vec3 => normalize(sub(point(Math.min(1, t + 1e-4)), point(Math.max(0, t - 1e-4))))
-  // A fixed reference keeps the circular sections from twisting along the path.
-  const side = normalize(sub(p[3], p[0]))
+  // The normal of the control polygon's plane is perpendicular to every tangent of a planar
+  // curve, so sections built around it never flip or twist.
+  const side = normalize(cross(sub(p[1], p[0]), sub(p[3], p[0])), [0, 1, 0])
   const loopAt = (t: number) => circleLoop(r0 + (r1 - r0) * t)
   const sections: Float64Array[] = []
   const segments = loopAt(0).length

@@ -74,6 +74,7 @@ function part(id: string, name: string, material: MetalId, mesh: SdfMesh, opts: 
   return {
     id,
     nodeId: id,
+    rev: '1',
     name,
     material,
     finish: 'polished',
@@ -330,6 +331,7 @@ export function pavePendant(h = 0.1): { design: Design; evaluation: Evaluation }
 export function fixtureKernel(evaluation: Evaluation): Kernel {
   return {
     kinds: [],
+    formats: ['stl', 'step', '3dm', '3mf'],
     ready: async () => {},
     evaluate: async () => evaluation,
     async export(_design: Design, format: ExportFormat, options: ExportOptions = {}): Promise<ExportResult> {

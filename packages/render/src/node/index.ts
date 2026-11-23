@@ -18,7 +18,10 @@ import { fileURLToPath } from 'node:url'
 import type { RenderMetrics } from '../assess'
 import type { ResolvedScene } from '../types'
 
-export const WORKER_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../workers/render')
+/** `PAVE_RENDER_WORKER_DIR` relocates the worker when this package is bundled or installed. */
+export const WORKER_DIR = resolve(
+  process.env.PAVE_RENDER_WORKER_DIR ?? join(dirname(fileURLToPath(import.meta.url)), '../../../../workers/render'),
+)
 const RUNNER = join(WORKER_DIR, 'pave_render.py')
 
 export interface RuntimeOptions {
