@@ -1,3 +1,4 @@
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
 
@@ -49,7 +50,7 @@ const EnvSchema = z.object({
 export function configFromEnv(env: NodeJS.ProcessEnv = process.env): Config {
   const e = EnvSchema.parse(env)
   const auth: AuthMode = e.PAVE_AUTH ?? (e.DATABASE_URL ? 'accounts' : 'local')
-  const dataDir = e.PAVE_DATA_DIR ?? `${REPO_ROOT}.data`
+  const dataDir = e.PAVE_DATA_DIR ?? join(REPO_ROOT, '.data')
   const production = e.NODE_ENV === 'production'
   return {
     port: e.PORT,
@@ -57,7 +58,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): Config {
     host: e.HOST ?? (auth === 'local' ? '127.0.0.1' : '0.0.0.0'),
     databaseUrl: e.DATABASE_URL ?? null,
     dataDir,
-    blobDir: `${dataDir}/blobs`,
+    blobDir: join(dataDir, 'blobs'),
     auth,
     authSecret: e.BETTER_AUTH_SECRET ?? null,
     publicUrl: e.PAVE_PUBLIC_URL ?? `http://localhost:${e.PORT}`,
@@ -66,7 +67,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): Config {
       .map((s) => s.trim())
       .filter(Boolean),
     seed: e.PAVE_SEED ?? true,
-    studioDist: e.PAVE_STUDIO_DIST ?? `${REPO_ROOT}apps/studio/dist`,
+    studioDist: e.PAVE_STUDIO_DIST ?? join(REPO_ROOT, 'apps', 'studio', 'dist'),
     maxUploadBytes: Math.round(e.PAVE_MAX_UPLOAD_MB * 1024 * 1024),
     validateOutputs: !production,
     logRequests: !production && e.NODE_ENV !== 'test',

@@ -132,6 +132,10 @@ used for evaluation.
   generations, render time) with idempotency keys; billing is an adapter on top.
 - **Desktop** — Electron: one Chromium everywhere matters for a GPU viewport. The shell only
   starts the server on loopback and opens a window; the web build is the same code.
+- **Cross-platform** — macOS, Windows, Linux and the browser are all first-class. Geometry runs
+  in WebAssembly, the database is embedded, there are no shell scripts in the toolchain, and CI
+  runs on all three operating systems. Blender is found through the `bpy` wheel or a user
+  install.
 
 ## Sourcing
 

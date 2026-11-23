@@ -1,4 +1,5 @@
 import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PGlite } from '@electric-sql/pglite'
 import { drizzle as drizzleNodePg } from 'drizzle-orm/node-postgres'
@@ -28,14 +29,14 @@ const MIGRATIONS = fileURLToPath(new URL('../../drizzle', import.meta.url))
 export async function openDatabase(opts: { url: string | null; dataDir: string | null }): Promise<Database> {
   if (opts.url) {
     const pool = new pg.Pool({ connectionString: opts.url })
-    const db = drizzleNodePg(pool, { schema, casing: 'snake_case' })
+    const db = drizzleNodePg(pool, { schema })
     await migrateNodePg(db, { migrationsFolder: MIGRATIONS })
     return { db, driver: 'pg', close: () => pool.end() }
   }
-  const dir = opts.dataDir === null ? undefined : `${opts.dataDir}/pg`
+  const dir = opts.dataDir === null ? undefined : join(opts.dataDir, 'pg')
   if (dir) mkdirSync(dir, { recursive: true })
   const client = new PGlite(dir)
-  const db = drizzlePglite(client, { schema, casing: 'snake_case' })
+  const db = drizzlePglite(client, { schema })
   await migratePglite(db, { migrationsFolder: MIGRATIONS })
   return { db, driver: 'pglite', close: () => client.close() }
 }

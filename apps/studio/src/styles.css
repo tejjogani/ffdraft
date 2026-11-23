@@ -1,0 +1,14 @@
+@import "@pave/ui/styles.css";
+
+/* The component system ships TS source; let Tailwind see its classes. */
+@source "../../../packages/ui/src";
+
+/* Frameless desktop windows drag from these strips. */
+@utility app-drag {
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+@utility app-no-drag {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
