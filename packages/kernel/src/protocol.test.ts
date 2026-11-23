@@ -73,6 +73,13 @@ describe('worker protocol', () => {
     expect(second.parts.find((p) => p.id === 'band')!.mesh).toBe(first.parts.find((p) => p.id === 'band')!.mesh)
     expect(second.gemMeshes).toEqual(first.gemMeshes)
     expect(second.parts.find((p) => p.id === 'head')!.rev).not.toBe(first.parts.find((p) => p.id === 'head')!.rev)
+
+    // Production parts (fused per alloy) cross the boundary too, with nothing but plain data.
+    const production = await client.evaluate(edited, { detail: 'production' })
+    expect(production.parts).toHaveLength(1)
+    expect(Object.keys(production.parts[0]!).sort()).toEqual(
+      ['areaMm2', 'bounds', 'edges', 'exact', 'finish', 'id', 'material', 'mesh', 'name', 'nodeId', 'plating', 'rev', 'volumeMm3'].sort(),
+    )
     local.dispose()
   })
 

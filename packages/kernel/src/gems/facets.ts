@@ -178,10 +178,11 @@ function brilliantHalf(
     const to = o.mains[next]! + (next === 0 ? TAU : 0)
     for (const [phi0, phi1, a, b] of [[from, brk, g0, gb], [brk, to, gb, g1]] as const) {
       const plane = planeThrough(mid[k]!, a, b)
-      const edge: Vec3[] = []
-      for (let m = 0; m < steps; m++) {
+      // The first point is the shared corner itself (bit for bit, so facets weld exactly).
+      const edge: Vec3[] = [a]
+      for (let m = 1; m < steps; m++) {
         const q = outlinePoint(o, phi0 + ((phi1 - phi0) * m) / steps)
-        const onPlane = m === 0 || Math.abs(plane.n[2]) < 1e-9 ? girdleZ : heightOn(plane, q)
+        const onPlane = Math.abs(plane.n[2]) < 1e-9 ? girdleZ : heightOn(plane, q)
         const bite = Math.max(0, crown ? girdleZ - onPlane : onPlane - girdleZ)
         dip = Math.max(dip, bite)
         edge.push([q[0], q[1], girdleZ + (crown ? -1 : 1) * Math.min(bite, maxDip)])

@@ -53,7 +53,7 @@ interface ChainPlan {
 const LINK_CREASE = (52 * Math.PI) / 180
 
 /** Air between the chain and the top of the bail it rests in. */
-const BAIL_CLEARANCE = 0.05
+const BAIL_CLEARANCE = 0.1
 
 /** Sweep stations around a link: enough for the twisted ovals to stay true to their centreline. */
 const LINK_STATIONS = 24

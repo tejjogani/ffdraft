@@ -109,3 +109,21 @@ describe('gem unit meshes', () => {
     expect(gemUnit('oval', 1).length).toBe(GEM_CUTS.oval.lw.default)
   })
 })
+
+describe('gem meshes weld exactly', () => {
+  it.each(GEM_CUT_IDS)('%s: coincident facet corners are bit-identical', (id) => {
+    // Consumers build solids from these meshes by welding equal positions, with no tolerance.
+    const { positions, indices } = gemUnit(id).mesh
+    const welded = weld(positions, indices)
+    const count = new Map<number, number>()
+    const n = welded.positions.length / 3
+    for (let t = 0; t < welded.indices.length; t += 3)
+      for (let e = 0; e < 3; e++) {
+        const a = welded.indices[t + e]!
+        const b = welded.indices[t + ((e + 1) % 3)]!
+        const key = a < b ? a * n + b : b * n + a
+        count.set(key, (count.get(key) ?? 0) + 1)
+      }
+    expect([...count.values()].filter((c) => c !== 2)).toEqual([])
+  })
+})

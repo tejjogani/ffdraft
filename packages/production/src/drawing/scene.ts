@@ -90,24 +90,38 @@ function concat(a: Float32Array, b: Float32Array): Float32Array {
   return out
 }
 
-/** The table facet outline of a unit gem: its top-most vertices, ordered around their centroid. */
+/** The table facet outline of a unit gem: the convex hull of its top-most vertices. */
 function tableOutline(mesh: MeshData): Float32Array {
   const p = mesh.positions
   let top = -Infinity
   for (let i = 2; i < p.length; i += 3) top = Math.max(top, p[i]!)
   const pts: [number, number][] = []
   for (let i = 0; i < p.length; i += 3) if (p[i + 2]! > top - 1e-4) pts.push([p[i]!, p[i + 1]!])
-  const unique = [...new Map(pts.map((q) => [`${q[0].toFixed(5)},${q[1].toFixed(5)}`, q])).values()]
-  if (unique.length < 3) return new Float32Array(0)
-  const cx = unique.reduce((s, q) => s + q[0], 0) / unique.length
-  const cy = unique.reduce((s, q) => s + q[1], 0) / unique.length
-  unique.sort((a, b) => Math.atan2(a[1] - cy, a[0] - cx) - Math.atan2(b[1] - cy, b[0] - cx))
+  const hull = convexHull(pts)
+  if (hull.length < 3) return new Float32Array(0)
   const out: number[] = []
-  unique.forEach((q, i) => {
-    const r = unique[(i + 1) % unique.length]!
+  hull.forEach((q, i) => {
+    const r = hull[(i + 1) % hull.length]!
     out.push(q[0], q[1], top, r[0], r[1], top)
   })
   return Float32Array.from(out)
+}
+
+/** Andrew's monotone chain; tolerant of duplicate and interior points (a table's centre vertex). */
+function convexHull(points: [number, number][]): [number, number][] {
+  const pts = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1])
+  const cross = (o: [number, number], a: [number, number], b: [number, number]) =>
+    (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+  const half = (list: [number, number][]) => {
+    const h: [number, number][] = []
+    for (const q of list) {
+      while (h.length >= 2 && cross(h[h.length - 2]!, h[h.length - 1]!, q) <= 1e-12) h.pop()
+      h.push(q)
+    }
+    h.pop()
+    return h
+  }
+  return [...half(pts), ...half([...pts].reverse())]
 }
 
 function transformSegments(segs: Float32Array, m: readonly number[]): Float32Array {

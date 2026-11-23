@@ -285,7 +285,7 @@ export function assembleProduction(
       const cutters = targeted.get(result.id)
       const tool = cutters && fuse(batch(cutters, quality, temp))
       for (const body of result.bodies) {
-        const group = groupFor(body)
+        const group = groupFor(specOf(body))
         if (tool) group.precut.push(temp(body.solid.manifold(quality).subtract(tool)))
         else group.solids.push(body.solid)
         group.sources.push({ nodeId: result.id, body })

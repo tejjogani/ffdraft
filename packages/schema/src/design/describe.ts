@@ -7,7 +7,8 @@
 import { z } from 'zod'
 import { GEM_CUTS, GEM_MATERIALS } from '../domain/gems'
 import { FINISHES, METALS, PLATINGS } from '../domain/metals'
-import { type Design, newId, type Op } from './design'
+import { formatRingSize, type RingSize } from '../domain/sizes'
+import { applyOps, type Design, newId, type Op } from './design'
 import type { FieldMeta, FieldWidget } from './fields'
 import { NODE_SCHEMAS, type Node, type NodeInput, type NodeKind, nodeRefs } from './nodes'
 
@@ -228,18 +229,28 @@ function fieldOf(key: string, js: Json, required: boolean): FieldInfo | null {
   }
 }
 
+/**
+ * The titled fields of any object schema, read the same way as a node's: a field shows when it
+ * declares a `title` (see ./fields). Use it for schemas other than nodes that carry field
+ * metadata, e.g. the render scene's inspector (`describeFields(RenderSceneSchema)`).
+ */
+export function describeFields(schema: z.ZodType, skip: readonly string[] = []): FieldInfo[] {
+  return fieldsOf(z.toJSONSchema(schema, { io: 'input' }) as Json, skip)
+}
+
 const described = new Map<NodeKind, NodeDescription>()
 
 /** The title, description and fields of a node kind, as the inspector and add menu show them. */
 export function describeNode(kind: NodeKind): NodeDescription {
   let d = described.get(kind)
   if (!d) {
-    const js = z.toJSONSchema(NODE_SCHEMAS[kind], { io: 'input' }) as Json
+    const schema = NODE_SCHEMAS[kind]
+    const meta = schema.meta() as { title?: string; description?: string } | undefined
     d = {
       kind,
-      title: js.title ?? humanize(kind),
-      ...(js.description ? { description: js.description } : {}),
-      fields: fieldsOf(js, ['id', 'kind', 'name', 'visible']),
+      title: meta?.title ?? humanize(kind),
+      ...(meta?.description ? { description: meta.description } : {}),
+      fields: describeFields(schema, ['id', 'kind', 'name', 'visible']),
     }
     described.set(kind, d)
   }
@@ -435,12 +446,15 @@ export function variantPatch(
 
 /**
  * Composes two JSON merge patches into one with the same effect, or null when merge-patch
- * cannot express it (an object written over a scalar the first patch set).
+ * cannot express it: an object written over a scalar the first patch set, or a variant switched
+ * (`type` changed) in an object the first patch wrote, since the switch drops the old variant's
+ * keys in between.
  */
 function composePatches(
   a: Record<string, unknown>,
   b: Record<string, unknown>,
 ): Record<string, unknown> | null {
+  if ('type' in b && b.type !== a.type && Object.keys(a).length > 0) return null
   const out = { ...a }
   for (const [k, bv] of Object.entries(b)) {
     if (!(k in a) || !isObject(bv)) out[k] = bv
@@ -533,10 +547,9 @@ const UNIT: Record<NonNullable<FieldMeta['unit']>, string> = {
 
 function show(value: unknown, field: FieldInfo | undefined): string {
   if (value === null || value === undefined) return 'default'
-  if (typeof value === 'number') {
-    const decimals = field?.meta.step ? Math.max(0, Math.ceil(-Math.log10(field.meta.step))) : 3
-    return String(Number(value.toFixed(Math.min(decimals, 3))))
-  }
+  // At most 3 decimals, never fewer than the value has: a label states what was written.
+  if (typeof value === 'number') return String(Number(value.toFixed(3)))
+  if (field?.widget === 'ringSize' && isRingSize(value)) return formatRingSize(value)
   if (typeof value === 'boolean') return value ? 'on' : 'off'
   if (typeof value === 'string')
     return field?.options
@@ -545,6 +558,9 @@ function show(value: unknown, field: FieldInfo | undefined): string {
   if (Array.isArray(value)) return `(${value.map((v) => show(v, undefined)).join(', ')})`
   return '…'
 }
+
+const isRingSize = (v: unknown): v is RingSize =>
+  isObject(v) && typeof v.system === 'string' && typeof v.value === 'number'
 
 const unitOf = (field: FieldInfo | undefined) => (field?.meta.unit ? UNIT[field.meta.unit] : '')
 const titleAt = (field: FieldInfo | undefined, path: readonly string[]) =>
@@ -568,14 +584,22 @@ export interface OpLine {
 /**
  * Every op of a change as readable lines ("Ring band · Width at top: 2.2 → 2.6 mm"). `inverse`
  * (stored with each change) supplies the before-values; `design` (any version that still has
- * the nodes) names updated nodes, which the ops alone do not.
+ * the nodes) names updated nodes, which the ops alone do not. A node added by an earlier op of
+ * the same change is named from that op.
  */
 export function describeOps(ops: readonly Op[], inverse: readonly Op[], design?: Design): OpLine[] {
   const removed = (id: string) =>
     inverse.find((x): x is Extract<Op, { t: 'add' }> => x.t === 'add' && x.node.id === id)?.node
+  const added = new Map<string, unknown>()
+  // `inverse` lists undo ops newest first, so the k-th update of a node in `ops` pairs with the
+  // k-th from last inverse update of that node.
+  const inverseUpdates = (id: string) =>
+    inverse.filter((x): x is Extract<Op, { t: 'update' }> => x.t === 'update' && x.id === id)
+  const seen = new Map<string, number>()
   return ops.flatMap((op): OpLine[] => {
     switch (op.t) {
       case 'add':
+        added.set(op.node.id, op.node)
         return [{ sign: '+', nodeId: op.node.id, text: nodeLabel(op.node, op.node.id) }]
       case 'remove':
         return [
@@ -596,10 +620,13 @@ export function describeOps(ops: readonly Op[], inverse: readonly Op[], design?:
       case 'setKind':
         return [{ sign: '~', nodeId: null, text: `Piece type → ${op.kind}` }]
       default: {
-        const node = design?.nodes[op.id]
-        const before =
-          inverse.find((x): x is Extract<Op, { t: 'update' }> => x.t === 'update' && x.id === op.id)
-            ?.patch ?? {}
+        const node = (design?.nodes[op.id] ?? added.get(op.id)) as
+          | { kind?: NodeKind; name?: string }
+          | undefined
+        const k = seen.get(op.id) ?? 0
+        seen.set(op.id, k + 1)
+        const candidates = inverseUpdates(op.id)
+        const before = candidates[candidates.length - 1 - k]?.patch ?? {}
         const name = nodeLabel(node, op.id)
         return leaves(op.patch).map(({ path, value }) => {
           const field = fieldAt(node?.kind, path, mergeForLookup(node, op.patch))
@@ -625,45 +652,90 @@ function mergeForLookup(node: unknown, patch: Record<string, unknown>): unknown 
 
 const LABEL_MAX = 200
 
+/** How one update reads: "Width at top 2.2 → 2.6 mm", "Placement On band → Free", "Band: A, B". */
+function updatePhrase(node: Node | undefined, id: string, patch: Record<string, unknown>) {
+  const after = mergeForLookup(node, patch)
+  const parts: { title: string; text: string }[] = []
+  // A variant switch reads as one change of its field; the old variant's nulled keys and the
+  // new variant's filled ones are part of it.
+  const switched = leaves(patch)
+    .filter((l) => l.path.at(-1) === 'type' && l.path.length > 1)
+    .map((l) => l.path.slice(0, -1))
+    .filter((p) => fieldAt(node?.kind, p, after)?.variants)
+  const under = (path: readonly string[], prefix: readonly string[]) =>
+    prefix.every((k, i) => path[i] === k)
+  for (const prefix of switched) {
+    const field = fieldAt(node?.kind, prefix, after)!
+    const variantTitle = (v: unknown) =>
+      field.variants!.find((x) => x.value === v)?.title ?? show(v, undefined)
+    const from = at(node, [...prefix, 'type'])
+    const to = at(patch, [...prefix, 'type'])
+    if (from !== to)
+      parts.push({ title: field.title, text: `${field.title} ${variantTitle(from)} → ${variantTitle(to)}` })
+  }
+  // A leaf inside a whole-value field (a ring size) reads as a change of that field.
+  const wholes = new Map<string, { path: string[]; field: FieldInfo }>()
+  for (const { path, value } of leaves(patch)) {
+    if (switched.some((p) => under(path, p))) continue
+    const parent = path.length > 1 ? fieldAt(node?.kind, path.slice(0, -1), after) : undefined
+    if (parent?.widget === 'ringSize') {
+      wholes.set(path.slice(0, -1).join('.'), { path: path.slice(0, -1), field: parent })
+      continue
+    }
+    const was = at(node, path)
+    // Leaves written back to what they were (a scrub that returned) are no change.
+    if (value === was || (value === null && was === undefined)) continue
+    const field = fieldAt(node?.kind, path, after)
+    parts.push({
+      title: titleAt(field, path),
+      text: `${titleAt(field, path)} ${show(was, field)} → ${show(value, field)}${unitOf(field)}`,
+    })
+  }
+  for (const { path, field } of wholes.values()) {
+    const was = at(node, path)
+    const now = at(after, path)
+    if (JSON.stringify(was) === JSON.stringify(now)) continue
+    parts.push({ title: field.title, text: `${field.title} ${show(was, field)} → ${show(now, field)}` })
+  }
+  if (parts.length === 0) return null
+  if (parts.length === 1) return parts[0]!.text
+  return `${nodeLabel(node, id)}: ${[...new Set(parts.map((p) => p.title))].join(', ')}`
+}
+
 /**
  * A short past-tense label for a change, made from its ops and the design they apply to:
  * "Width at top 2.2 → 2.6 mm", "Added Halo", "Ring band: Width at top, Width at base". Used for
- * one-gesture history entries and the assistant's change chips.
+ * one-gesture history entries and the assistant's change chips. Ops are read in order against
+ * the design as it stands at each one, so an update of a node added earlier in the list is named
+ * properly; edits that end where they started are left out.
  */
 export function labelForOps(ops: readonly Op[], before: Design): string {
   const phrases: string[] = []
+  let working = before
   for (const op of squashOps(ops)) {
-    let phrase: string
+    let phrase: string | null
     switch (op.t) {
       case 'add':
         phrase = `Added ${nodeLabel(op.node, op.node.id)}`
         break
       case 'remove':
-        phrase = `Removed ${nodeLabel(before.nodes[op.id], op.id)}`
+        phrase = `Removed ${nodeLabel(working.nodes[op.id], op.id)}`
         break
       case 'move':
-        phrase = `Reordered ${nodeLabel(before.nodes[op.id], op.id)}`
+        phrase = `Reordered ${nodeLabel(working.nodes[op.id], op.id)}`
         break
       case 'setKind':
         phrase = `Changed the piece type to ${op.kind}`
         break
-      case 'update': {
-        const node = before.nodes[op.id]
-        const changed = leaves(op.patch)
-        const after = mergeForLookup(node, op.patch)
-        const [only] = changed
-        if (changed.length === 1 && only) {
-          const field = fieldAt(node?.kind, only.path, after)
-          phrase = `${titleAt(field, only.path)} ${show(at(node, only.path), field)} → ${show(only.value, field)}${unitOf(field)}`
-        } else {
-          const titles = [
-            ...new Set(changed.map((l) => titleAt(fieldAt(node?.kind, l.path, after), l.path))),
-          ]
-          phrase = `${nodeLabel(node, op.id)}: ${titles.join(', ')}`
-        }
-      }
+      case 'update':
+        phrase = updatePhrase(working.nodes[op.id], op.id, op.patch)
     }
-    if (!phrases.includes(phrase)) phrases.push(phrase)
+    try {
+      working = applyOps(working, [op]).design
+    } catch {
+      // An op that does not apply still gets its phrase; later ops read the design without it.
+    }
+    if (phrase && !phrases.includes(phrase)) phrases.push(phrase)
   }
   if (phrases.length === 0) return 'No change'
   const label =

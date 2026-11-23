@@ -5,9 +5,9 @@
 import type { Manifold } from 'manifold-3d'
 import type { Scene, SceneStone } from '../core'
 import { runtime } from '../runtime/index'
-import { weld } from '../solid/meshing'
+import { boundsOverlap, weld } from '../solid/meshing'
 import { manifoldFromTriangles } from '../solid/solid'
-import type { Diagnostic } from '../types'
+import type { Bounds, Diagnostic } from '../types'
 import type { DfmProfile } from './profile'
 
 /** Overlap below this is tessellation noise between touching facets (mm³). */
@@ -71,7 +71,14 @@ function collisions(scene: Scene, gems: readonly Manifold[]): Diagnostic[] {
  * whose centre is nearest.
  */
 function buried(scene: Scene, gems: readonly Manifold[], profile: DfmProfile): Diagnostic[] {
-  const metal = scene.parts.flatMap((p) => (p.fused ? [p.fused.manifold(scene.quality)] : []))
+  // Only parts that reach a stone (a necklace's hundreds of links mostly do not).
+  const near = (b: Bounds) =>
+    scene.stones.some((s) => {
+      const r = radiusOf(s)
+      const o = s.stone.frame.origin
+      return boundsOverlap(b, { min: [o[0] - r, o[1] - r, o[2] - r], max: [o[0] + r, o[1] + r, o[2] + r] })
+    })
+  const metal = scene.parts.flatMap((p) => (p.fused && near(p.part.bounds) ? [p.fused.manifold(scene.quality)] : []))
   if (metal.length === 0) return []
   const { manifold: mf } = runtime()
   const all = mf.Manifold.union(metal)

@@ -32,7 +32,8 @@ export class TriangleBvh {
     const triangles = mesh.indices.length / 3
     this.order = new Uint32Array(triangles)
     for (let i = 0; i < triangles; i++) this.order[i] = i
-    const capacity = Math.max(1, 2 * Math.ceil(triangles / LEAF) + 1)
+    // Median splits give leaves of LEAF/2…LEAF triangles; 2n − 1 nodes always suffice.
+    const capacity = Math.max(1, 2 * triangles)
     this.boxes = new Float64Array(capacity * 6)
     this.offset = new Uint32Array(capacity)
     this.count = new Uint32Array(capacity)
@@ -221,18 +222,26 @@ export class TriangleBvh {
     while (top > 0) {
       const node = stack[--top]!
       const b = node * 6
-      let t0 = (bx[b]! - ox) * ix
-      let t1 = (bx[b + 3]! - ox) * ix
-      let tn = Math.min(t0, t1)
-      let tf = Math.max(t0, t1)
-      t0 = (bx[b + 1]! - oy) * iy
-      t1 = (bx[b + 4]! - oy) * iy
-      tn = Math.max(tn, Math.min(t0, t1))
-      tf = Math.min(tf, Math.max(t0, t1))
-      t0 = (bx[b + 2]! - oz) * iz
-      t1 = (bx[b + 5]! - oz) * iz
-      tn = Math.max(tn, Math.min(t0, t1))
-      tf = Math.min(tf, Math.max(t0, t1))
+      let tn = -Infinity
+      let tf = Infinity
+      for (let k = 0; k < 3; k++) {
+        const o = k === 0 ? ox : k === 1 ? oy : oz
+        const inv = k === 0 ? ix : k === 1 ? iy : iz
+        const lo = bx[b + k]!
+        const hi = bx[b + 3 + k]!
+        if (!Number.isFinite(inv)) {
+          // Parallel to this slab: inside it or never.
+          if (o < lo || o > hi) {
+            tn = Infinity
+            break
+          }
+          continue
+        }
+        const t0 = (lo - o) * inv
+        const t1 = (hi - o) * inv
+        tn = Math.max(tn, Math.min(t0, t1))
+        tf = Math.min(tf, Math.max(t0, t1))
+      }
       if (!(tf >= Math.max(tn, 0)) || tn > limit()) continue
       const n = this.count[node]!
       if (n === 0) {

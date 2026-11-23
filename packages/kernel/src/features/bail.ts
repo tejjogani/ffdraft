@@ -3,12 +3,13 @@
  * so that a chain passes through along X.
  */
 import type { NodeOf } from '@pave/schema'
-import { type Solid, defineFeature, metalOf } from '../core'
+import { QUALITY, type Solid, defineFeature, metalOf } from '../core'
 import { type Loop, circleLoop, roundedRectLoop } from '../geometry/loop'
 import { pathFrames } from '../geometry/path'
 import { placeLoop, sweepSolid } from '../geometry/sweep'
 import type { Frame, Vec3 } from '../geometry/vec'
 import { unionBounds } from '../solid/meshing'
+import type { Bounds } from '../types'
 
 type BailNode = NodeOf<'bail'>
 
@@ -77,12 +78,32 @@ function build(node: BailNode, top: Vec3, back: number): { solid: Solid; opening
   }
 }
 
+/**
+ * Where the bail stands: on the highest metal within the bail's own width of the host's centre
+ * line — a name in script has no metal at the very middle of its top edge.
+ */
+function topCentre(solids: readonly Solid[], bounds: Bounds, reach: number): Vec3 {
+  const cx = (bounds.min[0] + bounds.max[0]) / 2
+  const cy = (bounds.min[1] + bounds.max[1]) / 2
+  let top = -Infinity
+  let highest: Vec3 = [cx, cy, bounds.max[2]]
+  for (const solid of solids) {
+    const { positions } = solid.triangles(QUALITY.draft)
+    for (let i = 0; i < positions.length; i += 3) {
+      const z = positions[i + 2]!
+      if (Math.abs(positions[i]! - cx) <= reach && z > top) top = z
+      if (z >= highest[2] - 1e-6) highest = [positions[i]!, cy, z]
+    }
+  }
+  // Nothing under the centre line at all: stand on the piece's highest point instead.
+  return Number.isFinite(top) ? [cx, cy, top] : highest
+}
+
 export const bail = defineFeature('bail', (node, ctx) => {
   const host = node.host ? ctx.input(node.host) : null
-  const bounds = host && host.bodies.length > 0 ? unionBounds(host.bodies.map((b) => b.solid.bounds())) : null
-  const top: Vec3 = bounds
-    ? [(bounds.min[0] + bounds.max[0]) / 2, (bounds.min[1] + bounds.max[1]) / 2, bounds.max[2]]
-    : [0, 0, 0]
+  const solids = host?.bodies.map((b) => b.solid) ?? []
+  const bounds = solids.length > 0 ? unionBounds(solids.map((s) => s.bounds())) : null
+  const top: Vec3 = bounds ? topCentre(solids, bounds, Math.max(node.wire, node.width / 2)) : [0, 0, 0]
   const { solid, opening } = build(node, top, bounds ? bounds.max[1] : 0)
   if (node.opening < node.wire * 1.2)
     ctx.report({

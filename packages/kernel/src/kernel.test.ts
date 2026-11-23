@@ -46,11 +46,11 @@ describe('kernel core', () => {
         const p = (i: number, k: number) => mesh.positions[i + k]! - (k === 0 ? centre : 0)
         // The stored normal points away from the sphere's centre…
         expect(p(a, 0) * mesh.normals[a]! + p(a, 1) * mesh.normals[a + 1]! + p(a, 2) * mesh.normals[a + 2]!).toBeGreaterThan(0)
-        // …and so does the triangle's winding.
+        // …and so does the triangle's winding (triangles at the poles have no area).
         const u = [0, 1, 2].map((k) => p(b, k) - p(a, k))
         const v = [0, 1, 2].map((k) => p(c, k) - p(a, k))
         const n = [u[1]! * v[2]! - u[2]! * v[1]!, u[2]! * v[0]! - u[0]! * v[2]!, u[0]! * v[1]! - u[1]! * v[0]!]
-        expect(n[0]! * p(a, 0) + n[1]! * p(a, 1) + n[2]! * p(a, 2)).toBeGreaterThan(0)
+        expect(n[0]! * p(a, 0) + n[1]! * p(a, 1) + n[2]! * p(a, 2)).toBeGreaterThanOrEqual(0)
       }
       expect(s.volume()).toBeCloseTo((4 / 3) * Math.PI * 8, 6)
     }

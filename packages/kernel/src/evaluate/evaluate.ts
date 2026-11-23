@@ -132,7 +132,16 @@ export class Evaluator {
     if (detail === 'production') {
       // Whole-piece manufacturability checks need the fused bodies, so they run here only.
       const checkStarted = performance.now()
-      diagnostics.push(...manufacturabilityDiagnostics(scene))
+      try {
+        diagnostics.push(...manufacturabilityDiagnostics(scene))
+      } catch (error) {
+        // A check that cannot run must not cost the designer the geometry it was checking.
+        diagnostics.push({
+          level: 'warning',
+          code: 'dfm.unavailable',
+          message: `Manufacturability checks could not be completed: ${error instanceof Error ? error.message : String(error)}`,
+        })
+      }
       timings['@dfm'] = performance.now() - checkStarted
     }
     diagnostics.sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level])
