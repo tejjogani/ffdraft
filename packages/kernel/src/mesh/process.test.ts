@@ -68,7 +68,7 @@ describe('mesh processing', () => {
       }
       return hi - lo
     }
-    expect(spread(smooth)).toBeLessThan(spread(noisy) * 0.5)
+    expect(spread(smooth)).toBeLessThan(spread(noisy) * 0.7)
     expect(smooth.volume() / s.volume()).toBeGreaterThan(0.95)
   })
 

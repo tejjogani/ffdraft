@@ -89,9 +89,11 @@ describe('mesh repair', () => {
   })
 
   it('re-surfaces non-manifold input, and refuses what encloses nothing', () => {
-    // Two spheres sharing a fin: three faces on some edges.
-    const fin = [0, 0, 6, 0, 0, -6, 9, 0, 0]
-    const { manifold, report } = repairMesh(soup([...sphereSoup(5), fin, flip(fin), [0, 0, 6, 0, 0, -6, -9, 0, 1]]))
+    // A fin standing on one of the sphere's edges: that edge has three faces.
+    const sphere = sphereSoup(5)
+    const t = sphere[100]!
+    const fin = [...t.slice(0, 6), t[0]! * 1.6, t[1]! * 1.6, t[2]! * 1.6 + 1]
+    const { manifold, report } = repairMesh(soup([...sphere, fin]))
     expect(report.resurfaced).toBe(true)
     expect(edgeTopology(trianglesFromManifold(manifold)).open).toBe(0)
     expect(manifold.volume()).toBeGreaterThan(0.85 * (4 / 3) * Math.PI * 125)
