@@ -3,7 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts", "./types": "./src/types.ts" },
-  "scripts": { "typecheck": "tsc -p tsconfig.json" },
-  "dependencies": { "@pave/schema": "workspace:*" }
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@pave/schema": "workspace:*",
+    "manifold-3d": "^3.5.5",
+    "opentype.js": "^2.0.0",
+    "replicad": "^1.2.1",
+    "replicad-opencascadejs": "^1.2.1"
+  }
 }

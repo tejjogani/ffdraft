@@ -51,9 +51,32 @@ const metal = {
   plating: choice('Plating', PLATING_IDS, 'none', { group: 'Material' }),
 }
 
+/** A real, purchasable stone or parcel attached to design stones (docs/research/07-sourcing.md). */
+export const StoneSourcing = z.object({
+  provider: z.string(),
+  sku: z.string(),
+  url: z.string().url().optional(),
+  priceUsd: z.number().nonnegative().optional(),
+  /** Measured dimensions of the actual stone; when present the seat is cut to these. */
+  measured: z.object({ length: z.number(), width: z.number(), depth: z.number() }).optional(),
+  certificate: z.string().optional(),
+})
+export type StoneSourcing = z.infer<typeof StoneSourcing>
+
+/** What to buy: explicit grade lists, because that is how stones are traded and filtered. */
+export const StoneQuality = z.object({
+  origin: z.enum(['natural', 'lab', 'any']).default('any'),
+  colors: z.array(z.string().max(12)).max(12).optional(),
+  clarities: z.array(z.string().max(6)).max(12).optional(),
+  certified: z.boolean().optional(),
+})
+export type StoneQuality = z.infer<typeof StoneQuality>
+
 const stone = {
   cut: choice('Cut', GEM_CUT_IDS, 'round', { group: 'Stone' }),
   stone: choice('Stone', GEM_MATERIAL_IDS, 'diamond', { group: 'Stone' }),
+  quality: StoneQuality.optional(),
+  sourcing: StoneSourcing.optional(),
 }
 
 const RingSizeSchema = z
@@ -123,17 +146,6 @@ const GemPlacement = z
   .default({ type: 'free' })
   .meta({ title: 'Placement', group: 'Placement' })
 
-/** A real, purchasable stone attached to a design stone (see docs/research/07-sourcing.md). */
-export const StoneSourcing = z.object({
-  provider: z.string(),
-  sku: z.string(),
-  url: z.string().url().optional(),
-  priceUsd: z.number().nonnegative().optional(),
-  /** Measured dimensions of the actual stone; when present the seat is cut to these. */
-  measured: z.object({ length: z.number(), width: z.number(), depth: z.number() }).optional(),
-  certificate: z.string().optional(),
-})
-
 export const Gem = z
   .object({
     ...base,
@@ -148,7 +160,6 @@ export const Gem = z
       description: 'Ignored for round; clamped to what the cut allows.',
     }).optional(),
     placement: GemPlacement,
-    sourcing: StoneSourcing.optional(),
   })
   .meta({ title: 'Stone', description: 'A single gemstone.' })
 
@@ -246,8 +257,8 @@ export const Pave = z
       .meta({ title: 'Region', description: 'Which part of the body is covered.' }),
     sizeMax: mm('Largest stone', 0.8, 4, 1.8, { group: 'Stone' }),
     sizeMin: mm('Smallest stone', 0.8, 4, 1.0, { group: 'Stone' }),
-    gap: mm('Gap between stones', 0.05, 0.6, 0.12),
-    margin: mm('Edge margin', 0, 2, 0.3),
+    gap: mm('Gap between stones', 0.05, 0.6, 0.2),
+    margin: mm('Edge margin', 0, 2, 0.35),
     coverage: ratio('Ice level', 0.05, 1, 1, {
       widget: 'slider',
       description: 'Fraction of the region to fill. 1 = fully iced out.',
