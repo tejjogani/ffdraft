@@ -17,6 +17,7 @@ export class OutlineDistance {
   private readonly x0: number
   private readonly y0: number
   private readonly columns: number
+  private readonly rowCount: number
 
   constructor(contours: readonly Contour[]) {
     const edges: number[] = []
@@ -52,6 +53,7 @@ export class OutlineDistance {
     this.x0 = minX
     this.y0 = minY
     this.columns = Math.ceil((maxX - minX) / this.cell) + 1
+    this.rowCount = Math.ceil((maxY - minY) / this.cell) + 1
     for (let e = 0; e < n; e++) {
       const i0 = this.col(Math.min(this.ax[e]!, this.bx[e]!))
       const i1 = this.col(Math.max(this.ax[e]!, this.bx[e]!))
@@ -72,16 +74,16 @@ export class OutlineDistance {
     return Math.floor((y - this.y0) / this.cell)
   }
 
-  /** Unsigned distance from (x, y) to the nearest outline edge. */
-  distance(x: number, y: number): number {
+  /** Unsigned distance from (x, y) to the nearest outline edge, or `cap` if that is nearer. */
+  distance(x: number, y: number, cap = Infinity): number {
     const ci = this.col(x)
     const cj = this.row(y)
-    let best = Infinity
+    let best = cap
     const seen = new Set<number>()
     for (let ring = 0; ; ring++) {
-      // Every edge closer than `ring · cell` has been seen by now.
+      // Every edge closer than `(ring − 1) · cell` has been seen by now.
       if (best <= (ring - 1) * this.cell) break
-      if (ring > 4096) break
+      if (ring > this.columns + this.rowCount + 2) break
       for (let j = cj - ring; j <= cj + ring; j++)
         for (let i = ci - ring; i <= ci + ring; i++) {
           if (Math.max(Math.abs(i - ci), Math.abs(j - cj)) !== ring) continue

@@ -6,6 +6,7 @@ import { commitChange, storeFacts, toStoredChange } from '../design'
 import { notFound } from '../errors'
 import { getPiece } from '../lookups'
 import { serviceContext } from '../service-context'
+import { assertAttested } from './pieces'
 import type { HandlerGroup } from './types'
 
 export const design: HandlerGroup<'design'> = {
@@ -17,6 +18,7 @@ export const design: HandlerGroup<'design'> = {
       label: input.label,
       baseVersion: input.baseVersion,
       changeId: input.changeId,
+      reverts: input.reverts,
     }),
 
   'design.history': async (ctx, input) => {
@@ -30,15 +32,30 @@ export const design: HandlerGroup<'design'> = {
     return rows.map(toStoredChange)
   },
 
+  // A run reverts as one change: the inverses of its changes, newest first.
   'design.revert': async (ctx, input) => {
-    const target = await ctx.repo.changes.first(
-      and(eq(t.designChange.pieceId, input.pieceId), eq(t.designChange.seq, input.seq)),
-    )
-    if (!target) throw notFound(`Change ${input.seq} of piece`, input.pieceId)
+    await getPiece(ctx, input.pieceId)
+    const onPiece = eq(t.designChange.pieceId, input.pieceId)
+    const targets = await ctx.repo.changes.many({
+      where:
+        input.runId !== undefined
+          ? and(onPiece, eq(t.designChange.runId, input.runId))
+          : and(onPiece, eq(t.designChange.seq, input.seq!)),
+      orderBy: desc(t.designChange.seq),
+    })
+    if (targets.length === 0)
+      throw input.runId !== undefined
+        ? notFound(`Changes by run "${input.runId}" to piece`, input.pieceId)
+        : notFound(`Change ${input.seq} of piece`, input.pieceId)
+    const label =
+      input.runId !== undefined
+        ? `Undo assistant edits: ${targets.map((c) => c.label).toReversed().join('; ')}`
+        : `Revert: ${targets[0]!.label}`
     return commitChange(ctx, {
       pieceId: input.pieceId,
-      ops: target.inverse,
-      label: `Revert: ${target.label}`.slice(0, 200),
+      ops: targets.flatMap((c) => c.inverse),
+      label: label.length > 200 ? `${label.slice(0, 199)}…` : label,
+      reverts: targets.map((c) => c.id),
       // Later edits may have touched the same nodes; that is a conflict, not a malformed request.
       invalidAs: 'conflict',
     })
@@ -55,6 +72,7 @@ export const design: HandlerGroup<'design'> = {
 
   'design.export': async (ctx, input) => {
     const piece = await getPiece(ctx, input.pieceId)
+    assertAttested(piece)
     const { file, notes } = await ctx.services
       .get('geometry')
       .export(

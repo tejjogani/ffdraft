@@ -18,8 +18,10 @@ import { RESOLVED_SCENE_VERSION, type ResolvedScene } from './types'
 function resolveMaterials(scene: RenderScene, subject: SceneSubject) {
   const materials: Record<string, ResolvedMaterial> = {}
   const assignments: Record<string, string> = {}
+  // '*' applies to the whole piece; a node's own override wins over it.
+  const override = (nodeId: string) => ({ ...scene.overrides['*'], ...scene.overrides[nodeId] })
   for (const part of subject.parts) {
-    const o = scene.overrides[part.nodeId] ?? {}
+    const o = override(part.nodeId)
     const metal = o.material ?? part.material
     const finish = o.finish ?? part.finish
     const plating = o.plating ?? part.plating
@@ -28,7 +30,7 @@ function resolveMaterials(scene: RenderScene, subject: SceneSubject) {
     assignments[part.id] = k
   }
   for (const s of subject.stones) {
-    const stone = scene.overrides[s.nodeId]?.stone ?? s.stone
+    const stone = override(s.nodeId).stone ?? s.stone
     const k = gemKey(stone)
     materials[k] ??= gemMaterial(stone)
     assignments[s.id] = k
@@ -58,7 +60,9 @@ export function resolveScene(scene: RenderScene, input: Evaluation | SceneSubjec
     background: resolveBackground(scene.environment, look),
     ground: resolveGround(scene.ground, look, floorZ, camera.target, radius, camera.azimuth),
     ...resolveMaterials(scene, subject),
-    animation: scene.animation ? resolveAnimation(scene.animation, camera, rig.rotation, radius) : null,
+    animation: scene.animation
+      ? resolveAnimation(scene.animation, camera, rig.rotation, radius)
+      : null,
     output,
   }
 }

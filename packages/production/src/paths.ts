@@ -25,7 +25,8 @@ export function safeSegment(text: string, fallback = 'item', max = MAX_SEGMENT):
 export const skuSlug = (sku: string) => safeSegment(sku, 'PIECE', 40)
 
 /** `<sku>_r<rev>_production` — the single top-level folder of the zip (research Decisions). */
-export const bundleRoot = (sku: string, revision: number) => `${skuSlug(sku)}_r${revision}_production`
+export const bundleRoot = (sku: string, revision: number) =>
+  `${skuSlug(sku)}_r${revision}_production`
 
 /** Joins safe segments with forward slashes; extensions are appended verbatim. */
 export const joinPath = (...segments: string[]) => segments.join('/')

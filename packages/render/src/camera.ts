@@ -43,7 +43,10 @@ export const CAMERA_PRESETS: Record<CameraPreset, PresetSpec> = {
 export const SENSOR_WIDTH_MM = 36
 
 /** Right / up / back (toward the camera) unit vectors of an orbit camera. */
-export function cameraBasis(azimuth: number, elevation: number): { right: Vec3; up: Vec3; back: Vec3 } {
+export function cameraBasis(
+  azimuth: number,
+  elevation: number,
+): { right: Vec3; up: Vec3; back: Vec3 } {
   const back = orbitDirection(azimuth, elevation)
   // The orbit rig's pivot X axis is (cos a, sin a, 0) at every elevation, so top views stay upright.
   const a = (azimuth * Math.PI) / 180
@@ -51,7 +54,9 @@ export function cameraBasis(azimuth: number, elevation: number): { right: Vec3; 
   return { right, up: cross(back, right), back }
 }
 
-export function cameraPose(c: Pick<ResolvedCamera, 'target' | 'azimuth' | 'elevation' | 'distance'>): {
+export function cameraPose(
+  c: Pick<ResolvedCamera, 'target' | 'azimuth' | 'elevation' | 'distance'>,
+): {
   position: Vec3
   quaternion: Quat
 } {
@@ -94,7 +99,11 @@ export function framePoints(
     for (const p of pts) {
       const r = sub(p, target)
       const z = dot(r, back)
-      distance = Math.max(distance, z + Math.abs(dot(r, right)) / (fill * tx), z + Math.abs(dot(r, up)) / (fill * ty))
+      distance = Math.max(
+        distance,
+        z + Math.abs(dot(r, right)) / (fill * tx),
+        z + Math.abs(dot(r, up)) / (fill * ty),
+      )
     }
     let lo = [Infinity, Infinity]
     let hi = [-Infinity, -Infinity]
@@ -141,16 +150,25 @@ function stoneBounds(subject: SceneSubject): Bounds | null {
   return { min, max }
 }
 
+/**
+ * The table facet of a stone (research §3: focus on the table). The unit gem's table sits
+ * about 0.18 girdle widths above the girdle plane, along the stone's local +Z.
+ */
+function tableOf(s: SceneSubject['stones'][number]): Vec3 {
+  const m = s.matrix
+  return add(stoneCenter(s), scale([m[8]!, m[9]!, m[10]!], 0.18))
+}
+
 /** Where to focus: the named node, else the centre stone's table, else the framing target. */
 function focusPoint(subject: SceneSubject, nodeId: string | undefined, fallback: Vec3): Vec3 {
   if (nodeId) {
     const stone = subject.stones.find((s) => s.nodeId === nodeId)
-    if (stone) return stoneCenter(stone)
+    if (stone) return tableOf(stone)
     const part = subject.parts.find((p) => p.nodeId === nodeId)
     if (part) return boundsCenter(part.bounds)
   }
   const centre = subject.stones.find((s) => s.role === 'center')
-  return centre ? stoneCenter(centre) : fallback
+  return centre ? tableOf(centre) : fallback
 }
 
 export function resolveCamera(

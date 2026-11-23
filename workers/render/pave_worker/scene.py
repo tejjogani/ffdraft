@@ -23,6 +23,11 @@ def _m(v: Vec3) -> tuple[float, float, float]:
     return (v[0] * MM, v[1] * MM, v[2] * MM)
 
 
+def _offset(p: Vec3, pivot: Vec3) -> tuple[float, float, float]:
+    """A rig position relative to the rig's pivot, in metres."""
+    return _m((p[0] - pivot[0], p[1] - pivot[1], p[2] - pivot[2]))
+
+
 def _link(obj: bpy.types.Object, parent: bpy.types.Object | None = None) -> bpy.types.Object:
     bpy.context.scene.collection.objects.link(obj)
     if parent is not None:
@@ -108,7 +113,7 @@ def _panel(p: Panel, rig: bpy.types.Object, pivot: Vec3, material: bpy.types.Mat
         radiance.data[i].color = (*(c * k for c in p["radiance"]), 1.0)
     mesh.materials.append(material)
     obj = _link(bpy.data.objects.new(p["id"], mesh), rig)
-    obj.location = _m((p["position"][0] - pivot[0], p["position"][1] - pivot[1], p["position"][2] - pivot[2]))
+    obj.location = _offset(p["position"], pivot)
     x, y, z, qw = p["quaternion"]
     obj.rotation_mode = "QUATERNION"
     obj.rotation_quaternion = Quaternion((qw, x, y, z))
@@ -131,7 +136,7 @@ def _sparkle(i: int, s: Sparkle, rig: bpy.types.Object, pivot: Vec3, gems: bpy.t
     light.color = tuple(c / peak for c in s["intensity"])
     light.shadow_soft_size = s["radius"] * MM
     obj = _link(bpy.data.objects.new(light.name, light), rig)
-    obj.location = _m((s["position"][0] - pivot[0], s["position"][1] - pivot[1], s["position"][2] - pivot[2]))
+    obj.location = _offset(s["position"], pivot)
     obj.visible_camera = False
     # Research §1: light-link sparkle to stones so metal shows no pinpoint specks.
     obj.light_linking.receiver_collection = gems

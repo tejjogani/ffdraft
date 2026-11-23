@@ -6,7 +6,7 @@
  */
 import type { Annotation, P2, Side } from './dimensions'
 import type { Box2, ViewLines } from './hlr'
-import { type Item, type MeasureText, PT, type TextStyle, capHeight } from './model'
+import { capHeight, type Item, type MeasureText, PT, type TextStyle } from './model'
 import { hatch } from './polyline'
 import type { ViewId } from './views'
 
@@ -19,7 +19,7 @@ export interface ViewLayout {
   box: Box2
 }
 
-const DIM_TEXT: TextStyle = { size: 6.5 }
+const DIM_TEXT: TextStyle = { size: 6.5, tabular: true }
 const CAPTION: TextStyle = { size: 5, color: '#65635f' }
 const NOTE: TextStyle = { size: 6 }
 const NOTE_SUB: TextStyle = { size: 5.25, color: '#65635f' }
@@ -56,7 +56,12 @@ export function layoutView(input: LayoutInput): ViewLayout {
     return out
   }
   const b = input.lines.bounds
-  const geometry: Box2 = { minX: b.minX * s, maxX: b.maxX * s, minY: -b.maxY * s, maxY: -b.minY * s }
+  const geometry: Box2 = {
+    minX: b.minX * s,
+    maxX: b.maxX * s,
+    minY: -b.maxY * s,
+    maxY: -b.minY * s,
+  }
   const items: Item[] = []
 
   if (input.loops?.length) {
@@ -68,9 +73,11 @@ export function layoutView(input: LayoutInput): ViewLayout {
   }
   const anns = input.annotations.filter((a) => a.view === input.id)
   for (const a of anns) {
-    if (a.kind === 'centerline') items.push({ t: 'lines', pen: 'center', lines: [[...P(...a.a), ...P(...a.b)]] })
+    if (a.kind === 'centerline')
+      items.push({ t: 'lines', pen: 'center', lines: [[...P(...a.a), ...P(...a.b)]] })
   }
-  if (input.lines.hidden.length) items.push({ t: 'lines', pen: 'hidden', lines: input.lines.hidden.map(toPaper) })
+  if (input.lines.hidden.length)
+    items.push({ t: 'lines', pen: 'hidden', lines: input.lines.hidden.map(toPaper) })
   items.push({ t: 'lines', pen: 'stone', lines: input.lines.stones.map(toPaper) })
   items.push({ t: 'lines', pen: 'outline', lines: input.lines.metal.map(toPaper) })
 
@@ -81,7 +88,13 @@ export function layoutView(input: LayoutInput): ViewLayout {
     box.minY = Math.min(box.minY, y)
     box.maxY = Math.max(box.maxY, y)
   }
-  const growText = (x: number, y: number, w: number, size: number, anchor: 'start' | 'middle' | 'end') => {
+  const growText = (
+    x: number,
+    y: number,
+    w: number,
+    size: number,
+    anchor: 'start' | 'middle' | 'end',
+  ) => {
     const x0 = anchor === 'start' ? x : anchor === 'end' ? x - w : x - w / 2
     grow(x0, y - capHeight(size))
     grow(x0 + w, y + size * PT * 0.25)
@@ -90,7 +103,12 @@ export function layoutView(input: LayoutInput): ViewLayout {
   for (const a of anns) if (a.kind === 'cutline') cutline(a.x * s, geometry, a.label, items, grow)
 
   // ── Linear dimensions, stacked in tiers per side so none overlap ──
-  const tiers: Record<Side, { lo: number; hi: number }[][]> = { below: [], above: [], left: [], right: [] }
+  const tiers: Record<Side, { lo: number; hi: number }[][]> = {
+    below: [],
+    above: [],
+    left: [],
+    right: [],
+  }
   const linear = anns
     .filter((a): a is Extract<Annotation, { kind: 'linear' }> => a.kind === 'linear')
     .map((a) => ({ a, pa: P(...a.a), pb: P(...a.b) }))
@@ -127,14 +145,29 @@ export function layoutView(input: LayoutInput): ViewLayout {
 
   // ── Leader notes, in columns left and right of the dimensions ──
   for (const sideName of ['left', 'right'] as const) {
-    const notes = anns.filter((a): a is Extract<Annotation, { kind: 'note' }> => a.kind === 'note' && a.side === sideName)
+    const notes = anns.filter(
+      (a): a is Extract<Annotation, { kind: 'note' }> => a.kind === 'note' && a.side === sideName,
+    )
     if (!notes.length) continue
-    const dimReach = tiers[sideName].length ? FIRST_TIER + (tiers[sideName].length - 1) * TIER + 3 : 0
-    const colX = sideName === 'right' ? geometry.maxX + Math.max(dimReach, 4) + 3 : geometry.minX - Math.max(dimReach, 4) - 3
+    const dimReach = tiers[sideName].length
+      ? FIRST_TIER + (tiers[sideName].length - 1) * TIER + 3
+      : 0
+    const colX =
+      sideName === 'right'
+        ? geometry.maxX + Math.max(dimReach, 4) + 3
+        : geometry.minX - Math.max(dimReach, 4) - 3
     const placed = notes.map((n) => {
       const anchor = P(...n.anchor)
-      const elbow = n.radialFrom ? radialElbow(anchor, P(...n.radialFrom), sideName, geometry) : null
-      return { n, anchor, elbow, y: elbow ? elbow[1] : anchor[1], h: Math.max(n.lines.length * NOTE_LINE, n.badge ? BADGE_R * 2 + 0.6 : 0) }
+      const elbow = n.radialFrom
+        ? radialElbow(anchor, P(...n.radialFrom), sideName, geometry)
+        : null
+      return {
+        n,
+        anchor,
+        elbow,
+        y: elbow ? elbow[1] : anchor[1],
+        h: Math.max(n.lines.length * NOTE_LINE, n.badge ? BADGE_R * 2 + 0.6 : 0),
+      }
     })
     // Resolve overlaps: sweep down, then pull back up if the column ran past the lowest anchor.
     placed.sort((p, q) => p.y - q.y)
@@ -158,7 +191,18 @@ function arrowhead(tip: P2, dx: number, dy: number): Item {
   const uy = dy / l
   const bx = tip[0] - ux * ARROW
   const by = tip[1] - uy * ARROW
-  return { t: 'fill', color: '#1c1b1a', pts: [tip[0], tip[1], bx - uy * ARROW_HALF, by + ux * ARROW_HALF, bx + uy * ARROW_HALF, by - ux * ARROW_HALF] }
+  return {
+    t: 'fill',
+    color: '#1c1b1a',
+    pts: [
+      tip[0],
+      tip[1],
+      bx - uy * ARROW_HALF,
+      by + ux * ARROW_HALF,
+      bx + uy * ARROW_HALF,
+      by - ux * ARROW_HALF,
+    ],
+  }
 }
 
 function linearDim(
@@ -173,7 +217,13 @@ function linearDim(
   textW: number,
   captionW: number,
   grow: (x: number, y: number) => void,
-  growText: (x: number, y: number, w: number, size: number, anchor: 'start' | 'middle' | 'end') => void,
+  growText: (
+    x: number,
+    y: number,
+    w: number,
+    size: number,
+    anchor: 'start' | 'middle' | 'end',
+  ) => void,
 ) {
   const h = a.axis === 'h'
   const ext: number[][] = []
@@ -209,7 +259,14 @@ function linearDim(
     items.push({ t: 'text', x: cx, y, text: a.text, style: DIM_TEXT, anchor: 'middle' })
     growText(cx, y, textW, DIM_TEXT.size, 'middle')
     if (a.caption) {
-      items.push({ t: 'text', x: cx, y: at + capOff, text: a.caption, style: CAPTION, anchor: 'middle' })
+      items.push({
+        t: 'text',
+        x: cx,
+        y: at + capOff,
+        text: a.caption,
+        style: CAPTION,
+        anchor: 'middle',
+      })
       growText(cx, at + capOff, captionW, CAPTION.size, 'middle')
     }
   } else {
@@ -219,7 +276,15 @@ function linearDim(
     grow(x - capHeight(DIM_TEXT.size), cy - textW / 2)
     grow(x, cy + textW / 2)
     if (a.caption) {
-      items.push({ t: 'text', x: at + capOff, y: cy, text: a.caption, style: CAPTION, anchor: 'middle', rotate: 90 })
+      items.push({
+        t: 'text',
+        x: at + capOff,
+        y: cy,
+        text: a.caption,
+        style: CAPTION,
+        anchor: 'middle',
+        rotate: 90,
+      })
       grow(at + capOff, cy - captionW / 2)
       grow(at + capOff - capHeight(CAPTION.size), cy + captionW / 2)
     }
@@ -237,19 +302,32 @@ function radialElbow(anchor: P2, centre: P2, side: 'left' | 'right', g: Box2): P
   dx /= l
   dy /= l
   const targetX = side === 'left' ? g.minX - 2 : g.maxX + 2
-  const reach = dx !== 0 && Math.sign(targetX - anchor[0]) === Math.sign(dx) ? (targetX - anchor[0]) / dx : 3
+  const reach =
+    dx !== 0 && Math.sign(targetX - anchor[0]) === Math.sign(dx) ? (targetX - anchor[0]) / dx : 3
   const t = Math.min(reach, 7)
   return [anchor[0] + dx * t, anchor[1] + dy * t]
 }
 
 function leaderNote(
   items: Item[],
-  p: { n: Extract<Annotation, { kind: 'note' }>; anchor: P2; elbow: P2 | null; y: number; h: number },
+  p: {
+    n: Extract<Annotation, { kind: 'note' }>
+    anchor: P2
+    elbow: P2 | null
+    y: number
+    h: number
+  },
   colX: number,
   side: 'left' | 'right',
   measure: MeasureText,
   grow: (x: number, y: number) => void,
-  growText: (x: number, y: number, w: number, size: number, anchor: 'start' | 'middle' | 'end') => void,
+  growText: (
+    x: number,
+    y: number,
+    w: number,
+    size: number,
+    anchor: 'start' | 'middle' | 'end',
+  ) => void,
 ) {
   const dir = side === 'right' ? 1 : -1
   const shoulderEnd: P2 = [colX, p.y]
@@ -259,18 +337,36 @@ function leaderNote(
   path.push(...shoulderStart, ...shoulderEnd)
   items.push({ t: 'lines', pen: 'leader', lines: [path] })
   const next: P2 = p.elbow ?? shoulderStart
-  if (p.n.head === 'arrow') items.push(arrowhead(p.anchor, p.anchor[0] - next[0], p.anchor[1] - next[1]))
+  if (p.n.head === 'arrow')
+    items.push(arrowhead(p.anchor, p.anchor[0] - next[0], p.anchor[1] - next[1]))
   else items.push({ t: 'circle', cx: p.anchor[0], cy: p.anchor[1], r: 0.35, fill: '#1c1b1a' })
   grow(...p.anchor)
 
   let x = colX + dir * 0.8
   if (p.n.badge) {
-    const cx = x + dir * BADGE_R
-    items.push({ t: 'circle', cx, cy: p.y, r: BADGE_R, pen: 'leader', fill: '#ffffff' })
-    items.push({ t: 'text', x: cx, y: p.y + capHeight(BADGE.size) / 2, text: p.n.badge, style: BADGE, anchor: 'middle' })
-    grow(cx - BADGE_R, p.y - BADGE_R)
-    grow(cx + BADGE_R, p.y + BADGE_R)
-    x = cx + dir * (BADGE_R + 1.2)
+    // A circle for one key, a stadium for a range ("S1–S11").
+    const half = Math.max(BADGE_R, measure(p.n.badge, BADGE) / 2 + 0.9)
+    const cx = x + dir * half
+    if (half === BADGE_R)
+      items.push({ t: 'circle', cx, cy: p.y, r: BADGE_R, pen: 'leader', fill: '#ffffff' })
+    else
+      items.push({
+        t: 'lines',
+        pen: 'leader',
+        closed: true,
+        lines: [stadium(cx, p.y, half, BADGE_R)],
+      })
+    items.push({
+      t: 'text',
+      x: cx,
+      y: p.y + capHeight(BADGE.size) / 2,
+      text: p.n.badge,
+      style: BADGE,
+      anchor: 'middle',
+    })
+    grow(cx - half, p.y - BADGE_R)
+    grow(cx + half, p.y + BADGE_R)
+    x = cx + dir * (half + 1.2)
   }
   const anchor = side === 'right' ? 'start' : 'end'
   const top = p.y - ((p.n.lines.length - 1) * NOTE_LINE) / 2 + capHeight(NOTE.size) / 2
@@ -282,8 +378,28 @@ function leaderNote(
   })
 }
 
+function stadium(cx: number, cy: number, half: number, r: number): number[] {
+  const pts: number[] = []
+  const straight = half - r
+  for (const [ox, a0] of [
+    [straight, -Math.PI / 2],
+    [-straight, Math.PI / 2],
+  ] as const)
+    for (let k = 0; k <= 12; k++) {
+      const a = a0 + (k / 12) * Math.PI
+      pts.push(cx + ox + r * Math.cos(a), cy + r * Math.sin(a))
+    }
+  return pts
+}
+
 /** Cutting-plane line A–A: chain line with heavy ends and arrows showing the viewing direction. */
-function cutline(x: number, g: Box2, label: string, items: Item[], grow: (x: number, y: number) => void) {
+function cutline(
+  x: number,
+  g: Box2,
+  label: string,
+  items: Item[],
+  grow: (x: number, y: number) => void,
+) {
   const y0 = g.minY - 3
   const y1 = g.maxY + 3
   items.push({ t: 'lines', pen: 'cut', lines: [[x, y0, x, y1]] })
@@ -291,7 +407,14 @@ function cutline(x: number, g: Box2, label: string, items: Item[], grow: (x: num
     // Section A–A looks toward −X, i.e. to the left on the front view.
     items.push({ t: 'lines', pen: 'frame', lines: [[x, y, x - 3.2, y]] })
     items.push(arrowhead([x - 3.6, y], -1, 0))
-    items.push({ t: 'text', x: x - 4.6, y: y + capHeight(6.5) / 2, text: label, style: { size: 6.5, weight: 'semibold' }, anchor: 'end' })
+    items.push({
+      t: 'text',
+      x: x - 4.6,
+      y: y + capHeight(6.5) / 2,
+      text: label,
+      style: { size: 6.5, weight: 'semibold' },
+      anchor: 'end',
+    })
     grow(x - 7, y - 2)
     grow(x + 1, y + 2)
   }

@@ -5,19 +5,45 @@
  */
 import { z } from 'zod'
 
+/** Widgets a field may ask for. The library widgets (`metal`, `stone`, `cut`, …) pick from @pave/schema's catalogues. */
+export const FIELD_WIDGETS = [
+  'slider',
+  'segmented',
+  'select',
+  'text',
+  'textarea',
+  'vec3',
+  'path',
+  'asset',
+  'ringSize',
+  'stoneSize',
+  'metal',
+  'finish',
+  'plating',
+  'stone',
+  'cut',
+] as const
+export type FieldWidget = (typeof FIELD_WIDGETS)[number]
+
 export interface FieldMeta {
   title: string
   description?: string
-  unit?: 'mm' | 'deg' | 'ct' | '%'
+  unit?: 'mm' | 'deg' | 'ct' | '%' | 's' | 'px'
   step?: number
   /** Inspector section this field is grouped under. */
   group?: string
   /** For node references: which node kinds may be picked. */
   refKinds?: readonly string[]
   /** Hint for the widget; inferred from the type when omitted. */
-  widget?: 'slider' | 'segmented' | 'select' | 'text' | 'textarea' | 'vec3' | 'path' | 'asset'
+  widget?: FieldWidget
   /** Only show when another field has one of the given values. */
   when?: Record<string, readonly (string | number | boolean)[]>
+  /** Fine-tuning a designer rarely needs: hidden behind "Fine-tune" in the inspector. */
+  advanced?: boolean
+  /** Values snap to stock sizes: `melee` = calibrated melee diameters (`MELEE_SIZES_MM`). */
+  snap?: 'melee'
+  /** Human labels for enum values whose ids do not read well ("dShape" → "D-shape"). */
+  labels?: Record<string, string>
 }
 
 type Opts = Omit<FieldMeta, 'title' | 'unit'>

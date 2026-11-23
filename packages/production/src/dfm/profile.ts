@@ -32,7 +32,12 @@ export interface ManufacturerProfile {
   /** Sprue, button and melt allowance added to net metal for the order weight. */
   castingAllowancePct: number
   /** QC tolerances printed on the spec sheet (research §1, QC row). */
-  tolerances: { ringSize: string; ringIdMm: number; dimensionalPct: number; dimensionalFloorMm: number }
+  tolerances: {
+    ringSize: string
+    ringIdMm: number
+    dimensionalPct: number
+    dimensionalFloorMm: number
+  }
 }
 
 export const DEFAULT_PROFILE: ManufacturerProfile = {
@@ -57,19 +62,33 @@ export const DEFAULT_PROFILE: ManufacturerProfile = {
   casterCompensatesShrinkage: true,
   weightTolerancePct: 5,
   castingAllowancePct: 12,
-  tolerances: { ringSize: '+1/4 / −1/8 size', ringIdMm: 0.05, dimensionalPct: 5, dimensionalFloorMm: 0.15 },
+  tolerances: {
+    ringSize: '+1/4 / −1/8 size',
+    ringIdMm: 0.05,
+    dimensionalPct: 5,
+    dimensionalFloorMm: 0.15,
+  },
 }
 
-type DeepPartial<T> = { [K in keyof T]?: T[K] extends readonly unknown[] ? T[K] : T[K] extends object ? DeepPartial<T[K]> : T[K] }
+type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends readonly unknown[]
+    ? T[K]
+    : T[K] extends object
+      ? DeepPartial<T[K]>
+      : T[K]
+}
 export type ProfileInput = DeepPartial<ManufacturerProfile>
 
-const isPlain = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+const isPlain = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v)
 
 function merge<T>(base: T, over: unknown): T {
   if (!isPlain(over) || !isPlain(base)) return (over === undefined ? base : over) as T
   const out: Record<string, unknown> = { ...base }
-  for (const [k, v] of Object.entries(over)) if (v !== undefined) out[k] = merge((base as Record<string, unknown>)[k], v)
+  for (const [k, v] of Object.entries(over))
+    if (v !== undefined) out[k] = merge((base as Record<string, unknown>)[k], v)
   return out as T
 }
 
-export const resolveProfile = (input?: ProfileInput): ManufacturerProfile => merge(DEFAULT_PROFILE, input)
+export const resolveProfile = (input?: ProfileInput): ManufacturerProfile =>
+  merge(DEFAULT_PROFILE, input)

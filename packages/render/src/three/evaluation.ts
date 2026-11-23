@@ -10,7 +10,7 @@ import {
   Group,
   InstancedMesh,
   type Material,
-  Matrix3,
+  type Matrix3,
   Matrix4,
   Mesh,
 } from 'three'
@@ -19,7 +19,7 @@ import { boundsCenter } from '../subject'
 import type { ResolvedScene } from '../types'
 import type { PaveEnvironment } from './environment'
 import { environmentRotation } from './environment'
-import { GEM_QUALITY, GemMaterial, type GemQuality, createSurfaceGemMaterial } from './gem'
+import { createSurfaceGemMaterial, GEM_QUALITY, GemMaterial, type GemQuality } from './gem'
 import { createMetalMaterialFrom } from './metal'
 import { zUpGroup } from './space'
 
@@ -33,7 +33,8 @@ function geometryOf(mesh: MeshData): BufferGeometry {
 }
 
 type Tier = 'hero' | 'melee'
-const tierOf = (role: StoneInstance['role']): Tier => (role === 'center' || role === 'side' ? 'hero' : 'melee')
+const tierOf = (role: StoneInstance['role']): Tier =>
+  role === 'center' || role === 'side' ? 'hero' : 'melee'
 
 export interface EvaluationToThreeOptions {
   environment?: PaveEnvironment
@@ -49,7 +50,11 @@ export class PaveModel {
   private readonly gems: { material: GemMaterial; tier: Tier }[] = []
   private readonly disposables: { dispose(): void }[] = []
 
-  constructor(evaluation: Evaluation, resolved?: ResolvedScene, options: EvaluationToThreeOptions = {}) {
+  constructor(
+    evaluation: Evaluation,
+    resolved?: ResolvedScene,
+    options: EvaluationToThreeOptions = {},
+  ) {
     this.object = zUpGroup('pave-piece')
     this.spin = new Group()
     this.spin.name = 'spin'
@@ -65,11 +70,13 @@ export class PaveModel {
       resolved?.materials[key] ?? fallback()
 
     for (const part of evaluation.parts) {
-      const key = resolved?.assignments[part.id] ?? metalKey(part.material, part.finish, part.plating)
+      const key =
+        resolved?.assignments[part.id] ?? metalKey(part.material, part.finish, part.plating)
       let material = materials.get(key)
       if (!material) {
         const m = resolve(key, () => metalMaterial(part.material, part.finish, part.plating))
-        if (m.kind !== 'metal') throw new Error(`Part ${part.id} is assigned non-metal material ${key}`)
+        if (m.kind !== 'metal')
+          throw new Error(`Part ${part.id} is assigned non-metal material ${key}`)
         material = createMetalMaterialFrom(m)
         materials.set(key, material)
         this.disposables.push(material)
@@ -116,7 +123,7 @@ export class PaveModel {
       this.disposables.push(material)
       const mesh = new InstancedMesh(geometry, material, stones.length)
       const matrix = new Matrix4()
-      stones.forEach((s, i) => mesh.setMatrixAt(i, matrix.fromArray(s.matrix)))
+      for (const [i, s] of stones.entries()) mesh.setMatrixAt(i, matrix.fromArray(s.matrix))
       mesh.computeBoundingSphere()
       mesh.name = `gems:${materialKey}:${tier}`
       mesh.userData = { role: 'gem', stoneIds: stones.map((s) => s.id) }

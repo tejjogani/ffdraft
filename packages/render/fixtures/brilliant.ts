@@ -37,7 +37,9 @@ export function roundBrilliant(): MeshData {
     return polar(at(k) + Math.PI / 8, r, zg + ((R - r * c) * (zt - zg)) / (R - t))
   })
   const rp = R * (1 - LOWER_GIRDLE_LENGTH)
-  const Pv = Array.from({ length: 8 }, (_, k) => polar(at(k) + Math.PI / 8, rp / c, zc + (rp * (-zg - zc)) / R))
+  const Pv = Array.from({ length: 8 }, (_, k) =>
+    polar(at(k) + Math.PI / 8, rp / c, zc + (rp * (-zg - zc)) / R),
+  )
   const culet: P = [0, 0, zc]
 
   const faces: P[][] = [T]

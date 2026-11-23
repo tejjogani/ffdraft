@@ -5,8 +5,9 @@
  * square tube one wall thick whose top edge carries the pavilion (the stone's girdle overhangs
  * it by half a wall), closed below by a plate with a light hole of ≈ 0.66 × stone Ø
  * (docs/research/01-cad.md §2). Four prongs rise from the box corners and lean in over the
- * girdle. The hinge is a pair of interlocking rings under the plate — horizontal at the back,
- * vertical at the front — so links swing both ways like a cable chain without ever touching.
+ * girdle. The hinge is a pair of interlocking rings under the plate — horizontal at the back on
+ * two posts, vertical at the front — so links swing both ways like a cable chain without ever
+ * touching. Every ring and post lands on plate metal, clear of the light hole.
  */
 import { GEM_CUTS, type GemCutId, type GemDims, gemDims, snapToMelee } from '@pave/schema'
 import type { Manifold } from 'manifold-3d'
@@ -14,7 +15,8 @@ import { type Deletable, type Quality, runtime } from '../../core'
 import { type Vec3, frameFromZ, frameMatrix } from '../../geometry/vec'
 import { manifoldFromTriangles, trianglesFromManifold } from '../../solid/solid'
 import type { Template } from './instances'
-import { sampleCurve, segmentsFor, tubeMesh } from './tube'
+import { circleLoop } from '../../geometry/loop'
+import { sampleCurve, segmentsFor, sweepAlong } from './centreline'
 
 export interface TennisLink {
   template: Template
@@ -69,10 +71,15 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
   const bottom = plateTop - wall
   const corner = 1.5 * wall
 
-  const ring = Math.max(0.35, 0.4 * prong)
-  const inner = 3 * ring
-  const inset = (inner - CLEARANCE - BOX_GAP) / 2
   const pitch = lx + BOX_GAP
+  // Hinge rings: room inside for the other ring's wire plus play to swing.
+  const ring = Math.max(0.3, 0.35 * prong)
+  const inner = 2.6 * ring
+  const holeRadius = (LIGHT_HOLE * stoneWidth) / 2
+  // The front ring hangs from the plate midway between the light hole and the wall; the back
+  // ring of the previous link sits one taut cable pitch behind it (contact.ts).
+  const front = -(holeRadius + lx / 2) / 2
+  const back = front + pitch - (inner - CLEARANCE)
 
   const mesh = (quality: Quality) => {
     const { manifold: mf } = runtime()
@@ -107,33 +114,36 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
         const dir: Vec3 = [Math.cos(angle), Math.sin(angle), 0]
         const base: Vec3 = [sx * (lx / 2 - corner * 0.6), sy * (ly / 2 - corner * 0.6), top - wall]
         const reach = girdleReach(cut, dims, angle) + prong / 2 - PRONG_OVERLAP * prong
-        const tip: Vec3 = [dir[0] * reach, dir[1] * reach, girdle + 0.45 * prong]
+        const tip: Vec3 = [dir[0] * reach, dir[1] * reach, girdle + 0.3 * prong]
         parts.push(own(cylinderBetween(mf, base, tip, prong / 2, seg(prong / 2))))
-        parts.push(own(own(mf.Manifold.sphere(prong * 0.52, seg(prong / 2))).translate(tip)))
+        parts.push(own(own(mf.Manifold.sphere(prong * 0.5, seg(prong / 2))).translate(tip)))
       }
-      // Hinge: a vertical ring at the front, a horizontal ring (on a stem) at the back.
-      const loop = (normal: 'y' | 'z', at: Vec3) => {
-        const R = (inner + ring) / 2
+      // Hinge: a vertical ring at the front, a horizontal ring on two posts at the back.
+      const R = (inner + ring) / 2
+      const ringZ = bottom - R
+      const loop = (normal: 'y' | 'z', x: number) => {
         const line = sampleCurve(
           (t) => {
             const c = Math.cos(2 * Math.PI * t) * R
             const s = Math.sin(2 * Math.PI * t) * R
-            return normal === 'z' ? [at[0] + c, at[1] + s, at[2]] : [at[0] + c, at[1], at[2] + s]
+            return normal === 'z' ? [x + c, s, ringZ] : [x + c, 0, ringZ + s]
           },
           () => (normal === 'z' ? [0, 0, 1] : [0, 1, 0]),
-          seg(R),
+          16,
           true,
         )
-        return own(manifoldFromTriangles(tubeMesh(line, { side: ring / 2, up: ring / 2 }, seg(ring / 2))))
+        const wire = sweepAlong(line, circleLoop(ring / 2))
+        try {
+          return own(manifoldFromTriangles(wire.triangles(quality)))
+        } finally {
+          wire.dispose()
+        }
       }
-      const ringZCentre = bottom - inner / 2 - ring / 2
-      const back = lx / 2 - inset
-      parts.push(loop('y', [-lx / 2 + inset, 0, ringZCentre]))
-      parts.push(loop('z', [back, 0, ringZCentre]))
-      // The stem leans out to land on the plate between the light hole and the wall.
-      const landing = ((LIGHT_HOLE * stoneWidth) / 2 + lx / 2) / 2
-      const stem: Vec3 = [back - inner / 2 - ring / 2, 0, ringZCentre]
-      parts.push(own(cylinderBetween(mf, stem, [landing, 0, bottom + wall / 2], ring / 2, seg(ring / 2))))
+      parts.push(loop('y', front), loop('z', back))
+      for (const side of [-1, 1])
+        parts.push(
+          own(cylinderBetween(mf, [back, side * R, ringZ], [back, side * R, bottom + wall / 2], ring / 2, seg(ring / 2))),
+        )
       return trianglesFromManifold(own(mf.Manifold.union(parts)))
     } finally {
       for (const m of temps) m.delete()

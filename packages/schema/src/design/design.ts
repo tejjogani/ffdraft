@@ -99,7 +99,8 @@ export class OpError extends Error {
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
 
-function mergePatch(target: unknown, patch: unknown): unknown {
+/** Applies a JSON merge patch (RFC 7396): objects merge, arrays and scalars replace, null deletes. */
+export function mergePatch(target: unknown, patch: unknown): unknown {
   if (!isObject(patch)) return patch
   const out: Record<string, unknown> = isObject(target) ? { ...target } : {}
   for (const [k, v] of Object.entries(patch)) {

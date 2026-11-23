@@ -44,10 +44,6 @@ export class TriangleBVH {
     if (n > 0) this.build(cent, n)
   }
 
-  get triangleCount(): number {
-    return this.order.length
-  }
-
   private build(cent: Float32Array, n: number) {
     const stack: [node: number, start: number, end: number][] = [[this.nodes++, 0, n]]
     while (stack.length) {
@@ -187,7 +183,15 @@ export class TriangleBVH {
   }
 
   /** Möller–Trumbore; returns the ray parameter or NaN. Two-sided. */
-  private intersect(tri: number, ox: number, oy: number, oz: number, dx: number, dy: number, dz: number): number {
+  private intersect(
+    tri: number,
+    ox: number,
+    oy: number,
+    oz: number,
+    dx: number,
+    dy: number,
+    dz: number,
+  ): number {
     const p = this.p
     const a = this.idx[tri * 3]! * 3
     const b = this.idx[tri * 3 + 1]! * 3

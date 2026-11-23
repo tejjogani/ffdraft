@@ -21,8 +21,9 @@ export const FONT_FILES = {
   serif: '@fontsource/instrument-serif/files/instrument-serif-latin-400-normal.woff',
 } as const
 
-/** Tabular figures so columns of numbers align (Inter `tnum`). */
-export const SANS_FEATURES = { tnum: true } as const
+/** Tabular figures so columns of numbers align (Inter `tnum`); opt-in per style, since Inter's
+ * `tnum` also widens hyphens in dates and SKUs. */
+export const TABULAR = { tnum: true } as const
 
 /** Stand-ins for symbols outside the Latin subsets. */
 const FALLBACK: Record<string, string> = {
@@ -33,6 +34,7 @@ const FALLBACK: Record<string, string> = {
   '→': '->',
   '✓': '·',
   '−': '-',
+  '‰': '/1000',
 }
 
 export interface Typesetter {
@@ -62,11 +64,14 @@ export function createTypesetter(fonts: FontSet): Typesetter {
   }
   const cache = new Map<string, number>()
   const measure = (text: string, style: TextStyle) => {
-    const key = `${style.family}|${style.weight}|${text}`
+    const key = `${style.family}|${style.weight}|${style.tabular}|${text}`
     let em = cache.get(key)
     if (em === undefined) {
       const f = face(style.family, style.weight)
-      const run = f.layout(safe(text, style.family, style.weight), style.family === 'serif' ? undefined : SANS_FEATURES)
+      const run = f.layout(
+        safe(text, style.family, style.weight),
+        style.tabular && style.family !== 'serif' ? TABULAR : undefined,
+      )
       em = run.advanceWidth / f.unitsPerEm
       cache.set(key, em)
     }

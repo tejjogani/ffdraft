@@ -8,10 +8,10 @@
 import type { Evaluation, StoneInstance, StoneLot } from '@pave/kernel/types'
 import { GEM_CUTS, GEM_MATERIALS, METALS } from '@pave/schema'
 import type { PieceFacts } from '../facts'
-import { DIAMETER, type Units, fmtCarat, fmtLength } from '../format'
+import { DIAMETER, fmtCarat, fmtLength, type Units } from '../format'
 import { transformPoint } from '../geometry/vec'
 import type { Box2, ViewLines } from './hlr'
-import { VIEWS, type ViewId, project } from './views'
+import { project, VIEWS, type ViewId } from './views'
 
 export type P2 = [number, number]
 export type Side = 'below' | 'above' | 'left' | 'right'
@@ -47,7 +47,10 @@ export const lotKey = (i: number) => `S${i + 1}`
 
 export function stonesOfLot(lot: StoneLot, stones: readonly StoneInstance[]): StoneInstance[] {
   return stones.filter(
-    (s) => lot.nodeIds.includes(s.nodeId) && s.cut === lot.cut && Math.abs(s.dims.width - lot.width) < 0.011,
+    (s) =>
+      lot.nodeIds.includes(s.nodeId) &&
+      s.cut === lot.cut &&
+      Math.abs(s.dims.width - lot.width) < 0.011,
   )
 }
 
@@ -70,7 +73,15 @@ export function extractAnnotations(input: AnnotationInput): Annotation[] {
   const side = ex('side')
   const isPendant = !facts.ring && !!facts.bail
   if (front) {
-    out.push({ kind: 'linear', view: 'front', a: front.left, b: front.right, axis: 'h', side: 'below', text: L(front.right[0] - front.left[0]) })
+    out.push({
+      kind: 'linear',
+      view: 'front',
+      a: front.left,
+      b: front.right,
+      axis: 'h',
+      side: 'below',
+      text: L(front.right[0] - front.left[0]),
+    })
     out.push({
       kind: 'linear',
       view: 'front',
@@ -79,11 +90,19 @@ export function extractAnnotations(input: AnnotationInput): Annotation[] {
       axis: 'v',
       side: 'right',
       text: L(front.top[1] - front.bottom[1]),
-      ...(isPendant ? { caption: 'overall incl. bail' } : {}),
+      ...(isPendant && facts.bail?.built ? { caption: 'overall incl. bail' } : {}),
     })
   }
   if (side) {
-    out.push({ kind: 'linear', view: 'side', a: side.left, b: side.right, axis: 'h', side: 'below', text: L(side.right[0] - side.left[0]) })
+    out.push({
+      kind: 'linear',
+      view: 'side',
+      a: side.left,
+      b: side.right,
+      axis: 'h',
+      side: 'below',
+      text: L(side.right[0] - side.left[0]),
+    })
   }
 
   if (facts.ring) ringAnnotations(input, out, L)
@@ -110,17 +129,34 @@ function ringAnnotations(input: AnnotationInput, out: Annotation[], L: (mm: numb
     radialFrom: [0, 0],
     head: 'arrow',
     side: 'left',
-    lines: [`${DIAMETER}${L(ring.innerDiameter)} inside`, `${ring.sizes.us} · ${ring.sizes.uk} · ${ring.sizes.eu}`],
+    lines: [
+      `${DIAMETER}${L(ring.innerDiameter)} inside`,
+      `${ring.sizes.us} · ${ring.sizes.uk} · ${ring.sizes.eu}`,
+    ],
   })
   if (input.facts.centre || input.facts.settings.length > 0) {
-    out.push({ kind: 'linear', view: 'front', a: [0, r], b: [0, top], axis: 'v', side: 'right', text: L(top - r), caption: 'head above finger' })
+    out.push({
+      kind: 'linear',
+      view: 'front',
+      a: [0, r],
+      b: [0, top],
+      axis: 'v',
+      side: 'right',
+      text: L(top - r),
+      caption: 'head above finger',
+    })
   }
 
   const side = input.views.side
   if (side) {
     const z0 = input.facts.bounds.min[2] - 1
     out.push({ kind: 'centerline', view: 'side', a: [0, z0], b: [0, top + 1] })
-    out.push({ kind: 'centerline', view: 'side', a: [-n.widthBottom / 2 - 1.5, 0], b: [n.widthBottom / 2 + 1.5, 0] })
+    out.push({
+      kind: 'centerline',
+      view: 'side',
+      a: [-n.widthBottom / 2 - 1.5, 0],
+      b: [n.widthBottom / 2 + 1.5, 0],
+    })
   }
 
   if (input.views.section) {
@@ -137,10 +173,35 @@ function ringAnnotations(input: AnnotationInput, out: Annotation[], L: (mm: numb
       text: L(n.widthBottom),
       caption: same ? 'band width' : 'width at base',
     })
-    out.push({ kind: 'linear', view: 'section', a: [wb, -r - n.thicknessBottom], b: [wb, -r], axis: 'v', side: 'right', text: L(n.thicknessBottom), caption: 'base' })
-    out.push({ kind: 'linear', view: 'section', a: [wt, r], b: [wt, r + n.thicknessTop], axis: 'v', side: 'right', text: L(n.thicknessTop), caption: 'top' })
+    out.push({
+      kind: 'linear',
+      view: 'section',
+      a: [wb, -r - n.thicknessBottom],
+      b: [wb, -r],
+      axis: 'v',
+      side: 'right',
+      text: L(n.thicknessBottom),
+      caption: 'base',
+    })
+    out.push({
+      kind: 'linear',
+      view: 'section',
+      a: [wt, r],
+      b: [wt, r + n.thicknessTop],
+      axis: 'v',
+      side: 'right',
+      text: L(n.thicknessTop),
+      caption: 'top',
+    })
     if (!same) {
-      out.push({ kind: 'note', view: 'section', anchor: [-wt, r + n.thicknessTop / 2], head: 'arrow', side: 'left', lines: [`${L(n.widthTop)} width at top`] })
+      out.push({
+        kind: 'note',
+        view: 'section',
+        anchor: [-wt, r + n.thicknessTop / 2],
+        head: 'arrow',
+        side: 'left',
+        lines: [`${L(n.widthTop)} width at top`],
+      })
     }
   }
 }
@@ -152,10 +213,20 @@ function pendantAnnotations(input: AnnotationInput, out: Annotation[], L: (mm: n
   if (Math.abs(b.min[0] + b.max[0]) < 0.2 && front) {
     out.push({ kind: 'centerline', view: 'front', a: [0, b.min[2] - 1.5], b: [0, b.max[2] + 1.5] })
   }
-  if (facts.body && front) {
+  // The body's own height, when a bail stands above it.
+  if (facts.body && front && facts.body.bounds.max[2] < b.max[2] - 0.05) {
     const body = facts.body.bounds
     const e = extremes(front, (_x, y) => y <= body.max[2] + 1e-3)
-    out.push({ kind: 'linear', view: 'front', a: e.bottom, b: e.top, axis: 'v', side: 'right', text: L(e.top[1] - e.bottom[1]), caption: 'body' })
+    out.push({
+      kind: 'linear',
+      view: 'front',
+      a: e.bottom,
+      b: e.top,
+      axis: 'v',
+      side: 'right',
+      text: L(e.top[1] - e.bottom[1]),
+      caption: 'body',
+    })
   }
   if (input.views.section && facts.body) {
     const body = facts.body.bounds
@@ -173,7 +244,7 @@ function pendantAnnotations(input: AnnotationInput, out: Annotation[], L: (mm: n
     })
   }
   const bail = facts.bail!
-  if (input.views.side) {
+  if (input.views.side && bail.built) {
     const bb = bail.part?.bounds ?? b
     const cy = (bb.min[1] + bb.max[1]) / 2
     out.push({
@@ -182,62 +253,102 @@ function pendantAnnotations(input: AnnotationInput, out: Annotation[], L: (mm: n
       anchor: [cy, bb.max[2] - bail.node.wire],
       head: 'arrow',
       side: 'right',
-      lines: [`Bail opening ${L(bail.node.opening)}`, `${bail.node.style}, ${L(bail.node.wire)} wire`],
+      lines: [
+        `Bail opening ${L(bail.node.opening)}`,
+        `${bail.node.style}, ${L(bail.node.wire)} wire`,
+      ],
     })
   }
 }
 
-/** One keyed callout per stone lot, pointing at a representative, viewer-facing stone. */
+/**
+ * One keyed callout per stone group — a gem, or all graded lots of one pavé field — pointing at
+ * a representative, viewer-facing stone.
+ */
 function stoneAnnotations(input: AnnotationInput, out: Annotation[], L: (mm: number) => string) {
   const { evaluation, facts } = input
   const viewId: ViewId = facts.ring ? 'top' : 'front'
   if (!input.views[viewId]) return
   const view = VIEWS[viewId]
-
+  const groups = new Map<string, { lots: StoneLot[]; keys: string[] }>()
   evaluation.report.lots.forEach((lot, i) => {
-    const members = stonesOfLot(lot, evaluation.stones)
-    if (members.length === 0) return
+    const g = groups.get(lot.nodeIds.join('+')) ?? { lots: [], keys: [] }
+    g.lots.push(lot)
+    g.keys.push(lotKey(i))
+    groups.set(lot.nodeIds.join('+'), g)
+  })
+  for (const { lots, keys } of groups.values()) {
+    const members = lots.flatMap((lot) => stonesOfLot(lot, evaluation.stones))
+    if (members.length === 0) continue
     const facing = members.filter((s) => {
       const up = transformPoint(s.matrix, 0, 0, 1)
       const c = transformPoint(s.matrix, 0, 0, 0)
-      return (up[0] - c[0]) * view.toward[0] + (up[1] - c[1]) * view.toward[1] + (up[2] - c[2]) * view.toward[2] > 0
+      return (
+        (up[0] - c[0]) * view.toward[0] +
+          (up[1] - c[1]) * view.toward[1] +
+          (up[2] - c[2]) * view.toward[2] >
+        0
+      )
     })
     const pool = facing.length ? facing : members
     const centroid = pool.reduce<[number, number, number]>(
-      (acc, s) => [acc[0] + s.matrix[12]! / pool.length, acc[1] + s.matrix[13]! / pool.length, acc[2] + s.matrix[14]! / pool.length],
+      (acc, s) => [
+        acc[0] + s.matrix[12]! / pool.length,
+        acc[1] + s.matrix[13]! / pool.length,
+        acc[2] + s.matrix[14]! / pool.length,
+      ],
       [0, 0, 0],
     )
     const rep = pool.reduce((best, s) =>
       dist2(s.matrix, centroid) < dist2(best.matrix, centroid) ? s : best,
     )
     const c = project(view, [rep.matrix[12]!, rep.matrix[13]!, rep.matrix[14]!])
-    const isCentre = lot.role === 'center' && facts.centre?.instance?.id === rep.id
+    const lot = lots[0]!
+    const count = lots.reduce((t, l) => t + l.count, 0)
+    const ct = lots.reduce((t, l) => t + l.caratTotal, 0)
+    const widths = lots.map((l) => l.width)
+    const wMin = Math.min(...widths)
+    const wMax = Math.max(...widths)
     const size =
-      lot.cut === 'round' ? `${DIAMETER}${L(lot.width)}` : `${L(lot.length)} × ${L(lot.width)}`
-    const head = lot.count > 1 ? `${lot.count} × ${size}` : size
-    const ct = lot.count > 1 ? `${fmtCarat(lot.caratTotal)} total` : fmtCarat(lot.caratEach)
+      lot.cut !== 'round'
+        ? `${L(lot.length)} × ${L(lot.width)}`
+        : wMax - wMin > 0.005
+          ? `${DIAMETER}${L(wMin)}–${L(wMax)}`
+          : `${DIAMETER}${L(lot.width)}`
+    const isCentre = lot.role === 'center' && facts.centre?.instance?.id === rep.id
+    const big = rep.dims.width >= 3
     // Callouts gather on the side without vertical dimensions: right of a ring's plan view,
     // left of a pendant's front view. Big stones get the leader on their girdle, melee on the
     // stone centre.
-    const radius = lot.width / 2
     const right = !!facts.ring
     const angle = right ? Math.PI / 4 : (3 * Math.PI) / 4
-    const anchor: P2 = isCentre || lot.width >= 3 ? [c[0] + radius * Math.cos(angle), c[1] + radius * Math.sin(angle)] : [c[0], c[1]]
+    const radius = rep.dims.width / 2
     out.push({
       kind: 'note',
       view: viewId,
-      anchor,
-      ...(isCentre || lot.width >= 3 ? { radialFrom: [c[0], c[1]] as P2 } : {}),
-      head: lot.width >= 3 ? 'arrow' : 'dot',
+      anchor: big
+        ? [c[0] + radius * Math.cos(angle), c[1] + radius * Math.sin(angle)]
+        : [c[0], c[1]],
+      ...(big ? { radialFrom: [c[0], c[1]] as P2 } : {}),
+      head: big ? 'arrow' : 'dot',
       side: right ? 'right' : 'left',
-      badge: lotKey(i),
-      lines: [head, `${GEM_MATERIALS[lot.stone].label}, ${GEM_CUTS[lot.cut].label.toLowerCase()}`, `${ct} · ${lot.setting}`],
+      badge: keys.length > 1 ? `${keys[0]}–${keys[keys.length - 1]}` : keys[0]!,
+      lines: [
+        count > 1 ? `${count} × ${size}` : size,
+        `${GEM_MATERIALS[lot.stone].label}, ${GEM_CUTS[lot.cut].label.toLowerCase()}`,
+        `${count > 1 ? `${fmtCarat(ct)} total` : fmtCarat(ct)} · ${lot.setting}`,
+      ],
     })
     if (isCentre && lot.cut !== 'round') centreStoneDims(input, rep, out, L)
-  })
+  }
 }
 
-function centreStoneDims(input: AnnotationInput, stone: StoneInstance, out: Annotation[], L: (mm: number) => string) {
+function centreStoneDims(
+  input: AnnotationInput,
+  stone: StoneInstance,
+  out: Annotation[],
+  L: (mm: number) => string,
+) {
   const mesh = input.evaluation.gemMeshes[stone.meshKey]
   if (!mesh) return
   const view = VIEWS.top
@@ -246,7 +357,12 @@ function centreStoneDims(input: AnnotationInput, stone: StoneInstance, out: Anno
   let minY = Infinity
   let maxY = -Infinity
   for (let i = 0; i < mesh.positions.length; i += 3) {
-    const w = transformPoint(stone.matrix, mesh.positions[i]!, mesh.positions[i + 1]!, mesh.positions[i + 2]!)
+    const w = transformPoint(
+      stone.matrix,
+      mesh.positions[i]!,
+      mesh.positions[i + 1]!,
+      mesh.positions[i + 2]!,
+    )
     const [x, y] = project(view, w)
     minX = Math.min(minX, x)
     maxX = Math.max(maxX, x)
@@ -255,8 +371,24 @@ function centreStoneDims(input: AnnotationInput, stone: StoneInstance, out: Anno
   }
   const cx = (minX + maxX) / 2
   const cy = (minY + maxY) / 2
-  out.push({ kind: 'linear', view: 'top', a: [minX, cy], b: [maxX, cy], axis: 'h', side: 'above', text: L(maxX - minX) })
-  out.push({ kind: 'linear', view: 'top', a: [cx, minY], b: [cx, maxY], axis: 'v', side: 'left', text: L(maxY - minY) })
+  out.push({
+    kind: 'linear',
+    view: 'top',
+    a: [minX, cy],
+    b: [maxX, cy],
+    axis: 'h',
+    side: 'above',
+    text: L(maxX - minX),
+  })
+  out.push({
+    kind: 'linear',
+    view: 'top',
+    a: [cx, minY],
+    b: [cx, maxY],
+    axis: 'v',
+    side: 'left',
+    text: L(maxY - minY),
+  })
 }
 
 /** Engraving text and the fineness stamp: where they go and what they say. */
@@ -266,7 +398,10 @@ function markAnnotations(input: AnnotationInput, out: Annotation[]) {
   const stamp = metal ? METALS[metal].hallmark : ''
   if (facts.ring) {
     const r = facts.ring.innerDiameter / 2
-    const at = (deg: number): P2 => [r * Math.sin((deg * Math.PI) / 180), r * Math.cos((deg * Math.PI) / 180)]
+    const at = (deg: number): P2 => [
+      r * Math.sin((deg * Math.PI) / 180),
+      r * Math.cos((deg * Math.PI) / 180),
+    ]
     for (const e of facts.engravings) {
       out.push({
         kind: 'note',
@@ -274,11 +409,21 @@ function markAnnotations(input: AnnotationInput, out: Annotation[]) {
         anchor: at(e.angle),
         head: 'arrow',
         side: 'left',
-        lines: [`${e.mode === 'engrave' ? 'Engrave' : 'Emboss'} “${e.text}”`, `${e.where}, ${e.size.toFixed(2)} ${e.font}, ${e.depth.toFixed(2)} ${e.mode === 'engrave' ? 'deep' : 'high'}`],
+        lines: [
+          `${e.mode === 'engrave' ? 'Engrave' : 'Emboss'} “${e.text}”`,
+          `${e.where}, ${e.size.toFixed(2)} ${e.font}, ${e.depth.toFixed(2)} ${e.mode === 'engrave' ? 'deep' : 'high'}`,
+        ],
       })
     }
     if (stamp) {
-      out.push({ kind: 'note', view: 'front', anchor: at(160), head: 'arrow', side: 'right', lines: [`Stamp ${stamp} + maker’s mark`, input.stampLocation] })
+      out.push({
+        kind: 'note',
+        view: 'front',
+        anchor: at(160),
+        head: 'arrow',
+        side: 'right',
+        lines: [`Stamp ${stamp} + maker’s mark`, input.stampLocation],
+      })
     }
   } else if (stamp && input.views.side) {
     const b = (facts.body ?? { bounds: facts.bounds }).bounds
@@ -305,7 +450,10 @@ export interface Extremes {
 }
 
 /** Extreme drawn points of a view (optionally restricted), so extension lines start on lines. */
-export function extremes(lines: ViewLines, keep: (x: number, y: number) => boolean = () => true): Extremes {
+export function extremes(
+  lines: ViewLines,
+  keep: (x: number, y: number) => boolean = () => true,
+): Extremes {
   let left: P2 = [Infinity, 0]
   let right: P2 = [-Infinity, 0]
   let bottom: P2 = [0, Infinity]
@@ -323,5 +471,11 @@ export function extremes(lines: ViewLines, keep: (x: number, y: number) => boole
       }
     }
   }
-  return { left, right, bottom, top, box: { minX: left[0], maxX: right[0], minY: bottom[1], maxY: top[1] } }
+  return {
+    left,
+    right,
+    bottom,
+    top,
+    box: { minX: left[0], maxX: right[0], minY: bottom[1], maxY: top[1] },
+  }
 }

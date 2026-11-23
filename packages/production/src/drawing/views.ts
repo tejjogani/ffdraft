@@ -3,7 +3,7 @@
  * casting houses. Space follows the kernel: Z up, a ring's finger along Y with the head at +Z,
  * flat pieces in the XZ plane facing −Y — so "front" looks along +Y for both.
  */
-import { type V3, dot } from '../geometry/vec'
+import { dot, type V3 } from '../geometry/vec'
 
 export type ViewId = 'front' | 'top' | 'side' | 'section' | 'iso'
 

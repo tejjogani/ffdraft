@@ -15,7 +15,7 @@
  */
 import { type Face, type Shape3D, type Shell, assembleWire, makeBezierCurve, makeFace, makeSolid } from 'replicad'
 import { type Quality, type Solid, type SurfaceMesh, lazySolid, runtime } from '../core'
-import { featureEdges, meshVolume } from '../solid/meshing'
+import { CREASE_ANGLE, meshVolume } from '../solid/meshing'
 import { scoped, shapeVolume, wrapShape } from '../solid/occt'
 import { type CubicSpline, chordParameters, cubicSpline } from './bspline'
 import type { Loop } from './loop'
@@ -318,10 +318,13 @@ function tessellate(net: Net, quality: Quality, refine = 1): SurfaceMesh {
     if (a !== c && c !== d && a !== d) into.push(a, c, d)
   }
 
+  /** Display rows of each piece: index of the first vertex and the number of rows. */
+  const displayPieces: { base: number; rows: number }[] = []
   let r = 0
   net.pieces.forEach((piece, pi) => {
     const samples = perPiece[pi]!
     const base = displayPositions.length / 3
+    displayPieces.push({ base, rows: samples.length + 1 })
     const knots = piece.spline.knots
     const endU = knots[knots.length - 1]!
     samples.forEach((sample, k) => emitRow(r + k, piece, sample.u, true))
@@ -370,6 +373,46 @@ function tessellate(net: Net, quality: Quality, refine = 1): SurfaceMesh {
   if (net.startPole) smoothPole(0, displayAround)
   if (net.endPole) smoothPole((displayRows - 1) * displayAround, (displayRows - 2) * displayAround)
 
+  // Feature edges come from the construction, not from the triangles: profile joints and kinks
+  // where the surface normal really breaks, and the rims of flat caps.
+  const edges: number[] = []
+  const cosCrease = Math.cos(CREASE_ANGLE)
+  const creased = (a: number, b: number): boolean =>
+    displayNormals[a * 3]! * displayNormals[b * 3]! +
+      displayNormals[a * 3 + 1]! * displayNormals[b * 3 + 1]! +
+      displayNormals[a * 3 + 2]! * displayNormals[b * 3 + 2]! <
+    cosCrease
+  const segmentTo = (a: number, b: number) => {
+    for (const v of [a, b]) edges.push(displayPositions[v * 3]!, displayPositions[v * 3 + 1]!, displayPositions[v * 3 + 2]!)
+  }
+  // Offset of each profile segment's first display vertex within a row.
+  const starts: number[] = []
+  counts.reduce((offset, n, i) => {
+    starts[i] = offset + i
+    return offset + n
+  }, 0)
+  displayPieces.forEach(({ base, rows }, pi) => {
+    for (let seg = 0; seg < segments; seg++) {
+      const end = starts[seg]! + counts[seg]!
+      const next = starts[(seg + 1) % segments]!
+      for (let k = 0; k + 1 < rows; k++) {
+        const a = base + k * displayAround
+        const b = a + displayAround
+        if (creased(a + end, a + next) && creased(b + end, b + next)) segmentTo(a + end, b + end)
+      }
+    }
+    // The seam to the next piece (a kink): creased wherever the two pieces' normals differ.
+    const following = closed ? displayPieces[(pi + 1) % displayPieces.length] : displayPieces[pi + 1]
+    if (!following || (closed && net.pieces.length === 1)) return
+    const mine = base + (rows - 1) * displayAround
+    for (let seg = 0; seg < segments; seg++)
+      for (let m = 0; m < counts[seg]!; m++) {
+        const i = starts[seg]! + m
+        if (creased(mine + i, following.base + i) && creased(mine + i + 1, following.base + i + 1))
+          segmentTo(mine + i, mine + i + 1)
+      }
+  })
+
   // Flat caps: a fan about the centroid of the end profile.
   const cap = (rowIndex: number, centre: number, outwardAlongSweep: boolean) => {
     let cx = 0
@@ -389,6 +432,7 @@ function tessellate(net: Net, quality: Quality, refine = 1): SurfaceMesh {
       const v1 = vertex(rowIndex, b + 1)
       if (outwardAlongSweep) indices.push(centre, v0, v1)
       else indices.push(centre, v1, v0)
+      for (const v of [v0, v1]) edges.push(positions[v * 3]!, positions[v * 3 + 1]!, positions[v * 3 + 2]!)
     }
     // Display: the same triangles with one flat normal.
     const i0 = indices[first]! * 3
@@ -436,7 +480,7 @@ function tessellate(net: Net, quality: Quality, refine = 1): SurfaceMesh {
     flipWinding(display.indices)
     for (let i = 0; i < display.normals.length; i++) display.normals[i] = -display.normals[i]!
   }
-  return { ...welded, display: { mesh: display, edges: featureEdges(welded) } }
+  return { ...welded, display: { mesh: display, edges: new Float32Array(edges) } }
 }
 
 function flipWinding(indices: Uint32Array): void {

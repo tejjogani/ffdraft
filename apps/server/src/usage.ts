@@ -1,6 +1,8 @@
 import type { METERS, UsageEvent } from '@pave/schema'
+import { gte, sum } from 'drizzle-orm'
 import { actorRunId, type Ctx } from './context'
-import type { usageEvent } from './db/schema'
+import * as t from './db/schema'
+import { AppError } from './errors'
 import { createId } from './ids'
 
 export interface NewUsage {
@@ -40,7 +42,37 @@ export async function recordUsage(ctx: Ctx, event: NewUsage): Promise<boolean> {
   return row !== undefined
 }
 
-export const toUsageEvent = (r: typeof usageEvent.$inferSelect): UsageEvent => ({
+/** What the org has spent this calendar month (UTC), in USD. */
+export async function monthSpendUsd(ctx: Ctx): Promise<number> {
+  const now = new Date()
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+  const [row] = await ctx.repo.usage.select(
+    { micros: sum(t.usageEvent.costMicros).mapWith(Number) },
+    gte(t.usageEvent.occurredAt, start),
+  )
+  return fromMicros(row?.micros ?? 0)
+}
+
+const usd = (n: number) => `$${n.toFixed(2)}`
+
+/**
+ * Call before anything that spends money: refuses with `budget_exceeded` (402) once the org's
+ * monthly budget is used up, or when `upcomingUsd` more would pass it. No budget, no limit.
+ */
+export async function assertBudget(ctx: Ctx, upcomingUsd = 0): Promise<void> {
+  const settings = await ctx.repo.settings.first()
+  const budgetUsd = settings?.monthlyBudgetUsd ?? null
+  if (budgetUsd === null) return
+  const spentUsd = await monthSpendUsd(ctx)
+  if (spentUsd >= budgetUsd || spentUsd + upcomingUsd > budgetUsd)
+    throw new AppError(
+      'budget_exceeded',
+      `This would pass the organisation’s monthly budget of ${usd(budgetUsd)} (${usd(spentUsd)} spent so far). An admin can raise it in Settings → Usage.`,
+      { budgetUsd, spentUsd },
+    )
+}
+
+export const toUsageEvent = (r: typeof t.usageEvent.$inferSelect): UsageEvent => ({
   id: r.id,
   meter: r.meter,
   provider: r.provider,

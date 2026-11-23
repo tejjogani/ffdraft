@@ -12,27 +12,39 @@ import { z } from 'zod'
 import { ChangeSchema, DesignSchema, OpSchema, PIECE_KINDS } from '../design/design'
 import { PieceSpecSchema } from '../design/spec'
 import {
+  ATTESTATION_RIGHTS,
   AssetSchema,
   BoardSchema,
   BrandModelSchema,
+  CanvasPlacementSchema,
   CapabilitiesSchema,
   CollectionSchema,
+  FeedbackSchema,
+  GENERATION_ROLES,
+  GenerationInputSchema,
+  IMAGE_ASPECTS,
+  MESH_QUALITIES,
   METERS,
   MemberSchema,
+  MeshJobSchema,
   MessageSchema,
   ModelShotSchema,
   OrgSchema,
+  OriginFlagSchema,
+  PieceOriginInputSchema,
   PieceSchema,
   PieceSummarySchema,
   ProductionPackageSchema,
   RIGHTS,
   ROLES,
   ReferenceSchema,
+  RenderEngineStatusSchema,
   RenderJobSchema,
   RenderSceneSchema,
   type Role,
   RunSchema,
   STAGES,
+  SavedSceneSchema,
   SearchResultSchema,
   StepSchema,
   StoredChangeSchema,
@@ -61,6 +73,33 @@ const def = <I extends z.ZodType, O extends z.ZodType>(d: CommandDef<I, O>) => d
 const id = z.string()
 const ok = z.object({ ok: z.literal(true) })
 const none = z.object({})
+/** A JSON merge patch (RFC 7396): objects merge, arrays and scalars replace, null deletes. */
+const mergePatch = z.record(z.string(), z.unknown())
+
+/** What a paid generation will cost before it is confirmed. */
+export const EstimateSchema = z.object({
+  provider: z.string(),
+  model: z.string(),
+  usd: z.number().nonnegative(),
+  /** Typical wall-clock time. */
+  seconds: z.number().nonnegative(),
+})
+export type Estimate = z.infer<typeof EstimateSchema>
+
+const onModelShot = z.object({
+  modelId: id,
+  pieceId: id,
+  placement: z.enum(['hand', 'neck', 'ear', 'wrist']),
+  direction: z.string().max(1000).default(''),
+  count: z.number().int().min(1).max(4).default(1),
+  aspect: z.enum(IMAGE_ASPECTS).default('4:5'),
+})
+
+const meshRequest = {
+  /** One to four photos of the same object (front first). */
+  imageAssetIds: z.array(id).min(1).max(4),
+  quality: z.enum(MESH_QUALITIES).default('standard'),
+}
 
 /** The geometry facts the assistant reasons over (no meshes). */
 export const EvaluationSummarySchema = z.object({
@@ -127,7 +166,8 @@ export const commands = {
     output: z.object({
       traceRetentionDays: z.number().int(),
       allowEvalUse: z.boolean(),
-      assistantModel: z.string(),
+      /** Null means the assistant's default model. */
+      assistantModel: z.string().nullable(),
       monthlyBudgetUsd: z.number().nullable(),
     }),
   }),
@@ -138,7 +178,7 @@ export const commands = {
     input: z.object({
       traceRetentionDays: z.number().int().min(0).max(3650).optional(),
       allowEvalUse: z.boolean().optional(),
-      assistantModel: z.string().optional(),
+      assistantModel: z.string().nullable().optional(),
       monthlyBudgetUsd: z.number().nonnegative().nullable().optional(),
     }),
     output: ok,
@@ -197,7 +237,7 @@ export const commands = {
   }),
   'pieces.create': def({
     description:
-      'Create a piece. Pass `templateId` to start from a template, or `spec` to build from a confirmed spec; with neither the piece starts empty at the idea stage.',
+      'Create a piece. Pass `templateId` to start from a template, or `spec` to build from a confirmed spec; with neither the piece starts empty at the idea stage. Pass `origin` when the piece starts from a picture, logo, text, mesh, board references or another piece ("make it jewelry"); list the source assets and references so they are credited.',
     kind: 'mutation',
     tool: true,
     input: z.object({
@@ -207,11 +247,13 @@ export const commands = {
       templateId: z.string().optional(),
       spec: PieceSpecSchema.optional(),
       brief: z.string().max(20_000).optional(),
+      origin: PieceOriginInputSchema.optional(),
     }),
     output: PieceSchema,
   }),
   'pieces.update': def({
-    description: 'Update a piece’s title, stage, brief, collection or cover.',
+    description:
+      'Update a piece’s title, stage, brief, collection, cover or origin. Setting `coverAssetId` stops automatic cover capture unless `coverAuto: true` is sent with it. Changing the origin’s sources clears its attestation.',
     kind: 'mutation',
     tool: true,
     input: z.object({
@@ -221,8 +263,21 @@ export const commands = {
       brief: z.string().max(20_000).optional(),
       collectionId: id.nullable().optional(),
       coverAssetId: id.nullable().optional(),
+      coverAuto: z.boolean().optional(),
+      origin: PieceOriginInputSchema.nullable().optional(),
     }),
     output: PieceSummarySchema,
+  }),
+  'pieces.attest': def({
+    description:
+      'Record that the signed-in person owns, has licensed or has permission to use the artwork a piece was made from (and, when a person is shown, has their consent). Required before image-to-3D, export or a production package of such a piece. Only a person can attest; never offered to the assistant.',
+    kind: 'mutation',
+    input: z.object({
+      id,
+      rights: z.enum(ATTESTATION_RIGHTS),
+      likenessConsent: z.boolean().default(false),
+    }),
+    output: PieceSchema,
   }),
   'pieces.setSpec': def({
     description:
@@ -269,6 +324,8 @@ export const commands = {
       ops: z.array(OpSchema).min(1).max(200),
       /** Client-generated id so retries are idempotent. */
       changeId: z.string().optional(),
+      /** When these ops undo earlier changes (a guarded undo), their ids. */
+      reverts: z.array(id).min(1).max(200).optional(),
     }),
     output: z.object({ version: z.number().int(), change: StoredChangeSchema }),
   }),
@@ -280,10 +337,15 @@ export const commands = {
     output: z.array(StoredChangeSchema),
   }),
   'design.revert': def({
-    description: 'Undo one earlier change by applying its inverse as a new change.',
+    description:
+      'Undo earlier edits by applying their inverse as one new change: give `seq` for one change, or `runId` for everything an assistant run changed on this piece. Fails with a conflict if later edits touched the same features.',
     kind: 'mutation',
     tool: true,
-    input: z.object({ pieceId: id, seq: z.number().int() }),
+    input: z
+      .object({ pieceId: id, seq: z.number().int().optional(), runId: id.optional() })
+      .refine((v) => (v.seq === undefined) !== (v.runId === undefined), {
+        message: 'Give exactly one of seq or runId',
+      }),
     output: z.object({ version: z.number().int(), change: StoredChangeSchema }),
   }),
   'design.evaluate': def({
@@ -295,7 +357,8 @@ export const commands = {
     output: EvaluationSummarySchema,
   }),
   'design.export': def({
-    description: 'Export the CAD as STL, STEP, 3DM, GLB, OBJ or 3MF. Returns a downloadable asset.',
+    description:
+      'Export the CAD as STL, STEP, 3DM, GLB, OBJ or 3MF. Returns a downloadable asset. A piece made from someone’s artwork needs a person’s attestation first (409 otherwise).',
     kind: 'mutation',
     tool: true,
     input: z.object({
@@ -359,12 +422,20 @@ export const commands = {
     input: z.object({
       query: z.string().min(1).max(300),
       providers: z.array(z.string()).optional(),
+      /** Only results whose pixels may be stored and used (open access, CC0). */
+      openOnly: z.boolean().default(false),
       page: z.number().int().min(1).default(1),
     }),
-    output: z.object({ results: z.array(SearchResultSchema), providers: z.array(z.string()) }),
+    output: z.object({
+      results: z.array(SearchResultSchema),
+      providers: z.array(z.string()),
+      /** Providers that could not answer this time, and why in plain words. */
+      unavailable: z.array(z.object({ provider: z.string(), reason: z.string() })),
+    }),
   }),
   'references.save': def({
-    description: 'Save search results, a pasted URL or an uploaded asset to a board, keeping provenance.',
+    description:
+      'Save search results, pasted URLs, uploaded assets, notes or colour swatches to a board, keeping provenance. Search results are re-checked with their provider: rights come from the provider, and pixels are stored only where its terms allow. URLs are kept as view-only links. `pieceId` marks a reference that shows one of your pieces.',
     kind: 'mutation',
     tool: true,
     input: z.object({
@@ -375,8 +446,11 @@ export const commands = {
             result: SearchResultSchema.optional(),
             url: z.string().url().optional(),
             assetId: id.optional(),
+            swatch: z.object({ hex: z.string().regex(/^#[0-9a-fA-F]{6}$/) }).optional(),
+            pieceId: id.optional(),
             note: z.string().max(4000).optional(),
             title: z.string().max(200).optional(),
+            /** For uploads and notes; a search result or URL can only be lowered to `viewOnly`. */
             rights: z.enum(RIGHTS).optional(),
           }),
         )
@@ -386,7 +460,8 @@ export const commands = {
     output: z.array(ReferenceSchema),
   }),
   'references.update': def({
-    description: 'Edit a reference’s title, note, tags, rights or position.',
+    description:
+      'Edit a reference’s title, note, tags, rights, order, canvas placement or board. Raising a view-only reference’s rights needs `attestation: true` from a person.',
     kind: 'mutation',
     input: z.object({
       id,
@@ -394,9 +469,73 @@ export const commands = {
       note: z.string().max(4000).optional(),
       tags: z.array(z.string().max(40)).max(30).optional(),
       rights: z.enum(RIGHTS).optional(),
+      /** The person confirms they may use a view-only item beyond inspiration. */
+      attestation: z.literal(true).optional(),
       position: z.number().optional(),
+      canvas: CanvasPlacementSchema.nullable().optional(),
+      /** Move to another board. */
+      boardId: id.optional(),
     }),
     output: ReferenceSchema,
+  }),
+  'references.arrange': def({
+    description: 'Reorder references on a board and place them on its canvas, in one step.',
+    kind: 'mutation',
+    input: z.object({
+      boardId: id,
+      items: z
+        .array(
+          z.object({ id, position: z.number().optional(), canvas: CanvasPlacementSchema.nullable().optional() }),
+        )
+        .min(1)
+        .max(500),
+    }),
+    output: z.array(ReferenceSchema),
+  }),
+  'references.capture': def({
+    description:
+      'Store the image behind a saved link so it shows on the board. Its rights stay view-only: a captured page is inspiration, not material for generation.',
+    kind: 'mutation',
+    input: z.object({ id }),
+    output: ReferenceSchema,
+  }),
+  'references.lineage': def({
+    description:
+      'Where a reference came from and what came of it: the references it was generated from (with credit lines even when deleted), the images generated from it, and the pieces started from it or its descendants.',
+    kind: 'query',
+    tool: true,
+    input: z.object({ id }),
+    output: z.object({
+      ancestors: z.array(
+        z.object({
+          id,
+          /** Null when the parent has since been deleted; `credit` still names it. */
+          reference: ReferenceSchema.nullable(),
+          credit: GenerationInputSchema.nullable(),
+          /** 1 = parent, 2 = grandparent, … */
+          depth: z.number().int().min(1),
+        }),
+      ),
+      descendants: z.array(ReferenceSchema),
+      pieces: z.array(PieceSummarySchema),
+    }),
+  }),
+  'references.similar': def({
+    description:
+      'References similar to one reference or to a text description, from one board or the whole organisation. Uses semantic embeddings when configured, otherwise shared tags, palette and title words.',
+    kind: 'query',
+    tool: true,
+    input: z
+      .object({
+        id: id.optional(),
+        text: z.string().min(1).max(500).optional(),
+        boardId: id.optional(),
+        limit: z.number().int().min(1).max(50).default(12),
+      })
+      .refine((v) => v.id !== undefined || v.text !== undefined, {
+        message: 'Give a reference id or a text description',
+      }),
+    output: z.array(ReferenceSchema),
   }),
   'references.remove': def({
     description: 'Remove references from a board.',
@@ -414,18 +553,151 @@ export const commands = {
       prompt: z.string().min(3).max(4000),
       referenceIds: z.array(id).max(8).default([]),
       count: z.number().int().min(1).max(4).default(2),
-      aspect: z.enum(['1:1', '4:5', '3:2', '16:9']).default('1:1'),
+      /** What each reference is for ("image 1 = silhouette"); ids must be among `referenceIds`. */
+      roles: z
+        .array(z.object({ id, role: z.enum(GENERATION_ROLES) }))
+        .max(8)
+        .default([]),
+      aspect: z.enum(IMAGE_ASPECTS).default('1:1'),
       style: z.enum(['photo', 'sketch', 'technical', 'render']).default('photo'),
+      /** Repeat a result exactly, where the provider supports seeds. */
+      seed: z.number().int().min(0).optional(),
     }),
     output: z.array(ReferenceSchema),
   }),
 
-  // ── Render ────────────────────────────────────────────────────────────────────────────────
-  'renders.list': def({
-    description: 'Render jobs, newest first, optionally for one piece.',
+  // ── Make it jewelry: freeform and image to 3D ─────────────────────────────────────────────
+  'freeform.analyze': def({
+    description:
+      'Analyse a picture or mesh for turning it into jewelry: cut-out and outline, a height map for a relief, colour layers for pavé regions, the recommended mode (outline, relief or sculpt) and why, and printability warnings at the target height. Flags logos, characters and faces, which need the person’s attestation. Cheap and repeatable; tune `threshold` to change what counts as the subject.',
+    kind: 'mutation',
+    tool: true,
+    input: z.object({
+      /** An uploaded image or mesh. */
+      assetId: id,
+      /** Subject/background cut-off, 0–1; omitted = automatic. */
+      threshold: z.number().min(0).max(1).optional(),
+      invert: z.boolean().optional(),
+      /** The intended finished height, for the printability warnings. */
+      heightMm: z.number().min(3).max(200).optional(),
+    }),
+    output: z.object({
+      maskAssetId: id,
+      /** The subject on transparency; null for a mesh. */
+      cutoutAssetId: id.nullable(),
+      /** The traced outline as an SVG path, ready for an outline body. */
+      outline: z.object({ d: z.string(), aspect: z.number().positive() }),
+      heightMapAssetId: id,
+      /** `model` = a depth model; `basic` = silhouette dome plus luminance; `mesh` = the mesh’s own depth. */
+      depthSource: z.enum(['model', 'basic', 'mesh']),
+      colorLayers: z.array(
+        z.object({
+          hex: z.string(),
+          areaPct: z.number().min(0).max(100),
+          maskAssetId: id,
+        }),
+      ),
+      suggestedMode: z.enum(['outline', 'relief', 'sculpt']),
+      reason: z.string(),
+      lints: z.array(
+        z.object({
+          code: z.enum(['stroke', 'gap', 'island']),
+          message: z.string(),
+          valueMm: z.number(),
+          limitMm: z.number(),
+        }),
+      ),
+      flags: z.array(OriginFlagSchema),
+    }),
+  }),
+  'mesh3d.estimate': def({
+    description: 'What an image-to-3D generation would cost and how long it takes, before asking for confirmation.',
     kind: 'query',
     tool: true,
-    input: z.object({ pieceId: id.optional(), limit: z.number().int().max(200).default(60) }),
+    input: z.object(meshRequest),
+    output: EstimateSchema,
+  }),
+  'mesh3d.create': def({
+    description:
+      'Generate a 3D model from one to four photos of an object, for a high relief or a full-round body. Costs money and takes about a minute; poll mesh3d.get. Needs a person’s attestation for pieces made from someone’s artwork.',
+    kind: 'mutation',
+    tool: { confirm: true },
+    input: z.object({ pieceId: id, ...meshRequest }),
+    output: MeshJobSchema,
+  }),
+  'mesh3d.list': def({
+    description: 'Image-to-3D jobs for a piece, newest first.',
+    kind: 'query',
+    tool: true,
+    input: z.object({ pieceId: id }),
+    output: z.array(MeshJobSchema),
+  }),
+  'mesh3d.get': def({
+    description: 'One image-to-3D job with its status, progress and resulting mesh asset.',
+    kind: 'query',
+    tool: true,
+    input: z.object({ id }),
+    output: MeshJobSchema,
+  }),
+  'mesh3d.cancel': def({
+    description: 'Cancel a queued or running image-to-3D job.',
+    kind: 'mutation',
+    input: z.object({ id }),
+    output: MeshJobSchema,
+  }),
+
+  // ── Render ────────────────────────────────────────────────────────────────────────────────
+  'scenes.list': def({
+    description:
+      'Saved shots for a piece, in shot-list order; `pieceId: null` lists the organisation’s house shots.',
+    kind: 'query',
+    tool: true,
+    input: z.object({ pieceId: id.nullable() }),
+    output: z.array(SavedSceneSchema),
+  }),
+  'scenes.create': def({
+    description:
+      'Save a shot (a render scene) for a piece, or as a house shot with `pieceId: null`. Edit it with scenes.update and render it with renders.create {sceneId}.',
+    kind: 'mutation',
+    tool: true,
+    input: z.object({
+      pieceId: id.nullable(),
+      title: z.string().min(1).max(80),
+      scene: RenderSceneSchema,
+      position: z.number().optional(),
+    }),
+    output: SavedSceneSchema,
+  }),
+  'scenes.update': def({
+    description:
+      'Adjust a saved shot. `patch` is a JSON merge patch on its scene (e.g. {"camera":{"focalLength":105}}); the result is re-validated. The viewport shows the change before any render time is spent.',
+    kind: 'mutation',
+    tool: true,
+    input: z.object({
+      id,
+      title: z.string().min(1).max(80).optional(),
+      position: z.number().optional(),
+      patch: mergePatch.optional(),
+    }),
+    output: SavedSceneSchema,
+  }),
+  'scenes.delete': def({
+    description: 'Delete a saved shot. Its takes are kept.',
+    kind: 'mutation',
+    input: z.object({ id }),
+    output: ok,
+  }),
+  'renders.list': def({
+    description:
+      'Render takes, newest first, optionally for one piece. Page with `before` (a createdAt). Each says whether the design has changed since (`stale`).',
+    kind: 'query',
+    tool: true,
+    input: z.object({
+      pieceId: id.optional(),
+      purpose: z.enum(['take', 'reference']).default('take'),
+      before: z.string().optional(),
+      limit: z.number().int().max(200).default(60),
+    }),
     output: z.array(RenderJobSchema),
   }),
   'renders.get': def({
@@ -437,10 +709,51 @@ export const commands = {
   }),
   'renders.create': def({
     description:
-      'Queue a photoreal render (still or animation) of a piece from a declarative scene: look, camera, environment, overrides, animation, output. Poll renders.get for the result.',
+      'Queue a photoreal render (still or animation) of a piece from a saved shot (`sceneId`) or a declarative scene: look, camera, environment, overrides, animation, output. `engine: auto` uses Blender when available, else the browser (preview quality). For variants ("in rose gold"), make one call per variant with a shared `groupId` and a `variantLabel`. To re-render after critique, pass `retryOf` and a short `note`. Poll renders.get for the result.',
     kind: 'mutation',
     tool: true,
-    input: z.object({ pieceId: id, title: z.string().max(120).optional(), scene: RenderSceneSchema }),
+    input: z
+      .object({
+        pieceId: id,
+        title: z.string().max(120).optional(),
+        sceneId: id.optional(),
+        /** Overrides the saved shot’s scene when both are given. */
+        scene: RenderSceneSchema.optional(),
+        groupId: z.string().min(1).max(64).optional(),
+        variantLabel: z.string().max(80).optional(),
+        engine: z.enum(['auto', 'blender', 'browser']).default('auto'),
+        /** Let numeric checks fix framing and exposure in preview drafts first. */
+        autoTune: z.boolean().default(true),
+        retryOf: id.optional(),
+        note: z.string().max(500).optional(),
+        purpose: z.enum(['take', 'reference']).default('take'),
+      })
+      .refine((v) => v.scene !== undefined || v.sceneId !== undefined, {
+        message: 'Give a scene or a saved sceneId',
+      }),
+    output: RenderJobSchema,
+  }),
+  'renders.complete': def({
+    description:
+      'Deliver the result of a browser render: the uploaded images, or the error. Only the user who queued it can complete it, once.',
+    kind: 'mutation',
+    input: z
+      .object({
+        id,
+        assetIds: z.array(id).max(50).default([]),
+        error: z.string().max(2000).optional(),
+        seconds: z.number().nonnegative().optional(),
+        device: z.string().max(200).optional(),
+      })
+      .refine((v) => (v.assetIds.length > 0) !== (v.error !== undefined), {
+        message: 'Give either the rendered assetIds or an error',
+      }),
+    output: RenderJobSchema,
+  }),
+  'renders.update': def({
+    description: 'Star or rename a take.',
+    kind: 'mutation',
+    input: z.object({ id, starred: z.boolean().optional(), title: z.string().max(120).optional() }),
     output: RenderJobSchema,
   }),
   'renders.cancel': def({
@@ -448,6 +761,26 @@ export const commands = {
     kind: 'mutation',
     input: z.object({ id }),
     output: RenderJobSchema,
+  }),
+  'renders.delete': def({
+    description: 'Delete a take. Its images remain available to anything that uses them.',
+    kind: 'mutation',
+    input: z.object({ id }),
+    output: ok,
+  }),
+  'renders.engine': def({
+    description: 'Whether Blender is available for photoreal renders: version, device and path, or why not.',
+    kind: 'query',
+    input: none,
+    output: RenderEngineStatusSchema,
+  }),
+  'renders.configureEngine': def({
+    description:
+      'Point the server at a Blender install (or `null` to search again). Checked before it is saved. Local installs only.',
+    kind: 'mutation',
+    role: 'owner',
+    input: z.object({ blenderPath: z.string().min(1).max(1024).nullable() }),
+    output: RenderEngineStatusSchema,
   }),
 
   // ── Brand models ──────────────────────────────────────────────────────────────────────────
@@ -469,7 +802,8 @@ export const commands = {
     output: BrandModelSchema,
   }),
   'models.update': def({
-    description: 'Edit a brand model’s card, name or approval status.',
+    description:
+      'Edit a brand model’s card or name, or approve it. Approving freezes its card and portraits, records you as approver and bumps its version; set it back to draft to change them.',
     kind: 'mutation',
     input: z.object({
       id,
@@ -480,7 +814,8 @@ export const commands = {
     output: BrandModelSchema,
   }),
   'models.generatePortraits': def({
-    description: 'Generate (or regenerate) the canonical portrait set for a brand model.',
+    description:
+      'Generate (or regenerate) the canonical portrait set for a brand model. Generate the face first; once it is kept, the other views are conditioned on it.',
     kind: 'mutation',
     tool: { confirm: true },
     input: z.object({ id, views: z.array(z.enum(['face', 'hands', 'neck', 'ear', 'body'])).min(1) }),
@@ -499,18 +834,46 @@ export const commands = {
     input: z.object({ pieceId: id.optional(), modelId: id.optional() }),
     output: z.array(ModelShotSchema),
   }),
+  'shots.get': def({
+    description: 'One on-model image with its stage, fidelity findings and provenance.',
+    kind: 'query',
+    tool: true,
+    input: z.object({ id }),
+    output: ModelShotSchema,
+  }),
+  'shots.estimate': def({
+    description: 'What on-model images would cost and how long they take, before asking for confirmation.',
+    kind: 'query',
+    tool: true,
+    input: onModelShot,
+    output: EstimateSchema,
+  }),
   'shots.create': def({
     description:
-      'Create an on-model image of a piece worn by a brand model. Uses renders of the real CAD as references and checks the result against the design.',
+      'Create on-model images of a piece worn by an approved brand model (`count` images, one shot each). Uses renders of the real CAD as references and checks each result against the design; results are concepts, labelled as AI. Costs money.',
     kind: 'mutation',
     tool: { confirm: true },
-    input: z.object({
-      modelId: id,
-      pieceId: id,
-      placement: z.enum(['hand', 'neck', 'ear', 'wrist']),
-      direction: z.string().max(1000).default(''),
-    }),
+    input: onModelShot,
+    output: z.array(ModelShotSchema),
+  }),
+  'shots.cancel': def({
+    description: 'Cancel an on-model image that is still being made.',
+    kind: 'mutation',
+    input: z.object({ id }),
     output: ModelShotSchema,
+  }),
+  'shots.delete': def({
+    description: 'Delete an on-model image.',
+    kind: 'mutation',
+    input: z.object({ id }),
+    output: ok,
+  }),
+  'shots.export': def({
+    description:
+      'A downloadable copy of an on-model image that passed its check against the design, with the visible “AI” disclosure label unless `label: false`. The original is never altered.',
+    kind: 'mutation',
+    input: z.object({ id, label: z.boolean().default(true) }),
+    output: AssetSchema,
   }),
 
   // ── Production ────────────────────────────────────────────────────────────────────────────
@@ -523,7 +886,7 @@ export const commands = {
   }),
   'production.create': def({
     description:
-      'Build a manufacturer-ready production package for a piece: spec sheet PDF, dimensioned drawings, STL/STEP/3DM, stone list and BOM, cost estimate and manufacturability report, zipped as a new revision.',
+      'Build a manufacturer-ready production package for a piece: spec sheet PDF, dimensioned drawings, STL/STEP/3DM, stone list and BOM, cost estimate and manufacturability report, zipped as a new revision. A piece made from someone’s artwork needs a person’s attestation first (409 otherwise).',
     kind: 'mutation',
     tool: true,
     input: z.object({
@@ -544,16 +907,73 @@ export const commands = {
 
   // ── Assistant & traces ────────────────────────────────────────────────────────────────────
   'threads.list': def({
-    description: 'Assistant conversations.',
+    description: 'Your assistant conversations, most recent first.',
     kind: 'query',
     input: z.object({ pieceId: id.optional(), limit: z.number().int().max(100).default(30) }),
     output: z.array(ThreadSchema),
   }),
   'threads.get': def({
-    description: 'A conversation with its messages.',
+    description: 'One of your conversations with its messages in order, and its latest run.',
     kind: 'query',
     input: z.object({ id }),
-    output: z.object({ thread: ThreadSchema, messages: z.array(MessageSchema) }),
+    output: z.object({
+      thread: ThreadSchema,
+      messages: z.array(MessageSchema),
+      run: RunSchema.nullable(),
+    }),
+  }),
+  'threads.send': def({
+    description:
+      'Send a message to the assistant, starting a conversation when `threadId` is omitted, and start a run. Safe to retry with the same `clientMessageId`. Approvals still pending in the thread are declined.',
+    kind: 'mutation',
+    input: z.object({
+      threadId: id.optional(),
+      text: z.string().min(1).max(20_000),
+      attachments: z.array(id).max(8).default([]),
+      referenceIds: z.array(id).max(12).default([]),
+      context: z
+        .object({
+          pieceId: id.optional(),
+          boardId: id.optional(),
+          sceneId: id.optional(),
+          selection: z.array(id).max(200).default([]),
+        })
+        .default({ selection: [] }),
+      /** The studio window sending it, which client tools are asked first. */
+      clientId: z.string().min(1).max(64),
+      clientMessageId: z.string().min(1).max(64),
+    }),
+    output: z.object({ thread: ThreadSchema, run: RunSchema }),
+  }),
+  'runs.decide': def({
+    description: 'Approve or decline a tool call an assistant run is waiting on. Only the run’s own user can.',
+    kind: 'mutation',
+    input: z.object({
+      runId: id,
+      toolCallId: id,
+      decision: z.enum(['approve', 'deny']),
+      note: z.string().max(2000).optional(),
+    }),
+    output: RunSchema,
+  }),
+  'runs.cancel': def({
+    description: 'Stop an assistant run. Edits it already made stay, and can be undone.',
+    kind: 'mutation',
+    input: z.object({ runId: id }),
+    output: RunSchema,
+  }),
+  'client.respond': def({
+    description:
+      'A studio window’s answer to a `client.request` event (a client tool call). The first answer wins.',
+    kind: 'mutation',
+    // Client tools include reads a viewer may make; the request itself is addressed to this user.
+    role: 'viewer',
+    input: z
+      .object({ requestId: id, output: z.unknown().optional(), error: z.string().max(2000).optional() })
+      .refine((v) => (v.output === undefined) !== (v.error === undefined), {
+        message: 'Give either an output or an error',
+      }),
+    output: ok,
   }),
   'threads.delete': def({
     description: 'Delete a conversation.',
@@ -568,10 +988,11 @@ export const commands = {
     output: z.array(RunSchema),
   }),
   'traces.run': def({
-    description: 'One assistant run with every model and tool step, linked to the design changes it made.',
+    description:
+      'One assistant run with every model and tool step, linked to the design changes it made, and the feedback it received.',
     kind: 'query',
     input: z.object({ id }),
-    output: z.object({ run: RunSchema, steps: z.array(StepSchema) }),
+    output: z.object({ run: RunSchema, steps: z.array(StepSchema), feedback: z.array(FeedbackSchema) }),
   }),
   'traces.feedback': def({
     description: 'Record explicit feedback on a run or one of its steps.',

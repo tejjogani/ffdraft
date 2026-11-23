@@ -16,6 +16,8 @@ import {
   QUALITY,
 } from '../../core'
 import {
+  creaseNormals,
+  featureEdges,
   meshVolume,
   mergeTessellations,
   tessellationOf,
@@ -29,6 +31,8 @@ export interface Template {
   mesh(quality: Quality): IndexedTriangles
   /** The exact part; the caller deletes it. Omit for mesh-only parts. */
   brep?(): Shape3D
+  /** Dihedral angle above which the display mesh shows a hard edge (default: the kernel's). */
+  crease?: number
 }
 
 export interface Instance {
@@ -60,6 +64,26 @@ export function mergeTriangles(parts: readonly IndexedTriangles[]): IndexedTrian
 
 const qualityKey = (q: Quality) => `${q.chord}/${q.angle}`
 
+/**
+ * A draft chain is capped at about this many triangles: a 22" fine cable has ~600 links and a
+ * rope twice that, and the viewport only needs them to read as links. Each template is re-meshed
+ * at a coarser tolerance until one copy fits its per-copy share.
+ */
+const DRAFT_TRIANGLES = 250_000
+/** Never coarser than this facet angle: rounder wire than a hexagon. */
+const COARSEST_ANGLE = 0.7
+
+function budgeted(template: Template, quality: Quality, share: number): IndexedTriangles {
+  let q = quality
+  let tris = template.mesh(q)
+  if (quality.chord < QUALITY.draft.chord) return tris
+  while (tris.indices.length / 3 > share && q.angle < COARSEST_ANGLE) {
+    q = { chord: q.chord * 2, angle: Math.min(COARSEST_ANGLE, q.angle * 1.4) }
+    tris = template.mesh(q)
+  }
+  return tris
+}
+
 export function instancedSolid(templates: readonly Template[], instances: readonly Instance[]): Solid {
   const cache = new Map<string, { tris: IndexedTriangles; display: Tessellation }[]>()
   const meshed = (quality: Quality) => {
@@ -67,8 +91,12 @@ export function instancedSolid(templates: readonly Template[], instances: readon
     let entry = cache.get(key)
     if (!entry) {
       entry = templates.map((t) => {
-        const tris = t.mesh(quality)
-        return { tris, display: tessellationOf(tris) }
+        const tris = budgeted(t, quality, DRAFT_TRIANGLES / instances.length)
+        const display =
+          t.crease === undefined
+            ? tessellationOf(tris)
+            : { mesh: creaseNormals(tris, t.crease), edges: featureEdges(tris, t.crease) }
+        return { tris, display }
       })
       cache.set(key, entry)
     }

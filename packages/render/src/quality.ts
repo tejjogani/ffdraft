@@ -17,15 +17,17 @@ const DEEP = { total: 32, transmission: 32, glossy: 16, diffuse: 4, transparent:
 const FLOOR = { total: 24, transmission: 24, glossy: 12, diffuse: 2, transparent: 8 }
 
 const STILL: Record<Quality, Tier> = {
-  // The critique-loop draft: 768², 64 spp (research §4).
+  // The critique-loop draft: 768², 64 spp (research §4). Paths inside a stone are indirect,
+  // so a low indirect clamp or a wide glossy filter turns fire milky; these are the lowest
+  // values that kept the fixture diamond crisp at this sample count.
   preview: {
     maxSide: 768,
     samples: 64,
     noiseThreshold: 0.05,
     bounces: FLOOR,
     clampDirect: 0,
-    clampIndirect: 10,
-    filterGlossy: 1,
+    clampIndirect: 30,
+    filterGlossy: 0.5,
     denoise: true,
   },
   standard: {
@@ -34,8 +36,8 @@ const STILL: Record<Quality, Tier> = {
     noiseThreshold: 0.02,
     bounces: DEEP,
     clampDirect: 0,
-    clampIndirect: 10,
-    filterGlossy: 0.3,
+    clampIndirect: 0,
+    filterGlossy: 0.2,
     denoise: true,
   },
   // Clamping dims sparkle, so finals do not clamp.
@@ -52,7 +54,7 @@ const STILL: Record<Quality, Tier> = {
 }
 
 const ANIMATION: Record<Quality, Tier> = {
-  preview: { ...STILL.preview, maxSide: 512, samples: 32 },
+  preview: { ...STILL.preview, maxSide: 512, samples: 32, clampIndirect: 10 },
   standard: {
     maxSide: 1080,
     samples: 192,

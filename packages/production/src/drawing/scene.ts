@@ -59,11 +59,19 @@ function creases(p: Float32Array, e: EdgeTable, fn: Float32Array): Float32Array 
     const f0 = e.f0[k]!
     const f1 = e.f1[k]!
     if (f1 < 0) continue
-    const d = fn[f0 * 3]! * fn[f1 * 3]! + fn[f0 * 3 + 1]! * fn[f1 * 3 + 1]! + fn[f0 * 3 + 2]! * fn[f1 * 3 + 2]!
+    // Degenerate (zero-area) faces have no normal and say nothing about a crease.
+    if (isZero(fn, f0) || isZero(fn, f1)) continue
+    const d =
+      fn[f0 * 3]! * fn[f1 * 3]! +
+      fn[f0 * 3 + 1]! * fn[f1 * 3 + 1]! +
+      fn[f0 * 3 + 2]! * fn[f1 * 3 + 2]!
     if (d < cos) pushEdge(out, p, e.a[k]!, e.b[k]!)
   }
   return Float32Array.from(out)
 }
+
+const isZero = (fn: Float32Array, f: number) =>
+  fn[f * 3] === 0 && fn[f * 3 + 1] === 0 && fn[f * 3 + 2] === 0
 
 function boundaries(p: Float32Array, e: EdgeTable): Float32Array {
   const out: number[] = []
@@ -104,6 +112,7 @@ function tableOutline(mesh: MeshData): Float32Array {
 
 function transformSegments(segs: Float32Array, m: readonly number[]): Float32Array {
   const out = new Float32Array(segs.length)
-  for (let i = 0; i < segs.length; i += 3) out.set(transformPoint(m, segs[i]!, segs[i + 1]!, segs[i + 2]!), i)
+  for (let i = 0; i < segs.length; i += 3)
+    out.set(transformPoint(m, segs[i]!, segs[i + 1]!, segs[i + 2]!), i)
   return out
 }

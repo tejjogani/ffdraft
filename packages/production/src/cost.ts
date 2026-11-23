@@ -12,7 +12,14 @@
  * Every rate is an input with its source. Nothing is fetched: unset rates fall back to defaults
  * flagged "placeholder — set your rates" (the research found no current trade rate cards).
  */
-import { type GemMaterialId, METALS, type MetalFamily, type MetalId } from '@pave/schema'
+import {
+  GEM_CUTS,
+  GEM_MATERIALS,
+  type GemMaterialId,
+  METALS,
+  type MetalFamily,
+  type MetalId,
+} from '@pave/schema'
 import type { PackageContext } from './context'
 
 export interface RateInput {
@@ -80,7 +87,14 @@ export const PLACEHOLDER_NOTE = 'placeholder — set your rates'
 
 /** Placeholder defaults. Spot prices are round figures, not market data. */
 const DEFAULTS = {
-  spotPerGram: { gold: 130, platinum: 50, palladium: 45, silver: 1.6, titanium: 0.1, base: 0.02 } as Record<MetalFamily, number>,
+  spotPerGram: {
+    gold: 130,
+    platinum: 50,
+    palladium: 45,
+    silver: 1.6,
+    titanium: 0.1,
+    base: 0.02,
+  } as Record<MetalFamily, number>,
   castingLossPct: 5,
   alloyPremiumPct: 15,
   cadFee: 0,
@@ -90,9 +104,21 @@ const DEFAULTS = {
   hourlyRate: 60,
   platingFee: 15,
   assayFee: 5,
-  settingPerStone: { prong: 20, basket: 20, bezel: 30, halfBezel: 25, flush: 12, channel: 12, pave: 6, sharedProng: 8, bar: 10 } as Record<string, number>,
+  settingPerStone: {
+    prong: 20,
+    basket: 20,
+    bezel: 30,
+    halfBezel: 25,
+    flush: 12,
+    channel: 12,
+    pave: 6,
+    sharedProng: 8,
+    bar: 10,
+  } as Record<string, number>,
   settingFallback: 20,
-  stonePricePerCt: { diamond: 1500, 'diamond-lab': 150, moissanite: 60, cz: 1 } as Partial<Record<GemMaterialId, number>>,
+  stonePricePerCt: { diamond: 1500, 'diamond-lab': 150, moissanite: 60, cz: 1 } as Partial<
+    Record<GemMaterialId, number>
+  >,
   stoneFallbackPerCt: 200,
   overheadPct: 15,
   marginPct: 0,
@@ -105,12 +131,22 @@ export function estimateCost(ctx: PackageContext): CostEstimate {
   const rates = ctx.input.options.rates ?? {}
   const currency = rates.currency ?? 'USD'
   const placeholders = new Set<string>()
-  const rate = (name: string, user: number | undefined, fallback: number, unit: string): CostInput => {
+  const rate = (
+    name: string,
+    user: number | undefined,
+    fallback: number,
+    unit: string,
+  ): CostInput => {
     if (user !== undefined) return { name, value: user, unit, source: 'user' }
     placeholders.add(name)
     return { name, value: fallback, unit, source: 'default' }
   }
-  const computed = (name: string, value: number, unit: string): CostInput => ({ name, value, unit, source: 'computed' })
+  const computed = (name: string, value: number, unit: string): CostInput => ({
+    name,
+    value,
+    unit,
+    source: 'computed',
+  })
   const lines: CostLine[] = []
   const q = ctx.quantity
 
@@ -120,7 +156,12 @@ export function estimateCost(ctx: PackageContext): CostEstimate {
     const metal = METALS[m.metal as MetalId]
     const grams = computed('net metal', round3(m.netGrams), 'g')
     if (rates.metalPricePerGramUsd !== undefined || metal.fineness === 0) {
-      const price = rate(`${metal.label} per g`, rates.metalPricePerGramUsd, DEFAULTS.spotPerGram[metal.family], `${currency}/g`)
+      const price = rate(
+        `${metal.label} per g`,
+        rates.metalPricePerGramUsd,
+        DEFAULTS.spotPerGram[metal.family],
+        `${currency}/g`,
+      )
       lines.push({
         id: `metal:${m.metal}`,
         group: 'metal',
@@ -130,7 +171,12 @@ export function estimateCost(ctx: PackageContext): CostEstimate {
         amount: r2(m.netGrams * (1 + loss.value / 100) * price.value),
       })
     } else {
-      const spot = rate(`${metal.family} spot`, rates.spotPerGram?.[metal.family], DEFAULTS.spotPerGram[metal.family], `${currency}/g`)
+      const spot = rate(
+        `${metal.family} spot`,
+        rates.spotPerGram?.[metal.family],
+        DEFAULTS.spotPerGram[metal.family],
+        `${currency}/g`,
+      )
       const premium = rate('alloy premium', rates.alloyPremiumPct, DEFAULTS.alloyPremiumPct, '%')
       const fineness = computed('fineness', metal.fineness / 1000, '')
       lines.push({
@@ -139,7 +185,13 @@ export function estimateCost(ctx: PackageContext): CostEstimate {
         label: `${metal.label}`,
         formula: 'metal_g × (1 + loss) × spot_per_g × fineness × (1 + alloy_premium)',
         inputs: [grams, loss, spot, fineness, premium],
-        amount: r2(m.netGrams * (1 + loss.value / 100) * spot.value * fineness.value * (1 + premium.value / 100)),
+        amount: r2(
+          m.netGrams *
+            (1 + loss.value / 100) *
+            spot.value *
+            fineness.value *
+            (1 + premium.value / 100),
+        ),
       })
     }
   }
@@ -147,11 +199,16 @@ export function estimateCost(ctx: PackageContext): CostEstimate {
   // Stones, per lot.
   for (const info of ctx.lots) {
     const { lot, sourcing } = info
-    const label = `${info.key} · ${lot.count} × ${lot.stone} ${lot.cut} ${lot.width.toFixed(2)} mm`
+    const label = `${info.key} · ${lot.count} × ${GEM_MATERIALS[lot.stone].label}, ${GEM_CUTS[lot.cut].label.toLowerCase()} ${lot.width.toFixed(2)} mm`
     if (sourcing?.priceUsd !== undefined) {
       // A gem node's sourcing prices one stone; a pavé or row node's prices the parcel.
       const perStone = lot.count === 1 || lot.nodeIds.length === lot.count
-      const price: CostInput = { name: perStone ? 'price per stone' : 'parcel price', value: sourcing.priceUsd, unit: currency, source: 'sourcing' }
+      const price: CostInput = {
+        name: perStone ? 'price per stone' : 'parcel price',
+        value: sourcing.priceUsd,
+        unit: currency,
+        source: 'sourcing',
+      }
       lines.push({
         id: `stones:${info.key}`,
         group: 'stones',
@@ -172,7 +229,12 @@ export function estimateCost(ctx: PackageContext): CostEstimate {
         note: 'Supplied by the brand; not priced',
       })
     } else {
-      const perCt = rate(`${lot.stone} per ct`, rates.stonePricePerCt?.[lot.stone], DEFAULTS.stonePricePerCt[lot.stone] ?? DEFAULTS.stoneFallbackPerCt, `${currency}/ct`)
+      const perCt = rate(
+        `${lot.stone} per ct`,
+        rates.stonePricePerCt?.[lot.stone],
+        DEFAULTS.stonePricePerCt[lot.stone] ?? DEFAULTS.stoneFallbackPerCt,
+        `${currency}/ct`,
+      )
       lines.push({
         id: `stones:${info.key}`,
         group: 'stones',
@@ -191,9 +253,20 @@ export function estimateCost(ctx: PackageContext): CostEstimate {
   // Setting, per lot by setting type.
   for (const info of ctx.lots) {
     const s = info.lot.setting
-    const per = rates.settingPerStoneUsd !== undefined
-      ? rate('setting per stone', rates.settingPerStoneUsd, DEFAULTS.settingFallback, `${currency}/stone`)
-      : rate(`${s} setting per stone`, rates.settingPerStone?.[s], DEFAULTS.settingPerStone[s] ?? DEFAULTS.settingFallback, `${currency}/stone`)
+    const per =
+      rates.settingPerStoneUsd !== undefined
+        ? rate(
+            'setting per stone',
+            rates.settingPerStoneUsd,
+            DEFAULTS.settingFallback,
+            `${currency}/stone`,
+          )
+        : rate(
+            `${s} setting per stone`,
+            rates.settingPerStone?.[s],
+            DEFAULTS.settingPerStone[s] ?? DEFAULTS.settingFallback,
+            `${currency}/stone`,
+          )
     lines.push({
       id: `setting:${info.key}`,
       group: 'setting',
@@ -207,19 +280,51 @@ export function estimateCost(ctx: PackageContext): CostEstimate {
   // Labour.
   if (rates.laborUsd !== undefined) {
     const l = rate('labour per piece', rates.laborUsd, 0, currency)
-    lines.push({ id: 'labour', group: 'labour', label: 'Labour (all-in)', formula: 'labour', inputs: [l], amount: r2(l.value) })
+    lines.push({
+      id: 'labour',
+      group: 'labour',
+      label: 'Labour (all-in)',
+      formula: 'labour',
+      inputs: [l],
+      amount: r2(l.value),
+    })
   } else {
-    const labour = (id: string, label: string, formula: string, inputs: CostInput[], amount: number) =>
-      lines.push({ id: `labour:${id}`, group: 'labour', label, formula, inputs, amount: r2(amount) })
+    const labour = (
+      id: string,
+      label: string,
+      formula: string,
+      inputs: CostInput[],
+      amount: number,
+    ) =>
+      lines.push({
+        id: `labour:${id}`,
+        group: 'labour',
+        label,
+        formula,
+        inputs,
+        amount: r2(amount),
+      })
     const cad = rate('CAD fee', rates.cadFee, DEFAULTS.cadFee, currency)
-    labour('cad', 'CAD (amortised)', 'cad_fee / qty', [cad, { name: 'qty', value: q, unit: 'pcs', source: 'user' }], cad.value / q)
+    labour(
+      'cad',
+      'CAD (amortised)',
+      'cad_fee / qty',
+      [cad, { name: 'qty', value: q, unit: 'pcs', source: 'user' }],
+      cad.value / q,
+    )
     const print = rate('print fee', rates.printFee, DEFAULTS.printFee, currency)
     labour('print', 'Pattern print', 'print_fee', [print], print.value)
     const cast = rate('casting fee', rates.castingFee, DEFAULTS.castingFee, currency)
     labour('cast', 'Casting', 'casting_fee', [cast], cast.value)
     const hours = rate('finish hours', rates.finishHours, DEFAULTS.finishHours, 'h')
     const hourly = rate('hourly rate', rates.hourlyRate, DEFAULTS.hourlyRate, `${currency}/h`)
-    labour('finish', 'Finishing and polishing', 'finish_hours × hourly_rate', [hours, hourly], hours.value * hourly.value)
+    labour(
+      'finish',
+      'Finishing and polishing',
+      'finish_hours × hourly_rate',
+      [hours, hourly],
+      hours.value * hourly.value,
+    )
     if (ctx.input.evaluation.parts.some((p) => p.plating !== 'none')) {
       const plating = rate('plating fee', rates.platingFee, DEFAULTS.platingFee, currency)
       labour('plating', 'Plating', 'plating_fee', [plating], plating.value)
@@ -231,14 +336,35 @@ export function estimateCost(ctx: PackageContext): CostEstimate {
   const materials = r2(lines.reduce((t, l) => t + l.amount, 0))
   const overhead = rate('overhead', rates.overheadPct, DEFAULTS.overheadPct, '%')
   const overheadAmount = r2(materials * (overhead.value / 100))
-  lines.push({ id: 'overhead', group: 'overhead', label: 'Overhead', formula: 'subtotal × overhead', inputs: [computed('subtotal', materials, currency), overhead], amount: overheadAmount })
+  lines.push({
+    id: 'overhead',
+    group: 'overhead',
+    label: 'Overhead',
+    formula: 'subtotal × overhead',
+    inputs: [computed('subtotal', materials, currency), overhead],
+    amount: overheadAmount,
+  })
   const cost = r2(materials + overheadAmount)
   const margin = rate('margin', rates.marginPct, DEFAULTS.marginPct, '%')
   const marginAmount = r2(cost * (margin.value / 100))
-  lines.push({ id: 'margin', group: 'margin', label: 'Margin', formula: 'cost × margin', inputs: [computed('cost', cost, currency), margin], amount: marginAmount })
+  lines.push({
+    id: 'margin',
+    group: 'margin',
+    label: 'Margin',
+    formula: 'cost × margin',
+    inputs: [computed('cost', cost, currency), margin],
+    amount: marginAmount,
+  })
   const tax = rate('tax', rates.taxPct, DEFAULTS.taxPct, '%')
   const taxAmount = r2((cost + marginAmount) * (tax.value / 100))
-  lines.push({ id: 'tax', group: 'tax', label: 'Tax', formula: '(cost + margin) × tax', inputs: [computed('cost + margin', r2(cost + marginAmount), currency), tax], amount: taxAmount })
+  lines.push({
+    id: 'tax',
+    group: 'tax',
+    label: 'Tax',
+    formula: '(cost + margin) × tax',
+    inputs: [computed('cost + margin', r2(cost + marginAmount), currency), tax],
+    amount: taxAmount,
+  })
   const price = r2(cost + marginAmount + taxAmount)
 
   return {
@@ -250,7 +376,8 @@ export function estimateCost(ctx: PackageContext): CostEstimate {
     placeholders: [...placeholders],
     priceSource: rates.priceSource ?? null,
     priceTimestamp: rates.priceTimestamp ?? null,
-    formula: 'cost = (metal + stones + setting + labour) × (1 + overhead); price = cost × (1 + margin) × (1 + tax)',
+    formula:
+      'cost = (metal + stones + setting + labour) × (1 + overhead); price = cost × (1 + margin) × (1 + tax)',
   }
 }
 

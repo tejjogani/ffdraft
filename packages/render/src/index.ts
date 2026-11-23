@@ -13,7 +13,15 @@ export {
   type RenderMetrics,
   type SceneAdjustment,
 } from './assess'
-export { CAMERA_PRESETS, type CameraPreset, cameraBasis, cameraPose, framePoints, SENSOR_WIDTH_MM, viewTangents } from './camera'
+export {
+  CAMERA_PRESETS,
+  type CameraPreset,
+  cameraBasis,
+  cameraPose,
+  framePoints,
+  SENSOR_WIDTH_MM,
+  viewTangents,
+} from './camera'
 export { hexToRgb, kelvinToRgb, luminance, type Rgb, srgbToLinear } from './color'
 export {
   type Background,

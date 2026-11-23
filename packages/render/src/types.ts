@@ -109,7 +109,13 @@ export interface ResolvedOutput {
   height: number
   samples: number
   noiseThreshold: number
-  bounces: { total: number; transmission: number; glossy: number; diffuse: number; transparent: number }
+  bounces: {
+    total: number
+    transmission: number
+    glossy: number
+    diffuse: number
+    transparent: number
+  }
   clampDirect: number
   clampIndirect: number
   filterGlossy: number

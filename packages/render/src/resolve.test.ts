@@ -1,4 +1,12 @@
-import { FINISH_IDS, GEM_MATERIAL_IDS, GEM_MATERIALS, METAL_IDS, PLATING_IDS, RenderSceneSchema, type RenderSceneInput } from '@pave/schema'
+import {
+  FINISH_IDS,
+  GEM_MATERIAL_IDS,
+  GEM_MATERIALS,
+  METAL_IDS,
+  PLATING_IDS,
+  type RenderSceneInput,
+  RenderSceneSchema,
+} from '@pave/schema'
 import { describe, expect, it } from 'vitest'
 import { paveBar, solitaireRing } from '../fixtures'
 import { ease, sampleTrack } from './animation'
@@ -14,7 +22,10 @@ const ring = solitaireRing()
 // Every metal vertex plus the stone's support points.
 const points: Vec3[] = [
   ...ring.parts.flatMap((part) =>
-    Array.from({ length: part.mesh.positions.length / 3 }, (_, i) => Array.from(part.mesh.positions.subarray(i * 3, i * 3 + 3)) as Vec3),
+    Array.from(
+      { length: part.mesh.positions.length / 3 },
+      (_, i) => Array.from(part.mesh.positions.subarray(i * 3, i * 3 + 3)) as Vec3,
+    ),
   ),
   ...subjectOf(ring).silhouette!,
 ]
@@ -49,7 +60,10 @@ describe('material library', () => {
 describe('resolveScene', () => {
   it('is deterministic and JSON-clean', () => {
     const a = resolveScene(scene({ look: 'black-acrylic', animation: { type: 'turntable' } }), ring)
-    const b = resolveScene(scene({ look: 'black-acrylic', animation: { type: 'turntable' } }), subjectOf(ring))
+    const b = resolveScene(
+      scene({ look: 'black-acrylic', animation: { type: 'turntable' } }),
+      subjectOf(ring),
+    )
     expect(a).toEqual(b)
     expect(JSON.parse(JSON.stringify(a))).toEqual(a)
   })
@@ -64,7 +78,10 @@ describe('resolveScene', () => {
 
   it('frames the silhouette inside the 55–75 % fill band, centred', () => {
     for (const preset of ['hero', 'front', 'side', 'top', 'three-quarter'] as const) {
-      const r = resolveScene(scene({ camera: { preset }, output: { width: 1600, height: 1200 } }), ring)
+      const r = resolveScene(
+        scene({ camera: { preset }, output: { width: 1600, height: 1200 } }),
+        ring,
+      )
       const { position, quaternion } = cameraPose(r.camera)
       const [tx, ty] = viewTangents(r.camera.focalLength, 1600 / 1200)
       const right = rotate(quaternion, [1, 0, 0])
@@ -98,18 +115,36 @@ describe('resolveScene', () => {
     const r = resolveScene(scene({ camera: { preset: 'hero', fStop: 4 } }), ring)
     expect(r.camera.fStop).toBe(4)
     expect(r.camera.focusDistance).toBeGreaterThan(r.camera.distance * 0.8)
-    const c = resolveScene(scene({ camera: { preset: 'custom', position: [0, -100, 0], target: [0, 0, 0] } }), ring)
+    const c = resolveScene(
+      scene({ camera: { preset: 'custom', position: [0, -100, 0], target: [0, 0, 0] } }),
+      ring,
+    )
     expect(c.camera.azimuth).toBeCloseTo(0)
     expect(c.camera.elevation).toBeCloseTo(0)
     expect(c.camera.distance).toBeCloseTo(100)
   })
 
   it('applies per-node overrides and assigns every part and stone', () => {
-    const r = resolveScene(scene({ overrides: { shank: { material: 'au18k-rose' }, center: { stone: 'sapphire-blue' } } }), ring)
+    const r = resolveScene(
+      scene({
+        overrides: { shank: { material: 'au18k-rose' }, center: { stone: 'sapphire-blue' } },
+      }),
+      ring,
+    )
     expect(r.assignments.shank).toBe(metalKey('au18k-rose', 'polished', 'none'))
     expect(r.assignments.head).toBe(metalKey('au18k-yellow', 'polished', 'none'))
     expect(r.assignments['center:0']).toBe('gem:sapphire-blue')
     for (const key of Object.values(r.assignments)) expect(r.materials[key]).toBeDefined()
+
+    const all = resolveScene(
+      scene({
+        overrides: { '*': { material: 'pt950', stone: 'ruby' }, head: { material: 'au18k-rose' } },
+      }),
+      ring,
+    )
+    expect(all.assignments.shank).toBe(metalKey('pt950', 'polished', 'none'))
+    expect(all.assignments.head).toBe(metalKey('au18k-rose', 'polished', 'none'))
+    expect(all.assignments['center:0']).toBe('gem:ruby')
 
     const bar = resolveScene(scene(), paveBar())
     expect(Object.keys(bar.assignments)).toHaveLength(301)
@@ -143,19 +178,30 @@ describe('resolveScene', () => {
     expect(resolveScene(scene({ look: 'black-acrylic' }), ring).ground.kind).toBe('reflective')
     const sweep = resolveScene(scene({ ground: 'sweep' }), ring).ground
     expect(sweep.kind === 'sweep' && sweep.z).toBe(ring.report.bounds.min[2])
-    expect(resolveScene(scene({ environment: { background: 'transparent' } }), ring).background).toEqual({ kind: 'transparent' })
-    expect(resolveScene(scene({ environment: { background: 'color', color: '#ff0000' } }), ring).background).toEqual({
+    expect(
+      resolveScene(scene({ environment: { background: 'transparent' } }), ring).background,
+    ).toEqual({ kind: 'transparent' })
+    expect(
+      resolveScene(scene({ environment: { background: 'color', color: '#ff0000' } }), ring)
+        .background,
+    ).toEqual({
       kind: 'solid',
       color: [1, 0, 0],
     })
   })
 
   it('caps resolution and sets bounces per tier', () => {
-    const preview = resolveScene(scene({ output: { quality: 'preview', width: 2000, height: 1000 } }), ring).output
+    const preview = resolveScene(
+      scene({ output: { quality: 'preview', width: 2000, height: 1000 } }),
+      ring,
+    ).output
     expect([preview.width, preview.height]).toEqual([768, 384])
     expect(preview.bounces.transmission).toBeGreaterThanOrEqual(24)
     expect(preview.bounces.glossy).toBeGreaterThanOrEqual(12)
-    const final = resolveScene(scene({ output: { quality: 'final', width: 3000, height: 3000 } }), ring).output
+    const final = resolveScene(
+      scene({ output: { quality: 'final', width: 3000, height: 3000 } }),
+      ring,
+    ).output
     expect(final.width).toBe(3000)
     expect(final.clampIndirect).toBe(0)
   })

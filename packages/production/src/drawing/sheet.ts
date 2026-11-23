@@ -8,7 +8,7 @@ import type { PieceFacts } from '../facts'
 import type { Units } from '../format'
 import { layoutView, type ViewLayout } from './annotate'
 import { type Annotation, extractAnnotations } from './dimensions'
-import { type SceneBody, type ViewLines, hiddenLines } from './hlr'
+import { hiddenLines, type SceneBody, type ViewLines } from './hlr'
 import { INK, type Item, type MeasureText, type Sheet, type TextStyle } from './model'
 import { sceneBodies } from './scene'
 import { sliceBodies } from './section'
@@ -32,7 +32,11 @@ export interface DrawingOptions {
   resolution?: number
 }
 
-export function buildDrawingSet(evaluation: Evaluation, facts: PieceFacts, opts: DrawingOptions): DrawingSet {
+export function buildDrawingSet(
+  evaluation: Evaluation,
+  facts: PieceFacts,
+  opts: DrawingOptions,
+): DrawingSet {
   const bodies: SceneBody[] = sceneBodies(evaluation)
   const views: Partial<Record<ViewId, ViewLines>> = {}
   const timings: Partial<Record<ViewId, number>> = {}
@@ -49,11 +53,20 @@ export function buildDrawingSet(evaluation: Evaluation, facts: PieceFacts, opts:
       loops = cut.loops
       views.section = hiddenLines(bodies, VIEWS.section, { resolution: res, extra: cut.world })
     } else {
-      views[id] = hiddenLines(bodies, VIEWS[id], { resolution: res, hidden: id !== 'iso' && showHidden })
+      views[id] = hiddenLines(bodies, VIEWS[id], {
+        resolution: res,
+        hidden: id !== 'iso' && showHidden,
+      })
     }
     timings[id] = performance.now() - t0
   }
-  const annotations = extractAnnotations({ facts, evaluation, views, units: opts.units, stampLocation: opts.stampLocation })
+  const annotations = extractAnnotations({
+    facts,
+    evaluation,
+    views,
+    units: opts.units,
+    stampLocation: opts.stampLocation,
+  })
   return { views, loops, annotations, timings }
 }
 
@@ -75,7 +88,8 @@ const GAP = 9
 const TITLE_H = 21
 const LABEL: TextStyle = { size: 6, weight: 'medium', color: INK.muted, tracking: 0.08 }
 
-export const scaleLabel = (s: number) => (s >= 1 ? `${Number(s.toFixed(2))}:1` : `1:${Number((1 / s).toFixed(2))}`)
+export const scaleLabel = (s: number) =>
+  s >= 1 ? `${Number(s.toFixed(2))}:1` : `1:${Number((1 / s).toFixed(2))}`
 
 interface Placed {
   layout: ViewLayout
@@ -93,9 +107,11 @@ export function composeArrangement(
   title: TitleInfo,
 ): { sheet: Sheet; scale: number } {
   const avail = { width: frame.width, height: frame.height - TITLE_H - 16 }
+  // Largest scale that fits; the isometric shrinks, then drops out (it is also the cover
+  // pictorial) before the orthographic views give up a scale step.
   let best: ReturnType<typeof arrange> | null = null
   for (const s of SCALES) {
-    for (const isoScale of [s, s * 0.6]) {
+    for (const isoScale of [s, s * 0.6, 0]) {
       const r = arrange(set, measure, s, isoScale, avail.width)
       best = r
       if (r.w <= avail.width && r.h <= avail.height) break
@@ -117,12 +133,21 @@ export function composeArrangement(
 function arrange(set: DrawingSet, measure: MeasureText, s: number, isoScale: number, maxW: number) {
   const lay = (id: ViewId, scale = s): ViewLayout | null =>
     set.views[id]
-      ? layoutView({ id, lines: set.views[id]!, annotations: set.annotations, scale, measure, ...(id === 'section' ? { loops: set.loops } : {}) })
+      ? layoutView({
+          id,
+          lines: set.views[id]!,
+          annotations: set.annotations,
+          scale,
+          measure,
+          ...(id === 'section' ? { loops: set.loops } : {}),
+        })
       : null
   const front = lay('front')!
   const side = lay('side')
   const top = lay('top')
-  const extras = [lay('section'), lay('iso', isoScale)].filter((v): v is ViewLayout => !!v)
+  const extras = [lay('section'), isoScale > 0 ? lay('iso', isoScale) : null].filter(
+    (v): v is ViewLayout => !!v,
+  )
   // Every assignment of the free views (section, iso) to the top, middle or a third row; the
   // shortest arrangement that fits the width wins.
   let best: ReturnType<typeof rows> | null = null
@@ -137,7 +162,13 @@ function arrange(set: DrawingSet, measure: MeasureText, s: number, isoScale: num
 
 type Cell = { layout: ViewLayout; x: number }
 
-function rows(front: ViewLayout, side: ViewLayout | null, top: ViewLayout | null, extras: ViewLayout[], rowOf: number[]) {
+function rows(
+  front: ViewLayout,
+  side: ViewLayout | null,
+  top: ViewLayout | null,
+  extras: ViewLayout[],
+  rowOf: number[],
+) {
   const LABEL_H = 7
   // Column 1 shares the model x-origin between top and front (projection alignment).
   const colL = Math.max(-front.box.minX, top ? -top.box.minX : 0)
@@ -150,7 +181,9 @@ function rows(front: ViewLayout, side: ViewLayout | null, top: ViewLayout | null
     width[r]! += gap + v.box.maxX - v.box.minX
   }
   if (side) append(1, side)
-  extras.forEach((v, i) => append(rowOf[i]!, v))
+  extras.forEach((v, i) => {
+    append(rowOf[i]!, v)
+  })
   // The third row has no projection ties: centre it.
   const shift = (Math.max(...width) - width[2]!) / 2
   for (const c of grid[2]!) c.x += shift
@@ -161,7 +194,8 @@ function rows(front: ViewLayout, side: ViewLayout | null, top: ViewLayout | null
     if (!row.length) continue
     const topY = Math.min(...row.map((c) => c.layout.box.minY))
     const bottom = Math.max(...row.map((c) => c.layout.box.maxY))
-    for (const c of row) placed.push({ layout: c.layout, dx: c.x, dy: y - topY, labelY: y + bottom - topY + 5 })
+    for (const c of row)
+      placed.push({ layout: c.layout, dx: c.x, dy: y - topY, labelY: y + bottom - topY + 5 })
     y += bottom - topY + LABEL_H + GAP
   }
   return { placed, w: Math.max(...width), h: y - GAP }
@@ -197,18 +231,30 @@ export function translate(items: readonly Item[], dx: number, dy: number): Item[
         return { ...it, pts: it.pts.map((v, i) => v + (i % 2 ? dy : dx)) }
       case 'circle':
         return { ...it, cx: it.cx + dx, cy: it.cy + dy }
-      case 'rect':
-      case 'text':
+      default:
         return { ...it, x: it.x + dx, y: it.y + dy }
     }
   })
 }
 
 /** One view on its own sheet with a compact title block. */
-export function composeViewSheet(set: DrawingSet, id: ViewId, scale: number, measure: MeasureText, title: TitleInfo): Sheet | null {
+export function composeViewSheet(
+  set: DrawingSet,
+  id: ViewId,
+  scale: number,
+  measure: MeasureText,
+  title: TitleInfo,
+): Sheet | null {
   const lines = set.views[id]
   if (!lines) return null
-  const layout = layoutView({ id, lines, annotations: set.annotations, scale, measure, ...(id === 'section' ? { loops: set.loops } : {}) })
+  const layout = layoutView({
+    id,
+    lines,
+    annotations: set.annotations,
+    scale,
+    measure,
+    ...(id === 'section' ? { loops: set.loops } : {}),
+  })
   const b = layout.box
   const margin = 14
   const width = Math.max(b.maxX - b.minX + 2 * margin, 190)
@@ -218,36 +264,83 @@ export function composeViewSheet(set: DrawingSet, id: ViewId, scale: number, mea
   const dy = margin - b.minY
   const items = translate(layout.items, dx, dy)
   items.push(viewLabel({ layout, dx, dy, labelY: dy + b.maxY + 5 }, labelFor(id, null), 0, 0))
-  items.push(...titleBlock(title, scale, width - 16, contentH, measure).map((it) => translate([it], 8, 0)[0]!))
+  items.push(
+    ...titleBlock(title, scale, width - 16, contentH, measure).map(
+      (it) => translate([it], 8, 0)[0]!,
+    ),
+  )
   return { width, height, items }
 }
 
 /** Title block: identity, revision, scale, units, projection and the shrinkage declaration. */
-function titleBlock(t: TitleInfo, scale: number, width: number, y: number, measure: MeasureText): Item[] {
+function titleBlock(
+  t: TitleInfo,
+  scale: number,
+  width: number,
+  y: number,
+  measure: MeasureText,
+): Item[] {
   const items: Item[] = []
   const h = TITLE_H
   items.push({ t: 'rect', x: 0, y, w: width, h, pen: 'frame' })
   const row = 12
   items.push({ t: 'lines', pen: 'dim', lines: [[0, y + row, width, y + row]] })
   const col = (fr: number) => fr * width
-  const cells: { x0: number; x1: number; y0: number; label: string; value: string; style?: TextStyle }[] = [
-    { x0: 0, x1: col(0.44), y0: y, label: t.subtitle, value: t.title, style: { size: 13, family: 'serif' } },
+  const cells: {
+    x0: number
+    x1: number
+    y0: number
+    label: string
+    value: string
+    style?: TextStyle
+  }[] = [
+    {
+      x0: 0,
+      x1: col(0.44),
+      y0: y,
+      label: t.subtitle,
+      value: t.title,
+      style: { size: 13, family: 'serif' },
+    },
     { x0: col(0.44), x1: col(0.62), y0: y, label: 'SKU', value: t.sku },
     { x0: col(0.62), x1: col(0.7), y0: y, label: 'Rev', value: t.revision },
     { x0: col(0.7), x1: col(0.84), y0: y, label: 'Date', value: t.date },
     { x0: col(0.84), x1: width, y0: y, label: 'Scale', value: scaleLabel(scale) },
     { x0: 0, x1: col(0.44), y0: y + row, label: 'Drawn', value: `${t.author} · ${t.org}` },
     { x0: col(0.44), x1: col(0.7), y0: y + row, label: 'Material', value: t.material },
-    { x0: col(0.7), x1: col(0.84), y0: y + row, label: 'Units', value: t.units === 'mm' ? 'mm' : 'in [mm]' },
+    {
+      x0: col(0.7),
+      x1: col(0.84),
+      y0: y + row,
+      label: 'Units',
+      value: t.units === 'mm' ? 'mm' : 'in [mm]',
+    },
     { x0: col(0.84), x1: width, y0: y + row, label: 'Projection', value: '' },
   ]
   for (const c of cells) {
-    if (c.x0 > 0) items.push({ t: 'lines', pen: 'dim', lines: [[c.x0, c.y0, c.x0, c.y0 + (c.y0 === y ? row : h - row)]] })
+    if (c.x0 > 0)
+      items.push({
+        t: 'lines',
+        pen: 'dim',
+        lines: [[c.x0, c.y0, c.x0, c.y0 + (c.y0 === y ? row : h - row)]],
+      })
     const tall = c.y0 === y
-    items.push({ t: 'text', x: c.x0 + 2, y: c.y0 + 3.4, text: c.label.toUpperCase(), style: { size: 4.75, color: INK.subtle, weight: 'medium', tracking: 0.08 } })
+    items.push({
+      t: 'text',
+      x: c.x0 + 2,
+      y: c.y0 + 3.4,
+      text: c.label.toUpperCase(),
+      style: { size: 4.75, color: INK.subtle, weight: 'medium', tracking: 0.08 },
+    })
     const style = c.style ?? { size: tall ? 8.5 : 6.5 }
     const maxW = c.x1 - c.x0 - 4
-    items.push({ t: 'text', x: c.x0 + 2, y: c.y0 + (tall ? 9.6 : 7.4), text: fit(c.value, style, maxW, measure), style })
+    items.push({
+      t: 'text',
+      x: c.x0 + 2,
+      y: c.y0 + (tall ? 9.6 : 7.4),
+      text: fit(c.value, style, maxW, measure),
+      style,
+    })
   }
   items.push(...projectionSymbol(col(0.84) + 13, y + row + 5.9))
   // Scale bar and the shrinkage statement sit just above the block.
@@ -279,11 +372,26 @@ function scaleBar(scale: number, x: number, y: number): Item[] {
   const items: Item[] = []
   const h = 1.1
   for (let i = 0; i * seg < len; i++) {
-    items.push({ t: 'rect', x: x + i * seg * scale, y: y - h, w: seg * scale, h, pen: 'dim', ...(i % 2 === 0 ? { fill: INK.fg } : { fill: INK.paper }) })
+    items.push({
+      t: 'rect',
+      x: x + i * seg * scale,
+      y: y - h,
+      w: seg * scale,
+      h,
+      pen: 'dim',
+      ...(i % 2 === 0 ? { fill: INK.fg } : { fill: INK.paper }),
+    })
   }
   const lab: TextStyle = { size: 5, color: INK.muted }
   items.push({ t: 'text', x, y: y - h - 1, text: '0', style: lab, anchor: 'middle' })
-  items.push({ t: 'text', x: x + len * scale, y: y - h - 1, text: `${len} mm`, style: lab, anchor: 'middle' })
+  items.push({
+    t: 'text',
+    x: x + len * scale,
+    y: y - h - 1,
+    text: `${len} mm`,
+    style: lab,
+    anchor: 'middle',
+  })
   return items
 }
 
@@ -298,9 +406,37 @@ function projectionSymbol(cx: number, cy: number): Item[] {
     closed: true,
     lines: [[x0, cy - h / 2, x0 + 5.5, cy - h / 4, x0 + 5.5, cy + h / 4, x0, cy + h / 2]],
   })
-  items.push({ t: 'lines', pen: 'center', lines: [[x0 - 1, cy, x0 + 6.5, cy], [cx - 1.2, cy, cx + 3.6 + 1.2, cy]] })
+  items.push({
+    t: 'lines',
+    pen: 'center',
+    lines: [
+      [x0 - 1, cy, x0 + 6.5, cy],
+      [cx - 1.2, cy, cx + 3.6 + 1.2, cy],
+    ],
+  })
   items.push({ t: 'circle', cx: cx + 1.2, cy, r: h / 2, pen: 'dim' })
   items.push({ t: 'circle', cx: cx + 1.2, cy, r: h / 4, pen: 'dim' })
   return items
 }
 
+/** One view without annotations, scaled to fit a box: the pictorial on the spec sheet cover. */
+export function fitView(
+  set: DrawingSet,
+  id: ViewId,
+  width: number,
+  height: number,
+  measure: MeasureText,
+): Sheet | null {
+  const lines = set.views[id]
+  if (!lines) return null
+  const b = lines.bounds
+  const scale = Math.min(width / (b.maxX - b.minX), height / (b.maxY - b.minY))
+  const layout = layoutView({ id, lines, annotations: [], scale, measure })
+  const g = layout.geometry
+  const items = translate(
+    layout.items,
+    (width - (g.maxX - g.minX)) / 2 - g.minX,
+    (height - (g.maxY - g.minY)) / 2 - g.minY,
+  )
+  return { width, height, items }
+}

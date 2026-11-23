@@ -44,12 +44,20 @@ afterAll(() => Promise.all(dirs.map((d) => rm(d, { recursive: true, force: true 
 describe.skipIf(!capability.available)('renderWithBlender', () => {
   it('renders a still and measures it', async () => {
     const evaluation = solitaireRing()
-    const scene = RenderSceneSchema.parse({ look: 'catalog-white', output: { quality: 'preview', width: 256, height: 256 } })
+    const scene = RenderSceneSchema.parse({
+      look: 'catalog-white',
+      output: { quality: 'preview', width: 256, height: 256 },
+    })
     const resolved = resolveScene(scene, evaluation)
     const outDir = await mkdtemp(join(tmpdir(), 'pave-render-'))
     dirs.push(outDir)
     const progress: number[] = []
-    const result = await renderWithBlender({ resolved, glb: writeGlb(evaluation), outDir, onProgress: (p) => progress.push(p) })
+    const result = await renderWithBlender({
+      resolved,
+      glb: writeGlb(evaluation),
+      outDir,
+      onProgress: (p) => progress.push(p),
+    })
 
     const png = await readFile(result.files.image!)
     expect([...png.subarray(1, 4)].map((c) => String.fromCharCode(c)).join('')).toBe('PNG')
@@ -61,11 +69,19 @@ describe.skipIf(!capability.available)('renderWithBlender', () => {
 
   it('rejects when aborted', async () => {
     const evaluation = solitaireRing()
-    const resolved = resolveScene(RenderSceneSchema.parse({ output: { quality: 'preview', width: 256, height: 256 } }), evaluation)
+    const resolved = resolveScene(
+      RenderSceneSchema.parse({ output: { quality: 'preview', width: 256, height: 256 } }),
+      evaluation,
+    )
     const outDir = await mkdtemp(join(tmpdir(), 'pave-render-'))
     dirs.push(outDir)
     const controller = new AbortController()
-    const job = renderWithBlender({ resolved, glb: writeGlb(evaluation), outDir, signal: controller.signal })
+    const job = renderWithBlender({
+      resolved,
+      glb: writeGlb(evaluation),
+      outDir,
+      signal: controller.signal,
+    })
     setTimeout(() => controller.abort(), 500)
     await expect(job).rejects.toThrow(/aborted/)
   }, 60_000)

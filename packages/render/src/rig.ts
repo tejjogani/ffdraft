@@ -16,7 +16,13 @@ const tint = (kelvin: number | undefined): Rgb => (kelvin ? kelvinToRgb(kelvin) 
 /** Golden-ratio sequence: an even, deterministic spread of sparkle elevations. */
 const PHI = 0.6180339887
 
-function panel(p: RigPanel, target: Vec3, radius: number, camera: CameraAngles, intensity: number): ResolvedPanel {
+function panel(
+  p: RigPanel,
+  target: Vec3,
+  radius: number,
+  camera: CameraAngles,
+  intensity: number,
+): ResolvedPanel {
   const azimuth = camera.azimuth + p.azimuth
   const elevation = Math.min(90, p.elevation + (p.followCamera ? camera.elevation : 0))
   const position = add(target, scale(orbitDirection(azimuth, elevation), p.distance * radius))
@@ -32,7 +38,13 @@ function panel(p: RigPanel, target: Vec3, radius: number, camera: CameraAngles, 
   }
 }
 
-function sparkles(look: Look, target: Vec3, radius: number, cameraAzimuth: number, amount: number): ResolvedSparkle[] {
+function sparkles(
+  look: Look,
+  target: Vec3,
+  radius: number,
+  cameraAzimuth: number,
+  amount: number,
+): ResolvedSparkle[] {
   const s = look.sparkle
   if (amount <= 0) return []
   const r = s.radius * radius

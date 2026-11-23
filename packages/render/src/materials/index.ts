@@ -2,10 +2,22 @@
  * Resolves schema ids to explicit, renderer-neutral material parameters. Both the three.js
  * factories and the Blender worker consume only these resolved records, never the tables.
  */
-import { type FinishId, GEM_MATERIALS, type GemMaterialId, type MetalId, type PlatingId } from '@pave/schema'
+import {
+  type FinishId,
+  GEM_MATERIALS,
+  type GemMaterialId,
+  type MetalId,
+  type PlatingId,
+} from '@pave/schema'
 import type { Rgb } from '../color'
 import { GEM_APPEARANCE } from './gems'
-import { BRUSH_AXIS, FINISH_APPEARANCE, METAL_APPEARANCE, PLATING_APPEARANCE, type Relief } from './metals'
+import {
+  BRUSH_AXIS,
+  FINISH_APPEARANCE,
+  METAL_APPEARANCE,
+  PLATING_APPEARANCE,
+  type Relief,
+} from './metals'
 
 export { GEM_APPEARANCE, type GemAppearance, type SurfaceGem, type TransparentGem } from './gems'
 export {

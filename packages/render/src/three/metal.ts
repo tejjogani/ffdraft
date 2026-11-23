@@ -7,8 +7,15 @@
  * below viewport resolution and is left to the roughness.
  */
 import type { FinishId, MetalId, PlatingId } from '@pave/schema'
-import { Color, LinearSRGBColorSpace, MeshPhysicalMaterial, ShaderChunk, Vector3, type WebGLProgramParametersWithUniforms } from 'three'
-import { metalMaterial, type MetalMaterial } from '../materials'
+import {
+  Color,
+  LinearSRGBColorSpace,
+  MeshPhysicalMaterial,
+  ShaderChunk,
+  Vector3,
+  type WebGLProgramParametersWithUniforms,
+} from 'three'
+import { type MetalMaterial, metalMaterial } from '../materials'
 
 const BRUSH_FRAME = /* glsl */ `
 uniform vec3 paveBrushAxis;
@@ -51,7 +58,13 @@ function patch(m: MetalMaterial) {
     if (m.anisotropy > 0) {
       shader.uniforms.paveBrushAxis = { value: new Vector3(...m.brushAxis) }
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <normal_fragment_begin>', ShaderChunk.normal_fragment_begin.replace(/getTangentFrame\([\s\S]*?\);/, 'paveBrushFrame( normal );'))
+        .replace(
+          '#include <normal_fragment_begin>',
+          ShaderChunk.normal_fragment_begin.replace(
+            /getTangentFrame\([\s\S]*?\);/,
+            'paveBrushFrame( normal );',
+          ),
+        )
         .replace('void main() {', `${BRUSH_FRAME}\nvoid main() {`)
     }
     if (m.relief?.kind === 'cells') {
@@ -60,16 +73,18 @@ function patch(m: MetalMaterial) {
       shader.vertexShader = shader.vertexShader
         .replace('void main() {', 'varying vec3 vPaveObject;\nvoid main() {')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPaveObject = position;')
-      shader.fragmentShader = shader.fragmentShader.replace('void main() {', `${CELLS}\nvoid main() {`).replace(
-        '#include <normal_fragment_maps>',
-        `#include <normal_fragment_maps>
+      shader.fragmentShader = shader.fragmentShader
+        .replace('void main() {', `${CELLS}\nvoid main() {`)
+        .replace(
+          '#include <normal_fragment_maps>',
+          `#include <normal_fragment_maps>
         {
           // A spherical dimple per cell: the surface tilts toward the cell centre.
           vec3 offset = paveCellOffset( vPaveObject / paveCellSize );
           vec3 tilt = normalize( normalMatrix * offset ) * paveCellStrength * length( offset );
           normal = normalize( normal + tilt - dot( tilt, normal ) * normal );
         }`,
-      )
+        )
     }
   }
 }
@@ -88,6 +103,10 @@ export function createMetalMaterialFrom(m: MetalMaterial): MeshPhysicalMaterial 
   return material
 }
 
-export function createMetalMaterial(id: MetalId, finish: FinishId, plating: PlatingId): MeshPhysicalMaterial {
+export function createMetalMaterial(
+  id: MetalId,
+  finish: FinishId,
+  plating: PlatingId,
+): MeshPhysicalMaterial {
   return createMetalMaterialFrom(metalMaterial(id, finish, plating))
 }

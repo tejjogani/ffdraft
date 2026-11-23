@@ -21,6 +21,12 @@ export interface Outline {
   radius(phi: number): number
   /** Directions of sharp corners (points, cut-corner vertices). Empty for smooth outlines. */
   corners: number[]
+  /**
+   * Where a setter puts claws first: the points that would chip (pear, marquise and heart tips,
+   * the corners of a princess or trillion) and the cut corners of an emerald. Empty for shapes
+   * whose claws are simply spaced evenly.
+   */
+  prongs: { phi: number; point: boolean }[]
   /** Directions of the main (kite) facets of a brilliant, ascending in [0, 2π). */
   mains: number[]
   /**
@@ -116,6 +122,7 @@ function ellipse(length: number): Outline {
     centre: [0, 0],
     radius: (phi) => (a * b) / Math.hypot(b * Math.cos(phi), a * Math.sin(phi)),
     corners: [],
+    prongs: [],
     ...evenMains(8),
   }
 }
@@ -129,6 +136,7 @@ function cushion(length: number): Outline {
     centre: [0, 0],
     radius: (phi) => (Math.abs(Math.cos(phi) / a) ** 4 + Math.abs(Math.sin(phi) / b) ** 4) ** -0.25,
     corners: [],
+    prongs: [],
     // Mains on the corners (the diagonals of the bounding box) and the middles of the sides.
     ...mainsAt([0, 0], [[a, b], [-a, b], [-a, -b], [a, -b], [a, 0], [0, b], [-a, 0], [0, -b]]),
   }
@@ -147,6 +155,7 @@ function rectangle(length: number, cut: number): Outline {
       centre,
       radius: polar(centre, pts.map((p, i) => ({ type: 'line', a: p, b: pts[(i + 1) % 4]! }))),
       corners: pts.map((p) => angleTo(centre, p)).sort((x, y) => x - y),
+      prongs: pts.map((p) => ({ phi: angleTo(centre, p), point: true })),
       ...polygonMains(centre, pts),
     }
   }
@@ -160,6 +169,12 @@ function rectangle(length: number, cut: number): Outline {
     centre,
     radius: polar(centre, pts.map((p, i) => ({ type: 'line', a: p, b: pts[(i + 1) % 8]! }))),
     corners: pts.map((p) => angleTo(centre, p)).sort((x, y) => x - y),
+    // Claws sit on the four corner cuts (every second edge, starting with the upper right).
+    prongs: [1, 3, 5, 7].map((i) => {
+      const p = pts[i]!
+      const q = pts[(i + 1) % 8]!
+      return { phi: angleTo(centre, [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]), point: false }
+    }),
     ...polygonMains(centre, pts),
   }
 }
@@ -180,6 +195,7 @@ function pear(length: number): Outline {
       { type: 'arc', c: [big - 0.5, cy], r: big, keep: (p) => p[1] <= cy && p[0] <= 0 },
     ]),
     corners: [angleTo(centre, tip)],
+    prongs: [{ phi: angleTo(centre, tip), point: true }],
     ...evenMains(8, -Math.PI / 2),
   }
 }
@@ -195,6 +211,7 @@ function marquise(length: number): Outline {
       { type: 'arc', c: [big - 0.5, 0], r: big, keep: (p) => p[0] <= 0 },
     ]),
     corners: [Math.PI / 2, (3 * Math.PI) / 2],
+    prongs: [{ phi: Math.PI / 2, point: true }, { phi: (3 * Math.PI) / 2, point: true }],
     ...evenMains(8),
   }
 }
@@ -219,6 +236,7 @@ function heart(length: number): Outline {
       { type: 'arc', c: [big - 0.5, cy], r: big, keep: (p) => p[1] <= cy && p[0] <= 0 },
     ]),
     corners: [angleTo(centre, cleft), angleTo(centre, [0, -length / 2])],
+    prongs: [{ phi: angleTo(centre, [0, -length / 2]), point: true }],
     ...evenMains(8, Math.PI / 2),
   }
 }
@@ -255,6 +273,7 @@ function triangle(length: number): Outline {
     centre,
     radius: polar(centre, primitives),
     corners: pts.map((p) => angleTo(centre, p)).sort((a, b) => a - b),
+    prongs: pts.map((p) => ({ phi: angleTo(centre, p), point: true })),
     // The sides are bowed, so mains in their middles are real facets.
     ...mainsAt(centre, [...pts, ...sideMids]),
   }

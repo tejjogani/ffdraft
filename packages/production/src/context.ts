@@ -4,11 +4,16 @@
  * reads from this, so the BOM, stones.csv, cost estimate and spec sheet agree to the gram.
  */
 import type { StoneLot } from '@pave/kernel/types'
-import { type GemMaterialId, type StoneSourcing, gemDims } from '@pave/schema'
-import { type MetalRequirement, type StoneRequirement, metalRequirements, stoneRequirements } from '@pave/sourcing'
+import { type GemMaterialId, gemDims, type StoneSourcing } from '@pave/schema'
+import {
+  type MetalRequirement,
+  metalRequirements,
+  type StoneRequirement,
+  stoneRequirements,
+} from '@pave/sourcing'
+import { type ManufacturerProfile, resolveProfile } from './dfm/profile'
 import { lotKey } from './drawing/dimensions'
 import { type PieceFacts, pieceFacts } from './facts'
-import { type ManufacturerProfile, resolveProfile } from './dfm/profile'
 import type { Units } from './format'
 import { skuSlug } from './paths'
 import type { BuildInput } from './types'
@@ -40,7 +45,10 @@ export interface PackageContext {
 }
 
 /** FTC Jewelry Guides vocabulary: lab-grown diamonds, lab-created gems, simulants. */
-export function stoneOrigin(material: GemMaterialId, declared: StoneRequirement['origin']): StoneOrigin {
+export function stoneOrigin(
+  material: GemMaterialId,
+  declared: StoneRequirement['origin'],
+): StoneOrigin {
   if (material === 'diamond-lab') return 'lab-grown'
   if (material === 'moissanite') return 'lab-created'
   if (material === 'cz') return 'simulant'
@@ -82,4 +90,12 @@ export function createContext(input: BuildInput): PackageContext {
     lots,
     metals: metalRequirements(evaluation.report, profile.castingAllowancePct),
   }
+}
+
+/** Where the fineness and maker's marks go, unless the designer said. */
+export function stampLocation(ctx: PackageContext): string {
+  return (
+    ctx.input.options.marks?.location ??
+    (ctx.facts.ring ? 'Inside shank at base' : 'Back of body, lower centre')
+  )
 }

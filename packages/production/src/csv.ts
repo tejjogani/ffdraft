@@ -17,7 +17,7 @@ export function csvCell(v: Cell): string {
 }
 
 export function toCsv(header: readonly string[], rows: readonly (readonly Cell[])[]): string {
-  return [header, ...rows].map((r) => r.map(csvCell).join(',')).join('\r\n') + '\r\n'
+  return `${[header, ...rows].map((r) => r.map(csvCell).join(',')).join('\r\n')}\r\n`
 }
 
 /** UTF-8 bytes with a BOM. */

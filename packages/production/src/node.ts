@@ -6,7 +6,7 @@
  */
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { type BuildInput, type ProductionPackage, buildProductionPackage as build } from './bundle'
+import { type BuildInput, buildProductionPackage as build, type ProductionPackage } from './bundle'
 import { FONT_FILES, type FontSet } from './fonts'
 
 export * from './index'

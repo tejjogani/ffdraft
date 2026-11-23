@@ -17,4 +17,5 @@ export function zUpGroup(name: string): Group {
 }
 
 export const toThreePoint = (p: Vec3): Vector3 => new Vector3(p[0], p[2], -p[1])
-export const toThreeQuat = (q: Quat): Quaternion => Z_UP.clone().multiply(new Quaternion(q[0], q[1], q[2], q[3]))
+export const toThreeQuat = (q: Quat): Quaternion =>
+  Z_UP.clone().multiply(new Quaternion(q[0], q[1], q[2], q[3]))

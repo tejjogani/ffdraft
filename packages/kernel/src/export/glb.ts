@@ -126,7 +126,10 @@ export function writeGlb(evaluation: Evaluation, options: GlbOptions = {}): Uint
       name,
       primitives: [
         {
-          attributes: { POSITION: bin.vec3(data.positions, true), NORMAL: bin.vec3(data.normals, false) },
+          attributes: {
+            POSITION: bin.vec3(data.positions, true),
+            NORMAL: bin.vec3(data.normals, false),
+          },
           indices: bin.indices(data.indices),
           material: materialId,
         },
@@ -161,7 +164,8 @@ export function writeGlb(evaluation: Evaluation, options: GlbOptions = {}): Uint
       let meshId = gemMesh.get(key)
       if (meshId === undefined) {
         const data = evaluation.gemMeshes[stone.meshKey]
-        if (!data) throw new Error(`Stone ${stone.id} references missing gem mesh "${stone.meshKey}"`)
+        if (!data)
+          throw new Error(`Stone ${stone.id} references missing gem mesh "${stone.meshKey}"`)
         meshId = mesh(stone.meshKey, data, material(stone.stone, false))
         gemMesh.set(key, meshId)
       }
@@ -169,7 +173,13 @@ export function writeGlb(evaluation: Evaluation, options: GlbOptions = {}): Uint
         name: stone.id,
         mesh: meshId,
         matrix: stone.matrix,
-        extras: { nodeId: stone.nodeId, role: 'gem', stone: stone.stone, cut: stone.cut, carat: stone.carat },
+        extras: {
+          nodeId: stone.nodeId,
+          role: 'gem',
+          stone: stone.stone,
+          cut: stone.cut,
+          carat: stone.carat,
+        },
       })
     }
   }

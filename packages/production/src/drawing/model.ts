@@ -7,7 +7,7 @@
 /** Line styles (ISO 128-2 type and weight, scaled for small-format jewellery sheets). */
 export const PENS = {
   outline: { width: 0.3, color: '#1c1b1a' },
-  stone: { width: 0.13, color: '#4a4845' },
+  stone: { width: 0.15, color: '#3a3836' },
   hidden: { width: 0.13, color: '#97958f', dash: [1.1, 0.7] },
   hatch: { width: 0.08, color: '#65635f' },
   center: { width: 0.1, color: '#97958f', dash: [5, 1, 0.8, 1] },
@@ -15,7 +15,6 @@ export const PENS = {
   dim: { width: 0.1, color: '#1c1b1a' },
   leader: { width: 0.1, color: '#4a4845' },
   frame: { width: 0.25, color: '#1c1b1a' },
-  rule: { width: 0.1, color: '#c6c4bf' },
 } as const satisfies Record<string, { width: number; color: string; dash?: readonly number[] }>
 export type Pen = keyof typeof PENS
 
@@ -41,6 +40,8 @@ export interface TextStyle {
   color?: string
   /** Letter spacing in em (small caps-style labels). */
   tracking?: number
+  /** Tabular figures (Inter `tnum`) for numbers that should align. */
+  tabular?: boolean
 }
 
 export type Item =

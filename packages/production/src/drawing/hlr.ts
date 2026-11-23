@@ -12,7 +12,7 @@
  * view, where exact analytic HLR would be quadratic in the worst case.
  */
 import type { EdgeTable } from '../geometry/mesh'
-import { SegmentBuffer, chainSegments } from './polyline'
+import { chainSegments, SegmentBuffer } from './polyline'
 import type { ViewDef } from './views'
 
 export interface SceneBody {
@@ -58,6 +58,8 @@ export interface HlrOptions {
 const METAL = 0
 const STONE = 1
 const HIDDEN = 2
+/** Sample state: visible but lying on a nearer drawn line. */
+const DUPLICATE = 2
 
 /** Growable buffer of 3D candidate segments in view space. */
 class Buf {
@@ -97,7 +99,11 @@ function projectAll(p: Float32Array, v: ViewDef): Float32Array {
   return out
 }
 
-export function hiddenLines(bodies: readonly SceneBody[], view: ViewDef, opts: HlrOptions = {}): ViewLines {
+export function hiddenLines(
+  bodies: readonly SceneBody[],
+  view: ViewDef,
+  opts: HlrOptions = {},
+): ViewLines {
   const clip = view.clipDepth ?? Number.POSITIVE_INFINITY
   const res = opts.resolution ?? 2048
   const projected = bodies.map((b) => projectAll(b.positions, view))
@@ -118,7 +124,8 @@ export function hiddenLines(bodies: readonly SceneBody[], view: ViewDef, opts: H
       if (y > maxY) maxY = y
     }
   }
-  if (!Number.isFinite(minX)) return { metal: [], stones: [], hidden: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } }
+  if (!Number.isFinite(minX))
+    return { metal: [], stones: [], hidden: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } }
 
   const px = Math.max(maxX - minX, maxY - minY, 1e-3) / res
   // A three-pixel apron keeps every neighbourhood lookup inside the buffer.
@@ -129,7 +136,9 @@ export function hiddenLines(bodies: readonly SceneBody[], view: ViewDef, opts: H
   const depth = new Float32Array(W * H).fill(Number.NEGATIVE_INFINITY)
   const back = Number.isFinite(clip) ? new Uint8Array(W * H) : null
 
-  bodies.forEach((b, bi) => rasterize(projected[bi]!, b.indices, depth, back, W, H, ox, oy, px, clip))
+  bodies.forEach((b, bi) => {
+    rasterize(projected[bi]!, b.indices, depth, back, W, H, ox, oy, px, clip)
+  })
   if (back) {
     // Capping: where the nearest surface faces away we are looking into solid material, i.e. at
     // the cut face, which occludes everything behind it.
@@ -140,7 +149,16 @@ export function hiddenLines(bodies: readonly SceneBody[], view: ViewDef, opts: H
   const cls: number[] = []
   /** Per candidate: neighbourhood radius in pixels for the visibility test. */
   const reach: number[] = []
-  const add = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, c: number, r = 1) => {
+  const add = (
+    x0: number,
+    y0: number,
+    z0: number,
+    x1: number,
+    y1: number,
+    z1: number,
+    c: number,
+    r = 1,
+  ) => {
     cand.push6(x0, y0, z0, x1, y1, z1)
     cls.push(c)
     reach.push(r)
@@ -189,56 +207,91 @@ export function hiddenLines(bodies: readonly SceneBody[], view: ViewDef, opts: H
     return z + eps >= m
   }
 
+  // Two passes over the candidates. The first stamps the depth of every visible sample into a
+  // line buffer; the second drops visible samples lying on a nearer line — a back edge that
+  // projects exactly onto a front edge is the same drawn line, not a second one.
+  const lineDepth = new Float32Array(W * H).fill(Number.NEGATIVE_INFINITY)
+  const dupEps = 10 * px
+  const nearerLine = (x: number, y: number, z: number): boolean => {
+    const i = Math.floor((x - ox) / px)
+    const j = Math.floor((y - oy) / px)
+    for (let dj = -1; dj <= 1; dj++)
+      for (let di = -1; di <= 1; di++)
+        if (lineDepth[(j + dj) * W + i + di]! > z + dupEps) return true
+    return false
+  }
   let states = new Uint8Array(256)
   const d = cand.data
-  for (let s = 0; s < cls.length; s++) {
-    let x0 = d[s * 6]!
-    let y0 = d[s * 6 + 1]!
-    let z0 = d[s * 6 + 2]!
-    let x1 = d[s * 6 + 3]!
-    let y1 = d[s * 6 + 4]!
-    let z1 = d[s * 6 + 5]!
-    if (z0 > clip && z1 > clip) continue
-    if (z0 > clip || z1 > clip) {
-      const t = (clip - z0) / (z1 - z0)
-      const cx = x0 + (x1 - x0) * t
-      const cy = y0 + (y1 - y0) * t
-      if (z0 > clip) {
-        x0 = cx
-        y0 = cy
-        z0 = clip
-      } else {
-        x1 = cx
-        y1 = cy
-        z1 = clip
+  for (const pass of [0, 1] as const) {
+    for (let s = 0; s < cls.length; s++) {
+      let x0 = d[s * 6]!
+      let y0 = d[s * 6 + 1]!
+      let z0 = d[s * 6 + 2]!
+      let x1 = d[s * 6 + 3]!
+      let y1 = d[s * 6 + 4]!
+      let z1 = d[s * 6 + 5]!
+      if (z0 > clip && z1 > clip) continue
+      if (z0 > clip || z1 > clip) {
+        const t = (clip - z0) / (z1 - z0)
+        const cx = x0 + (x1 - x0) * t
+        const cy = y0 + (y1 - y0) * t
+        if (z0 > clip) {
+          x0 = cx
+          y0 = cy
+          z0 = clip
+        } else {
+          x1 = cx
+          y1 = cy
+          z1 = clip
+        }
       }
-    }
-    const len = Math.hypot(x1 - x0, y1 - y0) / px
-    if (len < 0.05) continue
-    const n = Math.max(1, Math.ceil(len / 0.7))
-    if (states.length < n + 1) states = new Uint8Array((n + 1) * 2)
-    const r = reach[s]!
-    for (let k = 0; k <= n; k++) {
-      const t = k / n
-      states[k] = visibleAt(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, z0 + (z1 - z0) * t, r) ? 1 : 0
-    }
-    // A lone sample disagreeing with both neighbours is depth-buffer noise, not an occluder.
-    for (let k = 1; k < n; k++) if (states[k - 1] === states[k + 1] && states[k] !== states[k - 1]) states[k] = states[k - 1]!
-    const visCls = cls[s]!
-    let start = 0
-    for (let k = 1; k <= n + 1; k++) {
-      if (k <= n && states[k] === states[start]) continue
-      const ta = start === 0 ? 0 : (start - 0.5) / n
-      const tb = k > n ? 1 : (k - 0.5) / n
-      const target = states[start] ? visCls : visCls === METAL ? HIDDEN : -1
-      if (target >= 0 && (target !== HIDDEN || opts.hidden)) {
-        out[target]!.push(x0 + (x1 - x0) * ta, y0 + (y1 - y0) * ta, x0 + (x1 - x0) * tb, y0 + (y1 - y0) * tb)
+      const len = Math.hypot(x1 - x0, y1 - y0) / px
+      if (len < 0.05) continue
+      const n = Math.max(1, Math.ceil(len / 0.7))
+      if (states.length < n + 1) states = new Uint8Array((n + 1) * 2)
+      const r = reach[s]!
+      for (let k = 0; k <= n; k++) {
+        const t = k / n
+        const x = x0 + (x1 - x0) * t
+        const y = y0 + (y1 - y0) * t
+        const z = z0 + (z1 - z0) * t
+        const visible = visibleAt(x, y, z, r)
+        if (pass === 0) {
+          if (visible) {
+            const o = Math.floor((y - oy) / px) * W + Math.floor((x - ox) / px)
+            if (z > lineDepth[o]!) lineDepth[o] = z
+          }
+          continue
+        }
+        states[k] = visible ? (nearerLine(x, y, z) ? DUPLICATE : 1) : 0
       }
-      start = k
+      if (pass === 0) continue
+      // A lone sample disagreeing with both neighbours is depth-buffer noise, not an occluder.
+      for (let k = 1; k < n; k++)
+        if (states[k - 1] === states[k + 1] && states[k] !== states[k - 1])
+          states[k] = states[k - 1]!
+      const visCls = cls[s]!
+      let start = 0
+      for (let k = 1; k <= n + 1; k++) {
+        if (k <= n && states[k] === states[start]) continue
+        const ta = start === 0 ? 0 : (start - 0.5) / n
+        const tb = k > n ? 1 : (k - 0.5) / n
+        const state = states[start]
+        const target = state === 1 ? visCls : state === 0 && visCls === METAL ? HIDDEN : -1
+        if (target >= 0 && (target !== HIDDEN || opts.hidden)) {
+          out[target]!.push(
+            x0 + (x1 - x0) * ta,
+            y0 + (y1 - y0) * ta,
+            x0 + (x1 - x0) * tb,
+            y0 + (y1 - y0) * tb,
+          )
+        }
+        start = k
+      }
     }
   }
 
-  const tol = opts.tolerance ?? 0.004
+  const tol = opts.tolerance ?? 0.01
   return {
     metal: chainSegments(out[METAL], tol, 0.02),
     stones: chainSegments(out[STONE], tol, 0.02),
@@ -254,7 +307,8 @@ function addWorldSegments(
   add: (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, c: number) => void,
 ) {
   const pp = projectAll(segs, view)
-  for (let i = 0; i + 5 < pp.length; i += 6) add(pp[i]!, pp[i + 1]!, pp[i + 2]!, pp[i + 3]!, pp[i + 4]!, pp[i + 5]!, c)
+  for (let i = 0; i + 5 < pp.length; i += 6)
+    add(pp[i]!, pp[i + 1]!, pp[i + 2]!, pp[i + 3]!, pp[i + 4]!, pp[i + 5]!, c)
 }
 
 /** Zero crossings of n·toward over each triangle, interpolated canonically (low → high index). */
@@ -263,14 +317,24 @@ function traceContours(
   idx: Uint32Array,
   normals: Float32Array,
   view: ViewDef,
-  add: (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, c: number, r?: number) => void,
+  add: (
+    x0: number,
+    y0: number,
+    z0: number,
+    x1: number,
+    y1: number,
+    z1: number,
+    c: number,
+    r?: number,
+  ) => void,
 ) {
   const [tx, ty, tz] = view.toward
   // Offset the zero level: a flat face seen exactly edge-on has n·v ≈ 0 everywhere, and noise
   // would scatter contour fragments over it. With the offset it reads as back-facing and the
   // contour lands cleanly where its fillet turns toward the viewer.
   const tau = 2e-3
-  const g = (v: number) => normals[v * 3]! * tx + normals[v * 3 + 1]! * ty + normals[v * 3 + 2]! * tz - tau
+  const g = (v: number) =>
+    normals[v * 3]! * tx + normals[v * 3 + 1]! * ty + normals[v * 3 + 2]! * tz - tau
   const pts: number[] = []
   for (let f = 0; f < idx.length; f += 3) {
     const a = idx[f]!
@@ -279,14 +343,14 @@ function traceContours(
     const ga = g(a)
     const gb = g(b)
     const gc = g(c)
-    if ((ga > 0) === (gb > 0) && (gb > 0) === (gc > 0)) continue
+    if (ga > 0 === gb > 0 && gb > 0 === gc > 0) continue
     pts.length = 0
     for (const [i, j, gi, gj] of [
       [a, b, ga, gb],
       [b, c, gb, gc],
       [c, a, gc, ga],
     ] as const) {
-      if ((gi > 0) === (gj > 0)) continue
+      if (gi > 0 === gj > 0) continue
       const [lo, hi, glo, ghi] = i < j ? [i, j, gi, gj] : [j, i, gj, gi]
       const t = glo / (glo - ghi)
       pts.push(

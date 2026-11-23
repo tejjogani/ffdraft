@@ -4,17 +4,18 @@
  * left to the final render.
  */
 import {
+  AgXToneMapping,
   BufferAttribute,
   BufferGeometry,
   CircleGeometry,
   Color,
   DataTexture,
   DirectionalLight,
-  Group,
+  type Group,
+  LinearSRGBColorSpace,
   Mesh,
   MeshStandardMaterial,
   NeutralToneMapping,
-  AgXToneMapping,
   type Object3D,
   type PerspectiveCamera,
   PlaneGeometry,
@@ -26,7 +27,6 @@ import {
   Vector3,
   VSMShadowMap,
   type WebGLRenderer,
-  LinearSRGBColorSpace,
 } from 'three'
 import { Reflector } from 'three/addons/objects/Reflector.js'
 import { sampleTrack } from '../animation'
@@ -55,7 +55,8 @@ function background(bg: Background): Color | DataTexture | null {
   for (let y = 0; y < h; y++) {
     // DataTexture row 0 is the bottom of the screen.
     const t = y / (h - 1)
-    for (let c = 0; c < 3; c++) data[y * 4 + c] = Math.round((bg.bottom[c]! + (bg.top[c]! - bg.bottom[c]!) * t) * 255)
+    for (let c = 0; c < 3; c++)
+      data[y * 4 + c] = Math.round((bg.bottom[c]! + (bg.top[c]! - bg.bottom[c]!) * t) * 255)
     data[y * 4 + 3] = 255
   }
   const texture = new DataTexture(data, 1, h)
@@ -66,7 +67,12 @@ function background(bg: Background): Color | DataTexture | null {
 
 const ACRYLIC_SHADER = {
   name: 'PaveAcrylic',
-  uniforms: { color: { value: null }, tDiffuse: { value: null }, textureMatrix: { value: null }, ior: { value: 1.49 } },
+  uniforms: {
+    color: { value: null },
+    tDiffuse: { value: null },
+    textureMatrix: { value: null },
+    ior: { value: 1.49 },
+  },
   vertexShader: /* glsl */ `
     uniform mat4 textureMatrix;
     varying vec4 vUv;
@@ -110,12 +116,19 @@ function sweepGeometry(profile: [number, number][], width: number): BufferGeomet
 }
 
 /** A zero-intensity shadow caster: ShadowMaterial shows its shadow without adding light. */
-function shadowCaster(resolved: ResolvedScene, z: number): { light: DirectionalLight; plane: Mesh } {
+function shadowCaster(
+  resolved: ResolvedScene,
+  z: number,
+): { light: DirectionalLight; plane: Mesh } {
   const { center, radius } = resolved.subject
   // Shadow from the luminance-weighted direction of the rig's upward-facing panels.
   const dir = new Vector3()
   for (const p of resolved.rig.panels) {
-    const v = new Vector3(p.position[0] - center[0], p.position[1] - center[1], p.position[2] - center[2])
+    const v = new Vector3(
+      p.position[0] - center[0],
+      p.position[1] - center[1],
+      p.position[2] - center[2],
+    )
     const up = Math.max(0, v.z / v.length())
     const weight = (p.radiance[0] + p.radiance[1] + p.radiance[2]) * p.size[0] * p.size[1] * up * up
     dir.addScaledVector(v.normalize(), weight)
@@ -160,7 +173,10 @@ function ground(g: ResolvedGround, resolved: ResolvedScene): Group {
   if (g.kind === 'sweep') {
     const sweep = new Mesh(
       sweepGeometry(g.profile, g.width),
-      new MeshStandardMaterial({ color: new Color().setRGB(...g.color, LinearSRGBColorSpace), roughness: g.roughness }),
+      new MeshStandardMaterial({
+        color: new Color().setRGB(...g.color, LinearSRGBColorSpace),
+        roughness: g.roughness,
+      }),
     )
     sweep.position.set(...g.center)
     sweep.rotation.z = (g.azimuth * Math.PI) / 180

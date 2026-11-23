@@ -50,7 +50,12 @@ export interface ProductionOptions {
   markets?: Market[]
   marks?: { makerMark?: string; location?: string; logo?: string }
   plating?: { microns?: number; layers?: string }
-  commercial?: { moq?: number; targetCostUsd?: number; leadTimeDays?: number; sampleFirst?: boolean }
+  commercial?: {
+    moq?: number
+    targetCostUsd?: number
+    leadTimeDays?: number
+    sampleFirst?: boolean
+  }
   packaging?: string
   /** Ring size run for production, e.g. ["US 5", "US 6", "US 7"]. */
   sizeRun?: string[]

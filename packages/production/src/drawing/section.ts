@@ -1,6 +1,6 @@
 /** Planar sections: the cut outline of metal bodies at a view's clip plane, as closed loops. */
 import type { SceneBody } from './hlr'
-import { SegmentBuffer, chainSegments } from './polyline'
+import { chainSegments, SegmentBuffer } from './polyline'
 import type { ViewDef } from './views'
 
 export interface Section {

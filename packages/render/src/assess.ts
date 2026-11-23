@@ -72,7 +72,10 @@ export interface RenderIssue {
   adjust: SceneAdjustment[]
 }
 
-const QUALITY_UP: Record<RenderScene['output']['quality'], RenderScene['output']['quality'] | null> = {
+const QUALITY_UP: Record<
+  RenderScene['output']['quality'],
+  RenderScene['output']['quality'] | null
+> = {
   preview: 'standard',
   standard: 'final',
   final: null,
@@ -131,7 +134,8 @@ function framingIssues(
     issues.push({
       code: 'framing.offCentre',
       severity: 'warning',
-      message: 'The piece is off-centre. Presets centre it automatically; a custom camera needs a new target.',
+      message:
+        'The piece is off-centre. Presets centre it automatically; a custom camera needs a new target.',
       value: r2(offset),
       limit: CHECKS.maxCentreOffset,
       adjust: scene.camera.preset === 'custom' ? [{ path: 'camera.preset', value: 'hero' }] : [],
@@ -235,7 +239,10 @@ export function assessRender(m: RenderMetrics, scene: RenderScene): RenderIssue[
 }
 
 /** Applies adjustments immutably; the result still needs schema validation by the caller. */
-export function applyAdjustments(scene: RenderScene, adjustments: readonly SceneAdjustment[]): RenderScene {
+export function applyAdjustments(
+  scene: RenderScene,
+  adjustments: readonly SceneAdjustment[],
+): RenderScene {
   const next: RenderScene = structuredClone(scene)
   for (const { path, value } of adjustments) {
     const [head, tail] = path.split('.') as [string, string | undefined]

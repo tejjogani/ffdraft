@@ -13,7 +13,10 @@ const n = (v: number) => {
 }
 
 export const escapeXml = (s: string) =>
-  s.replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[c]!)
+  s.replace(
+    /[<>&"']/g,
+    (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[c]!,
+  )
 
 function pathData(lines: readonly ArrayLike<number>[], closed?: boolean): string {
   const parts: string[] = []
@@ -35,6 +38,7 @@ function textAttrs(style: TextStyle): string {
     `fill="${style.color ?? '#1c1b1a'}"`,
   ]
   if (style.tracking) attrs.push(`letter-spacing="${n(style.tracking * size)}"`)
+  if (style.tabular) attrs.push('style="font-variant-numeric: tabular-nums"')
   return attrs.join(' ')
 }
 
@@ -50,11 +54,15 @@ function item(it: Item): string {
     case 'fill':
       return `<path d="${pathData([it.pts], true)}" fill="${it.color}"/>`
     case 'circle': {
-      const stroke = it.pen ? ` stroke="${PENS[it.pen].color}" stroke-width="${PENS[it.pen].width}"` : ''
+      const stroke = it.pen
+        ? ` stroke="${PENS[it.pen].color}" stroke-width="${PENS[it.pen].width}"`
+        : ''
       return `<circle cx="${n(it.cx)}" cy="${n(it.cy)}" r="${n(it.r)}" fill="${it.fill ?? 'none'}"${stroke}/>`
     }
     case 'rect': {
-      const stroke = it.pen ? ` stroke="${PENS[it.pen].color}" stroke-width="${PENS[it.pen].width}"` : ''
+      const stroke = it.pen
+        ? ` stroke="${PENS[it.pen].color}" stroke-width="${PENS[it.pen].width}"`
+        : ''
       return `<rect x="${n(it.x)}" y="${n(it.y)}" width="${n(it.w)}" height="${n(it.h)}" fill="${it.fill ?? 'none'}"${stroke}/>`
     }
     case 'text': {
@@ -68,7 +76,7 @@ function item(it: Item): string {
 export function sheetToSvg(sheet: Sheet, title: string): string {
   const body = sheet.items.map(item).filter(Boolean).join('\n')
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${n(sheet.width)}mm" height="${n(sheet.height)}mm" viewBox="0 0 ${n(sheet.width)} ${n(sheet.height)}" style="font-variant-numeric: tabular-nums">
+<svg xmlns="http://www.w3.org/2000/svg" width="${n(sheet.width)}mm" height="${n(sheet.height)}mm" viewBox="0 0 ${n(sheet.width)} ${n(sheet.height)}">
 <title>${escapeXml(title)}</title>
 <rect width="100%" height="100%" fill="#ffffff"/>
 ${body}

@@ -6,12 +6,12 @@
 import type { Mat4 } from '../../geometry/vec'
 
 /** A closed centreline (rows of xyz) and the radius of the wire around it. */
-export interface Loop {
+export interface WireLoop {
   points: Float64Array
   radius: number
 }
 
-export function moveLoop(loop: Loop, m: Mat4): Loop {
+export function moveLoop(loop: WireLoop, m: Mat4): WireLoop {
   const src = loop.points
   const out = new Float64Array(src.length)
   for (let i = 0; i < src.length; i += 3) {
@@ -58,7 +58,7 @@ function segmentDistance2(a: Float64Array, i: number, j: number, b: Float64Array
 }
 
 /** Smallest gap between the wire surfaces of two closed loops (negative when they intersect). */
-export function clearance(a: Loop, b: Loop): number {
+export function clearance(a: WireLoop, b: WireLoop): number {
   const pa = a.points
   const pb = b.points
   const na = pa.length / 3
@@ -78,7 +78,7 @@ export function clearance(a: Loop, b: Loop): number {
  * Gauss linking number of two closed polylines, summed exactly per segment pair
  * (Klenin & Langowski, Biopolymers 54, 2000). ±1 when the loops are threaded once.
  */
-export function linking(a: Loop, b: Loop): number {
+export function linking(a: WireLoop, b: WireLoop): number {
   const pa = a.points
   const pb = b.points
   const na = pa.length / 3
@@ -128,32 +128,53 @@ export function linking(a: Loop, b: Loop): number {
 }
 
 /** True when the loops are threaded through each other once and do not touch. */
-export const interlocked = (a: Loop, b: Loop, gap: number): boolean =>
+export const interlocked = (a: WireLoop, b: WireLoop, gap: number): boolean =>
   clearance(a, b) >= gap && Math.abs(Math.abs(linking(a, b)) - 1) < 0.25
 
+/** Thrown when two links cannot be threaded together without touching. */
+export class InterlockError extends Error {
+  constructor() {
+    super('These links cannot interlock; use a thinner wire or wider links')
+    this.name = 'InterlockError'
+  }
+}
+
+/** Pitches at which two links stay threaded and clear: nested tight (min) to pulled taut (max). */
+export interface PitchRange {
+  min: number
+  max: number
+}
+
 /**
- * The largest pitch at which `place(p)` keeps two loops interlocked with at least `gap` between
- * them — the chain pulled taut, as it hangs. Scans down from `start` and refines by bisection.
+ * The interval of pitches at which `pair(p)` keeps two loops interlocked with at least `gap`
+ * between them. Scans down from `start` (links apart) to the first interlocked pitch, then
+ * refines both ends of that interval by bisection.
  */
-export function tautPitch(
-  pair: (pitch: number) => [Loop, Loop],
+export function pitchRange(
+  pair: (pitch: number) => [WireLoop, WireLoop],
   start: number,
   step: number,
   gap: number,
-): number {
+): PitchRange {
   const ok = (p: number) => {
     const [a, b] = pair(p)
     return interlocked(a, b, gap)
   }
+  const refine = (inside: number, outside: number) => {
+    let a = inside
+    let b = outside
+    for (let i = 0; i < 12; i++) {
+      const mid = (a + b) / 2
+      if (ok(mid)) a = mid
+      else b = mid
+    }
+    return a
+  }
   let p = start
   while (p > step && !ok(p)) p -= step
-  if (p <= step) throw new Error('These links cannot interlock; use a thinner wire or wider links')
-  let lo = p
-  let hi = p + step
-  for (let i = 0; i < 12; i++) {
-    const mid = (lo + hi) / 2
-    if (ok(mid)) lo = mid
-    else hi = mid
-  }
-  return lo
+  if (p <= step) throw new InterlockError()
+  const max = refine(p, p + step)
+  let q = p
+  while (q > step && ok(q - step)) q -= step
+  return { min: refine(q, q - step), max }
 }

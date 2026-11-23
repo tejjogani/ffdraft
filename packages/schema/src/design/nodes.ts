@@ -36,7 +36,7 @@ const Transform = z
     rotation: vec3('Rotation', [0, 0, 0]),
     scale: ratio('Scale', 0.01, 100, 1),
   })
-  .meta({ title: 'Transform', group: 'Transform' })
+  .meta({ title: 'Transform', group: 'Transform', advanced: true })
 
 const base = {
   id: z.string(),
@@ -46,9 +46,13 @@ const base = {
 }
 
 const metal = {
-  material: choice('Metal', METAL_IDS, 'au18k-yellow', { group: 'Material' }),
-  finish: choice('Finish', FINISH_IDS, 'polished', { group: 'Material' }),
-  plating: choice('Plating', PLATING_IDS, 'none', { group: 'Material' }),
+  material: choice('Metal', METAL_IDS, 'au18k-yellow', { group: 'Material', widget: 'metal' }),
+  finish: choice('Finish', FINISH_IDS, 'polished', { group: 'Material', widget: 'finish' }),
+  plating: choice('Plating', PLATING_IDS, 'none', {
+    group: 'Material',
+    widget: 'plating',
+    advanced: true,
+  }),
 }
 
 /** A real, purchasable stone or parcel attached to design stones (docs/research/07-sourcing.md). */
@@ -73,16 +77,19 @@ export const StoneQuality = z.object({
 export type StoneQuality = z.infer<typeof StoneQuality>
 
 const stone = {
-  cut: choice('Cut', GEM_CUT_IDS, 'round', { group: 'Stone' }),
-  stone: choice('Stone', GEM_MATERIAL_IDS, 'diamond', { group: 'Stone' }),
+  cut: choice('Cut', GEM_CUT_IDS, 'round', { group: 'Stone', widget: 'cut' }),
+  stone: choice('Stone', GEM_MATERIAL_IDS, 'diamond', { group: 'Stone', widget: 'stone' }),
   quality: StoneQuality.optional(),
   sourcing: StoneSourcing.optional(),
 }
 
+/** Melee-sized stones: shown with the stone-size control and snapped to stock diameters. */
+const meleeSize = { widget: 'stoneSize', snap: 'melee' } as const
+
 const RingSizeSchema = z
   .object({ system: z.enum(RING_SIZE_SYSTEMS), value: z.number().min(0).max(80) })
   .default({ system: 'us', value: 6 })
-  .meta({ title: 'Ring size' })
+  .meta({ title: 'Ring size', widget: 'ringSize' })
 
 const fontChoice = choice('Font', ['sans', 'serif', 'script', 'block'], 'sans')
 
@@ -95,6 +102,7 @@ export const RingShank = z
     ...metal,
     size: RingSizeSchema,
     profile: choice('Profile', ['court', 'dShape', 'flat', 'flatCourt', 'knifeEdge'], 'court', {
+      labels: { dShape: 'D-shape', flatCourt: 'Flat court', knifeEdge: 'Knife edge' },
       description:
         'Cross-section. court = rounded inside and out (comfort fit); dShape = flat inside, domed outside; flatCourt = flat outside, rounded inside.',
     }),
@@ -153,6 +161,7 @@ export const Gem = z
     ...stone,
     width: mm('Width', 0.6, 40, 6.5, {
       group: 'Stone',
+      widget: 'stoneSize',
       description: 'Girdle width (diameter for rounds). 6.5 mm round ≈ 1 ct diamond.',
     }),
     lw: ratio('Length : width', 0.8, 5, 1, {
@@ -170,6 +179,7 @@ export const Setting = z
     ...metal,
     gem: ref('Holds', ['gem']),
     style: choice('Style', ['prong', 'basket', 'bezel', 'halfBezel', 'flush'], 'prong', {
+      labels: { halfBezel: 'Half bezel' },
       description:
         'prong = claws only; basket = claws joined by gallery rails; bezel = full metal rim; halfBezel = two arcs; flush = stone sunk into the host.',
     }),
@@ -184,11 +194,13 @@ export const Setting = z
     }),
     prongSpin: deg('Prong rotation', -90, 90, 45, {
       group: 'Prongs',
+      advanced: true,
       when: { style: ['prong', 'basket'] },
       description: '45 puts four prongs on the corners; 0 on the compass points.',
     }),
     taper: ratio('Taper', 0, 0.8, 0.35, {
       group: 'Prongs',
+      advanced: true,
       when: { style: ['prong', 'basket'] },
       description: 'How strongly the head narrows toward its base.',
     }),
@@ -204,11 +216,12 @@ export const Halo = z
     ...metal,
     ...stone,
     around: ref('Around', ['gem']),
-    stoneWidth: mm('Stone size', 0.8, 3.5, 1.3, { group: 'Stone' }),
+    stoneWidth: mm('Stone size', 0.8, 3.5, 1.3, { group: 'Stone', ...meleeSize }),
     rows: int('Rows', 1, 3, 1),
     offset: mm('Gap to centre stone', 0.05, 1.5, 0.25),
-    gap: mm('Gap between stones', 0.05, 0.6, 0.15),
+    gap: mm('Gap between stones', 0.05, 0.6, 0.15, { advanced: true }),
     drop: mm('Drop below girdle', -1, 3, 0.4, {
+      advanced: true,
       description: 'How far the halo sits below the centre stone’s girdle.',
     }),
   })
@@ -220,10 +233,13 @@ export const GemRow = z
     kind: z.literal('gemRow'),
     ...stone,
     host: ref('On band', ['ringShank']),
-    setting: choice('Setting', ['pave', 'channel', 'sharedProng', 'bar', 'flush'], 'pave'),
-    stoneWidth: mm('Stone size', 0.8, 6, 1.5, { group: 'Stone' }),
+    setting: choice('Setting', ['pave', 'channel', 'sharedProng', 'bar', 'flush'], 'pave', {
+      labels: { pave: 'Pavé', sharedProng: 'Shared prong' },
+    }),
+    stoneWidth: mm('Stone size', 0.8, 6, 1.5, { group: 'Stone', ...meleeSize }),
     graduateTo: mm('Graduate to', 0.8, 6, 1.5, {
       group: 'Stone',
+      ...meleeSize,
       description: 'Stone size at the ends of the row; equal to Stone size for no graduation.',
     }).optional(),
     coverage: deg('Coverage', 10, 360, 150, {
@@ -234,7 +250,7 @@ export const GemRow = z
       description: 'Arc left clear around the centre (for a head).',
     }),
     rows: int('Rows', 1, 5, 1),
-    gap: mm('Gap between stones', 0.05, 1, 0.15),
+    gap: mm('Gap between stones', 0.05, 1, 0.15, { advanced: true }),
   })
   .meta({ title: 'Stone row', description: 'Stones set along a ring band: pavé shoulders, channel, eternity.' })
 
@@ -255,16 +271,16 @@ export const Pave = z
       ])
       .default({ type: 'facing', direction: [0, -1, 0], maxAngle: 75 })
       .meta({ title: 'Region', description: 'Which part of the body is covered.' }),
-    sizeMax: mm('Largest stone', 0.8, 4, 1.8, { group: 'Stone' }),
-    sizeMin: mm('Smallest stone', 0.8, 4, 1.0, { group: 'Stone' }),
-    gap: mm('Gap between stones', 0.05, 0.6, 0.2),
-    margin: mm('Edge margin', 0, 2, 0.35),
+    sizeMax: mm('Largest stone', 0.8, 4, 1.8, { group: 'Stone', ...meleeSize }),
+    sizeMin: mm('Smallest stone', 0.8, 4, 1.0, { group: 'Stone', ...meleeSize }),
+    gap: mm('Gap between stones', 0.05, 0.6, 0.2, { advanced: true }),
+    margin: mm('Edge margin', 0, 2, 0.35, { advanced: true }),
     coverage: ratio('Ice level', 0.05, 1, 1, {
       widget: 'slider',
       description: 'Fraction of the region to fill. 1 = fully iced out.',
     }),
     beads: toggle('Beads', true, { description: 'Raise bead prongs between stones.' }),
-    seed: int('Layout seed', 0, 9999, 1),
+    seed: int('Layout seed', 0, 9999, 1, { advanced: true }),
   })
   .meta({ title: 'Pavé', description: 'Automatically packs graded stones over a surface.' })
 
@@ -332,8 +348,12 @@ export const MeshBody = z
       description: 'Slices this fraction off the back so the piece lies flat.',
     }),
     hollow: mm('Hollow to wall', 0, 5, 0, { description: '0 keeps the body solid.' }),
-    smooth: int('Smoothing', 0, 8, 0),
-    detail: ratio('Detail', 0.02, 1, 1, { widget: 'slider', description: 'Mesh simplification.' }),
+    smooth: int('Smoothing', 0, 8, 0, { advanced: true }),
+    detail: ratio('Detail', 0.02, 1, 1, {
+      widget: 'slider',
+      advanced: true,
+      description: 'Mesh simplification.',
+    }),
   })
   .meta({
     title: 'Sculpted body',
@@ -384,10 +404,15 @@ export const Pipe = z
       .max(400)
       .meta({ title: 'Path points', description: 'A smooth curve is fitted through these.' }),
     closed: toggle('Closed', false),
-    section: choice('Section', ['round', 'square', 'halfRound'], 'round'),
+    section: choice('Section', ['round', 'square', 'halfRound'], 'round', {
+      labels: { halfRound: 'Half round' },
+    }),
     width: mm('Wire width', 0.4, 20, 1.5),
     thickness: mm('Wire thickness', 0.4, 20, 1.5),
-    taper: ratio('End taper', 0, 1, 0, { description: 'Fraction by which the wire thins at its ends.' }),
+    taper: ratio('End taper', 0, 1, 0, {
+      advanced: true,
+      description: 'Fraction by which the wire thins at its ends.',
+    }),
   })
   .meta({ title: 'Wire', description: 'A wire swept along a curve: vines, bypass bands, hoops, bangles.' })
 
@@ -450,7 +475,14 @@ export const Finding = z
     ...base,
     kind: z.literal('finding'),
     ...metal,
-    type: choice('Type', ['earringPost', 'butterfly', 'jumpRing', 'lobsterClasp'], 'earringPost'),
+    type: choice('Type', ['earringPost', 'butterfly', 'jumpRing', 'lobsterClasp'], 'earringPost', {
+      labels: {
+        earringPost: 'Earring post',
+        butterfly: 'Butterfly back',
+        jumpRing: 'Jump ring',
+        lobsterClasp: 'Lobster clasp',
+      },
+    }),
     host: ref('On', BODY_KINDS).optional(),
     length: mm('Length', 2, 20, 10),
     wire: mm('Wire', 0.5, 2, 0.8),
@@ -467,7 +499,9 @@ export const Engraving = z
     size: mm('Letter height', 0.6, 20, 1.4),
     depth: mm('Depth', 0.05, 2, 0.25),
     mode: choice('Mode', ['engrave', 'emboss'], 'engrave'),
-    where: choice('Where', ['insideBand', 'outsideBand', 'front', 'back'], 'insideBand'),
+    where: choice('Where', ['insideBand', 'outsideBand', 'front', 'back'], 'insideBand', {
+      labels: { insideBand: 'Inside the band', outsideBand: 'Outside the band' },
+    }),
     angle: deg('Position', -180, 180, 180, { description: 'Around the band; 180 = base of the ring.' }),
   })
   .meta({ title: 'Engraving' })

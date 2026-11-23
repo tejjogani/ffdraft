@@ -8,8 +8,12 @@ export const smin = (a: number, b: number, k: number) => {
 export const smax = (a: number, b: number, k: number) => -smin(-a, -b, k)
 
 export function capsule(
-  px: number, py: number, pz: number,
-  a: [number, number, number], b: [number, number, number], r: number,
+  px: number,
+  py: number,
+  pz: number,
+  a: [number, number, number],
+  b: [number, number, number],
+  r: number,
 ): number {
   const bax = b[0] - a[0]
   const bay = b[1] - a[1]
@@ -17,7 +21,10 @@ export function capsule(
   const pax = px - a[0]
   const pay = py - a[1]
   const paz = pz - a[2]
-  const t = Math.max(0, Math.min(1, (pax * bax + pay * bay + paz * baz) / (bax * bax + bay * bay + baz * baz)))
+  const t = Math.max(
+    0,
+    Math.min(1, (pax * bax + pay * bay + paz * baz) / (bax * bax + bay * bay + baz * baz)),
+  )
   return Math.hypot(pax - bax * t, pay - bay * t, paz - baz * t) - r
 }
 
@@ -60,7 +67,13 @@ export function extrude(d2: number, w: number, h: number, r: number): number {
  * A brilliant-cut stone (girdle radius r) as a solid, in its own frame with the table toward
  * +a: crown frustum above the girdle, pavilion cone below. Used to cut seats.
  */
-export function stoneSolid(a: number, rho: number, r: number, crown: number, pavilion: number): number {
+export function stoneSolid(
+  a: number,
+  rho: number,
+  r: number,
+  crown: number,
+  pavilion: number,
+): number {
   const up = a - crown
   const crownSide = (rho - r + (a * (r * 0.43)) / crown) / Math.hypot(1, (r * 0.43) / crown)
   const pav = (rho - r * (1 + a / pavilion)) / Math.hypot(1, r / pavilion)

@@ -93,7 +93,11 @@ export class ScopedTable<T extends PgTable, K extends keyof T['$inferInsert'] & 
     return row
   }
 
-  async update(cond: SQL, set: Partial<Omit<T['$inferInsert'], K>>): Promise<T['$inferSelect'][]> {
+  /** Columns may be set to SQL expressions, e.g. `sql\`${col} + 1\`` for an atomic increment. */
+  async update(
+    cond: SQL,
+    set: { [C in keyof Omit<T['$inferInsert'], K>]?: Omit<T['$inferInsert'], K>[C] | SQL },
+  ): Promise<T['$inferSelect'][]> {
     return (await this.#db
       .update(this.table)
       .set(set as Partial<T['$inferInsert']>)

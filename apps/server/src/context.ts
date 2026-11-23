@@ -1,6 +1,7 @@
-import type { Actor, Role, User } from '@pave/schema'
+import type { Actor, CommandInput, CommandName, CommandOutput, Role, User } from '@pave/schema'
 import type { BlobStore } from './assets/blob-store'
-import type { EventBus, ServerEvent } from './events'
+import type { AuthMode } from './config'
+import type { EventAudience, EventBus, ServerEvent } from './events'
 import type { Repo } from './repo'
 import type { AccountRepo } from './repo/account'
 import type { ServiceRegistry } from './services'
@@ -21,9 +22,20 @@ export interface Ctx {
   readonly services: ServiceRegistry
   readonly blobs: BlobStore
   readonly events: EventBus
+  /** `local` (single-user desktop/self-host, no sign-in) or `accounts`. */
+  readonly authMode: AuthMode
+  /** Runs another command as the same actor through the full pipeline (role, validation, audit). */
+  readonly invoke: Invoke
 }
 
-export const publish = (ctx: Ctx, event: ServerEvent): void => ctx.events.publish(ctx.orgId, event)
+export type Invoke = <N extends CommandName>(
+  name: N,
+  input: CommandInput<N>,
+) => Promise<CommandOutput<N>>
+
+/** Publishes to the org, or with `to` only to one user (preferably one of their windows). */
+export const publish = (ctx: Ctx, event: ServerEvent, to?: EventAudience): number =>
+  ctx.events.publish(ctx.orgId, event, to)
 
 /** The run an agent actor belongs to, for attributing usage and generated content. */
 export const actorRunId = (actor: Actor): string | null =>

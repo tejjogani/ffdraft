@@ -3,22 +3,30 @@
  * look. URL parameters (look, piece, metal, ground, bounces, size, ui=0) make it scriptable;
  * `window.paveReady` turns true once a frame with the environment has been drawn.
  */
-import { METAL_IDS, type MetalId, RenderSceneSchema, type RenderSceneInput } from '@pave/schema'
+import { METAL_IDS, type MetalId, type RenderSceneInput, RenderSceneSchema } from '@pave/schema'
 import { PerspectiveCamera, Scene, WebGLRenderer } from 'three'
 import { paveBar, solitaireRing } from '../fixtures'
 import { LOOK_IDS, type LookId, resolveScene } from '../src'
-import { applyResolvedScene, configureRenderer, createEnvironment, evaluationToThree } from '../src/three'
+import {
+  applyResolvedScene,
+  configureRenderer,
+  createEnvironment,
+  evaluationToThree,
+} from '../src/three'
 
 declare global {
   interface Window {
     paveReady: boolean
+    /** Mean milliseconds per frame over `n` synchronous renders (benchmarks). */
+    paveFrameMs(n: number): number
   }
 }
 
 const params = new URLSearchParams(location.search)
 const look = (params.get('look') ?? 'studio-soft') as LookId
 const piece = params.get('piece') ?? 'ring'
-const metal = (params.get('metal') ?? (piece === 'ring' ? 'au18k-yellow' : 'au18k-white')) as MetalId
+const metal = (params.get('metal') ??
+  (piece === 'ring' ? 'au18k-yellow' : 'au18k-white')) as MetalId
 const bounces = Number(params.get('bounces') ?? 6)
 const size = Number(params.get('size') ?? 768)
 const ground = (params.get('ground') ?? 'look') as RenderSceneInput['ground']
@@ -39,7 +47,10 @@ select('piece', [], piece)
 select('metal', METAL_IDS, metal)
 select('bounces', [], String(bounces))
 
-const evaluation = piece === 'pave' ? paveBar({ material: metal, plating: metal.includes('white') ? 'rhodium' : 'none' }) : solitaireRing({ material: metal })
+const evaluation =
+  piece === 'pave'
+    ? paveBar({ material: metal, plating: metal.includes('white') ? 'rhodium' : 'none' })
+    : solitaireRing({ material: metal })
 const scene = RenderSceneSchema.parse({
   look,
   ground,
@@ -59,10 +70,26 @@ const camera = new PerspectiveCamera(30, 1)
 const environment = createEnvironment(renderer, resolved)
 const model = evaluationToThree(evaluation, resolved, {
   environment,
-  gemQuality: { hero: { bounces, dispersion: true }, melee: { bounces: Math.min(bounces, 3), dispersion: false } },
+  gemQuality: {
+    hero: { bounces, dispersion: true },
+    melee: { bounces: Math.min(bounces, 3), dispersion: false },
+  },
 })
 threeScene.add(model.object)
 applyResolvedScene(threeScene, camera, resolved, { model, environment })
+// ?debug=env shows the studio environment itself behind the piece.
+if (params.get('debug') === 'env') threeScene.background = environment.texture
+
+window.paveFrameMs = (n) => {
+  const gl = renderer.getContext()
+  const pixel = new Uint8Array(4)
+  const start = performance.now()
+  for (let i = 0; i < n; i++) {
+    renderer.render(threeScene, camera)
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel) // waits for the GPU
+  }
+  return (performance.now() - start) / n
+}
 
 // A still: draw a few frames (shader compilation, shadow maps), then stop.
 let frames = 0

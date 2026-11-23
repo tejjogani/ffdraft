@@ -45,14 +45,18 @@ const AMBIENT = {
     }`,
 }
 
-function panelMesh(p: ResolvedRig['panels'][number]): Mesh {
+function panelMesh(p: ResolvedRig['panels'][number], scale: number): Mesh {
   const geometry = new PlaneGeometry(p.size[0], p.size[1])
   // PlaneGeometry vertices: top-left, top-right, bottom-left, bottom-right.
-  const [bottom, top] = p.gradient
+  const [bottom, top] = p.gradient.map((k) => k * scale) as [number, number]
   const colors = new Float32Array(12)
-  ;[top, top, bottom, bottom].forEach((k, i) => colors.set([p.radiance[0] * k, p.radiance[1] * k, p.radiance[2] * k], i * 3))
+  for (const [i, k] of [top, top, bottom, bottom].entries())
+    colors.set([p.radiance[0] * k, p.radiance[1] * k, p.radiance[2] * k], i * 3)
   geometry.setAttribute('color', new BufferAttribute(colors, 3))
-  const mesh = new Mesh(geometry, new MeshBasicMaterial({ vertexColors: true, side: DoubleSide, toneMapped: false }))
+  const mesh = new Mesh(
+    geometry,
+    new MeshBasicMaterial({ vertexColors: true, side: DoubleSide, toneMapped: false }),
+  )
   mesh.name = p.id
   return mesh
 }
@@ -67,7 +71,11 @@ export function sweepFloorRadiance(resolved: ResolvedScene): [number, number, nu
   if (g.kind !== 'sweep') return null
   const { ambient, panels, pivot } = resolved.rig
   const floor = new Vector3(pivot[0], pivot[1], g.z)
-  const e = [0, 1, 2].map((c) => Math.PI * ambient.horizon[c]! + ((2 * Math.PI) / 3) * (ambient.zenith[c]! - ambient.horizon[c]!))
+  const e = [0, 1, 2].map(
+    (c) =>
+      Math.PI * ambient.horizon[c]! +
+      ((2 * Math.PI) / 3) * (ambient.zenith[c]! - ambient.horizon[c]!),
+  )
   for (const p of panels) {
     const v = new Vector3(...p.position).sub(floor)
     const d = v.length()
@@ -80,8 +88,50 @@ export function sweepFloorRadiance(resolved: ResolvedScene): [number, number, nu
   return [0, 1, 2].map((c) => (g.color[c]! * e[c]!) / Math.PI) as [number, number, number]
 }
 
+/**
+ * What the PMREM sees below the horizon. Cycles has the real ground in the scene; the capture
+ * gets a stand-in: a sweep is a flat emitter at its lit radiance, black acrylic a mirrored copy
+ * of the rig dimmed by the acrylic's Fresnel reflectance at grazing view (where reflections in
+ * a ring's lower half come from).
+ */
+export type CaptureFloor =
+  | { kind: 'emitter'; z: number; radiance: [number, number, number] }
+  | { kind: 'mirror'; z: number; reflectance: number }
+
+/** Schlick reflectance of a dielectric at 75° incidence. */
+const grazingReflectance = (ior: number) => {
+  const f0 = ((ior - 1) / (ior + 1)) ** 2
+  return f0 + (1 - f0) * (1 - Math.cos((75 * Math.PI) / 180)) ** 5
+}
+
+export function captureFloor(resolved: ResolvedScene): CaptureFloor | undefined {
+  const g = resolved.ground
+  if (g.kind === 'reflective')
+    return { kind: 'mirror', z: g.z, reflectance: grazingReflectance(g.ior) }
+  const radiance = sweepFloorRadiance(resolved)
+  if (radiance && g.kind === 'sweep') return { kind: 'emitter', z: g.z, radiance }
+  return undefined
+}
+
+function rigGroup(rig: ResolvedRig, scale = 1): Group {
+  const pivot = new Group()
+  pivot.position.set(...rig.pivot)
+  pivot.rotation.z = (rig.rotation * Math.PI) / 180
+  for (const p of rig.panels) {
+    const mesh = panelMesh(p, scale)
+    mesh.position.set(
+      p.position[0] - rig.pivot[0],
+      p.position[1] - rig.pivot[1],
+      p.position[2] - rig.pivot[2],
+    )
+    mesh.quaternion.set(...p.quaternion)
+    pivot.add(mesh)
+  }
+  return pivot
+}
+
 /** Builds the rig as a scene in three.js world space (Y up). */
-export function buildRigScene(rig: ResolvedRig, radius: number, floor?: { z: number; radiance: [number, number, number] }): Scene {
+export function buildRigScene(rig: ResolvedRig, radius: number, floor?: CaptureFloor): Scene {
   const scene = new Scene()
   scene.background = new Color(0, 0, 0)
   const stage = zUpGroup('rig-stage')
@@ -105,7 +155,8 @@ export function buildRigScene(rig: ResolvedRig, radius: number, floor?: { z: num
   ambient.renderOrder = -1
   stage.add(ambient)
 
-  if (floor) {
+  stage.add(rigGroup(rig))
+  if (floor?.kind === 'emitter') {
     const plane = new Mesh(
       new PlaneGeometry(radius * 200, radius * 200),
       new MeshBasicMaterial({ color: new Color(...floor.radiance), toneMapped: false }),
@@ -113,16 +164,13 @@ export function buildRigScene(rig: ResolvedRig, radius: number, floor?: { z: num
     plane.position.set(rig.pivot[0], rig.pivot[1], floor.z)
     stage.add(plane)
   }
-
-  const pivot = new Group()
-  pivot.position.set(...rig.pivot)
-  pivot.rotation.z = (rig.rotation * Math.PI) / 180
-  stage.add(pivot)
-  for (const p of rig.panels) {
-    const mesh = panelMesh(p)
-    mesh.position.set(p.position[0] - rig.pivot[0], p.position[1] - rig.pivot[1], p.position[2] - rig.pivot[2])
-    mesh.quaternion.set(...p.quaternion)
-    pivot.add(mesh)
+  if (floor?.kind === 'mirror') {
+    // Reflect the rig through the plane z = floor.z.
+    const mirror = new Group()
+    mirror.position.z = 2 * floor.z
+    mirror.scale.z = -1
+    mirror.add(rigGroup(rig, floor.reflectance))
+    stage.add(mirror)
   }
   return scene
 }
@@ -138,16 +186,21 @@ export interface PaveEnvironment {
 }
 
 /** Renders the look's rig into a PMREM environment. */
-export function createEnvironment(renderer: WebGLRenderer, resolved: ResolvedScene, size = 512): PaveEnvironment {
+export function createEnvironment(
+  renderer: WebGLRenderer,
+  resolved: ResolvedScene,
+  size = 512,
+): PaveEnvironment {
   const { rig } = resolved
   const { radius } = resolved.subject
-  const floorRadiance = sweepFloorRadiance(resolved)
-  const ground = resolved.ground
-  const scene = buildRigScene(rig, radius, floorRadiance && 'z' in ground ? { z: ground.z, radiance: floorRadiance } : undefined)
+  const scene = buildRigScene(rig, radius, captureFloor(resolved))
   const pmrem = new PMREMGenerator(renderer)
   const toneMapping = renderer.toneMapping
   renderer.toneMapping = NoToneMapping
-  const target = pmrem.fromScene(scene, 0, radius * 0.05, radius * 400, { size, position: toThreePoint(rig.pivot) })
+  const target = pmrem.fromScene(scene, 0, radius * 0.05, radius * 400, {
+    size,
+    position: toThreePoint(rig.pivot),
+  })
   renderer.toneMapping = toneMapping
   pmrem.dispose()
   scene.traverse((o) => {

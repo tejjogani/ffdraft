@@ -2,8 +2,11 @@ import {
   buildDesign,
   type Design,
   emptyDesign,
+  originNeedsAttestation,
   type Piece,
   type PieceKind,
+  type PieceOrigin,
+  type PieceOriginInputSchema,
   type PieceSpec,
   PieceSpecSchema,
   type PieceSummary,
@@ -11,14 +14,15 @@ import {
   type Stage,
   TEMPLATES,
 } from '@pave/schema'
-import { and, desc, eq, ilike, isNull, type SQL } from 'drizzle-orm'
+import { and, desc, eq, ilike, inArray, isNull, type SQL } from 'drizzle-orm'
+import type { z } from 'zod'
 import { getAssetRow } from '../assets/assets'
 import { type Ctx, publish } from '../context'
 import * as t from '../db/schema'
 import { commitChange, refreshFacts, replaceDesignOps } from '../design'
-import { badRequest, conflict } from '../errors'
+import { badRequest, conflict, forbidden } from '../errors'
 import { createId } from '../ids'
-import { ensure, getCollection, getPiece } from '../lookups'
+import { ensure, ensureAll, getCollection, getPiece } from '../lookups'
 import type { HandlerGroup } from './types'
 
 type PieceRow = typeof t.piece.$inferSelect
@@ -30,6 +34,7 @@ export const toPieceSummary = (r: PieceRow): PieceSummary => ({
   stage: r.stage,
   collectionId: r.collectionId,
   coverAssetId: r.coverAssetId,
+  coverAuto: r.coverAuto,
   facts: r.facts,
   createdBy: r.createdBy,
   createdAt: r.createdAt.toISOString(),
@@ -48,7 +53,49 @@ export async function toPiece(ctx: Ctx, r: PieceRow): Promise<Piece> {
     design: r.design,
     version: r.version,
     boardIds: boards.map((b) => b.id),
+    origin: r.origin ?? null,
   }
+}
+
+/**
+ * Refuses (409) to send a piece made from someone's artwork to a 3D provider, an export or a
+ * production package before a person has attested they may use it.
+ */
+export function assertAttested(piece: Pick<PieceRow, 'origin'>): void {
+  if (originNeedsAttestation(piece.origin ?? null))
+    throw conflict(
+      'This piece is made from artwork someone must confirm they may use. Ask the designer to confirm it (pieces.attest) first.',
+      { reason: 'attestation_required' },
+    )
+}
+
+type OriginInput = z.output<typeof PieceOriginInputSchema>
+
+/** Checks an origin's sources belong to the org and stores it; the attestation is kept only while the sources are unchanged. */
+async function toOrigin(
+  ctx: Ctx,
+  input: OriginInput,
+  previous: PieceOrigin | null,
+): Promise<PieceOrigin> {
+  await ensureAll(
+    ctx,
+    input.sourceAssetIds,
+    (ids) => ctx.repo.assets.many({ where: inArray(t.asset.id, ids) }),
+    'Asset',
+  )
+  await ensureAll(
+    ctx,
+    input.referenceIds,
+    (ids) => ctx.repo.references.many({ where: inArray(t.reference.id, ids) }),
+    'Reference',
+  )
+  const same = (a: readonly string[], b: readonly string[]) =>
+    a.length === b.length && a.every((x, i) => x === b[i])
+  const keep =
+    previous !== null &&
+    same(previous.sourceAssetIds, input.sourceAssetIds) &&
+    same(previous.referenceIds, input.referenceIds)
+  return { ...input, attestation: keep ? previous.attestation : null }
 }
 
 /** Moves a piece forward to `stage`, never back: stages are a status, not a gate. */
@@ -115,19 +162,40 @@ export const pieces: HandlerGroup<'pieces'> = {
       spec: start.spec,
       design: start.design,
       collectionId: input.collectionId ?? null,
+      origin: input.origin ? await toOrigin(ctx, input.origin, null) : null,
     })
   },
 
-  'pieces.update': async (ctx, { id, ...patch }) => {
-    await getPiece(ctx, id)
+  'pieces.update': async (ctx, { id, origin, ...patch }) => {
+    const current = await getPiece(ctx, id)
     await ensure(getCollection, ctx, patch.collectionId)
     if (patch.coverAssetId) await getAssetRow(ctx, patch.coverAssetId)
     const [row] = await ctx.repo.pieces.update(eq(t.piece.id, id), {
       ...patch,
+      // Choosing a cover by hand stops automatic capture, unless the capture itself is writing.
+      coverAuto: patch.coverAuto ?? (patch.coverAssetId !== undefined ? false : undefined),
+      ...(origin !== undefined
+        ? { origin: origin && (await toOrigin(ctx, origin, current.origin ?? null)) }
+        : {}),
       updatedAt: new Date(),
     })
     publish(ctx, { type: 'piece.updated', pieceId: id })
     return toPieceSummary(row!)
+  },
+
+  'pieces.attest': async (ctx, { id, rights, likenessConsent }) => {
+    if (ctx.actor.type !== 'user') throw forbidden('Only a person can attest to the rights in a source')
+    const piece = await getPiece(ctx, id)
+    if (!piece.origin) throw conflict('This piece was not made from a source, so there is nothing to attest')
+    if (piece.origin.flags.some((f) => f.code === 'face') && !likenessConsent)
+      throw badRequest('The source shows a person: confirm you have their consent (likenessConsent)')
+    const origin: PieceOrigin = {
+      ...piece.origin,
+      attestation: { rights, likenessConsent, by: ctx.user.id, at: new Date().toISOString() },
+    }
+    const [row] = await ctx.repo.pieces.update(eq(t.piece.id, id), { origin, updatedAt: new Date() })
+    publish(ctx, { type: 'piece.updated', pieceId: id })
+    return toPiece(ctx, row!)
   },
 
   'pieces.setSpec': async (ctx, { id, spec }) => {
@@ -172,6 +240,8 @@ export const pieces: HandlerGroup<'pieces'> = {
       design: source.design,
       collectionId: source.collectionId,
       coverAssetId: source.coverAssetId,
+      coverAuto: source.coverAuto,
+      origin: source.origin,
     })
   },
 

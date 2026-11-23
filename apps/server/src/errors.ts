@@ -7,6 +7,7 @@ export type ErrorCode =
   | 'not_found'
   | 'conflict'
   | 'payload_too_large'
+  | 'budget_exceeded'
   | 'not_configured'
   | 'internal'
 
@@ -15,6 +16,8 @@ const STATUS = {
   unauthorized: 401,
   forbidden: 403,
   not_found: 404,
+  /** The organisation's monthly budget would be exceeded; an admin can raise it. */
+  budget_exceeded: 402,
   conflict: 409,
   payload_too_large: 413,
   internal: 500,

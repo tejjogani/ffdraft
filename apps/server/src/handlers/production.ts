@@ -1,12 +1,11 @@
 import type { ProductionPackage } from '@pave/schema'
 import { desc, eq, max } from 'drizzle-orm'
-import { publish } from '../context'
 import * as t from '../db/schema'
 import { createId } from '../ids'
 import { getPiece } from '../lookups'
-import { jobHandle, serviceContext } from '../service-context'
+import { jobHandle, publishJob, serviceContext, stepProgress } from '../service-context'
 import type { ProductionPackagePatch } from '../services'
-import { toPiece } from './pieces'
+import { assertAttested, toPiece } from './pieces'
 import type { HandlerGroup } from './types'
 
 const toPackage = (r: typeof t.productionPackage.$inferSelect): ProductionPackage => ({
@@ -34,6 +33,7 @@ export const production: HandlerGroup<'production'> = {
   'production.create': async (ctx, { pieceId, ...request }) => {
     const packager = ctx.services.require('production')
     const piece = await getPiece(ctx, pieceId)
+    assertAttested(piece)
     const [last] = await ctx.repo.packages.select(
       { revision: max(t.productionPackage.revision) },
       eq(t.productionPackage.pieceId, pieceId),
@@ -47,12 +47,12 @@ export const production: HandlerGroup<'production'> = {
       createdBy: ctx.user.id,
     })
     const pkg = toPackage(row)
-    const handle = jobHandle<ProductionPackagePatch>(
-      ctx,
-      { kind: 'production', id: pkg.id, pieceId },
-      (patch) => ctx.repo.packages.update(eq(t.productionPackage.id, pkg.id), patch),
-    )
-    publish(ctx, { type: 'job.updated', kind: 'production', id: pkg.id, pieceId })
+    const job = { kind: 'production' as const, id: pkg.id, pieceId }
+    const handle = jobHandle<ProductionPackagePatch>(ctx, job, async (patch) => {
+      const [row] = await ctx.repo.packages.update(eq(t.productionPackage.id, pkg.id), patch)
+      return row && { status: row.status, progress: stepProgress(row.status) }
+    })
+    publishJob(ctx, job, { status: 'queued', progress: 0 })
     await packager.submit(
       pkg,
       { piece: await toPiece(ctx, piece), ...request },

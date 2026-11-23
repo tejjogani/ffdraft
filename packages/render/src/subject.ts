@@ -20,7 +20,8 @@ export interface SceneSubject {
 /** The 26 directions of a cube's faces, edges and corners. */
 const DIRECTIONS: Vec3[] = []
 for (let x = -1; x <= 1; x++)
-  for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) if (x || y || z) DIRECTIONS.push([x, y, z])
+  for (let y = -1; y <= 1; y++)
+    for (let z = -1; z <= 1; z++) if (x || y || z) DIRECTIONS.push([x, y, z])
 
 function supportPoints(e: Evaluation): Vec3[] {
   const best = DIRECTIONS.map(() => ({ score: -Infinity, point: [0, 0, 0] as Vec3 }))
@@ -55,7 +56,13 @@ export function subjectOf(input: Evaluation | SceneSubject): SceneSubject {
       plating,
       bounds,
     })),
-    stones: input.stones.map(({ id, nodeId, stone, role, matrix }) => ({ id, nodeId, stone, role, matrix })),
+    stones: input.stones.map(({ id, nodeId, stone, role, matrix }) => ({
+      id,
+      nodeId,
+      stone,
+      role,
+      matrix,
+    })),
   }
 }
 

@@ -1,0 +1,243 @@
+/**
+ * Round trips: every format is written from the kernel and parsed back — triangle counts,
+ * manifoldness, names, units and bounding boxes — for an all-exact solitaire ring and for a
+ * design with a mesh (sculpted) body.
+ */
+import { type Design, TEMPLATES, buildDesign, designFrom } from '@pave/schema'
+import { unzipSync } from 'fflate'
+import { importSTEP, measureVolume } from 'replicad'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { type LocalKernel, createKernel } from '../kernel'
+import type { Bounds, ExportFormat, ExportResult } from '../types'
+import { loadRhino3dm } from './rhino3dm'
+
+let kernel: LocalKernel
+beforeAll(() => {
+  kernel = createKernel()
+})
+afterAll(() => kernel.dispose())
+
+const solitaire = (): Design => buildDesign(TEMPLATES.find((t) => t.id === 'solitaire')!.spec)
+const sculpted = (): Design =>
+  designFrom('pendant', [
+    { id: 'trophy', kind: 'meshBody', name: 'Trophy', source: { type: 'builtin', name: 'trophy' }, height: 20 },
+    {
+      id: 'loop',
+      kind: 'primitive',
+      name: 'Loop',
+      shape: 'torus',
+      size: [6, 6, 1.2],
+      tube: 1.2,
+      transform: { position: [0, 0, 12], rotation: [90, 0, 0], scale: 1 },
+    },
+  ])
+
+interface Triangles {
+  positions: number[]
+  indices: number[]
+}
+
+/** Every edge used exactly twice, in opposite directions: closed and consistently wound. */
+function isClosedManifold({ positions, indices }: Triangles): boolean {
+  const ids = new Map<string, number>()
+  const vertex = (i: number) => {
+    const key = `${positions[i * 3]},${positions[i * 3 + 1]},${positions[i * 3 + 2]}`
+    let id = ids.get(key)
+    if (id === undefined) ids.set(key, (id = ids.size))
+    return id
+  }
+  const edges = new Map<string, number>()
+  for (let t = 0; t < indices.length; t += 3)
+    for (let e = 0; e < 3; e++) {
+      const a = vertex(indices[t + e]!)
+      const b = vertex(indices[t + ((e + 1) % 3)]!)
+      edges.set(`${a}>${b}`, (edges.get(`${a}>${b}`) ?? 0) + 1)
+    }
+  for (const [key, n] of edges) {
+    const [a, b] = key.split('>')
+    if (n !== 1 || edges.get(`${b}>${a}`) !== 1) return false
+  }
+  return true
+}
+
+function boundsOf(positions: number[]): Bounds {
+  const min: [number, number, number] = [Infinity, Infinity, Infinity]
+  const max: [number, number, number] = [-Infinity, -Infinity, -Infinity]
+  for (let i = 0; i < positions.length; i += 3)
+    for (let k = 0; k < 3; k++) {
+      min[k] = Math.min(min[k]!, positions[i + k]!)
+      max[k] = Math.max(max[k]!, positions[i + k]!)
+    }
+  return { min, max }
+}
+
+function expectBounds(actual: Bounds, expected: Bounds, tolerance = 0.05) {
+  for (let k = 0; k < 3; k++) {
+    expect(actual.min[k]).toBeCloseTo(expected.min[k]!, 1)
+    expect(Math.abs(actual.max[k]! - expected.max[k]!)).toBeLessThan(tolerance)
+  }
+}
+
+function parseStl(bytes: Uint8Array): { header: string; triangles: Triangles } {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const count = view.getUint32(80, true)
+  expect(bytes.byteLength).toBe(84 + count * 50)
+  const positions: number[] = []
+  for (let t = 0; t < count; t++)
+    for (let k = 0; k < 9; k++) positions.push(view.getFloat32(84 + t * 50 + 12 + k * 4, true))
+  return {
+    header: new TextDecoder().decode(bytes.subarray(0, 80)),
+    triangles: { positions, indices: positions.map((_, i) => i).filter((i) => i < positions.length / 3) },
+  }
+}
+
+/** Splits STL triangle soup into connected shells by shared vertex coordinates. */
+function shellCount({ positions, indices }: Triangles): number {
+  const ids = new Map<string, number>()
+  const parent: number[] = []
+  const find = (x: number): number => (parent[x] === x ? x : (parent[x] = find(parent[x]!)))
+  const vertex = (i: number) => {
+    const key = `${positions[i * 3]},${positions[i * 3 + 1]},${positions[i * 3 + 2]}`
+    let id = ids.get(key)
+    if (id === undefined) {
+      id = ids.size
+      ids.set(key, id)
+      parent.push(id)
+    }
+    return id
+  }
+  for (let t = 0; t < indices.length; t += 3) {
+    const a = find(vertex(indices[t]!))
+    for (const v of [indices[t + 1]!, indices[t + 2]!]) parent[find(vertex(v))] = a
+  }
+  return new Set(parent.map((_, i) => find(i))).size
+}
+
+const exportOf = (design: Design, format: ExportFormat, stones?: boolean): Promise<ExportResult> =>
+  kernel.export(design, format, stones === undefined ? {} : { stones })
+
+describe.each([
+  ['solitaire ring', solitaire],
+  ['design with a mesh body', sculpted],
+])('exports round-trip: %s', (_, make) => {
+  it('STL: watertight metal shells matching the production parts', async () => {
+    const design = make()
+    const evaluation = await kernel.evaluate(design, { detail: 'production' })
+    const result = await exportOf(design, 'stl')
+    expect(result.extension).toBe('stl')
+    const { header, triangles } = parseStl(result.bytes)
+    expect(header).toContain('millimetres')
+    const expected = evaluation.parts.reduce((n, p) => n + p.mesh.indices.length / 3, 0)
+    expect(triangles.indices.length / 3).toBeGreaterThan(0.5 * expected)
+    expect(isClosedManifold(triangles)).toBe(true)
+    expect(shellCount(triangles)).toBe(evaluation.parts.length)
+    expectBounds(boundsOf(triangles.positions), {
+      min: [0, 1, 2].map((k) => Math.min(...evaluation.parts.map((p) => p.bounds.min[k]!))) as Bounds['min'],
+      max: [0, 1, 2].map((k) => Math.max(...evaluation.parts.map((p) => p.bounds.max[k]!))) as Bounds['max'],
+    })
+    const withStones = parseStl((await exportOf(design, 'stl', true)).bytes)
+    expect(shellCount(withStones.triangles)).toBe(evaluation.parts.length + evaluation.stones.length)
+  })
+
+  it('3MF: millimetre model with one named, coloured object per part', async () => {
+    const design = make()
+    const evaluation = await kernel.evaluate(design, { detail: 'production' })
+    const files = unzipSync((await exportOf(design, '3mf')).bytes)
+    expect(Object.keys(files).sort()).toEqual(['3D/3dmodel.model', '[Content_Types].xml', '_rels/.rels'])
+    const xml = new TextDecoder().decode(files['3D/3dmodel.model'])
+    expect(xml).toContain('unit="millimeter"')
+    const objects = [...xml.matchAll(/<object id="(\d+)" type="model" name="([^"]+)"[^>]*><mesh><vertices>([\s\S]*?)<\/vertices><triangles>([\s\S]*?)<\/triangles>/g)]
+    expect(objects).toHaveLength(evaluation.parts.length)
+    expect(objects.map((o) => o[2])).toEqual(evaluation.parts.map((p) => p.name))
+    expect(xml).toMatch(/<base name="[^"]+" displaycolor="#[0-9A-F]{8}"\/>/)
+    for (const [, , vertices, tris] of objects) {
+      const positions = [...vertices!.matchAll(/x="([^"]+)" y="([^"]+)" z="([^"]+)"/g)].flatMap((m) => [m[1], m[2], m[3]].map(Number))
+      const indices = [...tris!.matchAll(/v1="(\d+)" v2="(\d+)" v3="(\d+)"/g)].flatMap((m) => [m[1], m[2], m[3]].map(Number))
+      expect(isClosedManifold({ positions, indices })).toBe(true)
+    }
+  })
+
+  it('OBJ: a named group per part and per stone, same triangles as the STL', async () => {
+    const design = make()
+    const evaluation = await kernel.evaluate(design, { detail: 'production' })
+    const text = new TextDecoder().decode((await exportOf(design, 'obj')).bytes)
+    expect(text).toContain('units: millimetres')
+    const groups = [...text.matchAll(/^g (.+)$/gm)].map((m) => m[1])
+    expect(groups).toHaveLength(evaluation.parts.length + evaluation.stones.length)
+    const faces = (text.match(/^f /gm) ?? []).length
+    const metal = parseStl((await exportOf(design, 'stl')).bytes).triangles.indices.length / 3
+    const stones = parseStl((await exportOf(design, 'stl', true)).bytes).triangles.indices.length / 3 - metal
+    expect(faces).toBe(metal + stones)
+  })
+
+  it('3DM: millimetre document with layers, named meshes and user strings', async () => {
+    const design = make()
+    const evaluation = await kernel.evaluate(design, { detail: 'production' })
+    const result = await exportOf(design, '3dm')
+    expect(result.notes.join(' ')).toMatch(/meshes and curves only.*STEP/)
+    const rhino = await loadRhino3dm()
+    const doc = rhino.File3dm.fromByteArray(result.bytes)
+    expect(doc.settings().modelUnitSystem).toBe(rhino.UnitSystem.Millimeters)
+    const layerNames = Array.from({ length: doc.layers().count }, (_, i) => doc.layers().get(i).name)
+    for (const p of evaluation.parts) expect(layerNames).toContain(p.material.length ? layerNames.find((n) => n.length > 0) : '')
+    const objects = doc.objects()
+    const meshes = Array.from({ length: objects.count }, (_, i) => objects.get(i)).filter(
+      (o) => o.geometry().objectType === rhino.ObjectType.Mesh,
+    )
+    expect(meshes).toHaveLength(evaluation.parts.length + evaluation.stones.length)
+    const metal = meshes.filter((o) => o.attributes().getUserString('alloy'))
+    expect(metal.map((o) => o.attributes().name)).toEqual(evaluation.parts.map((p) => p.name))
+    expect(metal[0]!.attributes().getUserString('alloy')).toBe(evaluation.parts[0]!.material)
+    const stones = meshes.filter((o) => o.attributes().getUserString('carat'))
+    expect(stones).toHaveLength(evaluation.stones.length)
+    for (const o of metal) expect((o.geometry() as unknown as { isClosed: boolean }).isClosed).toBe(true)
+  })
+
+  it('GLB is wired through the exporter registry', async () => {
+    const result = await exportOf(make(), 'glb')
+    expect(new TextDecoder().decode(result.bytes.subarray(0, 4))).toBe('glTF')
+  })
+})
+
+describe('STEP round trip', () => {
+  it('writes exact, named solids that re-import with the same volume', async () => {
+    const design = designFrom('other', [
+      { id: 'box', kind: 'primitive', name: 'Block', shape: 'box', size: [4, 5, 6] },
+      {
+        id: 'ball',
+        kind: 'primitive',
+        name: 'Ball',
+        material: 'pt950',
+        shape: 'sphere',
+        size: [4, 4, 4],
+        transform: { position: [10, 0, 0], rotation: [0, 0, 0], scale: 1 },
+      },
+    ])
+    const result = await exportOf(design, 'step')
+    const text = new TextDecoder().decode(result.bytes)
+    expect(text.startsWith('ISO-10303-21;')).toBe(true)
+    expect(text).toMatch(/FILE_SCHEMA/)
+    expect(text).toMatch(/SI_UNIT\(\.MILLI\.,\.METRE\.\)/)
+    expect((text.match(/MANIFOLD_SOLID_BREP/g) ?? []).length).toBe(2)
+    expect(text).toContain('Block — 18k Yellow Gold')
+    expect(text).toContain('Ball — Platinum 950')
+    const shape = await importSTEP(new Blob([result.bytes]))
+    expect(measureVolume(shape)).toBeCloseTo(120 + (4 / 3) * Math.PI * 8, 2)
+    shape.delete()
+  })
+
+  it('exports the solitaire exactly and says what it left out of a mesh design', async () => {
+    const ring = await exportOf(solitaire(), 'step', true)
+    const text = new TextDecoder().decode(ring.bytes)
+    const evaluation = await kernel.evaluate(solitaire(), { detail: 'production' })
+    expect((text.match(/MANIFOLD_SOLID_BREP/g) ?? []).length).toBeGreaterThanOrEqual(evaluation.stones.length + 2)
+    const shape = await importSTEP(new Blob([ring.bytes]))
+    // Bodies overlap where claws meet the band, so the solids sum to at least the fused metal.
+    expect(measureVolume(shape)).toBeGreaterThan(evaluation.report.metals[0]!.volumeMm3 * 0.98)
+    shape.delete()
+
+    const mesh = await exportOf(sculpted(), 'step')
+    expect(mesh.notes.join(' ')).toMatch(/Mesh bodies have no exact form and are omitted: Trophy/)
+    expect(new TextDecoder().decode(mesh.bytes)).toContain('Loop')
+  })
+})

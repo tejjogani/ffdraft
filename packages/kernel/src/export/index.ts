@@ -7,5 +7,10 @@
  */
 import type { Exporter } from '../core'
 import { glb } from './glbFormat'
+import { obj } from './obj'
+import { rhino3dm } from './rhino3dm'
+import { step } from './step'
+import { stl } from './stl'
+import { threeMf } from './threemf'
 
-export const EXPORTERS: readonly Exporter[] = [glb]
+export const EXPORTERS: readonly Exporter[] = [glb, stl, threeMf, obj, step, rhino3dm]

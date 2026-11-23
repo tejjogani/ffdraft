@@ -1,30 +1,57 @@
-import type { StoredChange } from '@pave/schema'
+import type { EventAudience, JobKind, ServerEvent } from '@pave/schema'
 
-export type JobKind = 'render' | 'shot' | 'production'
-
-/** Live, org-scoped notifications streamed to clients over `GET /api/events`. */
-export type ServerEvent =
-  | { type: 'design.changed'; pieceId: string; version: number; change: StoredChange }
-  | { type: 'job.updated'; kind: JobKind; id: string; pieceId: string }
-  | { type: 'piece.updated'; pieceId: string }
+export type { EventAudience, JobKind, ServerEvent }
 
 type Listener = (event: ServerEvent) => void
 
-/** In-process pub/sub. One server process owns its subscribers; events never cross orgs. */
-export class EventBus {
-  readonly #listeners = new Map<string, Set<Listener>>()
+interface Subscriber {
+  listener: Listener
+  /** Null for in-process listeners, which only see org-wide events. */
+  userId: string | null
+  /** The studio window (`/api/events?client=<id>`), when it said which it is. */
+  clientId: string | null
+}
 
-  publish(orgId: string, event: ServerEvent): void {
-    for (const listener of this.#listeners.get(orgId) ?? []) listener(event)
+/**
+ * In-process pub/sub. One server process owns its subscribers; events never cross orgs. An event
+ * may be addressed to one user: then it reaches that user's window `clientId` when it is
+ * connected, otherwise every window of theirs.
+ */
+export class EventBus {
+  readonly #subscribers = new Map<string, Set<Subscriber>>()
+
+  /** Delivers `event` and returns how many subscribers received it. */
+  publish(orgId: string, event: ServerEvent, to?: EventAudience): number {
+    const recipients = this.#recipients(orgId, to)
+    for (const s of recipients) s.listener(event)
+    return recipients.length
   }
 
-  subscribe(orgId: string, listener: Listener): () => void {
-    const set = this.#listeners.get(orgId) ?? new Set()
-    set.add(listener)
-    this.#listeners.set(orgId, set)
+  /** Whether a targeted event would reach anyone: is the user (or that window) connected? */
+  isConnected(orgId: string, to: EventAudience): boolean {
+    return this.#recipients(orgId, to).length > 0
+  }
+
+  subscribe(
+    orgId: string,
+    listener: Listener,
+    who: { userId: string; clientId?: string | null } | null = null,
+  ): () => void {
+    const set = this.#subscribers.get(orgId) ?? new Set()
+    const sub: Subscriber = { listener, userId: who?.userId ?? null, clientId: who?.clientId ?? null }
+    set.add(sub)
+    this.#subscribers.set(orgId, set)
     return () => {
-      set.delete(listener)
-      if (set.size === 0) this.#listeners.delete(orgId)
+      set.delete(sub)
+      if (set.size === 0) this.#subscribers.delete(orgId)
     }
+  }
+
+  #recipients(orgId: string, to: EventAudience | undefined): Subscriber[] {
+    const all = [...(this.#subscribers.get(orgId) ?? [])]
+    if (!to) return all
+    const theirs = all.filter((s) => s.userId === to.userId)
+    const window = to.clientId ? theirs.filter((s) => s.clientId === to.clientId) : []
+    return window.length ? window : theirs
   }
 }

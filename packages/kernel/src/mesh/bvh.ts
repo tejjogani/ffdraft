@@ -49,39 +49,59 @@ export class TriangleBvh {
   private build(centroids: Float64Array, triangles: number): void {
     const p = this.mesh.positions
     const idx = this.mesh.indices
+    // Per-triangle boxes, so node bounds are a union of boxes rather than of corners.
+    const tbox = new Float64Array(triangles * 6)
+    for (let t = 0; t < triangles; t++)
+      for (let k = 0; k < 3; k++) {
+        const a = p[idx[t * 3]! * 3 + k]!
+        const b = p[idx[t * 3 + 1]! * 3 + k]!
+        const c = p[idx[t * 3 + 2]! * 3 + k]!
+        tbox[t * 6 + k] = Math.min(a, b, c)
+        tbox[t * 6 + 3 + k] = Math.max(a, b, c)
+      }
     const order = this.order
-    const pending: [node: number, start: number, end: number][] = [[this.nodes++, 0, triangles]]
+    const boxes = this.boxes
+    const pending: number[] = [this.nodes++, 0, triangles]
     while (pending.length > 0) {
-      const [node, start, end] = pending.pop()!
+      const end = pending.pop()!
+      const start = pending.pop()!
+      const node = pending.pop()!
       const b = node * 6
-      this.boxes.fill(Infinity, b, b + 3)
-      this.boxes.fill(-Infinity, b + 3, b + 6)
-      const cmin = [Infinity, Infinity, Infinity]
-      const cmax = [-Infinity, -Infinity, -Infinity]
+      let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity
+      let cx0 = Infinity, cy0 = Infinity, cz0 = Infinity, cx1 = -Infinity, cy1 = -Infinity, cz1 = -Infinity
       for (let i = start; i < end; i++) {
         const t = order[i]!
-        for (let c = 0; c < 3; c++) {
-          const v = idx[t * 3 + c]! * 3
-          for (let k = 0; k < 3; k++) {
-            const x = p[v + k]!
-            if (x < this.boxes[b + k]!) this.boxes[b + k] = x
-            if (x > this.boxes[b + 3 + k]!) this.boxes[b + 3 + k] = x
-          }
-        }
-        for (let k = 0; k < 3; k++) {
-          const c = centroids[t * 3 + k]!
-          if (c < cmin[k]!) cmin[k] = c
-          if (c > cmax[k]!) cmax[k] = c
-        }
+        const o = t * 6
+        if (tbox[o]! < x0) x0 = tbox[o]!
+        if (tbox[o + 1]! < y0) y0 = tbox[o + 1]!
+        if (tbox[o + 2]! < z0) z0 = tbox[o + 2]!
+        if (tbox[o + 3]! > x1) x1 = tbox[o + 3]!
+        if (tbox[o + 4]! > y1) y1 = tbox[o + 4]!
+        if (tbox[o + 5]! > z1) z1 = tbox[o + 5]!
+        const cx = centroids[t * 3]!
+        const cy = centroids[t * 3 + 1]!
+        const cz = centroids[t * 3 + 2]!
+        if (cx < cx0) cx0 = cx
+        if (cx > cx1) cx1 = cx
+        if (cy < cy0) cy0 = cy
+        if (cy > cy1) cy1 = cy
+        if (cz < cz0) cz0 = cz
+        if (cz > cz1) cz1 = cz
       }
+      boxes[b] = x0
+      boxes[b + 1] = y0
+      boxes[b + 2] = z0
+      boxes[b + 3] = x1
+      boxes[b + 4] = y1
+      boxes[b + 5] = z1
       if (end - start <= LEAF) {
         this.offset[node] = start
         this.count[node] = end - start
         continue
       }
-      const ex = cmax[0]! - cmin[0]!
-      const ey = cmax[1]! - cmin[1]!
-      const ez = cmax[2]! - cmin[2]!
+      const ex = cx1 - cx0
+      const ey = cy1 - cy0
+      const ez = cz1 - cz0
       const axis = ex >= ey && ex >= ez ? 0 : ey >= ez ? 1 : 2
       const mid = (start + end) >> 1
       selectNth(order, centroids, axis, start, end - 1, mid)
@@ -89,7 +109,7 @@ export class TriangleBvh {
       this.nodes += 2
       this.offset[node] = left
       this.count[node] = 0
-      pending.push([left, start, mid], [left + 1, mid, end])
+      pending.push(left, start, mid, left + 1, mid, end)
     }
   }
 
@@ -348,22 +368,14 @@ export class TriangleBvh {
 }
 
 /** Partially orders `order[lo..hi]` so the element at `nth` is in its sorted place (quickselect). */
-function selectNth(
-  order: Uint32Array,
-  keys: Float64Array,
-  axis: number,
-  lo: number,
-  hi: number,
-  nth: number,
-): void {
-  const key = (i: number) => keys[order[i]! * 3 + axis]!
+function selectNth(order: Uint32Array, keys: Float64Array, axis: number, lo: number, hi: number, nth: number): void {
   while (hi > lo) {
-    const pivot = key((lo + hi) >> 1)
+    const pivot = keys[order[(lo + hi) >> 1]! * 3 + axis]!
     let i = lo
     let j = hi
     while (i <= j) {
-      while (key(i) < pivot) i++
-      while (key(j) > pivot) j--
+      while (keys[order[i]! * 3 + axis]! < pivot) i++
+      while (keys[order[j]! * 3 + axis]! > pivot) j--
       if (i <= j) {
         const tmp = order[i]!
         order[i] = order[j]!

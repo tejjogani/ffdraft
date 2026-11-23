@@ -62,7 +62,11 @@ export function meshSdf(
   for (let bk = 0; bk < nz - 1; bk += block) {
     for (let bj = 0; bj < ny - 1; bj += block) {
       for (let bi = 0; bi < nx - 1; bi += block) {
-        const c = sdf(min[0] + (bi + block / 2) * h, min[1] + (bj + block / 2) * h, min[2] + (bk + block / 2) * h)
+        const c = sdf(
+          min[0] + (bi + block / 2) * h,
+          min[1] + (bj + block / 2) * h,
+          min[2] + (bk + block / 2) * h,
+        )
         if (Math.abs(c) > reach) continue
         const ei = Math.min(block, nx - 1 - bi)
         const ej = Math.min(block, ny - 1 - bj)
@@ -84,7 +88,11 @@ export function meshSdf(
                 const li = i + dx + L * (j + dy + L * (k + dz))
                 cv.push(local[li]!)
                 cid.push(ids[li]!)
-                cp.push([min[0] + (bi + i + dx) * h, min[1] + (bj + j + dy) * h, min[2] + (bk + k + dz) * h])
+                cp.push([
+                  min[0] + (bi + i + dx) * h,
+                  min[1] + (bj + j + dy) * h,
+                  min[2] + (bk + k + dz) * h,
+                ])
               }
               if (cv.every((v) => v > 0) || cv.every((v) => v < 0)) continue
               for (const t of TETS) polygonise(t, cv, cid, cp, total, vertexOf, positions, indices)

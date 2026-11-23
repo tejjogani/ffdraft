@@ -57,10 +57,24 @@ const fixture = (): Evaluation => ({
 
 interface Gltf {
   asset: { version: string }
-  nodes: { name: string; mesh?: number; matrix?: number[]; children?: number[]; extras?: Record<string, unknown> }[]
-  meshes: { primitives: { attributes: Record<string, number>; indices: number; material: number }[] }[]
+  nodes: {
+    name: string
+    mesh?: number
+    matrix?: number[]
+    children?: number[]
+    extras?: Record<string, unknown>
+  }[]
+  meshes: {
+    primitives: { attributes: Record<string, number>; indices: number; material: number }[]
+  }[]
   materials: { name: string }[]
-  accessors: { bufferView: number; componentType: number; count: number; min?: number[]; max?: number[] }[]
+  accessors: {
+    bufferView: number
+    componentType: number
+    count: number
+    min?: number[]
+    max?: number[]
+  }[]
   bufferViews: { byteOffset: number; byteLength: number }[]
 }
 
@@ -82,7 +96,9 @@ function parseGlb(bytes: Uint8Array): { json: Gltf; bin: DataView } {
 function readFloats(g: { json: Gltf; bin: DataView }, accessor: number): number[] {
   const a = g.json.accessors[accessor]!
   const view = g.json.bufferViews[a.bufferView]!
-  return Array.from({ length: a.count * 3 }, (_, i) => g.bin.getFloat32(view.byteOffset + i * 4, true))
+  return Array.from({ length: a.count * 3 }, (_, i) =>
+    g.bin.getFloat32(view.byteOffset + i * 4, true),
+  )
 }
 
 describe('writeGlb', () => {
@@ -104,7 +120,9 @@ describe('writeGlb', () => {
       plating: 'none',
     })
     const prim = g.json.meshes[shank.mesh!]!.primitives[0]!
-    expect(readFloats(g, prim.attributes.POSITION!)).toEqual(Array.from(evaluation.parts[0]!.mesh.positions))
+    expect(readFloats(g, prim.attributes.POSITION!)).toEqual(
+      Array.from(evaluation.parts[0]!.mesh.positions),
+    )
     expect(g.json.accessors[prim.attributes.POSITION!]!.max).toEqual([1, 1, 1])
     const normals = readFloats(g, prim.attributes.NORMAL!)
     expect(normals[9]).toBeCloseTo(0.577)
@@ -115,7 +133,13 @@ describe('writeGlb', () => {
     const stones = g.json.nodes.filter((n) => n.extras?.role === 'gem')
     expect(stones.map((s) => s.name)).toEqual(['n-pave:0', 'n-pave:1', 'n-pave:2'])
     expect(stones[1]!.matrix).toEqual(stoneMatrix(2, 1.2))
-    expect(stones[0]!.extras).toEqual({ nodeId: 'n-pave', role: 'gem', stone: 'diamond', cut: 'round', carat: 0.01 })
+    expect(stones[0]!.extras).toEqual({
+      nodeId: 'n-pave',
+      role: 'gem',
+      stone: 'diamond',
+      cut: 'round',
+      carat: 0.01,
+    })
     // Same cut and material share one mesh; a different material gets its own.
     expect(stones[0]!.mesh).toBe(stones[1]!.mesh)
     expect(stones[2]!.mesh).not.toBe(stones[0]!.mesh)

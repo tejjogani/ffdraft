@@ -82,9 +82,9 @@ export function parseSvgPath(d: string, tolerance: number): Contour[] {
     if (explicit) command = explicit
     else if (!command || command === 'z' || command === 'Z')
       throw new Error('Path data must start with a move command (M)')
-    const c = command!
+    const c: string = command!
     const lower = c.toLowerCase()
-    const rel = c !== c.toUpperCase()
+    const rel: boolean = c !== c.toUpperCase()
     const ox = rel ? x : 0
     const oy = rel ? y : 0
     let cubic: Point | null = null

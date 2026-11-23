@@ -20,7 +20,8 @@ import type { ResolvedScene } from '../types'
 
 /** `PAVE_RENDER_WORKER_DIR` relocates the worker when this package is bundled or installed. */
 export const WORKER_DIR = resolve(
-  process.env.PAVE_RENDER_WORKER_DIR ?? join(dirname(fileURLToPath(import.meta.url)), '../../../../workers/render'),
+  process.env.PAVE_RENDER_WORKER_DIR ??
+    join(dirname(fileURLToPath(import.meta.url)), '../../../../workers/render'),
 )
 const RUNNER = join(WORKER_DIR, 'pave_render.py')
 
@@ -54,7 +55,16 @@ const blender = (command: string): BlenderRuntime => ({
   kind: 'blender',
   command,
   // --python-exit-code makes an uncaught Python error fail the process instead of exiting 0.
-  scriptArgs: (script, args) => ['-b', '--factory-startup', '--python-exit-code', '1', '-P', script, '--', ...args],
+  scriptArgs: (script, args) => [
+    '-b',
+    '--factory-startup',
+    '--python-exit-code',
+    '1',
+    '-P',
+    script,
+    '--',
+    ...args,
+  ],
 })
 
 export function resolveRuntime(options: RuntimeOptions = {}): BlenderRuntime {
@@ -93,11 +103,14 @@ function run(
       killedFor = why
       child.kill()
     }
-    const timer = setTimeout(() => kill(`timed out after ${Math.round(opts.timeoutMs / 1000)} s`), opts.timeoutMs)
+    const timer = setTimeout(
+      () => kill(`timed out after ${Math.round(opts.timeoutMs / 1000)} s`),
+      opts.timeoutMs,
+    )
     const onAbort = () => kill('aborted')
     opts.signal?.addEventListener('abort', onAbort, { once: true })
     createInterface({ input: child.stdout }).on('line', (line) => {
-      stdout = (stdout + line + '\n').slice(-TAIL)
+      stdout = `${stdout}${line}\n`.slice(-TAIL)
       opts.onLine?.(line)
     })
     child.stderr.on('data', (chunk: Buffer) => {
@@ -130,17 +143,34 @@ export interface BlenderCapability {
 export async function detectBlender(options: RuntimeOptions = {}): Promise<BlenderCapability> {
   const runtime = resolveRuntime(options)
   const base = { runtime: runtime.kind, command: runtime.command }
-  if (runtime.kind === 'bpy' && !existsSync(runtime.command) && runtime.command === venvPython(options.platform))
-    return { ...base, available: false, reason: 'Render worker not set up: run `pnpm --filter @pave/render setup:blender`.' }
+  if (
+    runtime.kind === 'bpy' &&
+    !existsSync(runtime.command) &&
+    runtime.command === venvPython(options.platform)
+  )
+    return {
+      ...base,
+      available: false,
+      reason: 'Render worker not set up: run `pnpm --filter @pave/render setup:blender`.',
+    }
   const args =
     runtime.kind === 'bpy'
       ? ['-c', 'import bpy; print("PAVE_BLENDER_VERSION", bpy.app.version_string)']
-      : ['-b', '--factory-startup', '--python-expr', 'import bpy; print("PAVE_BLENDER_VERSION", bpy.app.version_string)']
+      : [
+          '-b',
+          '--factory-startup',
+          '--python-expr',
+          'import bpy; print("PAVE_BLENDER_VERSION", bpy.app.version_string)',
+        ]
   try {
     const { code, stdout, stderr } = await run(runtime.command, args, { timeoutMs: 120_000 })
     const version = /PAVE_BLENDER_VERSION (\S+)/.exec(stdout)?.[1]
     if (code === 0 && version) return { ...base, available: true, version }
-    return { ...base, available: false, reason: (stderr || stdout).trim().split('\n').slice(-3).join('\n') }
+    return {
+      ...base,
+      available: false,
+      reason: (stderr || stdout).trim().split('\n').slice(-3).join('\n'),
+    }
   } catch (err) {
     return { ...base, available: false, reason: (err as Error).message }
   }
@@ -174,7 +204,9 @@ export interface RenderWithBlenderOptions extends Omit<RuntimeOptions, 'env' | '
   timeoutMs?: number
 }
 
-export async function renderWithBlender(options: RenderWithBlenderOptions): Promise<BlenderRenderResult> {
+export async function renderWithBlender(
+  options: RenderWithBlenderOptions,
+): Promise<BlenderRenderResult> {
   const runtime = resolveRuntime(options)
   const outDir = resolve(options.outDir)
   await mkdir(outDir, { recursive: true })
@@ -183,16 +215,20 @@ export async function renderWithBlender(options: RenderWithBlenderOptions): Prom
   await writeFile(glbPath, options.glb)
   await writeFile(jobPath, JSON.stringify({ scene: options.resolved, glb: glbPath, outDir }))
 
-  const { code, stdout, stderr } = await run(runtime.command, runtime.scriptArgs(RUNNER, [jobPath]), {
-    cwd: outDir,
-    signal: options.signal,
-    timeoutMs: options.timeoutMs ?? 2 * 60 * 60 * 1000,
-    onLine: (line) => {
-      if (!line.startsWith('{"progress"')) return
-      const value = (JSON.parse(line) as { progress: number }).progress
-      options.onProgress?.(value)
+  const { code, stdout, stderr } = await run(
+    runtime.command,
+    runtime.scriptArgs(RUNNER, [jobPath]),
+    {
+      cwd: outDir,
+      signal: options.signal,
+      timeoutMs: options.timeoutMs ?? 2 * 60 * 60 * 1000,
+      onLine: (line) => {
+        if (!line.startsWith('{"progress"')) return
+        const value = (JSON.parse(line) as { progress: number }).progress
+        options.onProgress?.(value)
+      },
     },
-  })
+  )
   if (code !== 0) {
     const tail = (stderr.trim() || stdout.trim()).split('\n').slice(-12).join('\n')
     throw new Error(`Blender render failed (exit ${code}):\n${tail}`)

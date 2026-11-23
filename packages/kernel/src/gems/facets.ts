@@ -199,9 +199,9 @@ export function brilliantFacets(o: Outline, cut: GemCut, options: BrilliantOptio
   // girdle (to at most twice nominal) so 40 % of it remains at the thinnest place, and flatten
   // whatever would still bite deeper — only a heart's cleft does.
   const probe = build(levelsOf(cut), Infinity)
-  const girdle = Math.min(2 * cut.girdlePct, Math.max(cut.girdlePct, (probe.crown.dip + probe.pavilion.dip) / 0.6))
-  const levels = levelsOf(cut, girdle)
-  const halves = build(levels, 0.3 * girdle)
+  const thickness = Math.min(2 * cut.girdlePct, Math.max(cut.girdlePct, (probe.crown.dip + probe.pavilion.dip) / 0.6))
+  const levels = levelsOf(cut, thickness)
+  const halves = build(levels, 0.3 * thickness)
   const { crown, pavilion } = halves
   const girdle: Facet[] = crown.ring.map((top, i) => {
     const j = (i + 1) % crown.ring.length

@@ -14,7 +14,8 @@ const good: RenderMetrics = {
   firefliesPerMp: 2,
   noise: 0.004,
 }
-const codes = (m: Partial<RenderMetrics>) => assessRender({ ...good, ...m }, scene).map((i) => i.code)
+const codes = (m: Partial<RenderMetrics>) =>
+  assessRender({ ...good, ...m }, scene).map((i) => i.code)
 
 describe('assessRender', () => {
   it('passes a well-made render', () => {
@@ -29,6 +30,11 @@ describe('assessRender', () => {
     expect(codes({ subjectBox: [0.05, 0.05, 0.95, 0.95] })).toContain('framing.large')
     expect(codes({ subjectBox: [0.4, 0.2, 0.95, 0.8] })).toContain('framing.offCentre')
     expect(codes({ subjectBox: null })).toEqual(['subject.missing'])
+  })
+
+  it('lets a macro crop the piece', () => {
+    const macro = RenderSceneSchema.parse({ camera: { preset: 'macro' } })
+    expect(assessRender({ ...good, subjectBox: [0.05, 0.3, 0.95, 1] }, macro)).toEqual([])
   })
 
   it('flags exposure, noise and fireflies', () => {

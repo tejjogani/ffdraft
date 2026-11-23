@@ -5,7 +5,7 @@
  * sub-second range.
  */
 import type { MeshData } from '@pave/kernel/types'
-import { transformDir, transformPoint } from './vec'
+import { transformPoint } from './vec'
 
 /** Positions + indices in world space; normals optional (per vertex, same length as positions). */
 export interface Tris {
@@ -87,8 +87,8 @@ export function edgeTable(indices: Uint32Array, canon: Uint32Array): EdgeTable {
       const u = canon[indices[f * 3 + k]!]!
       const v = canon[indices[f * 3 + ((k + 1) % 3)]!]!
       if (u === v) continue
-      const lo = u < v ? u : v
-      const hi = u < v ? v : u
+      const lo = Math.min(u, v)
+      const hi = Math.max(u, v)
       let h = (Math.imul(lo, 2654435761) ^ Math.imul(hi, 40503)) & mask
       let e = -1
       for (;;) {
@@ -209,7 +209,13 @@ function signedTetVolume(p: Float32Array, idx: Uint32Array, f: number): number {
 }
 
 /** Unit face normal of triangle f into `out` at offset `o`; returns twice the area. */
-export function faceNormal(p: Float32Array, idx: Uint32Array, f: number, out: Float32Array, o: number): number {
+export function faceNormal(
+  p: Float32Array,
+  idx: Uint32Array,
+  f: number,
+  out: Float32Array,
+  o: number,
+): number {
   const i = idx[f * 3]! * 3
   const j = idx[f * 3 + 1]! * 3
   const k = idx[f * 3 + 2]! * 3
@@ -242,7 +248,12 @@ export function instanceMesh(mesh: MeshData, matrix: readonly number[]): Tris {
   const n = mesh.positions.length / 3
   const positions = new Float32Array(n * 3)
   for (let i = 0; i < n; i++) {
-    const w = transformPoint(matrix, mesh.positions[i * 3]!, mesh.positions[i * 3 + 1]!, mesh.positions[i * 3 + 2]!)
+    const w = transformPoint(
+      matrix,
+      mesh.positions[i * 3]!,
+      mesh.positions[i * 3 + 1]!,
+      mesh.positions[i * 3 + 2]!,
+    )
     positions.set(w, i * 3)
   }
   return { positions, indices: mesh.indices }
@@ -268,12 +279,4 @@ export function mergeTris(list: readonly Tris[]): Tris {
     oi += t.indices.length
   }
   return { positions, indices }
-}
-
-/** Girdle extent of a placed unit gem: its centre and the world directions of its axes. */
-export function stoneFrame(matrix: readonly number[]) {
-  return {
-    centre: transformPoint(matrix, 0, 0, 0),
-    up: transformDir(matrix, 0, 0, 1),
-  }
 }

@@ -41,6 +41,7 @@ export const METAL_APPEARANCE: Record<MetalId, MetalAppearance> = {
   'ag999-fine': metal([0.989, 0.984, 0.978], [0.99, 0.99, 1.0]),
   'ti-grade5': metal([0.542, 0.497, 0.449], [0.77, 0.79, 0.82]),
   // Physically Based (CC0) brass.
+  // biome-ignore lint/suspicious/noApproximativeNumericConstant: a measured reflectance, not log10(e)
   brass: metal([0.887, 0.789, 0.434], [0.97, 0.97, 0.95]),
 }
 
@@ -76,8 +77,16 @@ export const FINISH_APPEARANCE: Record<FinishId, FinishAppearance> = {
   polished: { roughness: 0.045, anisotropy: 0, relief: null },
   satin: { roughness: 0.27, anisotropy: 0, relief: null },
   brushed: { roughness: 0.32, anisotropy: 0.75, relief: null },
-  matte: { roughness: 0.55, anisotropy: 0, relief: { kind: 'grain', sizeMm: 0.035, strength: 0.15 } },
-  hammered: { roughness: 0.1, anisotropy: 0, relief: { kind: 'cells', sizeMm: 1.5, strength: 0.4 } },
+  matte: {
+    roughness: 0.55,
+    anisotropy: 0,
+    relief: { kind: 'grain', sizeMm: 0.035, strength: 0.15 },
+  },
+  hammered: {
+    roughness: 0.1,
+    anisotropy: 0,
+    relief: { kind: 'cells', sizeMm: 1.5, strength: 0.4 },
+  },
 }
 
 /**

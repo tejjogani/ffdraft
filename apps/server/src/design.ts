@@ -13,10 +13,10 @@ import {
   type PieceSummary,
   type StoredChange,
 } from '@pave/schema'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { type Ctx, publish } from './context'
 import * as t from './db/schema'
-import { AppError, conflict } from './errors'
+import { AppError, badRequest, conflict } from './errors'
 import { createId } from './ids'
 import { getPiece } from './lookups'
 import { serviceContext } from './service-context'
@@ -32,6 +32,7 @@ export const toStoredChange = (r: ChangeRow): StoredChange => ({
   actor: r.actor,
   label: r.label,
   at: r.at.toISOString(),
+  ...(r.reverts.length ? { reverts: r.reverts } : {}),
 })
 
 export interface CommitInput {
@@ -44,6 +45,8 @@ export interface CommitInput {
   changeId?: string
   /** How an op that no longer applies is reported: a bad request, or a conflict with later edits. */
   invalidAs?: 'bad_request' | 'conflict'
+  /** Ids of earlier changes of this piece that these ops undo. */
+  reverts?: readonly string[]
 }
 
 /** Another writer committed between our read and our write. */
@@ -117,6 +120,14 @@ async function commitOnce(ctx: Ctx, tx: Ctx['repo'], input: CommitInput) {
   )
   if (updated.length === 0) throw new StaleWrite()
 
+  const reverted = input.reverts?.length
+    ? await tx.changes.many({
+        where: and(eq(t.designChange.pieceId, piece.id), inArray(t.designChange.id, [...input.reverts])),
+      })
+    : []
+  const unknown = input.reverts?.find((id) => !reverted.some((c) => c.id === id))
+  if (unknown) throw badRequest(`Change "${unknown}" is not part of this piece’s history`)
+
   const actor = ctx.actor
   const row = await tx.changes.insert({
     id: input.changeId ?? createId('chg'),
@@ -130,8 +141,23 @@ async function commitOnce(ctx: Ctx, tx: Ctx['repo'], input: CommitInput) {
     runId: actor.type === 'agent' ? actor.runId : null,
     toolCallId: actor.type === 'agent' ? (actor.toolCallId ?? null) : null,
     label: input.label,
+    reverts: [...(input.reverts ?? [])],
     at,
   })
+  // Undoing an assistant's edit is exact implicit feedback on its run.
+  const undone = reverted.filter((c) => c.runId !== null)
+  await tx.feedback.insertMany(
+    undone.map((c) => ({
+      id: createId('fb'),
+      runId: c.runId!,
+      stepId: null,
+      source: 'implicit' as const,
+      kind: 'undone' as const,
+      changeId: c.id,
+      note: `Undone by change ${seq}`,
+      userId: actor.type === 'system' ? null : ctx.user.id,
+    })),
+  )
   return {
     replayed: false as const,
     version: seq,

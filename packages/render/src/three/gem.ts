@@ -16,7 +16,7 @@
  * (ovals, pears) still refract correctly. Works on InstancedMesh: hundreds of pavé stones share
  * one geometry and one BVH, and cost scales with gem pixels, not stone count.
  */
-import { BVHShaderGLSL, MeshBVH, MeshBVHUniformStruct } from 'three-mesh-bvh'
+
 import {
   type BufferGeometry,
   Color,
@@ -27,6 +27,7 @@ import {
   type Texture,
   Vector3,
 } from 'three'
+import { BVHShaderGLSL, MeshBVH, MeshBVHUniformStruct } from 'three-mesh-bvh'
 import type { GemMaterial as GemOptics, SurfaceMaterial } from '../materials'
 
 export const MAX_SPARKLES = 8
@@ -185,7 +186,9 @@ export interface SparkleUniforms {
 
 export class GemMaterial extends ShaderMaterial {
   constructor(optics: GemOptics, geometry: BufferGeometry, quality: GemQuality = GEM_QUALITY.hero) {
-    const sigma = optics.attenuationColor.map((c) => -Math.log(Math.max(c, 1e-6)) / optics.attenuationDistance)
+    const sigma = optics.attenuationColor.map(
+      (c) => -Math.log(Math.max(c, 1e-6)) / optics.attenuationDistance,
+    )
     super({
       vertexShader,
       fragmentShader,

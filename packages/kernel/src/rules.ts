@@ -17,8 +17,8 @@ export const RULES = {
   /** Accent-stone prongs by stone size (JewelCraft presets, 01-cad §2). */
   accentProng: (stoneWidth: number): number =>
     stoneWidth >= 2.5 ? 0.8 : stoneWidth >= 1.7 ? 0.7 : stoneWidth >= 1.5 ? 0.6 : stoneWidth >= 1.2 ? 0.5 : 0.45,
-  /** Bezel wall (Stuller ≥ 0.45 mm; 0.6+ for hand setting). */
-  bezelWall: { warn: 0.6, error: 0.45 },
+  /** Bezel wall: Stuller's minimum (02-production "DFM checks": below 0.45 mm is an error). */
+  bezelWall: { error: 0.45 },
   /** Channel wall beside melee (Stuller ≥ 0.40 mm). */
   channelWall: 0.4,
   /** Prong overlap onto the stone: 0.15 mm or 15 % of the prong wire (Stuller spec sheet). */
@@ -31,8 +31,11 @@ export const RULES = {
   beadDiameter: (stoneWidth: number): number => Math.min(0.5, Math.max(0.3, stoneWidth * 0.3)),
   /** Metal that must stay between a culet and the finger (01-cad §2: 0.2–0.3 mm). */
   culetClearance: 0.2,
-  /** Metal that should remain either side of a stone set into a band (GIA pavé border ≥ 0.5 mm). */
-  stoneBorder: 0.5,
+  /**
+   * Least metal either side of a stone set into a band. Below this the stone is effectively
+   * wider than its band; the 0.5 mm pavé border of GIA's guidance is a `src/dfm` check.
+   */
+  stoneBorder: 0.2,
   /** Engraving: recess ≤ 0.5 mm deep (02-production §3). */
   engravingDepth: { max: 0.5 },
 } as const

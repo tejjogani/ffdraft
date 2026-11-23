@@ -6,12 +6,12 @@
 import type { Bounds, Evaluation, Part, StoneInstance } from '@pave/kernel/types'
 import {
   type Design,
+  formatRingSize,
   type GemDims,
+  gemDims,
   type NodeKind,
   type NodeOf,
   type RingSizeSystem,
-  formatRingSize,
-  gemDims,
   ringInnerDiameter,
   ringSizeFromDiameter,
 } from '@pave/schema'
@@ -33,7 +33,8 @@ export interface StoneFacts {
 export interface PieceFacts {
   ring?: RingFacts
   centre?: StoneFacts
-  bail?: { node: NodeOf<'bail'>; part?: Part }
+  /** `built` is false when the kernel reported it could not build the bail. */
+  bail?: { node: NodeOf<'bail'>; part?: Part; built: boolean }
   /** The body a pendant hangs from (the bail's host), when it is its own part. */
   body?: Part
   settings: NodeOf<'setting'>[]
@@ -41,10 +42,14 @@ export interface PieceFacts {
   findings: NodeOf<'finding'>[]
   chains: NodeOf<'chain'>[]
   paves: NodeOf<'pave'>[]
+  /** Nodes the kernel reported it could not build (feature.unsupported / blocked / failed). */
+  missing: Set<string>
   bounds: Bounds
   /** Overall extents along X, Y, Z in mm. */
   extent: [number, number, number]
 }
+
+const MISSING = new Set(['feature.unsupported', 'feature.blocked', 'feature.failed'])
 
 function nodesOf<K extends NodeKind>(design: Design, kind: K): NodeOf<K>[] {
   return design.order
@@ -57,10 +62,15 @@ export function pieceFacts(design: Design, evaluation: Evaluation): PieceFacts {
   const gems = nodesOf(design, 'gem')
   const bailNode = nodesOf(design, 'bail')[0]
   const bounds = evaluation.report.bounds
+  const missing = new Set(
+    evaluation.diagnostics.filter((d) => MISSING.has(d.code) && d.nodeId).map((d) => d.nodeId!),
+  )
+  const built = <T extends { id: string }>(list: T[]) => list.filter((n) => !missing.has(n.id))
 
   const ring = shank ? ringFacts(shank, evaluation.report.ringInnerDiameter) : undefined
   const centreNode =
-    gems.find((g) => evaluation.stones.some((s) => s.nodeId === g.id && s.role === 'center')) ?? gems[0]
+    gems.find((g) => evaluation.stones.some((s) => s.nodeId === g.id && s.role === 'center')) ??
+    gems[0]
   const centre = centreNode ? stoneFacts(centreNode, evaluation) : undefined
   const partOf = (nodeId?: string) => evaluation.parts.find((p) => p.nodeId === nodeId)
   const bailPart = partOf(bailNode?.id)
@@ -68,22 +78,37 @@ export function pieceFacts(design: Design, evaluation: Evaluation): PieceFacts {
   return {
     ...(ring ? { ring } : {}),
     ...(centre ? { centre } : {}),
-    ...(bailNode ? { bail: { node: bailNode, ...(bailPart ? { part: bailPart } : {}) } } : {}),
+    ...(bailNode
+      ? {
+          bail: {
+            node: bailNode,
+            built: !missing.has(bailNode.id),
+            ...(bailPart ? { part: bailPart } : {}),
+          },
+        }
+      : {}),
     ...(bailNode?.host && partOf(bailNode.host) ? { body: partOf(bailNode.host)! } : {}),
     settings: nodesOf(design, 'setting'),
     engravings: nodesOf(design, 'engraving'),
-    findings: nodesOf(design, 'finding'),
-    chains: nodesOf(design, 'chain'),
+    findings: built(nodesOf(design, 'finding')),
+    chains: built(nodesOf(design, 'chain')),
     paves: nodesOf(design, 'pave'),
+    missing,
     bounds,
-    extent: [bounds.max[0] - bounds.min[0], bounds.max[1] - bounds.min[1], bounds.max[2] - bounds.min[2]],
+    extent: [
+      bounds.max[0] - bounds.min[0],
+      bounds.max[1] - bounds.min[1],
+      bounds.max[2] - bounds.min[2],
+    ],
   }
 }
 
 function ringFacts(node: NodeOf<'ringShank'>, evaluated?: number): RingFacts {
   const innerDiameter = evaluated ?? ringInnerDiameter(node.size)
   const label = (system: RingSizeSystem) =>
-    formatRingSize(node.size.system === system ? node.size : ringSizeFromDiameter(innerDiameter, system))
+    formatRingSize(
+      node.size.system === system ? node.size : ringSizeFromDiameter(innerDiameter, system),
+    )
   return { node, innerDiameter, sizes: { us: label('us'), uk: label('uk'), eu: label('eu') } }
 }
 

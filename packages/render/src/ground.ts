@@ -47,7 +47,14 @@ export function resolveGround(
         roughness: spec.roughness,
       }
     case 'reflective':
-      return { kind, z: floorZ, size: radius * 120, color: spec.color, roughness: spec.roughness, ior: ACRYLIC_IOR }
+      return {
+        kind,
+        z: floorZ,
+        size: radius * 120,
+        color: spec.color,
+        roughness: spec.roughness,
+        ior: ACRYLIC_IOR,
+      }
   }
 }
 

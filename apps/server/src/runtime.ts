@@ -96,7 +96,7 @@ export class Runtime {
     if (!user) throw new AppError('unauthorized', 'Unknown user')
     const membership = pick(memberships)
     if (!membership) throw forbidden('You are not a member of this organisation')
-    return {
+    const ctx: Ctx = {
       user: { id: user.id, name: user.name, email: user.email, image: user.image },
       orgId: membership.org.id,
       role: effectiveRole(membership.role),
@@ -106,6 +106,9 @@ export class Runtime {
       services: this.services,
       blobs: this.blobs,
       events: this.events,
+      authMode: this.config.auth,
+      invoke: (name, input) => this.invoke(name, input, ctx),
     }
+    return ctx
   }
 }

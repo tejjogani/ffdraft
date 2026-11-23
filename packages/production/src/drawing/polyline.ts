@@ -70,7 +70,8 @@ export function chainSegments(buf: SegmentBuffer, tol: number, minLength: number
 
 export function polylineLength(pts: ArrayLike<number>): number {
   let len = 0
-  for (let i = 2; i < pts.length; i += 2) len += Math.hypot(pts[i]! - pts[i - 2]!, pts[i + 1]! - pts[i - 1]!)
+  for (let i = 2; i < pts.length; i += 2)
+    len += Math.hypot(pts[i]! - pts[i - 2]!, pts[i + 1]! - pts[i - 1]!)
   return len
 }
 
@@ -115,7 +116,11 @@ export function simplify(pts: ArrayLike<number>, tol: number): Float32Array {
  * Even-odd hatch fill of closed loops: parallel lines at `angleDeg`, `spacing` apart, clipped
  * to the interior. Returns segments [x0, y0, x1, y1, …].
  */
-export function hatch(loops: readonly ArrayLike<number>[], spacing: number, angleDeg = 45): Float32Array {
+export function hatch(
+  loops: readonly ArrayLike<number>[],
+  spacing: number,
+  angleDeg = 45,
+): Float32Array {
   const a = (angleDeg * Math.PI) / 180
   const c = Math.cos(a)
   const s = Math.sin(a)

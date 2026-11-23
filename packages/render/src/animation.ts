@@ -35,7 +35,11 @@ export function sampleTrack(keys: readonly Keyframe[], frame: number): number {
   return keys[keys.length - 1]!.value
 }
 
-const key = (frame: number, value: number, e: Ease = 'easeInOut'): Keyframe => ({ frame, value, ease: e })
+const key = (frame: number, value: number, e: Ease = 'easeInOut'): Keyframe => ({
+  frame,
+  value,
+  ease: e,
+})
 
 /** Rack focus at f/2.8 unless the scene chose an aperture (research §3). */
 export const RACK_FOCUS_FSTOP = 2.8
@@ -71,7 +75,12 @@ export function resolveAnimation(
       const far = camera.focusDistance + radius * 0.6
       const a = Math.round(n * 0.2)
       const b = Math.round(n * 0.8)
-      tracks.focusDistance = [key(0, near, 'linear'), key(a, near), key(b, far, 'linear'), key(n - 1, far)]
+      tracks.focusDistance = [
+        key(0, near, 'linear'),
+        key(a, near),
+        key(b, far, 'linear'),
+        key(n - 1, far),
+      ]
       break
     }
   }

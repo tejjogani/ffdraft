@@ -72,30 +72,4 @@ export function rotate(q: Quat, v: Vec3): Vec3 {
   return add(add(v, scale(t, w)), cross(u, t))
 }
 
-/** Rotates a point about the vertical axis through `pivot`. */
-export function rotateAboutZ(p: Vec3, pivot: Vec3, deg: number): Vec3 {
-  const c = Math.cos(deg * DEG)
-  const s = Math.sin(deg * DEG)
-  const x = p[0] - pivot[0]
-  const y = p[1] - pivot[1]
-  return [pivot[0] + c * x - s * y, pivot[1] + s * x + c * y, p[2]]
-}
-
-/** Transforms a point by a column-major 4×4 matrix. */
-export function transformPoint(m: readonly number[], p: Vec3): Vec3 {
-  return [
-    m[0]! * p[0] + m[4]! * p[1] + m[8]! * p[2] + m[12]!,
-    m[1]! * p[0] + m[5]! * p[1] + m[9]! * p[2] + m[13]!,
-    m[2]! * p[0] + m[6]! * p[1] + m[10]! * p[2] + m[14]!,
-  ]
-}
-
-/** Rounds to a fixed number of decimals so resolved jobs are byte-stable across platforms. */
-export const round = (n: number, decimals = 4): number => {
-  const f = 10 ** decimals
-  return Math.round(n * f) / f || 0
-}
-export const roundVec = <T extends number[]>(v: T, decimals = 4): T =>
-  v.map((n) => round(n, decimals)) as T
-
 export const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n))
