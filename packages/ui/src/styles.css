@@ -65,6 +65,22 @@
   --dur-1: 120ms;
   --dur-2: 180ms;
   --dur-3: 260ms;
+
+  /* Window chrome. Zero on the web; set per platform for the desktop shell below. */
+  --chrome-top: 12px; /* drag strip above the sidebar */
+  --chrome-left: 0px; /* room for macOS traffic lights when the sidebar is hidden */
+  --chrome-right: 0px; /* room for Windows/Linux title-bar overlay controls */
+}
+
+/* macOS desktop: traffic lights sit top-left of the frameless window. */
+[data-shell="desktop"][data-platform="mac"] {
+  --chrome-top: 40px;
+  --chrome-left: 76px;
+}
+/* Windows/Linux desktop: window controls via the title-bar overlay, top-right. The overlay
+   reports its geometry through env(); 140 px is the fallback width of three controls. */
+[data-shell="desktop"]:not([data-platform="mac"]) {
+  --chrome-right: calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - 140px)));
 }
 
 [data-theme="dark"] {
@@ -108,7 +124,7 @@
 @theme inline {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-serif: "Instrument Serif", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, "Cascadia Mono", Consolas, monospace;
 
   --color-bg: var(--bg);
   --color-bg-subtle: var(--bg-subtle);
@@ -196,13 +212,37 @@
   [role="button"] {
     cursor: default;
   }
-  /* Thin, unobtrusive scrollbars that appear on hover. */
+  /* Thin, unobtrusive scrollbars that appear on hover. Standard properties, so Windows and
+     Linux Chromium style them too (no reliance on macOS overlay scrollbars). Touch and
+     pen devices can't hover, so there they stay faintly visible. */
   * {
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
   }
   *:hover {
     scrollbar-color: var(--fg-faint) transparent;
+  }
+  @media (hover: none) {
+    * {
+      scrollbar-color: var(--fg-faint) transparent;
+    }
+  }
+}
+
+/* Secondary controls revealed when their `group` row is hovered or focused. Only devices that
+   can hover hide them; on touch they are always visible, so nothing is hover-only. */
+@layer components {
+  @media (hover: hover) {
+    .hover-reveal {
+      opacity: 0;
+      transition: opacity var(--dur-1) var(--ease-out);
+    }
+    .group:hover .hover-reveal,
+    .group:focus-within .hover-reveal,
+    .hover-reveal:focus-visible,
+    .hover-reveal[data-popup-open] {
+      opacity: 1;
+    }
   }
 }
 

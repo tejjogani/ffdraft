@@ -1,4 +1,5 @@
 export { cn } from './cn'
+export { isMac, platform, shell, type Platform, type Shell } from './platform'
 export { readStored, writeStored } from './storage'
 export { setTheme, useTheme, type ResolvedTheme, type ThemePreference } from './theme'
 export { PaveUIProvider } from './provider'
@@ -13,7 +14,7 @@ export { EmptyState, InlineError, type EmptyStateProps } from './components/empt
 export { Field, type FieldProps } from './components/field'
 export { floatingItem, floatingSurface } from './components/floating'
 export { Input, Textarea, controlClass, type InputProps, type TextareaProps } from './components/input'
-export { Kbd, isMac, shortcutKeys } from './components/kbd'
+export { Kbd, shortcutKeys } from './components/kbd'
 export {
   ContextMenu,
   Menu,

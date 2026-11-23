@@ -5,6 +5,8 @@
 import { z } from 'zod'
 import { ActorSchema, ChangeSchema, DesignSchema, PIECE_KINDS } from '../design/design'
 import { PieceSpecSchema } from '../design/spec'
+import { GEM_MATERIAL_IDS } from '../domain/gems'
+import { FINISH_IDS, METAL_IDS, PLATING_IDS } from '../domain/metals'
 
 const id = z.string()
 const iso = z.string()
@@ -167,8 +169,8 @@ export type SearchResult = z.infer<typeof SearchResultSchema>
 const Vec3 = z.tuple([z.number(), z.number(), z.number()])
 
 /**
- * A declarative shot. The same scene drives the real-time viewport and is compiled
- * deterministically to a Blender script by @pave/render — the assistant edits this, it never
+ * A declarative shot. @pave/render resolves it deterministically into an explicit job that both
+ * the real-time viewport and a fixed Blender runner consume — the assistant edits this, it never
  * writes Python.
  */
 export const RenderSceneSchema = z.object({
@@ -196,12 +198,24 @@ export const RenderSceneSchema = z.object({
       color: z.string().optional(),
     })
     .default({ rotation: 0, intensity: 1, background: 'look' }),
-  ground: z.enum(['look', 'none', 'shadow', 'reflective']).default('look'),
+  /** `shadow` = soft contact shadow only, `sweep` = seamless paper, `reflective` = black acrylic. */
+  ground: z.enum(['look', 'none', 'shadow', 'sweep', 'reflective']).default('look'),
   /** Extra small hard lights that pull fire out of diamonds. */
   sparkle: z.number().min(0).max(1).default(0.4),
-  /** Per-node appearance overrides, e.g. render the same CAD in rose gold. */
+  /**
+   * Per-node appearance overrides, e.g. render the same CAD in rose gold. Library ids only, so
+   * an unknown material is a validation error rather than a silent fallback.
+   */
   overrides: z
-    .record(z.string(), z.object({ material: z.string().optional(), finish: z.string().optional(), stone: z.string().optional() }))
+    .record(
+      z.string(),
+      z.object({
+        material: z.enum(METAL_IDS).optional(),
+        finish: z.enum(FINISH_IDS).optional(),
+        plating: z.enum(PLATING_IDS).optional(),
+        stone: z.enum(GEM_MATERIAL_IDS).optional(),
+      }),
+    )
     .default({}),
   animation: z
     .object({

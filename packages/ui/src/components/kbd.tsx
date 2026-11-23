@@ -1,7 +1,5 @@
 import { cn } from '../cn'
-
-export const isMac =
-  typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+import { isMac } from '../platform'
 
 const GLYPHS: Record<string, [mac: string, other: string]> = {
   mod: ['⌘', 'Ctrl'],

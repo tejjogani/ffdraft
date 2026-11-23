@@ -1,13 +1,22 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 
-/** Content-addressed bytes, keyed by their SHA-256 (hex). Writes are idempotent. */
+/** Content-addressed bytes, keyed by their SHA-256 (lowercase hex). Writes are idempotent. */
 export interface BlobStore {
   put(sha256: string, bytes: Uint8Array): Promise<void>
   get(sha256: string): Promise<Uint8Array | null>
 }
 
-/** Stores blobs as files under `root/ab/cd/<sha256>`. */
+const exists = (path: string) =>
+  access(path).then(
+    () => true,
+    () => false,
+  )
+
+/**
+ * Stores blobs as files under `root/ab/cd/<sha256>`. Keys are lowercase hex only, so names are
+ * safe on case-insensitive file systems and on every platform.
+ */
 export class FsBlobStore implements BlobStore {
   constructor(private readonly root: string) {}
 
@@ -18,11 +27,18 @@ export class FsBlobStore implements BlobStore {
 
   async put(sha256: string, bytes: Uint8Array): Promise<void> {
     const path = this.#path(sha256)
-    await mkdir(join(path, '..'), { recursive: true })
+    if (await exists(path)) return
+    await mkdir(dirname(path), { recursive: true })
     // Write-then-rename so a reader never sees a partial blob.
-    const tmp = `${path}.${process.pid}.${Date.now()}.tmp`
+    const tmp = `${path}.${process.pid}-${Date.now()}.tmp`
     await writeFile(tmp, bytes)
-    await rename(tmp, path)
+    try {
+      await rename(tmp, path)
+    } catch (err) {
+      // Windows refuses to replace a file that is open; a concurrent writer stored the same bytes.
+      await rm(tmp, { force: true })
+      if (!(await exists(path))) throw err
+    }
   }
 
   async get(sha256: string): Promise<Uint8Array | null> {
