@@ -6,11 +6,18 @@
  * are planar-faced solids built from the same facets the viewport shows.
  */
 import { GEM_MATERIALS, METALS } from '@pave/schema'
-import { type Shape3D, cast, exportSTEP, makePolygon, makeSolid } from 'replicad'
-import { type Body, type Mat4, type NodeResult, type Scene, defineExporter, runtime, subtract } from '../core'
-import { boundsOverlap } from '../solid/meshing'
+import { cast, exportSTEP, makePolygon, makeSolid, type Shape3D } from 'replicad'
+import {
+  type Body,
+  defineExporter,
+  type Mat4,
+  type NodeResult,
+  runtime,
+  type Scene,
+  subtract,
+} from '../core'
+import { boundsOverlap, weld } from '../solid/meshing'
 import { scoped, transformShape } from '../solid/occt'
-import { weld } from '../solid/meshing'
 import type { MeshData, StoneInstance } from '../types'
 
 interface NamedShape {
@@ -19,7 +26,8 @@ interface NamedShape {
   color: string
 }
 
-const labelOf = (result: NodeResult | undefined, fallback: string) => result?.node.name ?? result?.node.id ?? fallback
+const labelOf = (result: NodeResult | undefined, fallback: string) =>
+  result?.node.name ?? result?.node.id ?? fallback
 
 /** Cutters aimed at a node (or at whatever they touch) that overlap its body. */
 function cuttersFor(scene: Scene, nodeId: string, body: Body) {
@@ -27,7 +35,10 @@ function cuttersFor(scene: Scene, nodeId: string, body: Body) {
   return [...scene.nodes.values()]
     .filter((r) => r.status === 'ok' && r.node.visible)
     .flatMap((r) => r.cuts)
-    .filter((c) => (c.targets === 'all' || c.targets.includes(nodeId)) && boundsOverlap(c.solid.bounds(), box))
+    .filter(
+      (c) =>
+        (c.targets === 'all' || c.targets.includes(nodeId)) && boundsOverlap(c.solid.bounds(), box),
+    )
 }
 
 /** The body's B-rep with its seats cut, or uncut when the exact boolean cannot be trusted. */
@@ -35,9 +46,14 @@ function cutBody(scene: Scene, nodeId: string, body: Body): { shape: Shape3D; cu
   const tools = cuttersFor(scene, nodeId, body)
   const own = body.solid.brep()!
   if (tools.length === 0) return { shape: own.clone(), cut: true }
-  const result = subtract(body.solid, tools.map((t) => t.solid))
+  const result = subtract(
+    body.solid,
+    tools.map((t) => t.solid),
+  )
   try {
-    return result.exact ? { shape: result.brep()!.clone(), cut: true } : { shape: own.clone(), cut: false }
+    return result.exact
+      ? { shape: result.brep()!.clone(), cut: true }
+      : { shape: own.clone(), cut: false }
   } finally {
     result.dispose()
   }
@@ -53,9 +69,14 @@ const axisScales = (m: readonly number[]): [number, number, number] => [
 /** A closed planar-faced solid from a welded triangle mesh; coplanar facets are merged. */
 function polyhedron(mesh: MeshData, s: readonly [number, number, number]): Shape3D {
   const { positions: p, indices } = weld(mesh.positions, mesh.indices)
-  const point = (i: number): [number, number, number] => [p[i * 3]! * s[0], p[i * 3 + 1]! * s[1], p[i * 3 + 2]! * s[2]]
+  const point = (i: number): [number, number, number] => [
+    p[i * 3]! * s[0],
+    p[i * 3 + 1]! * s[1],
+    p[i * 3 + 2]! * s[2],
+  ]
   const faces = []
-  for (let t = 0; t < indices.length; t += 3) faces.push(makePolygon([point(indices[t]!), point(indices[t + 1]!), point(indices[t + 2]!)]))
+  for (let t = 0; t < indices.length; t += 3)
+    faces.push(makePolygon([point(indices[t]!), point(indices[t + 1]!), point(indices[t + 2]!)]))
   const solid = makeSolid(faces)
   for (const f of faces) f.delete()
   const { oc } = runtime()
@@ -117,12 +138,23 @@ export const step = defineExporter({
         }
         const { shape, cut } = cutBody(scene, nodeId, body)
         if (!cut) uncut++
-        shapes.push({ shape, name: `${labelOf(result, nodeId)} — ${METALS[body.material].label}`, color: METALS[body.material].swatch })
+        shapes.push({
+          shape,
+          name: `${labelOf(result, nodeId)} — ${METALS[body.material].label}`,
+          color: METALS[body.material].swatch,
+        })
       }
     const stones = options.stones ?? false
-    if (stones) shapes.push(...stoneShapes(scene, scene.evaluation.stones.filter((s) => !only || only.has(s.nodeId))))
+    if (stones)
+      shapes.push(
+        ...stoneShapes(
+          scene,
+          scene.evaluation.stones.filter((s) => !only || only.has(s.nodeId)),
+        ),
+      )
     try {
-      if (shapes.length === 0) throw new Error('Nothing in this design has an exact B-rep to write to STEP')
+      if (shapes.length === 0)
+        throw new Error('Nothing in this design has an exact B-rep to write to STEP')
       const blob = exportSTEP(shapes, { unit: 'MM' })
       const notes = [
         'STEP AP242, millimetres: exact B-rep solids, one per metal body, named and coloured by alloy.',
@@ -131,9 +163,17 @@ export const step = defineExporter({
         notes.push(
           `Mesh bodies have no exact form and are omitted: ${[...omitted].join(', ')}. Use STL, 3MF or 3DM for them.`,
         )
-      if (uncut > 0) notes.push(`${uncut} bod${uncut === 1 ? 'y is' : 'ies are'} exported without seats cut (the exact cut failed); the STL has them cut.`)
+      if (uncut > 0)
+        notes.push(
+          `${uncut} bod${uncut === 1 ? 'y is' : 'ies are'} exported without seats cut (the exact cut failed); the STL has them cut.`,
+        )
       notes.push(stones ? 'Stones are planar-faced reference solids.' : 'Stones are not included.')
-      return { bytes: new Uint8Array(await blob.arrayBuffer()), mime: 'model/step', extension: 'step', notes }
+      return {
+        bytes: new Uint8Array(await blob.arrayBuffer()),
+        mime: 'model/step',
+        extension: 'step',
+        notes,
+      }
     } finally {
       for (const s of shapes) s.shape.delete()
     }

@@ -79,7 +79,11 @@ export const choice = <const T extends readonly [string, ...string[]]>(
   values: T,
   def: T[number],
   opts: Opts = {},
-) => z.enum(values).default(def).meta({ title, ...opts })
+) =>
+  z
+    .enum(values)
+    .default(def)
+    .meta({ title, ...opts })
 
 export const toggle = (title: string, def: boolean, opts: Opts = {}) =>
   z

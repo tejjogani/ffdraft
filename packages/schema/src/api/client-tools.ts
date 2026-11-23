@@ -108,6 +108,8 @@ export const clientTools = {
 
 export type ClientToolName = keyof typeof clientTools
 export type ClientToolInput<N extends ClientToolName> = z.input<(typeof clientTools)[N]['input']>
-export type ClientToolParsedInput<N extends ClientToolName> = z.output<(typeof clientTools)[N]['input']>
+export type ClientToolParsedInput<N extends ClientToolName> = z.output<
+  (typeof clientTools)[N]['input']
+>
 export type ClientToolOutput<N extends ClientToolName> = z.output<(typeof clientTools)[N]['output']>
 export const CLIENT_TOOL_NAMES = Object.keys(clientTools) as [ClientToolName, ...ClientToolName[]]

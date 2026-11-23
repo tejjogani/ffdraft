@@ -42,6 +42,8 @@ export interface LayoutInput {
   measure: MeasureText
   /** Section loops in view mm, hatched at 45°. */
   loops?: readonly Float32Array[]
+  /** Annotations and boxes only: for trying scales without projecting every line. */
+  annotationsOnly?: boolean
 }
 
 export function layoutView(input: LayoutInput): ViewLayout {
@@ -64,7 +66,7 @@ export function layoutView(input: LayoutInput): ViewLayout {
   }
   const items: Item[] = []
 
-  if (input.loops?.length) {
+  if (input.loops?.length && !input.annotationsOnly) {
     const paperLoops = input.loops.map(toPaper)
     const h = hatch(paperLoops, 0.7, 45)
     const segs: Float32Array[] = []
@@ -76,10 +78,12 @@ export function layoutView(input: LayoutInput): ViewLayout {
     if (a.kind === 'centerline')
       items.push({ t: 'lines', pen: 'center', lines: [[...P(...a.a), ...P(...a.b)]] })
   }
-  if (input.lines.hidden.length)
-    items.push({ t: 'lines', pen: 'hidden', lines: input.lines.hidden.map(toPaper) })
-  items.push({ t: 'lines', pen: 'stone', lines: input.lines.stones.map(toPaper) })
-  items.push({ t: 'lines', pen: 'outline', lines: input.lines.metal.map(toPaper) })
+  if (!input.annotationsOnly) {
+    if (input.lines.hidden.length)
+      items.push({ t: 'lines', pen: 'hidden', lines: input.lines.hidden.map(toPaper) })
+    items.push({ t: 'lines', pen: 'stone', lines: input.lines.stones.map(toPaper) })
+    items.push({ t: 'lines', pen: 'outline', lines: input.lines.metal.map(toPaper) })
+  }
 
   const box: Box2 = { ...geometry }
   const grow = (x: number, y: number) => {

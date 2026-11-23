@@ -122,7 +122,10 @@ async function commitOnce(ctx: Ctx, tx: Ctx['repo'], input: CommitInput) {
 
   const reverted = input.reverts?.length
     ? await tx.changes.many({
-        where: and(eq(t.designChange.pieceId, piece.id), inArray(t.designChange.id, [...input.reverts])),
+        where: and(
+          eq(t.designChange.pieceId, piece.id),
+          inArray(t.designChange.id, [...input.reverts]),
+        ),
       })
     : []
   const unknown = input.reverts?.find((id) => !reverted.some((c) => c.id === id))

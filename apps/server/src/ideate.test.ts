@@ -29,7 +29,11 @@ const met: SearchResult = {
 let server: TestServer
 let api: Client
 const resolve = vi.fn<Services['search']['resolve']>(async (r) =>
-  r.key === met.key ? met : r.key === 'aic:2' ? { ...met, key: 'aic:2', provider: 'aic', rights: 'viewOnly', mayStore: false } : null,
+  r.key === met.key
+    ? met
+    : r.key === 'aic:2'
+      ? { ...met, key: 'aic:2', provider: 'aic', rights: 'viewOnly', mayStore: false }
+      : null,
 )
 const capture = vi.fn<Services['capture']['capture']>(async (url) => ({
   file: { bytes: await png('#204060'), name: 'capture.png', mime: 'image/png' },
@@ -38,7 +42,11 @@ const capture = vi.fn<Services['capture']['capture']>(async (url) => ({
 const generate = vi.fn<Services['imageGen']['generate']>(async (req) => ({
   model: 'acme-1',
   seed: 42,
-  images: Array.from({ length: req.count }, (_, i) => ({ bytes: new Uint8Array(), name: `g${i}.png`, mime: 'image/png' })),
+  images: Array.from({ length: req.count }, (_, i) => ({
+    bytes: new Uint8Array(),
+    name: `g${i}.png`,
+    mime: 'image/png',
+  })),
 }))
 
 beforeAll(async () => {
@@ -46,11 +54,18 @@ beforeAll(async () => {
   generate.mockImplementation(async (req) => ({
     model: 'acme-1',
     seed: 42,
-    images: Array.from({ length: req.count }, (_, i) => ({ bytes: tiny, name: `g${i}.png`, mime: 'image/png' })),
+    images: Array.from({ length: req.count }, (_, i) => ({
+      bytes: tiny,
+      name: `g${i}.png`,
+      mime: 'image/png',
+    })),
   }))
   server = await testServer({
     services: {
-      search: { search: async () => ({ results: [met], providers: ['met'], unavailable: [] }), resolve },
+      search: {
+        search: async () => ({ results: [met], providers: ['met'], unavailable: [] }),
+        resolve,
+      },
       capture: { capture },
       imageGen: { generate },
     },
@@ -91,13 +106,23 @@ describe('saving references', () => {
       boardId: board.id,
       items: [{ result: met, rights: 'viewOnly' }],
     })
-    expect(lowered).toMatchObject({ rights: 'viewOnly', source: { provider: 'met', license: 'CC0' } })
+    expect(lowered).toMatchObject({
+      rights: 'viewOnly',
+      source: { provider: 'met', license: 'CC0' },
+    })
     const gone = await api.fail('references.save', {
       boardId: board.id,
       items: [{ result: { ...met, key: 'met:404' } }],
     })
     expect(gone.status).toBe(400)
-    expect((await api.fail('references.save', { boardId: board.id, items: [{ note: 'x', pieceId: 'pc_nope' }] })).status).toBe(404)
+    expect(
+      (
+        await api.fail('references.save', {
+          boardId: board.id,
+          items: [{ note: 'x', pieceId: 'pc_nope' }],
+        })
+      ).status,
+    ).toBe(404)
   })
 
   it('lifts view-only only with a person’s attestation, and moves and arranges references', async () => {
@@ -107,15 +132,25 @@ describe('saving references', () => {
       boardId: board.id,
       items: [{ url: 'https://example.com/a' }, { note: 'n' }],
     })
-    expect((await api.fail('references.update', { id: link!.id, rights: 'licensed' })).status).toBe(400)
+    expect((await api.fail('references.update', { id: link!.id, rights: 'licensed' })).status).toBe(
+      400,
+    )
     const agent = await server.runtime.context({
       ...server.runtime.local!,
       actor: { type: 'agent', runId: 'run_1' },
     })
     await expect(
-      server.runtime.invoke('references.update', { id: link!.id, rights: 'licensed', attestation: true }, agent),
+      server.runtime.invoke(
+        'references.update',
+        { id: link!.id, rights: 'licensed', attestation: true },
+        agent,
+      ),
     ).rejects.toMatchObject({ status: 403 })
-    const lifted = await api.call('references.update', { id: link!.id, rights: 'licensed', attestation: true })
+    const lifted = await api.call('references.update', {
+      id: link!.id,
+      rights: 'licensed',
+      attestation: true,
+    })
     expect(lifted.rights).toBe('licensed')
 
     const canvas = { x: 10, y: 20, w: 200, z: 1 }
@@ -129,12 +164,19 @@ describe('saving references', () => {
     expect(arranged.map((r) => r.id)).toEqual([note!.id, link!.id])
     expect(arranged[0]).toMatchObject({ position: 0.5, canvas })
     expect(
-      (await api.fail('references.arrange', { boardId: other.id, items: [{ id: note!.id, position: 1 }] })).status,
+      (
+        await api.fail('references.arrange', {
+          boardId: other.id,
+          items: [{ id: note!.id, position: 1 }],
+        })
+      ).status,
     ).toBe(404)
 
     const moved = await api.call('references.update', { id: note!.id, boardId: other.id })
     expect(moved).toMatchObject({ boardId: other.id, position: 1 })
-    expect((await api.call('boards.get', { id: board.id })).references.map((r) => r.id)).toEqual([link!.id])
+    expect((await api.call('boards.get', { id: board.id })).references.map((r) => r.id)).toEqual([
+      link!.id,
+    ])
   })
 
   it('captures the image behind a link without changing its rights', async () => {
@@ -180,11 +222,16 @@ describe('generation and lineage', () => {
       count: 1,
       seed: 7,
     })
-    expect(generate.mock.calls.at(-1)![0]).toMatchObject({ roles: [{ id: parent!.id, role: 'subject' }], seed: 7 })
+    expect(generate.mock.calls.at(-1)![0]).toMatchObject({
+      roles: [{ id: parent!.id, role: 'subject' }],
+      seed: 7,
+    })
     expect(child!.generation).toMatchObject({
       seed: 42,
       parentIds: [parent!.id],
-      inputs: [{ id: parent!.id, role: 'subject', title: 'Silhouette', provider: 'upload', rights: 'own' }],
+      inputs: [
+        { id: parent!.id, role: 'subject', title: 'Silhouette', provider: 'upload', rights: 'own' },
+      ],
     })
     const [grandchild] = await api.call('references.generate', {
       boardId: board.id,
@@ -205,7 +252,11 @@ describe('generation and lineage', () => {
     await api.call('references.remove', { ids: [parent!.id] })
     const fromGrandchild = await api.call('references.lineage', { id: grandchild!.id })
     expect(fromGrandchild.ancestors).toEqual([
-      expect.objectContaining({ id: child!.id, depth: 1, reference: expect.objectContaining({ id: child!.id }) }),
+      expect.objectContaining({
+        id: child!.id,
+        depth: 1,
+        reference: expect.objectContaining({ id: child!.id }),
+      }),
       expect.objectContaining({
         id: parent!.id,
         depth: 2,
@@ -232,13 +283,21 @@ describe('similar references', () => {
     await api.call('references.update', { id: b!.id, tags: ['deco'] })
     const similar = await api.call('references.similar', { id: a!.id, boardId: board.id })
     expect(similar.map((r) => r.id)).toEqual([b!.id])
-    expect((await api.call('references.similar', { text: 'minimal plain', boardId: board.id })).map((r) => r.id)).toEqual([c!.id])
+    expect(
+      (await api.call('references.similar', { text: 'minimal plain', boardId: board.id })).map(
+        (r) => r.id,
+      ),
+    ).toEqual([c!.id])
 
     const embed = vi.fn<Services['embedding']['embed']>(async (inputs) =>
       inputs.map((i) => ('text' in i && i.text.includes('band') ? [1, 0] : [0, 1])),
     )
     server.runtime.services.register('embedding', { embed })
-    const ranked = await api.call('references.similar', { text: 'a band', boardId: board.id, limit: 1 })
+    const ranked = await api.call('references.similar', {
+      text: 'a band',
+      boardId: board.id,
+      limit: 1,
+    })
     expect(ranked.map((r) => r.id)).toEqual([c!.id])
     expect(embed.mock.calls[0]![0]).toHaveLength(4)
     expect((await api.call('session.get', {})).capabilities.embedding).toBe(true)

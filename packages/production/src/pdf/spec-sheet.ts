@@ -217,24 +217,29 @@ export async function specSheetPdf(input: SpecSheetInput): Promise<Uint8Array> {
       [...new Set(parts.map((p) => `${METALS[p.material].density} g/cm³`))].join(', '),
     ],
   ])
-  if (parts.length > 1) {
+  if (ctx.groups.length > 1 || ctx.groups.some((g) => g.count > 1)) {
     flow.table(
       [
         { title: 'Part', width: 30 },
-        { title: 'Alloy', width: 30 },
-        { title: 'Volume', width: 18, align: 'right' },
+        { title: 'Qty', width: 9, align: 'right' },
+        { title: 'Alloy', width: 28 },
+        { title: 'Volume each', width: 20, align: 'right' },
         { title: 'Net weight', width: 18, align: 'right' },
-        { title: 'Finish', width: 22 },
-        { title: 'Plating', width: 22 },
+        { title: 'Finish', width: 20 },
+        { title: 'Plating', width: 20 },
       ],
-      parts.map((p) => [
-        { text: p.name },
-        { text: METALS[p.material].label },
-        { text: `${p.volumeMm3.toFixed(1)} mm³` },
-        { text: fmtGrams(metalMassG(p.material, p.volumeMm3)) },
-        { text: FINISHES[p.finish].label },
-        { text: PLATINGS[p.plating].label },
-      ]),
+      ctx.groups.map((g) => {
+        const p = g.parts[0]!
+        return [
+          { text: g.name },
+          { text: String(g.count) },
+          { text: METALS[p.material].label },
+          { text: `${(g.volumeMm3 / g.count).toFixed(1)} mm³` },
+          { text: fmtGrams(metalMassG(p.material, g.volumeMm3)) },
+          { text: FINISHES[p.finish].label },
+          { text: PLATINGS[p.plating].label },
+        ]
+      }),
     )
   }
 
@@ -343,7 +348,10 @@ export async function specSheetPdf(input: SpecSheetInput): Promise<Uint8Array> {
   const platings = [...new Set(parts.map((p) => p.plating))].filter((p) => p !== 'none')
   flow.kv(
     [
-      ...parts.map((p): [string, string] => [p.name, `${FINISHES[p.finish].label}, all surfaces`]),
+      ...ctx.groups.map((g): [string, string] => [
+        g.name,
+        `${FINISHES[g.parts[0]!.finish].label}, all surfaces`,
+      ]),
       ...(platings.length
         ? platings.map((p): [string, string] => [
             PLATINGS[p].label,

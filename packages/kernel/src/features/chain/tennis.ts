@@ -12,11 +12,11 @@
 import { GEM_CUTS, type GemCutId, type GemDims, gemDims, snapToMelee } from '@pave/schema'
 import type { Manifold } from 'manifold-3d'
 import { type Deletable, type Quality, runtime } from '../../core'
-import { type Vec3, frameFromZ, frameMatrix } from '../../geometry/vec'
-import { manifoldFromTriangles, trianglesFromManifold } from '../../solid/solid'
-import type { Template } from './instances'
 import { circleLoop } from '../../geometry/loop'
+import { frameFromZ, frameMatrix, type Vec3 } from '../../geometry/vec'
+import { manifoldFromTriangles, trianglesFromManifold } from '../../solid/solid'
 import { sampleCurve, segmentsFor, sweepAlong } from './centreline'
+import type { Template } from './instances'
 
 export interface TennisLink {
   template: Template
@@ -27,6 +27,8 @@ export interface TennisLink {
   /** Tightest radius the chain can bend to sideways before neighbouring boxes touch. */
   minBend: number
   half: { y: number; z: number }
+  /** Height of the link's middle above the girdle plane: the chain's centre line runs there. */
+  middle: number
 }
 
 /** Space between neighbouring boxes; pitch ≈ stone + 0.3–0.6 mm (06-freeform.md §6). */
@@ -70,6 +72,7 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
   const plateTop = -pavilion - CLEARANCE
   const bottom = plateTop - wall
   const corner = 1.5 * wall
+  const crown = proportions.crownPct * stoneWidth + girdle
 
   const pitch = lx + BOX_GAP
   // Hinge rings: room inside for the other ring's wire plus play to swing.
@@ -80,6 +83,8 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
   // ring of the previous link sits one taut cable pitch behind it (contact.ts).
   const front = -(holeRadius + lx / 2) / 2
   const back = front + pitch - (inner - CLEARANCE)
+  // From the table down to the bottom of the hinge rings.
+  const lowest = bottom - inner - 1.5 * ring
 
   const mesh = (quality: Quality) => {
     const { manifold: mf } = runtime()
@@ -94,13 +99,19 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
     try {
       const outer = rounded(lx, ly, corner)
       const hole = rounded(lx - 2 * wall, ly - 2 * wall, Math.max(corner - wall, 0.05))
-      const walls = own(own(own(outer.subtract(hole)).extrude(top - plateTop)).translate(0, 0, plateTop))
+      const walls = own(
+        own(own(outer.subtract(hole)).extrude(top - plateTop)).translate(0, 0, plateTop),
+      )
       const lightHole = own(
-        own(mf.Manifold.cylinder(wall * 3, (LIGHT_HOLE * stoneWidth) / 2, undefined, seg(stoneWidth / 3), true)).translate(
-          0,
-          0,
-          bottom + wall / 2,
-        ),
+        own(
+          mf.Manifold.cylinder(
+            wall * 3,
+            (LIGHT_HOLE * stoneWidth) / 2,
+            undefined,
+            seg(stoneWidth / 3),
+            true,
+          ),
+        ).translate(0, 0, bottom + wall / 2),
       )
       const plate = own(own(own(outer.extrude(wall)).translate(0, 0, bottom)).subtract(lightHole))
       const parts: Manifold[] = [walls, plate]
@@ -142,7 +153,15 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
       parts.push(loop('y', front), loop('z', back))
       for (const side of [-1, 1])
         parts.push(
-          own(cylinderBetween(mf, [back, side * R, ringZ], [back, side * R, bottom + wall / 2], ring / 2, seg(ring / 2))),
+          own(
+            cylinderBetween(
+              mf,
+              [back, side * R, ringZ],
+              [back, side * R, bottom + wall / 2],
+              ring / 2,
+              seg(ring / 2),
+            ),
+          ),
         )
       return trianglesFromManifold(own(mf.Manifold.union(parts)))
     } finally {
@@ -158,7 +177,8 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
     length: lx,
     pitch,
     minBend,
-    half: { y: ly / 2, z: Math.max(proportions.crownPct * stoneWidth + girdle, -bottom) },
+    half: { y: ly / 2, z: (crown - lowest) / 2 },
+    middle: (crown + lowest) / 2,
   }
 }
 

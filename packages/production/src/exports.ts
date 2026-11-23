@@ -21,7 +21,7 @@ export interface CadExports {
   files: PackageFile[]
   notes: ExportNote[]
   stls: StlCheck[]
-  /** Triangles per part id, as exported. */
+  /** Triangles per casting group key, as exported. */
   triangles: Record<string, number>
 }
 
@@ -44,37 +44,55 @@ export async function exportCad(ctx: PackageContext): Promise<CadExports> {
     ? safeSegment(ctx.facts.ring.sizes.us.replace(/\s+/g, '').replace('½', '.5'))
     : ''
 
-  for (const part of evaluation.parts) {
+  for (const group of ctx.groups) {
+    const first = group.parts[0]!
     const name = uniqueName(
-      `${[ctx.stem, safeSegment(part.name, 'part', 32), safeSegment(part.material, 'metal', 24), size].filter(Boolean).join('_')}.stl`,
+      `${[ctx.stem, safeSegment(group.name, 'part', 32), safeSegment(first.material, 'metal', 24), size, group.count > 1 ? `x${group.count}` : ''].filter(Boolean).join('_')}.stl`,
       taken,
     )
     const path = joinPath('cad', name)
     const fileNotes: string[] = []
-    // Never ship a package without casting meshes: when the kernel cannot export, the
-    // production evaluation mesh is the same geometry.
+    // Never ship a package without casting meshes: when the kernel cannot export a group, the
+    // production evaluation meshes are the same geometry.
     const fromEvaluation = (why: string) => {
       fileNotes.push(`${why}; written from the production evaluation mesh.`)
-      return writeBinaryStl(part.mesh, `Pave ${ctx.stem} ${part.name} mm`)
+      return writeBinaryStl(
+        mergeTris(group.parts.map((p) => p.mesh)),
+        `Pave ${ctx.stem} ${group.name} mm`,
+      )
     }
     let bytes: Uint8Array
     if (!supports('stl')) bytes = fromEvaluation('This kernel build cannot write STL')
     else {
       try {
-        const r = await kernel.export(design, 'stl', { only: [part.nodeId], stones: false })
-        bytes = r.bytes
-        fileNotes.push(...r.notes)
+        const r = await kernel.export(design, 'stl', { only: [group.key], stones: false })
+        const soup = readBinaryStl(r.bytes)
+        if (soup && soup.indices.length === 0)
+          bytes = fromEvaluation(`The kernel exported no triangles for “${group.key}”`)
+        else {
+          bytes = r.bytes
+          fileNotes.push(...r.notes)
+        }
       } catch (err) {
         bytes = fromEvaluation(`Kernel STL export failed (${(err as Error).message})`)
       }
     }
+    if (group.count > 1)
+      fileNotes.push(`${group.count} identical bodies: cast ${group.count} per piece.`)
     const soup = readBinaryStl(bytes)
     const topology = soup
       ? analyzeTopology(soup.positions, soup.indices)
-      : analyzeTopology(part.mesh.positions, part.mesh.indices)
+      : analyzeTopology(first.mesh.positions, first.mesh.indices)
     if (!soup) fileNotes.push('Not a binary STL; topology checked on the evaluation mesh.')
-    triangles[part.id] = topology.triangles
-    stls.push({ path, partId: part.id, nodeId: part.nodeId, bytes: bytes.length, topology })
+    triangles[group.key] = topology.triangles
+    stls.push({
+      path,
+      partId: first.id,
+      nodeId: group.key,
+      bodies: group.count,
+      bytes: bytes.length,
+      topology,
+    })
     files.push({ path, bytes, mime: MIME.stl! })
     if (fileNotes.length) notes.push({ file: path, notes: fileNotes })
   }

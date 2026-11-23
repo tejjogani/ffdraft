@@ -149,8 +149,15 @@ function brilliantHalf(
     // planes' meeting point outside the stone; those kites are folded along their diagonal
     // instead of planar.
     const fallback = aimAt(height(crown ? 0.6 : 0.78))
-    const ok = met && Math.hypot(met[0] - fallback[0], met[1] - fallback[1]) < 0.12
-    mid.push(ok ? met : fallback)
+    // Usable only if it lies inside the girdle, in the sector between the two mains.
+    let ok = false
+    if (met) {
+      const dx = met[0] - o.centre[0]
+      const dy = met[1] - o.centre[1]
+      const between = (dx * a.direction[0] + dy * a.direction[1] > 0) && (dx * b.direction[0] + dy * b.direction[1] > 0)
+      ok = between && Math.hypot(dx, dy) < 0.98 * o.radius(Math.atan2(dy, dx))
+    }
+    mid.push(ok && met ? met : fallback)
   }
 
   const facets: Facet[] = []

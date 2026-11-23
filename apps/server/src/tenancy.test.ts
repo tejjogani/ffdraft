@@ -87,6 +87,17 @@ describe('tenancy isolation', () => {
       await ben.fail('boards.delete', { id: board.id }),
       await ben.fail('references.save', { boardId: board.id, items: [{ note: 'hi' }] }),
       await ben.fail('collections.update', { id: collection.id, name: 'x' }),
+      await ben.fail('pieces.attest', { id: piece.id, rights: 'own' }),
+      await ben.fail('design.revert', { pieceId: piece.id, runId: 'run_x' }),
+      await ben.fail('scenes.create', { pieceId: piece.id, title: 'x', scene: {} }),
+      await ben.fail('mesh3d.list', { pieceId: piece.id }),
+      await ben.fail('freeform.analyze', { assetId: asset.id }),
+      await ben.fail('threads.send', {
+        text: 'x',
+        clientId: 'w',
+        clientMessageId: 'm',
+        context: { pieceId: piece.id },
+      }),
     ]
     expect(denied.map((d) => d.status)).toEqual(denied.map(() => 404))
 
@@ -98,6 +109,10 @@ describe('tenancy isolation', () => {
       404,
     )
     expect((await ben.fail('boards.create', { title: 'x', pieceId: piece.id })).status).toBe(404)
+    expect(
+      (await ben.fail('pieces.create', { origin: { kind: 'image', sourceAssetIds: [asset.id] } }))
+        .status,
+    ).toBe(404)
     expect(
       (await ben.fail('references.save', { boardId: ownBoard.id, items: [{ assetId: asset.id }] }))
         .status,

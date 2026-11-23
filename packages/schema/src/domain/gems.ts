@@ -51,10 +51,12 @@ export const GEM_CUTS = {
     style: 'brilliant',
     lw: { default: 1, min: 1, max: 1 },
     cornerCut: 0,
+    // 34.5° crown and 40.8° pavilion on a 57 % table (docs/research/01-cad.md §3):
+    // 0.215·tan 34.5° = 14.8 %, 0.5·tan 40.8° = 43.2 %, plus a 3.5 % girdle.
     depthPct: 0.615,
     tablePct: 0.57,
-    crownPct: 0.15,
-    pavilionPct: 0.43,
+    crownPct: 0.148,
+    pavilionPct: 0.432,
     girdlePct: 0.035,
     caratFactor: [[1, 0.0061]],
   }),

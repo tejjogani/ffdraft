@@ -49,7 +49,10 @@ export const design: HandlerGroup<'design'> = {
         : notFound(`Change ${input.seq} of piece`, input.pieceId)
     const label =
       input.runId !== undefined
-        ? `Undo assistant edits: ${targets.map((c) => c.label).toReversed().join('; ')}`
+        ? `Undo assistant edits: ${targets
+            .map((c) => c.label)
+            .toReversed()
+            .join('; ')}`
         : `Revert: ${targets[0]!.label}`
     return commitChange(ctx, {
       pieceId: input.pieceId,

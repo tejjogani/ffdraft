@@ -4,22 +4,22 @@
  * copied from the template's, so crease normals are computed once per template, not per link.
  * The exact B-rep (STEP only) is a compound of moved copies of each template's B-rep.
  */
-import { type Shape3D, makeCompound } from 'replicad'
+import { makeCompound, type Shape3D } from 'replicad'
 import {
   type IndexedTriangles,
+  lazySolid,
   type Mat4,
+  QUALITY,
   type Quality,
   type Solid,
   type SurfaceMesh,
   type Tessellation,
-  lazySolid,
-  QUALITY,
 } from '../../core'
 import {
   creaseNormals,
   featureEdges,
-  meshVolume,
   mergeTessellations,
+  meshVolume,
   tessellationOf,
   transformTessellation,
   transformTriangles,
@@ -70,8 +70,8 @@ const qualityKey = (q: Quality) => `${q.chord}/${q.angle}`
  * at a coarser tolerance until one copy fits its per-copy share.
  */
 const DRAFT_TRIANGLES = 250_000
-/** Never coarser than this facet angle: rounder wire than a hexagon. */
-const COARSEST_ANGLE = 0.7
+/** Never coarser than this facet angle: hexagonal wire at worst. */
+const COARSEST_ANGLE = Math.PI / 3
 
 function budgeted(template: Template, quality: Quality, share: number): IndexedTriangles {
   let q = quality
@@ -84,7 +84,10 @@ function budgeted(template: Template, quality: Quality, share: number): IndexedT
   return tris
 }
 
-export function instancedSolid(templates: readonly Template[], instances: readonly Instance[]): Solid {
+export function instancedSolid(
+  templates: readonly Template[],
+  instances: readonly Instance[],
+): Solid {
   const cache = new Map<string, { tris: IndexedTriangles; display: Tessellation }[]>()
   const meshed = (quality: Quality) => {
     const key = qualityKey(quality)
@@ -109,7 +112,9 @@ export function instancedSolid(templates: readonly Template[], instances: readon
       const placed = instances.map(({ template, matrix }) => ({ part: parts[template]!, matrix }))
       return {
         ...mergeTriangles(placed.map(({ part, matrix }) => transformTriangles(matrix, part.tris))),
-        display: mergeTessellations(placed.map(({ part, matrix }) => transformTessellation(matrix, part.display))),
+        display: mergeTessellations(
+          placed.map(({ part, matrix }) => transformTessellation(matrix, part.display)),
+        ),
       }
     },
     volume: () => {
@@ -121,7 +126,8 @@ export function instancedSolid(templates: readonly Template[], instances: readon
         const bases = templates.map((t) => t.brep!())
         const copies: Shape3D[] = []
         try {
-          for (const { template, matrix } of instances) copies.push(transformShape(bases[template]!, matrix))
+          for (const { template, matrix } of instances)
+            copies.push(transformShape(bases[template]!, matrix))
           return makeCompound(copies) as unknown as Shape3D
         } finally {
           for (const shape of [...bases, ...copies]) shape.delete()

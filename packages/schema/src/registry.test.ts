@@ -70,7 +70,12 @@ describe('the command registry', () => {
       'boards.delete',
     ] as const)
       expect(needsConfirmation(name), name).toBe(true)
-    for (const name of ['freeform.analyze', 'mesh3d.estimate', 'shots.estimate', 'scenes.update'] as const)
+    for (const name of [
+      'freeform.analyze',
+      'mesh3d.estimate',
+      'shots.estimate',
+      'scenes.update',
+    ] as const)
       expect(needsConfirmation(name), name).toBe(false)
   })
 
@@ -112,7 +117,9 @@ describe('client tools', () => {
     })
     expect(input).toMatchObject({ mode: 'clay', size: 768 })
     expect(ViewSchema.safeParse('custom').success).toBe(false)
-    expect(clientTools['viewport.capture'].input.safeParse({ pieceId: 'p', views: [] }).success).toBe(false)
+    expect(
+      clientTools['viewport.capture'].input.safeParse({ pieceId: 'p', views: [] }).success,
+    ).toBe(false)
   })
 })
 
@@ -147,8 +154,12 @@ describe('events', () => {
       }).success,
     ).toBe(true)
     expect(
-      ServerEventSchema.safeParse({ type: 'client.request', requestId: 'q', runId: null, tool: 'design.apply' })
-        .success,
+      ServerEventSchema.safeParse({
+        type: 'client.request',
+        requestId: 'q',
+        runId: null,
+        tool: 'design.apply',
+      }).success,
     ).toBe(false)
   })
 
@@ -162,12 +173,21 @@ describe('events', () => {
 describe('entities', () => {
   it('describes render scene fields for a generated inspector without changing defaults', () => {
     const js = z.toJSONSchema(RenderSceneSchema, { io: 'input' }) as {
-      properties: Record<string, { title?: string; properties?: Record<string, { title?: string; unit?: string }> }>
+      properties: Record<
+        string,
+        { title?: string; properties?: Record<string, { title?: string; unit?: string }> }
+      >
     }
-    expect(js.properties.camera!.properties!.focalLength).toMatchObject({ title: 'Lens', unit: 'mm' })
+    expect(js.properties.camera!.properties!.focalLength).toMatchObject({
+      title: 'Lens',
+      unit: 'mm',
+    })
     expect(js.properties.sparkle).toMatchObject({ title: 'Sparkle' })
     const scene = RenderSceneSchema.parse({ overrides: { '*': { material: 'au18k-rose' } } })
-    expect(scene).toMatchObject({ look: 'studio-soft', camera: { preset: 'hero', focalLength: 90 } })
+    expect(scene).toMatchObject({
+      look: 'studio-soft',
+      camera: { preset: 'hero', focalLength: 90 },
+    })
     expect(scene.overrides['*']).toEqual({ material: 'au18k-rose' })
   })
 
@@ -175,7 +195,9 @@ describe('entities', () => {
     const origin = { kind: 'image' as const, sourceAssetIds: ['as_1'], referenceIds: [], flags: [] }
     expect(originNeedsAttestation(null)).toBe(false)
     expect(originNeedsAttestation({ ...origin, attestation: null })).toBe(true)
-    expect(originNeedsAttestation({ ...origin, sourceAssetIds: [], kind: 'text', attestation: null })).toBe(false)
+    expect(
+      originNeedsAttestation({ ...origin, sourceAssetIds: [], kind: 'text', attestation: null }),
+    ).toBe(false)
     expect(
       originNeedsAttestation({
         ...origin,
@@ -198,6 +220,10 @@ describe('entities', () => {
     }
     expect(card.safeParse({ ...base, ageRange: '25-34' }).success).toBe(true)
     expect(card.safeParse({ ...base, ageRange: '16-17' }).success).toBe(false)
-    expect(card.parse({ ...base, ageRange: '25-34' })).toMatchObject({ monkTone: null, eyes: '', marks: '' })
+    expect(card.parse({ ...base, ageRange: '25-34' })).toMatchObject({
+      monkTone: null,
+      eyes: '',
+      marks: '',
+    })
   })
 })

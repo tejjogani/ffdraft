@@ -208,7 +208,8 @@ export class Canvas {
           if (it.closed) ops.push(closePath())
         }
         ops.push(stroke(), popGraphicsState())
-        page.pushOperators(...ops)
+        // Spread in chunks: one call with ~10⁵ operators overflows the call stack.
+        for (let i = 0; i < ops.length; i += 8192) page.pushOperators(...ops.slice(i, i + 8192))
         return
       }
       case 'fill': {

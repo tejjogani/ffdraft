@@ -6,25 +6,24 @@
  * links cost one link's meshing plus a matrix multiply each (features/chain/instances.ts).
  */
 import type { NodeOf } from '@pave/schema'
-import { type Shape3D, makeBox } from 'replicad'
+import { makeBox, type Shape3D } from 'replicad'
 import {
   type BuildContext,
+  defineFeature,
   type Frame,
   type IndexedTriangles,
   type Mat4,
+  metalOf,
   type Quality,
   type Stone,
   type Vec3,
-  defineFeature,
-  metalOf,
-  runtime,
 } from '../core'
 import { IDENTITY, multiply, translation } from '../geometry/vec'
 import { booleanShapes } from '../solid/occt'
 import { manifoldFromTriangles, trianglesFromManifold } from '../solid/solid'
 import { sweepAlong } from './chain/centreline'
 import { type ChainPath, drapePath, linkFrames, straightPath } from './chain/drape'
-import { type Instance, type Template, instancedSolid } from './chain/instances'
+import { type Instance, instancedSolid, type Template } from './chain/instances'
 import { type WireLink, wireChain } from './chain/links'
 import { tennisLink } from './chain/tennis'
 
@@ -47,8 +46,8 @@ interface ChainPlan {
 }
 
 /**
- * Wire links read as smooth round wire down to 8 facets around (45° apart) while the diamond-cut
- * flats, which meet the round wire at 60° or more, keep their crisp edge.
+ * Wire links read as smooth round wire down to 8 facets around (45° apart) while the Cuban's
+ * diamond-cut flats, which meet the wire at ~66°, keep their crisp edge.
  */
 const LINK_CREASE = (52 * Math.PI) / 180
 
@@ -60,7 +59,6 @@ const LINK_STATIONS = 24
 
 /** Grinds a wire link's faces flat at |z| = flat (the diamond cut), on its mesh. */
 function grindMesh(tris: IndexedTriangles, flat: number): IndexedTriangles {
-  const { manifold: mf } = runtime()
   const wire = manifoldFromTriangles(tris)
   const below = wire.trimByPlane([0, 0, -1], -flat)
   const ground = below.trimByPlane([0, 0, 1], -flat)
@@ -113,9 +111,11 @@ function wireTemplate(link: WireLink): Template {
 function planFor(node: ChainNode): ChainPlan {
   if (node.style === 'tennis') {
     const link = tennisLink(node.linkWidth, node.wire, node.cut)
+    // Hang each link from its middle, so the chain's centre line runs through the links.
+    const centred = translation([0, 0, -link.middle])
     return {
       templates: [link.template],
-      period: [{ template: 0, orient: IDENTITY }],
+      period: [{ template: 0, orient: centred }],
       pitches: [link.pitch],
       half: link.half,
       minBend: link.minBend,
@@ -126,7 +126,7 @@ function planFor(node: ChainNode): ChainPlan {
         stone: node.stone,
         dims: link.dims,
         // Stone length runs along the chain.
-        frame: { origin: [0, 0, 0], x: [0, -1, 0], y: [1, 0, 0], z: [0, 0, 1] },
+        frame: { origin: [0, 0, -link.middle], x: [0, -1, 0], y: [1, 0, 0], z: [0, 0, 1] },
         role: 'accent',
         setting: 'four-prong',
       },
@@ -161,7 +161,8 @@ function anchor(node: ChainNode, ctx: BuildContext, path: ChainPath, halfUp: num
     ctx.report({
       level: 'info',
       code: 'chain.unhung',
-      message: 'The bail this chain passes through is not available, so the chain hangs on its own.',
+      message:
+        'The bail this chain passes through is not available, so the chain hangs on its own.',
     })
   const opening = bail?.frames.opening
   if (bail && opening) {
@@ -169,7 +170,10 @@ function anchor(node: ChainNode, ctx: BuildContext, path: ChainPath, halfUp: num
     // opening's centre, whatever the bail's shape.
     const [x, y, z] = opening.origin
     const top = Math.min(
-      ...bail.bodies.map((b) => b.solid.manifold(ctx.quality).rayCast([x, y, z], [x, y, z + 1e3])[0]?.position[2] ?? z),
+      ...bail.bodies.map(
+        (b) =>
+          b.solid.manifold(ctx.quality).rayCast([x, y, z], [x, y, z + 1e3])[0]?.position[2] ?? z,
+      ),
     )
     const lift = Math.max(0, top - z - halfUp - BAIL_CLEARANCE)
     const low = path.closed ? path.at(0).point : path.at(path.length / 2).point
@@ -236,16 +240,20 @@ export const chain = defineFeature('chain', (node, ctx) => {
     return { template, matrix: multiply(place, multiply(frame, orient)) }
   })
   const stones: Stone[] = plan.stone
-    ? instances.map(({ matrix }) => {
+    ? frames.map((frame) => {
+        const matrix = multiply(place, frame)
         const f = plan.stone!.frame
         const dir = (v: Vec3): Vec3 => [
           matrix[0]! * v[0] + matrix[4]! * v[1] + matrix[8]! * v[2],
           matrix[1]! * v[0] + matrix[5]! * v[1] + matrix[9]! * v[2],
           matrix[2]! * v[0] + matrix[6]! * v[1] + matrix[10]! * v[2],
         ]
+        const o = f.origin
+        const at = (k: number) =>
+          matrix[k]! * o[0] + matrix[k + 4]! * o[1] + matrix[k + 8]! * o[2] + matrix[k + 12]!
         return {
           ...plan.stone!,
-          frame: { origin: [matrix[12]!, matrix[13]!, matrix[14]!], x: dir(f.x), y: dir(f.y), z: dir(f.z) },
+          frame: { origin: [at(0), at(1), at(2)], x: dir(f.x), y: dir(f.y), z: dir(f.z) },
         }
       })
     : []

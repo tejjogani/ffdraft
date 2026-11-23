@@ -3,9 +3,13 @@
  * size systems are a presentation concern.
  *
  *  - US/Canada: d = 11.63 + 0.8128 × size
- *  - UK/AU:     one letter = half a US size, A = US ½ (12.04 mm)
+ *  - UK/AU:     inner circumference = 37.5 + 1.25 mm per letter, A = 0 (half sizes = 0.5)
  *  - EU (ISO 8653): size = inner circumference in mm
- *  - JP:        d = 13 + (size − 1) / 3
+ *  - JP:        the published chart (JIS: 13 mm at size 1, ⅓ mm of diameter per size, with
+ *               circumferences rounded to 0.1 mm), looked up and interpolated
+ *
+ * Formulas as verified in docs/research/01-cad.md §3 (JewelCraft `ringsizelib`). Charts for
+ * different systems disagree by up to half a size, so never round-trip through letters.
  */
 export type RingSizeSystem = 'us' | 'uk' | 'eu' | 'jp' | 'mm'
 export const RING_SIZE_SYSTEMS = ['us', 'uk', 'eu', 'jp', 'mm'] as const
@@ -18,17 +22,30 @@ export interface RingSize {
 
 const US_BASE = 11.63
 const US_STEP = 0.8128
+const UK_BASE_CIRCUMFERENCE = 37.5
+const UK_STEP_CIRCUMFERENCE = 1.25
+
+/** Inner circumference (mm) of Japanese sizes 1–30, as printed on ring-size charts. */
+const JP_CIRCUMFERENCE = Array.from({ length: 30 }, (_, i) => Math.round(Math.PI * (13 + i / 3) * 10) / 10)
+
+function jpDiameter(size: number): number {
+  const last = JP_CIRCUMFERENCE.length - 1
+  const i = Math.min(last - 1, Math.max(0, Math.floor(size - 1)))
+  const t = size - 1 - i
+  // Linear between chart entries, and extended along the end segments outside the chart.
+  return (JP_CIRCUMFERENCE[i]! + t * (JP_CIRCUMFERENCE[i + 1]! - JP_CIRCUMFERENCE[i]!)) / Math.PI
+}
 
 export function ringInnerDiameter(size: RingSize): number {
   switch (size.system) {
     case 'us':
       return US_BASE + US_STEP * size.value
     case 'uk':
-      return US_BASE + US_STEP * (size.value / 2 + 0.5)
+      return (UK_BASE_CIRCUMFERENCE + UK_STEP_CIRCUMFERENCE * size.value) / Math.PI
     case 'eu':
       return size.value / Math.PI
     case 'jp':
-      return 13 + (size.value - 1) / 3
+      return jpDiameter(size.value)
     case 'mm':
       return size.value
   }
@@ -40,7 +57,7 @@ export function ringSizeFromDiameter(d: number, system: RingSizeSystem): RingSiz
     case 'us':
       return { system, value: round((d - US_BASE) / US_STEP, 0.25) }
     case 'uk':
-      return { system, value: round(((d - US_BASE) / US_STEP - 0.5) * 2, 0.5) }
+      return { system, value: round((d * Math.PI - UK_BASE_CIRCUMFERENCE) / UK_STEP_CIRCUMFERENCE, 0.5) }
     case 'eu':
       return { system, value: round(d * Math.PI, 0.5) }
     case 'jp':

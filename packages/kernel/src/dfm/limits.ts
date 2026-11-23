@@ -18,7 +18,12 @@ export function limitChecks(scene: Scene, profile: DfmProfile): Diagnostic[] {
     if (!fused) continue
     const status = fused.manifold(scene.quality).status()
     if (status !== 'NoError')
-      out.push({ level: 'error', code: 'mesh.open', nodeId: part.nodeId, message: `“${part.name}” is not a closed solid (${status}).` })
+      out.push({
+        level: 'error',
+        code: 'mesh.open',
+        nodeId: part.nodeId,
+        message: `“${part.name}” is not a closed solid (${status}).`,
+      })
     triangles += fused.triangles(scene.quality).indices.length / 3
   }
   if (triangles > profile.maxTriangles)

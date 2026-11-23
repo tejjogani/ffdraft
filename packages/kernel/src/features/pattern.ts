@@ -12,16 +12,16 @@ import {
   type Body,
   type BuildContext,
   type Cut,
+  defineFeature,
   type Frame,
   type Mat4,
   type NodeResult,
   type Stone,
-  defineFeature,
 } from '../core'
 import {
-  IDENTITY,
   composeTransform,
   cross,
+  IDENTITY,
   invertSimilarity,
   multiply,
   transformFrame,
@@ -74,14 +74,22 @@ export function copyOutput(
     stones: result.stones.map((stone) => ({
       ...stone,
       frame: moveFrame(m, stone.frame),
-      dims: { length: stone.dims.length * s, width: stone.dims.width * s, depth: stone.dims.depth * s },
+      dims: {
+        length: stone.dims.length * s,
+        width: stone.dims.width * s,
+        depth: stone.dims.depth * s,
+      },
       ...(setting && { setting }),
     })),
     cuts: result.cuts.map((c) => ({
       solid: c.solid.transformed(m),
       targets: c.targets === 'all' ? 'all' : c.targets.map(retarget),
     })),
-    additions: result.additions.map((a) => ({ ...a, solid: a.solid.transformed(m), target: retarget(a.target) })),
+    additions: result.additions.map((a) => ({
+      ...a,
+      solid: a.solid.transformed(m),
+      target: retarget(a.target),
+    })),
   }
 }
 
@@ -119,7 +127,7 @@ function copyMatrices(node: PatternNode): Mat4[] {
     case 'polar': {
       // A full turn spaces copies evenly; a partial arc puts the last copy at its end.
       const full = node.angle >= 360 - 1e-9
-      const step = ((node.angle * Math.PI) / 180) / (full ? node.count : node.count - 1)
+      const step = (node.angle * Math.PI) / 180 / (full ? node.count : node.count - 1)
       return Array.from({ length: node.count - 1 }, (_, k) => rotation(axis, (k + 1) * step))
     }
   }

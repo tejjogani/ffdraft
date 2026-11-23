@@ -19,5 +19,8 @@
     "replicad": "^1.2.1",
     "replicad-opencascadejs": "^1.2.1",
     "rhino3dm": "^8.35.0"
+  },
+  "devDependencies": {
+    "zod": "^4.6.7"
   }
 }

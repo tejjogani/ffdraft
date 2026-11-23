@@ -21,8 +21,9 @@ import { meshBody } from './meshBody'
 import { pattern } from './pattern'
 import { pave } from './pave'
 import { primitive } from './primitive'
+import { relief } from './relief'
 import { ringShank } from './ringShank'
 import { setting } from './setting'
 import { vectorBody } from './vectorBody'
 
-export const FEATURES: readonly AnyFeature[] = [ringShank, gem, setting, halo, gemRow, revolve, pipe, engraving, booleanFeature, bail, primitive, meshBody, chain, pave, vectorBody, finding, pattern, group]
+export const FEATURES: readonly AnyFeature[] = [ringShank, gem, setting, halo, gemRow, revolve, pipe, engraving, booleanFeature, bail, primitive, meshBody, chain, pave, vectorBody, relief, finding, pattern, group]

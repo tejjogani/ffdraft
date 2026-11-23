@@ -5,11 +5,11 @@
  * clasp are formed sheet and wire whose small parts overlap, so they are fused on meshes.
  */
 import type { Manifold } from 'manifold-3d'
-import { type Shape3D, draw, drawCircle } from 'replicad'
-import { type Deletable, type Quality, type Vec3, runtime } from '../../core'
-import { circleLoop, ellipseLoop } from '../../geometry/loop'
-import { manifoldFromTriangles, trianglesFromManifold } from '../../solid/solid'
+import { draw, drawCircle, type Shape3D } from 'replicad'
+import { type Deletable, type Quality, runtime, type Vec3 } from '../../core'
+import { ellipseLoop } from '../../geometry/loop'
 import type { IndexedTriangles } from '../../solid/meshing'
+import { manifoldFromTriangles, trianglesFromManifold } from '../../solid/solid'
 import { type Centreline, sampleCurve, segmentsFor, sweepAlong } from '../chain/centreline'
 
 /** How far a post or ring is sunk into its host so the two fuse into one casting. */
@@ -62,7 +62,11 @@ function manifoldScope<T>(fn: (own: <D extends Deletable>(d: D) => D) => T): T {
 }
 
 /** Wire of elliptical section (half-sizes across and along `up` at t) swept along a line. */
-function sweptWire(line: Centreline, half: (t: number) => [number, number], quality: Quality): Manifold {
+function sweptWire(
+  line: Centreline,
+  half: (t: number) => [number, number],
+  quality: Quality,
+): Manifold {
   const solid = sweepAlong(line, (t) => ellipseLoop(...half(t)))
   try {
     return manifoldFromTriangles(solid.triangles(quality))
@@ -81,8 +85,12 @@ export function butterflyMesh(span: number, post: number, quality: Quality): Ind
     const sheet = Math.max(0.3, span * 0.06)
     const seg = (r: number) => segmentsFor(r, quality.chord, 12, 48)
     const lobe = span * 0.3
-    const lobes = [-1, 1].map((s) => own(own(mf.CrossSection.circle(lobe, seg(lobe))).translate(s * (span / 2 - lobe), 0)))
-    const outline = own(mf.CrossSection.union([...lobes, own(mf.CrossSection.circle(span * 0.2, seg(span * 0.2)))]))
+    const lobes = [-1, 1].map((s) =>
+      own(own(mf.CrossSection.circle(lobe, seg(lobe))).translate(s * (span / 2 - lobe), 0)),
+    )
+    const outline = own(
+      mf.CrossSection.union([...lobes, own(mf.CrossSection.circle(span * 0.2, seg(span * 0.2)))]),
+    )
     const plate = own(outline.extrude(sheet))
     const hole = own(mf.Manifold.cylinder(sheet * 4, post * 0.55, undefined, seg(post), true))
     const parts: Manifold[] = [own(plate.subtract(hole))]
@@ -116,8 +124,14 @@ export function lobsterMesh(length: number, wire: number, quality: Quality): Ind
   const { manifold: mf } = runtime()
   const L = length
   // The claw outline: an egg, fuller at the hook end.
-  const centre = 0.62 * L
-  const egg = (t: number): Vec3 => [0.27 * L * Math.sin(t) * (1 + 0.22 * Math.cos(t)), 0, centre + 0.36 * L * Math.cos(t)]
+  // Centre and half-height leave room for the eye below and the wire's thickness above: the
+  // whole clasp is `length` tall.
+  const centre = 0.6 * L
+  const egg = (t: number): Vec3 => [
+    0.27 * L * Math.sin(t) * (1 + 0.22 * Math.cos(t)),
+    0,
+    centre + 0.34 * L * Math.cos(t),
+  ]
   const facing = (): Vec3 => [0, 1, 0]
   // Body from the hook tip (upper left), over the top and down the back to the hinge (lower left).
   const hookTip = -1.15
@@ -145,15 +159,31 @@ export function lobsterMesh(length: number, wire: number, quality: Quality): Ind
       ),
     )
     // The gate runs from inside the hinge to just short of the hook tip.
-    const gate = own(sweptWire(between(hinge - 0.15, hookTip + 2 * Math.PI - 0.1, 0.04), () => [0.035 * L, 0.07 * L], quality))
+    const gate = own(
+      sweptWire(
+        between(hinge - 0.15, hookTip + 2 * Math.PI - 0.1, 0.04),
+        () => [0.035 * L, 0.07 * L],
+        quality,
+      ),
+    )
     const lever = egg(Math.PI + 0.85)
-    const thumb = own(own(mf.Manifold.sphere(0.065 * L, segmentsFor(0.065 * L, quality.chord, 12, 32))).translate([lever[0] - 0.06 * L, 0, lever[2]]))
+    const thumb = own(
+      own(mf.Manifold.sphere(0.065 * L, segmentsFor(0.065 * L, quality.chord, 12, 32))).translate([
+        lever[0] - 0.06 * L,
+        0,
+        lever[2],
+      ]),
+    )
     const ring = Math.max(wire, 0.06 * L)
     const eyeRadius = 0.065 * L + ring / 2
     const eye = own(
       sweptWire(
         sampleCurve(
-          (t) => [eyeRadius * Math.sin(2 * Math.PI * t), 0, ring / 2 + eyeRadius * (1 - Math.cos(2 * Math.PI * t))],
+          (t) => [
+            eyeRadius * Math.sin(2 * Math.PI * t),
+            0,
+            ring / 2 + eyeRadius * (1 - Math.cos(2 * Math.PI * t)),
+          ],
           facing,
           24,
           true,
@@ -165,11 +195,14 @@ export function lobsterMesh(length: number, wire: number, quality: Quality): Ind
     // A neck from the top of the eye up into the bottom of the claw.
     const neckBase = 2 * eyeRadius
     const neck = own(
-      own(mf.Manifold.cylinder(egg(Math.PI)[2] - neckBase, ring * 0.7, ring * 0.9, segmentsFor(ring, quality.chord, 12, 32))).translate([
-        0,
-        0,
-        neckBase,
-      ]),
+      own(
+        mf.Manifold.cylinder(
+          egg(Math.PI)[2] - neckBase,
+          ring * 0.7,
+          ring * 0.9,
+          segmentsFor(ring, quality.chord, 12, 32),
+        ),
+      ).translate([0, 0, neckBase]),
     )
     return trianglesFromManifold(own(mf.Manifold.union([body, gate, thumb, eye, neck])))
   })

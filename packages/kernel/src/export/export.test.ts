@@ -3,11 +3,11 @@
  * manifoldness, names, units and bounding boxes — for an all-exact solitaire ring and for a
  * design with a mesh (sculpted) body.
  */
-import { type Design, METALS, TEMPLATES, buildDesign, designFrom } from '@pave/schema'
+import { buildDesign, type Design, designFrom, METALS, TEMPLATES } from '@pave/schema'
 import { unzipSync } from 'fflate'
-import { type Shape3D, importSTEP, measureVolume } from 'replicad'
+import { importSTEP, measureVolume, type Shape3D } from 'replicad'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { type LocalKernel, createKernel } from '../kernel'
+import { createKernel, type LocalKernel } from '../kernel'
 import type { Bounds, ExportFormat, ExportResult } from '../types'
 import { loadRhino3dm } from './rhino3dm'
 
@@ -20,7 +20,13 @@ afterAll(() => kernel.dispose())
 const solitaire = (): Design => buildDesign(TEMPLATES.find((t) => t.id === 'solitaire')!.spec)
 const sculpted = (): Design =>
   designFrom('pendant', [
-    { id: 'trophy', kind: 'meshBody', name: 'Trophy', source: { type: 'builtin', name: 'trophy' }, height: 20 },
+    {
+      id: 'trophy',
+      kind: 'meshBody',
+      name: 'Trophy',
+      source: { type: 'builtin', name: 'trophy' },
+      height: 20,
+    },
     {
       id: 'loop',
       kind: 'primitive',
@@ -42,9 +48,8 @@ function isClosedManifold({ positions, indices }: Triangles): boolean {
   const ids = new Map<string, number>()
   const vertex = (i: number) => {
     const key = `${positions[i * 3]},${positions[i * 3 + 1]},${positions[i * 3 + 2]}`
-    let id = ids.get(key)
-    if (id === undefined) ids.set(key, (id = ids.size))
-    return id
+    if (!ids.has(key)) ids.set(key, ids.size)
+    return ids.get(key)!
   }
   const edges = new Map<string, number>()
   for (let t = 0; t < indices.length; t += 3)
@@ -95,7 +100,11 @@ function parseStl(bytes: Uint8Array): { header: string; triangles: Triangles } {
 function shellCount({ positions, indices }: Triangles): number {
   const ids = new Map<string, number>()
   const parent: number[] = []
-  const find = (x: number): number => (parent[x] === x ? x : (parent[x] = find(parent[x]!)))
+  const find = (x: number): number => {
+    let root = x
+    while (parent[root] !== root) root = parent[root]!
+    return root
+  }
   const vertex = (i: number) => {
     const key = `${positions[i * 3]},${positions[i * 3 + 1]},${positions[i * 3 + 2]}`
     let id = ids.get(key)
@@ -132,27 +141,45 @@ describe.each([
     expect(isClosedManifold(triangles)).toBe(true)
     expect(shellCount(triangles)).toBe(evaluation.parts.length)
     expectBounds(boundsOf(triangles.positions), {
-      min: [0, 1, 2].map((k) => Math.min(...evaluation.parts.map((p) => p.bounds.min[k]!))) as Bounds['min'],
-      max: [0, 1, 2].map((k) => Math.max(...evaluation.parts.map((p) => p.bounds.max[k]!))) as Bounds['max'],
+      min: [0, 1, 2].map((k) =>
+        Math.min(...evaluation.parts.map((p) => p.bounds.min[k]!)),
+      ) as Bounds['min'],
+      max: [0, 1, 2].map((k) =>
+        Math.max(...evaluation.parts.map((p) => p.bounds.max[k]!)),
+      ) as Bounds['max'],
     })
     const withStones = parseStl((await exportOf(design, 'stl', true)).bytes)
-    expect(shellCount(withStones.triangles)).toBe(evaluation.parts.length + evaluation.stones.length)
+    expect(shellCount(withStones.triangles)).toBe(
+      evaluation.parts.length + evaluation.stones.length,
+    )
   })
 
   it('3MF: millimetre model with one named, coloured object per part', async () => {
     const design = make()
     const evaluation = await kernel.evaluate(design, { detail: 'production' })
     const files = unzipSync((await exportOf(design, '3mf')).bytes)
-    expect(Object.keys(files).sort()).toEqual(['3D/3dmodel.model', '[Content_Types].xml', '_rels/.rels'])
+    expect(Object.keys(files).sort()).toEqual([
+      '3D/3dmodel.model',
+      '[Content_Types].xml',
+      '_rels/.rels',
+    ])
     const xml = new TextDecoder().decode(files['3D/3dmodel.model'])
     expect(xml).toContain('unit="millimeter"')
-    const objects = [...xml.matchAll(/<object id="(\d+)" type="model" name="([^"]+)"[^>]*><mesh><vertices>([\s\S]*?)<\/vertices><triangles>([\s\S]*?)<\/triangles>/g)]
+    const objects = [
+      ...xml.matchAll(
+        /<object id="(\d+)" type="model" name="([^"]+)"[^>]*><mesh><vertices>([\s\S]*?)<\/vertices><triangles>([\s\S]*?)<\/triangles>/g,
+      ),
+    ]
     expect(objects).toHaveLength(evaluation.parts.length)
     expect(objects.map((o) => o[2])).toEqual(evaluation.parts.map((p) => p.name))
     expect(xml).toMatch(/<base name="[^"]+" displaycolor="#[0-9A-F]{8}"\/>/)
     for (const [, , vertices, tris] of objects) {
-      const positions = [...vertices!.matchAll(/x="([^"]+)" y="([^"]+)" z="([^"]+)"/g)].flatMap((m) => [m[1], m[2], m[3]].map(Number))
-      const indices = [...tris!.matchAll(/v1="(\d+)" v2="(\d+)" v3="(\d+)"/g)].flatMap((m) => [m[1], m[2], m[3]].map(Number))
+      const positions = [...vertices!.matchAll(/x="([^"]+)" y="([^"]+)" z="([^"]+)"/g)].flatMap(
+        (m) => [m[1], m[2], m[3]].map(Number),
+      )
+      const indices = [...tris!.matchAll(/v1="(\d+)" v2="(\d+)" v3="(\d+)"/g)].flatMap((m) =>
+        [m[1], m[2], m[3]].map(Number),
+      )
       expect(isClosedManifold({ positions, indices })).toBe(true)
     }
   })
@@ -166,7 +193,8 @@ describe.each([
     expect(groups).toHaveLength(evaluation.parts.length + evaluation.stones.length)
     const faces = (text.match(/^f /gm) ?? []).length
     const metal = parseStl((await exportOf(design, 'stl')).bytes).triangles.indices.length / 3
-    const stones = parseStl((await exportOf(design, 'stl', true)).bytes).triangles.indices.length / 3 - metal
+    const stones =
+      parseStl((await exportOf(design, 'stl', true)).bytes).triangles.indices.length / 3 - metal
     expect(faces).toBe(metal + stones)
   })
 
@@ -178,7 +206,10 @@ describe.each([
     const rhino = await loadRhino3dm()
     const doc = rhino.File3dm.fromByteArray(result.bytes)
     expect(doc.settings().modelUnitSystem).toBe(rhino.UnitSystem.Millimeters)
-    const layerNames = Array.from({ length: doc.layers().count }, (_, i) => doc.layers().get(i).name)
+    const layerNames = Array.from(
+      { length: doc.layers().count },
+      (_, i) => doc.layers().get(i).name,
+    )
     expect(layerNames).toContain('Metal')
     for (const p of evaluation.parts) expect(layerNames).toContain(METALS[p.material].label)
     if (evaluation.stones.length > 0) expect(layerNames).toContain('Stones')
@@ -192,7 +223,8 @@ describe.each([
     expect(metal[0]!.attributes().getUserString('alloy')).toBe(evaluation.parts[0]!.material)
     const stones = meshes.filter((o) => o.attributes().getUserString('carat'))
     expect(stones).toHaveLength(evaluation.stones.length)
-    for (const o of metal) expect((o.geometry() as unknown as { isClosed: boolean }).isClosed).toBe(true)
+    for (const o of metal)
+      expect((o.geometry() as unknown as { isClosed: boolean }).isClosed).toBe(true)
   })
 
   it('GLB is wired through the exporter registry', async () => {
@@ -232,7 +264,9 @@ describe('STEP round trip', () => {
     const ring = await exportOf(solitaire(), 'step', true)
     const text = new TextDecoder().decode(ring.bytes)
     const evaluation = await kernel.evaluate(solitaire(), { detail: 'production' })
-    expect((text.match(/MANIFOLD_SOLID_BREP/g) ?? []).length).toBeGreaterThanOrEqual(evaluation.stones.length + 2)
+    expect((text.match(/MANIFOLD_SOLID_BREP/g) ?? []).length).toBeGreaterThanOrEqual(
+      evaluation.stones.length + 2,
+    )
     const shape = (await importSTEP(new Blob([ring.bytes.slice()]))) as Shape3D
     // Bodies overlap where claws meet the band, so the solids sum to at least the fused metal.
     expect(measureVolume(shape)).toBeGreaterThan(evaluation.report.metals[0]!.volumeMm3 * 0.98)

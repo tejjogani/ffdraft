@@ -12,8 +12,8 @@ import { z } from 'zod'
 import { ChangeSchema, DesignSchema, OpSchema, PIECE_KINDS } from '../design/design'
 import { PieceSpecSchema } from '../design/spec'
 import {
-  ATTESTATION_RIGHTS,
   AssetSchema,
+  ATTESTATION_RIGHTS,
   BoardSchema,
   BrandModelSchema,
   CanvasPlacementSchema,
@@ -35,17 +35,17 @@ import {
   PieceSchema,
   PieceSummarySchema,
   ProductionPackageSchema,
-  RIGHTS,
-  ROLES,
   ReferenceSchema,
   RenderEngineStatusSchema,
   RenderJobSchema,
   RenderSceneSchema,
+  RIGHTS,
+  ROLES,
   type Role,
   RunSchema,
-  STAGES,
   SavedSceneSchema,
   SearchResultSchema,
+  STAGES,
   StepSchema,
   StoredChangeSchema,
   ThreadSchema,
@@ -121,7 +121,12 @@ export const EvaluationSummarySchema = z.object({
   ),
   boundsMm: z.object({ x: z.number(), y: z.number(), z: z.number() }),
   diagnostics: z.array(
-    z.object({ level: z.string(), code: z.string(), message: z.string(), nodeId: z.string().optional() }),
+    z.object({
+      level: z.string(),
+      code: z.string(),
+      message: z.string(),
+      nodeId: z.string().optional(),
+    }),
   ),
 })
 export type EvaluationSummary = z.infer<typeof EvaluationSummarySchema>
@@ -330,10 +335,15 @@ export const commands = {
     output: z.object({ version: z.number().int(), change: StoredChangeSchema }),
   }),
   'design.history': def({
-    description: 'The edit history of a piece: who (person or assistant run) changed what, newest first.',
+    description:
+      'The edit history of a piece: who (person or assistant run) changed what, newest first.',
     kind: 'query',
     tool: true,
-    input: z.object({ pieceId: id, before: z.number().int().optional(), limit: z.number().int().max(200).default(50) }),
+    input: z.object({
+      pieceId: id,
+      before: z.number().int().optional(),
+      limit: z.number().int().max(200).default(50),
+    }),
     output: z.array(StoredChangeSchema),
   }),
   'design.revert': def({
@@ -485,7 +495,11 @@ export const commands = {
       boardId: id,
       items: z
         .array(
-          z.object({ id, position: z.number().optional(), canvas: CanvasPlacementSchema.nullable().optional() }),
+          z.object({
+            id,
+            position: z.number().optional(),
+            canvas: CanvasPlacementSchema.nullable().optional(),
+          }),
         )
         .min(1)
         .max(500),
@@ -611,7 +625,8 @@ export const commands = {
     }),
   }),
   'mesh3d.estimate': def({
-    description: 'What an image-to-3D generation would cost and how long it takes, before asking for confirmation.',
+    description:
+      'What an image-to-3D generation would cost and how long it takes, before asking for confirmation.',
     kind: 'query',
     tool: true,
     input: z.object(meshRequest),
@@ -745,7 +760,7 @@ export const commands = {
         seconds: z.number().nonnegative().optional(),
         device: z.string().max(200).optional(),
       })
-      .refine((v) => (v.assetIds.length > 0) !== (v.error !== undefined), {
+      .refine((v) => v.assetIds.length > 0 !== (v.error !== undefined), {
         message: 'Give either the rendered assetIds or an error',
       }),
     output: RenderJobSchema,
@@ -769,7 +784,8 @@ export const commands = {
     output: ok,
   }),
   'renders.engine': def({
-    description: 'Whether Blender is available for photoreal renders: version, device and path, or why not.',
+    description:
+      'Whether Blender is available for photoreal renders: version, device and path, or why not.',
     kind: 'query',
     input: none,
     output: RenderEngineStatusSchema,
@@ -818,7 +834,10 @@ export const commands = {
       'Generate (or regenerate) the canonical portrait set for a brand model. Generate the face first; once it is kept, the other views are conditioned on it.',
     kind: 'mutation',
     tool: { confirm: true },
-    input: z.object({ id, views: z.array(z.enum(['face', 'hands', 'neck', 'ear', 'body'])).min(1) }),
+    input: z.object({
+      id,
+      views: z.array(z.enum(['face', 'hands', 'neck', 'ear', 'body'])).min(1),
+    }),
     output: BrandModelSchema,
   }),
   'models.delete': def({
@@ -842,7 +861,8 @@ export const commands = {
     output: ModelShotSchema,
   }),
   'shots.estimate': def({
-    description: 'What on-model images would cost and how long they take, before asking for confirmation.',
+    description:
+      'What on-model images would cost and how long they take, before asking for confirmation.',
     kind: 'query',
     tool: true,
     input: onModelShot,
@@ -946,7 +966,8 @@ export const commands = {
     output: z.object({ thread: ThreadSchema, run: RunSchema }),
   }),
   'runs.decide': def({
-    description: 'Approve or decline a tool call an assistant run is waiting on. Only the run’s own user can.',
+    description:
+      'Approve or decline a tool call an assistant run is waiting on. Only the run’s own user can.',
     kind: 'mutation',
     input: z.object({
       runId: id,
@@ -969,7 +990,11 @@ export const commands = {
     // Client tools include reads a viewer may make; the request itself is addressed to this user.
     role: 'viewer',
     input: z
-      .object({ requestId: id, output: z.unknown().optional(), error: z.string().max(2000).optional() })
+      .object({
+        requestId: id,
+        output: z.unknown().optional(),
+        error: z.string().max(2000).optional(),
+      })
       .refine((v) => (v.output === undefined) !== (v.error === undefined), {
         message: 'Give either an output or an error',
       }),
@@ -992,7 +1017,11 @@ export const commands = {
       'One assistant run with every model and tool step, linked to the design changes it made, and the feedback it received.',
     kind: 'query',
     input: z.object({ id }),
-    output: z.object({ run: RunSchema, steps: z.array(StepSchema), feedback: z.array(FeedbackSchema) }),
+    output: z.object({
+      run: RunSchema,
+      steps: z.array(StepSchema),
+      feedback: z.array(FeedbackSchema),
+    }),
   }),
   'traces.feedback': def({
     description: 'Record explicit feedback on a run or one of its steps.',
@@ -1014,7 +1043,14 @@ export const commands = {
     input: z.object({ days: z.number().int().min(1).max(365).default(30) }),
     output: z.object({
       totalUsd: z.number(),
-      byMeter: z.array(z.object({ meter: z.enum(METERS), quantity: z.number(), unit: z.string(), costUsd: z.number() })),
+      byMeter: z.array(
+        z.object({
+          meter: z.enum(METERS),
+          quantity: z.number(),
+          unit: z.string(),
+          costUsd: z.number(),
+        }),
+      ),
       byDay: z.array(z.object({ day: z.string(), costUsd: z.number() })),
       recent: z.array(UsageEventSchema),
     }),

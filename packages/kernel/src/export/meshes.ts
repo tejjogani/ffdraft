@@ -3,10 +3,10 @@
  * production part, and optionally one per stone, with the names and facts a recipient needs.
  */
 import { GEM_MATERIALS, METALS } from '@pave/schema'
-import type { MeshData, StoneInstance } from '../types'
 import type { IndexedTriangles, MetalSpec, Scene, ScenePart } from '../core'
-import { weld } from '../solid/meshing'
 import { mergeTriangles } from '../features/chain/instances'
+import { weld } from '../solid/meshing'
+import type { MeshData, StoneInstance } from '../types'
 
 export interface MetalObject extends IndexedTriangles, MetalSpec {
   kind: 'metal'
@@ -43,7 +43,8 @@ function uniqueNames<T extends { name: string }>(objects: T[]): T[] {
 }
 
 const partTriangles = (scene: Scene, part: ScenePart): IndexedTriangles =>
-  part.fused?.triangles(scene.quality) ?? mergeTriangles(part.sources.map((s) => s.body.solid.triangles(scene.quality)))
+  part.fused?.triangles(scene.quality) ??
+  mergeTriangles(part.sources.map((s) => s.body.solid.triangles(scene.quality)))
 
 /** A unit gem mesh placed by a stone's matrix (non-uniform: girdle, length and depth scales). */
 function placedGem(mesh: MeshData, m: readonly number[]): IndexedTriangles {

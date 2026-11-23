@@ -39,7 +39,6 @@ export const getRun = (ctx: Ctx, id: string) =>
 
 /** Checks that every id names a row of the caller's org (404 naming the first that does not). */
 export async function ensureAll(
-  ctx: Ctx,
   ids: readonly string[],
   load: (ids: string[]) => Promise<{ id: string }[]>,
   what: string,

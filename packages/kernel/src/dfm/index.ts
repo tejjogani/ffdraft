@@ -9,15 +9,25 @@ import type { Diagnostic } from '../types'
 import { chainChecks } from './chains'
 import { connectivityChecks } from './connectivity'
 import { cutChecks } from './cuts'
-import { type DfmProfile, DEFAULT_PROFILE } from './profile'
-import { sizeChecks } from './sizes'
 import { limitChecks } from './limits'
+import { DEFAULT_PROFILE, type DfmProfile } from './profile'
+import { sizeChecks } from './sizes'
 import { stoneChecks } from './stones'
 
-export { type DfmProfile, DEFAULT_PROFILE, profileWith } from './profile'
+export { DEFAULT_PROFILE, type DfmProfile, profileWith } from './profile'
 
-const CHECKS = [sizeChecks, chainChecks, connectivityChecks, cutChecks, stoneChecks, limitChecks] as const
+const CHECKS = [
+  sizeChecks,
+  chainChecks,
+  connectivityChecks,
+  cutChecks,
+  stoneChecks,
+  limitChecks,
+] as const
 
-export function manufacturabilityDiagnostics(scene: Scene, profile: DfmProfile = DEFAULT_PROFILE): Diagnostic[] {
+export function manufacturabilityDiagnostics(
+  scene: Scene,
+  profile: DfmProfile = DEFAULT_PROFILE,
+): Diagnostic[] {
   return CHECKS.flatMap((check) => check(scene, profile))
 }

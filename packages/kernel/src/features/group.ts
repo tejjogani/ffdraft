@@ -8,15 +8,17 @@
  * child where it was built, because references point at nodes, not at the group: group a
  * setting with its gem when moving them together.
  */
-import { type Frame, type NodeResult, defineFeature } from '../core'
-import { IDENTITY, composeTransform, isIdentity } from '../geometry/vec'
+import { defineFeature, type Frame, type NodeResult } from '../core'
+import { composeTransform, IDENTITY, isIdentity } from '../geometry/vec'
 import { type Copy, copyOutput, settingStyles } from './pattern'
 
 export const group = defineFeature('group', (node, ctx) => {
   const t = node.transform
   if (!t || isIdentity(composeTransform(t.position, t.rotation, t.scale))) return {}
   // A child that could not be built has already reported why; the rest still move.
-  const children = node.children.map((id) => ctx.tryInput(id)).filter((r): r is NodeResult => r !== null)
+  const children = node.children
+    .map((id) => ctx.tryInput(id))
+    .filter((r): r is NodeResult => r !== null)
   const styles = settingStyles(children)
   const out: Copy = { bodies: [], stones: [], cuts: [], additions: [] }
   const frames: Record<string, Frame> = {}

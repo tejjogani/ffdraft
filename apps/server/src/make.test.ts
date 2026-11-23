@@ -4,7 +4,7 @@ import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { putAsset } from './assets/assets'
 import type { Ctx } from './context'
-import type { JobHandle, MeshJobPatch, Services } from './services'
+import type { Services } from './services'
 import { type Client, client, type TestServer, testServer } from './test/harness'
 import { recordUsage } from './usage'
 
@@ -44,7 +44,9 @@ describe('with no engines', () => {
       await api.fail('mesh3d.estimate', { imageAssetIds: [image.id] }),
       await api.fail('mesh3d.create', { pieceId: piece.id, imageAssetIds: [image.id] }),
     ]
-    expect(calls.map((c) => [c.status, c.error.code])).toEqual(calls.map(() => [501, 'not_configured']))
+    expect(calls.map((c) => [c.status, c.error.code])).toEqual(
+      calls.map(() => [501, 'not_configured']),
+    )
     expect(await api.call('mesh3d.list', { pieceId: piece.id })).toEqual([])
     expect((await api.fail('freeform.analyze', { assetId: 'as_nope' })).status).toBe(404)
   })
@@ -147,7 +149,11 @@ describe('making jewelry from a picture', () => {
       actor: { type: 'agent', runId: 'run_x' },
     })
     await expect(
-      server.runtime.invoke('pieces.attest', { id: piece.id, rights: 'own', likenessConsent: true }, agent),
+      server.runtime.invoke(
+        'pieces.attest',
+        { id: piece.id, rights: 'own', likenessConsent: true },
+        agent,
+      ),
     ).rejects.toMatchObject({ status: 403 })
 
     const attested = await api.call('pieces.attest', {
@@ -178,9 +184,17 @@ describe('making jewelry from a picture', () => {
 
     const typed = await api.call('pieces.create', { kind: 'pendant', origin: { kind: 'text' } })
     await api.call('design.export', { pieceId: typed.id, format: 'stl' })
-    expect((await api.fail('pieces.attest', { id: (await api.call('pieces.create', {})).id, rights: 'own' })).status).toBe(409)
     expect(
-      (await api.fail('pieces.create', { origin: { kind: 'image', sourceAssetIds: ['as_nope'] } })).status,
+      (
+        await api.fail('pieces.attest', {
+          id: (await api.call('pieces.create', {})).id,
+          rights: 'own',
+        })
+      ).status,
+    ).toBe(409)
+    expect(
+      (await api.fail('pieces.create', { origin: { kind: 'image', sourceAssetIds: ['as_nope'] } }))
+        .status,
     ).toBe(404)
   })
 
@@ -206,11 +220,7 @@ describe('making jewelry from a picture', () => {
       costUsd: null,
       actor: { type: 'user' },
     })
-    const [submitted, images, handle] = submit.mock.calls.at(-1)! as [
-      unknown,
-      { mime: string }[],
-      JobHandle<MeshJobPatch>,
-    ]
+    const [submitted, images, handle] = submit.mock.calls.at(-1)!
     expect(submitted).toEqual(job)
     expect(images.map((i) => i.mime)).toEqual(['image/png'])
 
@@ -239,7 +249,10 @@ describe('making jewelry from a picture', () => {
     const canceled = await api.call('mesh3d.cancel', { id: second.id })
     expect(canceled.status).toBe('canceled')
     expect(cancel).toHaveBeenCalledWith(second.id, expect.anything())
-    expect((await api.call('mesh3d.list', { pieceId: piece.id })).map((j) => j.id)).toEqual([second.id, job.id])
+    expect((await api.call('mesh3d.list', { pieceId: piece.id })).map((j) => j.id)).toEqual([
+      second.id,
+      job.id,
+    ])
 
     const doc = await putAsset(ctx, { bytes: new TextEncoder().encode('x'), name: 'a.txt' })
     expect(
@@ -251,7 +264,13 @@ describe('making jewelry from a picture', () => {
     const photo = await putAsset(ctx, { bytes: await png(), name: 'b.png' })
     const piece = await api.call('pieces.create', { kind: 'pendant' })
     await api.call('org.settings.update', { monthlyBudgetUsd: 1.5 })
-    await recordUsage(ctx, { meter: 'image', provider: 'x', quantity: 1, unit: 'images', costUsd: 0.75 })
+    await recordUsage(ctx, {
+      meter: 'image',
+      provider: 'x',
+      quantity: 1,
+      unit: 'images',
+      costUsd: 0.75,
+    })
     await api.call('mesh3d.create', { pieceId: piece.id, imageAssetIds: [photo.id] })
     const err = await api.fail('mesh3d.create', {
       pieceId: piece.id,

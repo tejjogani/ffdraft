@@ -7,10 +7,11 @@
  * Proportions follow docs/research/06-freeform.md §6 where it gives them (Cuban: link length
  * ≈ 1.35·W, pitch ≈ L − 2·wire; figaro: 3 short + 1 long); the rest are typical stock chain.
  */
-import { IDENTITY, type Mat4, type Vec3, multiply } from '../../geometry/vec'
-import { type Loop, circleLoop, roundedRectLoop } from '../../geometry/loop'
-import { InterlockError, type WireLoop, clearance, linking, moveLoop, pitchRange } from './contact'
+
+import { circleLoop, type Loop, roundedRectLoop } from '../../geometry/loop'
+import { IDENTITY, type Mat4, multiply, type Vec3 } from '../../geometry/vec'
 import { type Centreline, sampleCurve } from './centreline'
+import { clearance, InterlockError, linking, moveLoop, pitchRange, type WireLoop } from './contact'
 
 export interface WireLink {
   /** The centreline at `count` samples. */
@@ -89,7 +90,10 @@ function ovalLink(
 }
 
 const contactLoop = (link: WireLink, orient: Mat4, x = 0): WireLoop =>
-  moveLoop({ points: link.centreline(CONTACT_SAMPLES).points, radius: link.radius }, shifted(orient, x))
+  moveLoop(
+    { points: link.centreline(CONTACT_SAMPLES).points, radius: link.radius },
+    shifted(orient, x),
+  )
 
 /** Largest |z| a link's surface reaches. */
 function reach(link: WireLink): number {
@@ -132,7 +136,13 @@ function cable(width: number, wire: number): WireChain {
  * does the opposite — they thread through each other while every link lies flat. The faces are
  * then ground flat (`cut` of the wire diameter) for the diamond-cut look.
  */
-function curbLink(length: number, width: number, wire: number, tilt: number, cut: number): WireLink {
+function curbLink(
+  length: number,
+  width: number,
+  wire: number,
+  tilt: number,
+  cut: number,
+): WireLink {
   const r = wire / 2
   const a = (length - wire) / 2
   const twist = (x: number) => tilt * Math.sin((Math.PI / 2) * Math.max(-1, Math.min(1, x / a)))
@@ -140,6 +150,7 @@ function curbLink(length: number, width: number, wire: number, tilt: number, cut
   return cut > 0 ? { ...raw, flat: reach(raw) - cut * wire } : raw
 }
 
+/** Taut pitch, or for nested links the tightest pitch at which they still clear each other. */
 function curbPitch(a: WireLink, b: WireLink, wire: number, start: number, nested = false): number {
   const range = pitchRange(
     (p) => [contactLoop(a, IDENTITY), contactLoop(b, IDENTITY, p)],
@@ -154,7 +165,11 @@ interface CurbProportions {
   length: number
   tilt: number
   cut: number
-  /** Links pushed together rather than pulled apart: Cuban links are pressed to nest. */
+  /**
+   * Links pressed together until they nest, rather than pulled taut: the Cuban look. This packs
+   * tighter than the L − 2·wire rule of thumb in 06-freeform.md §6 (≈ 0.55·L instead of 0.6–0.7·L
+   * at the recipe's 0.26·W wire), because the rule leaves visible play between the links.
+   */
   nested: boolean
 }
 

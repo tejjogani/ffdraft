@@ -44,6 +44,8 @@ export interface Manifest {
     nodeId: string
     name: string
     alloy: string
+    /** Identical bodies cast per piece (chain links); 1 for an ordinary part. */
+    count: number
     fineness: number
     densityGcm3: number
     volumeMm3: number
@@ -109,7 +111,7 @@ export async function buildManifest(
   const { piece, evaluation, revision, options } = ctx.input
   const hashes = new Map<string, string>()
   for (const f of files) hashes.set(f.path, await sha256(f.bytes))
-  const stl = new Map(cad.stls.map((s) => [s.partId, s]))
+  const stl = new Map(cad.stls.map((s) => [s.nodeId, s]))
   const alloys = [...new Set(evaluation.parts.map((p) => p.material))]
   return {
     schema: MANIFEST_SCHEMA,
@@ -131,19 +133,24 @@ export async function buildManifest(
     meshToleranceMm: null,
     quantity: ctx.quantity,
     extentMm: ctx.facts.extent.map((v) => r(v, 3)) as [number, number, number],
-    parts: evaluation.parts.map((p) => {
-      const s = stl.get(p.id)
+    parts: ctx.groups.map((g) => {
+      const p = g.parts[0]!
+      const s = stl.get(g.key)
       return {
         id: p.id,
-        nodeId: p.nodeId,
-        name: p.name,
+        nodeId: g.key,
+        name: g.name,
         alloy: p.material,
+        count: g.count,
         fineness: METALS[p.material].fineness,
         densityGcm3: METALS[p.material].density,
-        volumeMm3: r(p.volumeMm3, 3),
-        areaMm2: r(p.areaMm2, 2),
-        triangles: cad.triangles[p.id] ?? p.mesh.indices.length / 3,
-        netWeightG: r((p.volumeMm3 / 1000) * METALS[p.material].density, 3),
+        volumeMm3: r(g.volumeMm3, 3),
+        areaMm2: r(
+          g.parts.reduce((t, x) => t + x.areaMm2, 0),
+          2,
+        ),
+        triangles: cad.triangles[g.key] ?? 0,
+        netWeightG: r((g.volumeMm3 / 1000) * METALS[p.material].density, 3),
         watertight: s?.topology.watertight ?? false,
         file: s?.path ?? '',
         sha256: s ? (hashes.get(s.path) ?? '') : '',

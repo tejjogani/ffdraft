@@ -1,3 +1,4 @@
+import { METALS } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
 import { createContext } from './context'
 import { estimateCost } from './cost'
@@ -58,8 +59,9 @@ describe('cost estimate', () => {
     const ctx = createContext(input({ rates }))
     const c = estimateCost(ctx)
     const line = (id: string) => c.lines.find((l) => l.id === id)!
-    // 1000 mm³ × 21.4 g/cm³ = 21.4 g
-    expect(line('metal:pt950').amount).toBeCloseTo(21.4 * 1.05 * 50 * 0.95 * 1.1, 2)
+    // 1000 mm³ → grams = density
+    const g = METALS.pt950.density
+    expect(line('metal:pt950').amount).toBeCloseTo(g * 1.05 * 50 * 0.95 * 1.1, 2)
     const ct = ctx.lots[0]!.lot.caratTotal
     expect(line('stones:S1').amount).toBeCloseTo(ct * 1000, 2)
     expect(line('setting:S1').amount).toBe(20)
@@ -98,7 +100,10 @@ describe('cost estimate', () => {
         }),
       ),
     )
-    expect(c.lines.find((l) => l.group === 'metal')!.amount).toBeCloseTo(21.4 * 1.05 * 40, 2)
+    expect(c.lines.find((l) => l.group === 'metal')!.amount).toBeCloseTo(
+      METALS.pt950.density * 1.05 * 40,
+      2,
+    )
     expect(c.lines.filter((l) => l.group === 'labour').map((l) => l.amount)).toEqual([150])
     expect(c.lines.find((l) => l.id === 'setting:S1')!.amount).toBe(12)
     expect(c.lines.find((l) => l.id === 'stones:S1')!.amount).toBe(0)

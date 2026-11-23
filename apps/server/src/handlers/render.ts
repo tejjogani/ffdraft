@@ -54,8 +54,10 @@ export async function toRenderJobs(ctx: Ctx, rows: RenderRow[]): Promise<RenderJ
   if (rows.length === 0) return []
   const versions = new Map(
     (
-      await ctx.repo.pieces
-        .select({ id: t.piece.id, version: t.piece.version }, inArray(t.piece.id, [...new Set(rows.map((r) => r.pieceId))]))
+      await ctx.repo.pieces.select(
+        { id: t.piece.id, version: t.piece.version },
+        inArray(t.piece.id, [...new Set(rows.map((r) => r.pieceId))]),
+      )
     ).map((p) => [p.id, p.version]),
   )
   return rows.map((r) => toRenderJob(r, versions.get(r.pieceId) ?? r.sourceVersion))
@@ -216,7 +218,6 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     if (job.createdBy !== ctx.user.id)
       throw forbidden('Only the person who queued this render can deliver it')
     await ensureAll(
-      ctx,
       assetIds,
       (ids) => ctx.repo.assets.many({ where: inArray(t.asset.id, ids) }),
       'Asset',

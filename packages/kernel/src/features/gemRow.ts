@@ -147,7 +147,14 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
   // Stones are spaced where their girdles are: near the surface at the top of the band.
   const radius = shank.outer(node.center * DEG).radius - sink(node.stoneWidth)
   const angles = rowAngles(node, radius)
-  if (angles.length === 0) throw new Error('no stone of this size fits in the arc')
+  if (angles.length === 0) {
+    ctx.report({
+      level: 'warning',
+      code: 'row.empty',
+      message: 'No stone of this size fits in the arc that is left after the gap at its centre.',
+    })
+    return {}
+  }
 
   const widest = Math.max(node.stoneWidth, endWidth(node))
   const rowPitch = dimsOf(widest).length + node.gap

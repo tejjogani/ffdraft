@@ -78,13 +78,11 @@ async function toOrigin(
   previous: PieceOrigin | null,
 ): Promise<PieceOrigin> {
   await ensureAll(
-    ctx,
     input.sourceAssetIds,
     (ids) => ctx.repo.assets.many({ where: inArray(t.asset.id, ids) }),
     'Asset',
   )
   await ensureAll(
-    ctx,
     input.referenceIds,
     (ids) => ctx.repo.references.many({ where: inArray(t.reference.id, ids) }),
     'Reference',
@@ -184,16 +182,23 @@ export const pieces: HandlerGroup<'pieces'> = {
   },
 
   'pieces.attest': async (ctx, { id, rights, likenessConsent }) => {
-    if (ctx.actor.type !== 'user') throw forbidden('Only a person can attest to the rights in a source')
+    if (ctx.actor.type !== 'user')
+      throw forbidden('Only a person can attest to the rights in a source')
     const piece = await getPiece(ctx, id)
-    if (!piece.origin) throw conflict('This piece was not made from a source, so there is nothing to attest')
+    if (!piece.origin)
+      throw conflict('This piece was not made from a source, so there is nothing to attest')
     if (piece.origin.flags.some((f) => f.code === 'face') && !likenessConsent)
-      throw badRequest('The source shows a person: confirm you have their consent (likenessConsent)')
+      throw badRequest(
+        'The source shows a person: confirm you have their consent (likenessConsent)',
+      )
     const origin: PieceOrigin = {
       ...piece.origin,
       attestation: { rights, likenessConsent, by: ctx.user.id, at: new Date().toISOString() },
     }
-    const [row] = await ctx.repo.pieces.update(eq(t.piece.id, id), { origin, updatedAt: new Date() })
+    const [row] = await ctx.repo.pieces.update(eq(t.piece.id, id), {
+      origin,
+      updatedAt: new Date(),
+    })
     publish(ctx, { type: 'piece.updated', pieceId: id })
     return toPiece(ctx, row!)
   },

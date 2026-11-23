@@ -5,8 +5,10 @@
  */
 import type { NodeOf } from '@pave/schema'
 import type { Manifold } from 'manifold-3d'
+import { crown } from './crown'
+import { dice } from './dice'
 import { trophy } from './trophy'
 
 export type BuiltinName = Extract<NodeOf<'meshBody'>['source'], { type: 'builtin' }>['name']
 
-export const BUILTINS: Record<BuiltinName, () => Manifold> = { trophy } as Record<BuiltinName, () => Manifold>
+export const BUILTINS: Record<BuiltinName, () => Manifold> = { trophy, crown, dice }

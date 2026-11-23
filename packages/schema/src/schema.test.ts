@@ -23,7 +23,10 @@ describe('domain', () => {
   })
   it('converts ring sizes', () => {
     expect(ringInnerDiameter({ system: 'us', value: 6 })).toBeCloseTo(16.51, 2)
-    expect(ringInnerDiameter({ system: 'uk', value: 11 })).toBeCloseTo(16.51, 2)
+    // US 6 is UK L½ (letter index 11.5): circumference 37.5 + 1.25 × 11.5 mm.
+    expect(ringInnerDiameter({ system: 'uk', value: 11.5 })).toBeCloseTo(16.51, 2)
+    expect(ringInnerDiameter({ system: 'jp', value: 12 })).toBeCloseTo(16.68, 2)
+    expect(ringSizeFromDiameter(16.51, 'uk').value).toBe(11.5)
     expect(ringInnerDiameter({ system: 'eu', value: 52 })).toBeCloseTo(16.55, 2)
     expect(ringSizeFromDiameter(17.32, 'us').value).toBe(7)
   })

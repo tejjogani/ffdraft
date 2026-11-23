@@ -5,9 +5,9 @@
  * companion: a layer per alloy and one for stones, named meshes with user strings, the chain
  * centre lines and stone girdles as curves, millimetre units. STEP is the exact B-rep route.
  */
-import { GEM_CUTS, GEM_MATERIALS, METALS } from '@pave/schema'
+import { METALS } from '@pave/schema'
 import type { RhinoModule } from 'rhino3dm'
-import { type Scene, defineExporter } from '../core'
+import { defineExporter, type Scene } from '../core'
 import type { ChainData } from '../features/chain'
 import { fromFrame } from '../geometry/vec'
 import { isNode, readPackageFile } from '../runtime/host'
@@ -31,7 +31,9 @@ function loadRhino(): Promise<RhinoModule> {
     if (!wasm) throw new Error('3DM export needs configureRhino3dm(url) in a browser')
     const { default: factory } = await import('rhino3dm')
     return factory(
-      typeof wasm === 'string' || wasm instanceof URL ? { locateFile: () => wasm.toString() } : { wasmBinary: wasm },
+      typeof wasm === 'string' || wasm instanceof URL
+        ? { locateFile: () => wasm.toString() }
+        : { wasmBinary: wasm },
     )
   })().catch((error) => {
     loading = null
@@ -81,8 +83,12 @@ function girdle(stone: MeshObject & { kind: 'stone' }): number[][] {
   const m = stone.stone.matrix
   const frame = {
     origin: [m[12]!, m[13]!, m[14]!] as const,
-    x: [m[0]!, m[1]!, m[2]!].map((v) => v / Math.hypot(m[0]!, m[1]!, m[2]!)) as unknown as readonly [number, number, number],
-    y: [m[4]!, m[5]!, m[6]!].map((v) => v / Math.hypot(m[4]!, m[5]!, m[6]!)) as unknown as readonly [number, number, number],
+    x: [m[0]!, m[1]!, m[2]!].map(
+      (v) => v / Math.hypot(m[0]!, m[1]!, m[2]!),
+    ) as unknown as readonly [number, number, number],
+    y: [m[4]!, m[5]!, m[6]!].map(
+      (v) => v / Math.hypot(m[4]!, m[5]!, m[6]!),
+    ) as unknown as readonly [number, number, number],
     z: [0, 0, 0] as const,
   }
   const { length, width } = stone.stone.dims
@@ -107,7 +113,8 @@ async function write3dm(scene: Scene, objects: readonly MeshObject[]): Promise<U
         const layer = new rhino.Layer()
         layer.name = path[path.length - 1]!
         layer.color = rgba(color)
-        if (path.length > 1) layer.parentLayerId = doc.layers().get(layerFor(path.slice(0, -1), color)).id
+        if (path.length > 1)
+          layer.parentLayerId = doc.layers().get(layerFor(path.slice(0, -1), color)).id
         index = doc.layers().add(layer)
         free(layer)
         layers.set(key, index)
@@ -125,17 +132,22 @@ async function write3dm(scene: Scene, objects: readonly MeshObject[]): Promise<U
       const mesh = new rhino.Mesh()
       const p = o.positions
       for (let i = 0; i < p.length; i += 3) mesh.vertices().add(p[i]!, p[i + 1]!, p[i + 2]!)
-      for (let t = 0; t < o.indices.length; t += 3) mesh.faces().addTriFace(o.indices[t]!, o.indices[t + 1]!, o.indices[t + 2]!)
+      for (let t = 0; t < o.indices.length; t += 3)
+        mesh.faces().addTriFace(o.indices[t]!, o.indices[t + 1]!, o.indices[t + 2]!)
       mesh.normals().computeNormals()
       mesh.compact()
       const layer =
-        o.kind === 'metal' ? layerFor(['Metal', METALS[o.material].label], objectColor(o)) : layerFor(['Stones'], '#9fd3ff')
+        o.kind === 'metal'
+          ? layerFor(['Metal', METALS[o.material].label], objectColor(o))
+          : layerFor(['Stones'], '#9fd3ff')
       const attrs = attributes(o.name, layer, userStrings(o))
       doc.objects().addMesh(mesh, attrs)
       free(attrs)
       free(mesh)
       if (o.kind === 'stone') {
-        const curve = attributes(`${o.name} girdle`, layerFor(['Curves', 'Girdles'], '#5a8fb8'), { stoneId: o.stone.id })
+        const curve = attributes(`${o.name} girdle`, layerFor(['Curves', 'Girdles'], '#5a8fb8'), {
+          stoneId: o.stone.id,
+        })
         doc.objects().addPolyline(girdle(o), curve)
         free(curve)
       }
@@ -145,11 +157,15 @@ async function write3dm(scene: Scene, objects: readonly MeshObject[]): Promise<U
         const data = result.data as ChainData
         const points = data.path.map((p) => [...p])
         if (data.closed) points.push(points[0]!)
-        const attrs = attributes(`${result.node.name ?? result.id} centre line`, layerFor(['Curves', 'Chains'], '#b08a3c'), {
-          nodeId: result.id,
-          links: String(data.links),
-          lengthMm: data.length.toFixed(1),
-        })
+        const attrs = attributes(
+          `${result.node.name ?? result.id} centre line`,
+          layerFor(['Curves', 'Chains'], '#b08a3c'),
+          {
+            nodeId: result.id,
+            links: String(data.links),
+            lengthMm: data.length.toFixed(1),
+          },
+        )
         doc.objects().addPolyline(points, attrs)
         free(attrs)
       }
@@ -164,7 +180,10 @@ export const rhino3dm = defineExporter({
   format: '3dm',
   detail: 'production',
   async run(scene, options) {
-    const objects = sceneObjects(scene, { stones: options.stones ?? true, ...(options.only && { only: options.only }) })
+    const objects = sceneObjects(scene, {
+      stones: options.stones ?? true,
+      ...(options.only && { only: options.only }),
+    })
     return {
       bytes: await write3dm(scene, objects),
       mime: 'application/x-3dm',

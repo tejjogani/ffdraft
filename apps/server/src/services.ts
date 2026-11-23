@@ -111,7 +111,10 @@ export interface GeometryService extends Service {
     sctx: ServiceContext,
   ): Promise<{ file: FileData; notes: string[] }>
   /** What a renderer needs: the design as GLB plus its subject summary. */
-  renderInput(design: Design, sctx: ServiceContext): Promise<{ glb: FileData; subject: RenderSubject }>
+  renderInput(
+    design: Design,
+    sctx: ServiceContext,
+  ): Promise<{ glb: FileData; subject: RenderSubject }>
 }
 
 export interface SearchService extends Service {

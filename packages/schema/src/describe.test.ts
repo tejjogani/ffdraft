@@ -60,7 +60,10 @@ describe('describeNode', () => {
     expect(band.fields.find((f) => f.key === 'size')!.widget).toBe('ringSize')
     expect(band.fields.find((f) => f.key === 'material')!.widget).toBe('metal')
     expect(band.fields.find((f) => f.key === 'plating')!.meta.advanced).toBe(true)
-    expect(band.fields.find((f) => f.key === 'transform')).toMatchObject({ widget: 'group', meta: { advanced: true } })
+    expect(band.fields.find((f) => f.key === 'transform')).toMatchObject({
+      widget: 'group',
+      meta: { advanced: true },
+    })
     const profile = band.fields.find((f) => f.key === 'profile')!
     expect(profile.options).toContainEqual({ value: 'dShape', label: 'D-shape' })
     expect(profile.widget).toBe('select')
@@ -100,7 +103,8 @@ describe('describeNode', () => {
   it('labels every enum option', () => {
     for (const kind of NODE_KINDS)
       for (const f of allFields(describeNode(kind).fields))
-        for (const o of f.options ?? []) expect(o.label, `${kind}.${f.key}=${o.value}`).toMatch(/^\S/)
+        for (const o of f.options ?? [])
+          expect(o.label, `${kind}.${f.key}=${o.value}`).toMatch(/^\S/)
   })
 })
 
@@ -171,12 +175,17 @@ describe('defaultNode', () => {
     expect(defaultNode('bail', pendant).node).toMatchObject({ host: 'body' })
     const pave = defaultNode('pave', pendant, { target: 'body' }).node!
     expect(pave).toMatchObject({ host: 'body' })
-    const chain = defaultNode('chain', applyOps(pendant, [{ t: 'add', node: { id: 'b', kind: 'bail', host: 'body' } }]).design).node!
+    const chain = defaultNode(
+      'chain',
+      applyOps(pendant, [{ t: 'add', node: { id: 'b', kind: 'bail', host: 'body' } }]).design,
+    ).node!
     expect(chain).toMatchObject({ through: 'b' })
   })
 
   it('chooses a buildable variant when a choice has no default', () => {
-    expect(defaultNode('meshBody', emptyDesign()).node).toMatchObject({ source: { type: 'builtin' } })
+    expect(defaultNode('meshBody', emptyDesign()).node).toMatchObject({
+      source: { type: 'builtin' },
+    })
     const withAsset = defaultNode('meshBody', emptyDesign(), {
       values: { source: { type: 'asset', assetId: 'as_1' } },
     }).node!
@@ -208,7 +217,10 @@ describe('variantPatch', () => {
   })
 
   it('never points a reference back at a dependent, and reports what it cannot fill', () => {
-    const d = designFrom('ring', [{ id: 'g', kind: 'gem' }, { id: 's', kind: 'setting', gem: 'g' }])
+    const d = designFrom('ring', [
+      { id: 'g', kind: 'gem' },
+      { id: 's', kind: 'setting', gem: 'g' },
+    ])
     expect(variantPatch(d.nodes.g!, 'placement', 'surface', { design: d })).toEqual({
       patch: null,
       missing: [{ key: 'host', title: 'On body', refKinds: expect.any(Array) }],
@@ -293,21 +305,30 @@ describe('labels and history lines', () => {
         d,
       ),
     ).toBe(`Width at top ${widthTop} → 2.6 mm`)
-    expect(labelForOps([{ t: 'update', id: center, patch: { placement: { elevation: 2 } } }], d)).toMatch(
-      /^Culet clearance .+ → 2 mm$/,
+    expect(
+      labelForOps([{ t: 'update', id: center, patch: { placement: { elevation: 2 } } }], d),
+    ).toMatch(/^Culet clearance .+ → 2 mm$/)
+    expect(labelForOps([{ t: 'update', id: band, patch: { profile: 'dShape' } }], d)).toMatch(
+      /→ D-shape$/,
     )
-    expect(labelForOps([{ t: 'update', id: band, patch: { profile: 'dShape' } }], d)).toMatch(/→ D-shape$/)
   })
 
   it('labels adds, removals and multi-field edits by schema title', () => {
-    expect(labelForOps([{ t: 'add', node: { id: 'h', kind: 'halo', around: center } }], d)).toBe('Added Halo')
-    expect(labelForOps([{ t: 'update', id: band, patch: { widthTop: 3, widthBottom: 3 } }], d)).toBe(
-      'Band: Width at top, Width at base',
+    expect(labelForOps([{ t: 'add', node: { id: 'h', kind: 'halo', around: center } }], d)).toBe(
+      'Added Halo',
     )
-    const many: Op[] = ['a', 'b', 'c', 'e'].map((id) => ({ t: 'add', node: { id, kind: 'primitive', name: id } }))
+    expect(
+      labelForOps([{ t: 'update', id: band, patch: { widthTop: 3, widthBottom: 3 } }], d),
+    ).toBe('Band: Width at top, Width at base')
+    const many: Op[] = ['a', 'b', 'c', 'e'].map((id) => ({
+      t: 'add',
+      node: { id, kind: 'primitive', name: id },
+    }))
     expect(labelForOps(many, d)).toBe('Added a; Added b and 2 more changes')
     expect(labelForOps([], d)).toBe('No change')
-    expect(labelForOps([{ t: 'setKind', kind: 'pendant' }], d)).toBe('Changed the piece type to pendant')
+    expect(labelForOps([{ t: 'setKind', kind: 'pendant' }], d)).toBe(
+      'Changed the piece type to pendant',
+    )
   })
 
   it('describes each op of a stored change with titles and before-values', () => {

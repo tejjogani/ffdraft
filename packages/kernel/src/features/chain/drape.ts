@@ -10,8 +10,8 @@
 import type { Mat4, Vec3 } from '../../geometry/vec'
 
 export interface ChainPath {
-  /** Point and unit tangent at arc length s (wrapped for closed paths). */
-  at(s: number): { point: Vec3; tangent: Vec3 }
+  /** Point at arc length s (wrapped for closed paths). */
+  at(s: number): { point: Vec3 }
   length: number
   closed: boolean
   /** Out of the chain's face: the way the stones and diamond-cut faces look. */
@@ -26,7 +26,7 @@ export function straightPath(length: number): ChainPath {
     length,
     closed: false,
     face: [0, 0, 1],
-    at: (s) => ({ point: [s - length / 2, 0, 0], tangent: [1, 0, 0] }),
+    at: (s) => ({ point: [s - length / 2, 0, 0] }),
   }
 }
 
@@ -49,10 +49,7 @@ export function drapePath(length: number, bend: number): ChainPath {
       face,
       at(s) {
         const a = s / radius - Math.PI / 2
-        return {
-          point: [radius * Math.cos(a), 0, radius * Math.sin(a) + radius],
-          tangent: [-Math.sin(a), 0, Math.cos(a)],
-        }
+        return { point: [radius * Math.cos(a), 0, radius * Math.sin(a) + radius] }
       },
     }
   }
@@ -74,11 +71,9 @@ export function drapePath(length: number, bend: number): ChainPath {
   const neckCentre = r + D
   const onCircle = (cz: number, radius: number, a: number) => ({
     point: [radius * Math.cos(a), 0, cz + radius * Math.sin(a)] as Vec3,
-    tangent: [-Math.sin(a), 0, Math.cos(a)] as Vec3,
   })
   const segment = (a: Vec3, b: Vec3, f: number) => ({
     point: [a[0] + (b[0] - a[0]) * f, 0, a[2] + (b[2] - a[2]) * f] as Vec3,
-    tangent: [(b[0] - a[0]) / line, 0, (b[2] - a[2]) / line] as Vec3,
   })
   const rightLow = onCircle(tipCentre, r, -phi).point
   const rightHigh = onCircle(neckCentre, R, -phi).point
@@ -94,7 +89,8 @@ export function drapePath(length: number, bend: number): ChainPath {
       if (s < tip) return onCircle(tipCentre, r, -Math.PI / 2 + s / r)
       if (s < tip + line) return segment(rightLow, rightHigh, (s - tip) / line)
       if (s < tip + line + neck) return onCircle(neckCentre, R, -phi + (s - tip - line) / R)
-      if (s < tip + 2 * line + neck) return segment(leftHigh, leftLow, (s - tip - line - neck) / line)
+      if (s < tip + 2 * line + neck)
+        return segment(leftHigh, leftLow, (s - tip - line - neck) / line)
       return onCircle(tipCentre, r, Math.PI + phi + (s - tip - 2 * line - neck) / r)
     },
   }
@@ -118,7 +114,11 @@ export function linkFrames(path: ChainPath, centres: readonly number[], halfSpan
     const fz = f[2] - x[2] * (f[0] * x[0] + f[1] * x[1] + f[2] * x[2])
     const zl = Math.hypot(fx, fy, fz) || 1
     const z: Vec3 = [fx / zl, fy / zl, fz / zl]
-    const y: Vec3 = [z[1] * x[2] - z[2] * x[1], z[2] * x[0] - z[0] * x[2], z[0] * x[1] - z[1] * x[0]]
+    const y: Vec3 = [
+      z[1] * x[2] - z[2] * x[1],
+      z[2] * x[0] - z[0] * x[2],
+      z[0] * x[1] - z[1] * x[0],
+    ]
     return [x[0], x[1], x[2], 0, y[0], y[1], y[2], 0, z[0], z[1], z[2], 0, p[0], p[1], p[2], 1]
   })
 }

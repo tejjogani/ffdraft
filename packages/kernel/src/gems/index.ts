@@ -153,7 +153,8 @@ function facetedMesh(facets: readonly Facet[]): MeshData {
     if (points.length < 3) continue
     let normal = polygonNormal(points)
     if (dot(normal, sub(points[0]!, inside)) < 0) {
-      points.reverse()
+      // Reverse the winding but keep the first point: it is the apex the facet fans out from.
+      points.push(...points.splice(1).reverse())
       normal = [-normal[0], -normal[1], -normal[2]]
     }
     // Fan from the first vertex — except tables, which can be concave (a heart's cleft) but
@@ -161,14 +162,24 @@ function facetedMesh(facets: readonly Facet[]): MeshData {
     if (facet.kind === 'table')
       points.unshift([0, 1, 2].map((k) => points.reduce((sum, p) => sum + p[k]!, 0) / points.length) as unknown as Vec3)
     const planar = points.every((p) => Math.abs(dot(normal, sub(p, points[0]!))) < 1e-6)
-    const last = facet.kind === 'table' ? points.length : points.length - 1
-    const triangles: [Vec3, Vec3, Vec3][] = []
-    for (let i = 1; i < last; i++) {
-      const j = i + 1 < points.length ? i + 1 : 1
-      // Skip slivers (collinear girdle points on straight sides).
-      const area = cross(sub(points[i]!, points[0]!), sub(points[j]!, points[0]!))
-      if (Math.hypot(area[0], area[1], area[2]) > 1e-12) triangles.push([points[0]!, points[i]!, points[j]!])
+    const fan = (apex: number): [Vec3, Vec3, Vec3][] => {
+      const order = [...points.slice(apex), ...points.slice(0, apex)]
+      const out: [Vec3, Vec3, Vec3][] = []
+      // A table's fan (about its centroid, the first point) closes back on itself.
+      const last = facet.kind === 'table' ? order.length : order.length - 1
+      for (let i = 1; i < last; i++) {
+        const j = i + 1 < order.length ? i + 1 : 1
+        // Skip slivers (collinear girdle points on straight sides).
+        const area = cross(sub(order[i]!, order[0]!), sub(order[j]!, order[0]!))
+        if (Math.hypot(area[0], area[1], area[2]) > 1e-12) out.push([order[0]!, order[i]!, order[j]!])
+      }
+      return out
     }
+    const flipped = (list: [Vec3, Vec3, Vec3][]) => list.some((t) => dot(polygonNormal(t), normal) < 0)
+    let triangles = fan(0)
+    // A concave kite (beside a heart's cleft) folds over when fanned from its inner corner;
+    // the other diagonal splits it properly.
+    if (points.length === 4 && flipped(triangles)) triangles = fan(1)
     if (planar) {
       // One set of vertices and one normal for the whole facet.
       const base = positions.length / 3

@@ -82,7 +82,10 @@ async function toShots(ctx: Ctx, rows: ShotRow[]): Promise<ModelShot[]> {
   const pv = new Map(pieces.map((p) => [p.id, p.version]))
   const mv = new Map(models.map((m) => [m.id, m.version]))
   return rows.map((r) =>
-    toShot(r, { piece: pv.get(r.pieceId) ?? r.sourceVersion, model: mv.get(r.modelId) ?? r.modelVersion }),
+    toShot(r, {
+      piece: pv.get(r.pieceId) ?? r.sourceVersion,
+      model: mv.get(r.modelId) ?? r.modelVersion,
+    }),
   )
 }
 
@@ -186,7 +189,10 @@ export const models: HandlerGroup<'models' | 'shots'> = {
 
   'shots.estimate': async (ctx, input) => {
     const onModel = ctx.services.require('onModel')
-    const [model, piece] = await Promise.all([getModel(ctx, input.modelId), getPiece(ctx, input.pieceId)])
+    const [model, piece] = await Promise.all([
+      getModel(ctx, input.modelId),
+      getPiece(ctx, input.pieceId),
+    ])
     return onModel.estimate(
       input,
       { model: toBrandModel(model), piece: await toPiece(ctx, piece) },

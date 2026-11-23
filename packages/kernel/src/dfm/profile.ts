@@ -48,4 +48,7 @@ export const DEFAULT_PROFILE: DfmProfile = {
 }
 
 /** The default profile with some values replaced. */
-export const profileWith = (overrides: Partial<DfmProfile>): DfmProfile => ({ ...DEFAULT_PROFILE, ...overrides })
+export const profileWith = (overrides: Partial<DfmProfile>): DfmProfile => ({
+  ...DEFAULT_PROFILE,
+  ...overrides,
+})

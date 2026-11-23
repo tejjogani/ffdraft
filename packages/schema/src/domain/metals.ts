@@ -3,7 +3,9 @@
  * keyed by the same ids, so there is exactly one place for each kind of number.
  *
  * `density` is g/cm³ at 20 °C for a typical casting alloy of that fineness. Real alloys vary
- * by a few percent with the master alloy; manufacturers confirm final weights.
+ * by a few percent with the master alloy; manufacturers confirm final weights. Values follow
+ * docs/research/01-cad.md §3 (JewelCraft's alloy table, Stuller's specific-gravity chart):
+ * platinum 950 is the common Pt/Ru casting alloy (20.7), not pure platinum (21.45).
  */
 export type MetalFamily = 'gold' | 'platinum' | 'palladium' | 'silver' | 'titanium' | 'base'
 
@@ -42,9 +44,9 @@ export const METALS = {
   'au10k-yellow': m('10k Yellow Gold', 'gold', 417, '417', 11.6, '#D6BE86', 1.25),
   'au10k-white': m('10k White Gold', 'gold', 417, '417', 11.1, '#D2D0CA', 1.25),
   'au9k-yellow': m('9k Yellow Gold', 'gold', 375, '375', 11.2, '#D4BE8C', 1.25),
-  pt950: m('Platinum 950', 'platinum', 950, 'PT950', 21.4, '#D4D4D2', 1.5),
+  pt950: m('Platinum 950', 'platinum', 950, 'PT950', 20.7, '#D4D4D2', 1.5),
   pt900: m('Platinum 900', 'platinum', 900, 'PT900', 21.5, '#D2D2D0', 1.5),
-  pd950: m('Palladium 950', 'palladium', 950, 'PD950', 11.8, '#CFCFCD', 1.5),
+  pd950: m('Palladium 950', 'palladium', 950, 'PD950', 12.16, '#CFCFCD', 1.5),
   'ag925-sterling': m('Sterling Silver', 'silver', 925, '925', 10.36, '#E3E3E1', 1.4),
   'ag999-fine': m('Fine Silver', 'silver', 999, '999', 10.49, '#E8E8E6', 1.4),
   'ti-grade5': m('Titanium', 'titanium', 900, 'TI', 4.43, '#A9A9A6', 0),

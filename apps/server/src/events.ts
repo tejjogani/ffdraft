@@ -38,7 +38,11 @@ export class EventBus {
     who: { userId: string; clientId?: string | null } | null = null,
   ): () => void {
     const set = this.#subscribers.get(orgId) ?? new Set()
-    const sub: Subscriber = { listener, userId: who?.userId ?? null, clientId: who?.clientId ?? null }
+    const sub: Subscriber = {
+      listener,
+      userId: who?.userId ?? null,
+      clientId: who?.clientId ?? null,
+    }
     set.add(sub)
     this.#subscribers.set(orgId, set)
     return () => {

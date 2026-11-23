@@ -1,4 +1,10 @@
-import type { Board, CommandParsedInput, GenerationInput, Reference, SearchResult } from '@pave/schema'
+import type {
+  Board,
+  CommandParsedInput,
+  GenerationInput,
+  Reference,
+  SearchResult,
+} from '@pave/schema'
 import { and, asc, count, desc, eq, inArray, max, ne, or, type SQL, sql } from 'drizzle-orm'
 import { getAssetRow, putAsset } from '../assets/assets'
 import { actorRunId, type Ctx, publish } from '../context'
@@ -35,7 +41,11 @@ export const toReference = (r: ReferenceRow): Reference => ({
   note: r.note,
   // Rows written before these fields existed lack them.
   source: r.source
-    ? { ...r.source, licenseUrl: r.source.licenseUrl ?? null, capturedAt: r.source.capturedAt ?? null }
+    ? {
+        ...r.source,
+        licenseUrl: r.source.licenseUrl ?? null,
+        capturedAt: r.source.capturedAt ?? null,
+      }
     : null,
   rights: r.rights,
   tags: r.tags,
@@ -187,7 +197,12 @@ async function referenceFromItem(ctx: Ctx, item: SaveItem): Promise<NewReference
   }
   if (item.url) {
     // A pasted page is inspiration until someone attests otherwise (references.update).
-    return { ...text, type: 'link', source: source({ provider: 'web', url: item.url }), rights: 'viewOnly' }
+    return {
+      ...text,
+      type: 'link',
+      source: source({ provider: 'web', url: item.url }),
+      rights: 'viewOnly',
+    }
   }
   if (item.swatch) {
     const hex = item.swatch.hex.toUpperCase()
@@ -318,7 +333,6 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
     await getBoard(ctx, boardId)
     const ids = items.map((i) => i.id)
     await ensureAll(
-      ctx,
       ids,
       (ids) =>
         ctx.repo.references.many({
@@ -360,7 +374,12 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
   'references.lineage': async (ctx, { id }) => {
     const root = toReference(await getReference(ctx, id))
 
-    const ancestors: { id: string; reference: Reference | null; credit: GenerationInput | null; depth: number }[] = []
+    const ancestors: {
+      id: string
+      reference: Reference | null
+      credit: GenerationInput | null
+      depth: number
+    }[] = []
     const seen = new Set([root.id])
     let level: { parentId: string; credit: GenerationInput | null }[] = (
       root.generation?.parentIds ?? []
@@ -368,11 +387,20 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
       parentId,
       credit: root.generation?.inputs.find((i) => i.id === parentId) ?? null,
     }))
-    for (let depth = 1; level.length && depth <= LINEAGE_DEPTH && ancestors.length < LINEAGE_MAX; depth++) {
+    for (
+      let depth = 1;
+      level.length && depth <= LINEAGE_DEPTH && ancestors.length < LINEAGE_MAX;
+      depth++
+    ) {
       const fresh = level.filter((l) => !seen.has(l.parentId))
       for (const l of fresh) seen.add(l.parentId)
       const rows = fresh.length
-        ? await ctx.repo.references.many({ where: inArray(t.reference.id, fresh.map((l) => l.parentId)) })
+        ? await ctx.repo.references.many({
+            where: inArray(
+              t.reference.id,
+              fresh.map((l) => l.parentId),
+            ),
+          })
         : []
       const next: typeof level = []
       for (const l of fresh) {
@@ -390,7 +418,11 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
 
     const descendants: Reference[] = []
     let frontier = [root.id]
-    for (let depth = 1; frontier.length && depth <= LINEAGE_DEPTH && descendants.length < LINEAGE_MAX; depth++) {
+    for (
+      let depth = 1;
+      frontier.length && depth <= LINEAGE_DEPTH && descendants.length < LINEAGE_MAX;
+      depth++
+    ) {
       const rows = await ctx.repo.references.many({
         where: containsId(sql`${t.reference.generation} -> 'parentIds'`, frontier),
         orderBy: asc(t.reference.createdAt),
@@ -407,7 +439,11 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
       orderBy: desc(t.piece.updatedAt),
       limit: LINEAGE_MAX,
     })
-    return { ancestors, descendants: descendants.slice(0, LINEAGE_MAX), pieces: pieces.map(toPieceSummary) }
+    return {
+      ancestors,
+      descendants: descendants.slice(0, LINEAGE_MAX),
+      pieces: pieces.map(toPieceSummary),
+    }
   },
 
   'references.similar': async (ctx, input) => {
@@ -452,7 +488,11 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
 
   'references.remove': async (ctx, { ids }) => {
     const removed = await ctx.repo.references.delete(inArray(t.reference.id, ids))
-    if (removed.length) await touchBoards(ctx, removed.map((r) => r.boardId))
+    if (removed.length)
+      await touchBoards(
+        ctx,
+        removed.map((r) => r.boardId),
+      )
     return { ok: true }
   },
 
@@ -464,7 +504,8 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
     const missing = input.referenceIds.filter((id) => !refs.some((r) => r.id === id))
     if (missing.length) throw notFound('Reference', missing[0])
     const stray = input.roles.find((r) => !input.referenceIds.includes(r.id))
-    if (stray) throw badRequest(`A role was given for "${stray.id}", which is not among referenceIds`)
+    if (stray)
+      throw badRequest(`A role was given for "${stray.id}", which is not among referenceIds`)
     const viewOnly = refs.filter((r) => r.rights === 'viewOnly')
     if (viewOnly.length)
       throw badRequest(

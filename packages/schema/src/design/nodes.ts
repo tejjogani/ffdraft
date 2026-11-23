@@ -112,7 +112,8 @@ export const RingShank = z
     thicknessBottom: mm('Thickness at base', 0.9, 5, 1.6, { group: 'Band' }),
     shoulder: choice('Shoulders', ['plain', 'cathedral', 'split'], 'plain', {
       group: 'Shoulders',
-      description: 'cathedral = arches rising to the head; split = band divides in two near the head.',
+      description:
+        'cathedral = arches rising to the head; split = band divides in two near the head.',
     }),
     shoulderHeight: mm('Cathedral rise', 0.5, 8, 3, {
       group: 'Shoulders',
@@ -146,7 +147,9 @@ const GemPlacement = z
       host: ref('On body', BODY_KINDS),
       point: vec3('Point', [0, 0, 0]),
       normal: vec3('Normal', [0, -1, 0]),
-      inset: mm('Sink depth', -2, 5, 0, { description: 'How far the girdle sits below the surface.' }),
+      inset: mm('Sink depth', -2, 5, 0, {
+        description: 'How far the girdle sits below the surface.',
+      }),
       spin: deg('Rotation', -180, 180, 0),
     }),
     z.object({ type: z.literal('free') }),
@@ -205,7 +208,10 @@ export const Setting = z
       description: 'How strongly the head narrows toward its base.',
     }),
     rails: int('Gallery rails', 0, 2, 1, { group: 'Prongs', when: { style: ['basket'] } }),
-    wall: mm('Bezel wall', 0.3, 2, 0.55, { group: 'Bezel', when: { style: ['bezel', 'halfBezel'] } }),
+    wall: mm('Bezel wall', 0.3, 2, 0.55, {
+      group: 'Bezel',
+      when: { style: ['bezel', 'halfBezel'] },
+    }),
   })
   .meta({ title: 'Setting', description: 'The head that holds one stone.' })
 
@@ -225,7 +231,10 @@ export const Halo = z
       description: 'How far the halo sits below the centre stone’s girdle.',
     }),
   })
-  .meta({ title: 'Halo', description: 'A ring of small stones following the outline of a centre stone.' })
+  .meta({
+    title: 'Halo',
+    description: 'A ring of small stones following the outline of a centre stone.',
+  })
 
 export const GemRow = z
   .object({
@@ -252,7 +261,10 @@ export const GemRow = z
     rows: int('Rows', 1, 5, 1),
     gap: mm('Gap between stones', 0.05, 1, 0.15, { advanced: true }),
   })
-  .meta({ title: 'Stone row', description: 'Stones set along a ring band: pavé shoulders, channel, eternity.' })
+  .meta({
+    title: 'Stone row',
+    description: 'Stones set along a ring band: pavé shoulders, channel, eternity.',
+  })
 
 export const Pave = z
   .object({
@@ -325,7 +337,8 @@ export const VectorBody = z
   })
   .meta({
     title: 'Outline body',
-    description: 'Text, a logo path or a shape, extruded into a solid: name pendants, charms, tags.',
+    description:
+      'Text, a logo path or a shape, extruded into a solid: name pendants, charms, tags.',
   })
 
 export const MeshBody = z
@@ -335,10 +348,13 @@ export const MeshBody = z
     ...metal,
     source: z
       .discriminatedUnion('type', [
-        z.object({ type: z.literal('asset'), assetId: z.string().meta({ title: 'Mesh', widget: 'asset' }) }),
+        z.object({
+          type: z.literal('asset'),
+          assetId: z.string().meta({ title: 'Mesh', widget: 'asset' }),
+        }),
         z.object({
           type: z.literal('builtin'),
-          name: choice('Model', ['trophy', 'skull', 'crown', 'dice', 'bust'], 'trophy'),
+          name: choice('Model', ['trophy', 'crown', 'dice'], 'trophy'),
         }),
       ])
       .meta({ title: 'Source' }),
@@ -357,7 +373,8 @@ export const MeshBody = z
   })
   .meta({
     title: 'Sculpted body',
-    description: 'An imported, scanned or AI-generated mesh made castable: scaled, flat-backed, hollowed.',
+    description:
+      'An imported, scanned or AI-generated mesh made castable: scaled, flat-backed, hollowed.',
   })
 
 export const Relief = z
@@ -381,14 +398,11 @@ export const Revolve = z
     ...base,
     kind: z.literal('revolve'),
     ...metal,
-    profile: z
-      .string()
-      .max(20_000)
-      .meta({
-        title: 'Profile',
-        widget: 'path',
-        description: 'SVG path in mm in the (radius, height) half-plane; revolved about Z.',
-      }),
+    profile: z.string().max(20_000).meta({
+      title: 'Profile',
+      widget: 'path',
+      description: 'SVG path in mm in the (radius, height) half-plane; revolved about Z.',
+    }),
     angle: deg('Sweep', 1, 360, 360),
   })
   .meta({ title: 'Revolve', description: 'A lathe form: domes, beads, cups, bezels.' })
@@ -414,7 +428,10 @@ export const Pipe = z
       description: 'Fraction by which the wire thins at its ends.',
     }),
   })
-  .meta({ title: 'Wire', description: 'A wire swept along a curve: vines, bypass bands, hoops, bangles.' })
+  .meta({
+    title: 'Wire',
+    description: 'A wire swept along a curve: vines, bypass bands, hoops, bangles.',
+  })
 
 export const Primitive = z
   .object({
@@ -436,7 +453,10 @@ export const BooleanNode = z
     target: ref('Target', BODY_KINDS),
     tools: z.array(ref('Tool', BODY_KINDS)).min(1).max(32),
   })
-  .meta({ title: 'Combine', description: 'Union, subtract or intersect bodies. Inputs are consumed.' })
+  .meta({
+    title: 'Combine',
+    description: 'Union, subtract or intersect bodies. Inputs are consumed.',
+  })
 
 // ── Attachments ──────────────────────────────────────────────────────────────────────────────
 
@@ -449,11 +469,16 @@ export const Bail = z
     style: choice('Style', ['loop', 'tube', 'ring', 'hidden'], 'loop', {
       description: 'ring = plain jump ring; hidden = slot behind the top of the piece.',
     }),
-    opening: mm('Opening', 1.5, 20, 4.5, { description: 'Clear inner height — must pass the chain end.' }),
+    opening: mm('Opening', 1.5, 20, 4.5, {
+      description: 'Clear inner height — must pass the chain end.',
+    }),
     width: mm('Width', 0.8, 15, 3),
     wire: mm('Wire', 0.5, 4, 1.1),
   })
-  .meta({ title: 'Bail', description: 'The loop a pendant hangs from. Auto-places at the top of its host.' })
+  .meta({
+    title: 'Bail',
+    description: 'The loop a pendant hangs from. Auto-places at the top of its host.',
+  })
 
 export const Chain = z
   .object({
@@ -502,7 +527,9 @@ export const Engraving = z
     where: choice('Where', ['insideBand', 'outsideBand', 'front', 'back'], 'insideBand', {
       labels: { insideBand: 'Inside the band', outsideBand: 'Outside the band' },
     }),
-    angle: deg('Position', -180, 180, 180, { description: 'Around the band; 180 = base of the ring.' }),
+    angle: deg('Position', -180, 180, 180, {
+      description: 'Around the band; 180 = base of the ring.',
+    }),
   })
   .meta({ title: 'Engraving' })
 
@@ -519,7 +546,10 @@ export const Pattern = z
     angle: deg('Total angle', 1, 360, 360, { when: { type: ['polar'] } }),
     spacing: mm('Spacing', 0.1, 200, 5, { when: { type: ['linear'] } }),
   })
-  .meta({ title: 'Pattern', description: 'Repeats nodes around an axis, along a line, or mirrors them.' })
+  .meta({
+    title: 'Pattern',
+    description: 'Repeats nodes around an axis, along a line, or mirrors them.',
+  })
 
 export const Group = z
   .object({

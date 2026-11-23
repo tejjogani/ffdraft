@@ -26,7 +26,14 @@ export function moveLoop(loop: WireLoop, m: Mat4): WireLoop {
 }
 
 /** Squared distance between segments p0p1 and q0q1 (Ericson, Real-Time Collision Detection §5.1.9). */
-function segmentDistance2(a: Float64Array, i: number, j: number, b: Float64Array, k: number, l: number): number {
+function segmentDistance2(
+  a: Float64Array,
+  i: number,
+  j: number,
+  b: Float64Array,
+  k: number,
+  l: number,
+): number {
   const d1x = a[j]! - a[i]!
   const d1y = a[j + 1]! - a[i + 1]!
   const d1z = a[j + 2]! - a[i + 2]!

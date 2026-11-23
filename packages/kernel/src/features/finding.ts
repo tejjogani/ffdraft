@@ -5,26 +5,38 @@
  * rings and clasps on +Z.
  */
 import type { NodeOf } from '@pave/schema'
+import { makeCylinder } from 'replicad'
 import {
   type BuildContext,
+  defineFeature,
   type Frame,
+  metalOf,
   type NodeResult,
   type Solid,
-  type Vec3,
-  defineFeature,
-  metalOf,
   solidFromBrep,
   solidFromManifold,
+  type Vec3,
 } from '../core'
-import { frameFromZ, frameMatrix, normalize, transformDirection } from '../geometry/vec'
+import { frameFromZ, frameMatrix } from '../geometry/vec'
+import { RULES } from '../rules'
 import { unionBounds } from '../solid/meshing'
 import { manifoldFromTriangles } from '../solid/solid'
-import { EMBED, NOTCH_FROM_TIP, butterflyMesh, lobsterMesh, postShape, ringShape } from './finding/shapes'
+import {
+  butterflyMesh,
+  EMBED,
+  lobsterMesh,
+  NOTCH_FROM_TIP,
+  postShape,
+  ringShape,
+} from './finding/shapes'
 
 type FindingNode = NodeOf<'finding'>
 
 /** Butterflies are placed on the notch of a stock post of this length (01-cad.md §2: 10–11 mm). */
 const STOCK_POST = 10
+/** How far a post pad may reach to find metal, and how thick it is, mm. */
+const PAD_REACH = 4
+const PAD_THICKNESS = 0.5
 
 /**
  * The point where a ray from outside the host toward its centre first meets metal: the middle
@@ -34,11 +46,16 @@ function surfacePoint(host: NodeResult, direction: Vec3, ctx: BuildContext): Vec
   const box = unionBounds(host.bodies.map((b) => b.solid.bounds()))
   const centre: Vec3 = [0, 1, 2].map((k) => (box.min[k]! + box.max[k]!) / 2) as unknown as Vec3
   const reach = Math.hypot(...box.max.map((v, k) => v - box.min[k]!)) + 1
-  const from: Vec3 = [centre[0] + direction[0] * reach, centre[1] + direction[1] * reach, centre[2] + direction[2] * reach]
+  const from: Vec3 = [
+    centre[0] + direction[0] * reach,
+    centre[1] + direction[1] * reach,
+    centre[2] + direction[2] * reach,
+  ]
   let best: { distance: number; position: Vec3 } | null = null
   for (const body of host.bodies) {
     const hit = body.solid.manifold(ctx.quality).rayCast([...from], [...centre])[0]
-    if (hit && (!best || hit.distance < best.distance)) best = { distance: hit.distance, position: hit.position }
+    if (hit && (!best || hit.distance < best.distance))
+      best = { distance: hit.distance, position: hit.position }
   }
   // A ray through an open basket can miss: fall back to the bounding box face.
   return (
@@ -50,18 +67,73 @@ function surfacePoint(host: NodeResult, direction: Vec3, ctx: BuildContext): Vec
   )
 }
 
+/** Pieces face −Y (schema convention), so a post leaves the back along +Y. */
+const BACK: Vec3 = [0, 1, 0]
+
 /** Where a post leaves its host: the host's `back` frame if it has one, else the middle of its back. */
 function backMount(host: NodeResult | null, ctx: BuildContext): Frame {
-  if (!host) return frameFromZ([0, 0, 0], [0, 1, 0], [1, 0, 0])
-  if (host.frames.back) return host.frames.back
-  const back = normalize(transformDirection(host.matrix, [0, 1, 0]))
-  return frameFromZ(surfacePoint(host, back, ctx), back, [1, 0, 0])
+  if (host?.frames.back) return host.frames.back
+  return frameFromZ(host ? surfacePoint(host, BACK, ctx) : [0, 0, 0], BACK, [1, 0, 0])
 }
 
 /** The top centre of the host (where a piece hangs from), z up, facing −Y like the piece. */
 function topMount(host: NodeResult | null, ctx: BuildContext): Frame {
   const origin: Vec3 = host ? surfacePoint(host, [0, 0, 1], ctx) : [0, 0, 0]
   return { origin, x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] }
+}
+
+/** Inside a host's metal: a ray from the point crosses its surface an odd number of times. */
+function inMetal(host: NodeResult, p: Vec3, ctx: BuildContext): boolean {
+  const far: [number, number, number] = [p[0], p[1], p[2] + 1e3]
+  return host.bodies.some(
+    (b) => b.solid.manifold(ctx.quality).rayCast([...p], far).length % 2 === 1,
+  )
+}
+
+/** Radius of a pad in the plane of `at` that reaches the nearest host metal (null: none in reach). */
+function padRadius(host: NodeResult, at: Frame, ctx: BuildContext): number | null {
+  let nearest = Infinity
+  for (let i = 0; i < 16; i++) {
+    const a = (2 * Math.PI * i) / 16
+    const dir: Vec3 = [0, 1, 2].map(
+      (k) => at.x[k]! * Math.cos(a) + at.y[k]! * Math.sin(a),
+    ) as unknown as Vec3
+    const o = at.origin
+    const to: [number, number, number] = [
+      o[0] + dir[0] * PAD_REACH,
+      o[1] + dir[1] * PAD_REACH,
+      o[2] + dir[2] * PAD_REACH,
+    ]
+    for (const b of host.bodies) {
+      const hit = b.solid.manifold(ctx.quality).rayCast([...o], to)[0]
+      if (hit) nearest = Math.min(nearest, Math.hypot(...hit.position.map((v, k) => v - o[k]!)))
+    }
+  }
+  return Number.isFinite(nearest) ? nearest + EMBED : null
+}
+
+/**
+ * The post and, when its foot would land in the open back of a basket, a pad soldered across
+ * to the nearest metal — as a bench jeweller would. The pad stands clear of the culet.
+ */
+function post(
+  node: FindingNode,
+  host: NodeResult | null,
+  ctx: BuildContext,
+): { solids: Solid[]; tip: Frame } {
+  const mount = backMount(host, ctx)
+  const rod = (at: Frame) =>
+    solidFromBrep(postShape(node.length, node.wire)).transformed(frameMatrix(at))
+  if (!host || inMetal(host, along(mount, -EMBED / 2).origin, ctx))
+    return { solids: [rod(mount)], tip: along(mount, node.length) }
+  const padAt = along(mount, RULES.culetClearance + PAD_THICKNESS / 2)
+  const radius = padRadius(host, padAt, ctx)
+  if (radius === null) return { solids: [rod(mount)], tip: along(mount, node.length) }
+  const foot = along(padAt, EMBED - PAD_THICKNESS / 2)
+  const pad = solidFromBrep(
+    makeCylinder(radius, PAD_THICKNESS, [0, 0, -PAD_THICKNESS / 2]),
+  ).transformed(frameMatrix(padAt))
+  return { solids: [rod(foot), pad], tip: along(foot, node.length) }
 }
 
 const along = (frame: Frame, distance: number): Frame => ({
@@ -73,20 +145,22 @@ const along = (frame: Frame, distance: number): Frame => ({
   ],
 })
 
-function build(node: FindingNode, ctx: BuildContext): { solid: Solid; frames?: Record<string, Frame> } {
+function build(
+  node: FindingNode,
+  ctx: BuildContext,
+): { solids: Solid[]; frames?: Record<string, Frame> } {
   const host = node.host ? ctx.input(node.host) : null
   switch (node.type) {
     case 'earringPost': {
-      const mount = backMount(host, ctx)
-      return {
-        solid: solidFromBrep(postShape(node.length, node.wire)).transformed(frameMatrix(mount)),
-        frames: { tip: along(mount, node.length) },
-      }
+      const { solids, tip } = post(node, host, ctx)
+      return { solids, frames: { tip } }
     }
     case 'butterfly': {
       const seat = along(backMount(host, ctx), STOCK_POST - NOTCH_FROM_TIP)
       const mesh = butterflyMesh(node.length, node.wire, ctx.quality)
-      return { solid: solidFromManifold(manifoldFromTriangles(mesh)).transformed(frameMatrix(seat)) }
+      return {
+        solids: [solidFromManifold(manifoldFromTriangles(mesh)).transformed(frameMatrix(seat))],
+      }
     }
     case 'jumpRing': {
       // Standing across the piece (axis along X) so a chain runs through it like a bail.
@@ -94,7 +168,7 @@ function build(node: FindingNode, ctx: BuildContext): { solid: Solid; frames?: R
       const centre = along(top, host ? node.length / 2 - EMBED : 0)
       const ring = frameFromZ(centre.origin, [1, 0, 0], [0, 0, 1])
       return {
-        solid: solidFromBrep(ringShape(node.length, node.wire)).transformed(frameMatrix(ring)),
+        solids: [solidFromBrep(ringShape(node.length, node.wire)).transformed(frameMatrix(ring))],
         frames: { opening: ring },
       }
     }
@@ -102,7 +176,7 @@ function build(node: FindingNode, ctx: BuildContext): { solid: Solid; frames?: R
       const base = along(topMount(host, ctx), host ? -EMBED : 0)
       const mesh = lobsterMesh(node.length, node.wire, ctx.quality)
       return {
-        solid: solidFromManifold(manifoldFromTriangles(mesh)).transformed(frameMatrix(base)),
+        solids: [solidFromManifold(manifoldFromTriangles(mesh)).transformed(frameMatrix(base))],
         frames: { eye: base },
       }
     }
@@ -110,6 +184,6 @@ function build(node: FindingNode, ctx: BuildContext): { solid: Solid; frames?: R
 }
 
 export const finding = defineFeature('finding', (node, ctx) => {
-  const { solid, frames } = build(node, ctx)
-  return { bodies: [{ solid, ...metalOf(node) }], ...(frames && { frames }) }
+  const { solids, frames } = build(node, ctx)
+  return { bodies: solids.map((solid) => ({ solid, ...metalOf(node) })), ...(frames && { frames }) }
 })

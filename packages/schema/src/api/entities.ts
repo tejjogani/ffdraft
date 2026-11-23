@@ -56,7 +56,10 @@ export const ORIGIN_FLAGS = ['logo', 'character', 'face'] as const
 /** The basis on which a person may turn the source into jewelry. */
 export const ATTESTATION_RIGHTS = ['own', 'licensed', 'permission'] as const
 
-export const OriginFlagSchema = z.object({ code: z.enum(ORIGIN_FLAGS), message: z.string().max(500) })
+export const OriginFlagSchema = z.object({
+  code: z.enum(ORIGIN_FLAGS),
+  message: z.string().max(500),
+})
 export type OriginFlag = z.infer<typeof OriginFlagSchema>
 
 /** A person's statement that they may use the source artwork, recorded by `pieces.attest` only. */
@@ -108,7 +111,12 @@ export const PieceSummarySchema = z.object({
   coverAuto: z.boolean(),
   /** Cached facts from the last evaluation, for cards and tables. */
   facts: z
-    .object({ metalMassG: z.number(), caratTotal: z.number(), stoneCount: z.number(), metal: z.string() })
+    .object({
+      metalMassG: z.number(),
+      caratTotal: z.number(),
+      stoneCount: z.number(),
+      metal: z.string(),
+    })
     .nullable(),
   createdBy: id,
   createdAt: iso,
@@ -282,7 +290,14 @@ const Vec3 = z.tuple([z.number(), z.number(), z.number()])
 export const RenderSceneSchema = z.object({
   /** Lighting + staging recipe; see @pave/render for the catalogue. */
   look: z
-    .enum(['studio-soft', 'studio-contrast', 'black-acrylic', 'daylight', 'editorial-warm', 'catalog-white'])
+    .enum([
+      'studio-soft',
+      'studio-contrast',
+      'black-acrylic',
+      'daylight',
+      'editorial-warm',
+      'catalog-white',
+    ])
     .default('studio-soft')
     .meta({ title: 'Look', group: 'Look' }),
   camera: z
@@ -290,9 +305,25 @@ export const RenderSceneSchema = z.object({
       preset: z
         .enum(['hero', 'front', 'side', 'top', 'three-quarter', 'macro', 'custom'])
         .default('hero')
-        .meta({ title: 'Angle', group: 'Angle', description: 'Orbiting the view by hand sets `custom`.' }),
-      position: Vec3.optional().meta({ title: 'Camera position', unit: 'mm', widget: 'vec3', group: 'Angle', advanced: true }),
-      target: Vec3.optional().meta({ title: 'Look at', unit: 'mm', widget: 'vec3', group: 'Angle', advanced: true }),
+        .meta({
+          title: 'Angle',
+          group: 'Angle',
+          description: 'Orbiting the view by hand sets `custom`.',
+        }),
+      position: Vec3.optional().meta({
+        title: 'Camera position',
+        unit: 'mm',
+        widget: 'vec3',
+        group: 'Angle',
+        advanced: true,
+      }),
+      target: Vec3.optional().meta({
+        title: 'Look at',
+        unit: 'mm',
+        widget: 'vec3',
+        group: 'Angle',
+        advanced: true,
+      }),
       /** 35 mm-equivalent focal length. Jewelry reads best at 85–105. */
       focalLength: z
         .number()
@@ -301,30 +332,29 @@ export const RenderSceneSchema = z.object({
         .default(90)
         .meta({ title: 'Lens', unit: 'mm', step: 1, group: 'Lens', widget: 'slider' }),
       /** f-stop for depth of field; omit for everything sharp. */
-      fStop: z
-        .number()
-        .min(0.8)
-        .max(32)
-        .optional()
-        .meta({
-          title: 'Background blur',
-          step: 0.1,
-          group: 'Background blur',
-          description: 'f-stop: lower blurs more. Leave unset to keep everything sharp.',
-        }),
-      focusNodeId: z
-        .string()
-        .optional()
-        .meta({ title: 'Focus on', group: 'Background blur', description: 'The feature kept sharp.' }),
+      fStop: z.number().min(0.8).max(32).optional().meta({
+        title: 'Background blur',
+        step: 0.1,
+        group: 'Background blur',
+        description: 'f-stop: lower blurs more. Leave unset to keep everything sharp.',
+      }),
+      focusNodeId: z.string().optional().meta({
+        title: 'Focus on',
+        group: 'Background blur',
+        description: 'The feature kept sharp.',
+      }),
     })
     .default({ preset: 'hero', focalLength: 90 })
     .meta({ title: 'Camera', group: 'Angle' }),
   environment: z
     .object({
-      rotation: z
-        .number()
-        .default(0)
-        .meta({ title: 'Light direction', unit: 'deg', step: 1, group: 'Light direction', widget: 'slider' }),
+      rotation: z.number().default(0).meta({
+        title: 'Light direction',
+        unit: 'deg',
+        step: 1,
+        group: 'Light direction',
+        widget: 'slider',
+      }),
       intensity: z
         .number()
         .min(0)
@@ -343,27 +373,20 @@ export const RenderSceneSchema = z.object({
     .default({ rotation: 0, intensity: 1, background: 'look' })
     .meta({ title: 'Environment', group: 'Light direction' }),
   /** `shadow` = soft contact shadow only, `sweep` = seamless paper, `reflective` = black acrylic. */
-  ground: z
-    .enum(['look', 'none', 'shadow', 'sweep', 'reflective'])
-    .default('look')
-    .meta({
-      title: 'Ground',
-      group: 'Backdrop',
-      description: 'shadow = soft contact shadow only; sweep = seamless paper; reflective = black acrylic.',
-    }),
+  ground: z.enum(['look', 'none', 'shadow', 'sweep', 'reflective']).default('look').meta({
+    title: 'Ground',
+    group: 'Backdrop',
+    description:
+      'shadow = soft contact shadow only; sweep = seamless paper; reflective = black acrylic.',
+  }),
   /** Extra small hard lights that pull fire out of diamonds. */
-  sparkle: z
-    .number()
-    .min(0)
-    .max(1)
-    .default(0.4)
-    .meta({
-      title: 'Sparkle',
-      step: 0.05,
-      group: 'Sparkle',
-      widget: 'slider',
-      description: 'Extra small hard lights that pull fire out of diamonds.',
-    }),
+  sparkle: z.number().min(0).max(1).default(0.4).meta({
+    title: 'Sparkle',
+    step: 0.05,
+    group: 'Sparkle',
+    widget: 'slider',
+    description: 'Extra small hard lights that pull fire out of diamonds.',
+  }),
   /**
    * Per-node appearance overrides, e.g. render the same CAD in rose gold. Library ids only, so
    * an unknown material is a validation error rather than a silent fallback. The key `'*'`
@@ -383,19 +406,15 @@ export const RenderSceneSchema = z.object({
     .meta({
       title: 'Materials',
       group: 'Look',
-      description: "Render in other materials without editing the CAD. Keyed by node id; '*' = the whole piece.",
+      description:
+        "Render in other materials without editing the CAD. Keyed by node id; '*' = the whole piece.",
     }),
   animation: z
     .object({
       type: z
         .enum(['turntable', 'orbit-arc', 'rack-focus', 'light-sweep', 'push-in'])
         .meta({ title: 'Motion' }),
-      seconds: z
-        .number()
-        .min(1)
-        .max(20)
-        .default(6)
-        .meta({ title: 'Length', unit: 's', step: 0.5 }),
+      seconds: z.number().min(1).max(20).default(6).meta({ title: 'Length', unit: 's', step: 0.5 }),
       fps: z
         .number()
         .int()
@@ -583,9 +602,13 @@ export const BrandModelSchema = z.object({
     handLengthMm: z.number().positive().nullable().default(null),
   }),
   /** Canonical portrait set, frozen once approved: face, hands, neck/ears, full body. */
-  portraits: z.array(z.object({ view: z.enum(['face', 'hands', 'neck', 'ear', 'body']), assetId: id })),
+  portraits: z.array(
+    z.object({ view: z.enum(['face', 'hands', 'neck', 'ear', 'body']), assetId: id }),
+  ),
   /** How the portraits were generated, so the set can be extended consistently. */
-  recipe: z.object({ provider: z.string(), model: z.string(), seed: z.number().int().nullable() }).nullable(),
+  recipe: z
+    .object({ provider: z.string(), model: z.string(), seed: z.number().int().nullable() })
+    .nullable(),
   /** Synthetic people only; the creator attests no real person's likeness is used. */
   attestedSynthetic: z.boolean(),
   status: z.enum(['draft', 'approved']),
@@ -759,7 +782,14 @@ export const RunSchema = z.object({
 })
 export type Run = z.infer<typeof RunSchema>
 
-export const STEP_STATUS = ['running', 'awaiting-approval', 'done', 'failed', 'denied', 'canceled'] as const
+export const STEP_STATUS = [
+  'running',
+  'awaiting-approval',
+  'done',
+  'failed',
+  'denied',
+  'canceled',
+] as const
 
 export const StepSchema = z.object({
   id,
@@ -814,7 +844,15 @@ export type Feedback = z.infer<typeof FeedbackSchema>
 
 // ── Usage ────────────────────────────────────────────────────────────────────────────────────
 
-export const METERS = ['llm', 'image', 'search', 'embedding', 'mesh3d', 'render', 'storage'] as const
+export const METERS = [
+  'llm',
+  'image',
+  'search',
+  'embedding',
+  'mesh3d',
+  'render',
+  'storage',
+] as const
 
 export const UsageEventSchema = z.object({
   id,

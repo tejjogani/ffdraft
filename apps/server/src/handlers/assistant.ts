@@ -64,13 +64,11 @@ export const assistant: HandlerGroup<'threads' | 'runs' | 'client' | 'traces'> =
     await ensure(getBoard, ctx, input.context.boardId)
     await ensure(getScene, ctx, input.context.sceneId)
     await ensureAll(
-      ctx,
       input.attachments,
       (ids) => ctx.repo.assets.many({ where: inArray(t.asset.id, ids) }),
       'Asset',
     )
     await ensureAll(
-      ctx,
       input.referenceIds,
       (ids) => ctx.repo.references.many({ where: inArray(t.reference.id, ids) }),
       'Reference',
@@ -79,7 +77,8 @@ export const assistant: HandlerGroup<'threads' | 'runs' | 'client' | 'traces'> =
   },
 
   'runs.decide': async (ctx, input) => {
-    if (ctx.actor.type !== 'user') throw forbidden('Only a person can approve an assistant’s action')
+    if (ctx.actor.type !== 'user')
+      throw forbidden('Only a person can approve an assistant’s action')
     await ownRun(ctx, input.runId)
     return ctx.services.require('assistant').decide(input, serviceContext(ctx))
   },

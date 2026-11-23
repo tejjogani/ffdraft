@@ -4,7 +4,7 @@
  * is listed with its threshold and a status — including the ones that could not be evaluated
  * from this data, so a caster can see what was and was not verified.
  */
-import type { Diagnostic, StoneInstance } from '@pave/kernel/types'
+import type { Diagnostic, Part, StoneInstance } from '@pave/kernel/types'
 import { METALS, type MetalFamily, metalMassG } from '@pave/schema'
 import { type PackageContext, stampLocation } from '../context'
 import { TriangleBVH } from '../geometry/bvh'
@@ -49,6 +49,8 @@ export interface StlCheck {
   path: string
   partId: string
   nodeId: string
+  /** Identical bodies this file is meant to hold (e.g. chain links); more shells is an error. */
+  bodies: number
   bytes: number
   topology: Topology
 }
@@ -65,6 +67,9 @@ const UK_HALLMARK_G: Partial<Record<MetalFamily, number>> = {
 }
 
 const mm = (v: number) => `${v.toFixed(2)} mm`
+
+/** Shells within this volume (mm³) of zero are stray sheets, not solids or cavities. */
+const SHELL_EPS = 1e-3
 
 export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmReport {
   const { profile: P, input } = ctx
@@ -92,6 +97,17 @@ export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmRepor
       .filter((d) => prefixes.some((p) => d.code.startsWith(p)))
       .map(fromDiagnostic)
   const nodes = design.order.map((id) => design.nodes[id]!).filter(Boolean)
+  // Identical repeated bodies (a chain's links) are checked once, through their first body.
+  const measured = ctx.groups.flatMap((g) => (g.identical ? [g.parts[0]!] : g.parts))
+  const bvhs = new Map<string, TriangleBVH>()
+  const bvhOf = (part: Part) => {
+    let b = bvhs.get(part.id)
+    if (!b) {
+      b = new TriangleBVH({ positions: part.mesh.positions, indices: part.mesh.indices })
+      bvhs.set(part.id, b)
+    }
+    return b
+  }
 
   // ── Mesh closed, manifold, outward, one shell per part ──
   {
@@ -133,17 +149,34 @@ export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmRepor
           code: 'mesh.inverted',
           message: `${s.path}: normals point inward (negative volume)`,
         })
-      const solids = t.shellVolumes.filter((v) => v > 0).length
-      if (solids > 1)
+      const solids = t.shellVolumes.filter((v) => v > SHELL_EPS).length
+      const fragments = t.shellVolumes.filter((v) => Math.abs(v) <= SHELL_EPS).length
+      if (solids > s.bodies)
         f.push({
           ...base,
           severity: 'error',
           code: 'mesh.shells',
           message: `${s.path}: ${solids} separate shells in one part`,
           value: solids,
-          limit: 1,
+          limit: s.bodies,
+        })
+      if (fragments)
+        f.push({
+          ...base,
+          severity: 'error',
+          code: 'mesh.fragments',
+          message: `${s.path}: ${fragments} zero-volume fragment${fragments === 1 ? '' : 's'} (stray sheets or slivers)`,
+          value: fragments,
+          limit: 0,
         })
     }
+    if (ctx.emptyParts.length)
+      f.push({
+        source: 'pave',
+        severity: 'info',
+        code: 'mesh.empty',
+        message: `${ctx.emptyParts.length} part${ctx.emptyParts.length === 1 ? '' : 's'} without geometry skipped (${ctx.emptyParts.slice(0, 3).join(', ')}${ctx.emptyParts.length > 3 ? ', …' : ''})`,
+      })
     add(
       'mesh',
       'Mesh closed, manifold, normals outward, single shell per part',
@@ -157,7 +190,7 @@ export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmRepor
   {
     const f: Finding[] = []
     const env = [...P.envelopeMm].sort((a, b) => a - b)
-    for (const part of evaluation.parts) {
+    for (const part of measured) {
       const ext = [0, 1, 2]
         .map((a) => part.bounds.max[a]! - part.bounds.min[a]!)
         .sort((a, b) => a - b)
@@ -228,14 +261,11 @@ export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmRepor
   // ── Wall thickness (measured) ──
   const thickness: Record<string, ThicknessReport> = {}
   const inPaveZone = paveZones(evaluation.stones)
-  const bvhs = new Map<string, TriangleBVH>()
   {
     const f: Finding[] = []
-    for (const part of evaluation.parts) {
+    for (const part of measured) {
       const tris = { positions: part.mesh.positions, indices: part.mesh.indices }
-      const bvh = new TriangleBVH(tris)
-      bvhs.set(part.id, bvh)
-      const r = wallThickness(tris, bvh, { threshold: P.wall.warnMm, exclude: inPaveZone })
+      const r = wallThickness(tris, bvhOf(part), { threshold: P.wall.warnMm, exclude: inPaveZone })
       thickness[part.id] = r
       // A region needs two readings: a single ray can graze a seat edge or a sliver facet.
       for (const g of r.regions.filter((g) => g.samples >= 2)) {
@@ -499,7 +529,7 @@ export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmRepor
   // ── Polish allowance ──
   {
     const f: Finding[] = []
-    for (const part of evaluation.parts) {
+    for (const part of measured) {
       const t = thickness[part.id]
       if (part.finish !== 'polished' || !t) continue
       const thin = t.regions.filter((g) => g.samples >= 2 && g.thicknessMm < P.polishWallWarnMm)
@@ -528,7 +558,7 @@ export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmRepor
       for (const part of evaluation.parts) {
         const b = part.bounds
         if (c.some((v, a) => v < b.min[a]! || v > b.max[a]!)) continue
-        if (bvhs.get(part.id)!.contains(...c)) {
+        if (bvhOf(part).contains(...c)) {
           f.push({
             source: 'pave',
             severity: 'error',
@@ -556,7 +586,7 @@ export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmRepor
   {
     const f: Finding[] = []
     for (const s of stls) {
-      const cavities = s.topology.shellVolumes.filter((v) => v < 0).length
+      const cavities = s.topology.shellVolumes.filter((v) => v < -SHELL_EPS).length
       if (cavities)
         f.push({
           source: 'pave',
@@ -680,7 +710,7 @@ export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmRepor
   {
     const f: Finding[] = []
     const microns = input.options.plating?.microns
-    for (const part of evaluation.parts) {
+    for (const part of measured) {
       if (part.plating === 'none') continue
       const base = { source: 'pave' as const, partId: part.id, nodeId: part.nodeId }
       if (part.plating.endsWith('vermeil')) {

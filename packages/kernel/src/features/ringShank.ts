@@ -166,6 +166,19 @@ export const ringShank = defineFeature('ringShank', (node, ctx) => {
       value: thinnest,
       limit: RULES.shankThickness.warn,
       at: [0, 0, node.thicknessBottom <= node.thicknessTop ? -innerRadius : innerRadius],
+      fix: {
+        label: `Thicken the band to ${RULES.shankThickness.warn} mm`,
+        ops: [
+          {
+            t: 'update',
+            id: node.id,
+            patch: {
+              thicknessTop: Math.max(node.thicknessTop, RULES.shankThickness.warn),
+              thicknessBottom: Math.max(node.thicknessBottom, RULES.shankThickness.warn),
+            },
+          },
+        ],
+      },
     })
   const narrowest = Math.min(node.widthTop, node.widthBottom)
   if (narrowest < RULES.shankWidth.warn)

@@ -5,7 +5,13 @@ import * as t from '../db/schema'
 import { badRequest, conflict, notFound } from '../errors'
 import { createId } from '../ids'
 import { getMeshJob, getPiece } from '../lookups'
-import { isTerminal, jobHandle, LIVE_STATUSES, publishJob, serviceContext } from '../service-context'
+import {
+  isTerminal,
+  jobHandle,
+  LIVE_STATUSES,
+  publishJob,
+  serviceContext,
+} from '../service-context'
 import type { MeshJobPatch } from '../services'
 import { assertBudget, fromMicros, toMicros } from '../usage'
 import { assertAttested } from './pieces'

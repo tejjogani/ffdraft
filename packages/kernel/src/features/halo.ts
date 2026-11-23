@@ -50,9 +50,17 @@ export const halo = defineFeature('halo', (node, ctx) => {
   for (let row = 0; row < node.rows; row++) {
     const offset = node.offset + size / 2 + row * pitch
     const path = shape.offsetPath(offset).map(([x, y]) => shape.toWorld([x, y, girdleZ]))
-    const count = symmetricCount(shape, pathLength(path, true) / pitch)
+    // Spacing is measured along the path; where the path turns inward (a heart's cleft) stones
+    // end up closer than that, so take stones out until none touch.
+    let count = symmetricCount(shape, pathLength(path, true) / pitch)
+    let centres = resamplePath(path, true, count)
+    const crowded = () =>
+      centres.some((c, i) => [1, 2, 3].some((k) => count > 2 * k && distance(c, centres[(i + k) % count]!) < size + 0.02))
+    while (count >= 3 && crowded()) {
+      count = symmetricCount(shape, count - 1)
+      centres = resamplePath(path, true, count)
+    }
     if (count < 3) throw new Error('the stones are too large to form a ring around the centre stone')
-    const centres = resamplePath(path, true, count)
     centres.forEach((origin, i) => {
       const next = centres[(i + 1) % count]!
       const x = normalize(sub(next, centres[(i + count - 1) % count]!))

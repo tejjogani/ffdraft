@@ -6,7 +6,7 @@
 import type { Solid } from '../../core'
 import type { Loop } from '../../geometry/loop'
 import { placeLoop, sweepSolid } from '../../geometry/sweep'
-import { type Vec3, cross, dot, normalize, scale, sub } from '../../geometry/vec'
+import { cross, dot, normalize, scale, sub, type Vec3 } from '../../geometry/vec'
 
 /** A centreline with a section orientation per sample (rows of xyz). */
 export interface Centreline {
@@ -35,7 +35,9 @@ export function sampleCurve(
   for (let i = 1; i <= dense; i++) {
     const t = i / dense
     const p = curve(t)
-    lengths.push(lengths[i - 1]! + Math.hypot(p[0] - previous[0], p[1] - previous[1], p[2] - previous[2]))
+    lengths.push(
+      lengths[i - 1]! + Math.hypot(p[0] - previous[0], p[1] - previous[1], p[2] - previous[2]),
+    )
     previous = p
   }
   const total = lengths[dense]!
@@ -54,18 +56,6 @@ export function sampleCurve(
     ups.set(up(t), i * 3)
   })
   return { points, ups, closed }
-}
-
-/** Arc length of a sampled centreline. */
-export function centrelineLength({ points, closed }: Centreline): number {
-  const n = points.length / 3
-  let sum = 0
-  for (let i = 1; i < n + (closed ? 1 : 0); i++) {
-    const a = at(points, i - 1)
-    const b = at(points, i % n)
-    sum += Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])
-  }
-  return sum
 }
 
 /** Samples around a section of half-size `r` so the facets stay within `chord` of the surface. */

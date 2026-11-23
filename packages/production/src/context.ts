@@ -3,7 +3,7 @@
  * @pave/sourcing, paired with what the design says about supply and provenance. Every output
  * reads from this, so the BOM, stones.csv, cost estimate and spec sheet agree to the gram.
  */
-import type { StoneLot } from '@pave/kernel/types'
+import type { Part, StoneLot } from '@pave/kernel/types'
 import { type GemMaterialId, gemDims, type StoneSourcing } from '@pave/schema'
 import {
   type MetalRequirement,
@@ -30,8 +30,27 @@ export interface LotInfo {
   sourcing?: StoneSourcing
 }
 
+/**
+ * The bodies one design node produced, cast together: usually one part, or many identical bodies
+ * (a chain's links) that the kernel returns separately.
+ */
+export interface CastingGroup {
+  key: string
+  name: string
+  parts: Part[]
+  /** Pieces to cast: the number of identical bodies, else 1. */
+  count: number
+  identical: boolean
+  volumeMm3: number
+}
+
 export interface PackageContext {
+  /** The input, with empty parts removed from the evaluation. */
   input: BuildInput
+  /** Parts the kernel returned without geometry; reported, never exported. */
+  emptyParts: string[]
+  /** Casting groups in evaluation order: one STL and one BOM line each. */
+  groups: CastingGroup[]
   facts: PieceFacts
   profile: ManufacturerProfile
   sku: string
@@ -57,7 +76,12 @@ export function stoneOrigin(
   return 'unspecified'
 }
 
-export function createContext(input: BuildInput): PackageContext {
+export function createContext(raw: BuildInput): PackageContext {
+  const parts = raw.evaluation.parts.filter((p) => p.mesh.indices.length > 0)
+  const emptyParts = raw.evaluation.parts
+    .filter((p) => p.mesh.indices.length === 0)
+    .map((p) => p.id)
+  const input: BuildInput = { ...raw, evaluation: { ...raw.evaluation, parts } }
   const { design, evaluation, options } = input
   const profile = resolveProfile(options.manufacturerProfile)
   const requirements = stoneRequirements(design, evaluation.report)
@@ -81,6 +105,8 @@ export function createContext(input: BuildInput): PackageContext {
   const sku = input.piece.sku?.trim() || input.piece.id
   return {
     input,
+    emptyParts,
+    groups: castingGroups(parts),
     facts: pieceFacts(design, evaluation),
     profile,
     sku,
@@ -90,6 +116,30 @@ export function createContext(input: BuildInput): PackageContext {
     lots,
     metals: metalRequirements(evaluation.report, profile.castingAllowancePct),
   }
+}
+
+function castingGroups(parts: readonly Part[]): CastingGroup[] {
+  const map = new Map<string, Part[]>()
+  for (const p of parts) {
+    const key = `${p.nodeId}|${p.material}`
+    map.set(key, [...(map.get(key) ?? []), p])
+  }
+  return [...map.values()].map((list) => {
+    const volumeMm3 = list.reduce((t, p) => t + p.volumeMm3, 0)
+    const mean = volumeMm3 / list.length
+    // Repeated bodies within 1 % of each other are one design cast N times.
+    const identical =
+      list.length > 1 && list.every((p) => Math.abs(p.volumeMm3 - mean) <= mean * 0.01)
+    const first = list[0]!
+    return {
+      key: first.nodeId,
+      name: first.name,
+      parts: list,
+      count: identical ? list.length : 1,
+      identical,
+      volumeMm3,
+    }
+  })
 }
 
 /** Where the fineness and maker's marks go, unless the designer said. */

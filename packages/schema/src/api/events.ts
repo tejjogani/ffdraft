@@ -81,7 +81,12 @@ export const RunEventSchema = z.discriminatedUnion('type', [
   /** Streamed assistant text, for content block `index` of the message being written. */
   z.object({ type: z.literal('text.delta'), ...run, index: z.number().int(), text: z.string() }),
   /** Summarised thinking, shown collapsed. */
-  z.object({ type: z.literal('thinking.delta'), ...run, index: z.number().int(), text: z.string() }),
+  z.object({
+    type: z.literal('thinking.delta'),
+    ...run,
+    index: z.number().int(),
+    text: z.string(),
+  }),
   /** A message was stored (assistant turn, tool results, or appended context). */
   z.object({ type: z.literal('message.completed'), ...run, message: MessageSchema }),
   z.object({

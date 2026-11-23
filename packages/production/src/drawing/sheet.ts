@@ -122,8 +122,18 @@ export function composeArrangement(
   const ox = (frame.width - w) / 2
   const items: Item[] = []
   for (const p of placed) {
-    items.push(...translate(p.layout.items, p.dx + ox, p.dy + 4))
-    const own = p.layout.id === 'iso' && isoScale !== scale ? isoScale : null
+    // The search laid out annotations only; draw the chosen views in full.
+    const id = p.layout.id
+    const full = layoutView({
+      id,
+      lines: set.views[id]!,
+      annotations: set.annotations,
+      scale: id === 'iso' ? isoScale : scale,
+      measure,
+      ...(id === 'section' ? { loops: set.loops } : {}),
+    })
+    items.push(...translate(full.items, p.dx + ox, p.dy + 4))
+    const own = id === 'iso' && isoScale !== scale ? isoScale : null
     items.push(viewLabel(p, labelFor(p.layout.id, own), ox, 4))
   }
   items.push(...titleBlock(title, scale, frame.width, frame.height - TITLE_H, measure))
@@ -139,7 +149,7 @@ function arrange(set: DrawingSet, measure: MeasureText, s: number, isoScale: num
           annotations: set.annotations,
           scale,
           measure,
-          ...(id === 'section' ? { loops: set.loops } : {}),
+          annotationsOnly: true,
         })
       : null
   const front = lay('front')!

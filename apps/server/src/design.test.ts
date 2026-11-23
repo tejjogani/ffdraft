@@ -175,11 +175,19 @@ describe('undo', () => {
       ...server.runtime.local!,
       actor: { type: 'agent', runId: run.id, toolCallId: 't1' },
     })
-    await server.runtime.invoke('design.apply', { pieceId: piece.id, label: 'Add a', ops: [gem('a', 0)] }, agent)
+    await server.runtime.invoke(
+      'design.apply',
+      { pieceId: piece.id, label: 'Add a', ops: [gem('a', 0)] },
+      agent,
+    )
     await api.call('design.apply', { pieceId: piece.id, label: 'Mine', ops: [gem('mine', 3)] })
     await server.runtime.invoke(
       'design.apply',
-      { pieceId: piece.id, label: 'Wider', ops: [{ t: 'update', id: 'band', patch: { widthTop: 5 } }] },
+      {
+        pieceId: piece.id,
+        label: 'Wider',
+        ops: [{ t: 'update', id: 'band', patch: { widthTop: 5 } }],
+      },
       agent,
     )
 
@@ -201,14 +209,22 @@ describe('undo', () => {
         ['implicit', 'undone', history[3]!.id],
       ]),
     )
-    expect((await api.fail('design.revert', { pieceId: piece.id, runId: 'run_nope' })).status).toBe(404)
+    expect((await api.fail('design.revert', { pieceId: piece.id, runId: 'run_nope' })).status).toBe(
+      404,
+    )
     expect((await api.fail('design.revert', { pieceId: piece.id })).status).toBe(400)
-    expect((await api.fail('design.revert', { pieceId: piece.id, seq: 1, runId: run.id })).status).toBe(400)
+    expect(
+      (await api.fail('design.revert', { pieceId: piece.id, seq: 1, runId: run.id })).status,
+    ).toBe(400)
   })
 
   it('marks a guarded undo sent through design.apply, and checks what it reverts', async () => {
     const piece = await api.call('pieces.create', { templateId: 'wedding-band' })
-    const first = await api.call('design.apply', { pieceId: piece.id, label: 'Add', ops: [gem('u', 0)] })
+    const first = await api.call('design.apply', {
+      pieceId: piece.id,
+      label: 'Add',
+      ops: [gem('u', 0)],
+    })
     expect(first.change).not.toHaveProperty('reverts')
     const undo = await api.call('design.apply', {
       pieceId: piece.id,
@@ -217,7 +233,9 @@ describe('undo', () => {
       reverts: [first.change.id],
     })
     expect(undo.change.reverts).toEqual([first.change.id])
-    expect((await api.call('design.history', { pieceId: piece.id }))[0]!.reverts).toEqual([first.change.id])
+    expect((await api.call('design.history', { pieceId: piece.id }))[0]!.reverts).toEqual([
+      first.change.id,
+    ])
     const other = await api.call('pieces.create', { templateId: 'wedding-band' })
     const err = await api.fail('design.apply', {
       pieceId: other.id,
@@ -235,8 +253,16 @@ describe('cover', () => {
     const piece = await api.call('pieces.create', { templateId: 'wedding-band' })
     expect(piece.coverAuto).toBe(true)
     const ctx = await server.runtime.context(server.runtime.local!)
-    const asset = await putAsset(ctx, { bytes: new TextEncoder().encode('x'), name: 'c.png', mime: 'image/png' })
-    const auto = await api.call('pieces.update', { id: piece.id, coverAssetId: asset.id, coverAuto: true })
+    const asset = await putAsset(ctx, {
+      bytes: new TextEncoder().encode('x'),
+      name: 'c.png',
+      mime: 'image/png',
+    })
+    const auto = await api.call('pieces.update', {
+      id: piece.id,
+      coverAssetId: asset.id,
+      coverAuto: true,
+    })
     expect(auto).toMatchObject({ coverAssetId: asset.id, coverAuto: true })
     const picked = await api.call('pieces.update', { id: piece.id, coverAssetId: asset.id })
     expect(picked.coverAuto).toBe(false)

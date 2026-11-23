@@ -52,19 +52,21 @@ export function billOfMaterials(ctx: PackageContext): BomLine[] {
   const { evaluation } = ctx.input
   const allowance = ctx.profile.castingAllowancePct
 
-  for (const part of evaluation.parts) {
+  for (const g of ctx.groups) {
+    const part = g.parts[0]!
     const metal = METALS[part.material]
-    const net = metalMassG(part.material, part.volumeMm3)
+    const unitVolume = g.volumeMm3 / g.count
+    const net = metalMassG(part.material, unitVolume)
     lines.push({
       type: 'metal',
-      item: part.name,
-      description: `Cast part, ${part.exact ? 'exact solid' : 'mesh'} (node ${part.nodeId})`,
+      item: g.name,
+      description: `Cast part, ${part.exact ? 'exact solid' : 'mesh'} (node ${g.key})${g.identical ? `; ${g.count} identical bodies` : g.parts.length > 1 ? `; ${g.parts.length} bodies` : ''}`,
       material: metal.label,
       fineness: String(metal.fineness),
       hallmark: metal.hallmark,
-      qtyPerPiece: 1,
+      qtyPerPiece: g.count,
       unit: 'pc',
-      volumeMm3: round(part.volumeMm3, 2),
+      volumeMm3: round(unitVolume, 2),
       netWeightG: round(net, 3),
       castingAllowancePct: allowance,
       orderWeightG: round(net * (1 + allowance / 100), 3),
@@ -137,7 +139,7 @@ export function billOfMaterials(ctx: PackageContext): BomLine[] {
   }
   const finishes = [...new Set(evaluation.parts.map((p) => p.finish))]
   for (const f of finishes) {
-    const parts = evaluation.parts.filter((p) => p.finish === f).map((p) => p.name)
+    const parts = ctx.groups.filter((g) => g.parts[0]!.finish === f).map((g) => g.name)
     lines.push({
       type: 'finish',
       item: FINISHES[f].label,

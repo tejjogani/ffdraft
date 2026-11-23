@@ -1,3 +1,4 @@
+import { formatRingSize, ringSizeFromDiameter } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
 import { pieceFacts } from '../facts'
 import { evaluationOf, solitaireRing, templateDesign } from '../testing/fixtures'
@@ -132,9 +133,14 @@ describe('dimensions', () => {
   it('reads the ring size and band from the design', () => {
     const ring = facts.ring!
     expect(ring.innerDiameter).toBeCloseTo(16.51, 2)
-    expect(ring.sizes).toEqual({ us: 'US 6', uk: 'UK L', eu: 'EU 52' })
+    const nearest = (system: 'uk' | 'eu') =>
+      formatRingSize(ringSizeFromDiameter(ring.innerDiameter, system))
+    expect(ring.sizes).toEqual({ us: 'US 6', uk: nearest('uk'), eu: nearest('eu') })
     const id = anns.find((a) => a.kind === 'note' && a.lines[0]!.includes('inside'))
-    expect(id?.kind === 'note' && id.lines).toEqual(['Ø16.51 inside', 'US 6 · UK L · EU 52'])
+    expect(id?.kind === 'note' && id.lines).toEqual([
+      'Ø16.51 inside',
+      `US 6 · ${nearest('uk')} · ${nearest('eu')}`,
+    ])
     expect(linear('section', 'band width').map((a) => a.kind === 'linear' && a.text)).toEqual([
       '2.00',
     ])

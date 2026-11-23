@@ -162,7 +162,11 @@ interface StepResult {
 }
 
 /** Records a finished step in one write (model calls; tool calls that need no resume). */
-export async function addStep(ctx: Ctx, runId: string, input: StepStart & StepResult): Promise<Step> {
+export async function addStep(
+  ctx: Ctx,
+  runId: string,
+  input: StepStart & StepResult,
+): Promise<Step> {
   await getRun(ctx, runId)
   const row = await ctx.repo.steps.insert({
     id: createId('stp'),
@@ -205,7 +209,13 @@ export async function beginStep(
     status: input.awaitingApproval ? 'awaiting-approval' : 'running',
     input: input.input,
     approval: input.awaitingApproval
-      ? { requestedAt: now.toISOString(), decision: null, decidedBy: null, decidedAt: null, note: null }
+      ? {
+          requestedAt: now.toISOString(),
+          decision: null,
+          decidedBy: null,
+          decidedAt: null,
+          note: null,
+        }
       : null,
     startedAt: input.startedAt ?? now,
   })

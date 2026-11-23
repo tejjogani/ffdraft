@@ -182,4 +182,28 @@ describe('DFM report', () => {
       ringShankWarnMm: 1,
     })
   })
+
+  it('treats identical bodies of one node as N castings of one file', async () => {
+    const link = (x: number) => box([x, 0, 0], [x + 3, 3, 3])
+    const ev = evaluationOf(
+      [0, 5, 10].map((x, i) => ({ id: `chain:${i}`, name: 'Link', mesh: link(x) })),
+    )
+    for (const p of ev.parts) p.nodeId = 'chain'
+    const input: BuildInput = {
+      piece: { id: 'p', title: 'T', kind: 'chain' },
+      revision: 1,
+      design: templateDesign('cuban'),
+      evaluation: ev,
+      kernel: fixtureKernel(ev),
+      fonts,
+      options: { quantity: 1, date: '2026-11-23', author: { name: 'a' }, org: { name: 'o' } },
+    }
+    const ctx = createContext(input)
+    expect(ctx.groups).toHaveLength(1)
+    expect(ctx.groups[0]).toMatchObject({ count: 3, identical: true })
+    const cad = await exportCad(ctx)
+    expect(cad.stls.map((s) => s.path)).toEqual(['cad/p_Link_au18k-yellow_x3.stl'])
+    const report = runDfm(ctx, cad.stls)
+    expect(report.checks.find((c) => c.code === 'mesh')!.status).toBe('pass')
+  })
 })

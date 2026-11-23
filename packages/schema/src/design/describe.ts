@@ -22,7 +22,15 @@ export type FieldType =
   | 'variant'
 
 /** The control to render: the declared widget, or one inferred from the field's type. */
-export type Widget = FieldWidget | 'number' | 'toggle' | 'ref' | 'refs' | 'list' | 'group' | 'variant'
+export type Widget =
+  | FieldWidget
+  | 'number'
+  | 'toggle'
+  | 'ref'
+  | 'refs'
+  | 'list'
+  | 'group'
+  | 'variant'
 
 export interface FieldOption {
   value: string
@@ -133,7 +141,9 @@ const LIBRARIES: Partial<Record<FieldWidget, Record<string, { label: string }>>>
 
 function optionLabel(meta: FieldMeta, value: string): string {
   return (
-    meta.labels?.[value] ?? (meta.widget && LIBRARIES[meta.widget]?.[value]?.label) ?? humanize(value)
+    meta.labels?.[value] ??
+    (meta.widget && LIBRARIES[meta.widget]?.[value]?.label) ??
+    humanize(value)
   )
 }
 
@@ -198,7 +208,8 @@ function fieldOf(key: string, js: Json, required: boolean): FieldInfo | null {
         ...(js.minItems !== undefined ? { min: js.minItems } : {}),
         ...(js.maxItems !== undefined ? { max: js.maxItems } : {}),
       }
-      if (js.prefixItems?.length === 3) return { ...base, type: 'list', widget: meta.widget ?? 'vec3' }
+      if (js.prefixItems?.length === 3)
+        return { ...base, type: 'list', widget: meta.widget ?? 'vec3' }
       if (items && items.type === 'string')
         return {
           ...base,
@@ -289,7 +300,11 @@ interface Picking {
   exclude: ReadonlySet<string>
 }
 
-function pickRef(p: Picking, refKinds: readonly string[] | undefined, taken: readonly string[] = []) {
+function pickRef(
+  p: Picking,
+  refKinds: readonly string[] | undefined,
+  taken: readonly string[] = [],
+) {
   const fits = (id: string | undefined): id is string => {
     const n = id === undefined ? undefined : p.design.nodes[id]
     return (
@@ -304,7 +319,12 @@ function pickRef(p: Picking, refKinds: readonly string[] | undefined, taken: rea
 }
 
 /** A value for a field that has no default, or undefined when it cannot be chosen automatically. */
-function fill(f: FieldInfo, p: Picking, node: Record<string, unknown>, preferVariant: boolean): unknown {
+function fill(
+  f: FieldInfo,
+  p: Picking,
+  node: Record<string, unknown>,
+  preferVariant: boolean,
+): unknown {
   if (f.widget === 'ref') return pickRef(p, f.meta.refKinds)
   if (f.widget === 'refs') {
     if (!f.min) return f.required ? [] : undefined
@@ -316,7 +336,8 @@ function fill(f: FieldInfo, p: Picking, node: Record<string, unknown>, preferVar
   // With a selection, prefer the variant that attaches to it (a stone on the selected band).
   const target = p.prefer === undefined ? undefined : p.design.nodes[p.prefer]
   const attaches = (v: FieldVariant) =>
-    target !== undefined && v.fields.some((s) => s.widget === 'ref' && s.meta.refKinds?.includes(target.kind))
+    target !== undefined &&
+    v.fields.some((s) => s.widget === 'ref' && s.meta.refKinds?.includes(target.kind))
   const ordered = [...f.variants.filter(attaches), ...f.variants.filter((v) => !attaches(v))]
   for (const v of ordered) {
     if (f.default !== undefined && !(preferVariant && attaches(v))) break
@@ -359,7 +380,11 @@ export function defaultNode(
     const value = fill(f, p, node, true)
     if (value !== undefined) node[f.key] = value
     else if (f.required && f.default === undefined)
-      missing.push({ key: f.key, title: f.title, ...(f.meta.refKinds ? { refKinds: f.meta.refKinds } : {}) })
+      missing.push({
+        key: f.key,
+        title: f.title,
+        ...(f.meta.refKinds ? { refKinds: f.meta.refKinds } : {}),
+      })
   }
   return missing.length ? { node: null, missing } : { node: node as NodeInput, missing }
 }
@@ -394,7 +419,11 @@ export function variantPatch(
       const value = fill(s, p, out, false)
       if (value !== undefined) out[s.key] = value
       else if (s.required)
-        missing.push({ key: s.key, title: s.title, ...(s.meta.refKinds ? { refKinds: s.meta.refKinds } : {}) })
+        missing.push({
+          key: s.key,
+          title: s.title,
+          ...(s.meta.refKinds ? { refKinds: s.meta.refKinds } : {}),
+        })
     }
   }
   for (const k of Object.keys(cur))
@@ -474,7 +503,11 @@ const at = (value: unknown, path: readonly string[]): unknown =>
   path.reduce<unknown>((v, k) => (isObject(v) ? v[k] : undefined), value)
 
 /** The field a patch path lands on, following variants by the node's own discriminator. */
-function fieldAt(kind: NodeKind | undefined, path: readonly string[], node: unknown): FieldInfo | undefined {
+function fieldAt(
+  kind: NodeKind | undefined,
+  path: readonly string[],
+  node: unknown,
+): FieldInfo | undefined {
   if (!kind || !(kind in NODE_SCHEMAS)) return undefined
   let fields = describeNode(kind).fields
   let field: FieldInfo | undefined
@@ -506,7 +539,9 @@ function show(value: unknown, field: FieldInfo | undefined): string {
   }
   if (typeof value === 'boolean') return value ? 'on' : 'off'
   if (typeof value === 'string')
-    return field?.options ? optionLabel(field.meta, value) : `“${value.length > 24 ? `${value.slice(0, 23)}…` : value}”`
+    return field?.options
+      ? optionLabel(field.meta, value)
+      : `“${value.length > 24 ? `${value.slice(0, 23)}…` : value}”`
   if (Array.isArray(value)) return `(${value.map((v) => show(v, undefined)).join(', ')})`
   return '…'
 }
@@ -517,7 +552,10 @@ const titleAt = (field: FieldInfo | undefined, path: readonly string[]) =>
 
 function nodeLabel(node: { kind?: unknown; name?: unknown } | undefined, fallback: string): string {
   if (!node || typeof node.kind !== 'string' || !(node.kind in NODE_SCHEMAS)) return fallback
-  return nodeTitle({ kind: node.kind as NodeKind, name: typeof node.name === 'string' ? node.name : undefined })
+  return nodeTitle({
+    kind: node.kind as NodeKind,
+    name: typeof node.name === 'string' ? node.name : undefined,
+  })
 }
 
 /** One line of a change's details, as the history panel lists them. */
@@ -540,7 +578,13 @@ export function describeOps(ops: readonly Op[], inverse: readonly Op[], design?:
       case 'add':
         return [{ sign: '+', nodeId: op.node.id, text: nodeLabel(op.node, op.node.id) }]
       case 'remove':
-        return [{ sign: '−', nodeId: op.id, text: nodeLabel(removed(op.id) ?? design?.nodes[op.id], op.id) }]
+        return [
+          {
+            sign: '−',
+            nodeId: op.id,
+            text: nodeLabel(removed(op.id) ?? design?.nodes[op.id], op.id),
+          },
+        ]
       case 'move':
         return [
           {
@@ -551,10 +595,11 @@ export function describeOps(ops: readonly Op[], inverse: readonly Op[], design?:
         ]
       case 'setKind':
         return [{ sign: '~', nodeId: null, text: `Piece type → ${op.kind}` }]
-      case 'update': {
+      default: {
         const node = design?.nodes[op.id]
         const before =
-          inverse.find((x): x is Extract<Op, { t: 'update' }> => x.t === 'update' && x.id === op.id)?.patch ?? {}
+          inverse.find((x): x is Extract<Op, { t: 'update' }> => x.t === 'update' && x.id === op.id)
+            ?.patch ?? {}
         const name = nodeLabel(node, op.id)
         return leaves(op.patch).map(({ path, value }) => {
           const field = fieldAt(node?.kind, path, mergeForLookup(node, op.patch))
@@ -611,7 +656,9 @@ export function labelForOps(ops: readonly Op[], before: Design): string {
           const field = fieldAt(node?.kind, only.path, after)
           phrase = `${titleAt(field, only.path)} ${show(at(node, only.path), field)} → ${show(only.value, field)}${unitOf(field)}`
         } else {
-          const titles = [...new Set(changed.map((l) => titleAt(fieldAt(node?.kind, l.path, after), l.path)))]
+          const titles = [
+            ...new Set(changed.map((l) => titleAt(fieldAt(node?.kind, l.path, after), l.path))),
+          ]
           phrase = `${nodeLabel(node, op.id)}: ${titles.join(', ')}`
         }
       }

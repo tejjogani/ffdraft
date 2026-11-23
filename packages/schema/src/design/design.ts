@@ -6,7 +6,7 @@
  * undo/redo, a replayable history and a per-edit trace of who (person or agent run) did what.
  */
 import { z } from 'zod'
-import { type Node, type NodeInput, NodeSchema, isBodyKind, nodeRefs } from './nodes'
+import { isBodyKind, type Node, type NodeInput, NodeSchema, nodeRefs } from './nodes'
 
 export const PIECE_KINDS = [
   'ring',
@@ -227,7 +227,11 @@ export function validateDesign(design: Design): DesignIssue[] {
     for (const r of nodeRefs(n)) {
       const target = design.nodes[r]
       if (!target)
-        issues.push({ level: 'error', nodeId: id, message: `"${id}" references missing node "${r}"` })
+        issues.push({
+          level: 'error',
+          nodeId: id,
+          message: `"${id}" references missing node "${r}"`,
+        })
       else if (
         (n.kind === 'pave' || n.kind === 'engraving' || n.kind === 'boolean') &&
         !isBodyKind(target.kind)

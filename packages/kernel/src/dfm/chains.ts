@@ -28,7 +28,10 @@ export function chainChecks(scene: Scene, profile: DfmProfile): Diagnostic[] {
         message: `The bail opening (${bail.node.opening.toFixed(1)} mm) must clear the ${width.toFixed(1)} mm chain by ${profile.bailClearance} mm: make it ${needed.toFixed(1)} mm.`,
         value: bail.node.opening,
         limit: needed,
-        fix: { label: `Open the bail to ${needed.toFixed(1)} mm`, ops: [{ t: 'update', id: bail.id, patch: { opening: Math.ceil(needed * 10) / 10 } }] },
+        fix: {
+          label: `Open the bail to ${needed.toFixed(1)} mm`,
+          ops: [{ t: 'update', id: bail.id, patch: { opening: Math.ceil(needed * 10) / 10 } }],
+        },
       })
     if (scene.detail !== 'production') continue
     const { manifold: mf } = runtime()

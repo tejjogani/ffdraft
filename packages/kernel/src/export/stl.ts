@@ -4,7 +4,7 @@
  * out unless asked for, and then appended as separate shells flagged as reference geometry.
  */
 import { defineExporter } from '../core'
-import { MM_NOTE, type MeshObject, sceneObjects } from './meshes'
+import { type MeshObject, MM_NOTE, sceneObjects } from './meshes'
 
 const HEADER_BYTES = 80
 const TRIANGLE_BYTES = 50
@@ -35,7 +35,20 @@ export function writeStl(objects: readonly MeshObject[], header: string): Uint8A
       nx /= l
       ny /= l
       nz /= l
-      for (const v of [nx, ny, nz, p[a]!, p[a + 1]!, p[a + 2]!, p[b]!, p[b + 1]!, p[b + 2]!, p[c]!, p[c + 1]!, p[c + 2]!]) {
+      for (const v of [
+        nx,
+        ny,
+        nz,
+        p[a]!,
+        p[a + 1]!,
+        p[a + 2]!,
+        p[b]!,
+        p[b + 1]!,
+        p[b + 2]!,
+        p[c]!,
+        p[c + 1]!,
+        p[c + 2]!,
+      ]) {
         view.setFloat32(at, v, true)
         at += 4
       }
@@ -56,9 +69,13 @@ export const stl = defineExporter({
       `${metal.length} watertight metal shell${metal.length === 1 ? '' : 's'}, seats and engravings cut; nominal size — the caster applies shrinkage.`,
       'STL carries no units, names or colours; use 3MF or 3DM when those matter.',
     ]
-    if (stones) notes.push('Stones are included as separate reference shells: remove them before printing.')
+    if (stones)
+      notes.push('Stones are included as separate reference shells: remove them before printing.')
     return {
-      bytes: writeStl(objects, `Pave STL, millimetres, ${stones ? 'metal + REFERENCE stones' : 'metal only'}`),
+      bytes: writeStl(
+        objects,
+        `Pave STL, millimetres, ${stones ? 'metal + REFERENCE stones' : 'metal only'}`,
+      ),
       mime: 'model/stl',
       extension: 'stl',
       notes,

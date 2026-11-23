@@ -31,7 +31,8 @@ function stoneManifolds(scene: Scene): Manifold[] {
   }
 }
 
-const radiusOf = ({ stone }: SceneStone) => Math.hypot(stone.dims.length, stone.dims.width, stone.dims.depth) / 2
+const radiusOf = ({ stone }: SceneStone) =>
+  Math.hypot(stone.dims.length, stone.dims.width, stone.dims.depth) / 2
 
 function collisions(scene: Scene, gems: readonly Manifold[]): Diagnostic[] {
   const out: Diagnostic[] = []
@@ -40,7 +41,11 @@ function collisions(scene: Scene, gems: readonly Manifold[]): Diagnostic[] {
     for (let j = i + 1; j < stones.length; j++) {
       const a = stones[i]!.stone.frame.origin
       const b = stones[j]!.stone.frame.origin
-      if (Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) > radiusOf(stones[i]!) + radiusOf(stones[j]!)) continue
+      if (
+        Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) >
+        radiusOf(stones[i]!) + radiusOf(stones[j]!)
+      )
+        continue
       const overlap = gems[i]!.intersect(gems[j]!)
       try {
         const volume = overlap.volume()
@@ -97,7 +102,10 @@ export function stoneChecks(scene: Scene, profile: DfmProfile): Diagnostic[] {
   if (scene.stones.length === 0) return []
   const gems = stoneManifolds(scene)
   try {
-    return [...collisions(scene, gems), ...(scene.detail === 'production' ? buried(scene, gems, profile) : [])]
+    return [
+      ...collisions(scene, gems),
+      ...(scene.detail === 'production' ? buried(scene, gems, profile) : []),
+    ]
   } finally {
     for (const g of gems) g.delete()
   }

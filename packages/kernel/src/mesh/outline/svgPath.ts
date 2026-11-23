@@ -79,9 +79,9 @@ export function parseSvgPath(d: string, tolerance: number): Contour[] {
 
   while (!scan.done()) {
     const explicit = scan.command()
+    if (!command && explicit !== 'M' && explicit !== 'm') throw new Error('Path data must start with a move command (M)')
     if (explicit) command = explicit
-    else if (!command || command === 'z' || command === 'Z')
-      throw new Error('Path data must start with a move command (M)')
+    else if (command === 'z' || command === 'Z') throw new Error(`Path data: expected a command at position ${scan.at}`)
     const c: string = command!
     const lower = c.toLowerCase()
     const rel: boolean = c !== c.toUpperCase()

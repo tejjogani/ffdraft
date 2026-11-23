@@ -61,7 +61,7 @@ export async function buildProductionPackage(input: BuildInput): Promise<Product
 
   const ctx = createContext(input)
   const ts = createTypesetter(input.fonts)
-  const { piece, evaluation, options, revision } = input
+  const { piece, evaluation, options, revision } = ctx.input
   const root = bundleRoot(ctx.sku, revision)
 
   const drawings = await time('drawings', () =>
@@ -121,7 +121,7 @@ export async function buildProductionPackage(input: BuildInput): Promise<Product
   files.push({ path: 'dfm-report.json', bytes: json(dfm), mime: 'application/json' })
 
   const taken = new Set<string>()
-  for (const r of input.renders ?? []) {
+  for (const r of ctx.input.renders ?? []) {
     const ext = r.mime === 'image/png' ? 'png' : 'jpg'
     const name = uniqueName(
       `${safeSegment(r.name.replace(/\.(png|jpe?g)$/i, ''), 'render')}.${ext}`,

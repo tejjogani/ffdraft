@@ -145,6 +145,10 @@ importers:
       rhino3dm:
         specifier: ^8.35.0
         version: 8.35.0
+    devDependencies:
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
 
   packages/production:
     dependencies:
