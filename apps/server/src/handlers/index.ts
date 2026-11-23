@@ -1,7 +1,9 @@
 import { assistant } from './assistant'
 import { collections } from './collections'
 import { design } from './design'
+import { freeform } from './freeform'
 import { ideate } from './ideate'
+import { mesh3d } from './mesh3d'
 import { models } from './models'
 import { org } from './org'
 import { pieces } from './pieces'
@@ -18,6 +20,8 @@ export const handlers: Handlers = {
   ...pieces,
   ...design,
   ...ideate,
+  ...freeform,
+  ...mesh3d,
   ...render,
   ...models,
   ...production,

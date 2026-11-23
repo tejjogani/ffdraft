@@ -264,11 +264,7 @@ export function composeViewSheet(
   const dy = margin - b.minY
   const items = translate(layout.items, dx, dy)
   items.push(viewLabel({ layout, dx, dy, labelY: dy + b.maxY + 5 }, labelFor(id, null), 0, 0))
-  items.push(
-    ...titleBlock(title, scale, width - 16, contentH, measure).map(
-      (it) => translate([it], 8, 0)[0]!,
-    ),
-  )
+  items.push(...translate(titleBlock(title, scale, width - 16, contentH, measure), 8, 0))
   return { width, height, items }
 }
 

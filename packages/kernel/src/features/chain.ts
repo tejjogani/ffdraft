@@ -165,15 +165,15 @@ function anchor(node: ChainNode, ctx: BuildContext, path: ChainPath, halfUp: num
     })
   const opening = bail?.frames.opening
   if (bail && opening) {
-    const size = bail.node.kind === 'bail' ? bail.node.opening : 0
-    // Gravity seats the chain against the top of the opening.
-    const lift = Math.max(0, size / 2 - halfUp - BAIL_CLEARANCE)
+    // Gravity seats the chain against the inside top of the bail: find it straight above the
+    // opening's centre, whatever the bail's shape.
+    const [x, y, z] = opening.origin
+    const top = Math.min(
+      ...bail.bodies.map((b) => b.solid.manifold(ctx.quality).rayCast([x, y, z], [x, y, z + 1e3])[0]?.position[2] ?? z),
+    )
+    const lift = Math.max(0, top - z - halfUp - BAIL_CLEARANCE)
     const low = path.closed ? path.at(0).point : path.at(path.length / 2).point
-    return translation([
-      opening.origin[0] - low[0],
-      opening.origin[1] - low[1],
-      opening.origin[2] - low[2] + lift,
-    ])
+    return translation([x - low[0], y - low[1], z - low[2] + lift])
   }
   if (!path.closed) return IDENTITY
   let lo = Infinity

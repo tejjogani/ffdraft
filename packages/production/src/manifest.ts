@@ -35,6 +35,8 @@ export interface Manifest {
   shrinkageCompensated: false
   shrinkage: { note: string; typicalLinearPct: Record<string, number> }
   detail: string
+  /** Chordal tessellation tolerance of the casting meshes; null when the kernel does not report it. */
+  meshToleranceMm: number | null
   quantity: number
   extentMm: [number, number, number]
   parts: {
@@ -125,6 +127,8 @@ export async function buildManifest(
       typicalLinearPct: Object.fromEntries(alloys.map((a) => [a, METALS[a].shrinkagePct])),
     },
     detail: evaluation.detail,
+    // The kernel contract carries no tessellation tolerance yet; say so rather than guess.
+    meshToleranceMm: null,
     quantity: ctx.quantity,
     extentMm: ctx.facts.extent.map((v) => r(v, 3)) as [number, number, number],
     parts: evaluation.parts.map((p) => {

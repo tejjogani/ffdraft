@@ -10,7 +10,7 @@ import fontkit from '@pdf-lib/fontkit'
 import type { StoneRow } from '../bom'
 import { platingSpec } from '../bom'
 import { type PackageContext, stampLocation } from '../context'
-import type { CostEstimate, CostInput } from '../cost'
+import { type CostEstimate, type CostInput, PLACEHOLDER_NOTE } from '../cost'
 import type { CheckStatus, DfmReport } from '../dfm/checks'
 import { INK } from '../drawing/model'
 import { composeArrangement, type DrawingSet, fitView, type TitleInfo } from '../drawing/sheet'
@@ -498,7 +498,7 @@ export async function specSheetPdf(input: SpecSheetInput): Promise<Uint8Array> {
         { text: money(l.amount) },
       ]),
     {
-      footnote: `${cost.formula}.${anyPlaceholder ? ' Values marked * are placeholders — set your rates.' : ''} No prices are fetched live; every rate is in cost-estimate.json.`,
+      footnote: `${cost.formula}.${anyPlaceholder ? ` Values marked * are a ${PLACEHOLDER_NOTE}.` : ''} No prices are fetched live; every rate is in cost-estimate.json.`,
     },
   )
 

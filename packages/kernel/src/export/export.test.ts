@@ -3,9 +3,9 @@
  * manifoldness, names, units and bounding boxes — for an all-exact solitaire ring and for a
  * design with a mesh (sculpted) body.
  */
-import { type Design, TEMPLATES, buildDesign, designFrom } from '@pave/schema'
+import { type Design, METALS, TEMPLATES, buildDesign, designFrom } from '@pave/schema'
 import { unzipSync } from 'fflate'
-import { importSTEP, measureVolume } from 'replicad'
+import { type Shape3D, importSTEP, measureVolume } from 'replicad'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type LocalKernel, createKernel } from '../kernel'
 import type { Bounds, ExportFormat, ExportResult } from '../types'
@@ -87,7 +87,7 @@ function parseStl(bytes: Uint8Array): { header: string; triangles: Triangles } {
     for (let k = 0; k < 9; k++) positions.push(view.getFloat32(84 + t * 50 + 12 + k * 4, true))
   return {
     header: new TextDecoder().decode(bytes.subarray(0, 80)),
-    triangles: { positions, indices: positions.map((_, i) => i).filter((i) => i < positions.length / 3) },
+    triangles: { positions, indices: Array.from({ length: positions.length / 3 }, (_, i) => i) },
   }
 }
 
@@ -179,7 +179,9 @@ describe.each([
     const doc = rhino.File3dm.fromByteArray(result.bytes)
     expect(doc.settings().modelUnitSystem).toBe(rhino.UnitSystem.Millimeters)
     const layerNames = Array.from({ length: doc.layers().count }, (_, i) => doc.layers().get(i).name)
-    for (const p of evaluation.parts) expect(layerNames).toContain(p.material.length ? layerNames.find((n) => n.length > 0) : '')
+    expect(layerNames).toContain('Metal')
+    for (const p of evaluation.parts) expect(layerNames).toContain(METALS[p.material].label)
+    if (evaluation.stones.length > 0) expect(layerNames).toContain('Stones')
     const objects = doc.objects()
     const meshes = Array.from({ length: objects.count }, (_, i) => objects.get(i)).filter(
       (o) => o.geometry().objectType === rhino.ObjectType.Mesh,
@@ -221,7 +223,7 @@ describe('STEP round trip', () => {
     expect((text.match(/MANIFOLD_SOLID_BREP/g) ?? []).length).toBe(2)
     expect(text).toContain('Block — 18k Yellow Gold')
     expect(text).toContain('Ball — Platinum 950')
-    const shape = await importSTEP(new Blob([result.bytes]))
+    const shape = (await importSTEP(new Blob([result.bytes.slice()]))) as Shape3D
     expect(measureVolume(shape)).toBeCloseTo(120 + (4 / 3) * Math.PI * 8, 2)
     shape.delete()
   })
@@ -231,7 +233,7 @@ describe('STEP round trip', () => {
     const text = new TextDecoder().decode(ring.bytes)
     const evaluation = await kernel.evaluate(solitaire(), { detail: 'production' })
     expect((text.match(/MANIFOLD_SOLID_BREP/g) ?? []).length).toBeGreaterThanOrEqual(evaluation.stones.length + 2)
-    const shape = await importSTEP(new Blob([ring.bytes]))
+    const shape = (await importSTEP(new Blob([ring.bytes.slice()]))) as Shape3D
     // Bodies overlap where claws meet the band, so the solids sum to at least the fused metal.
     expect(measureVolume(shape)).toBeGreaterThan(evaluation.report.metals[0]!.volumeMm3 * 0.98)
     shape.delete()

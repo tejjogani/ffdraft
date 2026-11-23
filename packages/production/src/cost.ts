@@ -77,7 +77,10 @@ export interface CostEstimate {
   lines: CostLine[]
   perPiece: { materials: number; cost: number; price: number }
   order: { cost: number; price: number }
+  /** Rates that fell back to defaults, by name. */
   placeholders: string[]
+  /** "placeholder — set your rates" whenever any default was used. */
+  note: string | null
   priceSource: string | null
   priceTimestamp: string | null
   formula: string
@@ -374,6 +377,7 @@ export function estimateCost(ctx: PackageContext): CostEstimate {
     perPiece: { materials, cost, price },
     order: { cost: r2(cost * q), price: r2(price * q) },
     placeholders: [...placeholders],
+    note: placeholders.size ? PLACEHOLDER_NOTE : null,
     priceSource: rates.priceSource ?? null,
     priceTimestamp: rates.priceTimestamp ?? null,
     formula:

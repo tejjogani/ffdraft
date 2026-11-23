@@ -99,15 +99,18 @@ async function write3dm(scene: Scene, objects: readonly MeshObject[]): Promise<U
   try {
     doc.settings().modelUnitSystem = rhino.UnitSystem.Millimeters
     const layers = new Map<string, number>()
-    const layerFor = (name: string, color: string): number => {
-      let index = layers.get(name)
+    /** A layer by path (`['Metal', '18k Yellow Gold']`), created with its parents on first use. */
+    const layerFor = (path: readonly string[], color: string): number => {
+      const key = path.join('::')
+      let index = layers.get(key)
       if (index === undefined) {
         const layer = new rhino.Layer()
-        layer.name = name
+        layer.name = path[path.length - 1]!
         layer.color = rgba(color)
+        if (path.length > 1) layer.parentLayerId = doc.layers().get(layerFor(path.slice(0, -1), color)).id
         index = doc.layers().add(layer)
         free(layer)
-        layers.set(name, index)
+        layers.set(key, index)
       }
       return index
     }
@@ -126,13 +129,13 @@ async function write3dm(scene: Scene, objects: readonly MeshObject[]): Promise<U
       mesh.normals().computeNormals()
       mesh.compact()
       const layer =
-        o.kind === 'metal' ? layerFor(`Metal::${METALS[o.material].label}`, objectColor(o)) : layerFor('Stones', '#9fd3ff')
+        o.kind === 'metal' ? layerFor(['Metal', METALS[o.material].label], objectColor(o)) : layerFor(['Stones'], '#9fd3ff')
       const attrs = attributes(o.name, layer, userStrings(o))
       doc.objects().addMesh(mesh, attrs)
       free(attrs)
       free(mesh)
       if (o.kind === 'stone') {
-        const curve = attributes(`${o.name} girdle`, layerFor('Curves::Girdles', '#5a8fb8'), { stoneId: o.stone.id })
+        const curve = attributes(`${o.name} girdle`, layerFor(['Curves', 'Girdles'], '#5a8fb8'), { stoneId: o.stone.id })
         doc.objects().addPolyline(girdle(o), curve)
         free(curve)
       }
@@ -142,7 +145,7 @@ async function write3dm(scene: Scene, objects: readonly MeshObject[]): Promise<U
         const data = result.data as ChainData
         const points = data.path.map((p) => [...p])
         if (data.closed) points.push(points[0]!)
-        const attrs = attributes(`${result.node.name ?? result.id} centre line`, layerFor('Curves::Chains', '#b08a3c'), {
+        const attrs = attributes(`${result.node.name ?? result.id} centre line`, layerFor(['Curves', 'Chains'], '#b08a3c'), {
           nodeId: result.id,
           links: String(data.links),
           lengthMm: data.length.toFixed(1),

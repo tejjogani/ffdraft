@@ -17,10 +17,12 @@ import type { OutlineDistance } from './distance'
 export type EdgeStyle = 'flat' | 'chamfer' | 'round' | 'pillow'
 
 export interface Profile {
-  /** Front height (z) at distance δ inside the outline. */
-  height(delta: number): number
+  /** Front height (z) at a point (x, y) of the outline plane that lies δ inside the outline. */
+  height(delta: number, x: number, y: number): number
   /** Distances at which slabs are cut, ascending from 0. */
   steps: number[]
+  /** The face is not flat, so it is refined before lifting. */
+  curved: boolean
 }
 
 /**
@@ -42,8 +44,8 @@ const COLLAPSE = 1e-3
  */
 export function edgeProfile(style: EdgeStyle, size: number, thickness: number, reach: number): Profile {
   const b = Math.min(size, thickness * 0.9)
-  if (style === 'flat' || b <= 1e-3) return { height: () => thickness, steps: [0] }
-  if (style === 'chamfer') return { height: (d) => thickness - Math.max(0, b - d), steps: [0, b] }
+  if (style === 'flat' || b <= 1e-3) return flatProfile(thickness)
+  if (style === 'chamfer') return { height: (d) => thickness - Math.max(0, b - d), steps: [0, b], curved: true }
   if (style === 'round') {
     // Quarter circle of radius b; steps evenly spaced along the arc.
     const steps = Array.from({ length: ROUND_STEPS + 1 }, (_, k) => b * (1 - Math.cos((Math.PI / 2) * (k / ROUND_STEPS))))
@@ -53,6 +55,7 @@ export function edgeProfile(style: EdgeStyle, size: number, thickness: number, r
         return thickness - (b - Math.sqrt(Math.max(0, b * b - (b - t) * (b - t))))
       },
       steps,
+      curved: true,
     }
   }
   // Pillow: an elliptical dome h(δ) = rise·√(1 − (1 − δ/D)²) over the whole face, so the edge
@@ -66,7 +69,67 @@ export function edgeProfile(style: EdgeStyle, size: number, thickness: number, r
       return thickness - rise + rise * Math.sqrt(Math.max(0, 1 - (1 - t) * (1 - t)))
     },
     steps,
+    curved: true,
   }
+}
+
+export const flatProfile = (height: number): Profile => ({ height: () => height, steps: [0], curved: false })
+
+/**
+ * A membrane dome for a field inside a raised border: the solution of ∇²u = −1 that vanishes
+ * on the field's edge (the "membrane/Poisson" inflation of 06-freeform.md §3a). Unlike a
+ * profile of the distance to the edge it has no ridge along the medial axis, every stroke of a
+ * letter swells to suit its own width, and scaling it so that the strongest curvature (|∇²u|
+ * across a strip) stays below 1/`minRadius` keeps a pavé field on it within the R/3 rule.
+ */
+export function membraneDome(
+  field: OutlineDistance,
+  bounds: { min: readonly [number, number]; max: readonly [number, number] },
+  rise: number,
+  floor: number,
+  minRadius: number,
+  spacing: number,
+): Profile {
+  const x0 = bounds.min[0] - spacing
+  const y0 = bounds.min[1] - spacing
+  const nx = Math.ceil((bounds.max[0] - x0) / spacing) + 2
+  const ny = Math.ceil((bounds.max[1] - y0) / spacing) + 2
+  const inside = new Uint8Array(nx * ny)
+  for (let j = 0; j < ny; j++)
+    for (let i = 0; i < nx; i++) inside[j * nx + i] = field.inside(x0 + i * spacing, y0 + j * spacing) ? 1 : 0
+  // Successive over-relaxation with the optimal factor for an n-wide grid.
+  const u = new Float64Array(nx * ny)
+  const n = Math.max(nx, ny)
+  const omega = 2 / (1 + Math.sin(Math.PI / n))
+  const h2 = spacing * spacing
+  for (let iter = 0; iter < 6 * n; iter++) {
+    let change = 0
+    for (let j = 1; j < ny - 1; j++)
+      for (let i = 1; i < nx - 1; i++) {
+        const k = j * nx + i
+        if (!inside[k]) continue
+        const next = (u[k - 1]! + u[k + 1]! + u[k - nx]! + u[k + nx]! + h2) / 4
+        const delta = omega * (next - u[k]!)
+        u[k] = u[k]! + delta
+        change = Math.max(change, Math.abs(delta))
+      }
+    if (change < 1e-7 * h2) break
+  }
+  let peak = 0
+  for (const v of u) peak = Math.max(peak, v)
+  const s = peak > 0 ? Math.min(rise / peak, 1 / minRadius) : 0
+  if (s * peak <= 1e-3) return flatProfile(floor)
+  const sample = (x: number, y: number): number => {
+    const fx = Math.min(Math.max((x - x0) / spacing, 0), nx - 1.001)
+    const fy = Math.min(Math.max((y - y0) / spacing, 0), ny - 1.001)
+    const i = Math.floor(fx)
+    const j = Math.floor(fy)
+    const tx = fx - i
+    const ty = fy - j
+    const k = j * nx + i
+    return (u[k]! * (1 - tx) + u[k + 1]! * tx) * (1 - ty) + (u[k + nx]! * (1 - tx) + u[k + nx + 1]! * tx) * ty
+  }
+  return { height: (_d, x, y) => floor - s * peak + s * sample(x, y), steps: [0], curved: true }
 }
 
 export interface SlabOptions {
@@ -76,11 +139,8 @@ export interface SlabOptions {
   profile: Profile
   /** Keep only this part of every slab (e.g. the rim outside a field), if given. */
   within?: (slab: CrossSection) => CrossSection
-  /** Only steps in [from, to] are used and distances are clamped to it. */
-  from?: number
+  /** Only steps below this distance are used, and distances are clamped to it. */
   to?: number
-  /** Lowers the whole front by this much (a recessed field). */
-  drop?: number
   /** Segments per full circle for round offset joins. */
   segments: number
   /** Longest edge on a profiled face, mm. */
@@ -90,10 +150,8 @@ export interface SlabOptions {
 /** The profiled slab, back on z = 0, front up +z. The caller owns the result. */
 export function profiledSlab(o: SlabOptions): Manifold {
   const { manifold: mf } = runtime()
-  const from = o.from ?? 0
   const to = o.to ?? Infinity
-  const drop = o.drop ?? 0
-  const deltas = [...new Set([from, ...o.profile.steps.filter((d) => d > from && d < to)])]
+  const deltas = o.profile.steps.filter((d) => d === 0 || d < to)
   const owned: { delete(): void }[] = []
   try {
     const slabs: Manifold[] = []
@@ -113,7 +171,8 @@ export function profiledSlab(o: SlabOptions): Manifold {
       // Each slab starts a little higher than the one before, inside it: coplanar overlapping
       // faces are the slow case for mesh booleans, and the inner bottoms vanish in the union.
       const base = slabs.length * STACK_STEP
-      const extruded = section.extrude(o.profile.height(delta) - drop - base)
+      const { min } = section.bounds()
+      const extruded = section.extrude(o.profile.height(delta, min[0], min[1]) - base)
       owned.push(extruded)
       const slab = base > 0 ? extruded.translate([0, 0, base]) : extruded
       if (slab !== extruded) owned.push(slab)
@@ -122,7 +181,7 @@ export function profiledSlab(o: SlabOptions): Manifold {
     if (slabs.length === 0) throw new Error('The outline is too small for its edge profile')
     let stacked = slabs.length === 1 ? slabs[0]!.translate([0, 0, 0]) : mf.Manifold.union(slabs)
     owned.push(stacked)
-    if (slabs.length > 1) {
+    if (o.profile.curved) {
       // Treads are triangulated from their two contours only, which leaves long slivers across
       // the medial axis; refining first lets every point of the face follow the true profile.
       stacked = stacked.refineToLength(o.resolution)
@@ -132,8 +191,9 @@ export function profiledSlab(o: SlabOptions): Manifold {
       for (let i = 0; i < count; i++) {
         // Back-plane vertices stay; every front vertex takes the height of its own distance.
         if (verts[i * 3 + 2]! <= 1e-9) continue
-        const d = Math.min(to, Math.max(from, o.distance.distance(verts[i * 3]!, verts[i * 3 + 1]!)))
-        verts[i * 3 + 2] = o.profile.height(d) - drop
+        const x = verts[i * 3]!
+        const y = verts[i * 3 + 1]!
+        verts[i * 3 + 2] = o.profile.height(Math.min(to, o.distance.distance(x, y)), x, y)
       }
     })
     owned.push(lifted)

@@ -196,19 +196,21 @@ const baseDepth = (head: Head, standoff: number): number =>
  */
 function bezelLoop(wall: number, top: number, ledgeTop: number, bottom: number, ledge: number): Loop {
   const lip = 0.12
+  // The cup narrows toward its base (about 8°), as a bezel turned from tapered tube does.
+  const inset = Math.min(0.14 * (top - bottom), ledge + wall - 0.3)
   const r = Math.min(0.3 * wall, 0.15)
   const r2 = Math.min(0.06, (wall + lip) * 0.2)
   const q = Math.PI / 2
   return [
-    lineSegment([-ledge, bottom], [wall, bottom]),
-    lineSegment([wall, bottom], [wall, top - r]),
+    lineSegment([-ledge - inset, bottom], [wall - inset, bottom]),
+    lineSegment([wall - inset, bottom], [wall, top - r]),
     arcSegment([wall - r, top - r], r, 0, q),
     lineSegment([wall - r, top], [-lip + r2, top]),
     arcSegment([-lip + r2, top - r2], r2, q, 2 * q),
     lineSegment([-lip, top - r2], [-lip, ledgeTop]),
     // The bearing: a 45° seat for the pavilion just under the girdle.
     lineSegment([-lip, ledgeTop], [-ledge, ledgeTop - (ledge - lip)]),
-    lineSegment([-ledge, ledgeTop - (ledge - lip)], [-ledge, bottom]),
+    lineSegment([-ledge, ledgeTop - (ledge - lip)], [-ledge - inset, bottom]),
   ]
 }
 

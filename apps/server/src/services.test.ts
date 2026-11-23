@@ -34,7 +34,7 @@ describe('engines that are not configured', () => {
       attestedSynthetic: true,
       card: {
         description: '',
-        ageRange: '',
+        ageRange: '25-34',
         skinTone: '',
         hair: '',
         build: '',
@@ -88,6 +88,9 @@ describe('registered engines', () => {
             },
             notes: ['Stones excluded'],
           }),
+          renderInput: async () => {
+            throw new Error('not used')
+          },
         },
         imageGen: {
           capabilities: { imageGeneration: ['acme'] },

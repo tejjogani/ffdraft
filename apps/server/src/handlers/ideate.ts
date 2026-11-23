@@ -34,11 +34,15 @@ export const toReference = (r: ReferenceRow): Reference => ({
   title: r.title,
   note: r.note,
   // Rows written before these fields existed lack them.
-  source: r.source ? { licenseUrl: null, capturedAt: null, ...r.source } : null,
+  source: r.source
+    ? { ...r.source, licenseUrl: r.source.licenseUrl ?? null, capturedAt: r.source.capturedAt ?? null }
+    : null,
   rights: r.rights,
   tags: r.tags,
   palette: r.palette,
-  generation: r.generation ? { seed: null, inputs: [], ...r.generation } : null,
+  generation: r.generation
+    ? { ...r.generation, seed: r.generation.seed ?? null, inputs: r.generation.inputs ?? [] }
+    : null,
   pieceId: r.pieceId,
   canvas: r.canvas ?? null,
   width: r.width,

@@ -1,15 +1,34 @@
-import { and, asc, desc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray } from 'drizzle-orm'
+import type { Ctx } from '../context'
 import * as t from '../db/schema'
-import { notFound } from '../errors'
+import { forbidden, notFound } from '../errors'
 import { createId } from '../ids'
-import { getRun, getThread } from '../lookups'
-import { toMessage, toRun, toStep, toThread } from '../traces'
+import { ensure, ensureAll, getBoard, getPiece, getRun, getScene, getThread } from '../lookups'
+import { serviceContext } from '../service-context'
+import { toFeedback, toMessage, toRun, toStep, toThread } from '../traces'
 import type { HandlerGroup } from './types'
 
-export const assistant: HandlerGroup<'threads' | 'traces'> = {
+/** Conversations are private to the person having them; another member's is not found. */
+async function ownThread(ctx: Ctx, id: string) {
+  const thread = await getThread(ctx, id)
+  if (thread.userId !== ctx.user.id) throw notFound('Thread', id)
+  return thread
+}
+
+/** Runs are steered (approved, stopped) only by the person they act for. */
+async function ownRun(ctx: Ctx, id: string) {
+  const run = await getRun(ctx, id)
+  if (run.userId !== ctx.user.id) throw notFound('Run', id)
+  return run
+}
+
+export const assistant: HandlerGroup<'threads' | 'runs' | 'client' | 'traces'> = {
   'threads.list': async (ctx, input) => {
     const rows = await ctx.repo.threads.many({
-      where: input.pieceId ? eq(t.thread.pieceId, input.pieceId) : undefined,
+      where: and(
+        eq(t.thread.userId, ctx.user.id),
+        input.pieceId ? eq(t.thread.pieceId, input.pieceId) : undefined,
+      ),
       orderBy: desc(t.thread.updatedAt),
       limit: input.limit,
     })
@@ -17,17 +36,61 @@ export const assistant: HandlerGroup<'threads' | 'traces'> = {
   },
 
   'threads.get': async (ctx, { id }) => {
-    const thread = await getThread(ctx, id)
-    const messages = await ctx.repo.messages.many({
-      where: eq(t.agentMessage.threadId, id),
-      orderBy: [asc(t.agentMessage.createdAt), asc(t.agentMessage.id)],
-    })
-    return { thread: toThread(thread), messages: messages.map(toMessage) }
+    const thread = await ownThread(ctx, id)
+    const [messages, run] = await Promise.all([
+      ctx.repo.messages.many({
+        where: eq(t.agentMessage.threadId, id),
+        orderBy: asc(t.agentMessage.seq),
+      }),
+      ctx.repo.runs.first(eq(t.agentRun.threadId, id), desc(t.agentRun.startedAt)),
+    ])
+    return {
+      thread: toThread(thread),
+      messages: messages.map(toMessage),
+      run: run ? toRun(run) : null,
+    }
   },
 
   'threads.delete': async (ctx, { id }) => {
-    await getThread(ctx, id)
+    await ownThread(ctx, id)
     await ctx.repo.threads.delete(eq(t.thread.id, id))
+    return { ok: true }
+  },
+
+  // Everything the message points at is checked to be the caller's before the runtime sees it.
+  'threads.send': async (ctx, input) => {
+    if (input.threadId) await ownThread(ctx, input.threadId)
+    await ensure(getPiece, ctx, input.context.pieceId)
+    await ensure(getBoard, ctx, input.context.boardId)
+    await ensure(getScene, ctx, input.context.sceneId)
+    await ensureAll(
+      ctx,
+      input.attachments,
+      (ids) => ctx.repo.assets.many({ where: inArray(t.asset.id, ids) }),
+      'Asset',
+    )
+    await ensureAll(
+      ctx,
+      input.referenceIds,
+      (ids) => ctx.repo.references.many({ where: inArray(t.reference.id, ids) }),
+      'Reference',
+    )
+    return ctx.services.require('assistant').send(input, serviceContext(ctx))
+  },
+
+  'runs.decide': async (ctx, input) => {
+    if (ctx.actor.type !== 'user') throw forbidden('Only a person can approve an assistant’s action')
+    await ownRun(ctx, input.runId)
+    return ctx.services.require('assistant').decide(input, serviceContext(ctx))
+  },
+
+  'runs.cancel': async (ctx, { runId }) => {
+    await ownRun(ctx, runId)
+    return ctx.services.require('assistant').cancel(runId, serviceContext(ctx))
+  },
+
+  'client.respond': async (ctx, input) => {
+    await ctx.services.require('assistant').respond(input, serviceContext(ctx))
     return { ok: true }
   },
 
@@ -42,11 +105,14 @@ export const assistant: HandlerGroup<'threads' | 'traces'> = {
 
   'traces.run': async (ctx, { id }) => {
     const run = await getRun(ctx, id)
-    const steps = await ctx.repo.steps.many({
-      where: eq(t.agentStep.runId, id),
-      orderBy: asc(t.agentStep.idx),
-    })
-    return { run: toRun(run), steps: steps.map(toStep) }
+    const [steps, feedback] = await Promise.all([
+      ctx.repo.steps.many({ where: eq(t.agentStep.runId, id), orderBy: asc(t.agentStep.idx) }),
+      ctx.repo.feedback.many({
+        where: eq(t.runFeedback.runId, id),
+        orderBy: asc(t.runFeedback.createdAt),
+      }),
+    ])
+    return { run: toRun(run), steps: steps.map(toStep), feedback: feedback.map(toFeedback) }
   },
 
   'traces.feedback': async (ctx, input) => {
@@ -61,6 +127,8 @@ export const assistant: HandlerGroup<'threads' | 'traces'> = {
       id: createId('fb'),
       runId: input.runId,
       stepId: input.stepId ?? null,
+      source: 'explicit',
+      kind: input.rating,
       rating: input.rating,
       note: input.note ?? null,
       userId: ctx.user.id,

@@ -10,7 +10,7 @@ import type { NodeOf } from '@pave/schema'
 import type { CrossSection, Manifold } from 'manifold-3d'
 import { type BuildContext, defineFeature, metalOf, runtime, solidFromManifold } from '../core'
 import { OutlineDistance } from '../mesh/outline/distance'
-import { edgeProfile, profiledSlab } from '../mesh/outline/profile'
+import { edgeProfile, flatProfile, membraneDome, profiledSlab } from '../mesh/outline/profile'
 import { SHAPES } from '../mesh/outline/shapes'
 import { MIN_STROKE, thickenStrokes } from '../mesh/outline/stroke'
 import { parseSvgPath } from '../mesh/outline/svgPath'
@@ -29,6 +29,8 @@ const SHAPE_CORNER = 0.015
  * Depth of the field below the rim: deep enough that melee crowns (≈0.15 d above the girdle)
  * sit below the rim's top, never more than a third of the body.
  */
+/** A domed field stays flatter than this radius, so ~2 mm melee still fit it (R/3 rule). */
+const FIELD_MIN_RADIUS = 6
 const recessFor = (border: number, thickness: number) => Math.min(Math.max(0.8 * border, 0.3), 0.6, thickness / 3)
 
 /** The source's filled area, y up, in source units (the caller owns it). */
@@ -155,8 +157,8 @@ function borderedSlab(
   const fieldDistance = new OutlineDistance(field.toPolygons())
   const fieldProfile =
     node.bevel === 'pillow'
-      ? edgeProfile('pillow', node.bevelSize, floor, innerReach(field, fieldDistance))
-      : edgeProfile('flat', 0, floor, 0)
+      ? membraneDome(fieldDistance, field.bounds(), node.bevelSize, floor, FIELD_MIN_RADIUS, resolution / 2)
+      : flatProfile(floor)
   const rim = profiledSlab({
     outline,
     distance,

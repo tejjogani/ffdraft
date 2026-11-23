@@ -142,6 +142,14 @@ export function featureEdges(tris: IndexedTriangles, angle = CREASE_ANGLE): Floa
 export function creaseNormals(tris: IndexedTriangles, angle = CREASE_ANGLE): MeshData {
   const { positions, indices } = tris
   const fn = faceNormals(tris)
+  // Unit normals for the angle tests; `fn` keeps its area weighting for the averages.
+  const unit = new Float32Array(fn.length)
+  for (let t = 0; t < fn.length; t += 3) {
+    const l = Math.hypot(fn[t]!, fn[t + 1]!, fn[t + 2]!) || 1
+    unit[t] = fn[t]! / l
+    unit[t + 1] = fn[t + 1]! / l
+    unit[t + 2] = fn[t + 2]! / l
+  }
   const vertexCount = positions.length / 3
   const cornerCount = indices.length
   // Corner lists per vertex (counting sort).
@@ -153,62 +161,57 @@ export function creaseNormals(tris: IndexedTriangles, angle = CREASE_ANGLE): Mes
   for (let i = 0; i < cornerCount; i++) corners[fill[indices[i]!]!++] = i
 
   const cosLimit = Math.cos(angle)
-  const outPos: number[] = []
-  const outNrm: number[] = []
+  // At most one output vertex per corner.
+  const outPos = new Float32Array(cornerCount * 3)
+  const outNrm = new Float32Array(cornerCount * 3)
   const outIdx = new Uint32Array(cornerCount)
-  const unit = new Float32Array(3)
+  let count = 0
   for (let v = 0; v < vertexCount; v++) {
     const from = start[v]!
     const to = start[v + 1]!
-    // Normals already emitted for this vertex; corners whose normal matches one share it.
-    const emitted: number[] = []
+    const first = count
     for (let k = from; k < to; k++) {
       const corner = corners[k]!
       const t = corner - (corner % 3)
-      const tl = Math.hypot(fn[t]!, fn[t + 1]!, fn[t + 2]!) || 1
       let nx = 0
       let ny = 0
       let nz = 0
       for (let j = from; j < to; j++) {
         const o = corners[j]! - (corners[j]! % 3)
-        const ol = Math.hypot(fn[o]!, fn[o + 1]!, fn[o + 2]!)
-        if (ol === 0) continue
-        const d = (fn[t]! * fn[o]! + fn[t + 1]! * fn[o + 1]! + fn[t + 2]! * fn[o + 2]!) / (tl * ol)
-        if (d >= cosLimit) {
+        if (unit[t]! * unit[o]! + unit[t + 1]! * unit[o + 1]! + unit[t + 2]! * unit[o + 2]! >= cosLimit) {
           nx += fn[o]!
           ny += fn[o + 1]!
           nz += fn[o + 2]!
         }
       }
       const l = Math.hypot(nx, ny, nz) || 1
-      unit[0] = nx / l
-      unit[1] = ny / l
-      unit[2] = nz / l
+      nx /= l
+      ny /= l
+      nz /= l
+      // Corners whose normal matches one already emitted for this vertex share it.
       let index = -1
-      for (const e of emitted) {
+      for (let e = first; e < count; e++)
         if (
-          Math.abs(outNrm[e * 3]! - unit[0]!) < 1e-4 &&
-          Math.abs(outNrm[e * 3 + 1]! - unit[1]!) < 1e-4 &&
-          Math.abs(outNrm[e * 3 + 2]! - unit[2]!) < 1e-4
+          Math.abs(outNrm[e * 3]! - nx) < 1e-4 &&
+          Math.abs(outNrm[e * 3 + 1]! - ny) < 1e-4 &&
+          Math.abs(outNrm[e * 3 + 2]! - nz) < 1e-4
         ) {
           index = e
           break
         }
-      }
       if (index < 0) {
-        index = outPos.length / 3
-        outPos.push(positions[v * 3]!, positions[v * 3 + 1]!, positions[v * 3 + 2]!)
-        outNrm.push(unit[0]!, unit[1]!, unit[2]!)
-        emitted.push(index)
+        index = count++
+        outPos[index * 3] = positions[v * 3]!
+        outPos[index * 3 + 1] = positions[v * 3 + 1]!
+        outPos[index * 3 + 2] = positions[v * 3 + 2]!
+        outNrm[index * 3] = nx
+        outNrm[index * 3 + 1] = ny
+        outNrm[index * 3 + 2] = nz
       }
       outIdx[corner] = index
     }
   }
-  return {
-    positions: new Float32Array(outPos),
-    normals: new Float32Array(outNrm),
-    indices: outIdx,
-  }
+  return { positions: outPos.slice(0, count * 3), normals: outNrm.slice(0, count * 3), indices: outIdx }
 }
 
 /** Crease-normal display mesh plus feature edges for a welded surface. */

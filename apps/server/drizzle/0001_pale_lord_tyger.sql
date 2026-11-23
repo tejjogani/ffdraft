@@ -32,9 +32,16 @@ CREATE TABLE "render_scene" (
 --> statement-breakpoint
 ALTER TABLE "org_settings" ALTER COLUMN "assistant_model" DROP DEFAULT;--> statement-breakpoint
 ALTER TABLE "org_settings" ALTER COLUMN "assistant_model" DROP NOT NULL;--> statement-breakpoint
+-- The old column default was never a choice anyone made: null now means "the default model".
+UPDATE "org_settings" SET "assistant_model" = NULL WHERE "assistant_model" = 'claude-opus-5-5';--> statement-breakpoint
 ALTER TABLE "run_feedback" ALTER COLUMN "rating" DROP NOT NULL;--> statement-breakpoint
 ALTER TABLE "run_feedback" ALTER COLUMN "user_id" DROP NOT NULL;--> statement-breakpoint
-ALTER TABLE "agent_message" ADD COLUMN "seq" integer NOT NULL;--> statement-breakpoint
+ALTER TABLE "agent_message" ADD COLUMN "seq" integer;--> statement-breakpoint
+-- Number existing messages in their previous display order.
+UPDATE "agent_message" AS m SET "seq" = o."seq" FROM (
+	SELECT "id", row_number() OVER (PARTITION BY "thread_id" ORDER BY "created_at", "id") AS "seq" FROM "agent_message"
+) AS o WHERE m."id" = o."id";--> statement-breakpoint
+ALTER TABLE "agent_message" ALTER COLUMN "seq" SET NOT NULL;--> statement-breakpoint
 ALTER TABLE "agent_message" ADD COLUMN "client_message_id" text;--> statement-breakpoint
 ALTER TABLE "agent_run" ADD COLUMN "origin" text DEFAULT 'studio' NOT NULL;--> statement-breakpoint
 ALTER TABLE "agent_run" ADD COLUMN "error_code" text;--> statement-breakpoint
@@ -46,6 +53,9 @@ ALTER TABLE "brand_model" ADD COLUMN "recipe" jsonb;--> statement-breakpoint
 ALTER TABLE "brand_model" ADD COLUMN "version" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
 ALTER TABLE "brand_model" ADD COLUMN "approved_by" text;--> statement-breakpoint
 ALTER TABLE "brand_model" ADD COLUMN "approved_at" timestamp with time zone;--> statement-breakpoint
+-- Model cards now take an adult age band; free-text ages from before are reset for review.
+UPDATE "brand_model" SET "card" = jsonb_set("card", '{ageRange}', '"25-34"'), "status" = 'draft'
+	WHERE NOT ("card"->>'ageRange' = ANY (ARRAY['18-24', '25-34', '35-44', '45-54', '55-64', '65+']));--> statement-breakpoint
 ALTER TABLE "design_change" ADD COLUMN "reverts" jsonb DEFAULT '[]'::jsonb NOT NULL;--> statement-breakpoint
 ALTER TABLE "model_shot" ADD COLUMN "aspect" text DEFAULT '4:5' NOT NULL;--> statement-breakpoint
 ALTER TABLE "model_shot" ADD COLUMN "stage" text;--> statement-breakpoint
@@ -74,7 +84,9 @@ ALTER TABLE "render_job" ADD COLUMN "device" text;--> statement-breakpoint
 ALTER TABLE "render_job" ADD COLUMN "cache_key" text;--> statement-breakpoint
 ALTER TABLE "render_job" ADD COLUMN "created_by" text;--> statement-breakpoint
 ALTER TABLE "run_feedback" ADD COLUMN "source" text DEFAULT 'explicit' NOT NULL;--> statement-breakpoint
-ALTER TABLE "run_feedback" ADD COLUMN "kind" text NOT NULL;--> statement-breakpoint
+ALTER TABLE "run_feedback" ADD COLUMN "kind" text;--> statement-breakpoint
+UPDATE "run_feedback" SET "kind" = "rating";--> statement-breakpoint
+ALTER TABLE "run_feedback" ALTER COLUMN "kind" SET NOT NULL;--> statement-breakpoint
 ALTER TABLE "run_feedback" ADD COLUMN "change_id" text;--> statement-breakpoint
 ALTER TABLE "thread" ADD COLUMN "scene_id" text;--> statement-breakpoint
 ALTER TABLE "thread" ADD COLUMN "prompt_hash" text;--> statement-breakpoint

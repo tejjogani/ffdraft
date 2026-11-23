@@ -26,6 +26,11 @@ describe('session & organisation', () => {
       mesh3d: [],
       blender: false,
       sourcing: [],
+      vision: false,
+      embedding: false,
+      depth: false,
+      onModel: [],
+      c2pa: false,
     })
   })
 
@@ -41,7 +46,7 @@ describe('session & organisation', () => {
     expect(await api.call('org.settings.get', {})).toEqual({
       traceRetentionDays: 90,
       allowEvalUse: false,
-      assistantModel: 'claude-opus-5-5',
+      assistantModel: null,
       monthlyBudgetUsd: null,
     })
     await api.call('org.settings.update', { allowEvalUse: true, monthlyBudgetUsd: 250 })
@@ -181,6 +186,7 @@ describe('ideate', () => {
             credit: 'The Met',
             license: 'CC0',
             rights: 'open',
+            mayStore: true,
             width: 800,
             height: 600,
           },
@@ -189,7 +195,12 @@ describe('ideate', () => {
     })
     expect(refs.map((r) => r.type)).toEqual(['note', 'link', 'image'])
     expect(refs[1]!.rights).toBe('viewOnly')
-    expect(refs[2]).toMatchObject({ rights: 'open', source: { provider: 'met', license: 'CC0' } })
+    // With no search provider to re-check it against, a result is kept as a view-only link.
+    expect(refs[2]).toMatchObject({
+      rights: 'viewOnly',
+      assetId: null,
+      source: { provider: 'met', license: 'CC0', capturedAt: null },
+    })
     expect(refs.map((r) => r.position)).toEqual([1, 2, 3])
 
     const edited = await api.call('references.update', {
@@ -229,7 +240,9 @@ describe('renders, models, shots, production', () => {
     })
     expect(job).toMatchObject({
       status: 'queued',
-      engine: 'blender',
+      engine: 'browser',
+      purpose: 'take',
+      stale: false,
       sourceVersion: 0,
       title: piece.title,
     })
@@ -249,7 +262,7 @@ describe('renders, models, shots, production', () => {
   it('manages brand models', async () => {
     const card = {
       description: 'Warm, editorial',
-      ageRange: '30s',
+      ageRange: '25-34' as const,
       skinTone: 'deep',
       hair: 'short curls',
       build: 'slim',

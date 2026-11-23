@@ -26,7 +26,14 @@ const toBrandModel = (r: ModelRow): BrandModel => ({
   id: r.id,
   name: r.name,
   // Cards written before these fields existed lack them.
-  card: { monkTone: null, undertone: null, eyes: '', marks: '', handLengthMm: null, ...r.card },
+  card: {
+    ...r.card,
+    monkTone: r.card.monkTone ?? null,
+    undertone: r.card.undertone ?? null,
+    eyes: r.card.eyes ?? '',
+    marks: r.card.marks ?? '',
+    handLengthMm: r.card.handLengthMm ?? null,
+  },
   portraits: r.portraits,
   recipe: r.recipe ?? null,
   attestedSynthetic: r.attestedSynthetic,

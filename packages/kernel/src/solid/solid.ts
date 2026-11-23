@@ -39,7 +39,7 @@ import {
 /** Tessellation presets per detail level (chord per docs/research/01-cad.md §5: ≤ 0.005–0.01 mm). */
 export const QUALITY = {
   draft: { chord: 0.02, angle: 0.35 },
-  production: { chord: 0.005, angle: 0.15 },
+  production: { chord: 0.005, angle: 0.3 },
 } as const satisfies Record<string, Quality>
 
 interface Level {

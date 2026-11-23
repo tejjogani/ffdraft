@@ -214,9 +214,23 @@ class Packer {
   }
 
   /** Rows direction in the tangent plane at a point (falls back to any tangent). */
-  private rowsAt(n: Vec3): Vec3 {
+  /**
+   * Row direction at a seed: along the region where it is narrow (perpendicular to the depth
+   * gradient, so a stroke of a letter is paved in rows that follow it), the preferred direction
+   * in open fields; turned by the seed's lattice angle either way.
+   */
+  private rowsAt(seed: number, n: Vec3): Vec3 {
     const angle = (((this.o.seed - 1) * 23) % 60) * (Math.PI / 180)
-    let e = sub(this.o.rowDirection, scale(n, dot(this.o.rowDirection, n)))
+    const p = this.surface.point(seed)
+    const reach = 2 * this.largest
+    let g: Vec3 = [0, 0, 0]
+    this.surface.near(p, reach, (j) => {
+      g = add(g, scale(sub(this.surface.point(j), p), this.surface.depth[j]! - this.surface.depth[seed]!))
+    })
+    g = sub(g, scale(n, dot(g, n)))
+    // A clear slope across the footprint means the seed sits in a band, not an open field.
+    const banded = Math.hypot(g[0], g[1], g[2]) > 1e-3 * reach ** 4 && this.surface.depth[seed]! < 2 * this.largest
+    let e = banded ? cross(n, g) : sub(this.o.rowDirection, scale(n, dot(this.o.rowDirection, n)))
     if (Math.hypot(e[0], e[1], e[2]) < 1e-3) e = cross(n, [0, 0, 1])
     e = normalize(e, normalize(cross(n, [1, 0, 0])))
     const f = cross(n, e)
@@ -226,7 +240,7 @@ class Packer {
   private grow(seed: number, first: boolean): void {
     let start = this.surface.point(seed)
     const n0 = this.surface.normal(seed)
-    const rows = this.rowsAt(n0)
+    const rows = this.rowsAt(seed, n0)
     if (first) {
       // Seeded phase: shift the lattice by up to half a pitch so layouts differ per seed.
       const pitch = this.largest + this.o.gap
@@ -355,8 +369,35 @@ class Packer {
       this.tick()
       const p = this.surface.point(i)
       const n = this.surface.normal(i)
-      if (this.fits(p, n, size) && this.sizeFor(i, p) >= size - EPS) this.place(p, n, size, i)
+      if (!this.fits(p, n, size) || this.sizeFor(i, p) < size - EPS) continue
+      const snug = this.nestle(p, size)
+      if (snug) this.place(snug.p, snug.n, size, snug.sample)
+      else this.place(p, n, size, i)
     }
+  }
+
+  /**
+   * A position for a void stone tangent to its two nearest neighbours, close to where it was
+   * found — so fill stones line up with the field instead of landing wherever a sample was.
+   */
+  private nestle(p: Vec3, size: number): ReturnType<PaveSurface['snap']> {
+    const near: [number, number][] = []
+    this.grid.near(p[0], p[1], p[2], size + this.largest + 2 * this.o.gap, (j, d2) => near.push([j, d2]))
+    if (near.length < 2) return null
+    near.sort((a, b) => a[1] - b[1] || a[0] - b[0])
+    const [i, j] = [near[0]![0], near[1]![0]]
+    let best: ReturnType<PaveSurface['snap']> = null
+    let bestD = 0.6 * size
+    for (const side of [1, -1]) {
+      const hit = this.tangentPoint(i, j, size / 2, side)
+      if (!hit) continue
+      const d = Math.hypot(hit.p[0] - p[0], hit.p[1] - p[1], hit.p[2] - p[2])
+      if (d < bestD && this.sizeFor(hit.sample, hit.p) >= size - EPS && this.fits(hit.p, hit.n, size)) {
+        best = hit
+        bestD = d
+      }
+    }
+    return best
   }
 
   /** The stones nearest the heart of the region until `coverage` of the field is kept. */
