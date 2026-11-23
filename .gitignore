@@ -1,0 +1,14 @@
+node_modules
+dist
+.data
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+.DS_Store
+apps/desktop/src-tauri/target
+apps/desktop/src-tauri/gen
+__pycache__
+.venv
+coverage
+.turbo

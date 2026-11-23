@@ -1,0 +1,245 @@
+/*
+ * Pavé design tokens — the single source of the visual language.
+ *
+ * Principles
+ *  1. The jewelry is the colour. Chrome is warm-neutral and quiet; metal and stone carry hue.
+ *  2. Hairlines over shadows, space over boxes. Shadows only lift things that float.
+ *  3. Glass is for floating layers (menus, popovers, palettes, HUDs over the viewport) and the
+ *     sidebar; never for content surfaces. Every glass surface has an opaque fallback.
+ *  4. One ink accent for actions, one blue for selection/focus, one warm shimmer reserved for AI.
+ *  5. 13 px UI on a 4 px grid; an editorial serif only for page titles and empty states.
+ */
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  color-scheme: light;
+
+  --bg: #ffffff;
+  --bg-subtle: #faf9f7;
+  --bg-muted: #f3f2ef;
+  --bg-inset: #eceae6;
+  --bg-hover: rgba(28, 27, 26, 0.045);
+  --bg-active: rgba(28, 27, 26, 0.075);
+
+  --fg: #1c1b1a;
+  --fg-muted: #65635f;
+  --fg-subtle: #97958f;
+  --fg-faint: #c6c4bf;
+
+  --line: rgba(28, 27, 26, 0.09);
+  --line-strong: rgba(28, 27, 26, 0.16);
+
+  --ink: #1c1b1a;
+  --ink-fg: #ffffff;
+  --select: #2b6ce6;
+  --select-soft: rgba(43, 108, 230, 0.12);
+  --danger: #cf4436;
+  --warn: #b97a12;
+  --ok: #2c8f62;
+
+  /* Reserved for AI affordances: assistant mark, generated badges, streaming edges. */
+  --ai-a: #c8a45a;
+  --ai-b: #e9cfa6;
+  --ai-c: #b7c4ea;
+
+  --glass: rgba(252, 251, 249, 0.72);
+  --glass-strong: rgba(252, 251, 249, 0.86);
+  --glass-line: rgba(28, 27, 26, 0.08);
+
+  /* The stage behind 3D content: a soft photographic sweep, never pure white. */
+  --stage-a: #f6f5f2;
+  --stage-b: #e7e5e0;
+
+  --shadow-sm: 0 1px 2px rgba(20, 18, 15, 0.05);
+  --shadow-md: 0 0 0 1px rgba(20, 18, 15, 0.04), 0 2px 6px rgba(20, 18, 15, 0.05),
+    0 8px 24px rgba(20, 18, 15, 0.06);
+  --shadow-pop: 0 0 0 1px rgba(20, 18, 15, 0.05), 0 4px 14px rgba(20, 18, 15, 0.07),
+    0 18px 48px rgba(20, 18, 15, 0.1);
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+  --dur-3: 260ms;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #161615;
+  --bg-subtle: #1b1b1a;
+  --bg-muted: #232322;
+  --bg-inset: #2a2a28;
+  --bg-hover: rgba(255, 255, 255, 0.055);
+  --bg-active: rgba(255, 255, 255, 0.09);
+
+  --fg: #edece8;
+  --fg-muted: #a5a39d;
+  --fg-subtle: #75736e;
+  --fg-faint: #4a4946;
+
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.15);
+
+  --ink: #edece8;
+  --ink-fg: #161615;
+  --select: #6b9cf5;
+  --select-soft: rgba(107, 156, 245, 0.18);
+  --danger: #ee6a5c;
+  --warn: #dba13a;
+  --ok: #4fbf8b;
+
+  --glass: rgba(34, 34, 33, 0.7);
+  --glass-strong: rgba(34, 34, 33, 0.86);
+  --glass-line: rgba(255, 255, 255, 0.09);
+
+  --stage-a: #232322;
+  --stage-b: #121211;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 18px 48px rgba(0, 0, 0, 0.5);
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: "Instrument Serif", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --color-bg: var(--bg);
+  --color-bg-subtle: var(--bg-subtle);
+  --color-bg-muted: var(--bg-muted);
+  --color-bg-inset: var(--bg-inset);
+  --color-bg-hover: var(--bg-hover);
+  --color-bg-active: var(--bg-active);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-fg-faint: var(--fg-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-fg: var(--ink-fg);
+  --color-select: var(--select);
+  --color-select-soft: var(--select-soft);
+  --color-danger: var(--danger);
+  --color-warn: var(--warn);
+  --color-ok: var(--ok);
+  --color-glass: var(--glass);
+  --color-glass-line: var(--glass-line);
+
+  /* Type: 13 px UI base. `display` and `title` are set in the serif. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.875rem;
+  --text-base--line-height: 1.375rem;
+  --text-lg: 1rem;
+  --text-lg--line-height: 1.5rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-title: 2rem;
+  --text-title--line-height: 2.375rem;
+  --text-display: 2.75rem;
+  --text-display--line-height: 3rem;
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-pop: var(--shadow-pop);
+
+  --ease-out: var(--ease-out);
+  --ease-in-out: var(--ease-in-out);
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    font-size: 16px;
+    font-feature-settings: "cv11", "ss01", "calt";
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+    overscroll-behavior: none;
+  }
+  *,
+  ::before,
+  ::after {
+    border-color: var(--line);
+  }
+  ::selection {
+    background: var(--select-soft);
+  }
+  :focus-visible {
+    outline: 2px solid var(--select);
+    outline-offset: 1px;
+  }
+  button,
+  [role="button"] {
+    cursor: default;
+  }
+  /* Thin, unobtrusive scrollbars that appear on hover. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  *:hover {
+    scrollbar-color: var(--fg-faint) transparent;
+  }
+}
+
+/* Frosted surface for floating layers. Falls back to a near-opaque fill when the user asks for
+   reduced transparency or the browser lacks backdrop-filter. */
+@utility glass {
+  background: var(--glass);
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  border: 1px solid var(--glass-line);
+  @supports not (backdrop-filter: blur(1px)) {
+    background: var(--bg-subtle);
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    background: var(--bg-subtle);
+    backdrop-filter: none;
+  }
+}
+
+/* The photographic sweep behind 3D viewports and render previews. */
+@utility stage {
+  background: radial-gradient(120% 90% at 50% 20%, var(--stage-a) 0%, var(--stage-b) 100%);
+}
+
+/* AI shimmer: use on a 1px border or a small mark, never as a fill behind text. */
+@utility ai-gradient {
+  background-image: linear-gradient(120deg, var(--ai-a), var(--ai-b) 45%, var(--ai-c));
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum", "cv11";
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
