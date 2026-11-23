@@ -171,8 +171,7 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
   }))
 
   const additions: Addition[] = []
-  const add = (solid: Solid, afterCuts = false) =>
-    additions.push({ solid: solid.transformed(host.matrix), target: node.host, afterCuts })
+  const add = (solid: Solid) => additions.push({ solid: solid.transformed(host.matrix), target: node.host })
   const cuts: Cut[] = []
   const full = node.coverage >= 360 && node.skipCenter === 0
   const span = (list: readonly Slot[]) => {
@@ -262,7 +261,7 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
         const lateral = Math.sqrt(Math.max(0.01, (width / 2 + bead / 2 - 0.05) ** 2 - ((width + node.gap) / 2) ** 2))
         for (const side of [-1, 1]) {
           const { point, normal } = surfaceAt(theta, a + side * lateral)
-          add(pinSolid(addScaled(point, normal, -0.1), normal, bead / 2, 0.1 + bead * 0.2), true)
+          add(pinSolid(addScaled(point, normal, -0.1), normal, bead / 2, 0.1 + bead * 0.2))
         }
       }, false)
     }

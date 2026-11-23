@@ -17,7 +17,15 @@ import {
   runtime,
   solidFromManifold,
 } from '../core'
-import { boundsOverlap, mergeTessellations, unionBounds } from '../solid/meshing'
+import {
+  type IndexedTriangles,
+  boundsOfPositions,
+  boundsOverlap,
+  mergeTessellations,
+  meshVolume,
+  unionBounds,
+} from '../solid/meshing'
+import { manifoldFromTriangles } from '../solid/solid'
 import type { Bounds, Part } from '../types'
 import { labelOf } from './build'
 import { hashString } from './hash'
@@ -163,11 +171,71 @@ export function assembleDraft(
 
 // ── Production ───────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Packs many small solids into a few Manifolds. A boolean costs roughly the same however small
+ * its operands (and every Manifold has a fixed overhead), so hundreds of beads or seat cutters
+ * are far cheaper as a handful of multi-shell meshes. Shells in one mesh must not overlap, so
+ * solids are batched greedily by bounding box.
+ */
+function batch(solids: readonly Solid[], quality: Quality, own: (m: Manifold) => Manifold): Manifold[] {
+  if (solids.length <= 1) return solids.map((s) => s.manifold(quality))
+  const out: Manifold[] = []
+  const batches: { members: { tris: IndexedTriangles; box: Bounds }[]; cells: Map<string, number[]> }[] = []
+  const boxes = solids.map((solid) => boundsOfPositions(solid.triangles(quality).positions))
+  // Hash grid sized to the typical solid, so overlap tests stay local with thousands of stones.
+  const sizes = boxes.map((b) => Math.max(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2])).sort((a, b) => a - b)
+  const cell = Math.max(0.5, sizes[sizes.length >> 1]! * 1.5)
+  solids.forEach((solid, n) => {
+    const box = boxes[n]!
+    const lo = box.min.map((v) => Math.floor(v / cell))
+    const hi = box.max.map((v) => Math.floor(v / cell))
+    // Large bodies keep a mesh of their own (the solid's cached one).
+    if ((hi[0]! - lo[0]! + 1) * (hi[1]! - lo[1]! + 1) * (hi[2]! - lo[2]! + 1) > 64) {
+      out.push(solid.manifold(quality))
+      return
+    }
+    const keys: string[] = []
+    for (let x = lo[0]!; x <= hi[0]!; x++)
+      for (let y = lo[1]!; y <= hi[1]!; y++) for (let z = lo[2]!; z <= hi[2]!; z++) keys.push(`${x},${y},${z}`)
+    let home = batches.find((b) => !keys.some((k) => b.cells.get(k)?.some((i) => boundsOverlap(b.members[i]!.box, box))))
+    if (!home) {
+      home = { members: [], cells: new Map() }
+      batches.push(home)
+    }
+    const index = home.members.push({ tris: solid.triangles(quality), box }) - 1
+    for (const k of keys) home.cells.set(k, [...(home.cells.get(k) ?? []), index])
+  })
+  for (const { members } of batches) {
+    let vertices = 0
+    let corners = 0
+    for (const m of members) {
+      vertices += m.tris.positions.length
+      corners += m.tris.indices.length
+    }
+    const positions = new Float32Array(vertices)
+    const indices = new Uint32Array(corners)
+    let v = 0
+    let i = 0
+    for (const m of members) {
+      positions.set(m.tris.positions, v)
+      for (let k = 0; k < m.tris.indices.length; k++) indices[i + k] = m.tris.indices[k]! + v / 3
+      v += m.tris.positions.length
+      i += m.tris.indices.length
+    }
+    out.push(own(manifoldFromTriangles({ positions, indices })))
+  }
+  return out
+}
+
 interface MetalGroup {
   spec: MetalSpec
   sources: Source[]
-  meshes: Manifold[]
-  late: Manifold[]
+  /** Bodies and additions to fuse. */
+  solids: Solid[]
+  /** Bodies that already had their own cutters (engraving) applied. */
+  precut: Manifold[]
+  /** Additions fused after the seats are cut. */
+  late: Solid[]
 }
 
 /** Shells smaller than this are numerical dust from booleans, not metal (mm³). */
@@ -192,16 +260,15 @@ export function assembleProduction(
 
   try {
     // Cutters: those aimed at specific nodes, and those that cut whatever metal they touch.
-    const targeted = new Map<string, Manifold[]>()
-    const everywhere: Manifold[] = []
+    const targeted = new Map<string, Solid[]>()
+    const everywhere: Solid[] = []
     for (const result of active)
       for (const cut of result.cuts) {
-        const cutter = cut.solid.manifold(quality)
-        if (cut.targets === 'all') everywhere.push(cutter)
+        if (cut.targets === 'all') everywhere.push(cut.solid)
         else
           for (const id of cut.targets) {
             const host = resolveTarget(id, consumed, results)
-            if (host) targeted.set(host.id, [...(targeted.get(host.id) ?? []), cutter])
+            if (host) targeted.set(host.id, [...(targeted.get(host.id) ?? []), cut.solid])
           }
       }
 
@@ -209,18 +276,18 @@ export function assembleProduction(
     const groupFor = (spec: MetalSpec): MetalGroup => {
       let group = groups.get(spec.material)
       if (!group) {
-        group = { spec, sources: [], meshes: [], late: [] }
+        group = { spec, sources: [], solids: [], precut: [], late: [] }
         groups.set(spec.material, group)
       }
       return group
     }
     for (const result of active) {
       const cutters = targeted.get(result.id)
-      const tool = cutters && fuse(cutters)
+      const tool = cutters && fuse(batch(cutters, quality, temp))
       for (const body of result.bodies) {
         const group = groupFor(body)
-        const mesh = body.solid.manifold(quality)
-        group.meshes.push(tool ? temp(mesh.subtract(tool)) : mesh)
+        if (tool) group.precut.push(temp(body.solid.manifold(quality).subtract(tool)))
+        else group.solids.push(body.solid)
         group.sources.push({ nodeId: result.id, body })
       }
     }
@@ -230,16 +297,16 @@ export function assembleProduction(
         if (!host) continue
         const spec = specOf(host.bodies[0]!)
         const group = groupFor(spec)
-        ;(addition.afterCuts ? group.late : group.meshes).push(addition.solid.manifold(quality))
+        ;(addition.afterCuts ? group.late : group.solids).push(addition.solid)
         group.sources.push({ nodeId: result.id, body: { solid: addition.solid, ...spec } })
       }
 
-    const seats = everywhere.length > 0 ? fuse(everywhere) : null
+    const seats = everywhere.length > 0 ? fuse(batch(everywhere, quality, temp)) : null
     const parts: ScenePart[] = []
     for (const [material, group] of groups) {
-      let fused = fuse(group.meshes)
+      let fused = fuse([...batch(group.solids, quality, temp), ...group.precut])
       if (seats) fused = temp(fused.subtract(seats))
-      if (group.late.length > 0) fused = temp(mf.Manifold.union([fused, ...group.late]))
+      if (group.late.length > 0) fused = temp(mf.Manifold.union([fused, ...batch(group.late, quality, temp)]))
       const shells = fused
         .decompose()
         .map((shell) => ({ shell, volume: shell.volume() }))
@@ -258,7 +325,7 @@ export function assembleProduction(
         const solid = solidFromManifold(shell)
         // Add back what tessellation shaved off the exact bodies (second-order for cutters).
         const deficit = sources.reduce(
-          (sum, s) => sum + s.body.solid.volume() - s.body.solid.manifold(quality).volume(),
+          (sum, s) => sum + s.body.solid.volume() - meshVolume(s.body.solid.triangles(quality)),
           0,
         )
         const first = sources[0] && results.get(sources[0].nodeId)

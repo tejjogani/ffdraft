@@ -79,7 +79,7 @@ export const halo = defineFeature('halo', (node, ctx) => {
       const lateral = Math.sqrt(Math.max(0.01, reach * reach - halfGap * halfGap))
       for (const side of [-1, 1]) {
         const foot = addScaled(addScaled(mid, across, side * lateral), up, surfaceZ - girdleZ - 0.1)
-        additions.push({ solid: pinSolid(foot, up, bead / 2, 0.1 + bead * 0.2), target: node.id, afterCuts: true })
+        additions.push({ solid: pinSolid(foot, up, bead / 2, 0.1 + bead * 0.2), target: node.id })
       }
     })
   }

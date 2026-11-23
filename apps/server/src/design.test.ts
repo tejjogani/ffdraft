@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { putAsset } from './assets/assets'
 import type { ServerEvent } from './events'
 import { type Client, client, type TestServer, testServer } from './test/harness'
+import { traces } from './traces'
 
 let server: TestServer
 let api: Client
@@ -161,5 +163,84 @@ describe('design document', () => {
     const mine = rows.filter((r) => r.targetId === piece.id).map((r) => r.action)
     expect(mine).toEqual(expect.arrayContaining(['pieces.create', 'pieces.update']))
     expect(rows.every((r) => r.actor.type === 'user')).toBe(true)
+  })
+})
+
+describe('undo', () => {
+  it('reverts everything a run changed on a piece as one change, recording implicit feedback', async () => {
+    const piece = await api.call('pieces.create', { templateId: 'wedding-band' })
+    const ctx = await server.runtime.context(server.runtime.local!)
+    const run = await traces.startRun(ctx, { model: 'm', pieceId: piece.id })
+    const agent = await server.runtime.context({
+      ...server.runtime.local!,
+      actor: { type: 'agent', runId: run.id, toolCallId: 't1' },
+    })
+    await server.runtime.invoke('design.apply', { pieceId: piece.id, label: 'Add a', ops: [gem('a', 0)] }, agent)
+    await api.call('design.apply', { pieceId: piece.id, label: 'Mine', ops: [gem('mine', 3)] })
+    await server.runtime.invoke(
+      'design.apply',
+      { pieceId: piece.id, label: 'Wider', ops: [{ t: 'update', id: 'band', patch: { widthTop: 5 } }] },
+      agent,
+    )
+
+    const undone = await api.call('design.revert', { pieceId: piece.id, runId: run.id })
+    expect(undone.version).toBe(4)
+    expect(undone.change.label).toBe('Undo assistant edits: Add a; Wider')
+    const history = await api.call('design.history', { pieceId: piece.id })
+    expect(undone.change.reverts).toEqual([history[1]!.id, history[3]!.id])
+    const after = await api.call('pieces.get', { id: piece.id })
+    expect(after.design.order).toContain('mine')
+    expect(after.design.order).not.toContain('a')
+    expect(after.design.nodes.band).toMatchObject({ widthTop: 4 })
+
+    const { feedback } = await api.call('traces.run', { id: run.id })
+    expect(feedback).toHaveLength(2)
+    expect(feedback.map((f) => [f.source, f.kind, f.changeId])).toEqual(
+      expect.arrayContaining([
+        ['implicit', 'undone', history[1]!.id],
+        ['implicit', 'undone', history[3]!.id],
+      ]),
+    )
+    expect((await api.fail('design.revert', { pieceId: piece.id, runId: 'run_nope' })).status).toBe(404)
+    expect((await api.fail('design.revert', { pieceId: piece.id })).status).toBe(400)
+    expect((await api.fail('design.revert', { pieceId: piece.id, seq: 1, runId: run.id })).status).toBe(400)
+  })
+
+  it('marks a guarded undo sent through design.apply, and checks what it reverts', async () => {
+    const piece = await api.call('pieces.create', { templateId: 'wedding-band' })
+    const first = await api.call('design.apply', { pieceId: piece.id, label: 'Add', ops: [gem('u', 0)] })
+    expect(first.change).not.toHaveProperty('reverts')
+    const undo = await api.call('design.apply', {
+      pieceId: piece.id,
+      label: 'Undo add',
+      ops: first.change.inverse,
+      reverts: [first.change.id],
+    })
+    expect(undo.change.reverts).toEqual([first.change.id])
+    expect((await api.call('design.history', { pieceId: piece.id }))[0]!.reverts).toEqual([first.change.id])
+    const other = await api.call('pieces.create', { templateId: 'wedding-band' })
+    const err = await api.fail('design.apply', {
+      pieceId: other.id,
+      label: 'x',
+      ops: [gem('v', 0)],
+      reverts: [first.change.id],
+    })
+    expect(err.status).toBe(400)
+    expect((await api.call('pieces.get', { id: other.id })).version).toBe(0)
+  })
+})
+
+describe('cover', () => {
+  it('captures automatically until someone picks a cover', async () => {
+    const piece = await api.call('pieces.create', { templateId: 'wedding-band' })
+    expect(piece.coverAuto).toBe(true)
+    const ctx = await server.runtime.context(server.runtime.local!)
+    const asset = await putAsset(ctx, { bytes: new TextEncoder().encode('x'), name: 'c.png', mime: 'image/png' })
+    const auto = await api.call('pieces.update', { id: piece.id, coverAssetId: asset.id, coverAuto: true })
+    expect(auto).toMatchObject({ coverAssetId: asset.id, coverAuto: true })
+    const picked = await api.call('pieces.update', { id: piece.id, coverAssetId: asset.id })
+    expect(picked.coverAuto).toBe(false)
+    expect((await api.call('pieces.update', { id: piece.id, title: 'T' })).coverAuto).toBe(false)
+    expect((await api.call('pieces.duplicate', { id: piece.id })).coverAuto).toBe(false)
   })
 })
