@@ -89,6 +89,11 @@ const RIDGE_PERCENTILE = 0.5
 const ROW_SPACING = Math.sqrt(3) / 2
 /** Regions whose bands are wider than this many stones are open fields, framed by one row. */
 const OPEN_FIELD = 2
+/**
+ * A face's rows are planned for its narrower strokes (this percentile of its ridge), so a letter
+ * whose strokes differ in width gets rows that fit all of them.
+ */
+const FACE_PERCENTILE = 0.25
 /** A row on a band's ridge follows the level this share of a stone inside it (the ridge itself is a kink). */
 const RIDGE_INSET = 0.03
 /** Outline rows are walked in steps of this share of a stone; the first spot that fits takes it. */
@@ -407,14 +412,17 @@ class Packer {
    * a letter are the junctions of its strokes; planning for the strokes' own width keeps rows
    * unbroken and gives every stroke of a letter the same stones. Infinity without a ridge.
    */
-  private ridgeHalfWidth(among: (visit: (i: number) => void) => void): number {
+  private ridgeHalfWidth(
+    among: (visit: (i: number) => void) => void,
+    percentile = RIDGE_PERCENTILE,
+  ): number {
     const ridge: number[] = []
     among((i) => {
       if (this.isRidge(i)) ridge.push(this.surface.edge[i]!)
     })
     if (ridge.length === 0) return Infinity
     ridge.sort((a, b) => a - b)
-    return ridge[Math.floor(RIDGE_PERCENTILE * (ridge.length - 1))]!
+    return ridge[Math.floor(percentile * (ridge.length - 1))]!
   }
 
   /** No sample within a quarter stone is farther from the edge: the sample is on a ridge. */
@@ -476,8 +484,10 @@ class Packer {
 
   /**
    * Rows that follow the region's outline, laid before any honeycomb, face by face: in bands
-   * (strokes, steps, rims) the rows the band's width takes, staggered about its ridge; in open
-   * fields one row of the largest stones hugging the edge, which frames the honeycomb inside.
+   * (strokes, steps, rims) the rows the band's width takes; in open fields one row of the
+   * largest stones. The outer rows hug the rim at the margin — a constant offset from the edge,
+   * so they run straight along tapering or uneven strokes — and an odd middle row follows the
+   * band's ridge.
    */
   private layOutlineRows(): void {
     const faces = this.faces()
@@ -485,20 +495,14 @@ class Packer {
     for (let i = 0; i < this.surface.count; i++)
       if (faces.id[i]! >= 0) members[faces.id[i]!]!.push(i)
     for (let f = 0; f < faces.count; f++) {
-      const half = this.ridgeHalfWidth((visit) => members[f]!.forEach(visit))
+      const half = this.ridgeHalfWidth((visit) => members[f]!.forEach(visit), FACE_PERCENTILE)
       const fit =
         half < OPEN_FIELD * this.largest
           ? this.rowsFor(2 * (half - this.o.margin), this.largest)
           : null
       const d = fit?.d ?? this.largest
-      const levels: number[] = []
-      if (fit) {
-        const pitch = (d + this.o.gap) * ROW_SPACING
-        for (let j = 0; j < Math.ceil(fit.rows / 2); j++) {
-          const offset = ((fit.rows - 1) / 2 - j) * pitch
-          levels.push(offset > EPS ? half - offset : half - RIDGE_INSET * d)
-        }
-      } else levels.push(this.o.margin + d / 2 + SLACK)
+      const levels = [this.o.margin + d / 2 + SLACK]
+      if (fit && fit.rows % 2 === 1 && fit.rows > 1) levels.push(half - RIDGE_INSET * d)
       for (const level of levels)
         walkLevelSets({
           surface: this.surface,

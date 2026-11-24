@@ -15,12 +15,12 @@ import {
   solidFromManifold,
 } from '../core'
 import { frameFromZ } from '../geometry/vec'
-import { RULES } from '../rules'
 import { layoutBeads } from '../mesh/pave/beads'
 import { layoutPave, type PlacedStone } from '../mesh/pave/layout'
 import { type PaveField, type PlacedField, selectRegion } from '../mesh/pave/region'
 import { beadSolids, seatCutters } from '../mesh/pave/seats'
 import { PaveSurface } from '../mesh/pave/surface'
+import { RULES } from '../rules'
 import type { IndexedTriangles } from '../solid/meshing'
 import { QUALITY } from '../solid/solid'
 
@@ -173,7 +173,7 @@ export const pave = defineFeature('pave', (node, ctx) => {
   ]
   const additions: Addition[] = []
   if (node.beads) {
-    const beads = layoutBeads(layout.stones, node.gap, (q) => surface.snap(q))
+    const beads = layoutBeads(layout.stones, node.gap, (q) => surface.snapExact(q))
     if (beads.length > 0)
       additions.push({
         solid: solidFromManifold(beadSolids(beads, ctx.quality)),

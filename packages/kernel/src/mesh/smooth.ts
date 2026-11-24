@@ -13,7 +13,7 @@ const MU = -0.53
 /** Each step of the 0–8 schema slider runs this many λ|μ pairs. */
 const PAIRS_PER_LEVEL = 3
 /** Deviation allowed when thinning the smoothed mesh, per unit of refined edge length. */
-const RETHIN = 0.04
+const RETHIN = 0.01
 
 export function taubinSmooth(mesh: IndexedTriangles, pairs: number): IndexedTriangles {
   const { start, list } = vertexRings(mesh)

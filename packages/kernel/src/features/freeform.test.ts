@@ -15,13 +15,14 @@ import {
 import { afterAll, describe, expect, it } from 'vitest'
 import { invertSimilarity, transformPoint } from '../geometry/vec'
 import { createKernel, type LocalKernel } from '../kernel'
+import { grayPng } from '../mesh/image/fixtures'
 import { OutlineDistance } from '../mesh/outline/distance'
 import type { PaveField } from '../mesh/pave/region'
 import { seededRandom } from '../mesh/random'
 import { edgeTopology } from '../mesh/topology'
 import { meshVolume } from '../solid/meshing'
 import { QUALITY } from '../solid/solid'
-import type { StoneInstance } from '../types'
+import type { AssetResolver, StoneInstance } from '../types'
 
 const kernel: LocalKernel = createKernel()
 afterAll(() => kernel.dispose())
@@ -150,6 +151,75 @@ describe('vectorBody', () => {
     expect(e.diagnostics.map((x) => x.code)).toContain('outline.disconnected')
   })
 
+  it('gives every edge treatment, with and without a border, one clean shell that later steps keep', async () => {
+    for (const shape of ['circle', 'hexagon', 'star', 'heart'] as const)
+      for (const bevel of bevels)
+        for (const border of [0, 1]) {
+          const node: VectorInput = {
+            id: 'v',
+            kind: 'vectorBody',
+            source: { type: 'shape', shape },
+            height: 24,
+            thickness: 4,
+            bevel,
+            bevelSize: 0.8,
+            border,
+          }
+          const label = `${shape} ${bevel} border ${border}`
+          const m = (await kernel.scene(pendant(node))).nodes.get('v')!.bodies[0]!.solid.manifold()
+          expect(m.genus(), label).toBe(0)
+          expect(m.decompose().length, label).toBe(1)
+          // The production assembly simplifies every shell within 5e-4 mm.
+          const simplified = m.simplify(5e-4)
+          expect(Math.abs(simplified.volume() / m.volume() - 1), label).toBeLessThan(1e-3)
+          simplified.delete()
+          const draft = await kernel.evaluate(pendant(node))
+          const production = await kernel.evaluate(pendant(node), { detail: 'production' })
+          const ratio = production.parts[0]!.volumeMm3 / draft.parts[0]!.volumeMm3
+          expect(Math.abs(ratio - 1), label).toBeLessThan(1e-3)
+        }
+  })
+
+  it('leaves out characters the font lacks, saying so, and fails when none are left', async () => {
+    const node = (text: string): VectorInput => ({
+      id: 'v',
+      kind: 'vectorBody',
+      source: { type: 'text', text, font: 'sans' },
+    })
+    const mixed = await kernel.scene(pendant(node('A😀B')))
+    expect(mixed.nodes.get('v')!.status).toBe('ok')
+    const missing = mixed.evaluation.diagnostics.find((d) => d.code === 'text.missingGlyph')
+    expect(missing?.message).toContain('😀')
+    const none = await kernel.scene(pendant(node('😀')))
+    expect(none.nodes.get('v')!.status).toBe('failed')
+    expect(none.evaluation.diagnostics[0]!.message).toMatch(/no letters for “😀”/)
+  })
+
+  it('rejects artwork it cannot build with messages a designer can act on', async () => {
+    const message = async (d: string, height = 20) => {
+      const scene = await kernel.scene(
+        pendant({ id: 'v', kind: 'vectorBody', source: { type: 'svg', d }, height }),
+      )
+      expect(scene.nodes.get('v')!.status).toBe('failed')
+      return scene.evaluation.diagnostics.map((x) => x.message).join(' ')
+    }
+    for (const d of ['', 'M0 0', 'M0 0 L10 10']) expect(await message(d)).toMatch(/no closed area/)
+    expect(await message('M0 0 L1e400 5 L3 3 Z')).toMatch(/cannot be read/)
+    expect(await message('M0 0 H1000 V1 H0 Z', 3)).toMatch(/3000 mm wide/)
+  })
+
+  it('stays fast on artwork traced with tens of thousands of points', async () => {
+    // A 22 mm staircase of 16,000 steps finer than any casting can show.
+    const steps = Array.from({ length: 16_000 }, (_, i) => (i % 2 ? 'h1' : 'v1')).join('')
+    const started = performance.now()
+    await expectSolid({
+      id: 'v',
+      kind: 'vectorBody',
+      source: { type: 'svg', d: `M0 0 ${steps} L0 8000 Z` },
+    })
+    expect(performance.now() - started).toBeLessThan(10_000)
+  })
+
   it('turns block text into one solid and publishes the field inside its border', async () => {
     const node: VectorInput = {
       id: 'v',
@@ -201,6 +271,38 @@ describe('relief', () => {
   })
 })
 
+describe('relief from an image', () => {
+  it('raises white to the full depth whatever the image size', async () => {
+    const images: Record<string, Uint8Array> = {
+      one: grayPng(1, 1, () => 1),
+      small: grayPng(16, 16, () => 1),
+      ramp: grayPng(64, 64, (x) => x / 63),
+    }
+    const assets: AssetResolver = async (id) => images[id]!
+    const relief = (assetId: string): ReliefInput => ({ id: 'r', kind: 'relief', assetId, rim: 0 })
+    for (const id of ['one', 'small']) {
+      const e = await kernel.evaluate(pendant(relief(id)), { assets })
+      // Default base 1.2 mm and depth 0.8 mm: the relief tops out 2 mm from the back.
+      expect(e.parts[0]!.bounds.min[1], id).toBeCloseTo(-2, 2)
+    }
+    // A ramp rises steadily left to right, with no rows left at the base between pixel rows.
+    const scene = await kernel.scene(pendant(relief('ramp')), { assets })
+    const tris = scene.nodes.get('r')!.bodies[0]!.solid.triangles(QUALITY.draft)
+    const front = (x: number, z: number) => {
+      let best = 0
+      for (let i = 0; i < tris.positions.length; i += 3)
+        if (Math.abs(tris.positions[i]! - x) < 0.3 && Math.abs(tris.positions[i + 2]! - z) < 0.3)
+          best = Math.min(best, tris.positions[i + 1]!)
+      return -best
+    }
+    for (const z of [-2, -1.05, 0, 0.95, 2]) {
+      expect(front(-4, z)).toBeLessThan(front(0, z))
+      expect(front(0, z)).toBeLessThan(front(4, z))
+      expect(front(0, z)).toBeGreaterThan(1.5)
+    }
+  })
+})
+
 describe('meshBody', () => {
   it('builds the built-in models, honouring height, flat back, hollow and smoothing', async () => {
     for (const name of ['trophy', 'crown', 'dice'] as const) {
@@ -243,6 +345,103 @@ describe('meshBody', () => {
       height: 200,
       flatBack: 0.9,
     } satisfies MeshInput)
+  })
+})
+
+describe('meshBody processing', () => {
+  it('keeps every built-in whole when smoothed', async () => {
+    for (const name of ['trophy', 'crown', 'dice'] as const) {
+      const volume = async (smooth: number) => {
+        const e = await kernel.evaluate(
+          pendant({
+            id: 'm',
+            kind: 'meshBody',
+            source: { type: 'builtin', name },
+            height: 40,
+            smooth,
+          }),
+        )
+        return e.parts[0]!.volumeMm3
+      }
+      const raw = await volume(0)
+      for (const level of [1, 8])
+        expect(Math.abs((await volume(level)) / raw - 1), `${name} at ${level}`).toBeLessThan(0.03)
+    }
+  })
+
+  it('hollows into one piece with its own escape holes per cavity, in seconds', async () => {
+    const started = performance.now()
+    const scene = await kernel.scene(
+      pendant({
+        id: 'm',
+        kind: 'meshBody',
+        source: { type: 'builtin', name: 'trophy' },
+        height: 40,
+        hollow: 0.8,
+      }),
+    )
+    expect(performance.now() - started).toBeLessThan(15_000)
+    const codes = scene.evaluation.diagnostics.map((d) => d.code)
+    expect(codes).not.toContain('mesh.disconnected')
+    expect(codes).toContain('mesh.drains')
+    // No sealed specks of cavity left in the wall: one shell.
+    expect(scene.nodes.get('m')!.bodies[0]!.solid.manifold().decompose().length).toBe(1)
+  })
+
+  it('rebuilds a broken mesh at a sensible density, and rejects a flat one plainly', async () => {
+    // A sphere with a tenth of its faces missing must be re-surfaced.
+    const tris: number[][] = []
+    const at = (i: number, j: number) => {
+      const t = (Math.PI * i) / 40
+      const f = (Math.PI * j) / 40
+      return [10 * Math.sin(t) * Math.cos(f), 10 * Math.sin(t) * Math.sin(f), 10 * Math.cos(t)]
+    }
+    const random = seededRandom(5)
+    for (let i = 0; i < 40; i++)
+      for (let j = 0; j < 80; j++) {
+        if (i > 0 && random() > 0.1) tris.push([...at(i, j), ...at(i + 1, j), ...at(i, j + 1)])
+        if (i < 39 && random() > 0.1)
+          tris.push([...at(i, j + 1), ...at(i + 1, j), ...at(i + 1, j + 1)])
+      }
+    const stl = (faces: number[][]) => {
+      const bytes = new Uint8Array(84 + faces.length * 50)
+      const view = new DataView(bytes.buffer)
+      view.setUint32(80, faces.length, true)
+      faces.forEach((f, i) => {
+        f.forEach((v, k) => {
+          view.setFloat32(84 + i * 50 + 12 + k * 4, v, true)
+        })
+      })
+      return bytes
+    }
+    // A closed box of zero thickness (10 × 10 × 0 mm): every face present, no volume inside.
+    const corner = (k: number) => [k & 1 ? 10 : 0, k & 2 ? 10 : 0, 0]
+    const quads = [
+      [0, 2, 3, 1],
+      [4, 5, 7, 6],
+      [0, 1, 5, 4],
+      [1, 3, 7, 5],
+      [3, 2, 6, 7],
+      [2, 0, 4, 6],
+    ]
+    const sheet = quads.flatMap(([a, b, c, d]) => [
+      [...corner(a!), ...corner(b!), ...corner(c!)],
+      [...corner(a!), ...corner(c!), ...corner(d!)],
+    ])
+    const files: Record<string, Uint8Array> = { holey: stl(tris), flat: stl(sheet) }
+    const assets: AssetResolver = async (id) => files[id]!
+    const mesh = (assetId: string): MeshInput => ({
+      id: 'm',
+      kind: 'meshBody',
+      source: { type: 'asset', assetId },
+    })
+    const scene = await kernel.scene(pendant(mesh('holey')), { assets })
+    expect(scene.evaluation.diagnostics.map((d) => d.code)).toContain('mesh.resurfaced')
+    expect(
+      scene.nodes.get('m')!.bodies[0]!.solid.triangles(QUALITY.draft).indices.length / 3,
+    ).toBeLessThan(40_000)
+    const flat = await kernel.scene(pendant(mesh('flat')), { assets })
+    expect(flat.evaluation.diagnostics[0]!.message).toMatch(/does not enclose a volume/)
   })
 })
 
@@ -403,6 +602,51 @@ describe('pave', () => {
     expect(ice.additions).toHaveLength(1)
     expect(ice.additions[0]!.afterCuts).toBe(true)
     for (const part of scene.parts) expect(edgeTopology(part.fused!.triangles()).open).toBe(0)
+  })
+
+  it('keeps the margin on a body without a border, and seats that never break through', async () => {
+    const disc: NodeInput = {
+      id: 'body',
+      kind: 'vectorBody',
+      source: { type: 'shape', shape: 'circle' },
+      height: 20,
+      thickness: 2,
+      bevel: 'flat',
+    }
+    const c = iced(disc, { sizeMax: 1.8, sizeMin: 1, margin: 0.35 })
+    const draft = await kernel.evaluate(c.design)
+    const stones = draft.stones.filter((s) => s.nodeId === 'ice')
+    expect(stones.length).toBeGreaterThan(50)
+    // The seat-wall rule (0.4 mm) wins over a smaller margin.
+    for (const s of stones)
+      expect(10 - Math.hypot(s.matrix[12]!, s.matrix[14]!)).toBeGreaterThanOrEqual(
+        s.dims.width / 2 + 0.4 - 0.005,
+      )
+    const scene = await kernel.scene(c.design, { detail: 'production' })
+    expect(scene.parts).toHaveLength(1)
+    // Blind holes: the plate gains no tunnels through to its back.
+    expect(scene.parts[0]!.fused!.manifold().genus()).toBe(0)
+    expect(scene.evaluation.diagnostics.map((d) => d.code)).not.toContain('seat.wall')
+  })
+
+  it('shares the metal of a plate paved on both faces, leaving no loose beads', async () => {
+    const plate = (thickness: number): NodeInput => ({
+      id: 'body',
+      kind: 'vectorBody',
+      source: { type: 'shape', shape: 'circle' },
+      height: 16,
+      thickness,
+      bevel: 'flat',
+    })
+    // Too thin for seats from both sides: no stones, and a warning rather than a failure.
+    const thin = await kernel.evaluate(iced(plate(1.2), { region: { type: 'all' } }).design)
+    expect(thin.stones.filter((s) => s.nodeId === 'ice')).toHaveLength(0)
+    expect(thin.diagnostics.map((d) => d.code)).toContain('pave.empty')
+    const c = iced(plate(3), { region: { type: 'all' } })
+    const scene = await kernel.scene(c.design, { detail: 'production' })
+    expect(scene.evaluation.stones.filter((s) => s.nodeId === 'ice').length).toBeGreaterThan(50)
+    expect(scene.parts).toHaveLength(1)
+    expect(scene.evaluation.diagnostics.map((d) => d.code)).not.toContain('metal.fragment')
   })
 
   it('warns instead of failing when the stones cannot fit', async () => {

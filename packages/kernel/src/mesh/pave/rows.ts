@@ -6,7 +6,7 @@
  * hugging the rim of a heart, are what setters lay by hand and what a honeycomb grown from the
  * middle cannot give where the region is only a few stones wide.
  */
-import { add, cross, dot, normalize, scale, sub, type Vec3 } from '../../geometry/vec'
+import { add, cross, dot, normalize, scale, type Vec3 } from '../../geometry/vec'
 import type { PaveSurface } from './surface'
 
 export interface LevelWalk {

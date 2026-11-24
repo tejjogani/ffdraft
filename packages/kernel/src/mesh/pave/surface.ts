@@ -111,6 +111,20 @@ export class PaveSurface {
     return { sample: s, p: sub(q, scale(n, dot(sub(q, ps), n))), n }
   }
 
+  /**
+   * Like {@link snap}, but onto the host's actual triangles: a tangent plane lies off a curved
+   * surface (by d²/2R at d from its sample), which a stone's seat absorbs but a 0.3 mm bead,
+   * which must sink into the metal to hold, does not.
+   */
+  snapExact(q: Vec3): { sample: number; p: Vec3; n: Vec3 } | null {
+    const hit = this.snap(q)
+    if (!hit) return null
+    this.bvh ??= new TriangleBvh(this.host)
+    const closest = { d2: 0, x: 0, y: 0, z: 0, triangle: -1 }
+    if (!this.bvh.closest(hit.p[0], hit.p[1], hit.p[2], closest, 2.5 * this.spacing)) return hit
+    return { ...hit, p: [closest.x, closest.y, closest.z] }
+  }
+
   /** Visits samples within `radius` of a point. */
   near(q: Vec3, radius: number, visit: (index: number, d2: number) => void): void {
     this.grid.near(q[0], q[1], q[2], radius, visit)
