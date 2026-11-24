@@ -155,3 +155,25 @@ dimensioned drawings, watertight STL per metal part plus reference stones, STEP 
 list and bill of materials, a transparent cost estimate, a manufacturability report against
 editable thresholds, renders, and a manifest that records units, volumes, weights and that
 geometry is nominal (the caster compensates for shrinkage).
+
+## Roadmap notes
+
+**Order of work.** The core engine comes first: the geometry kernel and the CAD workspace are
+finished and independently tested (every template, parameter fuzzing, visual inspection,
+watertight exports, performance) before the breadth features — ideation, brand models,
+publishing — are built on top of them.
+
+**Teams.** Organisations, members, roles, invitations and per-organisation isolation exist in
+the server. Still to do: invitation email and the accept flow in the studio, a members page that
+manages seats and guests (a manufacturer sees only the production packages shared with them),
+presence and live cursors on a piece (the op log already orders concurrent edits), and comments.
+
+**Sign in with Diaex.** One Diaex connection should be both identity and sourcing: "Continue
+with Diaex" on the sign-in page, and the same grant used to match stones and build carts. Diaex
+authenticates with Firebase, which is not itself an OAuth provider, so Diaex needs a small
+authorisation-code + PKCE endpoint that issues a signed identity token (subject, email, name,
+organisation, KYC level) and a scoped partner token — the first item of the hand-off checklist
+in [`research/07-sourcing.md`](./research/07-sourcing.md). Pavé then treats Diaex as a generic
+OpenID provider in Better Auth, links by verified email on first sign-in, and maps the Diaex
+organisation to a Pavé organisation. Until that exists the two accounts stay separate and
+sourcing uses deep links.
