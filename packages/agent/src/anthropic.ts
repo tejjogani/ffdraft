@@ -361,6 +361,17 @@ export function mapError(err: unknown, ctx: { model: string; aborted?: boolean }
   }
 }
 
+/** The API refused the request as malformed (400): a feature it does not take, or retention. */
+export const isRequestRejected = (err: unknown): boolean => err instanceof BadRequestError
+
+/**
+ * A stream that broke off (the connection dropped mid-answer) or a tool input the SDK could not
+ * parse: worth asking again. Errors the API answered with are not.
+ */
+export const isStreamBreak = (err: unknown): boolean =>
+  !(err instanceof APIUserAbortError) &&
+  (err instanceof APIConnectionError || !(err instanceof APIError))
+
 // ── The client ───────────────────────────────────────────────────────────────────────────────
 
 export interface ClientOptions {

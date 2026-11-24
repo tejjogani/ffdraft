@@ -15,6 +15,7 @@
  * Until a section is filled in, its commands answer 501 and `session.get` reports them absent.
  */
 import type { CreateAppOptions } from './app'
+import { type AssistantParts, createAssistant } from './assistant'
 import { createEngines, enginesConfigFromEnv } from './engines'
 import type { Runtime } from './runtime'
 import type { Services } from './services'
@@ -30,5 +31,13 @@ export function servicesFromEnv(env: NodeJS.ProcessEnv, runtime: Runtime): Parti
 
 /** The options `main.ts` passes to `createApp`. */
 export function compose(env: NodeJS.ProcessEnv = process.env): CreateAppOptions {
-  return { services: (runtime) => servicesFromEnv(env, runtime) }
+  let assistant: AssistantParts | null = null
+  return {
+    services: (runtime) => {
+      // ── Assistant: Claude with the key from .env or Settings, AI; registered while a key exists.
+      assistant = createAssistant(runtime, { env })
+      return { ...servicesFromEnv(env, runtime), ...assistant.services }
+    },
+    routes: (app, _runtime, withCtx) => assistant?.routes(app, withCtx),
+  }
 }

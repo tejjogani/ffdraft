@@ -68,6 +68,8 @@ export interface CommandDef<I extends z.ZodType = z.ZodType, O extends z.ZodType
    * anything destructive or that spends money.
    */
   tool?: true | { confirm: true }
+  /** Input fields that are secrets (an API key): never written to the audit log. */
+  secret?: readonly string[]
 }
 
 type ToolFlag = CommandDef['tool']
@@ -92,6 +94,77 @@ const tierModels = z.object({
   standard: z.enum(ASSISTANT_MODELS).nullable(),
   light: z.enum(ASSISTANT_MODELS).nullable(),
 })
+
+/** USD per million tokens for one model, as the settings screen shows them. */
+const ModelPriceSchema = z.object({
+  input: z.number(),
+  output: z.number(),
+  cacheRead: z.number(),
+  cacheWrite: z.number(),
+})
+
+/**
+ * How the assistant is set up for the organisation. The API key itself never leaves the server:
+ * only where it comes from and its last four characters (for owners and admins).
+ */
+export const AssistantSetupSchema = z.object({
+  /** A key is available, so conversations can start. */
+  configured: z.boolean(),
+  key: z.object({
+    /** `env`: ANTHROPIC_API_KEY in apps/server/.env, which wins and cannot be edited here. */
+    source: z.enum(['env', 'settings', 'none']),
+    /** The key's last four characters; null without a key or for members who are not admins. */
+    last4: z.string().nullable(),
+    /** Whether Save and Remove apply (not while the .env key is in force, nor in test mode). */
+    editable: z.boolean(),
+    updatedAt: z.string().nullable(),
+  }),
+  /** A scripted test model stands in for Claude (PAVE_ASSISTANT=scripted:…); never in normal use. */
+  scripted: z.boolean(),
+  defaultTier: z.object({
+    tier: z.enum(ASSISTANT_TIERS),
+    source: z.enum(['env', 'settings', 'default']),
+  }),
+  tiers: z.array(
+    z.object({
+      tier: z.enum(ASSISTANT_TIERS),
+      label: z.string(),
+      blurb: z.string(),
+      model: z.enum(ASSISTANT_MODELS),
+      modelLabel: z.string(),
+      /** `env`: set by PAVE_ASSISTANT_MODEL_<TIER> in apps/server/.env, which wins over settings. */
+      source: z.enum(['env', 'settings', 'default']),
+      price: ModelPriceSchema,
+      /** A rough cost of a typical design run on this model. */
+      typicalRunUsd: z.number(),
+    }),
+  ),
+  /** Every model a tier may point at, with its price. */
+  models: z.array(
+    z.object({
+      id: z.enum(ASSISTANT_MODELS),
+      label: z.string(),
+      price: ModelPriceSchema,
+      /** Fable 5.2: the Anthropic organisation must keep 30-day data retention. */
+      needsRetention: z.boolean(),
+    }),
+  ),
+  /** Names of the .env variables in force (values are not shown). */
+  envOverrides: z.array(z.string()),
+  /** .env values that were set but not understood, in plain words; they are ignored. */
+  warnings: z.array(z.string()),
+  /** This calendar month's AI spend (UTC); null for members who are not admins. */
+  monthSpendUsd: z.number().nullable(),
+})
+export type AssistantSetup = z.infer<typeof AssistantSetupSchema>
+
+export const KEY_CHECK_CODES = [
+  'invalid',
+  'forbidden',
+  'unreachable',
+  'rate_limited',
+  'error',
+] as const
 
 /** What a paid generation will cost before it is confirmed. */
 export const EstimateSchema = z.object({
@@ -1109,6 +1182,45 @@ export const commands = {
       note: z.string().max(2000).optional(),
     }),
     output: ok,
+  }),
+
+  // ── Assistant setup: never tools, so neither the model nor MCP can reach them ──────────────
+  'assistant.setup.get': def({
+    description:
+      'How the assistant is set up: whether a Claude API key is available and where it comes from, each tier’s model and price, and any apps/server/.env overrides.',
+    kind: 'query',
+    input: none,
+    output: AssistantSetupSchema,
+  }),
+  'assistant.key.set': def({
+    description:
+      'Save the organisation’s Claude API key on the server (encrypted). It takes effect at once. Refused while ANTHROPIC_API_KEY is set in apps/server/.env.',
+    kind: 'mutation',
+    role: 'admin',
+    secret: ['apiKey'],
+    input: z.object({ apiKey: z.string().trim().min(20).max(500) }),
+    output: AssistantSetupSchema,
+  }),
+  'assistant.key.test': def({
+    description:
+      'Check a Claude API key with Claude’s free Models API: the key given, or else the one in use. Says in plain words what is wrong, and which tier models the key can use.',
+    kind: 'query',
+    role: 'admin',
+    secret: ['apiKey'],
+    input: z.object({ apiKey: z.string().trim().min(20).max(500).optional() }),
+    output: z.object({
+      ok: z.boolean(),
+      code: z.enum(KEY_CHECK_CODES).nullable(),
+      message: z.string(),
+      models: z.array(z.enum(ASSISTANT_MODELS)),
+    }),
+  }),
+  'assistant.key.remove': def({
+    description: 'Remove the organisation’s saved Claude API key. The assistant turns off at once.',
+    kind: 'mutation',
+    role: 'admin',
+    input: none,
+    output: AssistantSetupSchema,
   }),
 
   // ── Usage ─────────────────────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { roleAllows } from '@pave/schema'
+import { type Message, roleAllows } from '@pave/schema'
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import type { Ctx } from '../context'
 import * as t from '../db/schema'
@@ -28,6 +28,24 @@ async function readableRun(ctx: Ctx, id: string) {
   return run
 }
 
+/**
+ * A message as the studio reads it: photos sent to the model are stored inline (the model must
+ * get the same bytes on every turn), but the studio shows them from their assets, so their data
+ * is left out here to keep the conversation light.
+ */
+function forStudio(m: Message): Message {
+  if (!m.content.some((b) => b.type === 'image')) return m
+  return {
+    ...m,
+    content: m.content.map((b) => {
+      const source = b.source as { type?: string; media_type?: string } | undefined
+      return b.type === 'image' && source?.type === 'base64'
+        ? { ...b, source: { type: 'base64', media_type: source.media_type, data: '' } }
+        : b
+    }),
+  }
+}
+
 /** Runs are steered (approved, stopped) only by the person they act for. */
 async function ownRun(ctx: Ctx, id: string) {
   const run = await getRun(ctx, id)
@@ -35,7 +53,26 @@ async function ownRun(ctx: Ctx, id: string) {
   return run
 }
 
-export const assistant: HandlerGroup<'threads' | 'runs' | 'client' | 'traces'> = {
+export const assistant: HandlerGroup<'threads' | 'runs' | 'client' | 'traces' | 'assistant'> = {
+  // Setup works without a key (that is how one is entered); the key itself never comes back.
+  'assistant.setup.get': async (ctx) =>
+    ctx.services
+      .get('assistantSetup')
+      .get(serviceContext(ctx), { admin: roleAllows(ctx.role, 'admin') }),
+
+  'assistant.key.set': async (ctx, { apiKey }) => {
+    if (ctx.actor.type !== 'user') throw forbidden('Only a person can set the API key')
+    return ctx.services.get('assistantSetup').setKey(apiKey, serviceContext(ctx))
+  },
+
+  'assistant.key.test': async (ctx, { apiKey }) =>
+    ctx.services.get('assistantSetup').testKey(apiKey ?? null, serviceContext(ctx)),
+
+  'assistant.key.remove': async (ctx) => {
+    if (ctx.actor.type !== 'user') throw forbidden('Only a person can remove the API key')
+    return ctx.services.get('assistantSetup').removeKey(serviceContext(ctx))
+  },
+
   'threads.list': async (ctx, input) => {
     const rows = await ctx.repo.threads.many({
       where: and(
@@ -59,7 +96,7 @@ export const assistant: HandlerGroup<'threads' | 'runs' | 'client' | 'traces'> =
     ])
     return {
       thread: toThread(thread),
-      messages: messages.map(toMessage),
+      messages: messages.map((m) => forStudio(toMessage(m))),
       run: run ? toRun(run) : null,
     }
   },

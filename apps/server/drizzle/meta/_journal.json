@@ -50,6 +50,13 @@
       "when": 1795548573339,
       "tag": "0006_drop_assistant_model",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1795550547253,
+      "tag": "0007_assistant_key",
+      "breakpoints": true
     }
   ]
 }

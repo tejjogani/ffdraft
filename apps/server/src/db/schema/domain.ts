@@ -70,6 +70,21 @@ export const orgSettings = pgTable('org_settings', {
   updatedAt: at('updated_at'),
 })
 
+/**
+ * The organisation's Claude API key, sealed with AES-256-GCM under a key derived from the
+ * server's auth secret (which never enters the database), so a database file, dump or backup
+ * alone does not give the key away. One row per organisation.
+ */
+export const assistantKey = pgTable('assistant_key', {
+  orgId: orgId().primaryKey(),
+  /** base64(iv ‖ tag ‖ ciphertext). */
+  sealed: text('sealed').notNull(),
+  /** Shown to owners and admins so they can tell keys apart. */
+  last4: text('last4').notNull(),
+  updatedBy: text('updated_by'),
+  updatedAt: at('updated_at'),
+})
+
 export const collection = pgTable(
   'collection',
   {

@@ -365,11 +365,29 @@ export interface AssistantService extends Service {
   /** Completes a pending client-tool request; the first answer wins. */
   respond(input: CommandParsedInput<'client.respond'>, sctx: ServiceContext): Promise<void>
   /**
+   * Whether this organisation can use the assistant now (it has a key). The service is shared by
+   * every organisation of the server, so `session.get` asks this for the caller's one.
+   */
+  available?(orgId: string): Promise<boolean>
+  /**
    * Called at boot for each run left `running` or `awaiting-approval`, as the run's user: fail
    * the running ones as `interrupted` and keep waiting on approvals. Without it, running runs
    * are failed as interrupted and waiting ones stay waiting.
    */
   resume?(run: Run, sctx: ServiceContext): Promise<void>
+}
+
+/**
+ * The assistant's setup (its Claude API key and tiers), for `assistant.setup.get` and
+ * `assistant.key.*`. Registered whether or not there is a key, so a key can be entered in the app;
+ * the role checks are the commands' own (owners and admins change the key).
+ */
+export interface AssistantSetupService extends Service {
+  get(sctx: ServiceContext, opts: { admin: boolean }): Promise<CommandOutput<'assistant.setup.get'>>
+  setKey(apiKey: string, sctx: ServiceContext): Promise<CommandOutput<'assistant.setup.get'>>
+  /** The key given, or else the one in use. */
+  testKey(apiKey: string | null, sctx: ServiceContext): Promise<CommandOutput<'assistant.key.test'>>
+  removeKey(sctx: ServiceContext): Promise<CommandOutput<'assistant.setup.get'>>
 }
 
 export type MeshJobPatch = Partial<
@@ -450,6 +468,7 @@ export interface Services {
   onModel: OnModelService
   production: ProductionService
   assistant: AssistantService
+  assistantSetup: AssistantSetupService
   mesh3d: Mesh3DService
   freeform: FreeformService
   vision: VisionService
@@ -468,7 +487,9 @@ const NOT_CONFIGURED: Record<ServiceName, string> = {
   renderEngine: 'This server cannot look for a render engine.',
   onModel: 'No on-model imaging provider is configured on this server.',
   production: 'No production packager is configured on this server.',
-  assistant: 'The assistant is not configured on this server.',
+  assistant:
+    'The assistant needs a Claude API key. An owner or admin can add one in Settings, AI (or set ANTHROPIC_API_KEY in apps/server/.env).',
+  assistantSetup: 'This server has no assistant, so there is no key to set up.',
   mesh3d: 'No image-to-3D provider is configured on this server.',
   freeform: 'Picture-to-jewelry analysis is not available on this server.',
   vision: 'No vision model is configured on this server.',
@@ -504,6 +525,12 @@ const DEFAULTS: Services = {
     decide: missing('assistant'),
     cancel: missing('assistant'),
     respond: missing('assistant'),
+  },
+  assistantSetup: {
+    get: missing('assistantSetup'),
+    setKey: missing('assistantSetup'),
+    testKey: missing('assistantSetup'),
+    removeKey: missing('assistantSetup'),
   },
   mesh3d: { estimate: missing('mesh3d'), submit: missing('mesh3d'), cancel: missing('mesh3d') },
   freeform: { analyze: missing('freeform') },
@@ -546,6 +573,15 @@ export class ServiceRegistry {
   register<K extends ServiceName>(name: K, impl: Services[K]): void {
     this.#impls[name] = impl
     this.#registered.add(name)
+  }
+
+  /**
+   * Puts the refusing default back, e.g. the assistant once its last API key is removed. Disposal
+   * stays with the caller, which may register the same implementation again later.
+   */
+  unregister(name: ServiceName): void {
+    ;(this.#impls as Record<ServiceName, unknown>)[name] = DEFAULTS[name]
+    this.#registered.delete(name)
   }
 
   get<K extends ServiceName>(name: K): Services[K] {

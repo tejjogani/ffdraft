@@ -29,6 +29,7 @@ export class Repo extends OrgScope {
   }
 
   readonly settings = this.scope(t.orgSettings)
+  readonly assistantKeys = this.scope(t.assistantKey)
   readonly collections = this.scope(t.collection)
   readonly pieces = this.scope(t.piece)
   readonly changes = this.scope(t.designChange)

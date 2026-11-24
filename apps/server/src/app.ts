@@ -68,6 +68,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<PaveSer
       services: new ServiceRegistry(typeof options.services === 'function' ? {} : options.services),
       events: new EventBus(),
       local,
+      secret,
     })
     if (typeof options.services === 'function')
       for (const [name, impl] of Object.entries(options.services(runtime)) as [

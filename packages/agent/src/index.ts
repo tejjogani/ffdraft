@@ -5,6 +5,7 @@
 export * from './describe'
 export * from './events'
 export * from './feedback'
+export * from './gate'
 export { hash } from './hash'
 export * from './model'
 export * from './pricing'

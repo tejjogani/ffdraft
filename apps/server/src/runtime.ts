@@ -1,3 +1,4 @@
+import { hkdfSync } from 'node:crypto'
 import type { Actor, CommandInput, CommandName, CommandOutput } from '@pave/schema'
 import type { BlobStore } from './assets/blob-store'
 import type { Auth } from './auth/auth'
@@ -5,6 +6,7 @@ import { effectiveRole } from './auth/roles'
 import type { Config } from './config'
 import type { Ctx } from './context'
 import type { Database } from './db/client'
+import * as t from './db/schema'
 import { AppError, forbidden } from './errors'
 import type { EventBus } from './events'
 import { recover, type Unfinished, unfinished } from './recovery'
@@ -22,6 +24,8 @@ export interface RuntimeDeps {
   events: EventBus
   /** Local mode's single identity; null in accounts mode. */
   local: { userId: string; orgId: string } | null
+  /** The auth secret; keys for sealing stored secrets are derived from it. */
+  secret: string
 }
 
 type Membership = Awaited<ReturnType<AccountRepo['memberships']>>[number]
@@ -44,8 +48,10 @@ export class Runtime {
   readonly events: EventBus
   readonly local: RuntimeDeps['local']
   readonly #database: Database
+  readonly #secret: string
 
   constructor(deps: RuntimeDeps) {
+    this.#secret = deps.secret
     this.config = deps.config
     this.auth = deps.auth
     this.blobs = deps.blobs
@@ -95,6 +101,22 @@ export class Runtime {
    */
   recover(): Promise<void> {
     return recover(this, this.#database.db)
+  }
+
+  /**
+   * A 32-byte key for sealing a stored secret, derived from the auth secret (HKDF-SHA256) for one
+   * purpose, so the auth secret itself is never used as a cipher key and never leaves here.
+   */
+  deriveKey(purpose: string): Buffer {
+    return Buffer.from(hkdfSync('sha256', this.#secret, 'pave', purpose, 32))
+  }
+
+  /** Organisations that saved a Claude API key — system scope, for the assistant's boot only. */
+  async assistantKeyOrgs(): Promise<string[]> {
+    const rows = await this.#database.db
+      .select({ orgId: t.assistantKey.orgId })
+      .from(t.assistantKey)
+    return rows.map((r) => r.orgId)
   }
 
   /** The context for an HTTP request: the local identity, or the Better Auth session's user. */

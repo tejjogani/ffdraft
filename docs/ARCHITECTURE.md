@@ -66,9 +66,9 @@ the Home page as the starting point ("What are we making?").
 | `packages/render` | Material library, looks, scene resolution, three.js materials (incl. the gem shader), Blender job runner |
 | `packages/sourcing` | Stone and metal requirements from CAD; marketplace providers (Diaex first) |
 | `packages/production` | Drawings, bill of materials, costing, manufacturability report, the bundle |
-| `packages/agent` | The assistant: tools from the registry, the frozen prompt and skills, model tiers and prices, the run reducer; `./anthropic` (server only) builds Claude requests and adapts the SDK stream. Run loop and MCP server to come |
+| `packages/agent` | The assistant: tools from the registry, the frozen prompt and skills, model tiers and prices, the run reducer; the gate's pure rules (run caps, rights, loop breaker, human-edit overlap); `./anthropic` (server only) builds Claude requests and adapts the SDK stream. MCP server to come |
 | `packages/ui` | Design tokens and components |
-| `apps/server` | Hono API: auth, tenancy, command handlers, assets, usage ledger, traces, jobs |
+| `apps/server` | Hono API: auth, tenancy, command handlers, assets, usage ledger, traces, jobs; `src/assistant` runs the assistant (durable run loop, live-run driver and run event stream, approvals, client-tool bridge, feedback hook, the Claude API key sealed per organisation and registered at runtime, tiers) |
 | `apps/studio` | The application (Vite + React); also served by the server as a single binary |
 | `apps/desktop` | Electron shell: starts the local server and opens a window on it |
 | `workers/render` | Python + `bpy`: the fixed Blender runner |
