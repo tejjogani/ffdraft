@@ -5,8 +5,10 @@ info:
   summary: Stone search, sets, availability, holds and events for partner apps such as Pavé.
   description: |
     Proposal of 24 November 2026; nothing is built. The prose contract is diaex-partner-api.md in the same
-    folder, and the two must say the same thing. This file covers v1 and v1.1. Every operation carries
-    `x-phase` (v1 or v1.1). The v2 hand-off is described in the prose contract only.
+    folder, and the two must say the same thing. When they disagree, the prose wins on meaning and this file wins
+    on field limits (lengths, counts, ranges, patterns, defaults); any difference is a bug to report and fix in
+    both. This file covers v1 and v1.1. Every operation carries `x-phase` (v1 or v1.1). The v2 hand-off is
+    described in the prose contract only.
 
     Rules that apply everywhere:
     - Times are UTC ISO 8601 with Z, to the second.
@@ -14,7 +16,13 @@ info:
     - Money is a decimal string with exactly 2 decimals and an ISO 4217 currency. A hidden price is null.
     - Requests with an unknown field are refused with 422. Clients must ignore unknown response fields and treat
       unknown enum values as "other".
-    - Every write takes an `Idempotency-Key` header. Searches write nothing and take none.
+    - Fixed lists that may grow are written as `x-extensible-enum`, not `enum`: a client must not refuse a reply
+      for a value it does not know. An unknown availability or hold status means not pickable.
+    - Every write takes an `Idempotency-Key` header, kept 24 hours per link, method and path. A replay answers the
+      first reply exactly as it was. Exempt: /oauth/token and /oauth/revoke. Searches write nothing and take none.
+    - Every reply or delivery that carries a price counts toward the company's daily priced-stone quota. Once it
+      is used, replies go on without prices (prices_hidden_reason quota_exceeded), never a 429.
+    - Stone ids are at most 64 characters and are percent-encoded in paths, dots included.
     - Every reply carries `x-request-id`. Errors use one shape (`Error`), except the OAuth token endpoint.
     - A call with no `Authorization` header is signed out: no price, limits per address.
 servers:
@@ -87,6 +95,7 @@ paths:
         '413': { $ref: '#/components/responses/TooLarge' }
         '422': { $ref: '#/components/responses/Invalid' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
+        '500': { $ref: '#/components/responses/ServerError' }
         '503': { $ref: '#/components/responses/Unavailable' }
 
   /sets/search:
@@ -240,9 +249,16 @@ paths:
                 token_type_hint: { type: string, enum: [access_token, refresh_token] }
       responses:
         '200':
-          description: Revoked, or already revoked or unknown. No body.
+          description: Revoked, or already revoked or unknown. No body. Takes no Idempotency-Key.
           headers:
             x-request-id: { $ref: '#/components/headers/RequestId' }
+        '400':
+          description: OAuth error (invalid_request, a missing token; RFC 7009 section 2.2.1)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /oauth/token:
     post:
@@ -254,8 +270,10 @@ paths:
         Public client `pave-local` sends `client_id` and `code_verifier`, no secret; its redirect is
         http://127.0.0.1:{any port}/oauth/diaex/callback. Confidential clients (hosted Pavé) authenticate with
         client_secret_basic. `client_credentials` gives an app token with stones:read at the signed_out level only.
-        Refresh tokens are rotated on every use; reusing an old one revokes the whole link. Errors use the OAuth
-        shape (RFC 6749 section 5.2).
+        Refresh tokens are rotated on every use; reusing an old one revokes the whole link, except within a
+        30-second grace window after a refresh (a proposal), when the previous refresh token answers the same new
+        pair. Clients refresh one at a time per link. Takes no Idempotency-Key. Errors use the OAuth shape (RFC 6749
+        section 5.2).
       security:
         - {}
         - clientBasic: []
@@ -282,6 +300,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/OAuthError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /holds:
     post:
@@ -291,7 +311,9 @@ paths:
       summary: Hold 1 to 10 stones for 30 to 120 minutes
       description: |
         Diaex's own priority, not a supplier promise. Verified companies only. Each stone is answered on its own:
-        active, or refused with a reason. At most 10 active holds per company and one active hold per stone.
+        active, or refused with a reason. At most 10 active holds per company and one holder per stone across
+        partner holds and orders, decided in the database. A company cannot hold a stone again during a cool-down
+        after its last hold on it ended (hold_cooldown).
       security:
         - partnerToken: [holds:write]
         - oauth: [holds:write]
@@ -344,6 +366,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /holds/{hold_id}:
     parameters:
@@ -367,11 +390,13 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
     delete:
       tags: [holds]
       operationId: releaseHold
       x-phase: v1.1
-      summary: Release a hold; answers the hold as released also when it had already ended
+      summary: Release a hold; an active hold ends with reason released_by_you, an ended hold is answered unchanged
       security:
         - partnerToken: [holds:write]
         - oauth: [holds:write]
@@ -379,7 +404,7 @@ paths:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '200':
-          description: The released hold
+          description: The hold, ended now or already ended
           headers:
             x-request-id: { $ref: '#/components/headers/RequestId' }
           content:
@@ -390,6 +415,8 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /holds/{hold_id}/extend:
     parameters:
@@ -422,13 +449,15 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /watches:
     post:
       tags: [events]
       operationId: addWatches
       x-phase: v1.1
-      summary: Watch stones so their changes come through the events feed
+      summary: Watch stones so their changes come through the events feed (verified companies only)
       security:
         - partnerToken: [events:read]
         - oauth: [events:read]
@@ -452,6 +481,7 @@ paths:
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Invalid' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
     get:
       tags: [events]
       operationId: listWatches
@@ -474,6 +504,8 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /watches/{stone_id}:
     delete:
@@ -497,6 +529,10 @@ paths:
             x-request-id: { $ref: '#/components/headers/RequestId' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /events:
     get:
@@ -505,8 +541,10 @@ paths:
       x-phase: v1.1
       summary: Changes to watched stones and this link's holds, polled by cursor
       description: |
-        Without `after`: an empty page and a cursor for now. Order by event id, increasing; at least once, so drop
-        ids already seen. Always store `next_cursor`. Events are kept 30 days; an older cursor answers 410.
+        Without `after`: an empty page and a cursor for now. Start in this order: get that cursor and store it, add
+        watches, check availability, then poll from the stored cursor. Order by event id, increasing; at least once,
+        so drop ids already seen. Always store `next_cursor`. Events are kept 30 days; an older cursor answers 410.
+        Prices in events are filled in from the caller's access when read, never when written.
       security:
         - partnerToken: [events:read]
         - oauth: [events:read]
@@ -530,6 +568,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '410': { $ref: '#/components/responses/Gone' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /webhooks:
     post:
@@ -537,6 +576,10 @@ paths:
       operationId: createWebhook
       x-phase: v1.1
       summary: Optional, hosted Pavé only. Register a public https address for signed event deliveries
+      description: |
+        At most 3 per link (409 webhook_limit_reached). The address is checked when registered and again at every
+        delivery: Diaex resolves the name each time, refuses loopback, private, link-local and metadata addresses,
+        connects to the address it checked, follows no redirects, and uses a short timeout and a capped read.
       security:
         - partnerToken: [events:read]
         - oauth: [events:read]
@@ -559,6 +602,8 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
     get:
       tags: [events]
       operationId: listWebhooks
@@ -577,6 +622,8 @@ paths:
               schema: { $ref: '#/components/schemas/WebhookList' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
   /webhooks/{webhook_id}:
     delete:
@@ -588,10 +635,7 @@ paths:
         - partnerToken: [events:read]
         - oauth: [events:read]
       parameters:
-        - name: webhook_id
-          in: path
-          required: true
-          schema: { type: string, pattern: '^whk_[A-Za-z0-9]{1,60}$' }
+        - $ref: '#/components/parameters/WebhookId'
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '204':
@@ -601,6 +645,38 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /webhooks/{webhook_id}/rotate-secret:
+    post:
+      tags: [events]
+      operationId: rotateWebhookSecret
+      x-phase: v1.1
+      summary: Get a new secret; for 24 hours each delivery carries two signatures, old and new
+      security:
+        - partnerToken: [events:read]
+        - oauth: [events:read]
+      parameters:
+        - $ref: '#/components/parameters/WebhookId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The webhook with its new secret, shown only here
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookCreated' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
 
 webhooks:
   event:
@@ -608,9 +684,12 @@ webhooks:
       x-phase: v1.1
       summary: One event, delivered to a registered address (Standard Webhooks signing)
       description: |
-        The body is the same Event the feed returns. Verify `webhook-signature` (v1, base64 HMAC-SHA256 of
-        "{webhook-id}.{webhook-timestamp}.{body}" with the secret) and refuse a timestamp more than 5 minutes off.
-        Diaex retries for 24 hours; the feed stays the record.
+        The body is the same Event the feed returns, with price filled in from the access at this delivery attempt.
+        `webhook-id` equals the event's `id`; drop ids already seen by feed or webhook. Verify `webhook-signature`
+        (v1, base64 HMAC-SHA256 of "{webhook-id}.{webhook-timestamp}.{body}"; the key is the base64-decoded part of
+        the secret after `whsec_`). During a secret change it holds two signatures separated by a space; accept
+        either. Refuse a timestamp more than 5 minutes off. Each event is retried for up to 24 hours; a webhook whose
+        every delivery fails for 3 days is turned off (status disabled). The feed stays the record.
       parameters:
         - { name: webhook-id, in: header, required: true, schema: { type: string } }
         - { name: webhook-timestamp, in: header, required: true, schema: { type: string, pattern: '^[0-9]+$' } }
@@ -676,13 +755,22 @@ components:
       name: Idempotency-Key
       in: header
       required: true
-      description: Kept 24 hours per link. Same key and body answers the first reply again.
+      description: |
+        Kept 24 hours per link, method and path. The same key and body answers the first reply again, exactly as it
+        was. A different body, method or path is 422 idempotency_key_reused; a missing key is 422
+        idempotency_key_missing.
       schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' }
     StoneId:
       name: id
       in: path
       required: true
+      description: Percent-encoded, dots included.
       schema: { $ref: '#/components/schemas/StoneId' }
+    WebhookId:
+      name: webhook_id
+      in: path
+      required: true
+      schema: { type: string, pattern: '^whk_[A-Za-z0-9]{1,60}$' }
     HoldId:
       name: hold_id
       in: path
@@ -715,21 +803,21 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Forbidden:
-      description: insufficient_scope, company_not_verified or access_removed
+      description: insufficient_scope, company_not_verified (holds, watches, events, webhooks) or access_removed
       headers:
         x-request-id: { $ref: '#/components/headers/RequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     NotFound:
-      description: stone_unavailable (with `missing` for locked ids) or not_found
+      description: stone_unavailable (with `missing` for locked ids) or not_found (a hold or webhook)
       headers:
         x-request-id: { $ref: '#/components/headers/RequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Conflict:
-      description: stone_on_memo (with `stones`), locked_unfit (with `differences`), hold_not_extendable or idempotency_in_progress
+      description: stone_on_memo (with `stones`), locked_unfit (with `differences`), hold_not_extendable, idempotency_in_progress or webhook_limit_reached
       headers:
         x-request-id: { $ref: '#/components/headers/RequestId' }
       content:
@@ -750,17 +838,24 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     Invalid:
-      description: invalid_request (with `detail`), requirement_unsupported (with `reason`), idempotency_key_reused or webhook_url_not_public
+      description: invalid_request (with `detail` inside `error`), requirement_unsupported (with `reason`), idempotency_key_missing, idempotency_key_reused or webhook_url_not_public
       headers:
         x-request-id: { $ref: '#/components/headers/RequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
     TooManyRequests:
-      description: rate_limited or daily_quota_exceeded
+      description: rate_limited. A used daily priced-stone quota is not a 429; replies go on without prices.
       headers:
         x-request-id: { $ref: '#/components/headers/RequestId' }
         Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ServerError:
+      description: internal (retryable), or cursor_unavailable (not retryable; a cursor for the next page could not be made)
+      headers:
+        x-request-id: { $ref: '#/components/headers/RequestId' }
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
@@ -776,13 +871,16 @@ components:
     StoneId:
       type: string
       minLength: 1
-      maxLength: 128
-      description: Diaex's public id. Opaque.
+      maxLength: 64
+      description: |
+        Diaex's public id. Opaque. At most 64 characters, the most a ?stone= link opens; Diaex confirms no listed
+        stone has a longer id.
 
     Ref:
       type: string
-      pattern: '^[A-Za-z0-9._:@+-]{1,64}$'
-      description: The partner's own opaque label, echoed back. Never design content.
+      pattern: '^[A-Za-z0-9_-]{1,64}$'
+      description: |
+        The partner's own opaque label, echoed back. Never design content. Pavé sends r_ and 6 to 12 hex characters.
 
     Mm:
       type: number
@@ -806,11 +904,11 @@ components:
       required: [level, prices, markup, prices_hidden_reason]
       properties:
         level: { type: string, enum: [signed_out, not_approved, approved] }
-        prices: { type: boolean }
+        prices: { type: boolean, description: 'False without prices:read, and once the daily quota is used.' }
         markup: { type: boolean, description: Prices are raised by the company's markup. }
         prices_hidden_reason:
           type: [string, 'null']
-          enum: [signed_out, not_verified, scope_missing, null]
+          x-extensible-enum: [signed_out, not_verified, scope_missing, quota_exceeded, null]
 
     Error:
       type: object
@@ -822,7 +920,7 @@ components:
           properties:
             code:
               type: string
-              enum:
+              x-extensible-enum:
                 - bad_cursor
                 - unauthenticated
                 - token_expired
@@ -836,15 +934,17 @@ components:
                 - locked_unfit
                 - hold_not_extendable
                 - idempotency_in_progress
+                - webhook_limit_reached
                 - cursor_expired
                 - body_too_large
                 - invalid_request
                 - requirement_unsupported
+                - idempotency_key_missing
                 - idempotency_key_reused
                 - webhook_url_not_public
                 - rate_limited
-                - daily_quota_exceeded
                 - internal
+                - cursor_unavailable
                 - storage_unavailable
             message: { type: string, description: For people; decide by code. }
             retryable: { type: boolean }
@@ -854,7 +954,7 @@ components:
             reason: { $ref: '#/components/schemas/UnsupportedReason' }
             detail:
               type: array
-              description: Each field and why. Never the value sent.
+              description: Each field and why. Never the value sent. Inside `error`, unlike Diaex's 422 today.
               items:
                 type: object
                 properties:
@@ -874,11 +974,12 @@ components:
 
     UnsupportedReason:
       type: string
-      enum: [parcels_not_listed, material_not_listed, cut_not_listed, colour_not_listed, set_too_large]
+      x-extensible-enum: [parcels_not_listed, material_not_listed, cut_not_listed, colour_not_listed, set_too_large]
 
     AvailabilityStatus:
       type: string
-      enum: [available, memo, on_hold, unavailable, unknown]
+      description: An unknown value means not pickable.
+      x-extensible-enum: [available, memo, on_hold, unavailable, unknown]
 
     Measurements:
       type: object
@@ -932,11 +1033,11 @@ components:
       required: [id, url, shape, shape_group, carat, origin, measurements, certificate, media, availability, price, price_per_carat, etag, updated_at]
       properties:
         id: { $ref: '#/components/schemas/StoneId' }
-        url: { type: string, format: uri, description: Diaex page that opens this stone, in both looks, signed out or in. }
+        url: { type: string, format: uri, description: 'Diaex page that opens this stone, signed out or in. How it opens in the old look is decision D17.' }
         shape: { type: [string, 'null'], description: The supplier's word. }
         shape_group: { type: [string, 'null'] }
         carat: { type: [number, 'null'] }
-        origin: { type: string, enum: [natural, lab] }
+        origin: { type: [string, 'null'], enum: [natural, lab, null], description: Null when Diaex has no stone type. }
         growth: { type: [string, 'null'], enum: [CVD, HPHT, null] }
         color: { type: [string, 'null'] }
         fancy_color: { type: [string, 'null'] }
@@ -947,18 +1048,18 @@ components:
         polish: { type: [string, 'null'] }
         symmetry: { type: [string, 'null'] }
         fluorescence: { type: [string, 'null'] }
-        treatment: { type: string, enum: [TREATED, UNTREATED, UNKNOWN] }
+        treatment: { type: string, enum: [TREATED, UNTREATED, UNKNOWN], description: 'New mapping: Diaex''s null today is UNKNOWN.' }
         measurements: { $ref: '#/components/schemas/Measurements' }
         profile: { $ref: '#/components/schemas/Profile' }
         certificate: { $ref: '#/components/schemas/Certificate' }
         media: { $ref: '#/components/schemas/Media' }
         location: { $ref: '#/components/schemas/Location' }
-        availability: { type: string, enum: [available, memo, on_hold] }
+        availability: { type: string, x-extensible-enum: [available, memo, on_hold], description: An unknown value means not pickable. }
         price: { $ref: '#/components/schemas/NullableMoney' }
         price_per_carat: { $ref: '#/components/schemas/NullableMoney' }
         has_pair: { type: [boolean, 'null'], description: A hint, never a promise. }
         etag: { type: string }
-        updated_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time, description: 'Last change in this caller''s view; a price change moves it only for callers who see prices.' }
 
     Fit:
       type: object
@@ -1159,7 +1260,7 @@ components:
       properties:
         ref: { $ref: '#/components/schemas/Ref' }
         kind: { type: string, enum: [single, matched_set, parcel] }
-        status: { type: string, enum: [matched, none, unsupported, error] }
+        status: { type: string, x-extensible-enum: [matched, none, unsupported, error] }
         reason:
           oneOf:
             - $ref: '#/components/schemas/UnsupportedReason'
@@ -1172,6 +1273,13 @@ components:
             - $ref: '#/components/schemas/StoneSet'
             - type: 'null'
         complete: { type: boolean }
+        capped: { type: boolean, description: matched_set rows only. More than 2,000 candidates were in the window. }
+        stopped: { type: boolean, description: matched_set rows only. The set search ran out of time. }
+        largest_found:
+          description: matched_set rows only.
+          oneOf:
+            - $ref: '#/components/schemas/LargestSet'
+            - type: 'null'
         search_url: { type: [string, 'null'], format: uri }
         error:
           type: [object, 'null']
@@ -1203,7 +1311,7 @@ components:
       properties:
         id: { $ref: '#/components/schemas/StoneId' }
         status: { $ref: '#/components/schemas/AvailabilityStatus' }
-        reason: { type: [string, 'null'], enum: [sold, delisted, null] }
+        reason: { type: [string, 'null'], x-extensible-enum: [sold, delisted, null] }
         held_by_you: { type: boolean, description: Always false in v1. }
         price: { $ref: '#/components/schemas/NullableMoney' }
         price_per_carat: { $ref: '#/components/schemas/NullableMoney' }
@@ -1250,9 +1358,13 @@ components:
 
     Me:
       type: object
-      required: [access, company, link]
+      required: [access, company, link, features]
       properties:
         access: { $ref: '#/components/schemas/Access' }
+        features:
+          type: array
+          description: Optional parts switched on for this server. Empty in v1.
+          items: { type: string, x-extensible-enum: [holds, events, webhooks] }
         company:
           oneOf:
             - $ref: '#/components/schemas/Company'
@@ -1290,10 +1402,27 @@ components:
       properties:
         id: { type: [string, 'null'], description: Null when refused. }
         stone_id: { $ref: '#/components/schemas/StoneId' }
-        status: { type: string, enum: [active, released, expired, refused] }
+        status: { type: string, x-extensible-enum: [active, ended, refused], description: An unknown value means not held. }
         reason:
           type: [string, 'null']
-          enum: [stone_held, stone_on_memo, stone_unavailable, hold_limit_reached, null]
+          description: |
+            Null while active. Refused: stone_held, stone_on_memo, stone_unavailable, hold_limit_reached,
+            hold_cooldown. Ended: released_by_you, expired, stone_sold, stone_delisted, released_by_staff,
+            link_revoked, access_lost.
+          x-extensible-enum:
+            - stone_held
+            - stone_on_memo
+            - stone_unavailable
+            - hold_limit_reached
+            - hold_cooldown
+            - released_by_you
+            - expired
+            - stone_sold
+            - stone_delisted
+            - released_by_staff
+            - link_revoked
+            - access_lost
+            - null
         reference:
           oneOf:
             - $ref: '#/components/schemas/Ref'
@@ -1375,15 +1504,14 @@ components:
 
     EventType:
       type: string
-      enum:
+      x-extensible-enum:
         - stone.price_changed
         - stone.unavailable
         - stone.available
         - stone.memo
         - stone.updated
         - hold.expiring
-        - hold.expired
-        - hold.released
+        - hold.ended
 
     Event:
       type: object
@@ -1400,10 +1528,13 @@ components:
         data:
           type: object
           description: |
-            stone.price_changed: {price, price_per_carat, was_price}, only to callers who see prices.
+            stone.price_changed: {price, price_per_carat, was_price}, filled in from the caller's access when read
+            or delivered, and only to callers who see prices at that moment; with the daily quota used, sent with all
+            three null.
             stone.unavailable: {status: on_hold | unavailable, reason: order_hold | hold | sold | delisted}.
             stone.available: {status: available}. stone.memo: {status: memo}.
-            stone.updated: {fields: [...]}. hold.expiring: {expires_at}. hold.expired, hold.released: {ended_at, reason}.
+            stone.updated: {fields: [...]}. hold.expiring: {expires_at}. hold.ended: {ended_at, reason}, with the
+            Hold's ended reasons.
 
     EventsPage:
       type: object
@@ -1427,11 +1558,13 @@ components:
 
     Webhook:
       type: object
-      required: [id, url, types, created_at]
+      required: [id, url, types, status, disabled_at, created_at]
       properties:
         id: { type: string, pattern: '^whk_' }
         url: { type: string, format: uri }
         types: { type: array, items: { $ref: '#/components/schemas/EventType' } }
+        status: { type: string, x-extensible-enum: [active, disabled], description: Disabled after 3 days in which every delivery failed. }
+        disabled_at: { type: [string, 'null'], format: date-time }
         created_at: { type: string, format: date-time }
 
     WebhookCreated:
