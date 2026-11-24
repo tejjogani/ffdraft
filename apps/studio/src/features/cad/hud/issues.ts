@@ -29,7 +29,7 @@ export function toIssues(ds: readonly Diagnostic[]): Issue[] {
   )
 }
 
-const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /**
  * A kernel message with node ids replaced by the features' names and the "(worst: …)" detail,
@@ -42,7 +42,7 @@ export function readableMessage(message: string, design: Design): string {
   const ids = Object.keys(design.nodes).toSorted((a, b) => b.length - a.length)
   if (!ids.length) return message
   const token = new RegExp(
-    `(stone\\s+)?(["“])?\\b(${ids.map(escape).join('|')})\\b(?::(\\d+))?`,
+    `(stone\\s+)?(["“])?\\b(${ids.map(escapeRegExp).join('|')})\\b(?::(\\d+))?`,
     'gi',
   )
   return message

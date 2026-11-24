@@ -12,8 +12,8 @@ import {
   type NodeKind,
   nodeRefs,
   type Op,
-  ringInnerDiameter,
   type RingSize,
+  ringInnerDiameter,
   variantPatch,
 } from '@pave/schema'
 

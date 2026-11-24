@@ -400,6 +400,7 @@ export class Viewer {
         this.geometries.delete(rev)
       }
 
+    this.schedulePickIndex()
     this.placeShadow(evaluation.report.bounds, evaluation.report.ringInnerDiameter !== undefined)
     this.applyGemQuality()
     this.applyLook()
@@ -439,6 +440,25 @@ export class Viewer {
       if (!done.has(material)) material.dispose()
       done.add(o.geometry).add(material)
     })
+  }
+
+  private indexTimer: ReturnType<typeof setTimeout> | undefined
+
+  /**
+   * Builds picking BVHs for new geometry once the viewport is idle, so the first hover after
+   * an edit does not stall on a large part (unchanged parts keep theirs, see `reuseGeometry`).
+   */
+  private schedulePickIndex(): void {
+    clearTimeout(this.indexTimer)
+    this.indexTimer = setTimeout(() => {
+      const b = this.built
+      if (!b || this.moving) return
+      const run = () => {
+        if (this.built === b) for (const t of [...b.metals, ...b.gems]) indexForPicking(t)
+      }
+      if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 2000 })
+      else run()
+    }, 400)
   }
 
   /** A ring stands on the stage, so it gets a contact shadow; pendants and earrings hang. */
@@ -756,9 +776,7 @@ export class Viewer {
       this.camera,
     )
     const targets = [...b.gems, ...b.metals.filter((m) => m.visible)]
-    for (const t of targets)
-      if (!t.geometry.boundsTree)
-        (t.geometry as unknown as { computeBoundsTree(): void }).computeBoundsTree()
+    for (const t of targets) indexForPicking(t)
     const hit = this.raycaster.intersectObjects(targets, false)[0]
     if (!hit) return null
     if (hit.object instanceof InstancedMesh && hit.instanceId !== undefined) {
@@ -927,6 +945,7 @@ export class Viewer {
     this.disposed = true
     cancelAnimationFrame(this.frame)
     clearTimeout(this.restTimer)
+    clearTimeout(this.indexTimer)
     this.clearOverlay()
     if (this.built) this.release(this.built)
     for (const { geometry } of this.geometries.values()) geometry.dispose()
@@ -975,6 +994,11 @@ function stoneEdges(gems: InstancedMesh): Float32Array[] {
     out.push(placed)
   }
   return out
+}
+
+function indexForPicking(mesh: Mesh): void {
+  if (!mesh.geometry.boundsTree)
+    (mesh.geometry as unknown as { computeBoundsTree(): void }).computeBoundsTree()
 }
 
 function corners(b: Bounds): Vec3[] {

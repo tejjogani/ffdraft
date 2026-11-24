@@ -79,6 +79,8 @@ export interface ViewportPalette {
   select: string
   clayMetal: string
   clayStone: string
+  /** X-ray metal: darker than clay, so a faint, see-through version still reads on the stage. */
+  xrayMetal: string
   /** Technical mode's fill: the page itself, so the piece reads as a drawing in either theme. */
   paper: string
   danger: string
@@ -94,6 +96,7 @@ export function readPalette(el: Element): ViewportPalette {
     danger: v('--danger', '#cf4436'),
     clayMetal: dark ? '#b9b4ab' : '#d9d4cb',
     clayStone: dark ? '#c9d0db' : '#dfe5ee',
+    xrayMetal: dark ? '#d6d1c8' : '#8f8a81',
     paper: v('--bg', dark ? '#1b1b1a' : '#fbfaf8'),
   }
 }
@@ -131,11 +134,11 @@ export function createModeMaterials(p: ViewportPalette): ModeMaterials {
   })
   // Still shaded, so the form reads; faint and without depth, so stones and inner parts show.
   const xray = new MeshStandardMaterial({
-    color: p.clayMetal,
+    color: p.xrayMetal,
     roughness: 0.6,
     metalness: 0,
     transparent: true,
-    opacity: 0.25,
+    opacity: 0.3,
     depthWrite: false,
     side: DoubleSide,
   })

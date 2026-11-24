@@ -4,9 +4,9 @@
  * prefers to read and what their scroll wheel is. Preferences persist; the rest resets when another piece opens.
  */
 import type { RingSizeSystem } from '@pave/schema'
-import type { WheelDevice } from '../../../components/stage/wheel'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { WheelDevice } from '../../../components/stage/wheel'
 
 export type DisplayMode = 'rendered' | 'clay' | 'technical'
 

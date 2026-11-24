@@ -7,9 +7,9 @@ import { type Design, nodeTitle } from '@pave/schema'
 import { Button, Chip, cn, ScrollArea, Switch } from '@pave/ui'
 import { Scale, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useEffect, useMemo } from 'react'
+import { runCommand } from '../../../lib/commands'
 import type { DesignSession } from '../../../lib/design-session/store'
 import { carats, mm } from '../../../lib/format'
-import { runCommand } from '../../../lib/commands'
 import { useWorkspace } from '../state/workspace'
 import { FieldEditContext, useNodeEdit } from './edit'
 import { FieldControl } from './FieldControl'
@@ -49,6 +49,7 @@ export function Inspector({
   // A gesture belongs to the feature it was started on: leaving that feature (or the
   // inspector) ends it as a change rather than leaving it live and unsaved.
   const nodeId = node?.id
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs its cleanup when the inspected feature changes
   useEffect(() => () => session?.commitGesture(), [nodeId, session])
 
   if (!node || !model || !edit) return <>{empty}</>

@@ -137,6 +137,78 @@ await step('display', async () => {
   await page.getByRole('button', { name: 'Rendered', exact: true }).click()
 })
 
+const expect = (ok, what) => {
+  console.log(ok ? 'ok' : 'FAILED', what)
+  results.checks ??= {}
+  results.checks[what] = ok
+}
+const camera = () =>
+  page.evaluate(() => window.paveViewer.camera.position.toArray().map((v) => +v.toFixed(2)))
+const selectedText = () => page.locator('main[data-region=viewport] .sr-only').textContent()
+
+await step('navigation', async () => {
+  await open(solitaire)
+  const box = await page.locator('canvas').boundingBox()
+  const before = await camera()
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 160, box.y + box.height / 2, { steps: 4 })
+  // Two frames: a camera move must be drawn while the gesture is still going on.
+  await page.evaluate(
+    () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+  )
+  const during = await camera()
+  await page.mouse.up()
+  expect(JSON.stringify(before) !== JSON.stringify(during), 'a drag moves the camera at once')
+  await page.locator('canvas').focus()
+  await page.keyboard.press('4')
+  await page.waitForTimeout(1200)
+  const [x, y, z] = await camera()
+  expect(Math.abs(x) < 0.5 && Math.abs(z) < 0.5 && y > 0, 'key 4 reaches the top view')
+  // Keyboard only: F6 cycles to the 3D view, whose arrow keys orbit.
+  await page.keyboard.press('1')
+  await page.locator('body').click({ position: { x: 4, y: 4 } })
+  let onCanvas = false
+  for (let i = 0; i < 4 && !onCanvas; i++) {
+    await page.keyboard.press('F6')
+    onCanvas = await page.evaluate(() => document.activeElement?.tagName === 'CANVAS')
+  }
+  expect(onCanvas, 'F6 reaches the 3D view')
+  const c0 = await camera()
+  await page.keyboard.press('ArrowLeft')
+  await page.waitForTimeout(800)
+  expect(JSON.stringify(c0) !== JSON.stringify(await camera()), 'arrow keys orbit the 3D view')
+})
+
+await step('toolbar', async () => {
+  await open(solitaire)
+  await tree('Band').click()
+  for (const name of ['Fit to view', 'Clay', 'X-ray metal', 'X-ray metal', 'Rendered'])
+    await page.getByRole('button', { name, exact: true }).click()
+  expect((await selectedText())?.includes('Band'), 'toolbar clicks keep the selection')
+})
+
+await step('chips', async () => {
+  // Each next-step chip, on a fresh copy of a template it is offered on, must not end in red.
+  for (const [templateId, label] of [
+    ['solitaire', 'Pavé the band'],
+    ['name-pendant', 'Ice it out'],
+  ]) {
+    const piece = await rpc('pieces.create', { templateId, title: `Chip: ${label}` })
+    await open(piece.id)
+    const rows = await page.getByRole('treeitem').count()
+    await page.getByRole('button', { name: label, exact: true }).click()
+    await page.waitForFunction((n) => document.querySelectorAll('[role=treeitem]').length > n, rows)
+    await page.waitForFunction(() => !document.body.innerText.includes('Updating…'), null, {
+      timeout: 120000,
+    })
+    const errors = await page.evaluate(
+      () => window.paveViewer.evaluation.diagnostics.filter((d) => d.level === 'error').length,
+    )
+    expect(errors === 0, `"${label}" leaves no problems`)
+  }
+})
+
 await step('select', async () => {
   await open(halo)
   await tree('Band').click()

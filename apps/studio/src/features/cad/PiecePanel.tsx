@@ -65,16 +65,20 @@ export function PiecePanel({
                   key={m.material}
                   label={m.material in METALS ? METALS[m.material as MetalId].label : m.material}
                 >
-                  ≈ {grams(m.massG)}
+                  ≈ <Num>{grams(m.massG)}</Num>
                 </Fact>
               ))}
-              <Fact label="Size">{size.map((v) => v.toFixed(1)).join(' × ')} mm</Fact>
+              <Fact label="Size">
+                <Num>{size.map((v) => v.toFixed(1)).join(' × ')}</Num> mm
+              </Fact>
               {r.ringInnerDiameter !== undefined && (
-                <Fact label="Finger">⌀ {mm(r.ringInnerDiameter)}</Fact>
+                <Fact label="Finger">
+                  ⌀ <Num>{mm(r.ringInnerDiameter)}</Num>
+                </Fact>
               )}
               {r.stoneCount > 0 && (
                 <Fact label="Stones">
-                  {plural(r.stoneCount, 'stone')} · {carats(r.caratTotal)}
+                  <Num>{carats(r.caratTotal)}</Num> · {plural(r.stoneCount, 'stone')}
                 </Fact>
               )}
             </dl>
@@ -105,11 +109,16 @@ export function PiecePanel({
   )
 }
 
+/** Words in the interface face, digits in mono (as in the facts strip over the view). */
 function Fact({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <>
       <dt className="truncate text-fg-muted">{label}</dt>
-      <dd className="font-mono text-xs leading-5 text-fg tabular">{children}</dd>
+      <dd className="text-fg">{children}</dd>
     </>
   )
 }
+
+const Num = ({ children }: { children: React.ReactNode }) => (
+  <span className="font-mono text-xs tabular">{children}</span>
+)

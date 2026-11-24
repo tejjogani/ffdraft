@@ -370,6 +370,13 @@ function ImageDoor({ onImport }: { onImport: EmptyDesignProps['onImport'] }) {
 
 const FAMILIES = [...new Set(TEMPLATES.map((t) => t.family))]
 
+/** Each template photographed once (`e2e/template-covers.ts`), by template id. */
+const COVERS: Record<string, string> = Object.fromEntries(
+  Object.entries(
+    import.meta.glob<string>('./covers/*.webp', { eager: true, query: '?url', import: 'default' }),
+  ).map(([path, url]) => [path.replace(/^.*\/|\.webp$/g, ''), url]),
+)
+
 function TemplateGrid({ busy, onPick }: { busy: string | null; onPick(t: Template): void }) {
   return (
     <div className="flex flex-col gap-5">
@@ -387,15 +394,27 @@ function TemplateGrid({ busy, onPick }: { busy: string | null; onPick(t: Templat
                 onClick={() => onPick(t)}
                 className="group flex flex-col items-start gap-2 rounded-md bg-bg p-3 text-left shadow-[0_0_0_1px_var(--line)] transition-shadow duration-120 hover:shadow-[0_0_0_1px_var(--line-strong),var(--shadow-sm)] disabled:opacity-50"
               >
-                <span className="stage flex h-16 w-full items-center justify-center rounded-sm">
-                  {busy === t.id ? (
-                    <Spinner />
+                <span className="stage relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-sm">
+                  {COVERS[t.id] ? (
+                    <img
+                      src={COVERS[t.id]}
+                      alt=""
+                      loading="lazy"
+                      className="size-full object-contain transition-transform duration-200 group-hover:scale-[1.03] motion-reduce:transition-none"
+                    />
                   ) : (
                     <KindGlyph kind={t.spec.kind} className="w-12 text-fg-subtle" />
                   )}
+                  {busy === t.id && (
+                    <span className="absolute inset-0 flex items-center justify-center bg-bg/60">
+                      <Spinner />
+                    </span>
+                  )}
                 </span>
-                <span className="text-sm font-medium text-fg">{t.spec.title}</span>
-                <span className="line-clamp-2 text-xs text-fg-muted">{t.spec.summary}</span>
+                <span className="w-full truncate text-sm font-medium text-fg">{t.spec.title}</span>
+                <span className="line-clamp-2 min-h-8 text-xs leading-4 text-fg-muted">
+                  {t.spec.summary}
+                </span>
               </button>
             ))}
           </div>
