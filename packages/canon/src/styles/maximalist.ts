@@ -1,6 +1,10 @@
 /** Research 09 §5 "Maximalist". */
-import { band, src } from '../rules/rule'
+import { gt, v } from '../expr'
+import { band, HEADED, src } from '../rules/rule'
 import { guide } from './guide'
+
+/** The look needs its big stone: never a wide band under a centre below 10 mm (09 §5). */
+const BIG_CENTRE = gt(v('cW'), 9.99)
 
 export const MAXIMALIST = guide({
   id: 'maximalist',
@@ -20,12 +24,17 @@ export const MAXIMALIST = guide({
   },
   recipes: [
     { path: 'gem.width', band: band(10.5, 10, 13) },
-    { path: 'ringShank.widthTop', band: band(5, 4, 8), note: 'plain; 2.5–4 when split' },
-    { path: 'setting.prongDiameter', band: band(1.5, 1.3, 1.8) },
+    {
+      path: 'ringShank.widthTop',
+      band: band(5, 4, 8),
+      note: 'plain; 2.5–4 when split',
+      applies: { archetypes: [...HEADED], when: BIG_CENTRE },
+    },
+    { path: 'setting.prongDiameter', band: band(1.5, 1.3, 1.8), applies: { archetypes: [...HEADED], when: BIG_CENTRE } },
   ],
   overrides: [
-    { ruleId: 'ring.solitaire.bandWidth', band: band(5, 2.5, 8) },
-    { ruleId: 'ring.scale.headToFinger', band: band(1.0, 0.6, 1.25) },
+    { ruleId: 'ring.solitaire.bandWidth', band: band(5, 2.5, 8), when: BIG_CENTRE },
+    { ruleId: 'ring.scale.headToFinger', band: band(1.0, 0.6, 1.25), when: BIG_CENTRE },
   ],
   do: ['Scale everything together.', 'Use a euro base.', 'Keep claws heavy, 1.3–1.8 mm.'],
   dont: [

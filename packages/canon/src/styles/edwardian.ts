@@ -1,5 +1,5 @@
 /** Research 09 §5 "Edwardian" (Lang, GIA). */
-import { band, src } from '../rules/rule'
+import { band, HEADED, src } from '../rules/rule'
 import { guide } from './guide'
 
 export const EDWARDIAN = guide({
@@ -21,10 +21,20 @@ export const EDWARDIAN = guide({
   recipes: [
     { path: 'gem.width', band: band(5.8, 5.0, 6.5), note: 'round centre' },
     { path: 'setting.wall', band: band(0.55, 0.5, 0.6) },
-    { path: 'setting.prongDiameter', band: band(0.85, 0.8, 0.9), note: 'six claws' },
-    { path: 'ringShank.widthTop', band: band(2.0, 1.8, 2.2), note: 'knife edge' },
+    {
+      path: 'setting.prongDiameter',
+      band: band(0.85, 0.8, 0.9),
+      note: 'six claws',
+      applies: { kinds: ['ring'] },
+    },
+    { path: 'ringShank.widthTop', band: band(2.0, 1.8, 2.2), note: 'knife edge', applies: { archetypes: [...HEADED] } },
     { path: 'pipe.width', band: band(0.7, 0.7, 0.8), note: 'lace wire, ≥ 1.0 deep, spans ≤ 8' },
-    { path: 'chain.linkWidth', band: band(1.0, 0.9, 1.1), note: 'pear drops on fine cable' },
+    {
+      path: 'chain.linkWidth',
+      band: band(1.0, 0.9, 1.1),
+      note: 'pear drops on fine cable',
+      applies: { archetypes: ['pendantSolitaire', 'custom'] },
+    },
   ],
   do: [
     'Keep it white: platinum, diamonds.',

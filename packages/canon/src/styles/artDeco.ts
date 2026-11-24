@@ -1,7 +1,7 @@
 /** Research 09 §5 "Art Deco" (GIA). */
 
 import { sub, v } from '../expr'
-import { band, src } from '../rules/rule'
+import { band, HEADED, src } from '../rules/rule'
 import { guide } from './guide'
 
 export const ART_DECO = guide({
@@ -28,7 +28,7 @@ export const ART_DECO = guide({
     { path: 'setting.wall', band: band(0.65, 0.6, 0.7), note: 'or tab/double claws' },
     { path: 'halo.stoneWidth', band: band(1.5, 1.3, 1.7), note: 'princess sapphire or ruby halo' },
     { path: 'halo.gap', band: band(0.11, 0.1, 0.12), note: 'calibré-tight' },
-    { path: 'ringShank.widthTop', band: band(2.6, 2.3, 3.0), note: 'flat band' },
+    { path: 'ringShank.widthTop', band: band(2.6, 2.3, 3.0), note: 'flat band', applies: { archetypes: [...HEADED] } },
     {
       path: 'gemRow.stoneWidth',
       band: band(sub(v('bandW'), 1.0), 0.8, sub(v('bandW'), 0.8)),

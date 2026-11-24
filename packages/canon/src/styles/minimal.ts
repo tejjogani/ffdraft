@@ -1,5 +1,5 @@
 /** Research 09 §5 "Minimal". */
-import { band, src } from '../rules/rule'
+import { band, HEADED, src } from '../rules/rule'
 import { guide } from './guide'
 
 export const MINIMAL = guide({
@@ -19,10 +19,20 @@ export const MINIMAL = guide({
     settings: ['bezel 0.5–0.7', 'four claws 0.9–1.1'],
   },
   recipes: [
-    { path: 'ringShank.widthTop', band: band(1.9, 1.8, 2.0), note: 'or a 5–8 mm cigar band' },
+    {
+      path: 'ringShank.widthTop',
+      band: band(1.9, 1.8, 2.0),
+      note: 'or a 5–8 mm cigar band',
+      applies: { archetypes: [...HEADED] },
+    },
     { path: 'setting.wall', band: band(0.6, 0.5, 0.7) },
     { path: 'setting.prongDiameter', band: band(1.0, 0.9, 1.1), note: 'four claws on 6.5 mm' },
-    { path: 'gem.placement.elevation', band: band(1.0, 0.5, 1.2), note: 'low' },
+    {
+      path: 'gem.placement.elevation',
+      band: band(1.0, 0.5, 1.2),
+      note: 'low, in a basket or bezel',
+      applies: { archetypes: [...HEADED] },
+    },
   ],
   do: [
     'Set low.',

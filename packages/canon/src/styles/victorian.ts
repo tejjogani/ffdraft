@@ -30,9 +30,19 @@ export const VICTORIAN = guide({
       path: 'gemRow.stoneWidth',
       band: band(3.5, 3.0, 3.5),
       note: 'half hoop graduating 3.5 → 2.5',
+      applies: { archetypes: ['band', 'eternity', 'custom'] },
     },
-    { path: 'gemRow.graduateTo', band: band(2.5, 2.3, 2.7) },
-    { path: 'ringShank.widthTop', band: band(4.0, 3.9, 4.1), note: 'half-hoop band' },
+    {
+      path: 'gemRow.graduateTo',
+      band: band(2.5, 2.3, 2.7),
+      applies: { archetypes: ['band', 'eternity', 'custom'] },
+    },
+    {
+      path: 'ringShank.widthTop',
+      band: band(4.0, 3.9, 4.1),
+      note: 'half-hoop band',
+      applies: { archetypes: ['band', 'eternity', 'custom'] },
+    },
   ],
   do: [
     'Use warm gold.',
