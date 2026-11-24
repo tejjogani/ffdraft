@@ -1,3 +1,5 @@
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { serve } from '@hono/node-server'
 import { createApp } from './app'
 import { compose } from './compose'
@@ -7,6 +9,11 @@ import { compose } from './compose'
  * killed after 5 s and waited on for 15 s in all), so they always get to clean up first.
  */
 const SHUTDOWN_TIMEOUT_MS = 25_000
+
+// An optional apps/server/.env (documented in .env.example). Values already set in the
+// environment win, and a missing file is fine: every variable has a default.
+const envFile = join(import.meta.dirname, '..', '.env')
+if (existsSync(envFile)) process.loadEnvFile(envFile)
 
 const server = await createApp(compose())
 const { config } = server.runtime
