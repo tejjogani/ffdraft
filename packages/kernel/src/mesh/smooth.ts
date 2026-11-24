@@ -12,6 +12,8 @@ const LAMBDA = 0.5
 const MU = -0.53
 /** Each step of the 0–8 schema slider runs this many λ|μ pairs. */
 const PAIRS_PER_LEVEL = 3
+/** Deviation allowed when thinning the smoothed mesh, per unit of refined edge length. */
+const RETHIN = 0.04
 
 export function taubinSmooth(mesh: IndexedTriangles, pairs: number): IndexedTriangles {
   const { start, list } = vertexRings(mesh)
@@ -42,8 +44,25 @@ export function taubinSmooth(mesh: IndexedTriangles, pairs: number): IndexedTria
   return { positions: Float32Array.from(p), indices: mesh.indices }
 }
 
-/** Smooths a Manifold body by `level` (0–8); the caller owns the result. */
-export function smoothManifold(m: Manifold, level: number): Manifold {
+/**
+ * Smooths a Manifold body by `level` (0–8), first refined to edges no longer than `edge`. The
+ * umbrella operator moves each vertex toward the mean of its neighbours, so it only behaves
+ * like curvature flow on an even mesh: on a CAD export or a hull, whose flat faces are a few
+ * long slivers, corners are dragged across whole faces and the faces crumple. The caller owns
+ * the result.
+ */
+export function smoothManifold(m: Manifold, level: number, edge: number): Manifold {
   if (level <= 0) return m
-  return manifoldFromTriangles(taubinSmooth(trianglesFromManifold(m), level * PAIRS_PER_LEVEL))
+  const even = m.refineToLength(edge)
+  const smooth = manifoldFromTriangles(
+    taubinSmooth(trianglesFromManifold(even), level * PAIRS_PER_LEVEL),
+  )
+  even.delete()
+  // The refinement is only needed while smoothing: thin it again wherever the surface stayed
+  // flat, within a deviation far below casting resolution.
+  try {
+    return smooth.simplify(edge * RETHIN)
+  } finally {
+    smooth.delete()
+  }
 }

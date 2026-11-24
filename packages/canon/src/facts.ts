@@ -17,6 +17,7 @@ import {
   ringInnerDiameter,
 } from '@pave/schema'
 import { ALLOY_CLASS, LW_BY_CUT, POINTS_BY_CUT, PRONGS_BY_CUT } from './tables'
+import { FLAG_PHRASES, hasAny } from './words'
 
 /** Every fact a rule may use, with the meaning printed in the prompt's index. */
 export const FACTS = {
@@ -339,13 +340,11 @@ function mainBody(d: Design): Node | undefined {
 
 /** Flags read from the brief's style words (PieceSpec.style or the intent's tags). */
 export function styleFacts(styles: readonly string[] = []): Facts {
-  const s = styles.map((x) => x.toLowerCase())
-  const has = (...words: string[]) => flag(s.some((x) => words.some((w) => x.includes(w))))
   return {
-    toi: has('toi', 'you and me', 'two-stone'),
-    mens: has('men', 'gent'),
-    eastWest: has('east-west', 'east west'),
-    champion: has('championship'),
+    toi: flag(hasAny(styles, FLAG_PHRASES.toi)),
+    mens: flag(hasAny(styles, FLAG_PHRASES.mens)),
+    eastWest: flag(hasAny(styles, FLAG_PHRASES.eastWest)),
+    champion: flag(hasAny(styles, FLAG_PHRASES.champion)),
   }
 }
 

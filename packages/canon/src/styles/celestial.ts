@@ -6,7 +6,7 @@ import { guide } from './guide'
 export const CELESTIAL = guide({
   id: 'celestial',
   label: 'Celestial and nature',
-  aliases: ['celestial', 'star', 'moon', 'nature', 'botanical', 'floral', 'leaf', 'flower'],
+  aliases: ['celestial', 'moon', 'botanical', 'floral', 'leaf', 'flower'],
   reads: [
     'Alternation reads botanical: big–small, leaf–stone, petal–gap.',
     'Stars and moons need depth to read as objects, not stickers.',

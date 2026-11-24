@@ -53,9 +53,13 @@ describe('SVG path data', () => {
   })
 
   it('reports malformed data', () => {
-    expect(() => parseSvgPath('L 1 1', 0.1)).toThrow(/move command/)
+    expect(() => parseSvgPath('1 1 L 2 2', 0.1)).toThrow(/move command/)
     expect(() => parseSvgPath('M 0 0 A 1 1 0 2 0 3 3', 0.1)).toThrow(/arc flag/)
-    expect(() => parseSvgPath('M 0 0 L x', 0.1)).toThrow(/number/)
+    expect(() => parseSvgPath('M 0 0 L 1', 0.1)).toThrow(/malformed/)
+    expect(() => parseSvgPath('M 0 0 L 1e400 5 L 3 3 Z', 0.1)).toThrow(/malformed/)
+    // Open or empty paths enclose nothing.
+    expect(parseSvgPath('', 0.1)).toEqual([])
+    expect(parseSvgPath('M0 0 L10 10', 0.1)).toEqual([])
   })
 
   it('parses every named shape into one closed outline', () => {

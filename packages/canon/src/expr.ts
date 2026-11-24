@@ -39,10 +39,30 @@ export const ExprSchema: z.ZodType<Expr> = z.lazy(() =>
 
 const DEG = Math.PI / 180
 
-/** Evaluates `expr`; undefined when a fact it needs is unknown. */
+/**
+ * Evaluates `expr`; undefined when a fact it needs is unknown. `if`, `and` and `or` are lazy, so
+ * a branch that is not taken may use facts the subject does not have (halo facts on a solitaire).
+ */
 export function evalExpr(expr: Expr, facts: Facts): number | undefined {
   if (typeof expr === 'number') return expr
   if ('var' in expr) return facts[expr.var]
+  if (expr.op === 'if') {
+    const [c, yes, no] = expr.args
+    const cond = c === undefined ? undefined : evalExpr(c, facts)
+    if (cond === undefined) return undefined
+    const branch = cond !== 0 ? yes : no
+    return branch === undefined ? undefined : evalExpr(branch, facts)
+  }
+  if (expr.op === 'and' || expr.op === 'or') {
+    // Short-circuit: a decided result does not wait on unknown facts further along.
+    let unknown = false
+    for (const arg of expr.args) {
+      const x = evalExpr(arg, facts)
+      if (x === undefined) unknown = true
+      else if ((x !== 0) === (expr.op === 'or')) return expr.op === 'or' ? 1 : 0
+    }
+    return unknown ? undefined : expr.op === 'or' ? 0 : 1
+  }
   const a: number[] = []
   for (const arg of expr.args) {
     const v = evalExpr(arg, facts)
@@ -77,13 +97,8 @@ export function evalExpr(expr: Expr, facts: Facts): number | undefined {
       return x < y ? 1 : 0
     case 'eq':
       return Math.abs(x - y) < 1e-9 ? 1 : 0
-    case 'and':
-      return a.every((v) => v !== 0) ? 1 : 0
-    case 'or':
-      return a.some((v) => v !== 0) ? 1 : 0
-    case 'if':
-      return x !== 0 ? y : z3
   }
+  return undefined
 }
 
 const INFIX: Partial<Record<Op, string>> = {

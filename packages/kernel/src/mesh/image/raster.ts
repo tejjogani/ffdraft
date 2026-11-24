@@ -50,6 +50,62 @@ export function luminanceHeights(image: Raster, invert: boolean): Float32Array {
   return out
 }
 
+/**
+ * Samples a w×h scalar image (row-major from the top-left) at continuous pixel coordinates
+ * (u, v) — pixel k spans [k, k + 1) — over a square footprint `size` pixels wide: bilinear where
+ * the footprint is smaller than a pixel (the image is coarser than the grid sampling it), the
+ * mean of the covered pixels where it is larger. A summed-area table keeps both O(1).
+ */
+export class ImageSampler {
+  private readonly sums: Float64Array
+
+  constructor(
+    private readonly values: Float32Array,
+    private readonly w: number,
+    private readonly h: number,
+  ) {
+    this.sums = new Float64Array((w + 1) * (h + 1))
+    for (let y = 0; y < h; y++) {
+      let row = 0
+      for (let x = 0; x < w; x++) {
+        row += values[y * w + x]!
+        this.sums[(y + 1) * (w + 1) + x + 1] = this.sums[y * (w + 1) + x + 1]! + row
+      }
+    }
+  }
+
+  sample(u: number, v: number, size: number): number {
+    return size <= 1 ? this.bilinear(u - 0.5, v - 0.5) : this.mean(u, v, size / 2)
+  }
+
+  private bilinear(x: number, y: number): number {
+    const { w, h, values } = this
+    const fx = Math.min(Math.max(x, 0), w - 1)
+    const fy = Math.min(Math.max(y, 0), h - 1)
+    const i = Math.min(Math.floor(fx), Math.max(w - 2, 0))
+    const j = Math.min(Math.floor(fy), Math.max(h - 2, 0))
+    const i1 = Math.min(i + 1, w - 1)
+    const j1 = Math.min(j + 1, h - 1)
+    const tx = fx - i
+    const ty = fy - j
+    const top = values[j * w + i]! * (1 - tx) + values[j * w + i1]! * tx
+    const bottom = values[j1 * w + i]! * (1 - tx) + values[j1 * w + i1]! * tx
+    return top * (1 - ty) + bottom * ty
+  }
+
+  private mean(u: number, v: number, r: number): number {
+    const { w, h } = this
+    const x0 = Math.min(Math.max(Math.round(u - r), 0), w - 1)
+    const y0 = Math.min(Math.max(Math.round(v - r), 0), h - 1)
+    const x1 = Math.min(Math.max(Math.round(u + r), x0 + 1), w)
+    const y1 = Math.min(Math.max(Math.round(v + r), y0 + 1), h)
+    const s = this.sums
+    const W = w + 1
+    const total = s[y1 * W + x1]! - s[y0 * W + x1]! - s[y1 * W + x0]! + s[y0 * W + x0]!
+    return total / ((x1 - x0) * (y1 - y0))
+  }
+}
+
 /** Separable Gaussian blur of a w×h scalar field (edges clamp). */
 export function blur(values: Float32Array, w: number, h: number, sigma: number): Float32Array {
   if (sigma <= 0) return values

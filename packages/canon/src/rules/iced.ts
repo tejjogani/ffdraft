@@ -208,43 +208,4 @@ export const ICED_RULES = [
     confidence: 'medium',
     severity: 'info',
   }),
-  rule({
-    id: 'iced.scoop',
-    title: 'Scooped backs',
-    applies: { archetypes: [...iced] },
-    paths: ['vectorBody.thickness'],
-    band: band(0, 0, 0),
-    rationale:
-      'An outline body cannot be scooped, so it is heavier than a listing: compare its mass with the solid figure.',
-    source: src('K', '§2 Mass'),
-    confidence: 'high',
-    severity: 'default',
-    expressible: false,
-  }),
-  rule({
-    id: 'iced.pavedLinks',
-    title: 'Pavé on chain links',
-    applies: { archetypes: [...iced, 'cuban', 'tennis'] },
-    paths: ['chain.style'],
-    band: band(0, 0, 0),
-    rationale:
-      'Links cannot carry pavé here: an iced Cuban is a maker note on a plain Cuban, or a tennis chain instead.',
-    source: src('K', '§5 What the schema cannot express'),
-    confidence: 'high',
-    severity: 'default',
-    expressible: false,
-  }),
-  rule({
-    id: 'iced.grillz',
-    title: 'Grillz',
-    applies: { archetypes: ['custom'] },
-    paths: ['meshBody.source'],
-    band: band(0, 0, 0),
-    rationale:
-      'Grillz start from a dental scan, imported as a sculpt with a 0.8 mm wall: never modelled freehand.',
-    source: src('EJ', '§2 Conventions'),
-    confidence: 'medium',
-    severity: 'default',
-    expressible: false,
-  }),
 ]

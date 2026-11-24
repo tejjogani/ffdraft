@@ -73,19 +73,6 @@ export const ROW_RULES = [
     fix: 'clampToBand',
   }),
   rule({
-    id: 'rows.frenchCut',
-    title: 'French and U-cut pavé',
-    applies: { nodeKind: 'gemRow' },
-    paths: ['gemRow.setting'],
-    band: band(0, 0, 0),
-    rationale:
-      'French and U-cut pavé cannot be modelled: build shared prong and say the setter will cut it.',
-    source: src('K', '§1 Rows: shared prong'),
-    confidence: 'high',
-    severity: 'default',
-    expressible: false,
-  }),
-  rule({
     id: 'rows.rowCount',
     title: 'Rows across the band',
     applies: { nodeKind: 'gemRow' },

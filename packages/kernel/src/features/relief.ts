@@ -9,7 +9,7 @@ import type { CrossSection, Manifold } from 'manifold-3d'
 import { guilloche } from '../builtin/guilloche'
 import { type BuildContext, defineFeature, metalOf, runtime, solidFromManifold } from '../core'
 import { type HeightGrid, heightfieldSolid } from '../mesh/heightfield'
-import { blur, decodeImage, luminanceHeights } from '../mesh/image/raster'
+import { blur, decodeImage, ImageSampler, luminanceHeights } from '../mesh/image/raster'
 import { OutlineDistance } from '../mesh/outline/distance'
 import { edgeProfile, profiledSlab } from '../mesh/outline/profile'
 import { SHAPES } from '../mesh/outline/shapes'
@@ -35,8 +35,14 @@ function outlineSection(node: ReliefNode): CrossSection {
     case 'round':
       // A coin is a circle: the smaller of width and height is its diameter.
       return mf.CrossSection.circle(Math.min(w, h) / 2, SEGMENTS)
-    case 'oval':
-      return mf.CrossSection.circle(0.5, SEGMENTS).scale([w, h])
+    case 'oval': {
+      const circle = mf.CrossSection.circle(0.5, SEGMENTS)
+      try {
+        return circle.scale([w, h])
+      } finally {
+        circle.delete()
+      }
+    }
     case 'cushion': {
       // Superellipse |x|⁴ + |y|⁴ = 1: square shoulders, soft corners (the classic signet cushion).
       const points: [number, number][] = Array.from({ length: SEGMENTS }, (_, i) => {
@@ -95,47 +101,24 @@ async function heightGrid(
   if (!ctx.assets)
     throw new Error('No asset store is connected, so the height map cannot be loaded')
   const image = decodeImage(await ctx.assets(node.assetId))
-  const heights = luminanceHeights(image, node.invert)
+  const sampler = new ImageSampler(luminanceHeights(image, node.invert), image.width, image.height)
   // "Cover" fit: the image fills the field, cropped to its aspect ratio; image rows run down.
-  const aspect = (max[0] - min[0]) / (max[1] - min[1])
-  const cropW = Math.min(image.width, image.height * aspect)
-  const cropH = cropW / aspect
+  const fieldW = max[0] - min[0]
+  const fieldH = max[1] - min[1]
+  const cropW = Math.min(image.width, (image.height * fieldW) / fieldH)
+  const cropH = (cropW * fieldH) / fieldW
   const left = (image.width - cropW) / 2
-  const topRow = (image.height - cropH) / 2
-  // Box-average the image down to the grid, then smooth by a fraction of a cell.
-  const sums = new Float32Array(nx * ny)
-  const counts = new Float32Array(nx * ny)
-  for (let py = Math.floor(topRow); py < Math.ceil(topRow + cropH); py++)
-    for (let px = Math.floor(left); px < Math.ceil(left + cropW); px++) {
-      const i = Math.round(((px + 0.5 - left) / cropW) * (nx - 1))
-      const j = Math.round((1 - (py + 0.5 - topRow) / cropH) * (ny - 1))
-      if (
-        i < 0 ||
-        j < 0 ||
-        i >= nx ||
-        j >= ny ||
-        px < 0 ||
-        py < 0 ||
-        px >= image.width ||
-        py >= image.height
-      )
-        continue
-      sums[j * nx + i]! += heights[py * image.width + px]!
-      counts[j * nx + i]!++
-    }
-  for (let k = 0; k < h.length; k++) h[k] = counts[k]! > 0 ? sums[k]! / counts[k]! : 0
-  fillGaps(h, counts, nx, ny)
-  return { x0: min[0], y0: min[1], spacing, nx, ny, h: blur(h, nx, ny, SMOOTHING) }
-}
-
-/** Grid nodes no pixel fell into (images smaller than the grid) take their left/lower neighbour. */
-function fillGaps(h: Float32Array, counts: Float32Array, nx: number, ny: number): void {
+  const top = (image.height - cropH) / 2
+  // Each grid node gathers the pixels under its cell (or interpolates a coarser image), then
+  // the map is smoothed by a fraction of a cell.
+  const pixelsPerCell = (spacing / fieldW) * cropW
   for (let j = 0; j < ny; j++)
     for (let i = 0; i < nx; i++) {
-      const k = j * nx + i
-      if (counts[k]! > 0) continue
-      h[k] = i > 0 ? h[k - 1]! : j > 0 ? h[k - nx]! : 0
+      const u = left + ((i * spacing) / fieldW) * cropW
+      const v = top + (1 - (j * spacing) / fieldH) * cropH
+      h[j * nx + i] = sampler.sample(u, v, pixelsPerCell)
     }
+  return { x0: min[0], y0: min[1], spacing, nx, ny, h: blur(h, nx, ny, SMOOTHING) }
 }
 
 export const relief = defineFeature('relief', async (node, ctx) => {

@@ -5,7 +5,7 @@ import { guide } from './guide'
 export const EAST_ASIAN = guide({
   id: 'eastAsian',
   label: 'East Asian-inspired',
-  aliases: ['east asian', 'chinese', 'zodiac', 'lunar', 'japanese', 'korean', '24k'],
+  aliases: ['east asian', 'chinese', 'zodiac', 'lunar', 'japanese', 'korean'],
   reads: [
     'Pure 24k gold with soft, rounded relief.',
     'Auspicious symbols: zodiac animals, characters, clouds, coins.',

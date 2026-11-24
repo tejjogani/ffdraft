@@ -117,17 +117,4 @@ export const HALO_RULES = [
     confidence: 'medium',
     severity: 'info',
   }),
-  rule({
-    id: 'halo.hidden',
-    title: 'Hidden halo',
-    applies: { kinds: ['ring'], archetypes: ['halo'] },
-    paths: ['halo.drop'],
-    band: band(0, 0, 0),
-    rationale:
-      'A hidden halo cannot be built: tables face up, so a deep drop makes a skirt. Record it as a maker note.',
-    source: src('K', '§1 Halo: hidden halo'),
-    confidence: 'high',
-    severity: 'default',
-    expressible: false,
-  }),
 ]

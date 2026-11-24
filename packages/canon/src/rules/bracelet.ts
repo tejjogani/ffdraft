@@ -58,17 +58,4 @@ export const BRACELET_RULES = [
     severity: 'warning',
     fix: 'clampToBand',
   }),
-  rule({
-    id: 'bangle.hinge',
-    title: 'Hinged bangles',
-    applies: { kinds: ['bracelet'] },
-    paths: ['pipe.closed'],
-    band: band(0, 0, 0),
-    rationale:
-      'Hinges and box clasps are not findings here: a hinged oval (57–60 × 43–48) is a maker note.',
-    source: src('S', '§3 Bangles'),
-    confidence: 'high',
-    severity: 'default',
-    expressible: false,
-  }),
 ]

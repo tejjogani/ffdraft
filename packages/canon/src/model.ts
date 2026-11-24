@@ -3,13 +3,13 @@
  * (no closures), style guides and exemplars are values, so the whole canon can be printed into
  * a prompt, hashed into CANON_VERSION and diffed between versions.
  */
-import type { Diagnostic } from '@pave/kernel/types'
 import {
   ARCHETYPES,
   FINISH_IDS,
   GEM_CUT_IDS,
   METAL_IDS,
   NODE_KINDS,
+  type EvaluationSummary,
   type NodeInput,
   NodeSchema,
   type Op,
@@ -61,10 +61,32 @@ export const RuleSchema = z.object({
   /** default = a suggestion only; the canon never emits errors (the kernel owns those). */
   severity: z.enum(['warning', 'info', 'default']),
   fix: z.enum(['clampToBand', 'setTypical']).optional(),
-  /** A look the schema cannot build: printed as a caveat, never linted. */
-  expressible: z.literal(false).optional(),
+  /**
+   * The broader rule this one narrows (east-west elevation refines the solitaire elevation): it
+   * wins over that rule when both hold, whatever the two filters score.
+   */
+  refines: z.string().optional(),
 })
 export type Rule = z.infer<typeof RuleSchema>
+
+/** Where a style recipe or caveat applies; a recipe without it applies to the hero everywhere. */
+const AppliesSchema = z.object({
+  kinds: z.array(z.enum(PIECE_KINDS)).optional(),
+  archetypes: z.array(z.enum(ARCHETYPES)).optional(),
+  styles: z.array(z.string()).optional(),
+  when: ExprSchema.optional(),
+})
+
+/** A look the schema cannot build: printed with its stand-in, never linted. */
+export const CaveatSchema = z.object({
+  id: z.string().regex(/^[a-z][a-zA-Z]*(\.[a-z][a-zA-Z0-9]*)+$/),
+  feature: z.string().max(80),
+  fallback: z.string().max(200),
+  applies: AppliesSchema.omit({ when: true }),
+  source: SourceSchema,
+  confidence: ConfidenceSchema,
+})
+export type Caveat = z.infer<typeof CaveatSchema>
 
 export const StyleGuideSchema = z.object({
   id: z.string(),
@@ -78,13 +100,26 @@ export const StyleGuideSchema = z.object({
     finishes: z.array(z.enum(FINISH_IDS)),
     settings: z.array(z.string()),
   }),
-  recipes: z.array(z.object({ path: z.string(), band: BandSchema, note: z.string().optional() })),
+  /**
+   * Preferred values: a recipe moves the suggestion inside the archetype rules' bands, never out
+   * of them, and only where `applies` holds.
+   */
+  recipes: z.array(
+    z.object({
+      path: z.string(),
+      band: BandSchema,
+      note: z.string().optional(),
+      applies: AppliesSchema.omit({ styles: true }).optional(),
+    }),
+  ),
+  /** Replaces a rule's band (and severity) for this style, where `when` holds. */
   overrides: z
     .array(
       z.object({
         ruleId: z.string(),
         band: BandSchema.optional(),
         severity: RuleSchema.shape.severity.optional(),
+        when: ExprSchema.optional(),
       }),
     )
     .optional(),
@@ -278,10 +313,16 @@ export type Critique = z.infer<typeof CritiqueSchema>
 
 // ── Findings and slices ──────────────────────────────────────────────────────────────────────
 
-/** A kernel-shaped diagnostic plus the rule and band it came from. */
-export type CanonFinding = Diagnostic & {
+/**
+ * A diagnostic shaped like the evaluation summary's (and the kernel's), plus the rule and band it
+ * came from. Declared from @pave/schema so the canon needs no kernel dependency.
+ */
+export type CanonFinding = EvaluationSummary['diagnostics'][number] & {
   level: 'warning' | 'info'
   code: `style.${string}`
+  value: number
+  limit: number
+  fix?: { label: string; ops: Op[] }
   ruleId: string
   param: string
   band: [number, number]

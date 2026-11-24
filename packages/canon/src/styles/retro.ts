@@ -5,7 +5,7 @@ import { guide } from './guide'
 export const RETRO = guide({
   id: 'retro',
   label: 'Retro',
-  aliases: ['retro', '1940s', 'cocktail', 'machine age'],
+  aliases: ['retro', '1940s', 'machine age'],
   reads: [
     'Big and sculptural: wide bands that swell into scrolls.',
     'Bi-colour gold: rose and yellow side by side, as separate nodes.',

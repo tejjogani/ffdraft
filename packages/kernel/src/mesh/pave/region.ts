@@ -133,19 +133,20 @@ export function selectRegion(
   for (let h = 0; h < indices.length; h++) {
     const t = (h / 3) | 0
     if (!inside[t]) continue
-    if (areas[t]! < speck) continue
     const o = twin[h]!
     const other = o < 0 ? -1 : (o / 3) | 0
-    if (other >= 0 && areas[other]! < speck) continue
-    // Each interior edge is visited from both sides; emit it once.
-    if (other >= 0 && inside[other] && other < t) continue
-    const crease =
-      other >= 0 &&
-      normals[t * 3]! * normals[other * 3]! +
+    // Open edges and label changes always bound the region, specks or not (a gap in the
+    // boundary lets stones into the margin). Between two triangles of the region only a crease
+    // does, and specks, whose normals are noise, make none.
+    if (other >= 0 && inside[other]) {
+      // Each interior edge is visited from both sides; judge it once.
+      if (other < t || areas[t]! < speck || areas[other]! < speck) continue
+      const cos =
+        normals[t * 3]! * normals[other * 3]! +
         normals[t * 3 + 1]! * normals[other * 3 + 1]! +
-        normals[t * 3 + 2]! * normals[other * 3 + 2]! <
-        cosCrease
-    if (other >= 0 && inside[other] && !crease) continue
+        normals[t * 3 + 2]! * normals[other * 3 + 2]!
+      if (cos >= cosCrease) continue
+    }
     const a = indices[h]!
     const b = indices[h - (h % 3) + ((h + 1) % 3)]!
     segments.push(p[a * 3]!, p[a * 3 + 1]!, p[a * 3 + 2]!, p[b * 3]!, p[b * 3 + 1]!, p[b * 3 + 2]!)

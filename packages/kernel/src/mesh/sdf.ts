@@ -35,6 +35,8 @@ export interface DistanceGridOptions {
 
 // Rows are nudged off the grid lines by an irrational fraction so rays do not graze edges.
 const NUDGE = 0.000137
+/** Grid nodes per side of a block tested for the band at once. */
+const BLOCK = 4
 
 export function distanceGrid(mesh: IndexedTriangles, options: DistanceGridOptions): DistanceGrid {
   const { spacing, band, votes } = options
@@ -95,17 +97,42 @@ export function distanceGrid(mesh: IndexedTriangles, options: DistanceGridOption
   }
   const majority = votes === 3 ? 2 : 1
 
+  // Distances only matter within the band. Nodes go in blocks: when nothing is within the band
+  // of any node of a block (one query from its centre), the whole block is clamped unvisited —
+  // most of a solid's grid is far from its surface.
   const values = new Float32Array(count)
   const hit: ClosestHit = { d2: 0, x: 0, y: 0, z: 0, triangle: -1 }
-  for (let k = 0; k < nz; k++)
-    for (let j = 0; j < ny; j++)
-      for (let i = 0; i < nx; i++) {
-        const n = at(i, j, k)
-        const x = origin[0] + i * spacing
-        const y = origin[1] + j * spacing
-        const z = origin[2] + k * spacing
-        const d = bvh.closest(x, y, z, hit, band) ? Math.sqrt(hit.d2) : band
-        values[n] = inside[n]! >= majority ? d : -d
+  const reach = (spacing * (BLOCK - 1) * Math.sqrt(3)) / 2
+  const distance = (x: number, y: number, z: number, limit: number) =>
+    bvh.closest(x, y, z, hit, limit) ? Math.sqrt(hit.d2) : limit
+  for (let k0 = 0; k0 < nz; k0 += BLOCK)
+    for (let j0 = 0; j0 < ny; j0 += BLOCK)
+      for (let i0 = 0; i0 < nx; i0 += BLOCK) {
+        const k1 = Math.min(k0 + BLOCK, nz)
+        const j1 = Math.min(j0 + BLOCK, ny)
+        const i1 = Math.min(i0 + BLOCK, nx)
+        const far =
+          distance(
+            origin[0] + ((i0 + i1 - 1) / 2) * spacing,
+            origin[1] + ((j0 + j1 - 1) / 2) * spacing,
+            origin[2] + ((k0 + k1 - 1) / 2) * spacing,
+            band + reach,
+          ) >=
+          band + reach
+        for (let k = k0; k < k1; k++)
+          for (let j = j0; j < j1; j++)
+            for (let i = i0; i < i1; i++) {
+              const n = at(i, j, k)
+              const d = far
+                ? band
+                : distance(
+                    origin[0] + i * spacing,
+                    origin[1] + j * spacing,
+                    origin[2] + k * spacing,
+                    band,
+                  )
+              values[n] = inside[n]! >= majority ? d : -d
+            }
       }
   return { origin, spacing, size, values, band }
 }

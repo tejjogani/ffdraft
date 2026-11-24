@@ -7,16 +7,18 @@ import { guide } from './guide'
 export const ART_DECO = guide({
   id: 'artDeco',
   label: 'Art Deco',
-  aliases: ['deco', 'art deco', 'art-deco', '1920s', 'gatsby'],
+  aliases: ['art deco', '1920s', 'gatsby'],
   reads: [
     'Bilateral symmetry: every element mirrored across the finger axis.',
-    'Step cuts and geometry: emerald, asscher, baguette, calibré lines.',
+    'Geometry: step-cut accents, calibré lines and octagonal frames, round or step-cut centre.',
     'White metal with colour contrast: sapphire, ruby or onyx against diamond.',
     'Flat planes and crisp edges, never soft domes.',
   ],
   vocabulary: {
     motifs: ['stepped shoulders', 'chevrons', 'calibré lines', 'geometric halo'],
-    cuts: ['emerald', 'asscher', 'baguette', 'princess'],
+    // Most period rings carry an old European round centre in a geometric surround (09 §5 says
+    // only that step cuts read right; it bans no centre). Round stands in for old European.
+    cuts: ['emerald', 'asscher', 'round', 'baguette', 'princess'],
     metals: ['pt950', 'au18k-white'],
     finishes: ['polished'],
     settings: ['tab claws', 'double claws', 'bezel 0.6–0.7', 'channel'],
@@ -40,7 +42,7 @@ export const ART_DECO = guide({
     'Make baguette sides 0.55–0.70 of the centre’s length.',
   ],
   dont: [
-    'Round brilliants as the hero.',
+    'A round centre without a geometric frame: give it step-cut sides, an octagonal or square halo, a flat band.',
     'Yellow gold as the main metal.',
     'Organic curves or pillowed surfaces.',
   ],
@@ -48,6 +50,7 @@ export const ART_DECO = guide({
     { feature: 'milgrain', fallback: 'leave a 0.5–0.7 mm rail and note "milgrain by maker"' },
     { feature: 'calibré-cut coloured stones', fallback: 'princess or baguette melee in a channel' },
     { feature: 'tapered baguettes', fallback: 'straight baguettes, declared as a stand-in' },
+    { feature: 'old European cut', fallback: 'a round brilliant, declared as a stand-in' },
     { feature: 'filigree and hand engraving', fallback: 'a maker note on plain planes' },
   ],
   source: src('S', '§5 Art Deco (GIA)'),

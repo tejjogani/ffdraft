@@ -196,7 +196,23 @@ export class TriangleBvh {
     tMax = Infinity,
     skip = -1,
   ): number {
+    return this.firstHit(ox, oy, oz, dx, dy, dz, tMin, tMax, skip).t
+  }
+
+  /** {@link raycast}, also naming the triangle hit (−1 with t = Infinity when none is). */
+  firstHit(
+    ox: number,
+    oy: number,
+    oz: number,
+    dx: number,
+    dy: number,
+    dz: number,
+    tMin = 0,
+    tMax = Infinity,
+    skip = -1,
+  ): { t: number; triangle: number } {
     let best = tMax
+    let hit = -1
     this.traverseRay(
       ox,
       oy,
@@ -206,10 +222,13 @@ export class TriangleBvh {
       dz,
       () => best,
       (t, triangle) => {
-        if (triangle !== skip && t > tMin && t < best) best = t
+        if (triangle !== skip && t > tMin && t < best) {
+          best = t
+          hit = triangle
+        }
       },
     )
-    return best < tMax ? best : Infinity
+    return hit >= 0 ? { t: best, triangle: hit } : { t: Infinity, triangle: -1 }
   }
 
   /**
@@ -285,7 +304,7 @@ export class TriangleBvh {
         if (!Number.isFinite(inv)) {
           // Parallel to this slab: inside it or never.
           if (o < lo || o > hi) {
-            tn = Infinity
+            tf = -Infinity
             break
           }
           continue

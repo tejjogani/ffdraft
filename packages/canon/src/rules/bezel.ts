@@ -25,19 +25,6 @@ export const BEZEL_RULES = [
     fix: 'clampToBand',
   }),
   rule({
-    id: 'bezel.halfArc',
-    title: 'Half-bezel arc',
-    applies: { nodeKind: 'setting', when: v('bezel') },
-    paths: ['setting.style'],
-    band: band(0, 0, 0),
-    rationale:
-      'The half-bezel arc is fixed at 110° a side: a wider or narrower grip is a maker note.',
-    source: src('K', '§1 Bezel'),
-    confidence: 'high',
-    severity: 'default',
-    expressible: false,
-  }),
-  rule({
     id: 'eastWest.spin',
     title: 'East-west orientation',
     applies: { kinds: ['ring'], nodeKind: 'gem', when: eastWest },

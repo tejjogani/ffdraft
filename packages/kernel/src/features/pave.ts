@@ -15,6 +15,7 @@ import {
   solidFromManifold,
 } from '../core'
 import { frameFromZ } from '../geometry/vec'
+import { RULES } from '../rules'
 import { layoutBeads } from '../mesh/pave/beads'
 import { layoutPave, type PlacedStone } from '../mesh/pave/layout'
 import { type PaveField, type PlacedField, selectRegion } from '../mesh/pave/region'
@@ -88,10 +89,13 @@ export const pave = defineFeature('pave', (node, ctx) => {
   const largest = sizes[0]!
   const smallest = sizes.at(-1)!
 
+  // A seat needs its wall of metal wherever the region ends (the DFM seat-wall rule), whatever
+  // smaller margin was asked for.
+  const margin = Math.max(node.margin, RULES.channelWall)
   const mesh = hostSurface(host)
   // Edge distances matter up to the half-width of the widest band that is paved in rows
   // (twice the largest stone; see mesh/pave/layout.ts), beyond which a field is open.
-  const edgeCap = 2 * largest + node.margin
+  const edgeCap = 2 * largest + margin
   const region = selectRegion(
     mesh,
     node.region,
@@ -115,7 +119,7 @@ export const pave = defineFeature('pave', (node, ctx) => {
   const layout = layoutPave(surface, {
     sizes,
     gap: node.gap,
-    margin: node.margin,
+    margin,
     coverage: node.coverage,
     seed: node.seed,
     rowDirection: [1, 0, 0],
@@ -128,7 +132,7 @@ export const pave = defineFeature('pave', (node, ctx) => {
     ctx.report({
       level: 'warning',
       code: 'pave.empty',
-      message: `No ${smallest}–${largest} mm stones fit the region with a ${node.margin} mm margin; try smaller stones or a smaller margin.`,
+      message: `No ${smallest}–${largest} mm stones fit the region with a ${margin} mm margin; try smaller stones or a smaller margin.`,
     })
   else {
     // Judged on the part of the region stones may go at all: the stem of a trophy or the wire of
@@ -160,9 +164,10 @@ export const pave = defineFeature('pave', (node, ctx) => {
   }))
   if (ctx.detail === 'draft' || stones.length === 0) return { stones }
 
+  const seats = stones.map((stone, i) => ({ stone, hole: layout.stones[i]!.hole }))
   const cuts: Cut[] = [
     {
-      solid: solidFromManifold(seatCutters(stones, { opening: largest * 0.5 }, ctx.quality)),
+      solid: solidFromManifold(seatCutters(seats, { opening: largest * 0.5 }, ctx.quality)),
       targets: [node.host],
     },
   ]

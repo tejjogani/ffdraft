@@ -5,7 +5,7 @@ import { guide } from './guide'
 export const MINIMAL = guide({
   id: 'minimal',
   label: 'Minimal',
-  aliases: ['minimal', 'minimalist', 'modern', 'clean', 'simple', 'scandi'],
+  aliases: ['minimal', 'minimalist', 'scandi'],
   reads: [
     'Proportion and weight are the design: nothing hides a bad number.',
     'One finish, one metal, one stone or none.',

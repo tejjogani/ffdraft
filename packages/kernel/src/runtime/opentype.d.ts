@@ -20,6 +20,8 @@ declare module 'opentype.js' {
     ascender: number
     tables: { os2?: { sCapHeight?: number } }
     charToGlyph(character: string): Glyph
+    /** 0 (the "missing glyph") for characters the font does not have. */
+    charToGlyphIndex(character: string): number
     getKerningValue(left: Glyph, right: Glyph): number
   }
 

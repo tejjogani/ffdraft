@@ -7,7 +7,7 @@ import { guide } from './guide'
 export const VICTORIAN = guide({
   id: 'victorian',
   label: 'Victorian',
-  aliases: ['victorian', 'georgian', 'half hoop', 'daisy cluster', 'sentimental'],
+  aliases: ['victorian', 'half hoop', 'daisy cluster', 'sentimental'],
   reads: [
     'Warm gold: 18k yellow or 14k rose.',
     'Sentiment: clusters, hearts, half hoops, hand-worked texture.',
@@ -44,6 +44,10 @@ export const VICTORIAN = guide({
     { feature: 'enamel and hair-work', fallback: 'a maker note' },
     { feature: 'rose and old mine cuts', fallback: 'cushion or round, declared as a stand-in' },
     { feature: 'repoussé and chasing', fallback: 'satin finish plus a maker note' },
+    {
+      feature: 'Georgian closed foiled backs, rose and table cuts',
+      fallback: 'an earlier vocabulary than Victorian: a closed bezel and a maker note',
+    },
   ],
   source: src('EJ', '§5 Victorian'),
   confidence: 'high',

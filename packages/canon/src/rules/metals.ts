@@ -140,17 +140,4 @@ export const METAL_RULES = [
     confidence: 'medium',
     severity: 'info',
   }),
-  rule({
-    id: 'metals.unsupported',
-    title: 'Alloys and finishes we cannot specify',
-    applies: {},
-    paths: ['ringShank.material'],
-    band: band(0, 0, 0),
-    rationale:
-      '21k, enamel, per-region plating and hand engraving are not here: pick the nearest alloy and note the rest.',
-    source: src('K', '§5 What the schema cannot express'),
-    confidence: 'high',
-    severity: 'default',
-    expressible: false,
-  }),
 ]

@@ -2,7 +2,8 @@
  * Production geometry for a pavé field, built in two batch Manifold calls as the research asks
  * (06-freeform.md §5 step 8): one union of every seat (the core's stone-shaped seat cutter,
  * opened to the surface, plus a drill hole), and one union of every bead. Each distinct stone
- * size is cut once and instanced by matrix, so thousands of seats cost one tessellation per size.
+ * size and hole depth is cut once and instanced by matrix, so thousands of seats cost a handful
+ * of tessellations.
  */
 import type { Manifold } from 'manifold-3d'
 import type { Quality, Stone } from '../../core'
@@ -17,17 +18,27 @@ export interface SeatSpec {
   opening: number
 }
 
+export interface Seat {
+  stone: Stone
+  /** Depth of the blind drill hole below the culet, mm (0: none). */
+  hole: number
+}
+
+/** Hole depths are rounded down to this step (mm) so seats of one size share a few units. */
+const HOLE_STEP = 0.1
+
 /** All seats as one Manifold (the caller owns it). */
-export function seatCutters(stones: readonly Stone[], spec: SeatSpec, quality: Quality): Manifold {
+export function seatCutters(seats: readonly Seat[], spec: SeatSpec, quality: Quality): Manifold {
   const { manifold: mf } = runtime()
-  const units = new Map<number, Manifold>()
+  const units = new Map<string, Manifold>()
   const placed: Manifold[] = []
   try {
-    for (const stone of stones) {
-      const key = Math.round(stone.dims.width * 1000)
+    for (const { stone, hole } of seats) {
+      const steps = Math.floor(hole / HOLE_STEP + 1e-9)
+      const key = `${Math.round(stone.dims.width * 1000)}:${steps}`
       let unit = units.get(key)
       if (!unit) {
-        unit = unitSeat({ ...stone, frame: WORLD }, spec, quality)
+        unit = unitSeat({ ...stone, frame: WORLD }, steps * HOLE_STEP, spec, quality)
         units.set(key, unit)
       }
       placed.push(
@@ -41,12 +52,22 @@ export function seatCutters(stones: readonly Stone[], spec: SeatSpec, quality: Q
   }
 }
 
-/** Seat + drill hole for one stone at the origin, girdle on z = 0, table toward +z. */
-function unitSeat(stone: Stone, spec: SeatSpec, quality: Quality): Manifold {
-  const { manifold: mf } = runtime()
+/**
+ * Seat + drill hole for one stone at the origin, girdle on z = 0, table toward +z. The hole is
+ * blind: as deep below the culet as the layout found metal for (light and cleaning), always
+ * stopping short of the far wall, so it never breaks through or meets a seat from the other side.
+ */
+function unitSeat(stone: Stone, depth: number, spec: SeatSpec, quality: Quality): Manifold {
   const seat = seatCutter(stone, { open: spec.opening })
-  // Blind hole one stone deep below the culet: light and cleaning without weakening thin parts.
-  const hole = seatHole(stone, stone.dims.width * RULES.seatHole, stone.dims.width)
+  if (depth <= 0) {
+    try {
+      return seat.manifold(quality).translate([0, 0, 0])
+    } finally {
+      seat.dispose()
+    }
+  }
+  const { manifold: mf } = runtime()
+  const hole = seatHole(stone, stone.dims.width * RULES.seatHole, depth)
   try {
     return mf.Manifold.union([seat.manifold(quality), hole.manifold(quality)])
   } finally {

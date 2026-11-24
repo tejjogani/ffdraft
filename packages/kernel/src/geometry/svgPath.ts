@@ -117,6 +117,16 @@ export function parsePathData(d: string): SubPath[] {
       throw new Error(`the path is malformed near “${tokens[i - 1] ?? 'its end'}”`)
     return v
   }
+  // Arc flags are single digits and may run into what follows ("a1 1 0 00 1 1"), which the
+  // tokenizer reads as one number: take the first digit and leave the rest as the next token.
+  const flag = (): boolean => {
+    const t = tokens[i]
+    if (t === undefined || (t[0] !== '0' && t[0] !== '1'))
+      throw new Error(`the path is malformed: “${t ?? 'its end'}” is not an arc flag (0 or 1)`)
+    if (t.length > 1) tokens[i] = t.slice(1)
+    else i++
+    return t[0] === '1'
+  }
   const push = (segment: PathSegment) => {
     current ??= { segments: [], closed: false }
     const [a, b] = [segment.points[0], segment.points[segment.points.length - 1]!]
@@ -198,8 +208,8 @@ export function parsePathData(d: string): SubPath[] {
         const rx = number()
         const ry = number()
         const rotation = number()
-        const large = number() !== 0
-        const sweep = number() !== 0
+        const large = flag()
+        const sweep = flag()
         const to = point()
         for (const segment of arcToCubics(at, rx, ry, rotation, large, sweep, to)) push(segment)
         at = to

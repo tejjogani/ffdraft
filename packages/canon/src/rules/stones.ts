@@ -101,17 +101,4 @@ export const STONE_RULES = [
     confidence: 'high',
     severity: 'default',
   }),
-  rule({
-    id: 'stones.antiqueCuts',
-    title: 'Antique and fancy cuts',
-    applies: {},
-    paths: ['gem.cut'],
-    band: band(0, 0, 0),
-    rationale:
-      'Old European, rose, polki, tapered baguette, trapezoid and half-moon are not cuts here: name the stand-in.',
-    source: src('K', '§5 What the schema cannot express'),
-    confidence: 'high',
-    severity: 'default',
-    expressible: false,
-  }),
 ]

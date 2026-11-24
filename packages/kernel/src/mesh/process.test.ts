@@ -58,7 +58,8 @@ describe('mesh processing', () => {
         v[2] *= k
       }),
     )
-    const smooth = own(smoothManifold(noisy, 4))
+    // The sphere is evenly triangulated (edges under 1 mm already), so it is smoothed as it is.
+    const smooth = own(smoothManifold(noisy, 4, 1))
     const spread = (m: Manifold) => {
       const { positions: p } = trianglesFromManifold(m)
       let lo = Infinity
@@ -72,6 +73,17 @@ describe('mesh processing', () => {
     }
     expect(spread(smooth)).toBeLessThan(spread(noisy) * 0.7)
     expect(smooth.volume() / s.volume()).toBeGreaterThan(0.95)
+  })
+
+  it('smooths a coarsely triangulated block without crumpling its flat faces', () => {
+    // Twelve triangles: each corner vertex's neighbours lie across whole faces.
+    const block = own(runtime().manifold.Manifold.cube([20, 12, 6], true))
+    const smooth = own(smoothManifold(block, 8, 0.2))
+    expect(Math.abs(smooth.volume() / block.volume() - 1)).toBeLessThan(0.03)
+    const b = smooth.boundingBox()
+    expect(b.max[0] - b.min[0]).toBeGreaterThan(19.5)
+    expect(b.max[2] - b.min[2]).toBeGreaterThan(5.7)
+    expect(smooth.genus()).toBe(0)
   })
 
   it('measures signed distance on a grid', () => {
@@ -98,19 +110,34 @@ describe('mesh processing', () => {
     const body = own(flatBack(envelope, 0.4))
     const scooped = hollowBody(body, envelope, 1)!
     own(scooped.manifold)
-    expect(scooped.open).toBe(true)
     expect(scooped.drains).toBe(0)
     expect(scooped.manifold.volume()).toBeLessThan(body.volume() * 0.5)
     expect(edgeTopology(trianglesFromManifold(scooped.manifold)).open).toBe(0)
 
     const sealed = hollowBody(envelope, envelope, 1)!
     own(sealed.manifold)
-    expect(sealed.open).toBe(false)
     expect(sealed.drains).toBe(2)
     // One shell with holes through it, not a ball with a loose core.
     expect(sealed.manifold.decompose().length).toBe(1)
     expect(sealed.manifold.genus()).toBeGreaterThanOrEqual(1)
 
     expect(hollowBody(sphere(1), sphere(1), 1)).toBeNull()
+  })
+
+  it('drains every cavity of its own', () => {
+    // Two lobes joined by a neck too thin to hollow: two separate cavities.
+    const { manifold: mf } = runtime()
+    const lobes = own(
+      mf.Manifold.union([
+        own(sphere(6).translate([-7, 0, 0])),
+        own(sphere(6).translate([7, 0, 0])),
+        own(mf.Manifold.cylinder(14, 0.8, 0.8, 24).rotate([0, 90, 0]).translate([-7, 0, 0])),
+      ]),
+    )
+    const hollowed = hollowBody(lobes, lobes, 1)!
+    own(hollowed.manifold)
+    expect(hollowed.drains).toBe(4)
+    // Every cavity opens to the outside: one shell, no sealed voids.
+    expect(hollowed.manifold.decompose().length).toBe(1)
   })
 })

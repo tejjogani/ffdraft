@@ -47,6 +47,8 @@ export class PaveSurface {
   private bvh: TriangleBvh | null = null
   private readonly thicknessCache: Float64Array
   private readonly host: IndexedTriangles
+  /** Region label per host triangle. */
+  private readonly inside: Uint8Array
 
   constructor(host: IndexedTriangles, region: Region, options: SurfaceOptions) {
     this.spacing = Math.max(options.spacing, Math.sqrt(region.area / MAX_SAMPLES))
@@ -83,6 +85,7 @@ export class PaveSurface {
     for (let i = 0; i < this.count; i++) this.edge[i] = region.edgeDistance(this.point(i))
     this.depth = this.geodesicDepth(options.edgeCap)
     this.host = host
+    this.inside = region.inside
     this.thicknessCache = new Float64Array(this.count).fill(-1)
   }
 
@@ -113,7 +116,11 @@ export class PaveSurface {
     this.grid.near(q[0], q[1], q[2], radius, visit)
   }
 
-  /** Metal thickness straight in from sample i (first wall hit along −normal), mm. */
+  /**
+   * Metal depth available to a seat at sample i: the thickness straight in (to the first wall
+   * hit along −normal), or half of it when that wall is itself in the region — its own stones
+   * are seated from the other side, so a thin plate paved on both faces shares its metal.
+   */
   thickness(i: number): number {
     let t = this.thicknessCache[i]!
     if (t < 0) {
@@ -121,9 +128,16 @@ export class PaveSurface {
       const [nx, ny, nz] = this.normal(i)
       const lift = this.spacing * 0.05
       this.bvh ??= new TriangleBvh(this.host)
-      t =
-        this.bvh.raycast(x + nx * lift, y + ny * lift, z + nz * lift, -nx, -ny, -nz, lift * 4) -
-        lift
+      const hit = this.bvh.firstHit(
+        x + nx * lift,
+        y + ny * lift,
+        z + nz * lift,
+        -nx,
+        -ny,
+        -nz,
+        lift * 4,
+      )
+      t = (hit.t - lift) * (hit.triangle >= 0 && this.inside[hit.triangle] ? 0.5 : 1)
       this.thicknessCache[i] = t
     }
     return t

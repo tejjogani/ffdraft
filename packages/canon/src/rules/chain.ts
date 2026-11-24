@@ -81,17 +81,4 @@ export const CHAIN_RULES = [
     severity: 'warning',
     fix: 'clampToBand',
   }),
-  rule({
-    id: 'chain.styles',
-    title: 'Chain styles we cannot model',
-    applies: { nodeKind: 'chain' },
-    paths: ['chain.style'],
-    band: band(0, 0, 0),
-    rationale:
-      'Franco, herringbone, snake and paperclip are not here, nor bezel tennis: offer the nearest of the seven.',
-    source: src('K', '§5 What the schema cannot express'),
-    confidence: 'high',
-    severity: 'default',
-    expressible: false,
-  }),
 ]

@@ -12,6 +12,7 @@
  */
 import type { CrossSection, Manifold } from 'manifold-3d'
 import { runtime } from '../../runtime/index'
+import { keepPieces } from '../pieces'
 import type { OutlineDistance } from './distance'
 
 export type EdgeStyle = 'flat' | 'chamfer' | 'round' | 'pillow'
@@ -37,6 +38,13 @@ const CONTOUR_TOLERANCE = 0.002
 const STACK_STEP = 0.01
 /** Edges shorter than this (mm) are collapsed after lifting. */
 const COLLAPSE = 1e-3
+/**
+ * Triangles a refined face may take: ~half a million in the whole body, a few seconds of work.
+ * Beyond it the face is refined more coarsely instead of running out of time or memory.
+ */
+const MAX_FACE_TRIANGLES = 250_000
+/** Shells below this volume (mm³) are collapsed steps and offset slivers, not the design. */
+const DEBRIS = 1e-6
 
 /**
  * The front profile of a body `thickness` thick (back at z = 0): `size` is the chamfer or
@@ -114,9 +122,10 @@ export function membraneDome(
   for (let j = 0; j < ny; j++)
     for (let i = 0; i < nx; i++)
       inside[j * nx + i] = field.inside(x0 + i * spacing, y0 + j * spacing) ? 1 : 0
-  // Successive over-relaxation with the optimal factor for an n-wide grid.
+  // Successive over-relaxation with the optimal factor for an n-wide grid. The slowest mode of
+  // the membrane spans the field's narrow side, so a long strip converges as fast as its width.
   const u = new Float64Array(nx * ny)
-  const n = Math.max(nx, ny)
+  const n = Math.min(nx, ny)
   const omega = 2 / (1 + Math.sin(Math.PI / n))
   const h2 = spacing * spacing
   for (let iter = 0; iter < 6 * n; iter++) {
@@ -204,7 +213,11 @@ export function profiledSlab(o: SlabOptions): Manifold {
     if (o.profile.curved) {
       // Treads are triangulated from their two contours only, which leaves long slivers across
       // the medial axis; refining first lets every point of the face follow the true profile.
-      stacked = stacked.refineToLength(o.resolution)
+      // An equilateral mesh of edge e holds about 2.3 / e² triangles per mm².
+      const area = o.outline.area()
+      stacked = stacked.refineToLength(
+        Math.max(o.resolution, Math.sqrt((2.3 * area) / MAX_FACE_TRIANGLES)),
+      )
       owned.push(stacked)
     }
     const lifted = stacked.warpBatch((verts, count) => {
@@ -218,7 +231,9 @@ export function profiledSlab(o: SlabOptions): Manifold {
     })
     owned.push(lifted)
     // The collapsed steps leave zero-area slivers; collapsing sub-micron edges removes them.
-    return lifted.simplify(COLLAPSE)
+    // Where an offset contour, thinned on its own, pokes past the one outside it, its slab's
+    // walls fold into zero-volume shells when lifted; those are dropped.
+    return keepPieces(lifted.simplify(COLLAPSE), (volume) => volume > DEBRIS)
   } finally {
     for (const x of owned) x.delete()
   }

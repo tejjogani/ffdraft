@@ -5,7 +5,7 @@ import { guide } from './guide'
 export const ART_NOUVEAU = guide({
   id: 'artNouveau',
   label: 'Art Nouveau',
-  aliases: ['art nouveau', 'nouveau', 'whiplash', 'jugendstil', 'vine'],
+  aliases: ['art nouveau', 'nouveau', 'whiplash', 'jugendstil'],
   reads: [
     'One asymmetric whiplash line carries the whole piece.',
     "Nature as line: vines, tendrils, dragonflies, women's hair.",

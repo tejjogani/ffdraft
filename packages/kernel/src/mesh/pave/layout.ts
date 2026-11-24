@@ -3,7 +3,8 @@
  * stock sizes over a sampled surface region.
  *
  *  1. Each sample gets an allowed diameter: the edge margin, the curvature caps (stone ≤ R/3 on
- *     convex, ≤ R/5 on concave surfaces) and the thickness cap (seat + 0.4 mm of metal below).
+ *     convex, ≤ R/5 on concave surfaces) and the thickness cap (seat + 0.4 mm of metal below;
+ *     the drill hole under the seat only takes what metal is left beyond that).
  *  2. Outline rows, face by face: where a face is a band (a stroke, a step, a rim) it gets the
  *     rows its width takes, staggered about its ridge; an open field gets one row hugging its
  *     edge. Rows follow level sets of the distance to the edge (rows.ts), the way setters pave
@@ -50,6 +51,8 @@ export interface PlacedStone {
   /** Smoothed surface normal over the footprint. */
   normal: Vec3
   diameter: number
+  /** Depth of the blind drill hole below the culet that the metal under the seat allows, mm. */
+  hole: number
 }
 
 export interface Layout {
@@ -63,6 +66,8 @@ export interface Layout {
 /** Metal under a seat, and seat depth per mm of stone (06-freeform.md §5 step 1). */
 const FLOOR_METAL = 0.4
 const SEAT_DEPTH_PER_MM = 0.65
+/** The drill hole under a seat reaches at most one stone deeper, and never into the floor metal. */
+const MAX_HOLE_PER_MM = 1
 /** Stones are at most R/3 (convex) or R/5 (concave) of the local radius of curvature. */
 const CONVEX_CAP = 3
 const CONCAVE_CAP = 5
@@ -269,7 +274,9 @@ class Packer {
   private place(p: Vec3, n: Vec3, d: number, sample: number): number {
     const index = this.stones.length
     const c = this.girdle(p, n, d)
-    this.stones.push({ position: c, normal: n, diameter: d })
+    const spare = this.surface.thickness(sample) - SEAT_DEPTH_PER_MM * d - FLOOR_METAL
+    const hole = Math.min(Math.max(spare, 0), MAX_HOLE_PER_MM * d)
+    this.stones.push({ position: c, normal: n, diameter: d, hole })
     this.depth.push(this.surface.depth[sample]!)
     this.grid.add(c[0], c[1], c[2])
     // No stone centre can ever be this close to the new stone again.

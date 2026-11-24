@@ -107,19 +107,6 @@ export const THREE_STONE_RULES = [
     severity: 'default',
   }),
   rule({
-    id: 'threeStone.taperedBaguette',
-    title: 'Tapered baguettes',
-    applies: { archetypes: ['threeStone'] },
-    paths: ['gem.cut'],
-    band: band(0, 0, 0),
-    rationale:
-      'Tapered baguette, trapezoid and half-moon are not cuts here: use straight baguettes and say so.',
-    source: src('K', '§1 Three-stone: pairing'),
-    confidence: 'high',
-    severity: 'default',
-    expressible: false,
-  }),
-  rule({
     id: 'threeStone.sideElevation',
     title: 'Side stone height',
     applies: { archetypes: ['threeStone'], nodeKind: 'gem', when: side },

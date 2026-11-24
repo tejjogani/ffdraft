@@ -2,9 +2,9 @@
  * Hollowing to a wall thickness. The cavity is the inward offset of the body by `wall` (a level
  * set of its distance field). On a flat-backed piece the offset is taken from the body *before*
  * the back was sliced off, so the cavity runs out through the flat back: the classic scooped
- * hip-hop back with a rim of `wall` all round. A body without a flat back gets a closed hollow
- * and two Ø2 mm escape holes through the back, per docs/research/02-production.md (hollows:
- * escape holes 4 mm × 1 or 2 mm × 2+, drains ≥ 1.5 mm).
+ * hip-hop back with a rim of `wall` all round. Every closed cavity gets two Ø2 mm escape holes
+ * through the back (one where it is too small for two), per docs/research/02-production.md
+ * (hollows: escape holes 4 mm × 1 or 2 mm × 2+, drains ≥ 1.5 mm).
  */
 import type { Manifold } from 'manifold-3d'
 import { runtime } from '../runtime/index'
@@ -12,22 +12,29 @@ import { trianglesFromManifold } from '../solid/solid'
 import { distanceGrid, levelSetOf } from './sdf'
 
 const DRAIN_RADIUS = 1
-/** Grid spacing as a fraction of the wall, and its bounds in mm. */
-const SPACING_PER_WALL = 0.4
-const MIN_SPACING = 0.12
-const MAX_CELLS = 220
+/**
+ * Grid spacing as a fraction of the wall, and its bounds in mm. The cavity is never seen, so it
+ * only needs to keep the wall: half a wall is plenty, and a few seconds at most.
+ */
+const SPACING_PER_WALL = 0.5
+const MIN_SPACING = 0.15
+const MAX_CELLS = 160
+
+/** Cavity pieces smaller than this (mm³) are specks where the inset barely opens, not hollows. */
+const MIN_CAVITY = 1
 
 export interface Hollowed {
   manifold: Manifold
-  /** The cavity opens through the flat back (no drain holes needed). */
-  open: boolean
+  /** Escape holes drilled through the back (none where a cavity opens through a flat back). */
   drains: number
 }
 
 /**
  * `body` is the finished outer shape; `envelope` the same body before its back was flattened
- * (pass `body` again when there is no flat back). Returns null when the walls would meet
- * everywhere (the body is thinner than two walls). The caller owns the returned Manifold.
+ * (pass `body` again when there is no flat back). Every cavity that does not open through the
+ * back gets its own escape holes, or is left solid when none can reach it — a sealed void
+ * cannot be cast. Returns null when no cavity remains (the body is thinner than two walls).
+ * The caller owns the returned Manifold.
  */
 export function hollowBody(body: Manifold, envelope: Manifold, wall: number): Hollowed | null {
   const { manifold: mf } = runtime()
@@ -40,35 +47,41 @@ export function hollowBody(body: Manifold, envelope: Manifold, wall: number): Ho
     votes: 1,
   })
   // Interpolation can pull the iso-surface up to ~¼ cell toward the outside; keep walls ≥ wall.
-  const cavity = levelSetOf(grid, wall + spacing / 4)
-  const owned: Manifold[] = [cavity]
+  const inset = levelSetOf(grid, wall + spacing / 4)
+  const pieces = inset.decompose()
+  inset.delete()
+  const owned: Manifold[] = [...pieces]
   try {
-    if (cavity.isEmpty() || cavity.volume() < spacing ** 3) return null
     const back = body.boundingBox().max[1]
-    const open = cavity.boundingBox().max[1] > back + 1e-6
-    let tool = cavity
+    const tools: Manifold[] = []
     let drains = 0
-    if (!open) {
-      const holes = drainHoles(cavity, back)
-      drains = holes.length
-      owned.push(...holes)
-      if (holes.length > 0) {
-        tool = mf.Manifold.union([cavity, ...holes])
-        owned.push(tool)
+    for (const piece of pieces) {
+      if (piece.volume() < MIN_CAVITY) continue
+      if (piece.boundingBox().max[1] > back + 1e-6) {
+        tools.push(piece)
+        continue
       }
+      const holes = drainHoles(piece, back)
+      owned.push(...holes)
+      if (holes.length === 0) continue
+      tools.push(piece, ...holes)
+      drains += holes.length
     }
+    if (tools.length === 0) return null
+    const tool = mf.Manifold.union(tools)
+    owned.push(tool)
     const result = body.subtract(tool)
     if (result.isEmpty() || result.volume() >= body.volume()) {
       result.delete()
       return null
     }
-    return { manifold: result, open, drains }
+    return { manifold: result, drains }
   } finally {
     for (const m of owned) m.delete()
   }
 }
 
-/** Two escape holes along +Y from the highest and lowest back-facing points of the cavity. */
+/** Escape holes along +Y from the highest and lowest back-facing points of one cavity. */
 function drainHoles(cavity: Manifold, back: number): Manifold[] {
   const { manifold: mf } = runtime()
   const { positions: p, indices } = trianglesFromManifold(cavity)
@@ -109,11 +122,13 @@ function drainHoles(cavity: Manifold, back: number): Manifold[] {
   return spots.map(([x, y, z]) => {
     const start = y - 2 * DRAIN_RADIUS
     const cylinder = mf.Manifold.cylinder(back + 1 - start, DRAIN_RADIUS, DRAIN_RADIUS, 24)
+    // Cylinder axis +Z → +Y, from inside the cavity out through the back.
+    const turned = cylinder.rotate([-90, 0, 0])
     try {
-      // Cylinder axis +Z → +Y, from inside the cavity out through the back.
-      return cylinder.rotate([-90, 0, 0]).translate([x, start, z])
+      return turned.translate([x, start, z])
     } finally {
       cylinder.delete()
+      turned.delete()
     }
   })
 }

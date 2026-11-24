@@ -10,6 +10,7 @@ import { BUILTINS } from '../builtin/index'
 import { type BuildContext, defineFeature, metalOf, solidFromManifold } from '../core'
 import { flatBack, flatPlacement, scaleToHeight } from '../mesh/fit'
 import { parseMesh } from '../mesh/parse/index'
+import { solidPieceCount } from '../mesh/pieces'
 import { repairMesh } from '../mesh/repair'
 import { hollowBody } from '../mesh/shell'
 import { simplifyToDetail } from '../mesh/simplify'
@@ -19,6 +20,8 @@ type MeshBodyNode = NodeOf<'meshBody'>
 
 /** Hollow shells thinner than this risk casting failure (02-production.md: shell ≥ 0.7 mm). */
 const MIN_HOLLOW_WALL = 0.7
+/** Smoothing works on a mesh this even, relative to the height (~0.27 mm on a 40 mm piece). */
+const SMOOTH_EDGE = 1 / 150
 
 async function sourceManifold(node: MeshBodyNode, ctx: BuildContext): Promise<Manifold> {
   if (node.source.type === 'builtin') return BUILTINS[node.source.name]()
@@ -65,7 +68,10 @@ export const meshBody = defineFeature('meshBody', async (node, ctx) => {
   // Scale first so every later tolerance is in millimetres.
   m = keep(scaleToHeight(m, node.height))
   m = keep(simplifyToDetail(m, node.detail, node.height))
-  if (node.smooth > 0) m = keep(scaleToHeight(keep(smoothManifold(m, node.smooth)), node.height))
+  if (node.smooth > 0)
+    m = keep(
+      scaleToHeight(keep(smoothManifold(m, node.smooth, node.height * SMOOTH_EDGE)), node.height),
+    )
   const trimmed = keep(flatBack(m, node.flatBack))
   const offset = flatPlacement(trimmed)
   let body = keep(trimmed.translate(offset))
@@ -101,13 +107,13 @@ export const meshBody = defineFeature('meshBody', async (node, ctx) => {
       })
   }
 
-  const pieces = body.decompose()
-  for (const p of pieces) p.delete()
-  if (pieces.length > 1)
+  // Sealed voids are shells too (of negative volume); only solid pieces cast apart.
+  const pieces = solidPieceCount(body)
+  if (pieces > 1)
     ctx.report({
       level: 'warning',
       code: 'mesh.disconnected',
-      message: `The body is in ${pieces.length} separate pieces; join them so it casts as one part.`,
+      message: `The body is in ${pieces} separate pieces; join them so it casts as one part.`,
     })
   // The solid owns a handle of its own; `body` stays tracked and is freed with the build.
   return { bodies: [{ solid: solidFromManifold(body.translate([0, 0, 0])), ...metalOf(node) }] }

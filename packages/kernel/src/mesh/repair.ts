@@ -12,7 +12,7 @@ import { boundsOfPositions, type IndexedTriangles } from '../solid/meshing'
 import { manifoldFromTriangles } from '../solid/solid'
 import { fillHoles } from './fill'
 import { orientOutward } from './orient'
-import { resurface } from './resurface'
+import { NO_VOLUME, resurface } from './resurface'
 import { edgeTopology, triangleComponents } from './topology'
 import { compact, weldWithin } from './weld'
 
@@ -38,7 +38,10 @@ const WELD_COARSE = 2e-4
 export function repairMesh(soup: IndexedTriangles): { manifold: Manifold; report: RepairReport } {
   if (soup.indices.length < 12) throw new Error('The mesh has too few triangles to form a solid')
   const b = boundsOfPositions(soup.positions)
-  const diagonal = Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2])
+  const size = [0, 1, 2].map((k) => b.max[k]! - b.min[k]!)
+  // Flat in any direction (a sheet, a capped plane): nothing to repair or re-surface into a solid.
+  if (!size.every((s) => s > 0)) throw new Error(NO_VOLUME)
+  const diagonal = Math.hypot(size[0]!, size[1]!, size[2]!)
   const report: RepairReport = {
     merged: 0,
     holes: 0,

@@ -53,19 +53,6 @@ export const EARRING_RULES = [
     severity: 'warning',
   }),
   rule({
-    id: 'earring.screwBack',
-    title: 'Screw backs',
-    applies: { kinds: ['earrings'] },
-    paths: ['finding.type'],
-    band: band(0, 0, 0),
-    rationale:
-      'Screw backs suit studs from about 1 ct each but are not a finding here: model a butterfly and note it.',
-    source: src('EJ', '§3 Stud head'),
-    confidence: 'medium',
-    severity: 'default',
-    expressible: false,
-  }),
-  rule({
     id: 'earring.post.wire',
     title: 'Post wire',
     applies: { nodeKind: 'finding', when: v('earrings') },
@@ -105,19 +92,6 @@ export const EARRING_RULES = [
     confidence: 'medium',
     severity: 'warning',
     fix: 'clampToBand',
-  }),
-  rule({
-    id: 'earring.hollowHoops',
-    title: 'Hollow hoops',
-    applies: { kinds: ['earrings'] },
-    paths: ['pipe.width'],
-    band: band(0, 0, 0),
-    rationale:
-      'Thicker hoops are hollow tube, which cannot be modelled: offer the solid limit or a maker note.',
-    source: src('D', '§3 Hoops'),
-    confidence: 'high',
-    severity: 'default',
-    expressible: false,
   }),
   rule({
     id: 'earring.massPerEar',

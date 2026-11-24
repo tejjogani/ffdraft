@@ -13,9 +13,9 @@ import { OutlineDistance } from '../mesh/outline/distance'
 import { edgeProfile, flatProfile, membraneDome, profiledSlab } from '../mesh/outline/profile'
 import { SHAPES } from '../mesh/outline/shapes'
 import { MIN_STROKE, thickenStrokes } from '../mesh/outline/stroke'
-import { parseSvgPath } from '../mesh/outline/svgPath'
+import { type Contour, parseSvgPath } from '../mesh/outline/svgPath'
 import type { PaveField } from '../mesh/pave/region'
-import { textOutline } from '../text'
+import { type FontId, loadFont, textOutline } from '../text'
 
 type VectorBodyNode = NodeOf<'vectorBody'>
 
@@ -26,18 +26,28 @@ const RELATIVE_TOLERANCE = 2e-4
 /** Corner radius of the named shapes relative to their height: crisp, but castable and polishable. */
 const SHAPE_CORNER = 0.015
 /**
+ * The scaled outline is thinned to this deviation (mm), far below casting resolution: artwork
+ * traced at thousands of points per millimetre would otherwise cost minutes in every offset.
+ */
+const OUTLINE_TOLERANCE = 0.005
+/** Widest outline accepted (mm): a belt buckle or a large plaque, not an SVG drawn at the wrong scale. */
+const MAX_WIDTH = 250
+/** A domed field stays flatter than this radius, so ~2 mm melee still fit it (R/3 rule). */
+const FIELD_MIN_RADIUS = 6
+/**
  * Depth of the field below the rim: deep enough that melee crowns (≈0.15 d above the girdle)
  * sit below the rim's top, never more than a third of the body.
  */
-/** A domed field stays flatter than this radius, so ~2 mm melee still fit it (R/3 rule). */
-const FIELD_MIN_RADIUS = 6
 const recessFor = (border: number, thickness: number) =>
   Math.min(Math.max(0.8 * border, 0.3), 0.6, thickness / 3)
+/** The rim's edge treatment takes at most this share of the border; the rest is at full height. */
+const RIM_EDGE = 0.75
 
 /** The source's filled area, y up, in source units (the caller owns it). */
 async function sourceSection(
   source: VectorBodyNode['source'],
   height: number,
+  ctx: BuildContext,
 ): Promise<CrossSection> {
   const { manifold: mf } = runtime()
   switch (source.type) {
@@ -48,24 +58,19 @@ async function sourceSection(
       )
     case 'svg': {
       // Flatten once coarsely to learn the artwork's size, then at the tolerance its scale needs.
-      const rough = parseSvgPath(source.d, 1)
+      const rough = artwork(source.d, 1)
       const ys = rough.flat().map((p) => p[1])
       const extent = Math.max(...ys) - Math.min(...ys) || 1
       const tolerance = Math.max(extent * RELATIVE_TOLERANCE, (0.002 * extent) / height)
       // SVG's y axis points down; the fill rule is SVG's default.
-      const contours = parseSvgPath(source.d, tolerance).map((c) =>
+      const contours = artwork(source.d, tolerance).map((c) =>
         c.map(([x, y]): [number, number] => [x, -y]),
       )
       return new mf.CrossSection(contours, 'NonZero')
     }
     case 'text': {
-      if (source.text.trim() === '') throw new Error('The text is empty')
-      const layout = await textOutline(
-        source.text,
-        source.font,
-        height,
-        height * RELATIVE_TOLERANCE * 5,
-      )
+      const text = await drawableText(source.text, source.font, ctx)
+      const layout = await textOutline(text, source.font, height, height * RELATIVE_TOLERANCE * 5)
       // Each glyph fills even-odd on its own; overlapping glyphs (script joins) are unioned.
       const glyphs = layout.glyphs.map(
         (g) =>
@@ -81,6 +86,48 @@ async function sourceSection(
       }
     }
   }
+}
+
+/** The path's closed contours, with errors a designer can act on. */
+function artwork(d: string, tolerance: number): Contour[] {
+  let contours: Contour[]
+  try {
+    contours = parseSvgPath(d, tolerance)
+  } catch (error) {
+    throw new Error(`The SVG path cannot be read: ${(error as Error).message}`)
+  }
+  if (contours.length === 0)
+    throw new Error('The SVG path has no closed area; draw a filled shape, not just a line')
+  return contours
+}
+
+/**
+ * The text without the characters the font has no glyph for, which would otherwise come out as
+ * the font's "missing glyph" box — engraved into gold. Warns naming them, or throws when
+ * nothing is left.
+ */
+async function drawableText(text: string, font: FontId, ctx: BuildContext): Promise<string> {
+  const face = await loadFont(font)
+  const missing = new Set<string>()
+  const kept = Array.from(text).filter((c) => {
+    if (c === '\n' || face.charToGlyphIndex(c) !== 0) return true
+    if (c.trim() !== '') missing.add(c)
+    return false
+  })
+  const list = [...missing].map((c) => `“${c}”`).join(' ')
+  if (kept.join('').trim() === '')
+    throw new Error(
+      missing.size > 0
+        ? `The ${font} font has no letters for ${list}; choose another font or other characters`
+        : 'The text is empty',
+    )
+  if (missing.size > 0)
+    ctx.report({
+      level: 'warning',
+      code: 'text.missingGlyph',
+      message: `The ${font} font has no letters for ${list}, so ${missing.size > 1 ? 'they were' : 'it was'} left out; choose another font to keep ${missing.size > 1 ? 'them' : 'it'}.`,
+    })
+  return kept.join('')
 }
 
 /** Largest distance from the outline to any point inside it (the pillow's reach). */
@@ -99,14 +146,21 @@ function innerReach(outline: CrossSection, distance: OutlineDistance): number {
 
 export const vectorBody = defineFeature('vectorBody', async (node, ctx) => {
   const own = <T extends CrossSection | Manifold>(x: T): T => ctx.track(x)
-  let outline = own(await sourceSection(node.source, node.height))
+  let outline = own(await sourceSection(node.source, node.height, ctx))
   if (outline.isEmpty()) throw new Error('The outline encloses no area')
   const box = outline.bounds()
   const scale = node.height / (box.max[1] - box.min[1])
+  const width = (box.max[0] - box.min[0]) * scale
+  if (width > MAX_WIDTH)
+    throw new Error(
+      `At ${node.height} mm tall this outline is ${Math.round(width)} mm wide (at most ${MAX_WIDTH} mm); lower the height or check the artwork's proportions`,
+    )
   outline = own(
-    own(outline.translate([-(box.min[0] + box.max[0]) / 2, -(box.min[1] + box.max[1]) / 2])).scale(
-      scale,
-    ),
+    own(
+      own(
+        outline.translate([-(box.min[0] + box.max[0]) / 2, -(box.min[1] + box.max[1]) / 2]),
+      ).scale(scale),
+    ).simplify(OUTLINE_TOLERANCE),
   )
   if (node.source.type === 'shape') {
     // Soften corners (convex, then concave) by a radius proportional to the shape.
@@ -193,7 +247,7 @@ function borderedSlab(
   const edge = node.bevel === 'pillow' ? 'round' : node.bevel
   const rimProfile = edgeProfile(
     edge,
-    Math.min(node.bevelSize, node.border * 0.75),
+    Math.min(node.bevelSize, node.border * RIM_EDGE),
     node.thickness,
     node.border,
   )
@@ -219,8 +273,12 @@ function borderedSlab(
     segments: SEGMENTS,
     resolution,
   })
+  // The field slab reaches under the rim, as far as the rim stands at full height, so the two
+  // overlap in volume: unioned while only touching along the field's wall, they leave sliver
+  // shells and handles that tear apart under any later tolerance-based step.
+  const under = field.offset(node.border * (1 - RIM_EDGE), 'Round', 2, SEGMENTS)
   const inner = profiledSlab({
-    outline: field,
+    outline: under,
     distance: fieldDistance,
     profile: fieldProfile,
     segments: SEGMENTS,
@@ -229,6 +287,7 @@ function borderedSlab(
   try {
     return mf.Manifold.union(rim, inner)
   } finally {
+    under.delete()
     rim.delete()
     inner.delete()
   }

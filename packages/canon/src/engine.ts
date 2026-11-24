@@ -3,40 +3,55 @@
  * overrides them, and what their bands evaluate to for a set of facts.
  */
 import type { Archetype, PieceKind } from '@pave/schema'
-import { type Expr, evalExpr } from './expr'
+import { and, type Expr, evalExpr, lt } from './expr'
 import type { Facts } from './facts'
 import type { Band, Rule, StyleGuide, Variant } from './model'
 import { RULES } from './rules/index'
 import { STYLES } from './styles/index'
+import { hasAny, hasPhrase } from './words'
 
-const norm = (s: string) =>
-  s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim()
-
-/** Style guides named by the brief's style words (PieceSpec.style or an intent's tags). */
+/**
+ * Style guides named by the brief's style words (PieceSpec.style or an intent's tags), matched
+ * as whole words or phrases, best match first: a guide named by its own label beats one reached
+ * through an alias, then more matching words, then canon order.
+ */
 export function matchStyles(words: readonly string[] = []): StyleGuide[] {
-  const w = words.map(norm)
-  return STYLES.filter((g) =>
-    [g.id, g.label, ...g.aliases].map(norm).some((a) => w.some((x) => x === a || x.includes(a))),
-  )
+  const scored = STYLES.map((g, i) => {
+    const byName = hasAny(words, [g.label, g.id])
+    const hits = g.aliases.filter((a) => hasPhrase(words, a)).length
+    return { g, i, score: (byName ? 10 : 0) + hits }
+  }).filter((x) => x.score > 0)
+  scored.sort((a, b) => b.score - a.score || a.i - b.i)
+  return scored.map((x) => x.g)
 }
 
-/** The rules with every matched style guide's overrides applied; an override band replaces lintAt. */
+/**
+ * The rules with every matched style guide's overrides applied; an override band replaces
+ * lintAt. A conditional override splits the rule in two with the same id: the style's version
+ * where its `when` holds, the canon's elsewhere.
+ */
 export function effectiveRules(styles: readonly StyleGuide[]): Rule[] {
   const overrides = new Map(
     styles.flatMap((g) => (g.overrides ?? []).map((o) => [o.ruleId, o] as const)),
   )
-  return RULES.map((r) => {
+  return RULES.flatMap((r) => {
     const o = overrides.get(r.id)
-    if (!o) return r
+    if (!o) return [r]
     const { lintAt, ...rest } = r
-    return {
+    const styled: Rule = {
       ...rest,
       ...(o.band ? { band: o.band, variants: undefined } : lintAt ? { lintAt } : {}),
       ...(o.severity ? { severity: o.severity } : {}),
     }
+    if (!o.when) return [styled]
+    const within = (c: Expr): Rule['applies'] => ({
+      ...r.applies,
+      when: r.applies.when === undefined ? c : and(r.applies.when, c),
+    })
+    return [
+      { ...styled, applies: within(o.when) },
+      { ...r, applies: within(lt(o.when, 0.5)) },
+    ]
   })
 }
 
@@ -51,8 +66,7 @@ export function ruleApplies(r: Rule, c: PieceContext): boolean {
   const a = r.applies
   if (a.kinds && !a.kinds.includes(c.kind)) return false
   if (a.archetypes && !a.archetypes.includes(c.archetype)) return false
-  if (a.styles && !a.styles.some((s) => c.words.some((w) => norm(w).includes(norm(s)))))
-    return false
+  if (a.styles && !hasAny(c.words, a.styles)) return false
   return true
 }
 
@@ -113,8 +127,12 @@ const varsIn = (e: Expr | undefined, out = new Set<string>()): Set<string> => {
   return out
 }
 
-/** How narrowly a rule targets: more filters and conditions win when bands disagree. */
+/**
+ * How narrowly a rule targets: more filters and conditions win when bands disagree, and a rule
+ * that declares what it refines always outranks the rule it refines.
+ */
 export const specificity = (r: Rule): number =>
+  (r.refines ? 20 : 0) +
   (r.applies.archetypes ? 2 : 0) +
   (r.applies.styles ? 3 : 0) +
   (r.applies.kinds ? 1 : 0) +
