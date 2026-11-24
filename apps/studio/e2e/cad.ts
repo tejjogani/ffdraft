@@ -383,7 +383,8 @@ await step('export', async () => {
       (async () => {
         if (!(await page.getByRole('menu').count()))
           await page.getByRole('button', { name: /^Export/ }).click()
-        await page.getByRole('menuitem', { name: new RegExp(`— ${f}`) }).click()
+        // Each row reads "For casting · Watertight metal, per alloy · STL": the format tag ends it.
+        await page.getByRole('menuitem', { name: new RegExp(`${f}$`) }).click()
       })(),
     ])
     const path = `${DL}/${download.suggestedFilename()}`

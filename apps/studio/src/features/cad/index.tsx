@@ -70,10 +70,12 @@ const INSPECTOR_PX = 328
 /**
  * Panels dock while the viewport keeps a usable width beside them, measured on the workspace
  * itself (the app's sidebar may be open or not): the feature list folds into a sheet first,
- * then the inspector.
+ * then the inspector. The narrowest view still fits both toolbars side by side (≈ 480 px with
+ * the panel buttons and the software-graphics chip).
  */
-const DOCK_OUTLINER_PX = 1100
-const DOCK_INSPECTOR_PX = 760
+const MIN_VIEW_PX = 480
+const DOCK_OUTLINER_PX = OUTLINER_PX + INSPECTOR_PX + MIN_VIEW_PX
+const DOCK_INSPECTOR_PX = INSPECTOR_PX + MIN_VIEW_PX
 /** Below this viewport width the floating rows go icon-only and the next-step chips step aside. */
 const COMPACT_VIEW_PX = 560
 
