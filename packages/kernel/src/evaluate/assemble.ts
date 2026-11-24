@@ -80,10 +80,29 @@ const specOf = (b: MetalSpec): MetalSpec => ({
 })
 
 /**
+ * The solids with coincident copies left out: the same body in the same place, recognised by
+ * equal bounds (to 0.1 µm) and volume (to six figures). A polar pattern about an axis through
+ * its source (the default) stacks every copy on the original; fusing eight coincident spheres
+ * took seconds and adds nothing. A hash, not pairwise tests: a pavé has thousands of bodies.
+ * Values that straddle a rounding step are merely kept, and fused as before.
+ */
+export function distinctSolids(solids: readonly Solid[]): Solid[] {
+  const seen = new Set<string>()
+  return solids.filter((solid) => {
+    const { min, max } = solid.bounds()
+    const key = [...min, ...max].map((v) => Math.round(v * 1e4)).join(',') + `|${solid.volume().toPrecision(6)}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+/**
  * Volume of overlapping solids fused together. The fuse runs on meshes; each exact solid's
  * tessellation deficit is added back so the figure is as good as the exact volumes allow.
  */
-function fusedVolume(solids: readonly Solid[], quality: Quality): number {
+function fusedVolume(all: readonly Solid[], quality: Quality): number {
+  const solids = all.length > 1 ? distinctSolids(all) : all
   if (solids.length === 1) return solids[0]!.volume()
   const { manifold: mf } = runtime()
   const meshes = solids.map((s) => s.manifold(quality))
@@ -161,6 +180,32 @@ function regionsOf(
   return regions.size > 0 ? [...regions.values()] : undefined
 }
 
+/**
+ * The parts with their names (and their regions' names) taken from the current nodes. Node
+ * hashes leave names out, so cached parts can carry a name the designer has since changed; the
+ * geometry, and so `rev`, stays as it is. Parts whose names are current are returned as they are.
+ */
+export function withCurrentNames(
+  parts: readonly ScenePart[],
+  results: ReadonlyMap<string, NodeResult>,
+): ScenePart[] {
+  const label = (id: string, fallback: string) => {
+    const result = results.get(id)
+    return result ? labelOf(result.node) : fallback
+  }
+  return parts.map((scenePart) => {
+    const { part, namedAfter } = scenePart
+    const name = namedAfter ? label(namedAfter, part.name) : part.name
+    const regions = part.regions?.map((r) => {
+      const current = label(r.nodeId, r.name)
+      return current === r.name ? r : { ...r, name: current }
+    })
+    const renamed = name !== part.name || regions?.some((r, i) => r !== part.regions![i])
+    if (!renamed) return scenePart
+    return { ...scenePart, part: { ...part, name, ...(regions ? { regions } : {}) } }
+  })
+}
+
 // ── Draft ────────────────────────────────────────────────────────────────────────────────────
 
 /** Per-node draft parts, reused while the node's hash and its additions' alloys are unchanged. */
@@ -213,6 +258,7 @@ export function assembleDraft(
             ),
             fused: null,
             sources: group,
+            namedAfter: result.id,
           }
         }),
       }
@@ -402,7 +448,8 @@ export function assembleProduction(
       // as "loose" and rejoin their body as one part at the end.
       const single: Solid[] = []
       const multi = new Map<Solid, { tris: IndexedTriangles; shells: Shells; loose: Set<number> }>()
-      for (const solid of group.solids) {
+      // Coincident copies add no metal and cost a slow union; their sources stay on record.
+      for (const solid of distinctSolids(group.solids)) {
         const tris = solid.triangles(quality)
         const found = shellsIn(tris)
         // A chain is a separate component, bought or cast apart and threaded on after: its links
@@ -559,7 +606,12 @@ export function assembleProduction(
         part.exact = sources.length > 0 && sources.every((s) => s.body.solid.exact)
         const regions = regionsOf(part, sources, results)
         if (regions) part.regions = regions
-        parts.push({ part, fused: solid, sources })
+        parts.push({
+          part,
+          fused: solid,
+          sources,
+          ...(kept.length > 1 && first ? { namedAfter: first.id } : {}),
+        })
       })
       for (const [home, body] of loose) {
         const sources = group.sources.filter((source) => source.body.solid === home)
@@ -580,7 +632,7 @@ export function assembleProduction(
           volume,
         )
         part.exact = whole && home.exact
-        parts.push({ part, fused: solid, sources })
+        parts.push({ part, fused: solid, sources, namedAfter: node.id })
       }
     }
     parts.sort(

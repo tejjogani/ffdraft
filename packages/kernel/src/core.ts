@@ -310,6 +310,8 @@ export interface ScenePart {
   fused: Solid | null
   /** The node bodies that make up this part — exact wherever the design is parametric. */
   sources: readonly { nodeId: string; body: Body }[]
+  /** The node whose name the part carries, if it is named after one (not after its alloy). */
+  namedAfter?: string
 }
 
 export interface SceneStone {

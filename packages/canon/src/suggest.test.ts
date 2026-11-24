@@ -15,10 +15,9 @@ import { canonDefaults, suggestDesign, suggestParameters } from './suggest'
  * Template values the canon corrects, with the rule that objects. These are data bugs in
  * TEMPLATES, recorded here until the templates are fixed in @pave/schema.
  */
-const TEMPLATE_CORRECTIONS: Record<string, string[]> = {
-  'iced-trophy': ['ice.sizeMax'],
-  'iced-initial': ['ice.sizeMax'],
-}
+// The iced templates' pavé was oversized (ice.sizeMax); they now ask 1.3 mm stones, which the
+// canon accepts, so no template needs a correction.
+const TEMPLATE_CORRECTIONS: Record<string, string[]> = {}
 
 describe('suggestParameters', () => {
   for (const t of TEMPLATES)

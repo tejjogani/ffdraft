@@ -67,7 +67,12 @@ function openingThatFits(
     if (passes(mid)) hi = mid
     else lo = mid
   }
-  return Math.min(MAX_OPENING, Math.ceil(hi * 10) / 10)
+  // Rounding up to 0.1 mm can land on a size that does not pass: at draft the tube's polygon
+  // changes its segment count with its radius, so the hole is not monotonic in the opening.
+  // Offer only a size that was checked, or the fix leaves bail.small behind.
+  let offer = Math.min(MAX_OPENING, Math.ceil(hi * 10) / 10)
+  while (offer < MAX_OPENING && !passes(offer)) offer = Math.round(offer * 10 + 1) / 10
+  return offer
 }
 
 export function chainChecks(scene: Scene, profile: DfmProfile): Diagnostic[] {

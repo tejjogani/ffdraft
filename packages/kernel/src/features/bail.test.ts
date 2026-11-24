@@ -180,6 +180,21 @@ describe('bail', () => {
     expect(codes).not.toContain('metal.disconnected')
   }, 60_000)
 
+  it('offers, at draft, an opening that clears the bail check in one click', async () => {
+    // A tube on the solitaire pendant over a 2 mm tennis line: the bisection's rounded size
+    // used to fall 0.1 mm short at draft, where the tube's polygon is coarse.
+    let design = template('pendant-solitaire')
+    design = applyOps(design, [
+      { t: 'update', id: 'bail', patch: { style: 'tube', opening: 4 } },
+      { t: 'update', id: 'chain', patch: { style: 'tennis', linkWidth: 2, wire: 0.64 } },
+    ]).design
+    const first = await kernel.evaluate(design)
+    const small = first.diagnostics.find((d) => d.code === 'bail.small')
+    expect(small?.fix).toBeDefined()
+    const fixed = await kernel.evaluate(applyOps(design, small!.fix!.ops).design)
+    expect(fixed.diagnostics.map((d) => d.code)).not.toContain('bail.small')
+  }, 60_000)
+
   it('warns when a hidden bail cannot hang a small piece face out', async () => {
     const e = await kernel.evaluate(
       designFrom('pendant', [
@@ -196,6 +211,90 @@ describe('bail', () => {
     const low = e.diagnostics.find((d) => d.code === 'bail.hiddenLow')
     expect(low?.fix?.ops).toEqual([{ t: 'update', id: 'bail', patch: { style: 'tube' } }])
   })
+
+  it.each<[string, NodeInput]>([
+    [
+      'flat-backed',
+      {
+        id: 'body',
+        kind: 'meshBody',
+        source: { type: 'builtin', name: 'crown' },
+        height: 35,
+        flatBack: 0.35,
+      },
+    ],
+    [
+      'hollowed',
+      {
+        id: 'body',
+        kind: 'meshBody',
+        source: { type: 'builtin', name: 'crown' },
+        height: 35,
+        flatBack: 0.5,
+        hollow: 1.25,
+      },
+    ],
+  ])(
+    'says a hidden bail has nothing to lie in on a %s crown open at the back',
+    async (_, body) => {
+      const design = designFrom('pendant', [
+        body,
+        { id: 'bail', kind: 'bail', host: 'body', style: 'hidden', opening: 10, width: 5 },
+      ])
+      // Already at draft, the detail the studio works in, with the one-click way out.
+      const draft = await kernel.evaluate(design)
+      const unsupported = draft.diagnostics.find((d) => d.code === 'bail.unsupported')
+      expect(unsupported?.fix?.ops).toEqual([{ t: 'update', id: 'bail', patch: { style: 'tube' } }])
+      // Not "too small": the piece is 35 mm, the bail just has no back to lie in.
+      expect(draft.diagnostics.map((d) => d.code)).not.toContain('bail.hiddenLow')
+      // Production does not add "move it until it overlaps" for a node that places itself.
+      const production = await kernel.evaluate(design, { detail: 'production' })
+      const codes = production.diagnostics.map((d) => d.code)
+      expect(codes).toContain('bail.unsupported')
+      expect(codes).not.toContain('metal.disconnected')
+      // The fix gives one casting.
+      const fixed = await kernel.evaluate(applyOps(design, unsupported!.fix!.ops).design, {
+        detail: 'production',
+      })
+      expect(fixed.diagnostics.map((d) => d.code)).not.toContain('metal.disconnected')
+      expect(fixed.parts).toHaveLength(1)
+    },
+    60_000,
+  )
+
+  it('hangs a hidden bail from the top rim of a scooped-out back', async () => {
+    // The trophy hollowed with an open back: no back plate, but the cup's rim runs along the top.
+    const e = await kernel.evaluate(
+      designFrom('pendant', [
+        {
+          id: 'body',
+          kind: 'meshBody',
+          source: { type: 'builtin', name: 'trophy' },
+          height: 45,
+          flatBack: 0.5,
+          hollow: 1.25,
+        },
+        { id: 'bail', kind: 'bail', host: 'body', style: 'hidden', opening: 10, width: 5 },
+      ]),
+      { detail: 'production' },
+    )
+    const codes = e.diagnostics.map((d) => d.code)
+    expect(codes).not.toContain('bail.unsupported')
+    expect(codes).not.toContain('metal.disconnected')
+    expect(e.parts).toHaveLength(1)
+  }, 60_000)
+
+  it('says how far off level a name hangs when its bail cannot stand over the centre of mass', async () => {
+    // "Tej": the nearest metal that carries the bail is 1.5 mm right of the centre of mass.
+    const tej = await kernel.evaluate(name('Tej'))
+    const off = tej.diagnostics.find((d) => d.code === 'bail.offLevel')
+    expect(off?.level).toBe('warning')
+    expect(off!.value!).toBeGreaterThan(off!.limit!)
+    expect(off!.message).toMatch(/hangs turned about \d+°/)
+    // A name with metal over its centre of mass hangs level and says nothing.
+    const olivia = await kernel.evaluate(name('Olivia'))
+    expect(olivia.diagnostics.map((d) => d.code)).not.toContain('bail.offLevel')
+  }, 60_000)
 
   it('reports a chain that runs through the pendant, not only through the bail', async () => {
     // A ring bail sunk deep in a tall plate: the hung chain passes through the plate's top.

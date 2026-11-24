@@ -4,7 +4,7 @@
  */
 import { type Design, evaluationOrder, type Node, nodeRefs } from '@pave/schema'
 import { type AnyFeature, type NodeResult, QUALITY, type Scene } from '../core'
-import { manufacturabilityDiagnostics } from '../dfm/index'
+import { CHECK_NAMES, runCheck, withoutCascades } from '../dfm/index'
 import { discardRuntime, isRuntimeFault, runtimeGeneration } from '../runtime/index'
 import type { Detail, Diagnostic, EvaluateOptions, Evaluation } from '../types'
 import {
@@ -13,8 +13,9 @@ import {
   assembleDraft,
   assembleProduction,
   type DraftCache,
+  withCurrentNames,
 } from './assemble'
-import { buildNode, disposeResult, failedResult } from './build'
+import { buildNode, disposeResult, failedResult, labelOf } from './build'
 import { stoneDiagnostics } from './diagnostics'
 import { combineHashes, hashNode } from './hash'
 import { buildReport } from './report'
@@ -177,6 +178,8 @@ export class Evaluator {
 
     const results = new Map<string, NodeResult>()
     const timings: Record<string, number> = {}
+    /** `“old label”` → `“new label”` for nodes renamed since their result was cached. */
+    const renames = new Map<string, string>()
     for (const id of order) {
       const node = design.nodes[id] as Node
       const hash = combineHashes([
@@ -199,8 +202,33 @@ export class Evaluator {
         cache.nodes.set(id, built)
         result = built
         timings[id] = built.ms
+      } else if (result.node !== node) {
+        // The same geometry from a new node object: a rename (names are not hashed) or the same
+        // document after a copy. The cached result is kept and given the current node.
+        const before = labelOf(result.node)
+        const after = labelOf(node)
+        if (before !== after) renames.set(`“${before}”`, `“${after}”`)
+        result = { ...result, node }
+        cache.nodes.set(id, result)
       }
       results.set(id, result)
+    }
+    // Messages name nodes in curly quotes; cached ones (this node's, its dependents', the
+    // whole-piece checks') still carry the old name after a rename.
+    const relabel = (list: readonly Diagnostic[]): Diagnostic[] =>
+      list.map((d) => {
+        const message = d.message.replace(/“[^”]*”/g, (quoted) => renames.get(quoted) ?? quoted)
+        return message === d.message ? d : { ...d, message }
+      })
+    if (renames.size > 0) {
+      for (const [id, result] of results) {
+        const diagnostics = relabel(result.diagnostics)
+        if (diagnostics.every((d, i) => d === result.diagnostics[i])) continue
+        const renamed = { ...result, diagnostics }
+        results.set(id, renamed)
+        cache.nodes.set(id, renamed)
+      }
+      if (cache.checks) cache.checks = { ...cache.checks, value: relabel(cache.checks.value) }
     }
     for (const [id, stale] of cache.nodes)
       if (!results.has(id)) {
@@ -211,8 +239,11 @@ export class Evaluator {
     await breathe()
     const assembleStarted = performance.now()
     const assembly = this.assembleOrDrop(design, results, detail, cache)
+    const parts = withCurrentNames(assembly.parts, results)
     timings['@assemble'] = performance.now() - assembleStarted
 
+    // Assembly can take seconds at production; an abort that arrived meanwhile stops here.
+    await breathe()
     const active = activeResults(design, results)
     const { stones, gemMeshes } = instanceStones(design, active)
     const diagnostics: Diagnostic[] = [
@@ -223,10 +254,10 @@ export class Evaluator {
 
     const evaluation: Evaluation = {
       detail,
-      parts: assembly.parts.map((p) => p.part),
+      parts: parts.map((p) => p.part),
       stones: stones.map((s) => s.instance),
       gemMeshes,
-      report: buildReport(design, assembly.parts, stones),
+      report: buildReport(design, parts, stones),
       diagnostics,
       ms: 0,
       timings,
@@ -236,7 +267,7 @@ export class Evaluator {
       detail,
       quality,
       nodes: results,
-      parts: assembly.parts,
+      parts,
       stones,
       evaluation,
     }
@@ -247,21 +278,15 @@ export class Evaluator {
     const checkStarted = performance.now()
     const checkKey = combineHashes([...results.values()].map((r) => r.hash))
     if (cache.checks?.key !== checkKey) {
-      let value: Diagnostic[]
-      try {
-        value = manufacturabilityDiagnostics(scene)
-      } catch (error) {
-        if (isRuntimeFault(error)) throw error
-        // A check that cannot run must not cost the designer the geometry it was checking.
-        value = [
-          {
-            level: 'warning',
-            code: 'dfm.unavailable',
-            message: `Manufacturability checks could not be completed: ${error instanceof Error ? error.message : String(error)}`,
-          },
-        ]
+      // One check at a time with a breather between them, so an abort (or a newer request)
+      // does not wait for every check of a heavy production piece. A check that cannot run
+      // costs only its own findings (see `runCheck`).
+      const found: Diagnostic[] = []
+      for (const name of CHECK_NAMES) {
+        await breathe()
+        found.push(...runCheck(name, scene))
       }
-      cache.checks = { key: checkKey, value }
+      cache.checks = { key: checkKey, value: withoutCascades(found) }
     }
     diagnostics.push(...cache.checks.value)
     timings['@dfm'] = performance.now() - checkStarted

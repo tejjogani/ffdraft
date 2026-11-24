@@ -251,3 +251,60 @@ describe('manufacturability checks', () => {
     expect(await codesOf([plate])).toEqual([])
   })
 })
+
+describe('one finding per cause', () => {
+  const template = (id: string) => buildDesign(TEMPLATES.find((t) => t.id === id)!.spec)
+  const found = async (design: ReturnType<typeof template>) =>
+    (await kernel.evaluate(design, { detail: 'production' })).diagnostics
+
+  it('an engraving that cuts the band apart is not also a loose band', async () => {
+    const design = applyOps(template('wedding-band'), [
+      { t: 'update', id: 'band', patch: { thicknessTop: 1, thicknessBottom: 1 } },
+      { t: 'add', node: { id: 'eng', kind: 'engraving', host: 'band', text: 'forever', depth: 2 } },
+    ]).design
+    const codes = (await found(design)).map((d) => d.code)
+    expect(codes).toContain('engraving.through')
+    expect(codes).not.toContain('metal.separate')
+  })
+
+  it('a stone buried in metal is buried, not unheld', async () => {
+    const codes = (
+      await found(
+        designFrom('other', [
+          { id: 'ball', kind: 'primitive', shape: 'sphere', size: [10, 10, 10] },
+          { id: 'lost', kind: 'gem', width: 2 },
+        ]),
+      )
+    ).map((d) => d.code)
+    expect(codes).toContain('stone.inMetal')
+    expect(codes).not.toContain('stone.unheld')
+  })
+
+  it('a flush setting with nothing to sink into is reported once, by the setting', async () => {
+    const flush = applyOps(template('solitaire'), [
+      { t: 'update', id: 'head', patch: { style: 'flush' } },
+    ]).design
+    const codes = (await found(flush)).map((d) => d.code)
+    expect(codes).toContain('setting.noHost')
+    expect(codes).not.toContain('stone.unheld')
+    expect(codes).not.toContain('seat.wall')
+  })
+
+  it('names stones by their feature, not by internal ids', async () => {
+    const moved = applyOps(template('eternity'), [
+      { t: 'update', id: 'row', patch: { transform: at(0, 0, 30) } },
+    ]).design
+    const unheld = (await kernel.evaluate(moved)).diagnostics.find((d) => d.code === 'stone.unheld')
+    expect(unheld?.message).toMatch(/“[^”]+”, stone \d+/)
+    expect(unheld?.message).not.toMatch(/row:\d/)
+    expect(unheld?.related?.[0]).toMatch(/^row:\d+$/)
+  })
+
+  it('states an absurd weight in readable kilograms', async () => {
+    const huge = designFrom('other', [
+      { id: 'b', kind: 'primitive', shape: 'box', size: [200, 200, 200] },
+    ])
+    const heavy = (await kernel.evaluate(huge)).diagnostics.find((d) => d.code === 'metal.heavy')
+    expect(heavy?.message).toMatch(/\d{1,3}(,\d{3})*(\.\d)? kg/)
+  })
+})

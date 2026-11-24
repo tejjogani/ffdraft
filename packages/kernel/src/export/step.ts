@@ -24,11 +24,13 @@ import {
   type NodeResult,
   runtime,
   type Scene,
-  subtract,
+  type Solid,
 } from '../core'
 import { gemUnit } from '../gems/index'
 import { boundsOverlap, weld } from '../solid/meshing'
-import { scoped, transformShape } from '../solid/occt'
+import { createBreather } from '../evaluate/yield'
+import { isRuntimeFault, runtimeGeneration } from '../runtime/index'
+import { compoundOf, scoped, shapeVolume, transformShape } from '../solid/occt'
 import type { Bounds, MeshData, StoneInstance } from '../types'
 import { linearHex } from './color'
 
@@ -41,8 +43,15 @@ interface NamedShape {
 const labelOf = (result: NodeResult | undefined, fallback: string) =>
   result?.node.name ?? result?.node.id ?? fallback
 
-/** Cutters aimed at a node (or at whatever they touch) that overlap its body. */
-function cuttersFor(scene: Scene, nodeId: string, body: Body) {
+/**
+ * Cutters aimed at a node (or at whatever they touch) that overlap its body. Metal added after
+ * the cuts (beads, claw tips: `afterCuts`) is not cut, exactly as in the cast part.
+ */
+function cuttersFor(scene: Scene, nodeId: string, body: Body): Solid[] {
+  const late = scene.nodes
+    .get(nodeId)
+    ?.additions.some((a) => a.afterCuts && a.solid === body.solid)
+  if (late) return []
   const box = body.solid.bounds()
   return [...scene.nodes.values()]
     .filter((r) => r.status === 'ok' && r.node.visible)
@@ -51,6 +60,7 @@ function cuttersFor(scene: Scene, nodeId: string, body: Body) {
       (c) =>
         (c.targets === 'all' || c.targets.includes(nodeId)) && boundsOverlap(c.solid.bounds(), box),
     )
+    .map((c) => c.solid)
 }
 
 /** Most cutters in one exact pass; beyond this OpenCascade's compound cut slows sharply. */
@@ -77,42 +87,85 @@ function passes<T extends { solid: { bounds(): Bounds } }>(tools: readonly T[]):
 }
 
 /**
- * Exact cutting passes allowed in one export. A pass of up to a dozen seats takes seconds; a
- * pavé field of hundreds would hold the export for many minutes, so beyond this the remaining
- * bodies go out uncut and the note names them. A count, not a clock, so two exports of the same
- * design cut exactly the same bodies.
+ * Exact cutters allowed in one export. One seat cut into a swept (B-spline) band takes 1–1.5 s
+ * in OpenCascade, holes about half that, and a band with dozens of seats took 90 s, holding the
+ * production worker and every request queued behind it. Beyond this the remaining bodies go
+ * out uncut and the note names them; the STL always has every seat. A count, not a clock, so
+ * two exports of the same design cut exactly the same bodies.
  */
-const MAX_PASSES = 16
+const MAX_EXACT_CUTTERS = 8
+
+/**
+ * One exact cutting pass, or null when OpenCascade's result cannot be trusted (it can return
+ * garbage without an error). Only the exact boolean: a mesh fallback would be wasted work here,
+ * since a body that cannot be cut exactly goes out uncut. Same-domain faces are not merged
+ * after each pass: on a band that already carries dozens of seats that clean-up took most of
+ * the time, and the solid is just as valid without it.
+ */
+function exactCut(target: Shape3D, tools: readonly Shape3D[]): Shape3D | null {
+  const before = shapeVolume(target)
+  let result: Shape3D | null = null
+  try {
+    const tool = tools.length === 1 ? tools[0]! : compoundOf(tools)
+    try {
+      result = target.cut(tool, { simplify: false })
+    } finally {
+      if (tool !== tools[0]) tool.delete()
+    }
+    const volume = shapeVolume(result)
+    const slack = 1e-6 * Math.max(1, before)
+    if (Number.isFinite(volume) && volume > slack && volume <= before + slack) return result
+  } catch {
+    // An exception is as untrustworthy as an implausible volume.
+  }
+  result?.delete()
+  return null
+}
+
+interface CachedCut {
+  shape: Shape3D
+  cut: boolean
+  /** The cutters it was cut with, and how many of the export's cutter budget it took. */
+  tools: readonly Solid[]
+  spent: number
+}
+
+/** The cut bodies of the last export, and the runtime they live in (see `runtimeGeneration`). */
+let lastCuts = new Map<Solid, CachedCut>()
+let generation = runtimeGeneration()
 
 /** The body's B-rep with its seats cut, or uncut when an exact boolean cannot be trusted. */
-function cutBody(
-  scene: Scene,
-  nodeId: string,
+async function cutBody(
+  tools: readonly Solid[],
   body: Body,
-  budget: { passes: number },
-): { shape: Shape3D; cut: boolean } {
-  const tools = cuttersFor(scene, nodeId, body)
+  budget: { cutters: number },
+  breathe: () => Promise<void>,
+): Promise<{ shape: Shape3D; cut: boolean }> {
   const own = body.solid.brep()!
   if (tools.length === 0) return { shape: own.clone(), cut: true }
-  let current = body.solid
+  // All of a body's cutters or none: a half-cut body would be the worst of both.
+  if (tools.length > budget.cutters) return { shape: own.clone(), cut: false }
+  budget.cutters -= tools.length
+  const planned = passes(tools.map((solid) => ({ solid })))
+  let current = own
   try {
-    const planned = passes(tools)
-    // All of a body's passes or none: a half-cut body would be the worst of both.
-    if (planned.length > budget.passes) return { shape: own.clone(), cut: false }
-    budget.passes -= planned.length
     for (const pass of planned) {
-      const next = subtract(
+      // A pass takes seconds on a heavily seated band: let an abort (or the next request) in.
+      await breathe()
+      const next = exactCut(
         current,
-        pass.map((t) => t.solid),
+        pass.map((t) => t.solid.brep()!),
       )
-      if (current !== body.solid) current.dispose()
+      // One pass failing means the exact body cannot carry its seats.
+      if (!next) return { shape: own.clone(), cut: false }
+      if (current !== own) current.delete()
       current = next
-      // One pass falling back to a mesh means the exact body cannot carry its seats.
-      if (!current.exact) return { shape: own.clone(), cut: false }
     }
-    return { shape: current.brep()!.clone(), cut: true }
+    const done = current
+    current = own
+    return { shape: done, cut: true }
   } finally {
-    if (current !== body.solid) current.dispose()
+    if (current !== own) current.delete()
   }
 }
 
@@ -241,7 +294,7 @@ export const step = defineExporter({
     const omitted = new Set<string>()
     let uncut = 0
     const uncutNodes = new Set<string>()
-    const budget = { passes: MAX_PASSES }
+    const budget = { cutters: MAX_EXACT_CUTTERS }
     const exact: { nodeId: string; body: Body }[] = []
     for (const part of scene.parts)
       for (const { nodeId, body } of part.sources) {
@@ -250,15 +303,52 @@ export const step = defineExporter({
         else omitted.add(labelOf(scene.nodes.get(nodeId), nodeId))
       }
     // The cutting budget goes to the largest bodies first (a band before its beads); the file
-    // keeps the parts' order.
-    const cuts = new Map<Body, { shape: Shape3D; cut: boolean }>()
-    for (const { nodeId, body } of [...exact].sort(
-      (a, b) => b.body.solid.volume() - a.body.solid.volume(),
-    ))
-      cuts.set(body, cutBody(scene, nodeId, body, budget))
+    // keeps the parts' order. Cuts made for the previous export are reused where the body and
+    // its cutters are the same solids: the stones/no-stones variants and repeat exports of a
+    // design cost one cut, not one each.
+    const breathe = createBreather(options.signal)
+    const previous: Map<Solid, CachedCut> =
+      generation === runtimeGeneration() ? lastCuts : new Map()
+    const cuts = new Map<Solid, CachedCut>()
+    let faulted = false
+    try {
+      for (const { nodeId, body } of [...exact].sort(
+        (a, b) => b.body.solid.volume() - a.body.solid.volume(),
+      )) {
+        await breathe()
+        const tools = cuttersFor(scene, nodeId, body)
+        const known = previous.get(body.solid)
+        if (
+          known &&
+          known.spent <= budget.cutters &&
+          known.tools.length === tools.length &&
+          known.tools.every((t, i) => t === tools[i])
+        ) {
+          budget.cutters -= known.spent
+          previous.delete(body.solid)
+          cuts.set(body.solid, known)
+          continue
+        }
+        const before = budget.cutters
+        const made = await cutBody(tools, body, budget, breathe)
+        cuts.set(body.solid, { ...made, tools, spent: before - budget.cutters })
+      }
+    } catch (error) {
+      faulted = isRuntimeFault(error)
+      throw error
+    } finally {
+      // Whatever the previous export cut and this one did not reuse is freed; what this one
+      // cut (even if it was aborted halfway) is kept for the next. After a fault the heap is
+      // gone: nothing is freed, and the next export starts afresh (see `generation`).
+      if (!faulted) for (const stale of previous.values()) stale.shape.delete()
+      lastCuts = cuts
+      generation = runtimeGeneration()
+    }
     for (const { nodeId, body } of exact) {
       const result = scene.nodes.get(nodeId)
-      const { shape, cut } = cuts.get(body)!
+      const { shape: cachedShape, cut } = cuts.get(body.solid)!
+      // The file gets its own handle; the cached shape stays for the next export.
+      const shape = cachedShape.clone()
       if (!cut) {
         uncut++
         uncutNodes.add(labelOf(result, nodeId))

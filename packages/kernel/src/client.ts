@@ -19,12 +19,34 @@ export interface KernelClient extends Kernel {
   terminate(): void
 }
 
+/** Events a real Worker raises when it fails to start, throws, or cannot be messaged. */
+interface WorkerEvents {
+  addEventListener?(type: 'error' | 'messageerror', listener: (event: unknown) => void): void
+}
+
 export interface KernelClientOptions {
   /**
    * The Worker (or any message port serving the kernel). Defaults to this package's module
    * Worker, which needs a bundler that understands `new Worker(new URL(…, import.meta.url))`.
    */
-  port?: Port<Request, Response> & { terminate?(): void }
+  port?: Port<Request, Response> & { terminate?(): void } & WorkerEvents
+  /**
+   * Called once when the Worker fails (it could not load, threw, or a message could not be
+   * delivered). Everything pending has been rejected with a {@link WorkerCrashedError} and the
+   * client is unusable: start a new one.
+   */
+  onCrash?(error: WorkerCrashedError): void
+}
+
+/**
+ * The kernel Worker failed: it could not be loaded, threw outside a request, or a message to
+ * or from it could not be delivered. Its state is unknown, so the client stops using it.
+ */
+export class WorkerCrashedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'WorkerCrashedError'
+  }
 }
 
 interface Pending {
@@ -52,7 +74,30 @@ export function createKernelClient(options: KernelClientOptions = {}): KernelCli
   let ready: Promise<void> | null = null
   /** The evaluate request currently in flight; a newer one supersedes it. */
   let latest: number | null = null
-  let terminated = false
+  /** Why the client can no longer be used: terminated by its owner, or the Worker failed. */
+  let dead: Error | null = null
+
+  const rejectAll = (error: Error) => {
+    for (const entry of pending.values()) entry.reject(error)
+    pending.clear()
+  }
+
+  const crash = (what: string) => {
+    if (dead) return
+    const error = new WorkerCrashedError(`The geometry engine stopped: ${what}`)
+    dead = error
+    rejectAll(error)
+    port.terminate?.()
+    options.onCrash?.(error)
+  }
+  // Without these, a Worker that fails to load or throws leaves every request (ready included)
+  // pending forever. A Worker killed from outside raises no event at all; callers still need a
+  // timeout for that case.
+  port.addEventListener?.('error', (event) => {
+    const message = (event as { message?: unknown }).message
+    crash(typeof message === 'string' && message ? message : 'the worker failed to start or threw')
+  })
+  port.addEventListener?.('messageerror', () => crash('a message could not be delivered'))
 
   const call = <T>(
     build: (id: number) => Request,
@@ -60,11 +105,26 @@ export function createKernelClient(options: KernelClientOptions = {}): KernelCli
   ): { id: number; promise: Promise<T> } => {
     const id = nextId++
     const promise = new Promise<T>((resolve, reject) => {
-      if (terminated) return reject(new Error('The kernel client was terminated'))
+      if (dead) return reject(dead)
       pending.set(id, { resolve: resolve as (value: never) => void, reject, assets })
-      port.postMessage(build(id))
+      try {
+        port.postMessage(build(id))
+      } catch (error) {
+        // A design that cannot be cloned (DataCloneError) never reached the Worker.
+        pending.delete(id)
+        reject(error instanceof Error ? error : new Error(String(error)))
+      }
     })
     return { id, promise }
+  }
+  /** Posts a control message (abort), which must not throw into the caller's code. */
+  const notify = (message: Request) => {
+    if (dead) return
+    try {
+      port.postMessage(message)
+    } catch {
+      // Nothing to deliver it to; the request it refers to settles some other way.
+    }
   }
 
   port.onmessage = ({ data }) => {
@@ -100,6 +160,8 @@ export function createKernelClient(options: KernelClientOptions = {}): KernelCli
   }
 
   const whenReady = (): Promise<void> => {
+    // A dead client must not keep answering "ready" from before it died.
+    if (dead) return Promise.reject(dead)
     ready ??= call<void>((id) => ({ type: 'ready', id })).promise.catch((error) => {
       ready = null
       throw error
@@ -118,13 +180,13 @@ export function createKernelClient(options: KernelClientOptions = {}): KernelCli
     async evaluate(design: Design, opts: EvaluateOptions = {}): Promise<Evaluation> {
       opts.signal?.throwIfAborted()
       // Latest request wins: whatever is still running is no longer wanted.
-      if (latest !== null && pending.has(latest)) port.postMessage({ type: 'abort', id: latest })
+      if (latest !== null && pending.has(latest)) notify({ type: 'abort', id: latest })
       const { id, promise } = call<Evaluation>(
         (id) => ({ type: 'evaluate', id, design, detail: opts.detail, assets: !!opts.assets }),
         opts.assets,
       )
       latest = id
-      const onAbort = () => port.postMessage({ type: 'abort', id })
+      const onAbort = () => notify({ type: 'abort', id })
       opts.signal?.addEventListener('abort', onAbort, { once: true })
       try {
         return await promise
@@ -137,18 +199,25 @@ export function createKernelClient(options: KernelClientOptions = {}): KernelCli
       format: ExportFormat,
       opts: ExportOptions = {},
     ): Promise<ExportResult> {
-      const { assets, ...rest } = opts
-      return call<ExportResult>(
+      const { assets, signal, ...rest } = opts
+      signal?.throwIfAborted()
+      const { id, promise } = call<ExportResult>(
         (id) => ({ type: 'export', id, design, format, options: rest, assets: !!assets }),
         assets,
-      ).promise
+      )
+      const onAbort = () => notify({ type: 'abort', id })
+      signal?.addEventListener('abort', onAbort, { once: true })
+      try {
+        return await promise
+      } finally {
+        signal?.removeEventListener('abort', onAbort)
+      }
     },
     terminate() {
-      terminated = true
+      if (!dead) dead = new Error('The kernel client was terminated')
       port.terminate?.()
-      for (const entry of pending.values())
-        entry.reject(new Error('The kernel client was terminated'))
-      pending.clear()
+      rejectAll(dead)
     },
   }
 }
+export type * from './types'

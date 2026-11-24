@@ -20,6 +20,9 @@ interface NodeProcess {
 
 const nodeProcess = (): NodeProcess | undefined => (globalThis as { process?: NodeProcess }).process
 
+/** The Node version when running under Node (whether or not its built-ins are reachable). */
+export const nodeVersion = (): string | undefined => nodeProcess()?.versions?.node
+
 /** True when Node's built-in modules are available (Node, Electron main, vitest). */
 export const isNode = (): boolean => typeof nodeProcess()?.getBuiltinModule === 'function'
 

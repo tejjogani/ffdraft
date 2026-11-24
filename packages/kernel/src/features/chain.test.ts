@@ -197,6 +197,30 @@ describe('chain', () => {
       }
   })
 
+  it('tennis: links too narrow for their hinge build at the narrowest that carries it', async () => {
+    const design = designFrom('chain', [
+      {
+        id: 't',
+        kind: 'chain',
+        style: 'tennis',
+        layout: 'straight',
+        length: 100,
+        linkWidth: 0.8,
+        wire: 0.8,
+      },
+    ])
+    const e = await kernel.evaluate(design)
+    expect(e.diagnostics.map((d) => d.code)).not.toContain('feature.failed')
+    expect(e.parts).toHaveLength(1)
+    expect(e.stones.length).toBeGreaterThan(0)
+    const raised = e.diagnostics.find((d) => d.code === 'chain.widthRaised')!
+    expect(raised.level).toBe('warning')
+    // The one-click fix asks for what was built; with it the warning goes.
+    const fixed = await kernel.evaluate(applyOps(design, raised.fix!.ops).design)
+    expect(fixed.diagnostics.map((d) => d.code)).not.toContain('chain.widthRaised')
+    expect(fixed.report.metalMassG).toBeCloseTo(e.report.metalMassG, 6)
+  })
+
   it('drapes through a bail, resting against the top of its opening', async () => {
     const scene = await kernel.scene(
       designFrom('pendant', [

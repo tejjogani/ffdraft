@@ -383,12 +383,26 @@ describe('export fidelity', () => {
     expect(text).toMatch(/FILE_NAME\('[^']*','2000-01-01T00:00:00'/)
   })
 
-  it('STEP: cuts the same seats on every export (the cutters survive the first cut)', async () => {
-    const design = buildDesign(TEMPLATES.find((t) => t.id === 'three-stone')!.spec)
+  it('STEP: cuts the same seats on every export, and cuts them once', async () => {
+    const design = buildDesign(TEMPLATES.find((t) => t.id === 'solitaire')!.spec)
     const first = await kernel.export(design, 'step')
-    const second = await kernel.export(design, 'step')
-    for (const r of [first, second]) expect(r.notes.join(' ')).not.toMatch(/without seats cut/)
-    expect(second.bytes.length).toBe(first.bytes.length)
+    const started = performance.now()
+    const second = await kernel.export(design, 'step', { stones: true })
+    const third = await kernel.export(design, 'step')
+    // The second and third reuse the first export's cut bodies instead of cutting again.
+    expect(performance.now() - started).toBeLessThan(3_000)
+    for (const r of [first, second, third])
+      expect(r.notes.join(' ')).not.toMatch(/without seats cut/)
+    expect(third.bytes).toEqual(first.bytes)
+  }, 120_000)
+
+  it('STEP: a heavily seated band goes out uncut quickly, and the note says so', async () => {
+    const design = buildDesign(TEMPLATES.find((t) => t.id === 'eternity')!.spec)
+    const started = performance.now()
+    const result = await kernel.export(design, 'step')
+    // Cutting its 58 seats exactly took 90 s; the STL carries them.
+    expect(performance.now() - started).toBeLessThan(30_000)
+    expect(result.notes.join(' ')).toMatch(/without seats cut .*Band/)
   }, 120_000)
 
   it('says in every format when a node could not be built', async () => {

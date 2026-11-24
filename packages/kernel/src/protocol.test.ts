@@ -132,3 +132,62 @@ describe('worker protocol', () => {
     local.dispose()
   })
 })
+
+/** A port that behaves like a Worker which never answers, and can raise Worker events. */
+function deadWorker(): Port<Request, Response> & {
+  addEventListener(type: string, listener: (event: unknown) => void): void
+  raise(type: string, event?: unknown): void
+  terminated: boolean
+  terminate(): void
+} {
+  const listeners = new Map<string, ((event: unknown) => void)[]>()
+  return {
+    onmessage: null,
+    postMessage: () => {},
+    addEventListener: (type, listener) => listeners.set(type, [...(listeners.get(type) ?? []), listener]),
+    raise: (type, event = {}) => {
+      for (const l of listeners.get(type) ?? []) l(event)
+    },
+    terminated: false,
+    terminate() {
+      this.terminated = true
+    },
+  }
+}
+
+describe('a Worker that fails', () => {
+  it('rejects what is pending and what comes later, ready included, and says so once', async () => {
+    const port = deadWorker()
+    const crashes: Error[] = []
+    const client = createKernelClient({ port, onCrash: (e) => crashes.push(e) })
+    const ready = client.ready()
+    const evaluation = client.evaluate(solitaire)
+    port.raise('error', { message: 'Uncaught Error: boot failed' })
+    await expect(ready).rejects.toMatchObject({ name: 'WorkerCrashedError' })
+    await expect(evaluation).rejects.toThrow(/boot failed/)
+    await expect(client.ready()).rejects.toMatchObject({ name: 'WorkerCrashedError' })
+    await expect(client.export(solitaire, 'stl')).rejects.toMatchObject({
+      name: 'WorkerCrashedError',
+    })
+    port.raise('messageerror')
+    expect(crashes).toHaveLength(1)
+    expect(port.terminated).toBe(true)
+  })
+
+  it('forgets a request whose design cannot be posted', async () => {
+    const { client: port, worker } = channel()
+    const local = coreKernel()
+    serveKernel(local, worker)
+    // A real Worker clones synchronously inside postMessage, so a DataCloneError throws there.
+    const post = port.postMessage
+    port.postMessage = (m) => post(structuredClone(m))
+    const client = createKernelClient({ port })
+    await client.ready()
+    const uncloneable = { ...solitaire, extra: () => {} } as unknown as typeof solitaire
+    await expect(client.evaluate(uncloneable)).rejects.toThrow()
+    // The failed request left nothing behind: a normal one still resolves.
+    expect((await client.evaluate(solitaire)).parts.length).toBeGreaterThan(0)
+    client.terminate()
+    local.dispose()
+  })
+})

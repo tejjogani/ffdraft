@@ -10,11 +10,14 @@ import { boundsOverlap, weld } from '../solid/meshing'
 import { manifoldFromTriangles } from '../solid/solid'
 import type { Bounds, Diagnostic, MeshData } from '../types'
 import type { DfmProfile } from './profile'
+import { explainedBy, stoneName } from './subjects'
 
 /** Overlap below this is tessellation noise between touching facets (mm³). */
 const NOISE_MM3 = 1e-4
 /** Stones intersected with a part per boolean in the buried-stone check. */
 const BURIED_BATCH = 64
+/** Stone pairs reported by name; the rest are counted in one summary (as `stone.overlap`). */
+const MAX_COLLISIONS = 12
 
 /**
  * A unit gem as a closed solid. Cuts that come to a point (marquise, pear, trillion) can weld
@@ -76,6 +79,7 @@ const boundsOf = (s: SceneStone): Bounds => {
 function collisions(scene: Scene, gems: readonly Manifold[]): Diagnostic[] {
   const { manifold: mf } = runtime()
   const out: Diagnostic[] = []
+  let collided = 0
   const { stones } = scene
   const radii = stones.map(radiusOf)
   // Hash grid on the largest reach, so neighbour lookups stay local with thousands of stones.
@@ -122,17 +126,27 @@ function collisions(scene: Scene, gems: readonly Manifold[]): Diagnostic[] {
     for (const j of near) {
       const volume = overlapVolume(gems[i]!, gems[j]!)
       if (volume <= NOISE_MM3) continue
+      // Capped like the draft `stone.overlap`: a crowded pavé is one problem, not hundreds.
+      if (collided++ >= MAX_COLLISIONS) continue
       const b = stones[j]!.stone.frame.origin
       out.push({
         level: 'error',
         code: 'stone.collision',
         nodeId: stones[i]!.instance.nodeId,
-        message: `Stones ${stones[i]!.instance.id} and ${stones[j]!.instance.id} overlap below or above their girdles; they cannot both be set.`,
+        message: `Stones ${stoneName(scene, stones[i]!.instance)} and ${stoneName(scene, stones[j]!.instance)} overlap below or above their girdles; they cannot both be set.`,
         at: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2],
+        related: [stones[i]!.instance.id, stones[j]!.instance.id],
         value: volume,
       })
     }
   }
+  if (collided > MAX_COLLISIONS)
+    out.push({
+      level: 'error',
+      code: 'stone.collision',
+      message: `${collided - MAX_COLLISIONS} more pairs of stones overlap below or above their girdles.`,
+      value: collided - MAX_COLLISIONS,
+    })
   return out
 }
 
@@ -148,12 +162,19 @@ function buried(scene: Scene, gems: readonly Manifold[], profile: DfmProfile): D
     [...scene.nodes.values()].filter((r) => r.node.kind === 'chain').map((r) => r.id),
   )
   const boxes = scene.stones.map(boundsOf)
+  // A pavé too large to cut says so (`pave.tooLarge`); its stones sit in uncut metal by
+  // design, and measuring 10 000 of them took most of a 200 mm pendant's two minutes.
+  const uncut = explainedBy(scene, 'pave.tooLarge')
   const volumes = new Float64Array(gems.length)
   for (const { part, fused, sources } of scene.parts) {
     if (!fused) continue
     const own = new Set(sources.map((s) => s.nodeId).filter((id) => chains.has(id)))
     const near = scene.stones.flatMap((s, i) =>
-      !own.has(s.instance.nodeId) && boundsOverlap(boxes[i]!, part.bounds) ? [i] : [],
+      !own.has(s.instance.nodeId) &&
+      !uncut.has(s.instance.nodeId) &&
+      boundsOverlap(boxes[i]!, part.bounds)
+        ? [i]
+        : [],
     )
     if (near.length === 0) continue
     // Stones go through in small, spatially sorted batches: one boolean of the whole pavé
@@ -207,8 +228,9 @@ function buried(scene: Scene, gems: readonly Manifold[], profile: DfmProfile): D
     level: fraction > 0.5 ? ('error' as const) : ('warning' as const),
     code: 'stone.inMetal',
     nodeId,
-    message: `${Math.round(fraction * 100)} % of stone ${stone.instance.id} is inside metal${count > 1 ? ` (${count} stones of this feature are partly buried)` : ''}: it needs a seat (or a setting) before it can be set.`,
+    message: `${Math.round(fraction * 100)} % of ${stoneName(scene, stone.instance)} is inside metal${count > 1 ? ` (${count} stones of this feature are partly buried)` : ''}: it needs a seat (or a setting) before it can be set.`,
     at: [...stone.stone.frame.origin] as [number, number, number],
+    related: [stone.instance.id],
     value: fraction,
     limit: profile.stoneInMetal,
   }))

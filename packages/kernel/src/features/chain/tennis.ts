@@ -33,6 +33,16 @@ export interface TennisLink {
   prong: number
 }
 
+/** The link is too narrow for its hinge: the rings and posts would land in the light hole. */
+export class NoRoomForHinge extends Error {
+  constructor(stoneWidth: number) {
+    super(
+      `A ${stoneWidth} mm stone leaves no room for the tennis link's hinge under it: use wider links.`,
+    )
+    this.name = 'NoRoomForHinge'
+  }
+}
+
 /** Space between neighbouring boxes; pitch ≈ stone + 0.3–0.6 mm (06-freeform.md §6). */
 const BOX_GAP = 0.3
 /**
@@ -143,10 +153,7 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
         : Math.abs(x) <= lx / 2 - inset && Math.abs(y) <= ly / 2 - inset
     return inside && Math.hypot(x, y) - ring / 2 >= lightHole
   }
-  if (!onPlate(front, 0) || !onPlate(back, R))
-    throw new Error(
-      `A ${stoneWidth} mm stone leaves no room for the tennis link's hinge under it: use wider links.`,
-    )
+  if (!onPlate(front, 0) || !onPlate(back, R)) throw new NoRoomForHinge(stoneWidth)
   // The rings hang one ring wire below the plate, so the front ring's arc passes under the
   // previous link's plate without touching it.
   const ringZ = bottom - R - ring - CLEARANCE

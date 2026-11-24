@@ -10,6 +10,7 @@ import { runtime } from '../runtime/index'
 import { boundsOfPositions, boundsOverlap } from '../solid/meshing'
 import type { Bounds, Diagnostic } from '../types'
 import type { DfmProfile } from './profile'
+import { explainedBy, stoneName } from './subjects'
 
 const centre = (b: Bounds): [number, number, number] => [
   (b.min[0] + b.max[0]) / 2,
@@ -74,6 +75,7 @@ function breakthroughs(scene: Scene): Diagnostic[] {
               ? `Cutting into “${host.node.name ?? host.id}” cuts a piece of it clean off.`
               : `The engraving cuts right through “${host.node.name ?? host.id}”; make it shallower or the wall thicker.`,
             at: centre(first.box),
+            related: [host.id],
           })
         } finally {
           tool.delete()
@@ -110,7 +112,16 @@ const inside = (m: Manifold, p: readonly number[]) =>
  * diagnostic per node, naming how many of its stones are short and where the worst one is.
  */
 function seatWalls(scene: Scene, profile: DfmProfile): Diagnostic[] {
-  const seated = scene.stones.filter((s) => SEATED.has(s.instance.setting))
+  // No seat wall to measure where the seats were never cut (a pavé too large to cut) or there
+  // is no metal at all (a flush setting with nothing to sink into): both are reported already.
+  const uncut = explainedBy(scene, 'pave.tooLarge')
+  const bare = explainedBy(scene, 'setting.noHost')
+  const seated = scene.stones.filter(
+    (s) =>
+      SEATED.has(s.instance.setting) &&
+      !uncut.has(s.instance.nodeId) &&
+      !bare.has(s.instance.nodeId),
+  )
   if (seated.length === 0 || scene.detail !== 'production') return []
   const short = new Map<string, { count: number; worst: SceneStone; open: number }>()
   for (const stone of seated) {
@@ -147,8 +158,9 @@ function seatWalls(scene: Scene, profile: DfmProfile): Diagnostic[] {
     level: 'warning' as const,
     code: 'seat.wall',
     nodeId,
-    message: `${count === 1 ? `Stone ${worst.instance.id} has` : `${count} stones (worst: ${worst.instance.id}) have`} less than ${profile.seatWall} mm of metal beside their seats; move them in from the edge or use smaller stones.`,
+    message: `${count === 1 ? `${stoneName(scene, worst.instance)} has` : `${count} stones (worst: ${stoneName(scene, worst.instance)}) have`} less than ${profile.seatWall} mm of metal beside their seats; move them in from the edge or use smaller stones.`,
     at: [...worst.stone.frame.origin] as [number, number, number],
+    related: [worst.instance.id],
     value: count,
     limit: profile.seatWall,
   }))

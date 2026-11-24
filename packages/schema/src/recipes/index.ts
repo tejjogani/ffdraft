@@ -248,6 +248,8 @@ function pendant(spec: PieceSpec, notes: string[]): NodeInput[] {
         stone: h?.stone ?? 'diamond',
         stoneWidth: widthOf(h, 1.3),
       })
+      // The halo is the outermost metal: a bail on the head would rise through its top stones.
+      host = 'halo'
     }
   } else if (a === 'namePendant') {
     nodes.push({
@@ -313,9 +315,15 @@ function pendant(spec: PieceSpec, notes: string[]): NodeInput[] {
     )
   }
 
+  const solitaire = a === 'pendantSolitaire' || a === 'solitaire' || a === 'halo'
   const pave = byRole(spec, 'pave')
   const ice = b?.iceLevel ?? 1
-  if ((a === 'icedPendant' || pave) && ice > 0) {
+  if (solitaire && pave)
+    // A head or a halo has no face to pavé: the field would come out empty (pave.empty).
+    notes.push(
+      `A ${a === 'halo' ? 'halo' : 'solitaire'} pendant has no body to pavé, so the pavé stones were left out; a halo frames the stone with melee.`,
+    )
+  else if ((a === 'icedPendant' || pave) && ice > 0) {
     const sizeMax = paveMax(spec)
     nodes.push({
       id: 'ice',
@@ -334,15 +342,16 @@ function pendant(spec: PieceSpec, notes: string[]): NodeInput[] {
   } else if (ice === 0 && (a === 'icedPendant' || pave))
     notes.push('Ice level 0 leaves the piece unset, so no pavé was added.')
 
-  const body = a === 'pendantSolitaire' || a === 'solitaire' || a === 'halo' ? undefined : height
-  nodes.push(
-    bailNode(
-      spec,
-      host,
-      body,
-      nodes.some((n) => n.kind === 'pave'),
-    ),
-  )
+  if (spec.kind === 'brooch') {
+    // A brooch is worn on a pin, not hung; there is no pin finding yet, so it is said, not
+    // replaced by a bail.
+    notes.push(
+      'There is no brooch pin among the findings yet, so the piece has no fitting: add a pin by hand, or make it a pendant to hang it from a bail.',
+    )
+    return nodes
+  }
+  const iced = nodes.some((n) => n.kind === 'pave')
+  nodes.push(bailNode(spec, host, solitaire ? undefined : height, iced))
   if (spec.chain) nodes.push(chainNode(spec, notes, 'bail'))
   return nodes
 }
@@ -351,13 +360,23 @@ function pendant(spec: PieceSpec, notes: string[]): NodeInput[] {
 const paveMax = (spec: PieceSpec) => byRole(spec, 'pave')?.widthMm ?? 1.3
 
 /**
+ * The depth of a tennis line as the kernel builds it (stone, box, plate and hinge), mm: about
+ * 1.25 × the link on wide links, and more than that on fine ones, whose hinge and plate do not
+ * shrink with the stone (2.1 × 3.1 mm at 2 mm, 3.0 × 3.7 at 3, 6.2 × 7.1 at 6).
+ */
+const tennisDepth = (w: number) => Math.max(1.25 * w, w + 1.15)
+
+/**
  * The bail for the pendant's chain. Its hole passes the chain's section with the 1.5 mm the
  * kernel's bail check asks for, by the same fits the canon's `bail.opening` rule uses (holes
  * measured on the kernel): in a ring or tube, round chain needs its width + 1.7, flat links
- * 1.15 × width + 2, box chain its diagonal, a tennis chain the diagonal of its deeper section. A ring on fine round chain, a tube on
- * everything heavier, and behind a paved front a hidden bail, so the top stones stay clear of
- * it (canon `bail.chainStyle`). On a body, wire, width and opening grow with the piece, as the
- * canon's `bail.wire` and `bail.opening` rules do, so a heavy piece is not hung on a fine wire.
+ * 1.15 × width + 2, box chain its diagonal, a tennis chain the diagonal of its deeper section.
+ * A ring on fine round chain, a tube on everything heavier. Behind a paved body a hidden bail
+ * keeps the top stones clear (canon `bail.chainStyle`), but only on a body tall enough to hide
+ * it high up: a hidden slot whose hole falls out of the body's top third tips the piece
+ * forward (the kernel's bail.hiddenLow), so a small iced piece, and any setting, gets a tube.
+ * On a body, wire, width and opening grow with the piece, as the canon's `bail.wire` and
+ * `bail.opening` rules do, so a heavy piece is not hung on a fine wire.
  */
 function bailNode(
   spec: PieceSpec,
@@ -369,23 +388,28 @@ function bailNode(
   const w = spec.chain?.widthMm ?? 1.2
   const round = style === 'cable' || style === 'rope'
   const flat = !round && style !== 'box' && style !== 'tennis'
-  const hidden = iced
+  const wire = bodyHeight ? Math.min(2.5, Math.max(1.1, 1.0 + 0.012 * bodyHeight)) : 1.1
   // The hidden slot is `opening` high and 0.6 of that deep: it must take the chain's width up
-  // and its thickness across (flat links half their width, a tennis box 1.25 of it).
-  const across = flat ? 0.5 * w : style === 'tennis' ? 1.25 * w : w
-  const need = hidden
-    ? Math.max(w + 1.5, (across + 1.5) / 0.6)
-    : style === 'tennis'
+  // and its depth across (flat links half their width). The canon's fit for a hidden bail is
+  // the floor, so the recipe and the canon's bail.opening rule agree.
+  const across = flat ? 0.5 * w : style === 'tennis' ? tennisDepth(w) : w
+  const canonHidden = style === 'tennis' ? 2.05 * w + 3.6 : flat ? 1.15 * w + 2 : 2.18 * w + 0.95
+  const hiddenOpening = Math.max(Math.max(w + 1.5, (across + 1.5) / 0.6) + 0.5, canonHidden + 0.3)
+  // The slot's centre sits a wire and half its height under the top. The kernel wants it in
+  // the top third; 0.3 of the height leaves room for a top that is lower across the slot than
+  // at its highest point (a letter's apex).
+  const hidden =
+    iced && bodyHeight !== undefined && 1.5 * wire + hiddenOpening / 2 <= 0.3 * bodyHeight
+  const need =
+    style === 'tennis'
       ? Math.hypot(w + 1.5, w + 2.1) + 0.2
       : style === 'box'
         ? 1.415 * (w + 1.5) + 0.1
         : round
           ? w + 1.7
           : 1.15 * w + 2.0
-  const wire = bodyHeight ? Math.min(2.5, Math.max(1.1, 1.0 + 0.012 * bodyHeight)) : 1.1
-  const forHeight = bodyHeight && !hidden ? 0.15 * bodyHeight - 2 * wire : 0
-  // Above the fit: 0.3 mm, or 0.5 in a hidden slot, whose rounded corners take some of it.
-  const opening = Math.max(need + (hidden ? 0.5 : 0.3), forHeight)
+  const forHeight = bodyHeight ? 0.15 * bodyHeight - 2 * wire : 0
+  const opening = hidden ? hiddenOpening : Math.max(need + 0.3, forHeight)
   return {
     id: 'bail',
     kind: 'bail',
@@ -418,7 +442,10 @@ function chainWire(style: string, width: number, stone: number): number {
             : style === 'tennis'
               ? Math.min(0.4 * stone, Math.max(0.8, 0.3 * stone))
               : 0.26 * width
-  return Number(Math.max(0.3, wire).toFixed(2))
+  // Rounded down, so the kernel never thins it (rounding up passed its cap: rope 3 mm 0.375
+  // became 0.38). The node's 0.3 mm floor is above the kernel's cap on fine rope and box, whose
+  // wires are thin by construction; there the floor holds and the kernel thins it, noted as info.
+  return Math.max(0.3, Math.floor(wire * 100 + 1e-9) / 100)
 }
 
 /** Narrowest tennis link the kernel builds, mm. */
@@ -480,6 +507,9 @@ function studs(spec: PieceSpec): NodeInput[] {
   const cut = center?.cut ?? 'round'
   // A flush setting sinks the stone into a host body; a stud has none, so it gets a bezel.
   const style = headStyle(center)
+  // A halo stud: the halo goes round each stone and is mirrored with it.
+  const halo = byRole(spec, 'halo')
+  const framed = spec.archetype === 'halo' || halo !== undefined
   return [
     {
       id: 'stone',
@@ -500,12 +530,26 @@ function studs(spec: PieceSpec): NodeInput[] {
       style: style === 'prong' ? 'basket' : style === 'flush' ? 'bezel' : style,
       ...prongsOf(center),
     },
+    ...(framed
+      ? [
+          {
+            id: 'halo',
+            kind: 'halo' as const,
+            name: 'Halo',
+            ...metal,
+            around: 'stone',
+            cut: 'round' as const,
+            stone: halo?.stone ?? 'diamond',
+            stoneWidth: widthOf(halo, 1.1),
+          },
+        ]
+      : []),
     { id: 'post', kind: 'finding', name: 'Post', ...metal, type: 'earringPost', host: 'head' },
     {
       id: 'pair',
       kind: 'pattern',
       name: 'Pair',
-      sources: ['stone', 'head', 'post'],
+      sources: framed ? ['stone', 'head', 'halo', 'post'] : ['stone', 'head', 'post'],
       type: 'mirror',
       axis: 'x',
     },

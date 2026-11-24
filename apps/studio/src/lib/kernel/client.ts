@@ -14,7 +14,7 @@ import {
   type ExportOptions,
   type ExportResult,
   type KernelClient,
-} from '@pave/kernel'
+} from '@pave/kernel/client'
 import type { Design } from '@pave/schema'
 import { useSyncExternalStore } from 'react'
 import { assetUrl } from '../assets'

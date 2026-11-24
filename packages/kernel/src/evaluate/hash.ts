@@ -34,10 +34,17 @@ export function canonicalJson(value: unknown): string {
   return `{${entries.join(',')}}`
 }
 
+/**
+ * The hash of everything a builder reads from its node. The name is left out: no builder reads
+ * it, so a rename must not rebuild the node and everything downstream of it (a trophy body,
+ * its pavé and its chain took 1.8 s). The evaluator puts the new name on the cached result,
+ * its parts and its messages instead.
+ */
 export function hashNode(node: Node): string {
   let hash = byIdentity.get(node)
   if (hash === undefined) {
-    hash = hashString(canonicalJson(node))
+    const { name: _name, ...geometry } = node
+    hash = hashString(canonicalJson(geometry))
     byIdentity.set(node, hash)
   }
   return hash

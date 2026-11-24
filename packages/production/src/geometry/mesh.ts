@@ -145,11 +145,21 @@ export interface Topology {
 }
 
 /** Closed/manifold/orientation/shell analysis — the checks casters run on upload. */
-export function analyzeTopology(positions: Float32Array, indices: Uint32Array): Topology {
+export function analyzeTopology(positions: Float32Array, all: Uint32Array): Topology {
   // Exact positions, as the kernel's watertight check uses: an STL stores each shared vertex
   // bit-identically, and a 10 µm grid would merge distinct vertices of sub-micron slivers into
   // non-manifold edges the exported mesh does not have.
   const canon = weld(positions, 0)
+  // A triangle with two corners at one position has no area and no edges of its own; counting
+  // it would turn its neighbours' edges non-manifold. The kernel's weld drops these too, so
+  // both judge the same file the same way.
+  const indices = all.filter((_, i, list) => {
+    const t = i - (i % 3)
+    const a = canon[list[t]!]!
+    const b = canon[list[t + 1]!]!
+    const c = canon[list[t + 2]!]!
+    return a !== b && b !== c && c !== a
+  })
   const edges = edgeTable(indices, canon)
   let boundaryEdges = 0
   let nonManifoldEdges = 0

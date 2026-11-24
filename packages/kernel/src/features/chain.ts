@@ -28,7 +28,7 @@ import { type ChainPath, drapePath, linkFrames, straightPath } from './chain/dra
 import { type Instance, instancedSolid } from './chain/instances'
 import { type LinkSet, wireChain } from './chain/links'
 import { type ChainSection, holeProfile, seatHeight } from './chain/seat'
-import { tennisLink } from './chain/tennis'
+import { NoRoomForHinge, type TennisLink, tennisLink } from './chain/tennis'
 
 type ChainNode = NodeOf<'chain'>
 
@@ -41,9 +41,40 @@ interface ChainPlan extends LinkSet {
 /** Air between the chain and the bail it rests in. */
 const BAIL_CLEARANCE = 0.1
 
-function planFor(node: ChainNode): ChainPlan {
+/** Widest a tennis link is made when the asked width leaves no room for its hinge, mm. */
+const TENNIS_SEARCH = 4
+
+/**
+ * The tennis link at the asked width, or, when that is too narrow to carry its hinge under the
+ * stone (the node accepts links from 0.8 mm), the narrowest width that does, in 0.1 mm steps:
+ * a chain that builds a little wider, said so with a one-click fix, rather than no chain.
+ */
+function tennisAtLeast(node: ChainNode, ctx: BuildContext): TennisLink {
+  for (let width = node.linkWidth; ; width = Math.round(width * 10 + 1) / 10) {
+    try {
+      const link = tennisLink(width, node.wire, node.cut)
+      if (width > node.linkWidth)
+        ctx.report({
+          level: 'warning',
+          code: 'chain.widthRaised',
+          message: `Tennis links ${node.linkWidth} mm wide leave no room for the hinge under the stone; the narrowest that carries it, ${width} mm, was built.`,
+          value: node.linkWidth,
+          limit: width,
+          fix: {
+            label: `Make the links ${width} mm`,
+            ops: [{ t: 'update', id: node.id, patch: { linkWidth: width } }],
+          },
+        })
+      return link
+    } catch (error) {
+      if (!(error instanceof NoRoomForHinge) || width >= node.linkWidth + TENNIS_SEARCH) throw error
+    }
+  }
+}
+
+function planFor(node: ChainNode, ctx: BuildContext): ChainPlan {
   if (node.style !== 'tennis') return wireChain(node.style, node.linkWidth, node.wire)
-  const link = tennisLink(node.linkWidth, node.wire, node.cut)
+  const link = tennisAtLeast(node, ctx)
   // Hang each link from its middle, so the chain's centre line runs through the links.
   const centred = translation([0, 0, -link.middle])
   return {
@@ -151,7 +182,7 @@ export interface ChainData {
 }
 
 export const chain = defineFeature('chain', (node, ctx) => {
-  const plan = planFor(node)
+  const plan = planFor(node, ctx)
   const periodLength = plan.pitches.reduce((a, b) => a + b, 0)
   const n = Math.max(1, Math.round(node.length / periodLength)) * plan.period.length
   const centres: number[] = []

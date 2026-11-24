@@ -207,7 +207,8 @@ describe('recipes', () => {
     const halo = buildDesign(pendant({ archetype: 'halo', stones: [{ role: 'center', carat: 1 }] }))
     expect(halo.nodes.center?.kind).toBe('gem')
     expect(halo.nodes.halo?.kind).toBe('halo')
-    expect((halo.nodes.bail as NodeOf<'bail'>).host).toBe('head')
+    // The bail stands on the halo, the outermost metal, not on the head inside it.
+    expect((halo.nodes.bail as NodeOf<'bail'>).host).toBe('halo')
     for (const spec of [
       { kind: 'bracelet', archetype: 'band' },
       { kind: 'ring', archetype: 'cuban' },
@@ -266,6 +267,102 @@ describe('recipes', () => {
     )
     expect(iced.style).toBe('hidden')
     expect(iced.opening).toBeGreaterThan(8 + 1.5)
+  })
+
+  it('hides the bail only behind a paved body tall enough to hide it high up', () => {
+    const bail = (spec: PieceSpecInput) => planDesign(spec).design.nodes.bail as NodeOf<'bail'>
+    // A pavé role on a solitaire pendant: the bail stands on the head, never behind it, and
+    // the pavé (which a head has no face for) is left out with a note.
+    const sol = planDesign(
+      pendant({
+        stones: [
+          { role: 'center', carat: 0.5 },
+          { role: 'pave', widthMm: 1.3 },
+        ],
+        chain: { style: 'cable', lengthMm: 450, widthMm: 1.2 },
+      }),
+    )
+    expect((sol.design.nodes.bail as NodeOf<'bail'>).style).toBe('ring')
+    expect(sol.design.nodes.ice).toBeUndefined()
+    expect(sol.notes.join(' ')).toMatch(/no body to pavé/)
+    // A 3 mm and a 12 mm iced piece cannot hide a slot high enough: a tube on top.
+    for (const heightMm of [3, 12])
+      expect(
+        bail(
+          pendant({
+            archetype: 'icedPendant',
+            body: { heightMm },
+            chain: { style: 'cuban', lengthMm: 560, widthMm: 8 },
+          }),
+        ).style,
+      ).toBe('tube')
+    // The slot's hole lands well inside the body's top third, where bail.hiddenLow is quiet.
+    for (const t of ['iced-trophy', 'iced-initial']) {
+      const spec = TEMPLATES.find((x) => x.id === t)!.spec
+      const b = bail(spec)
+      expect(b.style).toBe('hidden')
+      expect(1.5 * b.wire + b.opening / 2).toBeLessThanOrEqual(0.3 * spec.body!.heightMm)
+    }
+  })
+
+  it('agrees with the canon on a hidden bail’s opening', () => {
+    // The canon's bail.opening floor for a hidden slot (fitted on the kernel's hole): flat links
+    // 1.15 × w + 2, tennis 2.05 × w + 3.6, round 2.18 × w + 0.95.
+    const iced = (style: 'cuban' | 'tennis' | 'cable', widthMm: number) =>
+      planDesign(
+        pendant({
+          archetype: 'icedPendant',
+          body: { heightMm: 60 },
+          chain: { style, lengthMm: 560, widthMm },
+        }),
+      ).design.nodes.bail as NodeOf<'bail'>
+    expect(iced('cuban', 8).opening).toBeGreaterThanOrEqual(1.15 * 8 + 2)
+    expect(iced('tennis', 3).opening).toBeGreaterThanOrEqual(2.05 * 3 + 3.6)
+    expect(iced('cable', 4).opening).toBeGreaterThanOrEqual(2.18 * 4 + 0.95)
+    // A 2 mm tennis line is 3.1 mm deep as built: the slot, 0.6 of its opening deep, takes that
+    // with the 1.5 mm the kernel's bail check asks for.
+    expect(0.6 * iced('tennis', 2).opening).toBeGreaterThanOrEqual(3.1 + 1.5)
+  })
+
+  it('rounds chain wire down, so the kernel does not thin it', () => {
+    // The archetype names the piece; the chain spec picks the style.
+    const wire = (style: 'rope' | 'box', widthMm: number) =>
+      (
+        buildDesign({
+          kind: 'chain',
+          archetype: 'cuban',
+          title: 't',
+          summary: 's',
+          chain: { style, lengthMm: 450, widthMm },
+        }).nodes.chain as NodeOf<'chain'>
+      ).wire
+    // The kernel's caps: rope w / 8, box w / 5.5.
+    expect(wire('rope', 3)).toBeLessThanOrEqual(3 / 8)
+    expect(wire('box', 3)).toBeLessThanOrEqual(3 / 5.5)
+  })
+
+  it('frames halo studs with their halo, and says a brooch has no pin yet', () => {
+    const studs = buildDesign({
+      kind: 'earrings',
+      archetype: 'halo',
+      title: 't',
+      summary: 's',
+      stones: [
+        { role: 'center', carat: 0.5 },
+        { role: 'halo', widthMm: 1.1 },
+      ],
+    })
+    expect(studs.nodes.halo?.kind).toBe('halo')
+    expect((studs.nodes.pair as NodeOf<'pattern'>).sources).toContain('halo')
+    const brooch = planDesign({
+      kind: 'brooch',
+      archetype: 'medallion',
+      title: 't',
+      summary: 's',
+      body: { heightMm: 30 },
+    })
+    expect(brooch.design.nodes.bail).toBeUndefined()
+    expect(brooch.notes.join(' ')).toMatch(/brooch pin/)
   })
 
   it('hollows and flat-backs a sculpted iced body', () => {

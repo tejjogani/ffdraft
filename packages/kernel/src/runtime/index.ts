@@ -8,8 +8,9 @@
  * which keeps Safari/WKWebView and Electron renderers working.
  */
 import type { ManifoldToplevel } from 'manifold-3d'
+import { setManifold, setOC } from 'replicad'
 import type { OpenCascadeInstance } from 'replicad-opencascadejs'
-import { isNode, readPackageFile } from './host'
+import { isNode, nodeVersion, readPackageFile } from './host'
 
 export interface Runtime {
   oc: OpenCascadeInstance
@@ -54,11 +55,18 @@ function moduleOptions(source: WasmSource): Record<string, unknown> {
 
 async function resolveSources(): Promise<Required<RuntimeSources>> {
   if (sources.occt && sources.manifold) return sources as Required<RuntimeSources>
-  if (!isNode())
+  if (!isNode()) {
+    const node = nodeVersion()
+    // Node before 22.3 lacks process.getBuiltinModule, which the kernel reads its files with.
+    if (node)
+      throw new Error(
+        `The kernel needs Node 22.3 or later (or 20.16+) to load its WASM files; this is Node ${node}.`,
+      )
     throw new Error(
       'Kernel WASM locations are not configured. In a browser, run the kernel through ' +
         'createKernelClient() or call configureRuntime({ occt, manifold }) with asset URLs.',
     )
+  }
   return {
     occt: sources.occt ?? (await readPackageFile('replicad-opencascadejs/wasm')),
     manifold: sources.manifold ?? (await readPackageFile('manifold-3d/manifold.wasm')),
@@ -67,8 +75,10 @@ async function resolveSources(): Promise<Required<RuntimeSources>> {
 
 async function load(): Promise<Runtime> {
   const src = await resolveSources()
-  const [replicad, occtModule, manifoldModule] = await Promise.all([
-    import('replicad'),
+  // The Emscripten glue is loaded on demand, so the code that does not evaluate (the Worker
+  // client, type-only imports) never pulls it in. replicad itself is imported statically: a
+  // dozen kernel modules import it anyway, so a dynamic import here saved nothing.
+  const [occtModule, manifoldModule] = await Promise.all([
     import('replicad-opencascadejs'),
     import('manifold-3d'),
   ])
@@ -79,8 +89,8 @@ async function load(): Promise<Runtime> {
     (manifoldModule.default as unknown as Init<ManifoldToplevel>)(moduleOptions(src.manifold)),
   ])
   manifold.setup()
-  replicad.setOC(oc)
-  replicad.setManifold(manifold)
+  setOC(oc)
+  setManifold(manifold)
   loaded = { oc, manifold }
   return loaded
 }

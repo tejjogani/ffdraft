@@ -34,7 +34,7 @@ export type Request =
       id: number
       design: Design
       format: ExportFormat
-      options: Omit<ExportOptions, 'assets'>
+      options: Omit<ExportOptions, 'assets' | 'signal'>
       assets: boolean
     }
   | { type: 'abort'; id: number }

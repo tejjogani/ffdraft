@@ -1,0 +1,1449 @@
+openapi: 3.1.0
+info:
+  title: Diaex partner API
+  version: 1.1.0-draft
+  summary: Stone search, sets, availability, holds and events for partner apps such as Pavé.
+  description: |
+    Proposal of 24 November 2026; nothing is built. The prose contract is diaex-partner-api.md in the same
+    folder, and the two must say the same thing. This file covers v1 and v1.1. Every operation carries
+    `x-phase` (v1 or v1.1). The v2 hand-off is described in the prose contract only.
+
+    Rules that apply everywhere:
+    - Times are UTC ISO 8601 with Z, to the second.
+    - Millimetres, carats and percentages have at most 2 decimals. `length_mm` is the longer side.
+    - Money is a decimal string with exactly 2 decimals and an ISO 4217 currency. A hidden price is null.
+    - Requests with an unknown field are refused with 422. Clients must ignore unknown response fields and treat
+      unknown enum values as "other".
+    - Every write takes an `Idempotency-Key` header. Searches write nothing and take none.
+    - Every reply carries `x-request-id`. Errors use one shape (`Error`), except the OAuth token endpoint.
+    - A call with no `Authorization` header is signed out: no price, limits per address.
+servers:
+  - url: https://api.thediaex.com/partner/v1
+    description: Live (proposed address)
+  - url: http://localhost:8001/partner/v1
+    description: Diaex test server with the fixture set (port 8001 is Diaex's work server)
+
+tags:
+  - name: account
+  - name: stones
+  - name: sets
+  - name: holds
+  - name: events
+  - name: oauth
+
+security:
+  - {}
+  - partnerToken: [stones:read]
+  - oauth: [stones:read]
+
+paths:
+  /me:
+    get:
+      tags: [account]
+      operationId: getMe
+      x-phase: v1
+      summary: Who is calling, at which access level, with which scopes
+      parameters:
+        - $ref: '#/components/parameters/ClientRequestId'
+      responses:
+        '200':
+          description: The caller. Signed out gives level signed_out and null company and link.
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /stones/search:
+    post:
+      tags: [stones]
+      operationId: searchStones
+      x-phase: v1
+      summary: Single stones that fit one seat, best fit first, a page at a time
+      description: |
+        Returns only stones inside the seat window (see `Fit`). Maps to Diaex's POST /api/search.
+        `requirement.kind` must be `single`.
+      parameters:
+        - $ref: '#/components/parameters/ClientRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StonesSearchRequest' }
+      responses:
+        '200':
+          description: One page of candidates
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StonesSearchResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /sets/search:
+    post:
+      tags: [sets]
+      operationId: searchSets
+      x-phase: v1
+      summary: Matching pairs and layouts of 2 to 70 stones that each fit the seat
+      description: |
+        Maps to Diaex's POST /api/layouts/search. Diaex's matching rules apply unchanged. New: every stone must sit
+        inside the seat window on both sides. `requirement.kind` must be `matched_set`. Body at most 32 KB.
+      parameters:
+        - $ref: '#/components/parameters/ClientRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetsSearchRequest' }
+      responses:
+        '200':
+          description: Up to 3 sets, lowest total first, plus the cheapest one-supplier set
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SetsSearchResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /requirements/match:
+    post:
+      tags: [stones, sets]
+      operationId: matchRequirements
+      x-phase: v1
+      summary: Many requirements in one call, each answered as stones, sets, none, unsupported or error
+      description: |
+        Rows are answered in the order asked. Each `ref` once. Body at most 64 KB. Diaex answers within 10 s;
+        rows not finished come back with status `error` and code `row_timeout`. A bad row fails the whole call
+        with 422.
+      parameters:
+        - $ref: '#/components/parameters/ClientRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MatchRequest' }
+      responses:
+        '200':
+          description: One result per row
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MatchResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '413': { $ref: '#/components/responses/TooLarge' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /stones/availability:
+    post:
+      tags: [stones]
+      operationId: checkAvailability
+      x-phase: v1
+      summary: Status, price when allowed, and version tag for up to 100 stones
+      description: Maps to Diaex's POST /api/stones/batch. Repeated ids are answered once, in the order first asked.
+      parameters:
+        - $ref: '#/components/parameters/ClientRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AvailabilityRequest' }
+      responses:
+        '200':
+          description: One item per distinct id
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AvailabilityResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /stones/{id}:
+    get:
+      tags: [stones]
+      operationId: getStone
+      x-phase: v1
+      summary: One stone with media, certificate and measurements
+      description: |
+        Maps to Diaex's GET /api/stones/{public_id}, without the supplier card, market and ready pair. A stone held
+        by an order answers 200 with availability on_hold. A sold or delisted stone answers 404 stone_unavailable.
+      parameters:
+        - $ref: '#/components/parameters/StoneId'
+        - name: If-None-Match
+          in: header
+          required: false
+          schema: { type: string }
+          description: The stone's last `etag`; 304 when it is still current.
+        - $ref: '#/components/parameters/ClientRequestId'
+      responses:
+        '200':
+          description: The stone as this caller may see it
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoneResponse' }
+        '304':
+          description: Not changed since the given tag
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+            ETag: { $ref: '#/components/headers/ETag' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+
+  /oauth/revoke:
+    post:
+      tags: [oauth]
+      operationId: revokeToken
+      x-phase: v1
+      summary: Revoke a token (RFC 7009); works for pasted tokens in v1
+      security:
+        - {}
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token: { type: string }
+                token_type_hint: { type: string, enum: [access_token, refresh_token] }
+      responses:
+        '200':
+          description: Revoked, or already revoked or unknown. No body.
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+
+  /oauth/token:
+    post:
+      tags: [oauth]
+      operationId: getToken
+      x-phase: v1.1
+      summary: Exchange a code (PKCE S256), refresh a token, or get an app token (client_credentials)
+      description: |
+        Public client `pave-local` sends `client_id` and `code_verifier`, no secret; its redirect is
+        http://127.0.0.1:{any port}/oauth/diaex/callback. Confidential clients (hosted Pavé) authenticate with
+        client_secret_basic. `client_credentials` gives an app token with stones:read at the signed_out level only.
+        Refresh tokens are rotated on every use; reusing an old one revokes the whole link. Errors use the OAuth
+        shape (RFC 6749 section 5.2).
+      security:
+        - {}
+        - clientBasic: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: { $ref: '#/components/schemas/TokenRequest' }
+      responses:
+        '200':
+          description: Tokens
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '400':
+          description: OAuth error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+        '401':
+          description: OAuth error (invalid_client)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+
+  /holds:
+    post:
+      tags: [holds]
+      operationId: createHolds
+      x-phase: v1.1
+      summary: Hold 1 to 10 stones for 30 to 120 minutes
+      description: |
+        Diaex's own priority, not a supplier promise. Verified companies only. Each stone is answered on its own:
+        active, or refused with a reason. At most 10 active holds per company and one active hold per stone.
+      security:
+        - partnerToken: [holds:write]
+        - oauth: [holds:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ClientRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HoldsCreateRequest' }
+      responses:
+        '200':
+          description: One hold result per stone
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HoldsCreateResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+    get:
+      tags: [holds]
+      operationId: listHolds
+      x-phase: v1.1
+      summary: This link's holds
+      security:
+        - partnerToken: [holds:write]
+        - oauth: [holds:write]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, ended], default: active }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/ClientRequestId'
+      responses:
+        '200':
+          description: A page of holds
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HoldList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /holds/{hold_id}:
+    parameters:
+      - $ref: '#/components/parameters/HoldId'
+    get:
+      tags: [holds]
+      operationId: getHold
+      x-phase: v1.1
+      summary: One hold
+      security:
+        - partnerToken: [holds:write]
+        - oauth: [holds:write]
+      responses:
+        '200':
+          description: The hold
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Hold' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [holds]
+      operationId: releaseHold
+      x-phase: v1.1
+      summary: Release a hold; answers the hold as released also when it had already ended
+      security:
+        - partnerToken: [holds:write]
+        - oauth: [holds:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The released hold
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Hold' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Invalid' }
+
+  /holds/{hold_id}/extend:
+    parameters:
+      - $ref: '#/components/parameters/HoldId'
+    post:
+      tags: [holds]
+      operationId: extendHold
+      x-phase: v1.1
+      summary: Extend an active hold once, by 30 to 120 minutes
+      security:
+        - partnerToken: [holds:write]
+        - oauth: [holds:write]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/HoldExtendRequest' }
+      responses:
+        '200':
+          description: The extended hold
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Hold' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Invalid' }
+
+  /watches:
+    post:
+      tags: [events]
+      operationId: addWatches
+      x-phase: v1.1
+      summary: Watch stones so their changes come through the events feed
+      security:
+        - partnerToken: [events:read]
+        - oauth: [events:read]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WatchesRequest' }
+      responses:
+        '200':
+          description: Which ids are now watched, and which were refused
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WatchesResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+    get:
+      tags: [events]
+      operationId: listWatches
+      x-phase: v1.1
+      summary: The stones this link watches
+      security:
+        - partnerToken: [events:read]
+        - oauth: [events:read]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: A page of watched stone ids
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WatchList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /watches/{stone_id}:
+    delete:
+      tags: [events]
+      operationId: removeWatch
+      x-phase: v1.1
+      summary: Stop watching a stone
+      security:
+        - partnerToken: [events:read]
+        - oauth: [events:read]
+      parameters:
+        - name: stone_id
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/StoneId' }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: No longer watched (also when it was not watched)
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /events:
+    get:
+      tags: [events]
+      operationId: listEvents
+      x-phase: v1.1
+      summary: Changes to watched stones and this link's holds, polled by cursor
+      description: |
+        Without `after`: an empty page and a cursor for now. Order by event id, increasing; at least once, so drop
+        ids already seen. Always store `next_cursor`. Events are kept 30 days; an older cursor answers 410.
+      security:
+        - partnerToken: [events:read]
+        - oauth: [events:read]
+      parameters:
+        - name: after
+          in: query
+          required: false
+          schema: { type: string, maxLength: 512 }
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/ClientRequestId'
+      responses:
+        '200':
+          description: A page of events
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventsPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '410': { $ref: '#/components/responses/Gone' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /webhooks:
+    post:
+      tags: [events]
+      operationId: createWebhook
+      x-phase: v1.1
+      summary: Optional, hosted Pavé only. Register a public https address for signed event deliveries
+      security:
+        - partnerToken: [events:read]
+        - oauth: [events:read]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WebhookCreateRequest' }
+      responses:
+        '201':
+          description: Registered. The secret is shown only here.
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookCreated' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/Invalid' }
+    get:
+      tags: [events]
+      operationId: listWebhooks
+      x-phase: v1.1
+      summary: This link's webhooks, without secrets
+      security:
+        - partnerToken: [events:read]
+        - oauth: [events:read]
+      responses:
+        '200':
+          description: The webhooks
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WebhookList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /webhooks/{webhook_id}:
+    delete:
+      tags: [events]
+      operationId: deleteWebhook
+      x-phase: v1.1
+      summary: Remove a webhook
+      security:
+        - partnerToken: [events:read]
+        - oauth: [events:read]
+      parameters:
+        - name: webhook_id
+          in: path
+          required: true
+          schema: { type: string, pattern: '^whk_[A-Za-z0-9]{1,60}$' }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204':
+          description: Removed
+          headers:
+            x-request-id: { $ref: '#/components/headers/RequestId' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+webhooks:
+  event:
+    post:
+      x-phase: v1.1
+      summary: One event, delivered to a registered address (Standard Webhooks signing)
+      description: |
+        The body is the same Event the feed returns. Verify `webhook-signature` (v1, base64 HMAC-SHA256 of
+        "{webhook-id}.{webhook-timestamp}.{body}" with the secret) and refuse a timestamp more than 5 minutes off.
+        Diaex retries for 24 hours; the feed stays the record.
+      parameters:
+        - { name: webhook-id, in: header, required: true, schema: { type: string } }
+        - { name: webhook-timestamp, in: header, required: true, schema: { type: string, pattern: '^[0-9]+$' } }
+        - { name: webhook-signature, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Event' }
+      responses:
+        '2XX':
+          description: Received
+
+components:
+  securitySchemes:
+    partnerToken:
+      type: http
+      scheme: bearer
+      description: |
+        A pasted partner token, dxp_live_… or dxp_test_… (test fixtures only). Acts as the Diaex person who made
+        it, in their company; the access level is read on every request. Scopes: stones:read, prices:read,
+        holds:write, events:read (handoff:write in v2).
+    oauth:
+      type: oauth2
+      description: Authorization code with PKCE (S256 only); loopback redirect for Pavé on a designer's computer.
+      flows:
+        authorizationCode:
+          authorizationUrl: https://console.thediaex.com/oauth/authorize
+          tokenUrl: https://api.thediaex.com/partner/v1/oauth/token
+          refreshUrl: https://api.thediaex.com/partner/v1/oauth/token
+          scopes:
+            stones:read: Search, sets, match, availability, stone detail, me
+            prices:read: Prices, only for a verified company
+            holds:write: Place, extend, list and release holds
+            events:read: Watch list, events feed, webhooks
+        clientCredentials:
+          tokenUrl: https://api.thediaex.com/partner/v1/oauth/token
+          scopes:
+            stones:read: App token at the signed_out level, for hosted Pavé
+    clientBasic:
+      type: http
+      scheme: basic
+      description: Confidential clients (hosted Pavé) at the token endpoint.
+
+  headers:
+    RequestId:
+      description: Diaex's id for this request, req_ and 32 hex characters.
+      schema: { type: string, pattern: '^req_[0-9a-f]{32}$' }
+    RetryAfter:
+      description: Whole seconds to wait.
+      schema: { type: integer, minimum: 1 }
+    ETag:
+      description: Weak tag over the stone as this caller sees it.
+      schema: { type: string }
+
+  parameters:
+    ClientRequestId:
+      name: X-Client-Request-Id
+      in: header
+      required: false
+      schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Kept 24 hours per link. Same key and body answers the first reply again.
+      schema: { type: string, pattern: '^[A-Za-z0-9_-]{1,64}$' }
+    StoneId:
+      name: id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/StoneId' }
+    HoldId:
+      name: hold_id
+      in: path
+      required: true
+      schema: { type: string, pattern: '^hld_[A-Za-z0-9]{1,60}$' }
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 100 }
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string, maxLength: 512 }
+
+  responses:
+    BadRequest:
+      description: bad_cursor
+      headers:
+        x-request-id: { $ref: '#/components/headers/RequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: unauthenticated, token_expired or token_revoked
+      headers:
+        x-request-id: { $ref: '#/components/headers/RequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: insufficient_scope, company_not_verified or access_removed
+      headers:
+        x-request-id: { $ref: '#/components/headers/RequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: stone_unavailable (with `missing` for locked ids) or not_found
+      headers:
+        x-request-id: { $ref: '#/components/headers/RequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: stone_on_memo (with `stones`), locked_unfit (with `differences`), hold_not_extendable or idempotency_in_progress
+      headers:
+        x-request-id: { $ref: '#/components/headers/RequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Gone:
+      description: cursor_expired
+      headers:
+        x-request-id: { $ref: '#/components/headers/RequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    TooLarge:
+      description: body_too_large (over 32 KB; 64 KB for /requirements/match)
+      headers:
+        x-request-id: { $ref: '#/components/headers/RequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Invalid:
+      description: invalid_request (with `detail`), requirement_unsupported (with `reason`), idempotency_key_reused or webhook_url_not_public
+      headers:
+        x-request-id: { $ref: '#/components/headers/RequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    TooManyRequests:
+      description: rate_limited or daily_quota_exceeded
+      headers:
+        x-request-id: { $ref: '#/components/headers/RequestId' }
+        Retry-After: { $ref: '#/components/headers/RetryAfter' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unavailable:
+      description: storage_unavailable (retryable)
+      headers:
+        x-request-id: { $ref: '#/components/headers/RequestId' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    StoneId:
+      type: string
+      minLength: 1
+      maxLength: 128
+      description: Diaex's public id. Opaque.
+
+    Ref:
+      type: string
+      pattern: '^[A-Za-z0-9._:@+-]{1,64}$'
+      description: The partner's own opaque label, echoed back. Never design content.
+
+    Mm:
+      type: number
+      description: Millimetres, at most 2 decimals.
+
+    Money:
+      type: object
+      additionalProperties: false
+      required: [amount, currency]
+      properties:
+        amount: { type: string, pattern: '^[0-9]+\.[0-9]{2}$', examples: ['6120.00'] }
+        currency: { type: string, pattern: '^[A-Z]{3}$', examples: [USD] }
+
+    NullableMoney:
+      oneOf:
+        - $ref: '#/components/schemas/Money'
+        - type: 'null'
+
+    Access:
+      type: object
+      required: [level, prices, markup, prices_hidden_reason]
+      properties:
+        level: { type: string, enum: [signed_out, not_approved, approved] }
+        prices: { type: boolean }
+        markup: { type: boolean, description: Prices are raised by the company's markup. }
+        prices_hidden_reason:
+          type: [string, 'null']
+          enum: [signed_out, not_verified, scope_missing, null]
+
+    Error:
+      type: object
+      required: [error, request_id]
+      properties:
+        error:
+          type: object
+          required: [code, message, retryable]
+          properties:
+            code:
+              type: string
+              enum:
+                - bad_cursor
+                - unauthenticated
+                - token_expired
+                - token_revoked
+                - insufficient_scope
+                - company_not_verified
+                - access_removed
+                - stone_unavailable
+                - not_found
+                - stone_on_memo
+                - locked_unfit
+                - hold_not_extendable
+                - idempotency_in_progress
+                - cursor_expired
+                - body_too_large
+                - invalid_request
+                - requirement_unsupported
+                - idempotency_key_reused
+                - webhook_url_not_public
+                - rate_limited
+                - daily_quota_exceeded
+                - internal
+                - storage_unavailable
+            message: { type: string, description: For people; decide by code. }
+            retryable: { type: boolean }
+            missing: { type: array, items: { $ref: '#/components/schemas/StoneId' } }
+            stones: { type: array, items: { $ref: '#/components/schemas/StoneId' } }
+            differences: { type: array, items: { type: object } }
+            reason: { $ref: '#/components/schemas/UnsupportedReason' }
+            detail:
+              type: array
+              description: Each field and why. Never the value sent.
+              items:
+                type: object
+                properties:
+                  loc: { type: array, items: { type: [string, integer] } }
+                  msg: { type: string }
+                  type: { type: string }
+        request_id: { type: string }
+
+    OAuthError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          enum: [invalid_request, invalid_client, invalid_grant, unauthorized_client, unsupported_grant_type, invalid_scope]
+        error_description: { type: string }
+
+    UnsupportedReason:
+      type: string
+      enum: [parcels_not_listed, material_not_listed, cut_not_listed, colour_not_listed, set_too_large]
+
+    AvailabilityStatus:
+      type: string
+      enum: [available, memo, on_hold, unavailable, unknown]
+
+    Measurements:
+      type: object
+      required: [length_mm, width_mm, height_mm, ratio]
+      properties:
+        length_mm: { type: [number, 'null'], description: The longer side. }
+        width_mm: { type: [number, 'null'] }
+        height_mm: { type: [number, 'null'] }
+        ratio: { type: [number, 'null'] }
+
+    Profile:
+      type: object
+      properties:
+        table_pct: { type: [number, 'null'] }
+        depth_pct: { type: [number, 'null'] }
+        crown_angle: { type: [number, 'null'] }
+        crown_height_pct: { type: [number, 'null'] }
+        pavilion_angle: { type: [number, 'null'] }
+        pavilion_depth_pct: { type: [number, 'null'] }
+        girdle_thin: { type: [string, 'null'] }
+        girdle_thick: { type: [string, 'null'] }
+        culet: { type: [string, 'null'] }
+
+    Certificate:
+      type: object
+      required: [lab, report_no, report_url]
+      properties:
+        lab: { type: [string, 'null'] }
+        report_no: { type: [string, 'null'], description: Only when the number fits the lab's format. }
+        report_url: { type: [string, 'null'], format: uri }
+
+    Media:
+      type: object
+      required: [image_url, video_url]
+      properties:
+        image_url:
+          type: [string, 'null']
+          format: uri
+          description: Absolute, public, cacheable. Width through w = 96, 256, 512 or 1024.
+        video_url: { type: [string, 'null'], format: uri }
+
+    Location:
+      type: object
+      required: [country, city]
+      properties:
+        country: { type: [string, 'null'], pattern: '^[A-Z]{2}$' }
+        city: { type: [string, 'null'] }
+
+    Stone:
+      type: object
+      required: [id, url, shape, shape_group, carat, origin, measurements, certificate, media, availability, price, price_per_carat, etag, updated_at]
+      properties:
+        id: { $ref: '#/components/schemas/StoneId' }
+        url: { type: string, format: uri, description: Diaex page that opens this stone, in both looks, signed out or in. }
+        shape: { type: [string, 'null'], description: The supplier's word. }
+        shape_group: { type: [string, 'null'] }
+        carat: { type: [number, 'null'] }
+        origin: { type: string, enum: [natural, lab] }
+        growth: { type: [string, 'null'], enum: [CVD, HPHT, null] }
+        color: { type: [string, 'null'] }
+        fancy_color: { type: [string, 'null'] }
+        fancy_hue: { type: [string, 'null'] }
+        fancy_intensity: { type: [string, 'null'] }
+        clarity: { type: [string, 'null'] }
+        cut: { type: [string, 'null'] }
+        polish: { type: [string, 'null'] }
+        symmetry: { type: [string, 'null'] }
+        fluorescence: { type: [string, 'null'] }
+        treatment: { type: string, enum: [TREATED, UNTREATED, UNKNOWN] }
+        measurements: { $ref: '#/components/schemas/Measurements' }
+        profile: { $ref: '#/components/schemas/Profile' }
+        certificate: { $ref: '#/components/schemas/Certificate' }
+        media: { $ref: '#/components/schemas/Media' }
+        location: { $ref: '#/components/schemas/Location' }
+        availability: { type: string, enum: [available, memo, on_hold] }
+        price: { $ref: '#/components/schemas/NullableMoney' }
+        price_per_carat: { $ref: '#/components/schemas/NullableMoney' }
+        has_pair: { type: [boolean, 'null'], description: A hint, never a promise. }
+        etag: { type: string }
+        updated_at: { type: string, format: date-time }
+
+    Fit:
+      type: object
+      required: [d_length_mm, d_width_mm, d_height_mm, in_window, score]
+      description: |
+        d = stone minus seat, per side. Error e = d / tol_plus when d > 0, -d / tol_minus when d < 0, 0 when d = 0.
+        in_window = both errors at most 1 (and height at most max_height_mm when sent).
+        score = 1 - max(e_length, e_width), kept in 0..1, rounded half up to 2 decimals, in decimals.
+      properties:
+        d_length_mm: { type: number }
+        d_width_mm: { type: number }
+        d_height_mm: { type: [number, 'null'] }
+        in_window: { type: boolean }
+        score: { type: number, minimum: 0, maximum: 1 }
+
+    Seat:
+      type: object
+      additionalProperties: false
+      required: [length_mm, width_mm, tol_minus_mm, tol_plus_mm]
+      properties:
+        length_mm: { type: number, minimum: 0.3, maximum: 40, description: At least width_mm. }
+        width_mm: { type: number, minimum: 0.3, maximum: 40 }
+        tol_minus_mm: { type: number, minimum: 0, maximum: 2 }
+        tol_plus_mm: { type: number, minimum: 0, maximum: 2 }
+        max_height_mm: { type: [number, 'null'], minimum: 0.1, maximum: 40 }
+
+    CaratRange:
+      type: object
+      additionalProperties: false
+      properties:
+        min: { type: number, exclusiveMinimum: 0, maximum: 30 }
+        max: { type: number, exclusiveMinimum: 0, maximum: 30 }
+
+    CertificateRule:
+      type: object
+      additionalProperties: false
+      properties:
+        required: { type: boolean, default: false, description: True drops stones with no lab. }
+        labs:
+          type: [array, 'null']
+          maxItems: 16
+          items: { type: string, maxLength: 16 }
+
+    Requirement:
+      type: object
+      additionalProperties: false
+      required: [ref, kind, quantity, gem, origin, shape, seat]
+      properties:
+        ref: { $ref: '#/components/schemas/Ref' }
+        kind: { type: string, enum: [single, matched_set, parcel] }
+        quantity: { type: integer, minimum: 1, description: '1 for single; 2 to 70 for matched_set; any for parcel.' }
+        gem: { type: string, minLength: 1, maxLength: 32, description: 'diamond; anything else is answered unsupported.' }
+        origin: { type: string, enum: [natural, lab, any] }
+        shape: { type: string, minLength: 1, maxLength: 64 }
+        seat: { $ref: '#/components/schemas/Seat' }
+        carat:
+          oneOf:
+            - $ref: '#/components/schemas/CaratRange'
+            - type: 'null'
+        colors: { type: [array, 'null'], maxItems: 23, items: { type: string, maxLength: 12 } }
+        fancy_hues: { type: [array, 'null'], maxItems: 10, items: { type: string, maxLength: 16 } }
+        fancy_intensities: { type: [array, 'null'], maxItems: 10, items: { type: string, maxLength: 32 } }
+        clarities: { type: [array, 'null'], maxItems: 16, items: { type: string, maxLength: 8 } }
+        certificate: { $ref: '#/components/schemas/CertificateRule' }
+        max_price_each:
+          oneOf:
+            - $ref: '#/components/schemas/Money'
+            - type: 'null'
+        include_memo: { type: boolean, default: false, description: single only. }
+        same_supplier: { type: boolean, default: false, description: matched_set only. }
+        exclude:
+          type: array
+          maxItems: 70
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/StoneId' }
+
+    Candidate:
+      type: object
+      required: [stone, fit]
+      properties:
+        stone: { $ref: '#/components/schemas/Stone' }
+        fit: { $ref: '#/components/schemas/Fit' }
+
+    Spread:
+      type: object
+      properties:
+        length_mm: { type: number }
+        width_mm: { type: number }
+        table_pct: { type: number }
+        depth_pct: { type: number }
+        crown_height_pct: { type: number }
+
+    StoneSet:
+      type: object
+      required: [stones, total_price, total_carat, spread, suppliers, one_supplier, relaxed]
+      properties:
+        stones: { type: array, items: { $ref: '#/components/schemas/Candidate' } }
+        total_price: { $ref: '#/components/schemas/NullableMoney' }
+        total_carat: { type: number }
+        spread: { $ref: '#/components/schemas/Spread' }
+        suppliers: { type: integer, minimum: 0 }
+        one_supplier: { type: boolean }
+        relaxed: { type: boolean, description: Found one grade apart. }
+
+    LargestSet:
+      allOf:
+        - $ref: '#/components/schemas/StoneSet'
+        - type: object
+          required: [count]
+          properties:
+            count: { type: integer, minimum: 2 }
+
+    Loosen:
+      type: object
+      additionalProperties: false
+      properties:
+        length_mm: { type: number, exclusiveMinimum: 0 }
+        width_mm: { type: number, exclusiveMinimum: 0 }
+        table_pct: { type: number, exclusiveMinimum: 0 }
+        depth_pct: { type: number, exclusiveMinimum: 0 }
+        crown_height_pct: { type: number, exclusiveMinimum: 0 }
+
+    StonesSearchRequest:
+      type: object
+      additionalProperties: false
+      required: [requirement]
+      properties:
+        requirement: { $ref: '#/components/schemas/Requirement' }
+        sort: { type: string, enum: [fit, price_asc, ppc_asc], default: fit }
+        limit: { type: integer, minimum: 1, maximum: 100, default: 24 }
+        cursor: { type: [string, 'null'], maxLength: 512 }
+
+    StonesSearchResponse:
+      type: object
+      required: [ref, candidates, total, next_cursor, dropped, search_url, access]
+      properties:
+        ref: { $ref: '#/components/schemas/Ref' }
+        candidates: { type: array, items: { $ref: '#/components/schemas/Candidate' } }
+        total: { type: [integer, 'null'], description: First page only. }
+        next_cursor: { type: [string, 'null'] }
+        dropped: { type: array, items: { type: string, enum: [max_price_each] } }
+        search_url: { type: string, format: uri }
+        access: { $ref: '#/components/schemas/Access' }
+
+    SetsSearchRequest:
+      type: object
+      additionalProperties: false
+      required: [requirement]
+      properties:
+        requirement: { $ref: '#/components/schemas/Requirement' }
+        locked:
+          type: array
+          maxItems: 70
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/StoneId' }
+        loosen:
+          oneOf:
+            - $ref: '#/components/schemas/Loosen'
+            - type: 'null'
+
+    SetsSearchResponse:
+      type: object
+      required: [ref, sets, one_supplier, complete, capped, stopped, largest_found, search_url, access]
+      properties:
+        ref: { $ref: '#/components/schemas/Ref' }
+        sets: { type: array, maxItems: 3, items: { $ref: '#/components/schemas/StoneSet' } }
+        one_supplier:
+          oneOf:
+            - $ref: '#/components/schemas/StoneSet'
+            - type: 'null'
+        complete: { type: boolean }
+        capped: { type: boolean, description: More than 2,000 candidates were in the window. }
+        stopped: { type: boolean, description: The search ran out of time. }
+        largest_found:
+          oneOf:
+            - $ref: '#/components/schemas/LargestSet'
+            - type: 'null'
+        search_url: { type: string, format: uri }
+        access: { $ref: '#/components/schemas/Access' }
+
+    MatchRequest:
+      type: object
+      additionalProperties: false
+      required: [requirements]
+      properties:
+        requirements:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items: { $ref: '#/components/schemas/Requirement' }
+          description: Each ref once.
+        sort: { type: string, enum: [fit, price_asc, ppc_asc], default: fit }
+        limit_per_row: { type: integer, minimum: 1, maximum: 50, default: 10 }
+
+    RowResult:
+      type: object
+      required: [ref, kind, status]
+      properties:
+        ref: { $ref: '#/components/schemas/Ref' }
+        kind: { type: string, enum: [single, matched_set, parcel] }
+        status: { type: string, enum: [matched, none, unsupported, error] }
+        reason:
+          oneOf:
+            - $ref: '#/components/schemas/UnsupportedReason'
+            - type: 'null'
+        candidates: { type: array, items: { $ref: '#/components/schemas/Candidate' } }
+        total: { type: [integer, 'null'] }
+        sets: { type: array, items: { $ref: '#/components/schemas/StoneSet' } }
+        one_supplier:
+          oneOf:
+            - $ref: '#/components/schemas/StoneSet'
+            - type: 'null'
+        complete: { type: boolean }
+        search_url: { type: [string, 'null'], format: uri }
+        error:
+          type: [object, 'null']
+          properties:
+            code: { type: string, enum: [row_timeout] }
+            retryable: { type: boolean }
+
+    MatchResponse:
+      type: object
+      required: [results, access]
+      properties:
+        results: { type: array, items: { $ref: '#/components/schemas/RowResult' } }
+        access: { $ref: '#/components/schemas/Access' }
+
+    AvailabilityRequest:
+      type: object
+      additionalProperties: false
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: '#/components/schemas/StoneId' }
+
+    AvailabilityItem:
+      type: object
+      required: [id, status, reason, held_by_you, price, price_per_carat, etag, updated_at]
+      properties:
+        id: { $ref: '#/components/schemas/StoneId' }
+        status: { $ref: '#/components/schemas/AvailabilityStatus' }
+        reason: { type: [string, 'null'], enum: [sold, delisted, null] }
+        held_by_you: { type: boolean, description: Always false in v1. }
+        price: { $ref: '#/components/schemas/NullableMoney' }
+        price_per_carat: { $ref: '#/components/schemas/NullableMoney' }
+        etag: { type: [string, 'null'] }
+        updated_at: { type: [string, 'null'], format: date-time }
+
+    AvailabilityResponse:
+      type: object
+      required: [items, access]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AvailabilityItem' } }
+        access: { $ref: '#/components/schemas/Access' }
+
+    StoneResponse:
+      type: object
+      required: [stone, access]
+      properties:
+        stone: { $ref: '#/components/schemas/Stone' }
+        access: { $ref: '#/components/schemas/Access' }
+
+    Company:
+      type: object
+      required: [id, name, verified, kyc_status]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        verified: { type: boolean }
+        kyc_status: { type: string, enum: [not_submitted, submitted, approved, rejected] }
+
+    Link:
+      type: object
+      required: [id, kind, name, scopes, mode, last4, created_at, expires_at]
+      properties:
+        id: { type: string, pattern: '^lnk_' }
+        kind: { type: string, enum: [token, oauth] }
+        name: { type: string }
+        scopes:
+          type: array
+          items: { type: string, enum: ['stones:read', 'prices:read', 'holds:write', 'events:read', 'handoff:write'] }
+        mode: { type: string, enum: [live, test] }
+        last4: { type: string, minLength: 4, maxLength: 4 }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: [string, 'null'], format: date-time }
+
+    Me:
+      type: object
+      required: [access, company, link]
+      properties:
+        access: { $ref: '#/components/schemas/Access' }
+        company:
+          oneOf:
+            - $ref: '#/components/schemas/Company'
+            - type: 'null'
+        link:
+          oneOf:
+            - $ref: '#/components/schemas/Link'
+            - type: 'null'
+
+    TokenRequest:
+      type: object
+      required: [grant_type]
+      properties:
+        grant_type: { type: string, enum: [authorization_code, refresh_token, client_credentials] }
+        code: { type: string }
+        redirect_uri: { type: string }
+        client_id: { type: string }
+        code_verifier: { type: string, minLength: 43, maxLength: 128 }
+        refresh_token: { type: string }
+        scope: { type: string }
+
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in, scope]
+      properties:
+        access_token: { type: string }
+        token_type: { type: string, enum: [Bearer] }
+        expires_in: { type: integer, examples: [3600] }
+        refresh_token: { type: string, description: Not sent for client_credentials. }
+        scope: { type: string }
+
+    Hold:
+      type: object
+      required: [id, stone_id, status, reason, reference, created_at, expires_at, ended_at, extensions_left]
+      properties:
+        id: { type: [string, 'null'], description: Null when refused. }
+        stone_id: { $ref: '#/components/schemas/StoneId' }
+        status: { type: string, enum: [active, released, expired, refused] }
+        reason:
+          type: [string, 'null']
+          enum: [stone_held, stone_on_memo, stone_unavailable, hold_limit_reached, null]
+        reference:
+          oneOf:
+            - $ref: '#/components/schemas/Ref'
+            - type: 'null'
+        created_at: { type: [string, 'null'], format: date-time }
+        expires_at: { type: [string, 'null'], format: date-time }
+        ended_at: { type: [string, 'null'], format: date-time }
+        extensions_left: { type: integer, minimum: 0 }
+
+    HoldsCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [stone_ids]
+      properties:
+        stone_ids:
+          type: array
+          minItems: 1
+          maxItems: 10
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/StoneId' }
+        minutes: { type: integer, minimum: 30, maximum: 120, default: 60 }
+        reference:
+          oneOf:
+            - $ref: '#/components/schemas/Ref'
+            - type: 'null'
+
+    HoldsCreateResponse:
+      type: object
+      required: [holds]
+      properties:
+        holds: { type: array, items: { $ref: '#/components/schemas/Hold' } }
+
+    HoldExtendRequest:
+      type: object
+      additionalProperties: false
+      required: [minutes]
+      properties:
+        minutes: { type: integer, minimum: 30, maximum: 120 }
+
+    HoldList:
+      type: object
+      required: [holds, next_cursor]
+      properties:
+        holds: { type: array, items: { $ref: '#/components/schemas/Hold' } }
+        next_cursor: { type: [string, 'null'] }
+
+    WatchesRequest:
+      type: object
+      additionalProperties: false
+      required: [stone_ids]
+      properties:
+        stone_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/StoneId' }
+
+    WatchesResponse:
+      type: object
+      required: [watching, refused]
+      properties:
+        watching: { type: array, items: { $ref: '#/components/schemas/StoneId' } }
+        refused:
+          type: array
+          items:
+            type: object
+            required: [id, reason]
+            properties:
+              id: { $ref: '#/components/schemas/StoneId' }
+              reason: { type: string, enum: [unknown, watch_limit_reached] }
+
+    WatchList:
+      type: object
+      required: [stone_ids, next_cursor]
+      properties:
+        stone_ids: { type: array, items: { $ref: '#/components/schemas/StoneId' } }
+        next_cursor: { type: [string, 'null'] }
+
+    EventType:
+      type: string
+      enum:
+        - stone.price_changed
+        - stone.unavailable
+        - stone.available
+        - stone.memo
+        - stone.updated
+        - hold.expiring
+        - hold.expired
+        - hold.released
+
+    Event:
+      type: object
+      required: [id, type, created_at, stone_id, hold_id, data]
+      properties:
+        id: { type: string, pattern: '^evt_' }
+        type: { $ref: '#/components/schemas/EventType' }
+        created_at: { type: string, format: date-time }
+        stone_id:
+          oneOf:
+            - $ref: '#/components/schemas/StoneId'
+            - type: 'null'
+        hold_id: { type: [string, 'null'] }
+        data:
+          type: object
+          description: |
+            stone.price_changed: {price, price_per_carat, was_price}, only to callers who see prices.
+            stone.unavailable: {status: on_hold | unavailable, reason: order_hold | hold | sold | delisted}.
+            stone.available: {status: available}. stone.memo: {status: memo}.
+            stone.updated: {fields: [...]}. hold.expiring: {expires_at}. hold.expired, hold.released: {ended_at, reason}.
+
+    EventsPage:
+      type: object
+      required: [events, next_cursor, has_more]
+      properties:
+        events: { type: array, items: { $ref: '#/components/schemas/Event' } }
+        next_cursor: { type: string, description: Always set; store it and pass it next time. }
+        has_more: { type: boolean }
+
+    WebhookCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [url, types]
+      properties:
+        url: { type: string, format: uri, pattern: '^https://', maxLength: 2048 }
+        types:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: '#/components/schemas/EventType' }
+
+    Webhook:
+      type: object
+      required: [id, url, types, created_at]
+      properties:
+        id: { type: string, pattern: '^whk_' }
+        url: { type: string, format: uri }
+        types: { type: array, items: { $ref: '#/components/schemas/EventType' } }
+        created_at: { type: string, format: date-time }
+
+    WebhookCreated:
+      allOf:
+        - $ref: '#/components/schemas/Webhook'
+        - type: object
+          required: [secret]
+          properties:
+            secret: { type: string, pattern: '^whsec_', description: Shown once. }
+
+    WebhookList:
+      type: object
+      required: [webhooks]
+      properties:
+        webhooks: { type: array, items: { $ref: '#/components/schemas/Webhook' } }

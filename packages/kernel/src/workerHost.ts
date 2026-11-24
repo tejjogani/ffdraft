@@ -56,10 +56,13 @@ export function serveKernel(kernel: LocalKernel, port: Port<Response, Request>):
           .finally(() => running.delete(data.id))
         break
       }
-      case 'export':
+      case 'export': {
+        const controller = new AbortController()
+        running.set(data.id, controller)
         kernel
           .export(data.design, data.format, {
             ...data.options,
+            signal: controller.signal,
             ...(data.assets ? { assets: resolveAsset } : {}),
           })
           .then(
@@ -67,9 +70,11 @@ export function serveKernel(kernel: LocalKernel, port: Port<Response, Request>):
               port.postMessage({ type: 'exported', id: data.id, result }, [
                 result.bytes.buffer as ArrayBuffer,
               ]),
-            (error) => fail(data.id, error),
+            (error) => fail(data.id, error, controller.signal),
           )
+          .finally(() => running.delete(data.id))
         break
+      }
       case 'abort':
         running.get(data.id)?.abort()
         break

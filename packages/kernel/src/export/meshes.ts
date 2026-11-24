@@ -43,9 +43,17 @@ function uniqueNames<T extends { name: string }>(objects: T[]): T[] {
   return objects
 }
 
-const partTriangles = (scene: Scene, part: ScenePart): IndexedTriangles =>
-  part.fused?.triangles(scene.quality) ??
-  mergeTriangles(part.sources.map((s) => s.body.solid.triangles(scene.quality)))
+/**
+ * A part's triangles as they will be written: welded at float32, which drops triangles whose
+ * corners collapse onto one another. Chain links carry a few such slivers; harmless in the
+ * kernel's welded meshes, but every STL reader would count each as non-manifold edges.
+ */
+function partTriangles(scene: Scene, part: ScenePart): IndexedTriangles {
+  const tris =
+    part.fused?.triangles(scene.quality) ??
+    mergeTriangles(part.sources.map((s) => s.body.solid.triangles(scene.quality)))
+  return weld(tris.positions, tris.indices)
+}
 
 /** A unit gem mesh placed by a stone's matrix (non-uniform: girdle, length and depth scales). */
 function placedGem(mesh: MeshData, m: readonly number[]): IndexedTriangles {

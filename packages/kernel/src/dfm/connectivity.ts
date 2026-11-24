@@ -148,6 +148,9 @@ export function connectivityChecks(scene: Scene, profile: DfmProfile): Diagnosti
       loose = loose.filter((i) => !seated.includes(i))
       if (loose.length === 0) continue
     }
+    // A bail that places itself and found nothing to stand on has already said so, with the
+    // right advice; "move it" would point at a node that has no position of its own.
+    if (result.diagnostics.some((d) => d.code === 'bail.unsupported')) continue
     out.push({
       level: 'error',
       code: 'metal.disconnected',

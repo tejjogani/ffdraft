@@ -113,6 +113,11 @@ export interface Diagnostic {
   /** The measured value and the threshold it was compared to, in mm. */
   value?: number
   limit?: number
+  /**
+   * Other nodes and stones (`StoneInstance.id`) the finding concerns: the body an engraving
+   * cuts through, the stone a seat check measured. Messages name them for people; this is for code.
+   */
+  related?: string[]
   /** A one-click repair, when the fix is unambiguous: apply `ops` to the design. */
   fix?: { label: string; ops: Op[] }
 }
@@ -163,6 +168,8 @@ export interface ExportOptions {
   /** Restrict to these node ids. */
   only?: string[]
   assets?: AssetResolver
+  /** Stops the export (and the evaluation before it) at its next checkpoint. */
+  signal?: AbortSignal
 }
 
 export interface ExportResult {

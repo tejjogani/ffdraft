@@ -19,7 +19,7 @@ export function limitChecks(scene: Scene, profile: DfmProfile): Diagnostic[] {
     out.push({
       level: 'warning',
       code: 'metal.heavy',
-      message: `This piece would use ${mass >= 1000 ? `${(mass / 1000).toFixed(1)} kg` : `${mass.toFixed(0)} g`} of metal; check its size and scale.`,
+      message: `This piece would use ${mass >= 1000 ? `${(mass / 1000).toLocaleString('en-US', { maximumFractionDigits: 1 })} kg` : `${mass.toFixed(0)} g`} of metal; check its size and scale.`,
       value: mass,
       limit: profile.maxMetalG,
     })
