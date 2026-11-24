@@ -87,8 +87,9 @@ export const pave = defineFeature('pave', (node, ctx) => {
   const smallest = sizes.at(-1)!
 
   const mesh = hostSurface(host)
-  // Edge distances matter only up to the largest stone's radius plus the margin.
-  const edgeCap = largest / 2 + node.margin + 0.5
+  // Edge distances matter up to the half-width of the widest band that is paved in rows
+  // (twice the largest stone; see mesh/pave/layout.ts), beyond which a field is open.
+  const edgeCap = 2 * largest + node.margin
   const region = selectRegion(
     mesh,
     node.region,

@@ -63,7 +63,23 @@ const SLACK = 0.012
 const DRIFT = 0.06
 /** Depth changing this many times faster across a seed than along it marks a band. */
 const BAND_ANISOTROPY = 4
+/** A single row is re-centred within ±CENTRE_REACH of a stone across its band, in this many steps a side. */
+const CENTRE_REACH = 0.35
+const CENTRE_STEPS = 7
+/** More rows in a band must pack this much more stone area per length to be chosen. */
+const MORE_ROWS = 1.08
+/** Row spacing of a honeycomb per unit of pitch. */
+const ROW_SPACING = Math.sqrt(3) / 2
 const EPS = 1e-9
+
+type Hit = NonNullable<ReturnType<PaveSurface['snap']>>
+
+/** The stones a front lays: up to `limit` across, only that size when `uniform`, in `rows`. */
+interface FrontPlan {
+  limit: number
+  uniform: boolean
+  rows: number
+}
 
 export function layoutPave(surface: PaveSurface, options: LayoutOptions): Layout {
   return new Packer(surface, options).run()
@@ -83,6 +99,7 @@ class Packer {
   private readonly random: () => number
   private work = 0
   private seedCursor = 0
+  private front: FrontPlan
 
   constructor(
     private readonly surface: PaveSurface,
@@ -98,6 +115,11 @@ class Packer {
     this.order = Uint32Array.from(ids)
     this.grid = new PointGrid(this.largest + o.gap)
     this.random = seededRandom(o.seed)
+    this.front = this.openField()
+  }
+
+  private openField(): FrontPlan {
+    return { limit: this.largest, uniform: false, rows: 0 }
   }
 
   run(): Layout {
@@ -113,7 +135,6 @@ class Packer {
       (sum, s) => sum + Math.PI * (s.diameter / 2 + this.o.gap / 2) ** 2,
       0,
     )
-    ;(globalThis as any).__stones = this.stones
     return { stones: this.select(full), packedArea: full }
   }
 
@@ -160,7 +181,7 @@ class Packer {
     if (d === 0) return 0
     const margin = 2 * (this.o.edgeDistance(p) - this.o.margin)
     const thickness = (this.surface.thickness(i) - FLOOR_METAL) / SEAT_DEPTH_PER_MM
-    return this.stock(Math.min(d, margin, thickness))
+    return this.stock(Math.min(d, margin, thickness, this.front.limit))
   }
 
   /** Girdle centre of a stone of diameter d whose footprint is centred on surface point p. */
@@ -201,9 +222,8 @@ class Packer {
         const away = dist > EPS ? scale(sub(c, other.position), 1 / dist) : cur.n
         push = add(push, scale(away, min - dist + SLACK))
       })
-      if (process.env.TRACE) (globalThis as any).__lastwhy = 'settle iter ' + iter + ' worst ' + worst.toFixed(4) + ' push ' + push.map((x) => x.toFixed(4))
-      if (worst === 0) return this.place(cur.p, cur.n, d, cur.sample)
-      if (worst > DRIFT * d) { ((globalThis as any).__viol ??= []).push(worst); if (process.env.TRACE) { const ids: number[] = []; this.grid.near(c[0], c[1], c[2], d / 2 + this.largest / 2 + this.o.gap, (j, d2) => { if (Math.sqrt(d2) < (d + this.stones[j]!.diameter) / 2 + this.o.gap) ids.push(j) }); (globalThis as any).__lastwhy = 'blocked by ' + ids.join(',') + ' worst ' + worst.toFixed(3) }; return -1 }
+        if (worst === 0) return this.place(cur.p, cur.n, d, cur.sample)
+      if (worst > DRIFT * d) return -1
       const next = this.snap(add(cur.p, sub(push, scale(cur.n, dot(push, cur.n)))))
       if (!next || this.sizeFor(next.sample, next.p) < d - EPS) return -1
       cur = next
@@ -303,14 +323,55 @@ class Packer {
     return { rows: normalize(add(scale(e, Math.cos(angle)), scale(f, Math.sin(angle)))), banded: band }
   }
 
+  /**
+   * The rows a band takes: k staggered rows of diameter d need d + (k − 1)(d + gap)·√3/2 across,
+   * and the choice packs the most stone area per length (k·d²/(d + gap)) — so a 3 mm stroke gets
+   * two rows of 1.3 mm instead of one row of 1.6 mm with slivers of metal beside it, the way
+   * setters pave letters. Every stone of the front then has that size, in rows along the band.
+   */
+  private bandPlan(seed: number): FrontPlan {
+    const across = 2 * (this.surface.edge[seed]! - this.o.margin)
+    const cap = this.sizeAt(seed)
+    let best: FrontPlan = this.openField()
+    let bestScore = 0
+    for (let rows = 1; rows <= 3; rows++) {
+      const extra = (rows - 1) * ROW_SPACING
+      const d = this.stock(Math.min(cap, (across - extra * this.o.gap) / (1 + extra)))
+      if (d === 0) continue
+      const score = (rows * d * d) / (d + this.o.gap)
+      if (score > bestScore * MORE_ROWS) {
+        best = { limit: d, uniform: true, rows }
+        bestScore = score
+      }
+    }
+    return best
+  }
+
   private grow(seed: number, first: boolean): void {
-    let start = this.surface.point(seed)
     const n0 = this.surface.normal(seed)
     const { rows, banded } = this.rowsAt(seed, n0)
+    this.front = banded ? this.bandPlan(seed) : this.openField()
+    try {
+      this.growFront(seed, first, rows, banded)
+    } finally {
+      this.front = this.openField()
+    }
+  }
+
+  private growFront(seed: number, first: boolean, rows: Vec3, banded: boolean): void {
+    const n0 = this.surface.normal(seed)
+    let start = this.surface.point(seed)
+    if (this.front.rows > 1) {
+      // The seed is on the band's centre line; the first row goes to one side of it.
+      const offset = ((this.front.rows - 1) / 2) * (this.front.limit + this.o.gap) * ROW_SPACING
+      const side = this.snap(sub(start, scale(cross(n0, rows), offset)))
+      if (!side) return
+      start = side.p
+    }
     if (first) {
       // Seeded phase: shift the lattice by up to half a pitch so layouts differ per seed — only
-      // along a band, never off its centre line, and never onto a spot that takes a smaller stone.
-      const pitch = this.largest + this.o.gap
+      // along a band, never across it, and never onto a spot that takes a smaller stone.
+      const pitch = this.front.limit + this.o.gap
       const across = banded ? 0 : (this.random() - 0.5) * pitch
       const shifted = this.snap(
         add(
@@ -318,28 +379,28 @@ class Packer {
           scale(cross(n0, rows), across),
         ),
       )
+      const here = this.snap(start)
       const d = shifted ? this.sizeFor(shifted.sample, shifted.p) : 0
-      if (shifted && d >= this.sizeFor(seed, start) && this.fits(shifted.p, shifted.n, d))
+      if (shifted && here && d >= this.sizeFor(here.sample, here.p) && this.fits(shifted.p, shifted.n, d))
         start = shifted.p
     }
     const root = this.snap(start)
     if (!root) return
     const d0 = this.sizeFor(root.sample, root.p)
-    if (d0 === 0 || !this.fits(root.p, root.n, d0)) return
+    if (d0 === 0 || (this.front.uniform && d0 < this.front.limit - EPS)) return
+    if (!this.fits(root.p, root.n, d0)) return
     const a = this.place(root.p, root.n, d0, root.sample)
-    if (process.env.TRACE) console.log('why', this.sizeAt(root.sample), this.surface.convex[root.sample], this.surface.concave[root.sample], this.o.edgeDistance(root.p), this.surface.thickness(root.sample), this.surface.edge[root.sample])
-    if (process.env.TRACE) console.log('seed', a, root.p.map((x) => x.toFixed(2)), d0, 'rows', rows.map((x) => x.toFixed(2)))
 
-    // The second stone sets the row direction; try the six lattice directions in turn.
+    // The second stone sets the row direction; try the six lattice directions in turn (in a
+    // band only along it, so the rows follow the band).
     let b = -1
-    for (let k = 0; k < 6 && b < 0; k++) {
+    for (let k = 0; k < 6 && b < 0; k += banded ? 3 : 1) {
       const angle = (k * Math.PI) / 3
       const dir = normalize(
         add(scale(rows, Math.cos(angle)), scale(cross(root.n, rows), Math.sin(angle))),
       )
       b = this.besideAlong(a, dir)
     }
-    if (process.env.TRACE) console.log('second', b, (globalThis as any).__lastwhy)
     if (b < 0) return
 
     // FIFO of stone pairs: (i, j, k) means "place a stone tangent to i and j, on the side away
@@ -351,7 +412,6 @@ class Packer {
       let grew = false
       for (const side of away < 0 ? [1, -1] : [this.sideAwayFrom(i, j, away)]) {
         const k = this.tangentTo(i, j, side)
-        if (process.env.TRACE && k < 0 && String((globalThis as any).__lastwhy).startsWith('settle')) console.log('pair', i, j, away, side, '->', k, (globalThis as any).__lastwhy)
         if (k < 0) continue
         queue.push([i, k, j], [k, j, i])
         grew = true
@@ -375,17 +435,40 @@ class Packer {
   /** A stone next to stone a in direction dir (gap apart), or -1. */
   private besideAlong(a: number, dir: Vec3): number {
     const sa = this.stones[a]!
-    let r = this.largest / 2
+    let r = this.front.limit / 2
     for (let iter = 0; iter < 4; iter++) {
-      const hit = this.snap(add(sa.position, scale(dir, sa.diameter / 2 + r + this.o.gap + SLACK)))
+      let hit = this.snap(add(sa.position, scale(dir, sa.diameter / 2 + r + this.o.gap + SLACK)))
+      if (hit && this.front.rows === 1) hit = this.centredAcross(hit, dir, 2 * r)
       if (!hit) return -1
       const d = this.sizeFor(hit.sample, hit.p)
       if (d === 0) return -1
-      if (d / 2 >= r - EPS)
-        return this.placeSettled(hit, 2 * r)
+      if (d / 2 >= r - EPS) return this.placeSettled(hit, 2 * r)
+      if (this.front.uniform) return -1
       r = d / 2
     }
     return -1
+  }
+
+  /**
+   * A single row keeps to the middle of its band: the footprint slid across the row to where
+   * it is farthest from the region's edge. Following the previous two stones alone, a row
+   * drifts off a curved or slanted stroke within a few stones and breaks.
+   */
+  private centredAcross(hit: Hit, dir: Vec3, d: number): Hit | null {
+    const across = normalize(cross(hit.n, dir))
+    let best = hit
+    let bestEdge = this.o.edgeDistance(hit.p)
+    for (let k = -CENTRE_STEPS; k <= CENTRE_STEPS; k++) {
+      if (k === 0) continue
+      const q = this.snap(add(hit.p, scale(across, (k / CENTRE_STEPS) * CENTRE_REACH * d)))
+      if (!q) continue
+      const e = this.o.edgeDistance(q.p)
+      if (e > bestEdge + EPS) {
+        best = q
+        bestEdge = e
+      }
+    }
+    return best
   }
 
   private sideAwayFrom(i: number, j: number, k: number): number {
@@ -398,18 +481,14 @@ class Packer {
 
   /** Places a stone tangent to stones i and j on `side`; returns its index or -1. */
   private tangentTo(i: number, j: number, side: number): number {
-    let r = this.largest / 2
-    const G = ((globalThis as any).__why ??= {})
-    const bump = (k: string) => { G[k] = (G[k] ?? 0) + 1; (globalThis as any).__lastwhy = k }
+    let r = this.front.limit / 2
     for (let attempt = 0; attempt < 4; attempt++) {
       const hit = this.tangentPoint(i, j, r, side)
-      if (!hit) { bump('nohit'); return -1 }
+      if (!hit) return -1
       const d = this.sizeFor(hit.sample, hit.p)
-      if (d === 0) { bump('size0:' + this.sizeAt(hit.sample) + ':' + (this.surface.thickness(hit.sample)).toFixed(2) + ':' + this.o.edgeDistance(hit.p).toFixed(2)); return -1 }
-      if (d / 2 >= r - EPS) {
-        const k = this.placeSettled(hit, 2 * r)
-        if (k >= 0) bump('ok'); else { G.nofit = (G.nofit ?? 0) + 1 }; return k }
-      bump('shrink:' + d + ':' + this.sizeAt(hit.sample) + ':th' + this.surface.thickness(hit.sample).toFixed(2) + ':e' + this.o.edgeDistance(hit.p).toFixed(2))
+      if (d === 0) return -1
+      if (d / 2 >= r - EPS) return this.placeSettled(hit, 2 * r)
+      if (this.front.uniform) return -1
       r = d / 2
     }
     return -1
