@@ -1,0 +1,20 @@
+{
+  "name": "@pave/match",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Reference match: fit a parametric design and its cameras to the silhouettes of photos, deterministically, on typed arrays.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "bench": "tsx src/bench/cli.ts"
+  },
+  "dependencies": {
+    "@pave/schema": "workspace:*"
+  },
+  "devDependencies": {
+    "@pave/kernel": "workspace:*"
+  }
+}
