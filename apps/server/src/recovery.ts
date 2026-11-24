@@ -11,8 +11,9 @@ import * as t from './db/schema'
 import { toMeshJob } from './handlers/mesh3d'
 import { toBrandModel, toShots } from './handlers/models'
 import { toPiece } from './handlers/pieces'
+import { toPackage } from './handlers/production'
 import { toRenderJobs } from './handlers/render'
-import { engineError, meshHandle, renderHandle, shotHandle } from './jobs'
+import { engineError, meshHandle, packageHandle, renderHandle, shotHandle } from './jobs'
 import { getModel, getPiece } from './lookups'
 import type { Runtime } from './runtime'
 import { LIVE_STATUSES, serviceContext } from './service-context'
@@ -30,18 +31,19 @@ export type Unfinished =
       providerJobId: string | null
     }
   | { kind: 'shot'; id: string; orgId: string; userId: string | null; actor: Actor | null }
+  | { kind: 'production'; id: string; orgId: string; userId: string; actor: null }
   | { kind: 'run'; id: string; orgId: string; userId: string; status: Run['status'] }
 
 const INTERRUPTED = 'Interrupted by a server restart; run it again.'
 const LIVE_RUNS: Run['status'][] = ['running', 'awaiting-approval']
 
 /**
- * Live work across all orgs: Blender renders, image-to-3D jobs and on-model shots that are
- * queued or running, and runs that are running or awaiting approval. Browser renders are not
+ * Live work across all orgs: Blender renders, image-to-3D jobs, on-model shots and production
+ * packages that are queued or running, and runs that are running or awaiting approval. Browser renders are not
  * listed: the studio window that queued one may still deliver it.
  */
 export async function unfinished(db: Db): Promise<Unfinished[]> {
-  const [renders, meshJobs, shots, runs] = await Promise.all([
+  const [renders, meshJobs, shots, packages, runs] = await Promise.all([
     db
       .select({
         id: t.renderJob.id,
@@ -72,6 +74,14 @@ export async function unfinished(db: Db): Promise<Unfinished[]> {
       .where(inArray(t.modelShot.status, LIVE_STATUSES)),
     db
       .select({
+        id: t.productionPackage.id,
+        orgId: t.productionPackage.orgId,
+        userId: t.productionPackage.createdBy,
+      })
+      .from(t.productionPackage)
+      .where(inArray(t.productionPackage.status, LIVE_STATUSES)),
+    db
+      .select({
         id: t.agentRun.id,
         orgId: t.agentRun.orgId,
         userId: t.agentRun.userId,
@@ -84,6 +94,7 @@ export async function unfinished(db: Db): Promise<Unfinished[]> {
     ...renders.map((r) => ({ kind: 'render' as const, ...r })),
     ...meshJobs.map((r) => ({ kind: 'mesh3d' as const, ...r })),
     ...shots.map((r) => ({ kind: 'shot' as const, ...r })),
+    ...packages.map((r) => ({ kind: 'production' as const, actor: null, ...r })),
     ...runs.map((r) => ({ kind: 'run' as const, ...r })),
   ]
 }
@@ -110,6 +121,17 @@ async function failOrphan(db: Db, item: Unfinished): Promise<void> {
         .update(t.modelShot)
         .set(failed)
         .where(and(eq(t.modelShot.id, item.id), inArray(t.modelShot.status, LIVE_STATUSES)))
+      return
+    case 'production':
+      await db
+        .update(t.productionPackage)
+        .set({ status: 'failed' })
+        .where(
+          and(
+            eq(t.productionPackage.id, item.id),
+            inArray(t.productionPackage.status, LIVE_STATUSES),
+          ),
+        )
       return
     case 'run':
       await db
@@ -171,6 +193,20 @@ async function resumeOne(ctx: Ctx, item: Unfinished): Promise<void> {
       return onModel.resumeShot(shot!, subject, handle, sctx).catch((err: unknown) => {
         console.error(`Resuming on-model image ${item.id} failed:`, err)
         return handle.update({ status: 'failed', error: engineError(err) })
+      })
+    }
+    case 'production': {
+      const row = await ctx.repo.packages.first(eq(t.productionPackage.id, item.id))
+      if (!row) return
+      const pkg = toPackage(row)
+      const handle = packageHandle(ctx, pkg)
+      const packager = services.optional('production')
+      // Packages from before the request was stored cannot be rebuilt as asked.
+      if (!packager?.resume || !row.request) return handle.update({ status: 'failed' })
+      const request = { ...row.request, piece: await toPiece(ctx, await getPiece(ctx, row.pieceId)) }
+      return packager.resume(pkg, request, handle, sctx).catch((err: unknown) => {
+        console.error(`Resuming production package ${item.id} failed:`, err)
+        return handle.update({ status: 'failed' })
       })
     }
     case 'run': {

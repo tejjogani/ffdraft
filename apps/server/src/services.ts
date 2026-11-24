@@ -101,6 +101,11 @@ export interface JobHandle<Patch> {
 interface Service {
   /** What this implementation adds to `session.get` → `capabilities`. */
   readonly capabilities?: Partial<Capabilities>
+  /**
+   * Stops workers and child processes when the server closes. Work cut off here stays live in
+   * the database, so boot recovery takes it up again.
+   */
+  dispose?(): Promise<void>
 }
 
 export type ExportFormat = CommandParsedInput<'design.export'>['format']
@@ -136,22 +141,32 @@ export interface RenderSubject {
   }[]
 }
 
+/**
+ * Options every geometry call accepts. `pieceId` lets an engine keep one piece's work together
+ * (its per-node cache makes a repeat evaluation of the same piece cheap); `signal` abandons it.
+ */
+export interface GeometryCall {
+  pieceId?: string
+  signal?: AbortSignal
+}
+
 export interface GeometryService extends Service {
   /** Facts of a design: masses, stones, bounds and manufacturability diagnostics. */
   evaluate(
     design: Design,
-    opts: { detail: 'draft' | 'production' },
+    opts: { detail: 'draft' | 'production' } & GeometryCall,
     sctx: ServiceContext,
   ): Promise<EvaluationSummary>
   export(
     design: Design,
-    opts: { format: ExportFormat; stones: boolean },
+    opts: { format: ExportFormat; stones: boolean } & GeometryCall,
     sctx: ServiceContext,
   ): Promise<{ file: FileData; notes: string[] }>
   /** What a renderer needs: the design as GLB plus its subject summary. */
   renderInput(
     design: Design,
     sctx: ServiceContext,
+    opts?: GeometryCall,
   ): Promise<{ glb: FileData; subject: RenderSubject }>
 }
 
@@ -295,13 +310,31 @@ export interface OnModelService extends Service {
 
 export type ProductionPackagePatch = Partial<
   Pick<ProductionPackage, 'status' | 'assetId' | 'manifest'>
+> & {
+  /** 0–1, published with `job.updated` but not stored (a package row has no progress). */
+  progress?: number
+}
+
+export type ProductionRequest = { piece: Piece } & Omit<
+  CommandParsedInput<'production.create'>,
+  'pieceId'
 >
 
 export interface ProductionService extends Service {
   /** Accept a queued package build and return promptly; report progress through `handle`. */
   submit(
     pkg: ProductionPackage,
-    request: { piece: Piece } & Omit<CommandParsedInput<'production.create'>, 'pieceId'>,
+    request: ProductionRequest,
+    handle: JobHandle<ProductionPackagePatch>,
+    sctx: ServiceContext,
+  ): Promise<void>
+  /**
+   * Called at boot for each package still queued or running, with the request it was queued
+   * with, as the user who queued it. Without it such packages fail as interrupted.
+   */
+  resume?(
+    pkg: ProductionPackage,
+    request: ProductionRequest,
     handle: JobHandle<ProductionPackagePatch>,
     sctx: ServiceContext,
   ): Promise<void>
@@ -532,5 +565,13 @@ export class ServiceRegistry {
     for (const name of this.#registered)
       Object.assign(out, IMPLIED[name], this.#impls[name].capabilities)
     return out
+  }
+
+  /** Disposes every registered implementation once (one object may serve several names). */
+  async dispose(): Promise<void> {
+    const impls = new Set<Service>([...this.#registered].map((name) => this.#impls[name]))
+    const results = await Promise.allSettled([...impls].map((impl) => impl.dispose?.()))
+    for (const r of results)
+      if (r.status === 'rejected') console.error('Stopping an engine failed:', r.reason)
   }
 }

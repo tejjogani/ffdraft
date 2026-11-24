@@ -92,7 +92,7 @@ export function readPalette(el: Element): ViewportPalette {
     select: v('--select', '#2b6ce6'),
     danger: v('--danger', '#cf4436'),
     clayMetal: dark ? '#b9b4ab' : '#d9d4cb',
-    clayStone: dark ? '#dfe5ee' : '#f2f5fa',
+    clayStone: dark ? '#c9d0db' : '#dfe5ee',
     paper: dark ? '#2a2a28' : '#fbfaf8',
   }
 }
@@ -116,8 +116,8 @@ export function createModeMaterials(p: ViewportPalette): ModeMaterials {
   const clayMetal = new MeshStandardMaterial({ color: p.clayMetal, roughness: 0.62, metalness: 0 })
   const clayStone = new MeshStandardMaterial({
     color: p.clayStone,
-    roughness: 0.18,
-    metalness: 0,
+    roughness: 0.35,
+    metalness: 0.15,
     flatShading: true,
   })
   // Technical faces sit slightly behind their edges so lines are never z-fought.

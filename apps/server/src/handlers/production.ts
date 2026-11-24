@@ -2,13 +2,13 @@ import type { ProductionPackage } from '@pave/schema'
 import { desc, eq, max } from 'drizzle-orm'
 import * as t from '../db/schema'
 import { createId } from '../ids'
+import { packageHandle } from '../jobs'
 import { getPiece } from '../lookups'
-import { jobHandle, publishJob, serviceContext, stepProgress } from '../service-context'
-import type { ProductionPackagePatch } from '../services'
+import { publishJob, serviceContext } from '../service-context'
 import { assertAttested, toPiece } from './pieces'
 import type { HandlerGroup } from './types'
 
-const toPackage = (r: typeof t.productionPackage.$inferSelect): ProductionPackage => ({
+export const toPackage = (r: typeof t.productionPackage.$inferSelect): ProductionPackage => ({
   id: r.id,
   pieceId: r.pieceId,
   revision: r.revision,
@@ -44,21 +44,25 @@ export const production: HandlerGroup<'production'> = {
       revision: (last?.revision ?? 0) + 1,
       sourceVersion: piece.version,
       status: 'queued',
+      request,
       createdBy: ctx.user.id,
     })
     const pkg = toPackage(row)
     const job = { kind: 'production' as const, id: pkg.id, pieceId }
-    const handle = jobHandle<ProductionPackagePatch>(ctx, job, async (patch) => {
-      const [row] = await ctx.repo.packages.update(eq(t.productionPackage.id, pkg.id), patch)
-      return row && { status: row.status, progress: stepProgress(row.status) }
-    })
+    const handle = packageHandle(ctx, job)
     publishJob(ctx, job, { status: 'queued', progress: 0 })
-    await packager.submit(
-      pkg,
-      { piece: await toPiece(ctx, piece), ...request },
-      handle,
-      serviceContext(ctx),
-    )
+    try {
+      await packager.submit(
+        pkg,
+        { piece: await toPiece(ctx, piece), ...request },
+        handle,
+        serviceContext(ctx),
+      )
+    } catch (err) {
+      // Never leave a package queued for ever behind an engine that refused it.
+      await handle.update({ status: 'failed' })
+      throw err
+    }
     return pkg
   },
 }

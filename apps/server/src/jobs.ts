@@ -8,7 +8,13 @@ import type { Ctx } from './context'
 import * as t from './db/schema'
 import { AppError } from './errors'
 import { isTerminal, jobHandle, LIVE_STATUSES, stepProgress } from './service-context'
-import type { JobHandle, MeshJobPatch, ModelShotPatch, RenderJobPatch } from './services'
+import type {
+  JobHandle,
+  MeshJobPatch,
+  ModelShotPatch,
+  ProductionPackagePatch,
+  RenderJobPatch,
+} from './services'
 import { toMicros } from './usage'
 
 type JobRef = { id: string; pieceId: string }
@@ -44,6 +50,19 @@ export async function updateShot(ctx: Ctx, id: string, patch: ModelShotPatch) {
   return row
 }
 
+/** Writes a production package update unless the build has already settled. */
+export async function updatePackage(ctx: Ctx, id: string, patch: ProductionPackagePatch) {
+  const { progress: _published, ...stored } = patch
+  const live = and(
+    eq(t.productionPackage.id, id),
+    inArray(t.productionPackage.status, LIVE_STATUSES),
+  )!
+  // A progress-only update writes nothing; it is still refused once the build has settled.
+  if (Object.keys(stored).length === 0) return ctx.repo.packages.first(live)
+  const [row] = await ctx.repo.packages.update(live, stored)
+  return row
+}
+
 /** The handle for render job `job`; each accepted update is published as `job.updated`. */
 export const renderHandle = (ctx: Ctx, job: JobRef): JobHandle<RenderJobPatch> =>
   jobHandle(ctx, { kind: 'render', ...job }, (patch) => updateRender(ctx, job.id, patch))
@@ -51,6 +70,13 @@ export const renderHandle = (ctx: Ctx, job: JobRef): JobHandle<RenderJobPatch> =
 /** The handle for image-to-3D job `job`. */
 export const meshHandle = (ctx: Ctx, job: JobRef): JobHandle<MeshJobPatch> =>
   jobHandle(ctx, { kind: 'mesh3d', ...job }, (patch) => updateMeshJob(ctx, job.id, patch))
+
+/** The handle for production package `job`; progress is published, never stored. */
+export const packageHandle = (ctx: Ctx, job: JobRef): JobHandle<ProductionPackagePatch> =>
+  jobHandle(ctx, { kind: 'production', ...job }, async (patch) => {
+    const row = await updatePackage(ctx, job.id, patch)
+    return row && { status: row.status, progress: patch.progress ?? stepProgress(row.status) }
+  })
 
 /** The handle for on-model shot `job` (progress is 0 until done). */
 export const shotHandle = (ctx: Ctx, job: JobRef): JobHandle<ModelShotPatch> =>

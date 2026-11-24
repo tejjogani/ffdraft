@@ -17,6 +17,7 @@
 import { add, cross, dot, normalize, scale, sub, type Vec3 } from '../../geometry/vec'
 import { PointGrid } from '../grid'
 import { seededRandom } from '../random'
+import { walkLevelSets } from './rows'
 import type { PaveSurface } from './surface'
 
 export interface LayoutOptions {
@@ -49,6 +50,8 @@ export interface Layout {
   stones: PlacedStone[]
   /** Area the full (ice level 1) packing covers, each stone counted with half the gap, mm². */
   packedArea: number
+  /** Share of the region where the smallest stone is allowed (not too curved, thin or near an edge). */
+  fillable: number
 }
 
 /** Metal under a seat, and seat depth per mm of stone (06-freeform.md §5 step 1). */
@@ -62,16 +65,23 @@ const SLACK = 0.012
 /** Overlaps up to this share of a stone are construction drift, settled rather than refused. */
 const DRIFT = 0.06
 /** Depth changing this many times faster across a seed than along it marks a band. */
-const BAND_ANISOTROPY = 4
+const BAND_ANISOTROPY = 1.5
 /** A single row is re-centred within ±CENTRE_REACH of a stone across its band, in this many steps a side. */
 const CENTRE_REACH = 0.35
 const CENTRE_STEPS = 7
 /** More rows in a band must pack this much more stone area per length to be chosen. */
 const MORE_ROWS = 1.08
-/** Share of the seed's half-width a band's rows are planned for. */
-const BAND_TAPER = 0.94
+/** A band's width is read along its ridge within this many stones of the seed, at this percentile. */
+const BAND_REACH = 5
+const RIDGE_PERCENTILE = 0.2
 /** Row spacing of a honeycomb per unit of pitch. */
 const ROW_SPACING = Math.sqrt(3) / 2
+/** Regions whose bands are wider than this many stones are open fields, framed by one row. */
+const OPEN_FIELD = 2
+/** A row on a band's ridge follows the level this share of a stone inside it (the ridge itself is a kink). */
+const RIDGE_INSET = 0.03
+/** Outline rows are walked in steps of this share of a stone; the first spot that fits takes it. */
+const ROW_STEP = 0.04
 const EPS = 1e-9
 
 type Hit = NonNullable<ReturnType<PaveSurface['snap']>>
@@ -125,6 +135,7 @@ class Packer {
   }
 
   run(): Layout {
+    this.layOutlineRows()
     let first = true
     for (;;) {
       const seed = this.nextSeed(first)
@@ -137,7 +148,13 @@ class Packer {
       (sum, s) => sum + Math.PI * (s.diameter / 2 + this.o.gap / 2) ** 2,
       0,
     )
-    return { stones: this.select(full), packedArea: full }
+    let fillable = 0
+    for (let i = 0; i < this.surface.count; i++) if (this.sizeAt(i) > 0) fillable++
+    return {
+      stones: this.select(full),
+      packedArea: full,
+      fillable: this.surface.count > 0 ? fillable / this.surface.count : 0,
+    }
   }
 
   private tick(): void {
@@ -253,7 +270,7 @@ class Packer {
    * three fits along the local row direction, so new fronts start in unreached parts (another
    * face, the next step of a plinth) rather than in the gaps between fronts, which are filled
    * afterwards. Stones are only ever added, so a rejected sample stays rejected: the scan
-   * resumes where the previous one stopped.
+   * resumes after the previous seed.
    */
   private nextSeed(first: boolean): number {
     for (; this.seedCursor < this.order.length; this.seedCursor++) {
@@ -263,7 +280,9 @@ class Packer {
       const n = this.surface.normal(i)
       const d = this.sizeFor(i, p)
       if (d === 0 || !this.fits(p, n, d)) continue
-      if (!first && !this.roomForRow(i, p, n, d)) continue
+      if (this.stones.length > 0 && !this.roomForRow(i, p, n, d)) continue
+      // Consumed either way: a front that cannot start here never will.
+      this.seedCursor++
       return i
     }
     return -1
@@ -326,17 +345,13 @@ class Packer {
   }
 
   /**
-   * The rows a band takes: k staggered rows of diameter d need d + (k − 1)(d + gap)·√3/2 across,
-   * and the choice packs the most stone area per length (k·d²/(d + gap)) — so a 3 mm stroke gets
-   * two rows of 1.3 mm instead of one row of 1.6 mm with slivers of metal beside it, the way
-   * setters pave letters. Every stone of the front then has that size, in rows along the band.
+   * The rows a band `across` mm wide takes: k staggered rows of diameter d need
+   * d + (k − 1)(d + gap)·√3/2, and the choice packs the most stone area per length
+   * (k·d²/(d + gap)) — so a 3 mm stroke gets two rows of 1.3 mm instead of one row of 1.6 mm
+   * with slivers of metal beside it, the way setters pave letters. Null when nothing fits.
    */
-  private bandPlan(seed: number): FrontPlan {
-    // Planned for a band a little narrower than at the seed: strokes and faces vary along
-    // their length, and a uniform row that does not fit somewhere breaks there.
-    const across = 2 * (BAND_TAPER * this.surface.edge[seed]! - this.o.margin)
-    const cap = this.sizeAt(seed)
-    let best: FrontPlan = this.openField()
+  private rowsFor(across: number, cap: number): { rows: number; d: number } | null {
+    let best: { rows: number; d: number } | null = null
     let bestScore = 0
     for (let rows = 1; rows <= 3; rows++) {
       const extra = (rows - 1) * ROW_SPACING
@@ -344,18 +359,89 @@ class Packer {
       if (d === 0) continue
       const score = (rows * d * d) / (d + this.o.gap)
       if (score > bestScore * MORE_ROWS) {
-        best = { limit: d, uniform: true, rows }
+        best = { rows, d }
         bestScore = score
       }
     }
     return best
   }
 
+  /** A band front lays uniform rows planned for the band's width (see `ridgeHalfWidth`). */
+  private bandPlan(seed: number): FrontPlan {
+    const s = this.surface
+    const fit = this.rowsFor(
+      2 * (this.ridgeHalfWidth(s.point(seed), BAND_REACH * this.largest) - this.o.margin),
+      this.sizeAt(seed),
+    )
+    return fit ? { limit: fit.d, uniform: true, rows: fit.rows } : this.openField()
+  }
+
+  /**
+   * Half-width of the bands within `radius` of a point (everywhere when `radius` is infinite):
+   * a low percentile of the depth along their ridges, not the depth at any one point. Seeds are
+   * the deepest points left, which in a letter are the junctions of its strokes; planning for
+   * the strokes' own width keeps rows unbroken and gives every stroke of a letter the same
+   * stones. Infinity when the region has no ridge (no edge).
+   */
+  private ridgeHalfWidth(centre: Vec3, radius: number): number {
+    const s = this.surface
+    const ridge: number[] = []
+    const local = Math.max(2.5 * s.spacing, 0.25 * this.largest)
+    const consider = (i: number) => {
+      const e = s.edge[i]!
+      let top = true
+      s.near(s.point(i), local, (j) => {
+        if (s.edge[j]! > e + EPS) top = false
+      })
+      if (top) ridge.push(e)
+    }
+    if (Number.isFinite(radius)) s.near(centre, radius, consider)
+    else for (let i = 0; i < s.count; i++) consider(i)
+    if (ridge.length === 0) return Infinity
+    ridge.sort((a, b) => a - b)
+    return ridge[Math.floor(RIDGE_PERCENTILE * (ridge.length - 1))]!
+  }
+
+  // ── Outline rows ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Rows that follow the region's outline, laid before any honeycomb: in bands (strokes,
+   * steps, rims) the rows the band's width takes, staggered about its ridge; in open fields one
+   * row of the largest stones hugging the edge, which frames the honeycomb inside it.
+   */
+  private layOutlineRows(): void {
+    const half = this.ridgeHalfWidth([0, 0, 0], Infinity)
+    const fit =
+      half < OPEN_FIELD * this.largest
+        ? this.rowsFor(2 * (half - this.o.margin), this.largest)
+        : null
+    const d = fit?.d ?? this.largest
+    const levels: number[] = []
+    if (fit) {
+      const pitch = (d + this.o.gap) * ROW_SPACING
+      for (let j = 0; j < Math.ceil(fit.rows / 2); j++) {
+        const offset = ((fit.rows - 1) / 2 - j) * pitch
+        levels.push(offset > EPS ? half - offset : half - RIDGE_INSET * d)
+      }
+    } else levels.push(this.o.margin + d / 2 + SLACK)
+    for (const level of levels)
+      walkLevelSets({
+        surface: this.surface,
+        edgeDistance: this.o.edgeDistance,
+        level,
+        step: ROW_STEP * d,
+        visit: (p, n, sample) => {
+          this.tick()
+          if (this.sizeFor(sample, p) >= d - EPS && this.fits(p, n, d)) this.place(p, n, d, sample)
+        },
+        checkpoint: this.o.checkpoint,
+      })
+  }
+
   private grow(seed: number, first: boolean): void {
     const n0 = this.surface.normal(seed)
     const { rows, banded } = this.rowsAt(seed, n0)
     this.front = banded ? this.bandPlan(seed) : this.openField()
-    if (process.env.TRACE) console.log('seed', seed, banded, JSON.stringify(this.front), this.surface.edge[seed], this.surface.depth[seed], this.stones.length)
     try {
       this.growFront(seed, first, rows, banded)
     } finally {

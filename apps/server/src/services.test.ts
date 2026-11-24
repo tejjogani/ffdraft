@@ -155,7 +155,7 @@ describe('registered engines', () => {
     expect(result).toEqual(summary)
     expect(evaluate).toHaveBeenLastCalledWith(
       expect.objectContaining({ kind: 'ring' }),
-      { detail: 'production' },
+      { detail: 'production', pieceId: piece.id },
       expect.anything(),
     )
     expect((await api.call('pieces.get', { id: piece.id })).facts).toEqual({

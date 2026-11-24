@@ -1,0 +1,1 @@
+ALTER TABLE "production_package" ADD COLUMN "request" jsonb;

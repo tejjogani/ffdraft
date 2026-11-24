@@ -89,6 +89,8 @@ export interface ViewerState {
 }
 
 export interface CaptureOptions {
+  /** Show this evaluation first (the caller waited for it), so the pictures match its version. */
+  evaluation?: Evaluation
   views: readonly (CameraPreset | { azimuth: number; elevation: number })[]
   mode: DisplayMode
   size: number
@@ -322,7 +324,7 @@ export class Viewer {
     this.applyLook()
     if (!this.framedOnce && evaluation.parts.length + evaluation.stones.length > 0) {
       this.framedOnce = true
-      this.frameAll(false)
+      this.view(this.defaultView(), false)
     }
   }
 
@@ -517,10 +519,6 @@ export class Viewer {
   /** Frames the whole piece (or the given nodes) from the current direction. */
   frameAll(animate = true, nodeIds?: readonly string[]): void {
     const pts = this.pointsFor(nodeIds)
-    if (!this.framedOnce || !this.evaluation) {
-      const p = CAMERA_PRESETS[this.defaultView()]
-      return this.look(p.azimuth, p.elevation, pts, p.fill, animate)
-    }
     const { azimuth, elevation } = this.orbitAngles()
     this.look(azimuth, elevation, pts, nodeIds?.length ? 0.5 : 0.66, animate)
   }
@@ -597,6 +595,7 @@ export class Viewer {
    * and materials match the viewport) and within one task, then restores the viewport.
    */
   async capture(opts: CaptureOptions): Promise<Blob[]> {
+    if (opts.evaluation) this.setEvaluation(opts.evaluation)
     const saved = {
       state: this.state,
       position: this.controls.getPosition(new Vector3()),

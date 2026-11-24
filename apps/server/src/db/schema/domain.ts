@@ -7,6 +7,7 @@
 import type {
   Actor,
   BrandModel,
+  CommandParsedInput,
   Design,
   Feedback,
   JOB_STATUS,
@@ -378,6 +379,8 @@ export const productionPackage = pgTable(
     status: text('status').$type<JobStatus>().notNull(),
     assetId: text('asset_id'),
     manifest: jsonb('manifest').$type<Record<string, unknown>>(),
+    /** What was asked for (quantity, notes, rates), so a build cut off by a restart can resume. */
+    request: jsonb('request').$type<Omit<CommandParsedInput<'production.create'>, 'pieceId'>>(),
     createdBy: text('created_by').notNull(),
     createdAt: at('created_at'),
   },

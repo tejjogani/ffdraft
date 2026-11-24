@@ -232,15 +232,59 @@ export async function storeFacts(
   if (rows.length) publish(ctx, { type: 'piece.updated', pieceId })
 }
 
+/** How long a piece must stay unchanged before its facts are re-evaluated. */
+export const FACTS_DEBOUNCE_MS = 300
+
+interface FactsRefresh {
+  timer: NodeJS.Timeout | null
+  /** The newest change not evaluated yet; null once taken. */
+  next: { ctx: Ctx; version: number; design: Design } | null
+  running: boolean
+}
+
+/** Pending refreshes per server (its service registry) and piece. */
+const refreshes = new WeakMap<Ctx['services'], Map<string, FactsRefresh>>()
+
 /**
  * Re-evaluates in the background after a change when a geometry engine is registered; without
- * one, `facts` stays null rather than guessed.
+ * one, `facts` stays null rather than guessed. Debounced per piece: a slider drag commits many
+ * changes, and only the design it settles on is evaluated — never while another evaluation of
+ * the same piece is still running, and never on the commit's own path.
  */
 export function refreshFacts(ctx: Ctx, pieceId: string, version: number, design: Design): void {
   if (!ctx.services.isConfigured('geometry')) return
-  ctx.services
-    .get('geometry')
-    .evaluate(design, { detail: 'draft' }, serviceContext(ctx))
-    .then((summary) => storeFacts(ctx, pieceId, version, summary))
-    .catch((err: unknown) => console.error(`Evaluating piece ${pieceId} v${version} failed:`, err))
+  const byPiece = refreshes.get(ctx.services) ?? new Map<string, FactsRefresh>()
+  refreshes.set(ctx.services, byPiece)
+  const key = `${ctx.orgId}:${pieceId}`
+  const entry: FactsRefresh = byPiece.get(key) ?? { timer: null, next: null, running: false }
+  byPiece.set(key, entry)
+  entry.next = { ctx, version, design }
+  if (entry.timer) clearTimeout(entry.timer)
+  entry.timer = setTimeout(() => void flush(byPiece, key, pieceId), FACTS_DEBOUNCE_MS)
+  entry.timer.unref()
+}
+
+async function flush(byPiece: Map<string, FactsRefresh>, key: string, pieceId: string) {
+  const entry = byPiece.get(key)
+  if (!entry) return
+  entry.timer = null
+  // A change that lands while evaluating is picked up when the running evaluation finishes.
+  if (entry.running || !entry.next) return
+  const { ctx, version, design } = entry.next
+  entry.next = null
+  entry.running = true
+  try {
+    const summary = await ctx.services
+      .get('geometry')
+      .evaluate(design, { detail: 'draft', pieceId }, serviceContext(ctx))
+    await storeFacts(ctx, pieceId, version, summary)
+  } catch (err) {
+    // The server closing under a pending refresh is not a failure worth reporting.
+    if (!(err instanceof Error && err.name === 'AbortError'))
+      console.error(`Evaluating piece ${pieceId} v${version} failed:`, err)
+  } finally {
+    entry.running = false
+    if (entry.next && !entry.timer) void flush(byPiece, key, pieceId)
+    else if (!entry.next && !entry.timer) byPiece.delete(key)
+  }
 }

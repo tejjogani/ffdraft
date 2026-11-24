@@ -1,0 +1,97 @@
+/** The floating controls over the viewport: history, display, framing, x-ray; and on the right, saving and export. */
+import type { ExportFormat } from '@pave/kernel'
+import { Button, Chip, cn, IconButton, Menu, MenuGroup, MenuItem, Segmented, Tooltip } from '@pave/ui'
+import { ChevronDown, Crosshair, Download, Focus, Gauge, Redo2, ScanEye, Undo2 } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { runCommand } from '../../../lib/commands'
+import type { SaveState } from '../../../lib/design-session/store'
+import { DISPLAY_MODES } from '../commands'
+import { EXPORT_PURPOSE } from '../export'
+import { SavePill } from '../hud/SavePill'
+import { useWorkspace } from '../state/workspace'
+
+function Cluster({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={cn('glass shadow-sm flex h-9 items-center gap-0.5 rounded-lg px-1', className)}>{children}</div>
+  )
+}
+
+const Divider = () => <span aria-hidden className="mx-1 h-4 w-px bg-line-strong" />
+
+export function ViewToolbar({ canUndo, canRedo }: { canUndo: boolean; canRedo: boolean }) {
+  const display = useWorkspace((s) => s.display)
+  const xray = useWorkspace((s) => s.xray)
+  return (
+    <Cluster>
+      <IconButton icon={Undo2} label="Undo" shortcut="mod+z" disabled={!canUndo} onClick={() => runCommand('design.undo')} />
+      <IconButton icon={Redo2} label="Redo" shortcut="mod+shift+z" disabled={!canRedo} onClick={() => runCommand('design.redo')} />
+      <Divider />
+      <Segmented
+        value={display}
+        aria-label="Display"
+        onChange={(m) => runCommand(`view.display.${m}`)}
+        options={DISPLAY_MODES.map((m) => ({ value: m.id, label: m.title, icon: m.icon }))}
+      />
+      <Divider />
+      <IconButton icon={Focus} label="Fit to view" shortcut="f" onClick={() => runCommand('view.fit')} />
+      <Menu trigger={<IconButton icon={Crosshair} label="Views" />} align="start" className="min-w-44">
+        {(['hero', 'front', 'side', 'top'] as const).map((v, i) => (
+          <MenuItem key={v} shortcut={String(i + 1)} onClick={() => runCommand(`view.${v}`)}>
+            {v === 'hero' ? 'Hero' : v[0]!.toUpperCase() + v.slice(1)}
+          </MenuItem>
+        ))}
+      </Menu>
+      <IconButton icon={ScanEye} label="X-ray metal" shortcut="x" active={xray} onClick={() => runCommand('view.xray')} />
+    </Cluster>
+  )
+}
+
+export function FileToolbar({
+  save,
+  formats,
+  simplified,
+}: {
+  save: SaveState | null
+  formats: readonly ExportFormat[]
+  simplified: boolean
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      {simplified && (
+        <Tooltip content="This device draws 3D in software, so the viewport uses simpler materials. Your design is unaffected.">
+          <Chip icon={<Gauge aria-hidden />} className="glass h-7 px-2">
+            Simplified graphics
+          </Chip>
+        </Tooltip>
+      )}
+      <Cluster className="pr-1 pl-0.5">
+        {save && <SavePill save={save} />}
+        {formats.length > 0 && (
+          <Menu
+            align="end"
+            className="w-72"
+            trigger={
+              <Button variant="ghost" size="sm" icon={Download} className="text-fg">
+                Export
+                <ChevronDown className="size-3.5! text-fg-subtle" aria-hidden />
+              </Button>
+            }
+          >
+            <MenuGroup label="Download">
+              {formats.map((f) => (
+                <MenuItem key={f} onClick={() => runCommand(`design.export.${f}`)}>
+                  <span className="flex flex-col py-0.5">
+                    <span>
+                      {EXPORT_PURPOSE[f].label} — {f.toUpperCase()}
+                    </span>
+                    <span className="text-xs text-fg-subtle">{EXPORT_PURPOSE[f].hint}</span>
+                  </span>
+                </MenuItem>
+              ))}
+            </MenuGroup>
+          </Menu>
+        )}
+      </Cluster>
+    </div>
+  )
+}

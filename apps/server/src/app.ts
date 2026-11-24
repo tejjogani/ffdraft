@@ -79,7 +79,12 @@ export async function createApp(options: CreateAppOptions = {}): Promise<PaveSer
       await seedIfEmpty(runtime, await runtime.context({ ...local, actor: { type: 'system' } }))
     await runtime.recover()
 
-    return { app: buildRoutes(runtime, options.routes), runtime, close: () => database.close() }
+    const close = async () => {
+      // Engines first: their last writes need the database.
+      await runtime.services.dispose()
+      await database.close()
+    }
+    return { app: buildRoutes(runtime, options.routes), runtime, close }
   } catch (err) {
     await database.close()
     throw err

@@ -22,8 +22,9 @@ import type { QueryName } from './rpc'
 
 type Of<T extends ServerEventType> = Extract<ServerEvent, { type: T }>
 type Handler<T extends ServerEventType> = (event: Of<T>) => void
+type AnyHandler = (event: ServerEvent) => void
 
-const handlers = new Map<ServerEventType, Set<Handler<never>>>()
+const handlers = new Map<ServerEventType, Set<AnyHandler>>()
 const reconnectHandlers = new Set<() => void>()
 /** Pieces whose design a live session keeps current itself; their `pieces.get` is not refetched. */
 const livePieces = new Set<string>()
@@ -32,8 +33,10 @@ const livePieces = new Set<string>()
 export function onServerEvent<T extends ServerEventType>(type: T, handler: Handler<T>): () => void {
   let set = handlers.get(type)
   if (!set) handlers.set(type, (set = new Set()))
-  set.add(handler as Handler<never>)
-  return () => set.delete(handler as Handler<never>)
+  // Dispatch only calls a handler with events of its own type.
+  const h = handler as unknown as AnyHandler
+  set.add(h)
+  return () => set.delete(h)
 }
 
 /** Called after the stream reconnects: anything sent in between was missed. */
@@ -97,7 +100,7 @@ function dispatch(raw: string): void {
   if (!parsed.success) return
   const event = parsed.data
   refresh(event)
-  for (const h of handlers.get(event.type) ?? []) (h as Handler<typeof event.type>)(event as never)
+  for (const h of handlers.get(event.type) ?? []) h(event)
 }
 
 /** Opens the window's event stream while `enabled`. Mount once, in the authenticated shell. */

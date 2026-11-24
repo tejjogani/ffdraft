@@ -183,7 +183,7 @@ export const design: HandlerGroup<'design'> = {
     const piece = await getPiece(ctx, input.pieceId)
     const summary = await ctx.services
       .get('geometry')
-      .evaluate(piece.design, { detail: input.detail }, serviceContext(ctx))
+      .evaluate(piece.design, { detail: input.detail, pieceId: piece.id }, serviceContext(ctx))
     await storeFacts(ctx, piece.id, piece.version, summary)
     return summary
   },
@@ -195,7 +195,7 @@ export const design: HandlerGroup<'design'> = {
       .get('geometry')
       .export(
         piece.design,
-        { format: input.format, stones: input.stones ?? true },
+        { format: input.format, stones: input.stones ?? true, pieceId: piece.id },
         serviceContext(ctx),
       )
     const asset = await putAsset(ctx, { ...file, kind: 'mesh' })

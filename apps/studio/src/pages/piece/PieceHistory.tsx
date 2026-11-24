@@ -1,4 +1,4 @@
-import type { Op, StoredChange } from '@pave/schema'
+import { type Design, describeOps, type Op, type OpLine, type StoredChange } from '@pave/schema'
 import { AiChip, AiMark, Avatar, Button, EmptyState, InlineError, Skeleton } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
 import { ChevronRight, Cog, RotateCcw } from 'lucide-react'
@@ -11,6 +11,8 @@ export function PieceHistory({ pieceId }: { pieceId: string }) {
   const history = useRpc('design.history', { pieceId, limit: 100 })
   const members = useRpc('org.members', {})
   const revert = useRpcMutation('design.revert')
+  // Names updated nodes; nodes deleted since are named from the change's own inverse.
+  const design = useRpc('pieces.get', { id: pieceId }).data?.design
 
   if (history.isError)
     return <InlineError message={history.error.message} onRetry={() => void history.refetch()} />
@@ -100,7 +102,7 @@ export function PieceHistory({ pieceId }: { pieceId: string }) {
                   Revert
                 </Button>
               </div>
-              <OpsDiff change={c} />
+              <OpsDiff change={c} design={design} />
             </div>
           </li>
         )
@@ -109,10 +111,9 @@ export function PieceHistory({ pieceId }: { pieceId: string }) {
   )
 }
 
-function OpsDiff({ change }: { change: StoredChange }) {
+function OpsDiff({ change, design }: { change: StoredChange; design: Design | undefined }) {
   const [open, setOpen] = useState(false)
   const ops = change.ops as Op[]
-  const inverse = change.inverse as Op[]
   return (
     <div className="mt-1.5">
       <button
@@ -129,16 +130,16 @@ function OpsDiff({ change }: { change: StoredChange }) {
       </button>
       {open && (
         <ul className="mt-1.5 flex flex-col gap-0.5 rounded-md bg-bg-subtle p-2.5 font-mono text-2xs leading-5 shadow-[inset_0_0_0_1px_var(--line)]">
-          {ops.flatMap((op, i) =>
-            describe(op, inverse).map((line, j) => <DiffLine key={`${i}.${j}`} {...line} />),
-          )}
+          {describeOps(ops, change.inverse as Op[], design).map((line, i) => (
+            <DiffLine key={i} {...line} />
+          ))}
         </ul>
       )}
     </div>
   )
 }
 
-function DiffLine({ sign, text }: { sign: '+' | '−' | '~'; text: string }) {
+function DiffLine({ sign, text }: OpLine) {
   const tone = sign === '+' ? 'text-ok' : sign === '−' ? 'text-danger' : 'text-fg-subtle'
   return (
     <li className="flex gap-2 text-fg-muted">
@@ -146,35 +147,4 @@ function DiffLine({ sign, text }: { sign: '+' | '−' | '~'; text: string }) {
       <span className="min-w-0 break-words">{text}</span>
     </li>
   )
-}
-
-const show = (v: unknown): string => {
-  if (v === null || v === undefined) return '∅'
-  const s = typeof v === 'string' ? v : JSON.stringify(v)
-  return s.length > 48 ? `${s.slice(0, 47)}…` : s
-}
-
-/** Human lines for an op; updates show before → after using the change's inverse. */
-function describe(op: Op, inverse: Op[]): { sign: '+' | '−' | '~'; text: string }[] {
-  switch (op.t) {
-    case 'add': {
-      const n = op.node as { id?: string; kind?: string; name?: string }
-      return [{ sign: '+', text: `${n.name ?? n.id ?? 'node'} (${n.kind ?? 'node'})` }]
-    }
-    case 'remove':
-      return [{ sign: '−', text: op.id }]
-    case 'move':
-      return [{ sign: '~', text: `${op.id} → position ${op.index + 1}` }]
-    case 'setKind':
-      return [{ sign: '~', text: `kind → ${op.kind}` }]
-    case 'update': {
-      const before =
-        inverse.find((x): x is Extract<Op, { t: 'update' }> => x.t === 'update' && x.id === op.id)
-          ?.patch ?? {}
-      return Object.entries(op.patch).map(([k, v]) => ({
-        sign: '~' as const,
-        text: `${op.id}.${k}: ${show(before[k])} → ${show(v)}`,
-      }))
-    }
-  }
 }

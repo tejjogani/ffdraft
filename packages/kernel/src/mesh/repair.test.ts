@@ -39,6 +39,23 @@ function sphereSoup(
   return tris
 }
 
+/** An unwelded soup of an outward cube of side 4 with its lowest corner at `min`. */
+function cubeSoup(min: [number, number, number]): number[][] {
+  const v = (i: number) => [min[0] + (i & 1) * 4, min[1] + ((i >> 1) & 1) * 4, min[2] + ((i >> 2) & 1) * 4]
+  const quads = [
+    [0, 2, 3, 1],
+    [4, 5, 7, 6],
+    [0, 1, 5, 4],
+    [2, 6, 7, 3],
+    [0, 4, 6, 2],
+    [1, 3, 7, 5],
+  ]
+  return quads.flatMap(([a, b, c, d]) => [
+    [...v(a!), ...v(b!), ...v(c!)],
+    [...v(a!), ...v(c!), ...v(d!)],
+  ])
+}
+
 const soup = (tris: number[][]): IndexedTriangles => ({
   positions: Float32Array.from(tris.flat()),
   indices: Uint32Array.from({ length: tris.length * 3 }, (_, i) => i),
@@ -108,15 +125,23 @@ describe('mesh repair', () => {
     manifold.delete()
   })
 
-  it('re-surfaces non-manifold input, and refuses what encloses nothing', () => {
-    // A fin standing on one of the sphere's edges: that edge has three faces.
+  it('drops a fin standing on an edge as debris', () => {
     const sphere = sphereSoup(5)
     const t = sphere[100]!
     const fin = [...t.slice(0, 6), t[0]! * 1.6, t[1]! * 1.6, t[2]! * 1.6 + 1]
     const { manifold, report } = repairMesh(soup([...sphere, fin]))
+    expect(report.fragments).toBe(1)
+    expect(report.resurfaced).toBe(false)
+    expect(manifold.volume()).toBeGreaterThan(0.9 * (4 / 3) * Math.PI * 125)
+    manifold.delete()
+  })
+
+  it('re-surfaces non-manifold input, and refuses what encloses nothing', () => {
+    // Two closed cubes touching along one edge: that edge has four faces.
+    const { manifold, report } = repairMesh(soup([...cubeSoup([0, 0, 0]), ...cubeSoup([4, 4, 0])]))
     expect(report.resurfaced).toBe(true)
     expect(edgeTopology(trianglesFromManifold(manifold)).open).toBe(0)
-    expect(manifold.volume()).toBeGreaterThan(0.85 * (4 / 3) * Math.PI * 125)
+    expect(manifold.volume()).toBeGreaterThan(0.85 * 2 * 64)
     manifold.delete()
     // A flat disc: capping its rim encloses nothing.
     const disc = Array.from({ length: 16 }, (_, i) => {

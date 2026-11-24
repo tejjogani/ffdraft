@@ -25,6 +25,8 @@ interface WorkspaceState {
   hidden: string[]
   renaming: string | null
   display: DisplayMode
+  /** The designer picked a display mode (so a software GPU does not switch it to clay). */
+  displayChosen: boolean
   xray: boolean
   fineTune: boolean
   /** The system ring sizes are read and picked in; null = each band's own. */
@@ -38,7 +40,7 @@ interface WorkspaceState {
   setHover(p: Pick | null): void
   toggleHidden(id: string): void
   setRenaming(id: string | null): void
-  setDisplay(mode: DisplayMode): void
+  setDisplay(mode: DisplayMode, chosen?: boolean): void
   toggleXray(): void
   setFineTune(on: boolean): void
   setRingSystem(system: RingSizeSystem | null): void
@@ -58,6 +60,7 @@ export const useWorkspace = create<WorkspaceState>()(
       hidden: [],
       renaming: null,
       display: 'rendered',
+      displayChosen: false,
       xray: false,
       fineTune: false,
       ringSystem: null,
@@ -91,7 +94,8 @@ export const useWorkspace = create<WorkspaceState>()(
           hidden: s.hidden.includes(id) ? s.hidden.filter((x) => x !== id) : [...s.hidden, id],
         })),
       setRenaming: (renaming) => set({ renaming }),
-      setDisplay: (display) => set({ display }),
+      setDisplay: (display, chosen = true) =>
+        set((s) => ({ display, displayChosen: s.displayChosen || chosen })),
       toggleXray: () => set((s) => ({ xray: !s.xray })),
       setFineTune: (fineTune) => set({ fineTune }),
       setRingSystem: (ringSystem) => set({ ringSystem }),
@@ -99,7 +103,12 @@ export const useWorkspace = create<WorkspaceState>()(
     }),
     {
       name: 'pave:cad',
-      partialize: (s) => ({ display: s.display, fineTune: s.fineTune, ringSystem: s.ringSystem }),
+      partialize: (s) => ({
+        display: s.display,
+        displayChosen: s.displayChosen,
+        fineTune: s.fineTune,
+        ringSystem: s.ringSystem,
+      }),
     },
   ),
 )

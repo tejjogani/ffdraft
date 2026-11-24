@@ -30,8 +30,10 @@ type PaveNode = NodeOf<'pave'>
  * the seat holds it while the whole crown stands proud (06-freeform.md §5 step 5).
  */
 const GIRDLE_BELOW = 0.03
-/** Below this share of the region covered, the size range is too coarse for the shape. */
+/** Below this share of the paveable surface covered, the size range is too coarse for the shape. */
 const SPARSE_FILL = 0.45
+/** Below this share of the region able to take stones at all, say which part stays bare. */
+const LEFT_BARE = 0.65
 
 /** Stock melee sizes within the requested range, largest first (or the nearest one). */
 function stockSizes(node: PaveNode, ctx: BuildContext): number[] {
@@ -128,13 +130,25 @@ export const pave = defineFeature('pave', (node, ctx) => {
       code: 'pave.empty',
       message: `No ${smallest}–${largest} mm stones fit the region with a ${node.margin} mm margin; try smaller stones or a smaller margin.`,
     })
-  else if (layout.packedArea / region.area < SPARSE_FILL)
-    ctx.report({
-      level: 'warning',
-      code: 'pave.sparse',
-      message: `Only ${Math.round((100 * layout.packedArea) / region.area)} % of the region can take ${smallest}–${largest} mm stones; smaller stones would cover more of it.`,
-      value: smallest,
-    })
+  else {
+    // Judged on the part of the region stones may go at all: the stem of a trophy or the wire of
+    // a handle is too tightly curved for any stock melee, and smaller stones would not help.
+    const fillable = layout.fillable * region.area
+    if (layout.packedArea / fillable < SPARSE_FILL)
+      ctx.report({
+        level: 'warning',
+        code: 'pave.sparse',
+        message: `Only ${Math.round((100 * layout.packedArea) / fillable)} % of the paveable surface can take ${smallest}–${largest} mm stones; smaller stones would cover more of it.`,
+        value: smallest,
+      })
+    if (layout.fillable < LEFT_BARE)
+      ctx.report({
+        level: 'info',
+        code: 'pave.bare',
+        message: `${Math.round(100 * (1 - layout.fillable))} % of the region is too thin, too tightly curved or too close to an edge for ${smallest} mm stones, and stays polished metal.`,
+        value: smallest,
+      })
+  }
 
   const stones: Stone[] = layout.stones.map((s: PlacedStone) => ({
     cut: 'round',

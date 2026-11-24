@@ -1,5 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "lib": ["ES2023"], "types": ["node"] },
-  "include": ["src", "drizzle.config.ts"]
+  "include": ["src", "drizzle.config.ts"],
+  // The kernel worker type-checks on its own (tsconfig.worker.json): the kernel's WASM
+  // dependencies declare browser globals that would leak into the server's Node types.
+  "exclude": ["src/engines/kernel/worker.ts"]
 }

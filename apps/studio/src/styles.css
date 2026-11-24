@@ -12,3 +12,21 @@
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
+
+/* The Design tab's one AI sweep when an assistant edit lands (hidden under reduced motion). */
+@keyframes cad-sweep {
+  from {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.3;
+  }
+  to {
+    transform: translateX(420%);
+    opacity: 0;
+  }
+}
+.cad-sweep {
+  animation: cad-sweep 1.4s var(--ease-in-out) forwards;
+}
