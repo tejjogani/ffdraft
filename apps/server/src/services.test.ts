@@ -2,7 +2,7 @@ import type { EvaluationSummary } from '@pave/schema'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Services } from './services'
-import { type Client, client, type TestServer, testServer } from './test/harness'
+import { BOOT_TIMEOUT, type Client, client, type TestServer, testServer } from './test/harness'
 
 const summary: EvaluationSummary = {
   metalMassG: 4.2,
@@ -23,7 +23,7 @@ describe('engines that are not configured', () => {
   beforeAll(async () => {
     server = await testServer()
     api = client(server)
-  })
+  }, BOOT_TIMEOUT)
   afterAll(() => server.dispose())
 
   it('answer 501 with a clear message and leave no rows behind', async () => {
@@ -94,6 +94,12 @@ describe('registered engines', () => {
         },
         imageGen: {
           capabilities: { imageGeneration: ['acme'] },
+          estimate: async (req) => ({
+            provider: 'acme',
+            model: 'acme-1',
+            usd: 0.04 * req.count,
+            seconds: 12,
+          }),
           generate: async (req, sctx) => {
             await sctx.recordUsage({
               meter: 'image',
@@ -127,7 +133,7 @@ describe('registered engines', () => {
       cancel: async () => {},
     })
     api = client(server)
-  })
+  }, BOOT_TIMEOUT)
   afterAll(() => server.dispose())
 
   it('report their capabilities', async () => {
@@ -187,6 +193,19 @@ describe('registered engines', () => {
         })
       ).status,
     ).toBe(400)
+
+    // The price shown before confirming is the one checked against the budget.
+    expect(await api.call('references.estimate', { prompt: 'an art deco ring', count: 2 })).toEqual(
+      { provider: 'acme', model: 'acme-1', usd: 0.08, seconds: 12 },
+    )
+    await api.call('org.settings.update', { monthlyBudgetUsd: 0.05 })
+    const over = await api.fail('references.generate', {
+      boardId: board.id,
+      prompt: 'an art deco ring',
+      count: 2,
+    })
+    expect([over.status, over.error.code]).toEqual([402, 'budget_exceeded'])
+    await api.call('org.settings.update', { monthlyBudgetUsd: null })
 
     const refs = await api.call('references.generate', {
       boardId: board.id,

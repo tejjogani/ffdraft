@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { putAsset } from './assets/assets'
 import type { Ctx } from './context'
 import type { Services } from './services'
-import { type Client, client, type TestServer, testServer } from './test/harness'
+import { BOOT_TIMEOUT, type Client, client, type TestServer, testServer } from './test/harness'
 import { recordUsage } from './usage'
 
 const png = () =>
@@ -32,7 +32,7 @@ describe('with no engines', () => {
   beforeAll(async () => {
     server = await testServer()
     api = client(server)
-  })
+  }, BOOT_TIMEOUT)
   afterAll(() => server.dispose())
 
   it('answers 501 for analysis and image to 3D, and leaves no job behind', async () => {
@@ -92,7 +92,7 @@ describe('making jewelry from a picture', () => {
     })
     api = client(server)
     ctx = await server.runtime.context(server.runtime.local!)
-  })
+  }, BOOT_TIMEOUT)
   afterAll(() => server.dispose())
 
   it('analyses a picture, handing the engine the bytes and no optional helpers', async () => {
@@ -246,9 +246,11 @@ describe('making jewelry from a picture', () => {
     expect((await api.fail('mesh3d.cancel', { id: job.id })).status).toBe(409)
 
     const second = await api.call('mesh3d.create', { pieceId: piece.id, imageAssetIds: [photo.id] })
+    await submit.mock.calls.at(-1)![2].update({ status: 'running', providerJobId: 'fal_2' })
     const canceled = await api.call('mesh3d.cancel', { id: second.id })
     expect(canceled.status).toBe('canceled')
-    expect(cancel).toHaveBeenCalledWith(second.id, expect.anything())
+    // The provider's own job id comes back, so the engine can stop the job at the provider.
+    expect(cancel).toHaveBeenCalledWith(second.id, expect.anything(), { providerJobId: 'fal_2' })
     expect((await api.call('mesh3d.list', { pieceId: piece.id })).map((j) => j.id)).toEqual([
       second.id,
       job.id,
@@ -258,6 +260,57 @@ describe('making jewelry from a picture', () => {
     expect(
       (await api.fail('mesh3d.create', { pieceId: piece.id, imageAssetIds: [doc.id] })).status,
     ).toBe(400)
+  })
+
+  it('fails a job its engine would not take, and cancels one its engine cannot stop', async () => {
+    const photo = await putAsset(ctx, { bytes: await png(), name: 'c.png' })
+    const piece = await api.call('pieces.create', { kind: 'pendant' })
+    submit.mockRejectedValueOnce(new Error('invalid API key'))
+    const refused = await api.fail('mesh3d.create', { pieceId: piece.id, imageAssetIds: [photo.id] })
+    expect(refused.status).toBe(500)
+    const [failed] = await api.call('mesh3d.list', { pieceId: piece.id })
+    expect(failed).toMatchObject({
+      status: 'failed',
+      error: 'The engine could not take this job; try again later.',
+    })
+
+    const job = await api.call('mesh3d.create', { pieceId: piece.id, imageAssetIds: [photo.id] })
+    cancel.mockRejectedValueOnce(new Error('provider down'))
+    expect((await api.call('mesh3d.cancel', { id: job.id })).status).toBe('canceled')
+  })
+
+  it('lets an agent add to an origin, but only a person clear or shrink it', async () => {
+    const image = await putAsset(ctx, { bytes: await png(), name: 'logo.png' })
+    const more = await putAsset(ctx, { bytes: await png(), name: 'more.png', mime: 'image/png' })
+    const flags = [{ code: 'logo' as const, message: 'A brand mark' }]
+    const piece = await api.call('pieces.create', {
+      kind: 'pendant',
+      origin: { kind: 'logo', sourceAssetIds: [image.id], flags },
+    })
+    const agent = await server.runtime.context({
+      ...server.runtime.local!,
+      actor: { type: 'agent', runId: 'run_o' },
+    })
+    const update = (origin: unknown) =>
+      server.runtime.execute('pieces.update', { id: piece.id, origin }, agent)
+    for (const origin of [
+      null,
+      { kind: 'logo' },
+      { kind: 'logo', sourceAssetIds: [more.id], flags },
+      { kind: 'logo', sourceAssetIds: [image.id] },
+    ])
+      await expect(update(origin), JSON.stringify(origin)).rejects.toMatchObject({ status: 403 })
+    const gate = await api.fail('design.export', { pieceId: piece.id, format: 'stl' })
+    expect(gate.error.reason).toBe('attestation_required')
+
+    // Adding is allowed, and clears an attestation a person had given.
+    await api.call('pieces.attest', { id: piece.id, rights: 'own' })
+    await update({ kind: 'logo', sourceAssetIds: [image.id, more.id], flags })
+    const after = await api.call('pieces.get', { id: piece.id })
+    expect(after.origin).toMatchObject({ sourceAssetIds: [image.id, more.id], attestation: null })
+    // A person may clear it.
+    await api.call('pieces.update', { id: piece.id, origin: null })
+    await api.call('design.export', { pieceId: piece.id, format: 'stl' })
   })
 
   it('refuses a paid job that would pass the monthly budget', async () => {

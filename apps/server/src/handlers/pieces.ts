@@ -96,6 +96,29 @@ async function toOrigin(
   return { ...input, attestation: keep ? previous.attestation : null }
 }
 
+/**
+ * Only a person may lift the attestation gate. Clearing an origin, or dropping its sources or
+ * flags, would let export and production through as surely as attesting, so an assistant (or
+ * any non-person actor) may only add to an origin; adding sources clears an attestation.
+ */
+function assertOnlyAdds(previous: PieceOrigin | null, next: OriginInput | null): void {
+  if (previous === null) return
+  const keeps = (had: readonly string[], has: readonly string[]) =>
+    had.every((x) => has.includes(x))
+  const ok =
+    next !== null &&
+    keeps(previous.sourceAssetIds, next.sourceAssetIds) &&
+    keeps(previous.referenceIds, next.referenceIds) &&
+    keeps(
+      previous.flags.map((f) => f.code),
+      next.flags.map((f) => f.code),
+    )
+  if (!ok)
+    throw forbidden(
+      'Only a person can clear a piece’s origin or remove its sources or flags; the assistant may only add to them',
+    )
+}
+
 /** Moves a piece forward to `stage`, never back: stages are a status, not a gate. */
 const advance = (current: Stage, to: Stage): Stage =>
   STAGES.indexOf(current) < STAGES.indexOf(to) ? to : current
@@ -166,6 +189,8 @@ export const pieces: HandlerGroup<'pieces'> = {
 
   'pieces.update': async (ctx, { id, origin, ...patch }) => {
     const current = await getPiece(ctx, id)
+    if (origin !== undefined && ctx.actor.type !== 'user')
+      assertOnlyAdds(current.origin ?? null, origin)
     await ensure(getCollection, ctx, patch.collectionId)
     if (patch.coverAssetId) await getAssetRow(ctx, patch.coverAssetId)
     const [row] = await ctx.repo.pieces.update(eq(t.piece.id, id), {

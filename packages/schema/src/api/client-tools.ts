@@ -65,7 +65,7 @@ export const clientTools = {
   }),
   'viewport.select': def({
     description:
-      'Select features of a piece in the open Design view, to point the designer at them ("this prong", "these stones").',
+      'Change the selection in the Design view of a piece the designer already has open, to point at features ("this prong", "these stones"); an empty list clears it. Fails if that piece is not open on its Design tab: to go there, use ui.navigate with `selectNodeIds` instead.',
     kind: 'mutation',
     role: 'viewer',
     tool: true,
@@ -92,16 +92,23 @@ export const clientTools = {
   }),
   'ui.navigate': def({
     description:
-      'Open a piece (optionally on a tab and with features selected) or a board in the designer’s window. Use it to show the result of your work; do not navigate away while the designer is editing unless asked.',
+      'Change page in the designer’s window: open a piece (`pieceId`, optionally on a `tab` and with `selectNodeIds` selected on arrival) or a board (`boardId`), exactly one of the two. Use it to show the result of your work; do not navigate away while the designer is editing unless asked. To change only the selection on the page already open, use viewport.select.',
     kind: 'mutation',
     role: 'viewer',
     tool: true,
-    input: z.object({
-      pieceId: id.optional(),
-      tab: z.enum(PIECE_TABS).optional(),
-      boardId: id.optional(),
-      selectNodeIds: z.array(id).max(200).optional(),
-    }),
+    input: z
+      .object({
+        pieceId: id.optional(),
+        tab: z.enum(PIECE_TABS).optional(),
+        boardId: id.optional(),
+        selectNodeIds: z.array(id).max(200).optional(),
+      })
+      .refine((v) => (v.pieceId === undefined) !== (v.boardId === undefined), {
+        message: 'Give exactly one of pieceId or boardId',
+      })
+      .refine((v) => v.pieceId !== undefined || (v.tab === undefined && !v.selectNodeIds), {
+        message: '`tab` and `selectNodeIds` go with a pieceId',
+      }),
     output: z.object({ ok: z.literal(true) }),
   }),
 } as const

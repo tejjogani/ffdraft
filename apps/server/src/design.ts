@@ -49,6 +49,18 @@ export interface CommitInput {
   reverts?: readonly string[]
 }
 
+/** What to commit, worked out inside the commit transaction from the piece as it is there. */
+export type CommitPlan = (
+  tx: Ctx['repo'],
+  design: Design,
+) => Promise<Pick<CommitInput, 'ops' | 'label' | 'reverts'>>
+
+/**
+ * A commit whose ops depend on the history (a revert): `plan` runs in the same transaction as
+ * the write, and runs again if a concurrent commit wins, so two undo requests never both pass.
+ */
+export type PlannedCommit = Omit<CommitInput, 'ops' | 'label' | 'reverts'> & { plan: CommitPlan }
+
 /** Another writer committed between our read and our write. */
 class StaleWrite extends Error {}
 
@@ -56,7 +68,7 @@ const MAX_ATTEMPTS = 5
 
 export async function commitChange(
   ctx: Ctx,
-  input: CommitInput,
+  input: CommitInput | PlannedCommit,
 ): Promise<{ version: number; change: StoredChange }> {
   for (let attempt = 1; ; attempt++) {
     try {
@@ -85,20 +97,22 @@ export async function commitChange(
   }
 }
 
-async function commitOnce(ctx: Ctx, tx: Ctx['repo'], input: CommitInput) {
-  if (input.changeId) {
-    const existing = await tx.changes.first(eq(t.designChange.id, input.changeId))
+async function commitOnce(ctx: Ctx, tx: Ctx['repo'], planned: CommitInput | PlannedCommit) {
+  if (planned.changeId) {
+    const existing = await tx.changes.first(eq(t.designChange.id, planned.changeId))
     if (existing) {
-      if (existing.pieceId !== input.pieceId)
-        throw conflict(`Change id "${input.changeId}" is already used`)
+      if (existing.pieceId !== planned.pieceId)
+        throw conflict(`Change id "${planned.changeId}" is already used`)
       return { replayed: true as const, version: existing.seq, change: toStoredChange(existing) }
     }
   }
-  const piece = await getPiece({ ...ctx, repo: tx }, input.pieceId)
-  if (input.baseVersion !== undefined && input.baseVersion !== piece.version)
-    throw conflict(`The piece is at version ${piece.version}, not ${input.baseVersion}`, {
+  const piece = await getPiece({ ...ctx, repo: tx }, planned.pieceId)
+  if (planned.baseVersion !== undefined && planned.baseVersion !== piece.version)
+    throw conflict(`The piece is at version ${piece.version}, not ${planned.baseVersion}`, {
       currentVersion: piece.version,
     })
+  const input: CommitInput =
+    'plan' in planned ? { ...planned, ...(await planned.plan(tx, piece.design)) } : planned
 
   let applied: { design: Design; inverse: Op[] }
   try {
@@ -147,8 +161,24 @@ async function commitOnce(ctx: Ctx, tx: Ctx['repo'], input: CommitInput) {
     reverts: [...(input.reverts ?? [])],
     at,
   })
-  // Undoing an assistant's edit is exact implicit feedback on its run.
-  const undone = reverted.filter((c) => c.runId !== null)
+  // A person undoing an assistant's edit is exact implicit feedback on its run, recorded once per
+  // change; an assistant backing out its own edit is not feedback.
+  const recorded =
+    actor.type === 'user' && reverted.some((c) => c.runId !== null)
+      ? await tx.feedback.many({
+          where: and(
+            eq(t.runFeedback.kind, 'undone'),
+            inArray(
+              t.runFeedback.changeId,
+              reverted.map((c) => c.id),
+            ),
+          ),
+        })
+      : []
+  const undone =
+    actor.type === 'user'
+      ? reverted.filter((c) => c.runId !== null && !recorded.some((f) => f.changeId === c.id))
+      : []
   await tx.feedback.insertMany(
     undone.map((c) => ({
       id: createId('fb'),

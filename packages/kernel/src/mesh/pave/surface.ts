@@ -7,7 +7,7 @@
  * body happens to be triangulated: an extruded letter's face is a few long slivers, an AI mesh a
  * million noisy triangles, and both are sampled at the same ~¼-stone spacing.
  */
-import { dot, scale, sub, type Vec3 } from '../../geometry/vec'
+import { cross, dot, normalize, scale, sub, type Vec3 } from '../../geometry/vec'
 import type { IndexedTriangles } from '../../solid/meshing'
 import { TriangleBvh } from '../bvh'
 import { StaticPointGrid } from '../grid'
@@ -154,25 +154,55 @@ export class PaveSurface {
     return out
   }
 
-  /** κ ≈ (nⱼ − nᵢ)·(pⱼ − pᵢ) / |pⱼ − pᵢ|² over neighbours; positive where the surface is convex. */
+  /**
+   * Principal curvatures from normal curvatures: every neighbour j gives κⱼ ≈ (nⱼ − nᵢ)·(pⱼ − pᵢ)
+   * / |pⱼ − pᵢ|² along its tangent direction θⱼ, and Euler's theorem κ(θ) = a cos²θ + 2b cosθ sinθ
+   * + c sin²θ is fitted to them by least squares. Taking the largest single κⱼ instead lets one
+   * noisy facet normal shrink the stones around it; the fit averages that noise away.
+   */
   private measureCurvature(radius: number): void {
     const p = this.p
     const n = this.n
     const minD2 = (radius * 0.4) ** 2
+    // Normal equations of the 3-parameter fit, accumulated per sample.
+    const m = new Float64Array(9)
+    const r = new Float64Array(3)
     for (let i = 0; i < this.count; i++) {
-      let convex = 0
-      let concave = 0
+      const normal = this.normal(i)
+      const e1 = tangentOf(normal)
+      const e2 = cross(normal, e1)
+      m.fill(0)
+      r.fill(0)
+      let samples = 0
       this.grid.near(p[i * 3]!, p[i * 3 + 1]!, p[i * 3 + 2]!, radius, (j, d2) => {
         if (d2 < minD2) return
         let k = 0
-        for (let c = 0; c < 3; c++)
-          k += (n[j * 3 + c]! - n[i * 3 + c]!) * (p[j * 3 + c]! - p[i * 3 + c]!)
+        let u = 0
+        let v = 0
+        for (let c = 0; c < 3; c++) {
+          const dp = p[j * 3 + c]! - p[i * 3 + c]!
+          k += (n[j * 3 + c]! - n[i * 3 + c]!) * dp
+          u += dp * e1[c]!
+          v += dp * e2[c]!
+        }
+        const t2 = u * u + v * v
+        if (t2 < 1e-18) return
+        const row = [(u * u) / t2, (2 * u * v) / t2, (v * v) / t2]
         k /= d2
-        if (k > convex) convex = k
-        if (-k > concave) concave = -k
+        for (let a = 0; a < 3; a++) {
+          r[a] = r[a]! + row[a]! * k
+          for (let b = 0; b < 3; b++) m[a * 3 + b] = m[a * 3 + b]! + row[a]! * row[b]!
+        }
+        samples++
       })
-      this.convex[i] = convex
-      this.concave[i] = concave
+      const fit = samples >= 6 ? solve3(m, r) : null
+      if (!fit) continue
+      const [a, b, c] = fit
+      // Eigenvalues of the symmetric form [[a, b], [b, c]]: the principal curvatures.
+      const mean = (a + c) / 2
+      const spread = Math.hypot((a - c) / 2, b)
+      this.convex[i] = Math.max(0, mean + spread)
+      this.concave[i] = Math.max(0, spread - mean)
     }
   }
 
@@ -204,6 +234,28 @@ export class PaveSurface {
     for (let i = 0; i < this.count; i++) if (depth[i] === Infinity) depth[i] = cap
     return depth
   }
+}
+
+/** A unit tangent of a unit normal (any one; the curvature fit does not depend on which). */
+function tangentOf(n: Vec3): Vec3 {
+  return normalize(Math.abs(n[0]) < 0.9 ? cross(n, [1, 0, 0]) : cross(n, [0, 1, 0]))
+}
+
+/** Solves the 3×3 system m·x = r (row-major) by Cramer's rule, or null when singular. */
+function solve3(m: Float64Array, r: Float64Array): [number, number, number] | null {
+  const det = (a: ArrayLike<number>) =>
+    a[0]! * (a[4]! * a[8]! - a[5]! * a[7]!) -
+    a[1]! * (a[3]! * a[8]! - a[5]! * a[6]!) +
+    a[2]! * (a[3]! * a[7]! - a[4]! * a[6]!)
+  const d = det(m)
+  if (Math.abs(d) < 1e-12) return null
+  const out: [number, number, number] = [0, 0, 0]
+  for (let col = 0; col < 3; col++) {
+    const a = Float64Array.from(m)
+    for (let row = 0; row < 3; row++) a[row * 3 + col] = r[row]!
+    out[col] = det(a) / d
+  }
+  return out
 }
 
 /** Binary min-heap of (index, key) pairs. */

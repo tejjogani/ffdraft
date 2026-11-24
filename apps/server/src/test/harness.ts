@@ -6,6 +6,12 @@ import type { CommandInput, CommandName, CommandOutput } from '@pave/schema'
 import { type CreateAppOptions, createApp, type PaveServer } from '../app'
 import { configFromEnv } from '../config'
 
+/**
+ * For `beforeAll` hooks that boot a server: PGlite plus every migration can take far longer than
+ * vitest's 10 s hook default on a busy machine (several suites running at once).
+ */
+export const BOOT_TIMEOUT = 60_000
+
 export interface TestServer extends PaveServer {
   dispose(): Promise<void>
 }
@@ -108,4 +114,26 @@ export async function authPost(c: Client, path: string, body: unknown) {
   })
   if (!res.ok) throw new Error(`${path} failed: ${res.status} ${await res.text()}`)
   return res.json() as Promise<unknown>
+}
+
+/**
+ * Invites `email` into `owner`'s active org with `role`, accepts as `who` and makes that org
+ * their active one; returns the org id. Accounts mode only.
+ */
+export async function joinOrg(
+  server: PaveServer,
+  owner: Client,
+  who: Client,
+  email: string,
+  role: 'viewer' | 'designer' | 'admin',
+): Promise<string> {
+  const { activeOrgId, user } = await owner.call('session.get', {})
+  await owner.call('org.invite', { email, role })
+  const ctx = await server.runtime.context({ userId: user.id, orgId: activeOrgId })
+  const invitation = (await ctx.repo.invitations.many()).find(
+    (i) => i.email === email && i.status === 'pending',
+  )!
+  await authPost(who, '/organization/accept-invitation', { invitationId: invitation.id })
+  await authPost(who, '/organization/set-active', { organizationId: activeOrgId })
+  return activeOrgId
 }

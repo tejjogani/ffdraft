@@ -13,12 +13,14 @@ import { badRequest, conflict, forbidden, notFound } from '../errors'
 import { createId } from '../ids'
 import { ensure, ensureAll, getBoard, getPiece, getReference } from '../lookups'
 import { serviceContext } from '../service-context'
+import type { ImageGenRequest } from '../services'
 import { assertBudget } from '../usage'
 import { toPieceSummary } from './pieces'
 import type { HandlerGroup } from './types'
 
 type BoardRow = typeof t.board.$inferSelect
 type ReferenceRow = typeof t.reference.$inferSelect
+type AssetRow = typeof t.asset.$inferSelect
 export type NewReference = Omit<
   typeof t.reference.$inferInsert,
   'orgId' | 'id' | 'boardId' | 'position'
@@ -153,8 +155,44 @@ async function trustedResult(ctx: Ctx, r: SearchResult): Promise<SearchResult> {
 async function capturePixels(ctx: Ctx, url: string) {
   const capture = ctx.services.optional('capture')
   if (!capture) return null
-  const { file } = await capture.capture(url, serviceContext(ctx))
-  return putAsset(ctx, { ...file, kind: 'image' })
+  const { file, sourceUrl } = await capture.capture(url, serviceContext(ctx))
+  return putAsset(ctx, { ...file, kind: 'image', capturedFrom: sourceUrl })
+}
+
+/**
+ * A reference to pixels the server fetched from the web keeps the rights they were fetched
+ * under, whoever saves it: those of the references showing the asset (the most restrictive),
+ * or view-only once none is left. So a captured view-only page cannot come back as `own`.
+ */
+async function capturedAsset(
+  ctx: Ctx,
+  asset: AssetRow,
+  item: SaveItem,
+  text: { title: string; note: string; pieceId: string | null },
+): Promise<NewReference> {
+  const showing = await ctx.repo.references.many({ where: eq(t.reference.assetId, asset.id) })
+  const from =
+    showing.find((r) => r.rights === 'viewOnly') ??
+    showing.find((r) => r.rights !== 'own') ??
+    showing[0]
+  const rights = item.rights === 'viewOnly' || !from ? 'viewOnly' : from.rights
+  return {
+    ...text,
+    title: item.title ?? from?.title ?? asset.name,
+    type: 'image',
+    assetId: asset.id,
+    thumbUrl: from?.thumbUrl ?? null,
+    source:
+      from?.source ??
+      source({
+        provider: 'web',
+        url: asset.capturedFrom,
+        capturedAt: asset.createdAt.toISOString(),
+      }),
+    rights,
+    width: asset.width,
+    height: asset.height,
+  }
 }
 
 async function referenceFromItem(ctx: Ctx, item: SaveItem): Promise<NewReference> {
@@ -184,6 +222,7 @@ async function referenceFromItem(ctx: Ctx, item: SaveItem): Promise<NewReference
   }
   if (item.assetId) {
     const asset = await getAssetRow(ctx, item.assetId)
+    if (asset.capturedFrom !== null) return capturedAsset(ctx, asset, item, text)
     return {
       ...text,
       title: item.title ?? asset.name,
@@ -250,6 +289,31 @@ const cosine = (a: number[], b: number[]) => {
     nb += b[i]! ** 2
   }
   return na && nb ? dot / Math.sqrt(na * nb) : 0
+}
+
+/**
+ * The request a generation provider receives: the references, checked to belong to the org and
+ * to allow generative use, and roles only for those references.
+ */
+async function generationRequest(
+  ctx: Ctx,
+  { referenceIds, ...input }: CommandParsedInput<'references.estimate'>,
+): Promise<ImageGenRequest> {
+  const refs = referenceIds.length
+    ? await ctx.repo.references.many({ where: inArray(t.reference.id, referenceIds) })
+    : []
+  const missing = referenceIds.filter((id) => !refs.some((r) => r.id === id))
+  if (missing.length) throw notFound('Reference', missing[0])
+  const stray = input.roles.find((r) => !referenceIds.includes(r.id))
+  if (stray) throw badRequest(`A role was given for "${stray.id}", which is not among referenceIds`)
+  const viewOnly = refs.filter((r) => r.rights === 'viewOnly')
+  if (viewOnly.length)
+    throw badRequest(
+      `These references are view-only and cannot be sent to a generative model: ${viewOnly.map((r) => r.title || r.id).join(', ')}`,
+    )
+  // In the order asked for, so "image 1" in a prompt is the first id given.
+  const references = referenceIds.map((id) => toReference(refs.find((r) => r.id === id)!))
+  return { ...input, references }
 }
 
 export const ideate: HandlerGroup<'boards' | 'references'> = {
@@ -358,8 +422,8 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
     const url = ref.source?.url
     if (!url) throw conflict('This reference has no web address to capture an image from')
     const capture = ctx.services.require('capture')
-    const { file } = await capture.capture(url, serviceContext(ctx))
-    const asset = await putAsset(ctx, { ...file, kind: 'image' })
+    const { file, sourceUrl } = await capture.capture(url, serviceContext(ctx))
+    const asset = await putAsset(ctx, { ...file, kind: 'image', capturedFrom: sourceUrl })
     // The pixels are stored for display; the rights are unchanged (a page stays view-only).
     const [row] = await ctx.repo.references.update(eq(t.reference.id, id), {
       assetId: asset.id,
@@ -496,28 +560,22 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
     return { ok: true }
   },
 
-  'references.generate': async (ctx, input) => {
-    await getBoard(ctx, input.boardId)
-    const refs = input.referenceIds.length
-      ? await ctx.repo.references.many({ where: inArray(t.reference.id, input.referenceIds) })
-      : []
-    const missing = input.referenceIds.filter((id) => !refs.some((r) => r.id === id))
-    if (missing.length) throw notFound('Reference', missing[0])
-    const stray = input.roles.find((r) => !input.referenceIds.includes(r.id))
-    if (stray)
-      throw badRequest(`A role was given for "${stray.id}", which is not among referenceIds`)
-    const viewOnly = refs.filter((r) => r.rights === 'viewOnly')
-    if (viewOnly.length)
-      throw badRequest(
-        `These references are view-only and cannot be sent to a generative model: ${viewOnly.map((r) => r.title || r.id).join(', ')}`,
-      )
-    await assertBudget(ctx)
+  'references.estimate': async (ctx, input) => {
+    const request = await generationRequest(ctx, input)
+    return ctx.services.get('imageGen').estimate(request, serviceContext(ctx))
+  },
 
-    const { boardId, referenceIds, ...request } = input
-    const parents = refs.map(toReference)
-    const result = await ctx.services
-      .get('imageGen')
-      .generate({ ...request, references: parents }, serviceContext(ctx))
+  'references.generate': async (ctx, { boardId, ...input }) => {
+    await getBoard(ctx, boardId)
+    const request = await generationRequest(ctx, input)
+    const imageGen = ctx.services.get('imageGen')
+    const sctx = serviceContext(ctx)
+    // The figure the person confirmed is the one checked against the budget.
+    await assertBudget(ctx, (await imageGen.estimate(request, sctx)).usd)
+
+    const { referenceIds } = input
+    const parents = request.references
+    const result = await imageGen.generate(request, sctx)
     // Credit lines survive the parents being deleted.
     const inputs: GenerationInput[] = parents.map((p) => ({
       id: p.id,

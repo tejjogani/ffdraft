@@ -17,6 +17,11 @@ export interface NewAsset {
   mime?: string
   /** Defaults to what the bytes or extension say (`image`, `mesh`, …). */
   kind?: AssetKind
+  /**
+   * The web address the bytes were fetched from, when the server fetched them (a captured link
+   * or search result). References to such an asset keep the rights it was fetched under.
+   */
+  capturedFrom?: string
 }
 
 type AssetRow = typeof t.asset.$inferSelect
@@ -114,6 +119,7 @@ export async function putAsset(ctx: Ctx, input: NewAsset): Promise<Asset> {
     bytes: input.bytes.byteLength,
     width: image?.width ?? null,
     height: image?.height ?? null,
+    capturedFrom: input.capturedFrom ?? null,
     createdBy: ctx.user.id,
   })
   return toAsset(row)

@@ -3,7 +3,7 @@ import { and, asc, desc, eq, inArray, isNull, lt, max, type SQL } from 'drizzle-
 import { z } from 'zod'
 import { type Ctx, publish } from '../context'
 import * as t from '../db/schema'
-import { badRequest, conflict, forbidden } from '../errors'
+import { AppError, badRequest, conflict, forbidden } from '../errors'
 import { createId } from '../ids'
 import { ensure, ensureAll, getPiece, getRender, getScene } from '../lookups'
 import { renderHandle, stopJob, submitJob, updateRender } from '../jobs'
@@ -77,6 +77,20 @@ const sceneScope = (pieceId: string | null): SQL =>
 const announceScene = (ctx: Ctx, row: SceneRow) =>
   publish(ctx, { type: 'scene.updated', sceneId: row.id, pieceId: row.pieceId })
 
+const isObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/** Paths a merge patch writes that the parsed result does not have (stripped as unknown). */
+function strippedKeys(patch: Record<string, unknown>, parsed: unknown, path = ''): string[] {
+  if (!isObject(parsed)) return []
+  return Object.entries(patch).flatMap(([k, v]) => {
+    const at = path ? `${path}.${k}` : k
+    if (v === null) return []
+    if (!(k in parsed)) return [at]
+    return isObject(v) ? strippedKeys(v, parsed[k], at) : []
+  })
+}
+
 export const render: HandlerGroup<'renders' | 'scenes'> = {
   'scenes.list': async (ctx, { pieceId }) => {
     await ensure(getPiece, ctx, pieceId)
@@ -111,6 +125,12 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     if (patch) {
       const parsed = RenderSceneSchema.safeParse(mergePatch(current.scene, patch))
       if (!parsed.success) throw badRequest(z.prettifyError(parsed.error), parsed.error.issues)
+      // Parsing strips unknown keys; a misspelt one must fail, not "succeed" with no change.
+      const unknown = strippedKeys(patch, parsed.data)
+      if (unknown.length)
+        throw new AppError('bad_request', `Unknown scene fields: ${unknown.join(', ')}`, {
+          paths: unknown,
+        })
       scene = parsed.data
     }
     const [row] = await ctx.repo.scenes.update(eq(t.renderScene.id, id), {

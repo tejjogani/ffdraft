@@ -4,7 +4,7 @@ import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { putAsset } from './assets/assets'
 import type { Services } from './services'
-import { type Client, client, type TestServer, testServer } from './test/harness'
+import { BOOT_TIMEOUT, type Client, client, type TestServer, testServer } from './test/harness'
 
 const png = (color = '#c9a13b') =>
   sharp({ create: { width: 40, height: 30, channels: 3, background: color } })
@@ -67,11 +67,19 @@ beforeAll(async () => {
         resolve,
       },
       capture: { capture },
-      imageGen: { generate },
+      imageGen: {
+        estimate: async (req) => ({
+          provider: 'fake',
+          model: 'img-1',
+          usd: 0.04 * req.count,
+          seconds: 9,
+        }),
+        generate,
+      },
     },
   })
   api = client(server)
-})
+}, BOOT_TIMEOUT)
 afterAll(() => server.dispose())
 
 describe('saving references', () => {
@@ -191,6 +199,29 @@ describe('saving references', () => {
     expect(captured.source?.capturedAt).not.toBeNull()
     const [note] = await api.call('references.save', { boardId: board.id, items: [{ note: 'n' }] })
     expect((await api.fail('references.capture', { id: note!.id })).status).toBe(409)
+
+    // Saving the captured pixels again, as anyone, keeps them view-only (no laundering to `own`).
+    const agent = await server.runtime.context({
+      ...server.runtime.local!,
+      actor: { type: 'agent', runId: 'run_l' },
+    })
+    const save = (item: object) =>
+      server.runtime.invoke('references.save', { boardId: board.id, items: [item] }, agent)
+    const [again] = await save({ assetId: captured.assetId!, rights: 'own' })
+    expect(again).toMatchObject({
+      rights: 'viewOnly',
+      source: { provider: 'web', url: 'https://shop.example/ring' },
+    })
+    await api.call('references.remove', { ids: [link!.id, again!.id] })
+    const [orphan] = await save({ assetId: captured.assetId! })
+    expect(orphan).toMatchObject({ rights: 'viewOnly', source: { provider: 'web' } })
+    const refused = await api.fail('references.generate', {
+      boardId: board.id,
+      prompt: 'a ring like this',
+      referenceIds: [orphan!.id],
+    })
+    expect(refused.status).toBe(400)
+    expect((await api.fail('references.update', { id: orphan!.id })).status).toBe(400)
   })
 })
 

@@ -1,3 +1,4 @@
+import { roleAllows } from '@pave/schema'
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import type { Ctx } from '../context'
 import * as t from '../db/schema'
@@ -13,6 +14,18 @@ async function ownThread(ctx: Ctx, id: string) {
   const thread = await getThread(ctx, id)
   if (thread.userId !== ctx.user.id) throw notFound('Thread', id)
   return thread
+}
+
+/**
+ * Traces carry the conversation (model inputs and outputs), so they share its privacy: a member
+ * reads their own runs; admins and owners, who answer for the organisation's use, read any.
+ */
+const seesAllRuns = (ctx: Ctx) => roleAllows(ctx.role, 'admin')
+
+async function readableRun(ctx: Ctx, id: string) {
+  const run = await getRun(ctx, id)
+  if (run.userId !== ctx.user.id && !seesAllRuns(ctx)) throw notFound('Run', id)
+  return run
 }
 
 /** Runs are steered (approved, stopped) only by the person they act for. */
@@ -95,7 +108,10 @@ export const assistant: HandlerGroup<'threads' | 'runs' | 'client' | 'traces'> =
 
   'traces.runs': async (ctx, input) => {
     const rows = await ctx.repo.runs.many({
-      where: input.pieceId ? eq(t.agentRun.pieceId, input.pieceId) : undefined,
+      where: and(
+        input.pieceId ? eq(t.agentRun.pieceId, input.pieceId) : undefined,
+        seesAllRuns(ctx) ? undefined : eq(t.agentRun.userId, ctx.user.id),
+      ),
       orderBy: desc(t.agentRun.startedAt),
       limit: input.limit,
     })
@@ -103,7 +119,7 @@ export const assistant: HandlerGroup<'threads' | 'runs' | 'client' | 'traces'> =
   },
 
   'traces.run': async (ctx, { id }) => {
-    const run = await getRun(ctx, id)
+    const run = await readableRun(ctx, id)
     const [steps, feedback] = await Promise.all([
       ctx.repo.steps.many({ where: eq(t.agentStep.runId, id), orderBy: asc(t.agentStep.idx) }),
       ctx.repo.feedback.many({
@@ -115,7 +131,7 @@ export const assistant: HandlerGroup<'threads' | 'runs' | 'client' | 'traces'> =
   },
 
   'traces.feedback': async (ctx, input) => {
-    await getRun(ctx, input.runId)
+    await readableRun(ctx, input.runId)
     if (input.stepId) {
       const step = await ctx.repo.steps.first(
         and(eq(t.agentStep.id, input.stepId), eq(t.agentStep.runId, input.runId)),

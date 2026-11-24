@@ -1,6 +1,6 @@
 import { TEMPLATES } from '@pave/schema'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { type Client, client, type TestServer, testServer } from './test/harness'
+import { BOOT_TIMEOUT, type Client, client, type TestServer, testServer } from './test/harness'
 import { traces } from './traces'
 import { recordUsage } from './usage'
 
@@ -10,7 +10,7 @@ let api: Client
 beforeAll(async () => {
   server = await testServer()
   api = client(server)
-})
+}, BOOT_TIMEOUT)
 afterAll(() => server.dispose())
 
 describe('session & organisation', () => {

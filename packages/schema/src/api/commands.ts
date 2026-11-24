@@ -105,6 +105,24 @@ const newModelCard = modelCard.extend({
   handLengthMm: modelCard.shape.handLengthMm.default(null),
 })
 
+/** An image generation request, as estimated and as generated onto a board. */
+const generateRequest = z.object({
+  prompt: z.string().min(3).max(4000),
+  referenceIds: z.array(id).max(8).default([]),
+  count: z.number().int().min(1).max(4).default(2),
+  /** What each reference is for ("image 1 = silhouette"); ids must be among `referenceIds`. */
+  roles: z
+    .array(z.object({ id, role: z.enum(GENERATION_ROLES) }))
+    .max(8)
+    .default([]),
+  aspect: z.enum(IMAGE_ASPECTS).default('1:1'),
+  style: z.enum(['photo', 'sketch', 'technical', 'render']).default('photo'),
+  /** Repeat a result exactly, where the provider supports seeds. */
+  seed: z.number().int().min(0).optional(),
+})
+
+const portraitViews = z.array(z.enum(['face', 'hands', 'neck', 'ear', 'body'])).min(1)
+
 const meshRequest = {
   /** One to four photos of the same object (front first). */
   imageAssetIds: z.array(id).min(1).max(4),
@@ -268,7 +286,7 @@ export const commands = {
   }),
   'pieces.update': def({
     description:
-      'Update a piece’s title, stage, brief, collection, cover or origin. Setting `coverAssetId` stops automatic cover capture unless `coverAuto: true` is sent with it. Changing the origin’s sources clears its attestation.',
+      'Update a piece’s title, stage, brief, collection, cover or origin. Setting `coverAssetId` stops automatic cover capture unless `coverAuto: true` is sent with it. Changing the origin’s sources clears its attestation. The assistant may only add sources and flags to an origin; only a person can remove them, clear the origin or attest (403 otherwise).',
     kind: 'mutation',
     tool: true,
     input: z.object({
@@ -358,7 +376,7 @@ export const commands = {
   }),
   'design.revert': def({
     description:
-      'Undo earlier edits by applying their inverse as one new change: give `seq` for one change, or `runId` for everything an assistant run changed on this piece. Fails with a conflict if later edits touched the same features.',
+      'Undo earlier edits by applying their inverse as one new change: give `seq` for one change, or `runId` for everything an assistant run changed on this piece that is not undone yet. Fails with a conflict (409, naming the `nodeIds`) if later edits changed the same features since, so a later edit is never overwritten, and with a conflict if everything asked for is already undone.',
     kind: 'mutation',
     tool: true,
     input: z
@@ -455,24 +473,37 @@ export const commands = {
   }),
   'references.save': def({
     description:
-      'Save search results, pasted URLs, uploaded assets, notes or colour swatches to a board, keeping provenance. Search results are re-checked with their provider: rights come from the provider, and pixels are stored only where its terms allow. URLs are kept as view-only links. `pieceId` marks a reference that shows one of your pieces.',
+      'Save search results, pasted URLs, uploaded assets, notes or colour swatches to a board, keeping provenance. Each item is exactly one of `result`, `url`, `assetId` or `swatch` (a `note` may go with it), or a note alone. Search results are re-checked with their provider: rights come from the provider, and pixels are stored only where its terms allow. URLs are kept as view-only links, and an image captured from one stays view-only wherever it is saved again. `pieceId` marks a reference that shows one of your pieces.',
     kind: 'mutation',
     tool: true,
     input: z.object({
       boardId: id,
       items: z
         .array(
-          z.object({
-            result: SearchResultSchema.optional(),
-            url: z.string().url().optional(),
-            assetId: id.optional(),
-            swatch: z.object({ hex: z.string().regex(/^#[0-9a-fA-F]{6}$/) }).optional(),
-            pieceId: id.optional(),
-            note: z.string().max(4000).optional(),
-            title: z.string().max(200).optional(),
-            /** For uploads and notes; a search result or URL can only be lowered to `viewOnly`. */
-            rights: z.enum(RIGHTS).optional(),
-          }),
+          z
+            .object({
+              result: SearchResultSchema.optional(),
+              url: z.string().url().optional(),
+              assetId: id.optional(),
+              swatch: z.object({ hex: z.string().regex(/^#[0-9a-fA-F]{6}$/) }).optional(),
+              pieceId: id.optional(),
+              note: z.string().max(4000).optional(),
+              title: z.string().max(200).optional(),
+              /** For uploads and notes; a search result or URL can only be lowered to `viewOnly`. */
+              rights: z.enum(RIGHTS).optional(),
+            })
+            .refine(
+              (item) => {
+                const sources = [item.result, item.url, item.assetId, item.swatch].filter(
+                  (x) => x !== undefined,
+                ).length
+                return sources === 1 || (sources === 0 && item.note !== undefined)
+              },
+              {
+                message:
+                  'Give exactly one of result, url, assetId or swatch (a note may go with it), or a note alone',
+              },
+            ),
         )
         .min(1)
         .max(50),
@@ -483,19 +514,25 @@ export const commands = {
     description:
       'Edit a reference’s title, note, tags, rights, order, canvas placement or board. Raising a view-only reference’s rights needs `attestation: true` from a person.',
     kind: 'mutation',
-    input: z.object({
-      id,
-      title: z.string().max(200).optional(),
-      note: z.string().max(4000).optional(),
-      tags: z.array(z.string().max(40)).max(30).optional(),
-      rights: z.enum(RIGHTS).optional(),
-      /** The person confirms they may use a view-only item beyond inspiration. */
-      attestation: z.literal(true).optional(),
-      position: z.number().optional(),
-      canvas: CanvasPlacementSchema.nullable().optional(),
-      /** Move to another board. */
-      boardId: id.optional(),
-    }),
+    input: z
+      .object({
+        id,
+        title: z.string().max(200).optional(),
+        note: z.string().max(4000).optional(),
+        tags: z.array(z.string().max(40)).max(30).optional(),
+        rights: z.enum(RIGHTS).optional(),
+        /** The person confirms they may use a view-only item beyond inspiration. */
+        attestation: z.literal(true).optional(),
+        position: z.number().optional(),
+        canvas: CanvasPlacementSchema.nullable().optional(),
+        /** Move to another board. */
+        boardId: id.optional(),
+      })
+      .refine(
+        (v) =>
+          Object.entries(v).some(([k, x]) => k !== 'id' && k !== 'attestation' && x !== undefined),
+        { message: 'Give at least one field to change' },
+      ),
     output: ReferenceSchema,
   }),
   'references.arrange': def({
@@ -567,26 +604,20 @@ export const commands = {
     input: z.object({ ids: z.array(id).min(1).max(100) }),
     output: ok,
   }),
+  'references.estimate': def({
+    description:
+      'What references.generate would cost for this request and how long it takes, before asking for confirmation.',
+    kind: 'query',
+    tool: true,
+    input: generateRequest,
+    output: EstimateSchema,
+  }),
   'references.generate': def({
     description:
       'Generate concept images from a prompt, optionally conditioned on references from a board. New images are saved to the board with their lineage. Costs money per image.',
     kind: 'mutation',
     tool: { confirm: true },
-    input: z.object({
-      boardId: id,
-      prompt: z.string().min(3).max(4000),
-      referenceIds: z.array(id).max(8).default([]),
-      count: z.number().int().min(1).max(4).default(2),
-      /** What each reference is for ("image 1 = silhouette"); ids must be among `referenceIds`. */
-      roles: z
-        .array(z.object({ id, role: z.enum(GENERATION_ROLES) }))
-        .max(8)
-        .default([]),
-      aspect: z.enum(IMAGE_ASPECTS).default('1:1'),
-      style: z.enum(['photo', 'sketch', 'technical', 'render']).default('photo'),
-      /** Repeat a result exactly, where the provider supports seeds. */
-      seed: z.number().int().min(0).optional(),
-    }),
+    input: generateRequest.extend({ boardId: id }),
     output: z.array(ReferenceSchema),
   }),
 
@@ -778,7 +809,11 @@ export const commands = {
   'renders.update': def({
     description: 'Star or rename a take.',
     kind: 'mutation',
-    input: z.object({ id, starred: z.boolean().optional(), title: z.string().max(120).optional() }),
+    input: z
+      .object({ id, starred: z.boolean().optional(), title: z.string().max(120).optional() })
+      .refine((v) => v.starred !== undefined || v.title !== undefined, {
+        message: 'Give starred or title',
+      }),
     output: RenderJobSchema,
   }),
   'renders.cancel': def({
@@ -840,15 +875,20 @@ export const commands = {
     }),
     output: BrandModelSchema,
   }),
+  'models.estimatePortraits': def({
+    description:
+      'What models.generatePortraits would cost for these views and how long it takes, before asking for confirmation.',
+    kind: 'query',
+    tool: true,
+    input: z.object({ id, views: portraitViews }),
+    output: EstimateSchema,
+  }),
   'models.generatePortraits': def({
     description:
       'Generate (or regenerate) the canonical portrait set for a brand model. Generate the face first; once it is kept, the other views are conditioned on it.',
     kind: 'mutation',
     tool: { confirm: true },
-    input: z.object({
-      id,
-      views: z.array(z.enum(['face', 'hands', 'neck', 'ear', 'body'])).min(1),
-    }),
+    input: z.object({ id, views: portraitViews }),
     output: BrandModelSchema,
   }),
   'models.delete': def({
@@ -1018,14 +1058,15 @@ export const commands = {
     output: ok,
   }),
   'traces.runs': def({
-    description: 'Assistant runs with token usage and cost, newest first.',
+    description:
+      'Your assistant runs with token usage and cost, newest first; admins and owners see the whole organisation’s.',
     kind: 'query',
     input: z.object({ pieceId: id.optional(), limit: z.number().int().max(200).default(50) }),
     output: z.array(RunSchema),
   }),
   'traces.run': def({
     description:
-      'One assistant run with every model and tool step, linked to the design changes it made, and the feedback it received.',
+      'One assistant run with every model and tool step, linked to the design changes it made, and the feedback it received. Runs are private to the person they acted for; admins and owners may read any run of the organisation.',
     kind: 'query',
     input: z.object({ id }),
     output: z.object({
@@ -1035,7 +1076,8 @@ export const commands = {
     }),
   }),
   'traces.feedback': def({
-    description: 'Record explicit feedback on a run or one of its steps.',
+    description:
+      'Record explicit feedback on one of your runs or one of its steps (admins and owners: any run of the organisation).',
     kind: 'mutation',
     input: z.object({
       runId: id,

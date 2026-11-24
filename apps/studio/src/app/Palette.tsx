@@ -3,7 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { Folder } from 'lucide-react'
 import { useMemo } from 'react'
 import { StageIcon } from '../components/StageChip'
-import { type CommandGroup, useCommands } from '../lib/commands'
+import { type CommandGroup, isAvailable, useCommands } from '../lib/commands'
 import { STAGE_LABEL } from '../lib/domain'
 import { useRpc } from '../lib/query'
 import { assistant } from '../stores/assistant'
@@ -14,6 +14,7 @@ const ORDER: (CommandGroup | 'Pieces' | 'Collections')[] = [
   'Create',
   'Navigate',
   'Collections',
+  'Design',
   'Assistant',
   'View',
   'Preferences',
@@ -31,7 +32,7 @@ export function Palette() {
   const items = useMemo<PaletteItem[]>(
     () => [
       ...commands
-        .filter((c) => !c.hidden)
+        .filter((c) => !c.hidden && isAvailable(c))
         .map((c) => ({
           id: c.id,
           title: c.title,
@@ -65,7 +66,9 @@ export function Palette() {
         onSelect: () => void navigate({ to: '/collections/$id', params: { id: c.id } }),
       })),
     ],
-    [commands, pieces.data, collections.data, navigate],
+    // `open` re-reads each command's `when` every time the palette opens.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: see above
+    [open, commands, pieces.data, collections.data, navigate],
   )
 
   return (

@@ -1,5 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { authPost, type Client, client, signUp, type TestServer, testServer } from './test/harness'
+import {
+  BOOT_TIMEOUT,
+  authPost,
+  type Client,
+  client,
+  signUp,
+  type TestServer,
+  testServer,
+} from './test/harness'
 
 const PNG_1PX = Uint8Array.from(
   Buffer.from(
@@ -22,7 +30,7 @@ beforeAll(async () => {
   server = await testServer({ auth: 'accounts' })
   ada = await signUp(server, 'Ada Lovelace', 'ada@example.com')
   ben = await signUp(server, 'Ben Franklin', 'ben@example.com')
-})
+}, BOOT_TIMEOUT)
 afterAll(() => server.dispose())
 
 /** Invites `email` into Ada's org with `role`, accepts as `who`, and makes it their active org. */

@@ -114,7 +114,12 @@ async function failOrphan(db: Db, item: Unfinished): Promise<void> {
     case 'run':
       await db
         .update(t.agentRun)
-        .set({ status: 'failed', errorCode: 'interrupted', error: INTERRUPTED, endedAt: finishedAt })
+        .set({
+          status: 'failed',
+          errorCode: 'interrupted',
+          error: INTERRUPTED,
+          endedAt: finishedAt,
+        })
         .where(and(eq(t.agentRun.id, item.id), inArray(t.agentRun.status, LIVE_RUNS)))
       return
   }

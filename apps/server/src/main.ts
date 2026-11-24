@@ -1,7 +1,8 @@
 import { serve } from '@hono/node-server'
 import { createApp } from './app'
+import { compose } from './compose'
 
-const server = await createApp()
+const server = await createApp(compose())
 const { config } = server.runtime
 
 const http = serve(

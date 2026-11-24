@@ -171,10 +171,9 @@ export interface SearchService extends Service {
   ): Promise<SearchResult | null>
 }
 
-export type ImageGenRequest = Omit<
-  CommandParsedInput<'references.generate'>,
-  'boardId' | 'referenceIds'
-> & { references: Reference[] }
+export type ImageGenRequest = Omit<CommandParsedInput<'references.estimate'>, 'referenceIds'> & {
+  references: Reference[]
+}
 
 export interface ImageGenService extends Service {
   /**
@@ -362,7 +361,11 @@ export interface Mesh3DService extends Service {
     sctx: ServiceContext,
     stored: { providerJobId: string | null },
   ): Promise<void>
-  cancel(jobId: string, sctx: ServiceContext, stored: { providerJobId: string | null }): Promise<void>
+  cancel(
+    jobId: string,
+    sctx: ServiceContext,
+    stored: { providerJobId: string | null },
+  ): Promise<void>
 }
 
 /** Built by the render workstream's vision provider; see the note at the top of this file. */

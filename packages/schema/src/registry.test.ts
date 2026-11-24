@@ -74,9 +74,18 @@ describe('the command registry', () => {
       'freeform.analyze',
       'mesh3d.estimate',
       'shots.estimate',
+      'references.estimate',
+      'models.estimatePortraits',
       'scenes.update',
     ] as const)
       expect(needsConfirmation(name), name).toBe(false)
+    // Every paid generation can be priced before it is confirmed, with the same request.
+    const generate = commands['references.generate'].input.parse({ boardId: 'b', prompt: 'a ring' })
+    const { boardId: _, ...request } = generate
+    expect(commands['references.estimate'].input.parse({ prompt: 'a ring' })).toEqual(request)
+    expect(isToolCommand('references.estimate') && isToolCommand('models.estimatePortraits')).toBe(
+      true,
+    )
   })
 
   it('sets roles deliberately', () => {
@@ -107,6 +116,55 @@ describe('the command registry', () => {
     expect(commands['client.respond'].input.safeParse({ requestId: 'q' }).success).toBe(false)
     expect(commands['references.similar'].input.safeParse({}).success).toBe(false)
   })
+
+  it('refuses inputs that would be silently misread', () => {
+    const save = commands['references.save'].input
+    const item = (x: object) => save.safeParse({ boardId: 'b', items: [x] }).success
+    expect(item({ url: 'https://example.com/a' })).toBe(true)
+    expect(item({ url: 'https://example.com/a', note: 'why' })).toBe(true)
+    expect(item({ note: 'just a thought' })).toBe(true)
+    expect(item({ swatch: { hex: '#AABBCC' }, pieceId: 'p' })).toBe(true)
+    expect(item({ url: 'https://example.com/a', swatch: { hex: '#AABBCC' } })).toBe(false)
+    expect(item({ assetId: 'a', url: 'https://example.com/a' })).toBe(false)
+    expect(item({ title: 'nothing to save' })).toBe(false)
+
+    // Nothing to change is a bad request, not an empty write.
+    expect(commands['renders.update'].input.safeParse({ id: 'r' }).success).toBe(false)
+    expect(commands['renders.update'].input.safeParse({ id: 'r', starred: true }).success).toBe(
+      true,
+    )
+    const ref = commands['references.update'].input
+    expect(ref.safeParse({ id: 'r' }).success).toBe(false)
+    expect(ref.safeParse({ id: 'r', attestation: true }).success).toBe(false)
+    expect(ref.safeParse({ id: 'r', rights: 'own', attestation: true }).success).toBe(true)
+  })
+
+  it('changes only the card fields a partial model edit gives', () => {
+    const update = commands['models.update'].input.parse({ id: 'm', card: { hair: 'braids' } })
+    expect(update.card).toEqual({ hair: 'braids' })
+    const created = commands['models.create'].input.parse({
+      name: 'Mara',
+      attestedSynthetic: true,
+      card: {
+        description: '',
+        ageRange: '25-34',
+        skinTone: '',
+        hair: '',
+        build: '',
+        styling: '',
+        ringSizeUs: null,
+        wristMm: null,
+        neckMm: null,
+      },
+    })
+    expect(created.card).toMatchObject({
+      monkTone: null,
+      undertone: null,
+      eyes: '',
+      marks: '',
+      handLengthMm: null,
+    })
+  })
 })
 
 describe('client tools', () => {
@@ -120,6 +178,16 @@ describe('client tools', () => {
     expect(
       clientTools['viewport.capture'].input.safeParse({ pieceId: 'p', views: [] }).success,
     ).toBe(false)
+  })
+
+  it('navigate to exactly one place, selecting only on a piece', () => {
+    const go = (x: object) => clientTools['ui.navigate'].input.safeParse(x).success
+    expect(go({ pieceId: 'p', tab: 'design', selectNodeIds: ['band'] })).toBe(true)
+    expect(go({ boardId: 'b' })).toBe(true)
+    expect(go({})).toBe(false)
+    expect(go({ tab: 'design' })).toBe(false)
+    expect(go({ pieceId: 'p', boardId: 'b' })).toBe(false)
+    expect(go({ boardId: 'b', selectNodeIds: ['band'] })).toBe(false)
   })
 })
 
@@ -208,6 +276,7 @@ describe('entities', () => {
 
   it('keeps brand models adult', () => {
     const card = BrandModelSchema.shape.card
+    const newCard = commands['models.create'].input.shape.card
     const base = {
       description: '',
       skinTone: '',
@@ -218,9 +287,12 @@ describe('entities', () => {
       wristMm: null,
       neckMm: null,
     }
-    expect(card.safeParse({ ...base, ageRange: '25-34' }).success).toBe(true)
-    expect(card.safeParse({ ...base, ageRange: '16-17' }).success).toBe(false)
-    expect(card.parse({ ...base, ageRange: '25-34' })).toMatchObject({
+    expect(newCard.safeParse({ ...base, ageRange: '25-34' }).success).toBe(true)
+    expect(newCard.safeParse({ ...base, ageRange: '16-17' }).success).toBe(false)
+    expect(card.partial().safeParse({ ageRange: '16-17' }).success).toBe(false)
+    // The stored card has no defaults (a partial edit must not fill them); a new card does.
+    expect(card.safeParse({ ...base, ageRange: '25-34' }).success).toBe(false)
+    expect(newCard.parse({ ...base, ageRange: '25-34' })).toMatchObject({
       monkTone: null,
       eyes: '',
       marks: '',

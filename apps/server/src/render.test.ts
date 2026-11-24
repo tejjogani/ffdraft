@@ -4,7 +4,15 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { putAsset } from './assets/assets'
 import type { Ctx } from './context'
 import type { JobHandle, ModelShotPatch, Services } from './services'
-import { authPost, type Client, client, signUp, type TestServer, testServer } from './test/harness'
+import {
+  BOOT_TIMEOUT,
+  authPost,
+  type Client,
+  client,
+  signUp,
+  type TestServer,
+  testServer,
+} from './test/harness'
 
 const card = {
   description: 'Warm, editorial',
@@ -26,7 +34,7 @@ describe('saved shots and takes', () => {
     server = await testServer()
     api = client(server)
     ctx = await server.runtime.context(server.runtime.local!)
-  })
+  }, BOOT_TIMEOUT)
   afterAll(() => server.dispose())
 
   it('keeps shots per piece and house shots, adjusted by re-validated merge patches', async () => {
@@ -264,6 +272,12 @@ describe('brand models and on-model images', () => {
             usd: 0.1 * req.count,
             seconds: 40,
           }),
+          estimatePortraits: async (_m, views) => ({
+            provider: 'fake',
+            model: 'img-1',
+            usd: 0.05 * views.length,
+            seconds: 20,
+          }),
           submitShot,
           cancelShot: async () => {},
           exportShot,
@@ -272,7 +286,7 @@ describe('brand models and on-model images', () => {
     })
     api = client(server)
     ctx = await server.runtime.context(server.runtime.local!)
-  })
+  }, BOOT_TIMEOUT)
   afterAll(() => server.dispose())
 
   it('approves a model as a person, freezing it and bumping its version', async () => {
@@ -283,6 +297,9 @@ describe('brand models and on-model images', () => {
       recipe: null,
       card: { monkTone: null, eyes: '' },
     })
+    expect(
+      await api.call('models.estimatePortraits', { id: model.id, views: ['face', 'hands'] }),
+    ).toEqual({ provider: 'fake', model: 'img-1', usd: 0.1, seconds: 20 })
     const portraits = await api.call('models.generatePortraits', { id: model.id, views: ['face'] })
     expect(portraits.recipe).toEqual({ provider: 'fake', model: 'img-1', seed: 3 })
 
@@ -330,7 +347,11 @@ describe('brand models and on-model images', () => {
       marks: 'freckles',
       handLengthMm: 180,
     }
-    const model = await api.call('models.create', { name: 'Ada', card: full, attestedSynthetic: true })
+    const model = await api.call('models.create', {
+      name: 'Ada',
+      card: full,
+      attestedSynthetic: true,
+    })
     const edited = await api.call('models.update', { id: model.id, card: { hair: 'braids' } })
     expect(edited.card).toEqual({ ...full, hair: 'braids' })
   })
@@ -433,7 +454,7 @@ describe('across people and organisations', () => {
     )!
     await authPost(dee, '/organization/accept-invitation', { invitationId: invitation.id })
     await authPost(dee, '/organization/set-active', { organizationId: orgId })
-  })
+  }, BOOT_TIMEOUT)
   afterAll(() => server.dispose())
 
   it('lets only the person who queued a browser take deliver it, and hides it from other orgs', async () => {

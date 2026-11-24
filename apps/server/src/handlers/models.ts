@@ -138,15 +138,22 @@ export const models: HandlerGroup<'models' | 'shots'> = {
     })
   },
 
+  'models.estimatePortraits': async (ctx, { id, views }) => {
+    const model = toBrandModel(await getModel(ctx, id))
+    return ctx.services.get('onModel').estimatePortraits(model, views, serviceContext(ctx))
+  },
+
   'models.generatePortraits': async (ctx, { id, views }) => {
     const model = toBrandModel(await getModel(ctx, id))
     if (model.status === 'approved')
       throw conflict(
         'Approved models keep their portraits; set the model back to draft to regenerate',
       )
-    await assertBudget(ctx)
+    const onModel = ctx.services.get('onModel')
     const sctx = serviceContext(ctx)
-    const generated = await ctx.services.get('onModel').portraits(model, views, sctx)
+    // The figure the person confirmed is the one checked against the budget.
+    await assertBudget(ctx, (await onModel.estimatePortraits(model, views, sctx)).usd)
+    const generated = await onModel.portraits(model, views, sctx)
     const fresh: BrandModel['portraits'] = []
     for (const { view, file } of generated.portraits)
       fresh.push({ view, assetId: (await putAsset(ctx, { ...file, kind: 'image' })).id })
@@ -192,7 +199,8 @@ export const models: HandlerGroup<'models' | 'shots'> = {
     ])
     if (model.status !== 'approved')
       throw conflict('Approve this brand model before making on-model images with it')
-    await assertBudget(ctx)
+    const subject = { model: toBrandModel(model), piece: await toPiece(ctx, piece) }
+    await assertBudget(ctx, (await onModel.estimate(input, subject, serviceContext(ctx))).usd)
     const rows = await ctx.repo.shots.insertMany(
       Array.from({ length: input.count }, () => ({
         id: createId('sht'),
@@ -210,7 +218,6 @@ export const models: HandlerGroup<'models' | 'shots'> = {
       })),
     )
     const shots = await toShots(ctx, rows)
-    const subject = { model: toBrandModel(model), piece: await toPiece(ctx, piece) }
     for (const row of rows) announce(ctx, row)
     for (const [i, shot] of shots.entries()) {
       try {

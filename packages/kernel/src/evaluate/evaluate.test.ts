@@ -1,4 +1,11 @@
-import { applyOps, buildDesign, designFrom, metalMassG, TEMPLATES } from '@pave/schema'
+import {
+  applyOps,
+  buildDesign,
+  designFrom,
+  metalMassG,
+  type NodeInput,
+  TEMPLATES,
+} from '@pave/schema'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { QUALITY } from '../core'
 import { createKernel } from '../kernel'
@@ -196,6 +203,34 @@ describe('incremental evaluation', () => {
     expect(production.parts[0]!.volumeMm3).toBeCloseTo(6 * 6 * 3 - Math.PI * 1.5 * 1.5 * 3, 2)
   })
 
+  it('a body of separate shells stays one part; only shells that touch other metal are fused', async () => {
+    const sphere = (id: string, x: number): NodeInput => ({
+      id,
+      kind: 'primitive',
+      shape: 'sphere',
+      size: [4, 4, 4],
+      transform: { position: [x, 0, 0], rotation: [0, 0, 0], scale: 1 },
+    })
+    const beads: NodeInput[] = [
+      sphere('a', 0),
+      sphere('b', 10),
+      sphere('c', 20),
+      { id: 'beads', kind: 'boolean', op: 'union', target: 'a', tools: ['b', 'c'] },
+    ]
+    const ball = (4 / 3) * Math.PI * 8
+    const alone = await evaluate(evaluator, designFrom('other', [...beads]), 'production')
+    expect(alone.parts.map((p) => [p.id, p.nodeId])).toEqual([['au18k-yellow:beads', 'beads']])
+    expect(alone.parts[0]!.volumeMm3 / (3 * ball)).toBeCloseTo(1, 2)
+
+    // A bar through the first bead: that bead fuses with the bar, the other two stay loose.
+    const bar: NodeInput = { id: 'bar', kind: 'primitive', shape: 'box', size: [2, 2, 12] }
+    const joined = await evaluate(evaluator, designFrom('other', [...beads, bar]), 'production')
+    expect(joined.parts.map((p) => p.nodeId).sort()).toEqual(['bar', 'beads'])
+    const loose = joined.parts.find((p) => p.id === 'au18k-yellow:beads')!
+    expect(loose.volumeMm3 / (2 * ball)).toBeCloseTo(1, 2)
+    expect(joined.report.metals[0]!.volumeMm3).toBeGreaterThan(3 * ball)
+  })
+
   it('does not leak WASM memory over many evaluations', async () => {
     const design = template('solitaire')
     const heap = () => runtime().oc.wasmMemory.buffer.byteLength
@@ -228,6 +263,7 @@ describe('templates', () => {
     'signet',
     'pendant-solitaire',
     'studs',
+    'cuban',
   ]
   it.each(ids)('%s evaluates at both detail levels without a failed feature', async (id) => {
     const kernel = createKernel()

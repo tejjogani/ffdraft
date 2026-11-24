@@ -9,6 +9,8 @@ import { type Design, METALS, type MetalId } from '@pave/schema'
 import type { Manifold } from 'manifold-3d'
 import {
   type Body,
+  IDENTITY,
+  lazySolid,
   type MetalSpec,
   type NodeResult,
   type Quality,
@@ -338,30 +340,107 @@ export function assembleProduction(
         ? temp(fuse(batch(everywhere, quality, temp)).translate(GENERAL_POSITION))
         : null
     const parts: ScenePart[] = []
+    const cutterBoxes = [...everywhere, ...[...groups.values()].flatMap((g) => g.late)].map((c) =>
+      c.bounds(),
+    )
     for (const [material, group] of groups) {
-      let fused = fuse([...batch(group.solids, quality, temp), ...group.precut])
-      if (seats) fused = temp(fused.subtract(seats))
-      if (group.late.length > 0)
-        fused = temp(mf.Manifold.union([fused, ...batch(group.late, quality, temp)]))
-      const shells = fused
-        .decompose()
-        .map((raw) => {
-          const shell = castable(raw)
-          return { shell, volume: shell.volume() }
+      // A mesh body can hold many separate shells (the links of a chain). Shells that touch
+      // nothing outside their own body need no boolean at all — and fusing a thousand links
+      // with a pendant they never touch would take most of a minute — so they are set aside
+      // as "loose" and rejoin their body as one part at the end.
+      const single: Solid[] = []
+      const multi = new Map<Solid, { tris: IndexedTriangles; shells: Shells; loose: Set<number> }>()
+      for (const solid of group.solids) {
+        const tris = solid.triangles(quality)
+        const found = shellsIn(tris)
+        // Dust shells (slivers a mesh pipeline left behind) do not make a body "multi-shell".
+        if (found.volumes.filter((v) => v > DUST_MM3).length > 1)
+          multi.set(solid, { tris, shells: found, loose: new Set() })
+        else single.push(solid)
+      }
+      const singleBoxes = single.map((solid) => solid.bounds())
+      const precutBoxes = group.precut.map(boundsOfManifold)
+      /** Shells that might touch something else and so go through the fuse. */
+      const busyShells: {
+        home: Solid
+        index: number
+        manifold: Manifold
+        box: Bounds
+        volume: number
+      }[] = []
+      for (const [solid, body] of multi) {
+        const foreign = [
+          ...singleBoxes,
+          ...precutBoxes,
+          ...cutterBoxes,
+          ...[...multi].flatMap(([other, b]) => (other === solid ? [] : b.shells.boxes)),
+        ]
+        body.shells.boxes.forEach((box, index) => {
+          if (body.shells.volumes[index]! <= DUST_MM3) return
+          if (!foreign.some((f) => boundsOverlap(f, box))) {
+            body.loose.add(index)
+            return
+          }
+          const manifold = temp(
+            manifoldFromTriangles(shellTriangles(body.tris, body.shells, (i) => i === index)),
+          )
+          busyShells.push({ home: solid, index, manifold, box, volume: manifold.volume() })
         })
-        .sort((a, b) => b.volume - a.volume)
-      const kept = shells.filter((s) => s.volume > DUST_MM3)
-      for (const s of shells) if (s.volume <= DUST_MM3) s.shell.delete()
+      }
+      /** The busy shell a fused shell is identical to, if the fuse left it untouched. */
+      const untouched = (box: Bounds, volume: number) =>
+        busyShells.find(
+          (u) =>
+            Math.abs(u.volume - volume) <= 1e-3 * u.volume &&
+            [0, 1, 2].every(
+              (k) =>
+                Math.abs(u.box.min[k]! - box.min[k]!) < 5e-3 &&
+                Math.abs(u.box.max[k]! - box.max[k]!) < 5e-3,
+            ),
+        )
+
+      const busy = [
+        ...batch(single, quality, temp),
+        ...group.precut,
+        ...busyShells.map((b) => b.manifold),
+      ]
+      const shells: { shell: Manifold; volume: number }[] = []
+      if (busy.length > 0) {
+        let fused = fuse(busy)
+        if (seats) fused = temp(fused.subtract(seats))
+        if (group.late.length > 0)
+          fused = temp(mf.Manifold.union([fused, ...batch(group.late, quality, temp)]))
+        for (const raw of fused.decompose()) {
+          const same = untouched(boundsOfManifold(raw), raw.volume())
+          if (same) {
+            // It only passed near the rest of the piece: back with its siblings, as it was.
+            multi.get(same.home)!.loose.add(same.index)
+            raw.delete()
+            continue
+          }
+          const shell = castable(raw)
+          const volume = shell.volume()
+          if (volume > DUST_MM3) shells.push({ shell, volume })
+          else shell.delete()
+        }
+        shells.sort((a, b) => b.volume - a.volume)
+      }
+      /** Bodies whose shells (all or some) stay loose, each to become one part. */
+      const loose = new Map([...multi].filter(([, body]) => body.loose.size > 0))
+      const kept = shells
+      // Sources of bodies that became a loose part belong to that part; the rest are shared
+      // out among the fused shells.
+      const fusedSources = group.sources.filter((source) => !loose.has(source.body.solid))
       const boxes = kept.map(({ shell }) => boundsOfManifold(shell))
       // Each source body belongs to the shell whose box holds its centre (the nearest one when
-      // several do — chain links nest in each other's boxes).
+      // several do).
       const centre = (b: Bounds): [number, number, number] => [
         (b.min[0] + b.max[0]) / 2,
         (b.min[1] + b.max[1]) / 2,
         (b.min[2] + b.max[2]) / 2,
       ]
       const centres = boxes.map(centre)
-      const sourceCentres = group.sources.map((source) => centre(source.body.solid.bounds()))
+      const sourceCentres = fusedSources.map((source) => centre(source.body.solid.bounds()))
       const nearest = (
         p: readonly number[],
         candidates: readonly (readonly number[])[],
@@ -387,16 +466,18 @@ export function assembleProduction(
         const held = nearest(p, centres, inside)
         return held >= 0 ? held : Math.max(0, nearest(p, centres))
       })
-      kept.forEach(({ shell, volume }, i) => {
-        const sources = group.sources.filter((_, k) => owner[k] === i)
-        const solid = solidFromManifold(shell)
-        // Add back what tessellation shaved off the exact bodies (second-order for cutters).
-        const deficit = sources.reduce(
+      // Add back what tessellation shaved off the exact bodies (second-order for cutters).
+      const deficitOf = (sources: readonly Source[]) =>
+        sources.reduce(
           (sum, s) => sum + s.body.solid.volume() - meshVolume(s.body.solid.triangles(quality)),
           0,
         )
+      kept.forEach(({ shell, volume }, i) => {
+        const sources = fusedSources.filter((_, k) => owner[k] === i)
+        const solid = solidFromManifold(shell)
         // A shell that no body's centre fell into is still named after the body nearest to it.
-        const named = sources[0] ?? group.sources[nearest(centres[i]!, sourceCentres)]
+        const named =
+          sources[0] ?? fusedSources[nearest(centres[i]!, sourceCentres)] ?? group.sources[0]
         const first = named && results.get(named.nodeId)
         const part = partOf(
           `${material}:${i}`,
@@ -406,11 +487,32 @@ export function assembleProduction(
           group.spec,
           [solid],
           quality,
-          volume + deficit,
+          volume + deficitOf(sources),
         )
         part.exact = sources.length > 0 && sources.every((s) => s.body.solid.exact)
         parts.push({ part, fused: solid, sources })
       })
+      for (const [home, body] of loose) {
+        const sources = group.sources.filter((source) => source.body.solid === home)
+        const node = results.get(sources[0]!.nodeId)!
+        // Untouched bodies are passed on as they are — no boolean, no re-tessellation.
+        const whole = body.loose.size === body.shells.boxes.length
+        const kept = whole ? null : shellTriangles(body.tris, body.shells, (i) => body.loose.has(i))
+        const solid = kept ? lazySolid({ mesh: () => kept }) : home.transformed(IDENTITY)
+        const volume = kept ? meshVolume(kept) : home.volume()
+        const part = partOf(
+          `${material}:${node.id}`,
+          node.id,
+          rev,
+          labelOf(node.node),
+          group.spec,
+          [solid],
+          quality,
+          volume,
+        )
+        part.exact = whole && home.exact
+        parts.push({ part, fused: solid, sources })
+      }
     }
     return {
       parts,
@@ -440,6 +542,89 @@ function castable(shell: Manifold): Manifold {
   } catch {
     return tidy
   }
+}
+
+/** The separate shells of a mesh: which shell each vertex belongs to, and each shell's box. */
+interface Shells {
+  ofVertex: Uint32Array
+  boxes: Bounds[]
+  /** Enclosed volume of each shell, mm³. */
+  volumes: number[]
+}
+
+/** Finds the connected shells of a welded mesh (union-find over its vertices). */
+function shellsIn({ positions, indices }: IndexedTriangles): Shells {
+  const count = positions.length / 3
+  const parent = new Uint32Array(count)
+  for (let i = 0; i < count; i++) parent[i] = i
+  const find = (v: number): number => {
+    while (parent[v] !== v) {
+      parent[v] = parent[parent[v]!]!
+      v = parent[v]!
+    }
+    return v
+  }
+  for (let t = 0; t < indices.length; t += 3) {
+    const a = find(indices[t]!)
+    parent[find(indices[t + 1]!)] = a
+    parent[find(indices[t + 2]!)] = a
+  }
+  const shellOfRoot = new Map<number, number>()
+  const ofVertex = new Uint32Array(count)
+  const boxes: Bounds[] = []
+  for (let v = 0; v < count; v++) {
+    const root = find(v)
+    let shell = shellOfRoot.get(root)
+    if (shell === undefined) {
+      shell = boxes.length
+      shellOfRoot.set(root, shell)
+      boxes.push({ min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] })
+    }
+    ofVertex[v] = shell
+    const box = boxes[shell]!
+    for (let k = 0; k < 3; k++) {
+      const value = positions[v * 3 + k]!
+      if (value < box.min[k]!) box.min[k] = value
+      if (value > box.max[k]!) box.max[k] = value
+    }
+  }
+  const volumes = boxes.map(() => 0)
+  for (let t = 0; t < indices.length; t += 3) {
+    const a = indices[t]! * 3
+    const b = indices[t + 1]! * 3
+    const c = indices[t + 2]! * 3
+    volumes[ofVertex[indices[t]!]!]! +=
+      (positions[a]! *
+        (positions[b + 1]! * positions[c + 2]! - positions[b + 2]! * positions[c + 1]!) -
+        positions[a + 1]! *
+          (positions[b]! * positions[c + 2]! - positions[b + 2]! * positions[c]!) +
+        positions[a + 2]! *
+          (positions[b]! * positions[c + 1]! - positions[b + 1]! * positions[c]!)) /
+      6
+  }
+  return { ofVertex, boxes, volumes }
+}
+
+/** The triangles of the shells that `keep` selects, with their vertices renumbered. */
+function shellTriangles(
+  tris: IndexedTriangles,
+  shells: Shells,
+  keep: (shell: number) => boolean,
+): IndexedTriangles {
+  const { positions, indices } = tris
+  const renumbered = new Int32Array(positions.length / 3).fill(-1)
+  const outPositions: number[] = []
+  const outIndices: number[] = []
+  for (let t = 0; t < indices.length; t++) {
+    const v = indices[t]!
+    if (!keep(shells.ofVertex[v]!)) continue
+    if (renumbered[v]! < 0) {
+      renumbered[v] = outPositions.length / 3
+      outPositions.push(positions[v * 3]!, positions[v * 3 + 1]!, positions[v * 3 + 2]!)
+    }
+    outIndices.push(renumbered[v]!)
+  }
+  return { positions: new Float32Array(outPositions), indices: new Uint32Array(outIndices) }
 }
 
 function boundsOfManifold(m: Manifold): Bounds {

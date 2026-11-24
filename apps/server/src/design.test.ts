@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { putAsset } from './assets/assets'
 import type { ServerEvent } from './events'
-import { type Client, client, type TestServer, testServer } from './test/harness'
+import { BOOT_TIMEOUT, type Client, client, type TestServer, testServer } from './test/harness'
 import { traces } from './traces'
 
 let server: TestServer
@@ -10,7 +10,7 @@ let api: Client
 beforeAll(async () => {
   server = await testServer()
   api = client(server)
-})
+}, BOOT_TIMEOUT)
 afterAll(() => server.dispose())
 
 const gem = (id: string, x: number) => ({
@@ -216,6 +216,82 @@ describe('undo', () => {
     expect(
       (await api.fail('design.revert', { pieceId: piece.id, seq: 1, runId: run.id })).status,
     ).toBe(400)
+  })
+
+  it('undoes a run once, and never over a later edit to the same features', async () => {
+    const piece = await api.call('pieces.create', { templateId: 'wedding-band' })
+    const ctx = await server.runtime.context(server.runtime.local!)
+    const run = await traces.startRun(ctx, { model: 'm', pieceId: piece.id })
+    const agent = await server.runtime.context({
+      ...server.runtime.local!,
+      actor: { type: 'agent', runId: run.id, toolCallId: 't1' },
+    })
+    const widen = (widthTop: number) =>
+      server.runtime.invoke(
+        'design.apply',
+        { pieceId: piece.id, label: `Width ${widthTop}`, ops: [{ t: 'update', id: 'band', patch: { widthTop } }] },
+        agent,
+      )
+    await widen(5)
+    await widen(6)
+    await api.call('design.revert', { pieceId: piece.id, runId: run.id })
+    expect((await api.call('pieces.get', { id: piece.id })).design.nodes.band).toMatchObject({
+      widthTop: 4,
+    })
+    // A second "Undo all" (double click, retry) finds nothing left to undo.
+    const again = await api.fail('design.revert', { pieceId: piece.id, runId: run.id })
+    expect([again.status, again.error.reason]).toEqual([409, 'already_undone'])
+    expect((await api.call('traces.run', { id: run.id })).feedback).toHaveLength(2)
+
+    // The run edits again, then a person corrects the same field: the person wins.
+    await widen(7)
+    await api.call('design.apply', {
+      pieceId: piece.id,
+      label: 'Mine',
+      ops: [{ t: 'update', id: 'band', patch: { widthTop: 3 } }],
+    })
+    const clash = await api.fail('design.revert', { pieceId: piece.id, runId: run.id })
+    expect([clash.status, clash.error.reason, clash.error.nodeIds]).toEqual([
+      409,
+      'edited_since',
+      ['band'],
+    ])
+    const { design, version } = await api.call('pieces.get', { id: piece.id })
+    expect(design.nodes.band).toMatchObject({ widthTop: 3 })
+
+    // Once the person's edit is undone, the run's can be too; then undo is redo-able by seq.
+    await api.call('design.revert', { pieceId: piece.id, seq: version })
+    const last = await api.call('design.revert', { pieceId: piece.id, runId: run.id })
+    expect(last.change.label).toBe('Undo assistant edits: Width 7')
+    expect((await api.call('pieces.get', { id: piece.id })).design.nodes.band).toMatchObject({
+      widthTop: 4,
+    })
+    await api.call('design.revert', { pieceId: piece.id, seq: last.version })
+    expect((await api.call('pieces.get', { id: piece.id })).design.nodes.band).toMatchObject({
+      widthTop: 7,
+    })
+    await api.call('design.revert', { pieceId: piece.id, runId: run.id })
+  })
+
+  it('records feedback only when a person undoes an assistant’s edit', async () => {
+    const piece = await api.call('pieces.create', { templateId: 'wedding-band' })
+    const ctx = await server.runtime.context(server.runtime.local!)
+    const run = await traces.startRun(ctx, { model: 'm', pieceId: piece.id })
+    const agent = await server.runtime.context({
+      ...server.runtime.local!,
+      actor: { type: 'agent', runId: run.id, toolCallId: 't1' },
+    })
+    const { version } = await server.runtime.invoke(
+      'design.apply',
+      { pieceId: piece.id, label: 'Add a', ops: [gem('a', 0)] },
+      agent,
+    )
+    // The assistant backing out its own edit is not feedback on it.
+    await server.runtime.invoke('design.revert', { pieceId: piece.id, seq: version }, agent)
+    expect((await api.call('traces.run', { id: run.id })).feedback).toEqual([])
+    // Its own undo is not one of its edits, and the edit is already undone.
+    const none = await api.fail('design.revert', { pieceId: piece.id, runId: run.id })
+    expect(none.error.reason).toBe('already_undone')
   })
 
   it('marks a guarded undo sent through design.apply, and checks what it reverts', async () => {

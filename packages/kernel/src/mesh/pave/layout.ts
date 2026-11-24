@@ -58,7 +58,9 @@ const SEAT_DEPTH_PER_MM = 0.65
 const CONVEX_CAP = 3
 const CONCAVE_CAP = 5
 /** Construction slack so snapping onto a curved surface never closes a gap below spec. */
-const SLACK = 0.004
+const SLACK = 0.012
+/** Overlaps up to this share of a stone are construction drift, settled rather than refused. */
+const DRIFT = 0.06
 const EPS = 1e-9
 
 export function layoutPave(surface: PaveSurface, options: LayoutOptions): Layout {
@@ -109,6 +111,7 @@ class Packer {
       (sum, s) => sum + Math.PI * (s.diameter / 2 + this.o.gap / 2) ** 2,
       0,
     )
+    ;(globalThis as any).__stones = this.stones
     return { stones: this.select(full), packedArea: full }
   }
 
@@ -172,6 +175,38 @@ class Packer {
       if (d2 < (min - EPS) * (min - EPS)) ok = false
     })
     return ok
+  }
+
+  /**
+   * Places a stone of diameter d at a candidate footprint, first nudging it out of overlaps of up
+   * to `DRIFT` of its diameter. Positions built from neighbours carry their rounding and the
+   * curvature of the surface along; without this, a stone that misses a third neighbour by a few
+   * microns is rejected and leaves a hole in an otherwise perfect honeycomb. Returns -1 when it
+   * still does not fit.
+   */
+  private placeSettled(hit: { sample: number; p: Vec3; n: Vec3 }, d: number): number {
+    let cur = hit
+    for (let iter = 0; iter < 4; iter++) {
+      const c = this.girdle(cur.p, cur.n, d)
+      let push: Vec3 = [0, 0, 0]
+      let worst = 0
+      this.grid.near(c[0], c[1], c[2], d / 2 + this.largest / 2 + this.o.gap, (j, d2) => {
+        const other = this.stones[j]!
+        const min = (d + other.diameter) / 2 + this.o.gap
+        if (d2 >= (min - EPS) * (min - EPS)) return
+        const dist = Math.sqrt(d2)
+        worst = Math.max(worst, min - dist)
+        const away = dist > EPS ? scale(sub(c, other.position), 1 / dist) : cur.n
+        push = add(push, scale(away, min - dist + SLACK))
+      })
+      if (process.env.TRACE) (globalThis as any).__lastwhy = 'settle iter ' + iter + ' worst ' + worst.toFixed(4) + ' push ' + push.map((x) => x.toFixed(4))
+      if (worst === 0) return this.place(cur.p, cur.n, d, cur.sample)
+      if (worst > DRIFT * d) { ((globalThis as any).__viol ??= []).push(worst); if (process.env.TRACE) { const ids: number[] = []; this.grid.near(c[0], c[1], c[2], d / 2 + this.largest / 2 + this.o.gap, (j, d2) => { if (Math.sqrt(d2) < (d + this.stones[j]!.diameter) / 2 + this.o.gap) ids.push(j) }); (globalThis as any).__lastwhy = 'blocked by ' + ids.join(',') + ' worst ' + worst.toFixed(3) }; return -1 }
+      const next = this.snap(add(cur.p, sub(push, scale(cur.n, dot(push, cur.n)))))
+      if (!next || this.sizeFor(next.sample, next.p) < d - EPS) return -1
+      cur = next
+    }
+    return -1
   }
 
   private place(p: Vec3, n: Vec3, d: number, sample: number): number {
@@ -266,6 +301,7 @@ class Packer {
     const d0 = this.sizeFor(root.sample, root.p)
     if (d0 === 0 || !this.fits(root.p, root.n, d0)) return
     const a = this.place(root.p, root.n, d0, root.sample)
+    if (process.env.TRACE) console.log('seed', a, root.p.map((x) => x.toFixed(2)), d0, 'rows', rows.map((x) => x.toFixed(2)))
 
     // The second stone sets the row direction; try the six lattice directions in turn.
     let b = -1
@@ -276,6 +312,7 @@ class Packer {
       )
       b = this.besideAlong(a, dir)
     }
+    if (process.env.TRACE) console.log('second', b, (globalThis as any).__lastwhy)
     if (b < 0) return
 
     // FIFO of stone pairs: (i, j, k) means "place a stone tangent to i and j, on the side away
@@ -287,6 +324,7 @@ class Packer {
       let grew = false
       for (const side of away < 0 ? [1, -1] : [this.sideAwayFrom(i, j, away)]) {
         const k = this.tangentTo(i, j, side)
+        if (process.env.TRACE && k < 0 && String((globalThis as any).__lastwhy).startsWith('settle')) console.log('pair', i, j, away, side, '->', k, (globalThis as any).__lastwhy)
         if (k < 0) continue
         queue.push([i, k, j], [k, j, i])
         grew = true
@@ -317,7 +355,7 @@ class Packer {
       const d = this.sizeFor(hit.sample, hit.p)
       if (d === 0) return -1
       if (d / 2 >= r - EPS)
-        return this.fits(hit.p, hit.n, 2 * r) ? this.place(hit.p, hit.n, 2 * r, hit.sample) : -1
+        return this.placeSettled(hit, 2 * r)
       r = d / 2
     }
     return -1
@@ -334,13 +372,17 @@ class Packer {
   /** Places a stone tangent to stones i and j on `side`; returns its index or -1. */
   private tangentTo(i: number, j: number, side: number): number {
     let r = this.largest / 2
+    const G = ((globalThis as any).__why ??= {})
+    const bump = (k: string) => { G[k] = (G[k] ?? 0) + 1; (globalThis as any).__lastwhy = k }
     for (let attempt = 0; attempt < 4; attempt++) {
       const hit = this.tangentPoint(i, j, r, side)
-      if (!hit) return -1
+      if (!hit) { bump('nohit'); return -1 }
       const d = this.sizeFor(hit.sample, hit.p)
-      if (d === 0) return -1
-      if (d / 2 >= r - EPS)
-        return this.fits(hit.p, hit.n, 2 * r) ? this.place(hit.p, hit.n, 2 * r, hit.sample) : -1
+      if (d === 0) { bump('size0:' + this.sizeAt(hit.sample) + ':' + (this.surface.thickness(hit.sample)).toFixed(2) + ':' + this.o.edgeDistance(hit.p).toFixed(2)); return -1 }
+      if (d / 2 >= r - EPS) {
+        const k = this.placeSettled(hit, 2 * r)
+        if (k >= 0) bump('ok'); else { G.nofit = (G.nofit ?? 0) + 1 }; return k }
+      bump('shrink:' + d + ':' + this.sizeAt(hit.sample) + ':th' + this.surface.thickness(hit.sample).toFixed(2) + ':e' + this.o.edgeDistance(hit.p).toFixed(2))
       r = d / 2
     }
     return -1
@@ -392,10 +434,12 @@ class Packer {
       this.tick()
       const p = this.surface.point(i)
       const n = this.surface.normal(i)
-      if (!this.fits(p, n, size) || this.sizeFor(i, p) < size - EPS) continue
+      if (this.sizeFor(i, p) < size - EPS) continue
+      // A void that only just takes the stone has a single spot where it fits, which a sample
+      // seldom hits: so look for the spot tangent to the nearest stones even when p is taken.
       const snug = this.nestle(p, size)
       if (snug) this.place(snug.p, snug.n, size, snug.sample)
-      else this.place(p, n, size, i)
+      else if (this.fits(p, n, size)) this.place(p, n, size, i)
     }
   }
 

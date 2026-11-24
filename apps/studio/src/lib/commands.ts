@@ -8,7 +8,14 @@ import { isMac } from '@pave/ui'
 import type { LucideIcon } from 'lucide-react'
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 
-export type CommandGroup = 'Navigate' | 'Create' | 'Piece' | 'View' | 'Preferences' | 'Assistant'
+export type CommandGroup =
+  | 'Navigate'
+  | 'Create'
+  | 'Piece'
+  | 'Design'
+  | 'View'
+  | 'Preferences'
+  | 'Assistant'
 
 export interface Command {
   id: string
@@ -19,6 +26,13 @@ export interface Command {
   keywords?: string[]
   /** Hidden from the palette (shortcut-only commands). */
   hidden?: boolean
+  /** Only offered (palette and shortcut) while this returns true, e.g. while a panel has focus. */
+  when?: () => boolean
+  /**
+   * Whether the shortcut fires while typing in a text field. Defaults to true for `mod+` chords
+   * and false for bare keys; set false for chords the field itself owns (`mod+z` is text undo).
+   */
+  inEditable?: boolean
   run: () => void
 }
 
@@ -64,6 +78,7 @@ export function useRegisterCommands(commands: Command[]): void {
         latest.current.map((c) => ({
           ...c,
           run: () => latest.current.find((x) => x.id === c.id)?.run(),
+          ...(c.when ? { when: () => latest.current.find((x) => x.id === c.id)?.when?.() ?? false } : {}),
         })),
       ),
     [signature],
@@ -80,7 +95,13 @@ export function useCommands(): Command[] {
   )
 }
 
-export const runCommand = (id: string): void => registry.get(id)?.run()
+/** Whether a command is currently offered (its `when`, if any, holds). */
+export const isAvailable = (c: Command): boolean => c.when?.() ?? true
+
+export const runCommand = (id: string): void => {
+  const c = registry.get(id)
+  if (c && isAvailable(c)) c.run()
+}
 
 interface Chord {
   key: string
@@ -102,11 +123,19 @@ const parse = (shortcut: string): Chord => {
 const isEditable = (t: EventTarget | null) =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))
 
+/**
+ * The layout-independent key: `code` keeps letter shortcuts working on non-Latin layouts and
+ * with ⌥ held on macOS, and keeps digits digits under Shift (`shift+1` is `!` as a `key`).
+ */
+function keyOf(e: KeyboardEvent): string {
+  if (e.code.startsWith('Key')) return e.code.slice(3).toLowerCase()
+  if (e.code.startsWith('Digit')) return e.code.slice(5)
+  return e.key.toLowerCase()
+}
+
 function matches(e: KeyboardEvent, c: Chord): boolean {
   const mod = isMac ? e.metaKey : e.ctrlKey
-  // `code` keeps letter shortcuts working on non-Latin layouts and with ⌥ held on macOS.
-  const key = e.code.startsWith('Key') ? e.code.slice(3).toLowerCase() : e.key.toLowerCase()
-  return key === c.key && mod === c.mod && e.shiftKey === c.shift && e.altKey === c.alt
+  return keyOf(e) === c.key && mod === c.mod && e.shiftKey === c.shift && e.altKey === c.alt
 }
 
 /** One global keydown listener dispatching to the registry. */
@@ -117,9 +146,8 @@ export function useShortcutListener(): void {
       for (const cmd of registry.values()) {
         if (!cmd.shortcut) continue
         const chord = parse(cmd.shortcut)
-        // Bare-key shortcuts never fire while typing.
-        if (!chord.mod && isEditable(e.target)) continue
-        if (matches(e, chord)) {
+        if (isEditable(e.target) && !(cmd.inEditable ?? chord.mod)) continue
+        if (matches(e, chord) && isAvailable(cmd)) {
           e.preventDefault()
           cmd.run()
           return

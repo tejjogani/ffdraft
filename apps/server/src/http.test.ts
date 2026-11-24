@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { seedIfEmpty } from './seed'
-import { client, type TestServer, testServer } from './test/harness'
+import { BOOT_TIMEOUT, client, type TestServer, testServer } from './test/harness'
 
 describe('http surface', () => {
   let server: TestServer
@@ -15,7 +15,7 @@ describe('http surface', () => {
     await writeFile(join(dist, 'index.html'), '<!doctype html><title>Pavé</title>')
     await writeFile(join(dist, 'assets', 'app.js'), 'console.log(1)')
     server = await testServer({ config: { studioDist: dist } })
-  })
+  }, BOOT_TIMEOUT)
   afterAll(async () => {
     await server.dispose()
     await rm(dist, { recursive: true, force: true })

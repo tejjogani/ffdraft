@@ -1,6 +1,6 @@
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { type Client, client, type TestServer, testServer } from './test/harness'
+import { BOOT_TIMEOUT, type Client, client, type TestServer, testServer } from './test/harness'
 import { recordUsage } from './usage'
 
 let server: TestServer
@@ -9,7 +9,7 @@ let api: Client
 beforeAll(async () => {
   server = await testServer()
   api = client(server)
-})
+}, BOOT_TIMEOUT)
 afterAll(() => server.dispose())
 
 const png = (width: number, height: number) =>

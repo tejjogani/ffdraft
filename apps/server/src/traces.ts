@@ -394,20 +394,21 @@ export async function finishRun(
   const [row] = await ctx.repo.runs.update(
     and(eq(t.agentRun.id, runId), inArray(t.agentRun.status, LIVE_RUN))!,
     {
-    status: input.status,
-    error: input.error ?? null,
-    errorCode: input.errorCode ?? null,
-    endedAt: input.status === 'awaiting-approval' ? null : new Date(),
-    ...(input.tokens
-      ? {
-          tokensIn: input.tokens.input,
-          tokensOut: input.tokens.output,
-          tokensCacheRead: input.tokens.cacheRead,
-          tokensCacheWrite: input.tokens.cacheWrite,
-        }
-      : {}),
-    ...(input.costUsd !== undefined ? { costMicros: toMicros(input.costUsd) } : {}),
-  })
+      status: input.status,
+      error: input.error ?? null,
+      errorCode: input.errorCode ?? null,
+      endedAt: input.status === 'awaiting-approval' ? null : new Date(),
+      ...(input.tokens
+        ? {
+            tokensIn: input.tokens.input,
+            tokensOut: input.tokens.output,
+            tokensCacheRead: input.tokens.cacheRead,
+            tokensCacheWrite: input.tokens.cacheWrite,
+          }
+        : {}),
+      ...(input.costUsd !== undefined ? { costMicros: toMicros(input.costUsd) } : {}),
+    },
+  )
   return toRun(row ?? (await getRun(ctx, runId)))
 }
 

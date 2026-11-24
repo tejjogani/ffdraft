@@ -3,6 +3,8 @@ import type { EventAudience, JobKind, ServerEvent } from '@pave/schema'
 export type { EventAudience, JobKind, ServerEvent }
 
 type Listener = (event: ServerEvent) => void
+/** Sees every org-wide event of every org, e.g. the assistant's post-commit feedback detection. */
+type GlobalListener = (orgId: string, event: ServerEvent) => void
 
 interface Subscriber {
   listener: Listener
@@ -19,12 +21,26 @@ interface Subscriber {
  */
 export class EventBus {
   readonly #subscribers = new Map<string, Set<Subscriber>>()
+  readonly #global = new Set<GlobalListener>()
 
-  /** Delivers `event` and returns how many subscribers received it. */
+  /**
+   * Delivers `event` and returns how many org subscribers received it. Org-wide events also go
+   * to {@link subscribeAll} listeners; events addressed to one user never do.
+   */
   publish(orgId: string, event: ServerEvent, to?: EventAudience): number {
     const recipients = this.#recipients(orgId, to)
     for (const s of recipients) s.listener(event)
+    if (!to) for (const listener of this.#global) listener(orgId, event)
     return recipients.length
+  }
+
+  /**
+   * Listens to org-wide events across all orgs — server-side only (it crosses tenants): rebuild
+   * a context with `runtime.context` before acting on one. Returns the unsubscribe function.
+   */
+  subscribeAll(listener: GlobalListener): () => void {
+    this.#global.add(listener)
+    return () => this.#global.delete(listener)
   }
 
   /** Whether a targeted event would reach anyone: is the user (or that window) connected? */

@@ -161,6 +161,8 @@ export const asset = pgTable(
     bytes: integer('bytes').notNull(),
     width: integer('width'),
     height: integer('height'),
+    /** Where the server fetched the bytes from (a captured link or search result); null for uploads and outputs. */
+    capturedFrom: text('captured_from'),
     createdBy: text('created_by'),
     createdAt: at('created_at'),
   },
