@@ -29,6 +29,7 @@ import type {
   Run,
   Stage,
   Step,
+  StoredDirection,
 } from '@pave/schema'
 import {
   bigint,
@@ -117,6 +118,11 @@ export const piece = pgTable(
     coverAuto: boolean('cover_auto').notNull().default(true),
     origin: jsonb('origin').$type<PieceOrigin>(),
     facts: jsonb('facts').$type<NonNullable<PieceSummary['facts']>>(),
+    /** The Design stage's alternatives, each with the design built for it. */
+    directions: jsonb('directions').$type<StoredDirection[]>().notNull().default([]),
+    chosenDirectionId: text('chosen_direction_id'),
+    /** How many directions were ever proposed: the next one's letter, so letters are not reused. */
+    directionCount: integer('direction_count').notNull().default(0),
     createdBy: text('created_by')
       .notNull()
       .references(() => user.id),

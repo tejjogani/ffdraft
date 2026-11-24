@@ -4,6 +4,7 @@
  */
 import { z } from 'zod'
 import { ActorSchema, ChangeSchema, DesignSchema, PIECE_KINDS } from '../design/design'
+import { DirectionSchema } from '../design/directions'
 import { PieceSpecSchema } from '../design/spec'
 import { GEM_MATERIAL_IDS } from '../domain/gems'
 import { FINISH_IDS, METAL_IDS, PLATING_IDS } from '../domain/metals'
@@ -136,6 +137,10 @@ export const PieceSchema = PieceSummarySchema.extend({
   boardIds: z.array(id),
   /** Set for pieces started from a picture, logo, text, mesh, references or another piece. */
   origin: PieceOriginSchema.nullable(),
+  /** The Design stage's alternatives, oldest first (see design/directions.ts). */
+  directions: z.array(DirectionSchema),
+  /** The direction the piece's design was last taken from; null when none was chosen. */
+  chosenDirectionId: id.nullable(),
 })
 export type Piece = z.infer<typeof PieceSchema>
 

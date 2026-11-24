@@ -7,17 +7,21 @@ import { toolDefs } from '../tools'
 import { CORE_PROMPT, DESIGN_KNOWLEDGE } from './core'
 import { NODE_REFERENCE } from './node-reference'
 import { ASK_SKILL } from './skills/ask'
+import { DIRECTIONS_SKILL } from './skills/directions'
 import { EDITING_SKILL } from './skills/editing'
 import { PHOTO_SKILL } from './skills/photo'
+import { PRODUCTION_SKILL } from './skills/production'
 import { SPEC_SKILL } from './skills/spec'
 import { STONE_SKILL } from './skills/stone'
 
 export const SKILLS = [
   '# Skills',
   SPEC_SKILL,
+  DIRECTIONS_SKILL,
   EDITING_SKILL,
   STONE_SKILL,
   PHOTO_SKILL,
+  PRODUCTION_SKILL,
   ASK_SKILL,
 ].join('\n\n')
 

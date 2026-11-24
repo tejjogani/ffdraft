@@ -10,9 +10,10 @@ import type { Op, Run, StoredChange } from '@pave/schema'
 import { Skeleton, toast } from '@pave/ui'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { ArrowRight } from 'lucide-react'
-import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { type AssistantContext, useAssistant } from '../../stores/assistant'
+import { DirectionCards } from '../directions/DirectionCards'
 import { ApprovalCard } from './ApprovalCard'
 import { useRunActions, useSend } from './actions'
 import { JobStrip } from './jobs/JobStrip'
@@ -217,14 +218,25 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
                   }
                 />
               ) : (
-                <ToolChip
-                  key={c.toolCallId}
-                  call={c}
-                  pieceId={pieceId}
-                  change={changeOfCall(history.data, c.runId, c.toolCallId)}
-                  onUndo={undo}
-                  undoing={revert.isPending}
-                />
+                <Fragment key={c.toolCallId}>
+                  <ToolChip
+                    call={c}
+                    pieceId={pieceId}
+                    change={changeOfCall(history.data, c.runId, c.toolCallId)}
+                    onUndo={undo}
+                    undoing={revert.isPending}
+                  />
+                  {/* A round of directions reads side by side, right where it was proposed. */}
+                  {c.name === 'pieces.proposeDirections' && c.status === 'done' && piece.data && (
+                    <DirectionCards
+                      piece={piece.data}
+                      directions={piece.data.directions.filter(
+                        (d) => d.toolCallId === c.toolCallId,
+                      )}
+                      variant="inline"
+                    />
+                  )}
+                </Fragment>
               ),
             )}
           </div>

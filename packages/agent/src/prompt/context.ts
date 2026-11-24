@@ -17,6 +17,8 @@ export interface ContextPiece {
   archetype?: string | null
   /** Node ids in outliner order with their kind and name, so "the band" can be found. */
   nodes?: { id: string; kind: string; name?: string }[]
+  /** The piece's design directions, oldest first; `chosen` marks the one its design came from. */
+  directions?: { id: string; letter: string; name: string; chosen: boolean }[]
 }
 
 export interface ContextSelection {
@@ -62,6 +64,15 @@ export function renderContext(c: TurnContext): string {
         line(
           'Nodes',
           p.nodes.map((n) => `${n.id} (${n.kind}${n.name ? ` "${n.name}"` : ''})`).join(', '),
+        ),
+      )
+    if (p.directions?.length)
+      out.push(
+        line(
+          'Directions',
+          p.directions
+            .map((d) => `${d.letter} "${d.name}" (id ${d.id}${d.chosen ? ', chosen' : ''})`)
+            .join(', '),
         ),
       )
   } else out.push('Open piece: none')

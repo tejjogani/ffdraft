@@ -20,6 +20,7 @@ import { getAssetRow } from '../assets/assets'
 import { type Ctx, publish } from '../context'
 import * as t from '../db/schema'
 import { commitChange, refreshFacts, replaceDesignOps } from '../design'
+import { chooseDirection, proposeDirections, removeDirection, toDirection } from '../directions'
 import { badRequest, conflict, forbidden } from '../errors'
 import { createId } from '../ids'
 import { ensure, ensureAll, getCollection, getPiece } from '../lookups'
@@ -54,6 +55,8 @@ export async function toPiece(ctx: Ctx, r: PieceRow): Promise<Piece> {
     version: r.version,
     boardIds: boards.map((b) => b.id),
     origin: r.origin ?? null,
+    directions: (r.directions ?? []).map(toDirection),
+    chosenDirectionId: r.chosenDirectionId ?? null,
   }
 }
 
@@ -274,6 +277,10 @@ export const pieces: HandlerGroup<'pieces'> = {
       origin: source.origin,
     })
   },
+
+  'pieces.proposeDirections': (ctx, input) => proposeDirections(ctx, input),
+  'pieces.chooseDirection': (ctx, input) => chooseDirection(ctx, input),
+  'pieces.removeDirection': (ctx, input) => removeDirection(ctx, input),
 
   'pieces.delete': async (ctx, { id }) => {
     await getPiece(ctx, id)

@@ -10,6 +10,7 @@
  */
 import { z } from 'zod'
 import { ChangeSchema, DesignSchema, OpSchema, PIECE_KINDS } from '../design/design'
+import { DirectionSchema, MIX_PARTS } from '../design/directions'
 import { PhotoReadSchema } from '../design/photo-read'
 import { PieceSpecSchema } from '../design/spec'
 import {
@@ -430,6 +431,65 @@ export const commands = {
     tool: true,
     input: z.object({ id, title: z.string().max(120).optional() }),
     output: PieceSchema,
+  }),
+  'pieces.proposeDirections': def({
+    description:
+      'Add design directions to a piece for the designer to compare side by side (two to four in a round). Give each a name of two to four words, a one-line idea, its honest trade-off, and one of: `spec` (a full spec), `templateId`, or `mix` (a direction with parts taken from others: `head`, `band`, `metal`, `style`). Pavé builds each with the canon’s proportions, evaluates and draws it, and returns each direction’s letter and id, metal weight, carats, stone count, rough cost, kernel warnings and style findings. Earlier directions stay as alternatives. Let the designer choose.',
+    kind: 'mutation',
+    tool: true,
+    input: z.object({
+      pieceId: id,
+      directions: z
+        .array(
+          z
+            .object({
+              name: z.string().min(1).max(60).optional(),
+              idea: z.string().max(240).optional(),
+              tradeOff: z.string().max(240).optional(),
+              spec: PieceSpecSchema.optional(),
+              templateId: z.string().optional(),
+              mix: z
+                .object({
+                  base: id.describe('The direction the mix starts from: its id or its letter.'),
+                  take: z
+                    .array(
+                      z.object({
+                        from: id.describe('The direction lending the parts: its id or its letter.'),
+                        parts: z.array(z.enum(MIX_PARTS)).min(1),
+                      }),
+                    )
+                    .min(1)
+                    .max(3),
+                })
+                .optional(),
+            })
+            .refine(
+              (d) => [d.spec, d.templateId, d.mix].filter((x) => x !== undefined).length === 1,
+              { message: 'Give exactly one of spec, templateId or mix' },
+            ),
+        )
+        .min(1)
+        .max(4),
+    }),
+    output: z.object({
+      directions: z.array(DirectionSchema),
+      /** Letters of older unchosen directions that gave way (a piece keeps twelve). */
+      dropped: z.array(z.string()),
+    }),
+  }),
+  'pieces.chooseDirection': def({
+    description:
+      'Make a direction the piece’s design: its spec and its built variant replace the current ones as one undoable change, and the piece moves on to CAD. Only when the designer has picked it (in words or on its card); the other directions stay as alternatives.',
+    kind: 'mutation',
+    tool: true,
+    input: z.object({ pieceId: id, directionId: id.describe('Its id or its letter.') }),
+    output: z.object({ version: z.number().int(), direction: DirectionSchema }),
+  }),
+  'pieces.removeDirection': def({
+    description: 'Remove a direction from a piece. The chosen one cannot be removed.',
+    kind: 'mutation',
+    input: z.object({ pieceId: id, directionId: id }),
+    output: ok,
   }),
   'pieces.delete': def({
     description: 'Delete a piece and everything attached to it.',

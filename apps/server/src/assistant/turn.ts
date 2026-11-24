@@ -135,6 +135,12 @@ export async function contextText(
             const n = piece.design.nodes[id] as { kind?: string; name?: string } | undefined
             return { id, kind: n?.kind ?? 'node', ...(n?.name ? { name: n.name } : {}) }
           }),
+          directions: piece.directions.map((d) => ({
+            id: d.id,
+            letter: d.letter,
+            name: d.name,
+            chosen: d.id === piece.chosenDirectionId,
+          })),
         }
       : null,
     selection: selection(piece, input.context.selection),

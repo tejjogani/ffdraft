@@ -78,7 +78,7 @@ describe('AI job plans', () => {
     const finished = endJob(advanceJob(newJob('cad'), 'viewport.capture')!, 'done')
     const redo = continueJob(finished, 'run_2', 'build')
     expect(states(redo.job)).toEqual(['done', 'skipped', 'running', 'pending', 'pending'])
-    expect(redo.redo?.label).toBe('Build the CAD')
+    expect(redo.redo?.label).toBe('Build the CAD and its production detail')
     expect(redo.job.review).toBeNull()
   })
 
@@ -91,5 +91,26 @@ describe('AI job plans', () => {
     expect(jobMessage(job, { type: 'redo', step: 'Render the takes' })).toContain(
       'Render the takes',
     )
+  })
+
+  it('leaves the person’s step (choosing a direction) to them, unless the assistant is asked', () => {
+    let job = newJob('design')
+    job = advanceJob(job, 'pieces.get') ?? job
+    job = advanceJob(job, 'pieces.proposeDirections')!
+    const proposed = endJob(job, 'done')
+    expect(states(proposed)).toEqual(['done', 'done', 'pending'])
+    expect(proposed.review).toBe('pending')
+
+    // A mix asked for by chat: the directions step runs again; the choice is still theirs.
+    let mix = continueJob(proposed, 'run_2').job
+    expect(states(mix)).toEqual(['done', 'done', 'pending'])
+    mix = advanceJob(mix, 'pieces.proposeDirections')!
+    expect(states(mix)).toEqual(['done', 'running', 'pending'])
+    expect(states(endJob(mix, 'done'))).toEqual(['done', 'done', 'pending'])
+
+    // "Go with D": the assistant takes the step.
+    let pick = continueJob(endJob(mix, 'done'), 'run_3').job
+    pick = advanceJob(pick, 'pieces.chooseDirection')!
+    expect(states(endJob(pick, 'done'))).toEqual(['done', 'done', 'done'])
   })
 })

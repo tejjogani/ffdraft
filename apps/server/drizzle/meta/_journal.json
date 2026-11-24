@@ -64,6 +64,13 @@
       "when": 1795552342870,
       "tag": "0008_ai_jobs",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795558925677,
+      "tag": "0009_design_directions",
+      "breakpoints": true
     }
   ]
 }

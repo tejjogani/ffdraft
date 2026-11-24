@@ -117,7 +117,9 @@ client-side tools (look at the viewport from named angles, navigate the UI). Com
 `confirm` — anything destructive or that spends money — pause the run for approval. For CAD the
 assistant works spec-first: it settles a small, readable `PieceSpec` with the designer, builds
 the first design from a recipe, then refines with ops and checks itself with `design.evaluate`
-and viewport captures. Runs, steps, tool calls, token usage and cost are stored and linked to the
+and viewport captures. For an open brief it first proposes two to four design directions: built,
+evaluated and priced variants of the same piece, compared as cards, mixed by part and chosen by
+the designer, the chosen one becoming the piece's design. Runs, steps, tool calls, token usage and cost are stored and linked to the
 design changes they produced; organisations control retention and whether their traces may be
 used for evaluation.
 

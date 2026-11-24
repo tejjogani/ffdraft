@@ -85,6 +85,10 @@ describe('the context message', () => {
           { id: 'band', kind: 'ringShank', name: 'Band' },
           { id: 'center', kind: 'gem' },
         ],
+        directions: [
+          { id: 'dir_a', letter: 'A', name: 'Low bezel', chosen: false },
+          { id: 'dir_b', letter: 'B', name: 'Cushion halo', chosen: true },
+        ],
       },
       selection: [{ nodeId: 'center', kind: 'gem' }],
       board: null,
@@ -96,7 +100,15 @@ describe('the context message', () => {
     const text = renderContext(ctx)
     expect(text).toBe(renderContext(structuredClone(ctx)))
     expect(text.startsWith('Context')).toBe(true)
-    for (const s of ['pc_1', 'version 7', 'center (gem)', 'as_9', 'view only', 'v7 Band to 2 mm'])
+    for (const s of [
+      'pc_1',
+      'version 7',
+      'center (gem)',
+      'as_9',
+      'view only',
+      'v7 Band to 2 mm',
+      'Directions: A "Low bezel" (id dir_a), B "Cushion halo" (id dir_b, chosen)',
+    ])
       expect(text).toContain(s)
   })
 

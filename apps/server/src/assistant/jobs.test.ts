@@ -72,7 +72,7 @@ describe('AI jobs', () => {
     // The person's turn reads as the job's goal and plan, followed by their own words.
     const { messages } = await api.call('threads.get', { id: thread.id })
     const first = messages[0]!.content.find((b) => b.type === 'text') as { text: string }
-    expect(first.text).toMatch(/^CAD job: Turn the brief and spec/)
+    expect(first.text).toMatch(/^CAD job: Make production-ready CAD/)
     expect(first.text).toContain('3. Build the CAD')
     expect(first.text).toMatch(/Make the CAD$/)
 

@@ -10,7 +10,7 @@ const ROUND_SIZES = [0.25, 0.5, 0.75, 1, 1.5, 2, 3]
   .join(', ')
 
 export const SPEC_SKILL = `## Skill: a piece from a description
-Use when the designer describes a piece they want and there is no design for it yet. A specific brief ("a 1 ct oval solitaire in rose gold") is built straight away. An open one ("something for a tenth anniversary") gets two or three directions in words first, each named in a few words with its look, rough weight and one trade-off; build the one they pick.
+Use when the designer describes a piece they want and there is no design for it yet. A specific brief ("a 1 ct oval solitaire in rose gold") is built straight away. An open one ("something for a tenth anniversary") gets built directions to choose from first (the directions skill); work on the one they pick.
 
 1. Read the brief for what decides the build: the kind (ring, pendant, earrings, bracelet, necklace, chain, brooch); the closest archetype; the hero stone (cut, carat or size, stone, natural or lab); the metal; the size (ring size, or the height of a pendant or charm); chain style and length; the style words.
 2. Fill the gaps with conventional choices and name each in the spec summary or notes: ring size US 6 when no size is given ("size assumed"); a natural diamond unless they say lab, moissanite or a colour; 18k yellow gold unless the style or stone says otherwise (white metal for a "classic bridal" diamond or a cool palette, rose for "vintage" warmth when asked); the canon's typical proportions for everything else. Pick one variant (delicate, classic or bold) from the words and keep to it.

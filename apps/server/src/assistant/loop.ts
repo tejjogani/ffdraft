@@ -50,6 +50,7 @@ import {
   toApiMessages,
 } from '@pave/agent/anthropic'
 import { lintDesign } from '@pave/canon'
+import { roughCost } from '@pave/production'
 import type {
   AiJob,
   AssistantModelId,
@@ -57,6 +58,7 @@ import type {
   ClientToolParsedInput,
   CommandName,
   CommandParsedInput,
+  Design,
   EvaluationSummary,
   Run,
 } from '@pave/schema'
@@ -823,6 +825,44 @@ async function afterCommand(
     const note = await evaluationFor(host, input.pieceId as string)
     if (note) notes.push(note)
   }
+  // The checks the CAD job runs are the kernel's diagnostics (in the result) and the canon's
+  // style findings, which only the loop adds.
+  if (command === 'design.evaluate') {
+    const piece = await getPiece(host.ctx, input.pieceId as string)
+    const summary = out as EvaluationSummary | null
+    notes.push(styleFindings(piece.design, summary) ?? 'Canon style findings: none.')
+    if (summary) {
+      // The CAD job confirms cost along with weight and carats; this is the estimate the
+      // production package uses, at its placeholder rates until the house sets its own.
+      try {
+        const cost = roughCost(summary).perPiece.cost
+        if (cost > 0)
+          notes.push(
+            `Rough cost to make: about $${Math.round(cost)} (metal, stones, setting, labour and overhead at placeholder rates; not a quote).`,
+          )
+      } catch {
+        // A summary the estimate cannot price: leave the cost out rather than guess.
+      }
+    }
+  }
+}
+
+/** The canon's findings as a note; null when there are none (or the canon cannot read it). */
+function styleFindings(design: Design, summary: EvaluationSummary | null): string | null {
+  let findings: ReturnType<typeof lintDesign> = []
+  try {
+    findings = lintDesign(design, summary ?? undefined)
+  } catch {
+    return null
+  }
+  if (!findings.length) return null
+  return [
+    'Canon style findings:',
+    ...findings.map(
+      (f) =>
+        `- ${f.level} ${f.code}${f.nodeId ? ` [${f.nodeId}]` : ''}: ${f.message}${f.fix ? ` (fix: ${f.fix.label})` : ''}`,
+    ),
+  ].join('\n')
 }
 
 /** A run that creates a piece works on it from then on; the thread follows if it had none. */
@@ -855,20 +895,14 @@ async function evaluationFor(host: RunHost, pieceId: string): Promise<string | n
     if (host.signal.aborted) throw host.signal.reason
     summary = undefined
   }
+  if (!summary) return styleFindings(piece.design, null)
   let findings: ReturnType<typeof lintDesign> = []
   try {
     findings = lintDesign(piece.design, summary)
   } catch {
     findings = []
   }
-  if (summary) return evaluationNote(summary, findings)
-  if (!findings.length) return null
-  return [
-    'Canon style findings:',
-    ...findings.map(
-      (f) => `- ${f.level} ${f.code}${f.nodeId ? ` [${f.nodeId}]` : ''}: ${f.message}`,
-    ),
-  ].join('\n')
+  return evaluationNote(summary, findings)
 }
 
 /**

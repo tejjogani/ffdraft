@@ -18,6 +18,11 @@ export interface JobStep {
   id: string
   label: string
   tools: readonly AgentToolName[]
+  /**
+   * A step the person usually takes after the run (choosing a direction): when the run ends it
+   * stays to do instead of being marked not needed. The assistant still takes it when asked.
+   */
+  byPerson?: true
 }
 
 export interface JobRecipe {
@@ -36,7 +41,7 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
     stage: 'design',
     label: 'Design',
     button: 'Propose directions with AI',
-    goal: 'Propose a few design directions from the brief and write the spec for the strongest one.',
+    goal: 'Propose two to four distinct directions from the brief, each built and checked, for me to choose from.',
     steps: [
       {
         id: 'brief',
@@ -48,26 +53,32 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
           'references.search',
           'references.similar',
           'references.lineage',
+          'references.read',
           'freeform.analyze',
         ],
       },
       {
         id: 'directions',
-        label: 'Propose directions',
-        tools: ['references.generate', 'references.save', 'boards.create'],
+        label: 'Build two to four directions and check each',
+        tools: ['pieces.proposeDirections'],
       },
-      { id: 'spec', label: 'Write the spec', tools: ['pieces.setSpec', 'pieces.update'] },
+      {
+        id: 'choose',
+        label: 'You choose one; it goes to CAD',
+        tools: ['pieces.chooseDirection', 'pieces.setSpec', 'pieces.update'],
+        byPerson: true,
+      },
     ],
   },
   cad: {
     stage: 'cad',
     label: 'CAD',
     button: 'Make the CAD with AI',
-    goal: 'Turn the brief and spec into a buildable CAD model, then check it.',
+    goal: 'Make production-ready CAD from the chosen direction (or the brief, spec or photo): production detail, every check run and each warning fixed or explained, the size set, stones and seats checked, weight, carats and cost confirmed, and a short report.',
     steps: [
       {
         id: 'brief',
-        label: 'Read the brief, the spec and any photo',
+        label: 'Read the brief, the chosen direction and any photo',
         tools: [
           'pieces.get',
           'boards.get',
@@ -79,15 +90,19 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
       },
       {
         id: 'spec',
-        label: 'Settle the spec',
-        tools: ['pieces.create', 'pieces.setSpec', 'pieces.update'],
+        label: 'Settle the spec and the size',
+        tools: ['pieces.create', 'pieces.setSpec', 'pieces.update', 'pieces.chooseDirection'],
       },
       {
         id: 'build',
-        label: 'Build the CAD',
+        label: 'Build the CAD and its production detail',
         tools: ['pieces.buildFromSpec', 'design.apply', 'design.revert'],
       },
-      { id: 'check', label: 'Check weight, sizes and stones', tools: ['design.evaluate'] },
+      {
+        id: 'check',
+        label: 'Run every check; fix or explain each warning',
+        tools: ['design.evaluate'],
+      },
       {
         id: 'look',
         label: 'Look at it, compare it with any photo, fix what is off',
@@ -121,9 +136,15 @@ type Plan = AiJob['plan']
 const withStates = (plan: Plan, state: (step: Plan[number], i: number) => PlanStepState): Plan =>
   plan.map((s, i) => ({ ...s, state: state(s, i) }))
 
-/** The first pending step starts; used when a job (or a continuation of one) begins. */
-function startFirstPending(plan: Plan): Plan {
-  const at = plan.findIndex((s) => s.state === 'pending')
+/**
+ * The first pending step starts; used when a job (or a continuation of one) begins. A person's
+ * step is not started for them: it runs only when the assistant is asked to take it.
+ */
+function startFirstPending(stage: JobStage, plan: Plan): Plan {
+  const steps = JOB_RECIPES[stage].steps
+  const at = plan.findIndex(
+    (s) => s.state === 'pending' && !steps.some((r) => r.id === s.id && r.byPerson),
+  )
   return at === -1 ? plan : withStates(plan, (s, i) => (i === at ? 'running' : s.state))
 }
 
@@ -134,6 +155,7 @@ export function newJob(stage: JobStage, goal?: string, continues: string | null 
     stage,
     goal: goal?.trim() || recipe.goal,
     plan: startFirstPending(
+      stage,
       recipe.steps.map((s) => ({ id: s.id, label: s.label, state: 'pending' as const })),
     ),
     continues,
@@ -169,8 +191,8 @@ export function advanceJob(job: AiJob, tool: string): AiJob | null {
 }
 
 /**
- * The run ended. Done: the running step is done, steps never reached were skipped, and the
- * outputs wait for review. Failed: the running step failed. Paused or stopped: it goes back to
+ * The run ended. Done: the running step is done, steps never reached were skipped (except
+ * the person's own, which stay to do), and the outputs wait for review. Failed: the running step failed. Paused or stopped: it goes back to
  * pending, to be picked up by Resume.
  */
 export function endJob(
@@ -180,12 +202,14 @@ export function endJob(
 ): AiJob {
   const running: PlanStepState =
     status === 'done' ? 'done' : status === 'failed' ? 'failed' : 'pending'
+  const byPerson = (id: string) =>
+    JOB_RECIPES[job.stage].steps.some((r) => r.id === id && r.byPerson)
   return {
     ...job,
     plan: withStates(job.plan, (s) =>
       s.state === 'running'
         ? running
-        : status === 'done' && s.state === 'pending'
+        : status === 'done' && s.state === 'pending' && !byPerson(s.id)
           ? 'skipped'
           : s.state,
     ),
@@ -212,7 +236,13 @@ export function continueJob(
         : s.state,
   )
   return {
-    job: { ...job, plan: startFirstPending(plan), continues, review: null, pausedBy: null },
+    job: {
+      ...job,
+      plan: startFirstPending(job.stage, plan),
+      continues,
+      review: null,
+      pausedBy: null,
+    },
     redo: redoAt === -1 ? null : job.plan[redoAt]!,
   }
 }

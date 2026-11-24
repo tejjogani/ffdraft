@@ -51,6 +51,17 @@ export const TOOL_CHIPS = {
     done: 'Built the design from the spec',
   },
   'pieces.duplicate': { running: 'Duplicating the piece', done: 'Duplicated the piece' },
+  'pieces.proposeDirections': {
+    running: 'Building the directions',
+    done: (i) =>
+      i.directions.length === 1
+        ? `Added a direction: ${i.directions[0]!.name ?? (i.directions[0]!.mix ? 'a mix' : 'from a template')}`
+        : `Proposed ${plural(i.directions.length, 'direction')}`,
+  },
+  'pieces.chooseDirection': {
+    running: 'Choosing the direction',
+    done: 'Made the chosen direction the design',
+  },
   'pieces.delete': { running: 'Deleting the piece', done: 'Deleted the piece' },
   'design.apply': { running: 'Editing the design', done: (i) => i.label },
   'design.history': { quiet: true, running: 'Reading the history', done: 'Read the history' },
