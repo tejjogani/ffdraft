@@ -78,6 +78,9 @@ function sweptWire(
   }
 }
 
+/** Air between a butterfly back and its post, each side, mm. */
+const BACK_CLEARANCE = 0.05
+
 /**
  * Butterfly (scroll) back, `span` wide, sliding on a post of diameter `post` along z: a two-lobed
  * plate with a hole, and two scrolls curled up from its edges whose lips meet at the post.
@@ -95,17 +98,24 @@ export function butterflyMesh(span: number, post: number, quality: Quality): Ind
       mf.CrossSection.union([...lobes, own(mf.CrossSection.circle(span * 0.2, seg(span * 0.2)))]),
     )
     const plate = own(outline.extrude(sheet))
-    const hole = own(mf.Manifold.cylinder(sheet * 4, post * 0.55, undefined, seg(post), true))
+    // The hole and the scrolls' lips stand BACK_CLEARANCE off the post: a back that touches its
+    // post is fused to it in the casting, and a butterfly is cast on its own and slid on.
+    const bore = post / 2 + BACK_CLEARANCE
+    const hole = own(mf.Manifold.cylinder(sheet * 4, bore, undefined, seg(post), true))
     const parts: Manifold[] = [own(plate.subtract(hole))]
     // Each scroll: a C-curl of sheet, its axis along y, rising from the plate beside the hole.
     const curl = post / 2 + sheet
     const length = span * 0.45
+    // The curl turns 1.35 of a half turn and ends leaning in: its lip's inner face reaches
+    // `inward` × (curl + half the sheet) back toward the post from the curl's centre.
+    const turn = 1.35 * Math.PI
+    const inward = -Math.cos(-Math.PI / 2 + turn)
     for (const side of [-1, 1]) {
-      const centre = side * (post / 2 + curl)
+      const centre = side * (bore + inward * (curl + sheet / 2))
       const line = sampleCurve(
         (t) => {
-          // From the plate, out and over the top, ending with its lip against the post.
-          const a = -Math.PI / 2 + side * 1.35 * Math.PI * t
+          // From the plate, out and over the top, ending with its lip just off the post.
+          const a = -Math.PI / 2 + side * turn * t
           return [centre + curl * Math.cos(a), 0, sheet + curl + curl * Math.sin(a)]
         },
         () => [0, 1, 0],

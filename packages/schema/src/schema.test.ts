@@ -82,11 +82,27 @@ describe('design', () => {
     for (const op of bad)
       expect(() => applyOps(d, [op as never]), JSON.stringify(op)).toThrow(/Invalid op/)
     expect(() => applyOps(d, [{ t: 'add', node: { id: '', kind: 'ringShank' } }])).toThrow(/empty/)
-    for (const id of ['__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
+    for (const id of ['constructor', 'toString', 'hasOwnProperty']) {
       const added = applyOps(d, [{ t: 'add', node: { id, kind: 'ringShank' } }]).design
       expect(Object.hasOwn(added.nodes, id), id).toBe(true)
       expect(validateDesign(added), id).toEqual([])
     }
+    // It would not survive a save and load: the record parser drops that key.
+    expect(() => applyOps(d, [{ t: 'add', node: { id: '__proto__', kind: 'ringShank' } }])).toThrow(
+      /cannot be a node id/,
+    )
+  })
+  it('undoes a cascade remove into the same document, node order included', () => {
+    const d0 = buildDesign(TEMPLATES.find((t) => t.id === 'halo')!.spec)
+    const { design: d1, inverse } = applyOps(d0, [{ t: 'remove', id: 'center', cascade: true }])
+    const back = applyOps(d1, inverse).design
+    expect(Object.keys(back.nodes)).toEqual(Object.keys(d0.nodes))
+    expect(JSON.stringify(back)).toBe(JSON.stringify(d0))
+  })
+  it('reports nodes missing from the order', () => {
+    const d = buildDesign(TEMPLATES[0]!.spec)
+    const issues = validateDesign({ ...d, order: d.order.slice(1) })
+    expect(issues.map((i) => i.nodeId)).toEqual([d.order[0]])
   })
   it('rejects dangling references and guards removal', () => {
     const d = buildDesign(TEMPLATES[0]!.spec)

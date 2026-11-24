@@ -26,10 +26,10 @@ import {
   type Scene,
   type Solid,
 } from '../core'
-import { gemUnit } from '../gems/index'
-import { boundsOverlap, weld } from '../solid/meshing'
 import { createBreather } from '../evaluate/yield'
+import { gemUnit } from '../gems/index'
 import { isRuntimeFault, runtimeGeneration } from '../runtime/index'
+import { boundsOverlap, weld } from '../solid/meshing'
 import { compoundOf, scoped, shapeVolume, transformShape } from '../solid/occt'
 import type { Bounds, MeshData, StoneInstance } from '../types'
 import { linearHex } from './color'
@@ -48,9 +48,7 @@ const labelOf = (result: NodeResult | undefined, fallback: string) =>
  * the cuts (beads, claw tips: `afterCuts`) is not cut, exactly as in the cast part.
  */
 function cuttersFor(scene: Scene, nodeId: string, body: Body): Solid[] {
-  const late = scene.nodes
-    .get(nodeId)
-    ?.additions.some((a) => a.afterCuts && a.solid === body.solid)
+  const late = scene.nodes.get(nodeId)?.additions.some((a) => a.afterCuts && a.solid === body.solid)
   if (late) return []
   const box = body.solid.bounds()
   return [...scene.nodes.values()]

@@ -188,6 +188,9 @@ export function applyOps(input: Design, ops: readonly Op[]): { design: Design; i
       case 'add': {
         const node = parseNode(op.node, op)
         if (node.id === '') throw new OpError('A node id cannot be empty', op)
+        // A JSON object cannot keep this key through a save and load (the record parser drops
+        // it), so the node would vanish from a saved design while the outliner still lists it.
+        if (node.id === '__proto__') throw new OpError('"__proto__" cannot be a node id', op)
         if (has(node.id)) throw new OpError(`Node "${node.id}" already exists`, op)
         nodes[node.id] = node
         order.splice(Math.min(op.index ?? order.length, order.length), 0, node.id)
@@ -235,7 +238,20 @@ export function applyOps(input: Design, ops: readonly Op[]): { design: Design; i
     }
   }
 
-  const next: Design = { schemaVersion: DESIGN_VERSION, kind, nodes: { ...nodes }, order }
+  // Nodes are kept in outliner order, so undoing a remove gives back the same document, key
+  // order included (revision ids and manifests hash its JSON).
+  const listed = new Set(order)
+  const next: Design = {
+    schemaVersion: DESIGN_VERSION,
+    kind,
+    nodes: Object.fromEntries([
+      ...order.filter(has).map((id) => [id, nodes[id]!] as const),
+      ...Object.keys(nodes)
+        .filter((id) => !listed.has(id))
+        .map((id) => [id, nodes[id]!] as const),
+    ]),
+    order,
+  }
   const issues = validateDesign(next).filter((i) => i.level === 'error')
   if (issues.length) throw new OpError(issues.map((i) => i.message).join('; '), ops[0]!)
   return { design: next, inverse }
@@ -277,6 +293,14 @@ export function validateDesign(design: Design): DesignIssue[] {
         })
     }
   }
+  const listed = new Set(design.order)
+  for (const id of Object.keys(design.nodes))
+    if (!listed.has(id))
+      issues.push({
+        level: 'warning',
+        nodeId: id,
+        message: `Node "${id}" is missing from the order`,
+      })
   if (evaluationOrder(design) === null)
     issues.push({ level: 'error', message: 'Nodes reference each other in a cycle' })
   return issues

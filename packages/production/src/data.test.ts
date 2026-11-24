@@ -1,3 +1,4 @@
+import type { Part, PartRegion } from '@pave/kernel/types'
 import { METALS } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
 import { billOfMaterials } from './bom'
@@ -7,7 +8,6 @@ import { csvCell, encodeCsv, toCsv } from './csv'
 import { bundleRoot, safeSegment, skuSlug, uniqueName } from './paths'
 import { evaluationOf, fixtureKernel, stoneAt, templateDesign } from './testing/fixtures'
 import { box } from './testing/shapes'
-import type { Part, PartRegion } from '@pave/kernel/types'
 import type { BuildInput } from './types'
 
 /** A 1000 mm³ Pt950 block with one 6.5 mm round diamond, priced with explicit rates. */
@@ -268,5 +268,40 @@ describe('selective finishing in the BOM', () => {
     const [plating] = line(bom, 'plating')
     expect(plating?.description).toMatch(/; Head$/)
     expect(plating?.notes).toMatch(/mask/i)
+  })
+})
+
+describe('a pair of studs in the BOM', () => {
+  it('names the mirrored castings L and R and lists no post that is cast in', () => {
+    const design = templateDesign('studs')
+    const evaluation = evaluationOf([
+      { id: 'pair', name: 'Pair', mesh: box([5, -3, -3], [9, 3, 3]) },
+      { id: 'head', name: 'Setting', mesh: box([-9, -3, -3], [-5, 3, 3]) },
+    ])
+    const ctx = createContext({
+      ...input({}, design),
+      evaluation,
+      kernel: fixtureKernel(evaluation),
+    })
+    const bom = billOfMaterials(ctx)
+    expect(bom.filter((l) => l.type === 'metal').map((l) => l.item)).toEqual(['Stud R', 'Stud L'])
+    expect(bom.filter((l) => l.type === 'finding')).toEqual([])
+    expect(bom.find((l) => l.item === 'Stud L')?.description).toMatch(/Post cast in/)
+  })
+
+  it('counts a bought finding once per copy a mirror makes of it', () => {
+    const design = templateDesign('studs')
+    // The post is its own casting here (it touches nothing), so it is a finding to buy.
+    const evaluation = evaluationOf([
+      { id: 'head', name: 'Setting', mesh: box([-9, -3, -3], [-5, 3, 3]) },
+      { id: 'post', name: 'Post', mesh: box([-7.4, -0.4, -12], [-6.6, 0.4, -4]) },
+    ])
+    const ctx = createContext({
+      ...input({}, design),
+      evaluation,
+      kernel: fixtureKernel(evaluation),
+    })
+    const post = billOfMaterials(ctx).find((l) => l.type === 'finding' && l.item === 'Post')
+    expect(post?.qtyPerPiece).toBe(2)
   })
 })

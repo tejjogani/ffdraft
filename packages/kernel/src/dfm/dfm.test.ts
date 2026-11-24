@@ -308,3 +308,43 @@ describe('one finding per cause', () => {
     expect(heavy?.message).toMatch(/\d{1,3}(,\d{3})*(\.\d)? kg/)
   })
 })
+
+describe('walls too thin to cast', () => {
+  it('finds a 0.3 mm plate and a 0.4 mm wire, and says so in the STL notes', async () => {
+    const foil = designFrom('other', [
+      { id: 'foil', kind: 'primitive', name: 'Foil', shape: 'box', size: [12, 12, 0.3] },
+    ])
+    const wire = designFrom('other', [
+      {
+        id: 'wire',
+        kind: 'pipe',
+        name: 'Wire',
+        points: [
+          [-20, 0, 0],
+          [0, 0, 0],
+          [20, 0, 0],
+        ],
+        width: 0.4,
+        thickness: 0.4,
+      },
+    ])
+    for (const [design, id] of [
+      [foil, 'foil'],
+      [wire, 'wire'],
+    ] as const) {
+      const e = await kernel.evaluate(design, { detail: 'production' })
+      expect(e.diagnostics.find((d) => d.code === 'wall.thin')?.nodeId).toBe(id)
+      const stl = await kernel.export(design, 'stl')
+      expect(stl.notes.join(' ')).toMatch(/Check before making: .*walls 0\.\d+ mm thin/)
+    }
+  })
+
+  it('leaves a 2 mm plate and the stock solitaire alone', async () => {
+    const plateDesign = designFrom('other', [plate])
+    const solitaire = buildDesign(TEMPLATES.find((t) => t.id === 'solitaire')!.spec)
+    for (const design of [plateDesign, solitaire]) {
+      const e = await kernel.evaluate(design, { detail: 'production' })
+      expect(e.diagnostics.map((d) => d.code)).not.toContain('wall.thin')
+    }
+  })
+})

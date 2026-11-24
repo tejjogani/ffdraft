@@ -73,6 +73,34 @@ describe('finding', () => {
     expect(alone.nodes.get('back')!.bodies[0]!.solid.bounds().min[1]).toBeCloseTo(0.75 + 8, 1)
   })
 
+  it('butterfly: cast on its own, clear of a matching post, its span set by its length', async () => {
+    // On a 0.8 mm post (the default butterfly's own wire): a separate casting, not fused on.
+    const scene = await kernel.scene(
+      designFrom('earrings', [
+        disc,
+        { id: 'post', kind: 'finding', type: 'earringPost', host: 'disc', wire: 0.8 },
+        { id: 'back', kind: 'finding', type: 'butterfly', host: 'post' },
+      ]),
+      { detail: 'production' },
+    )
+    const post = scene.nodes.get('post')!.bodies[0]!.solid.manifold(scene.quality)
+    const back = scene.nodes.get('back')!.bodies[0]!.solid.manifold(scene.quality)
+    expect(post.minGap(back, 1)).toBeGreaterThan(0.02)
+    expect(scene.evaluation.parts).toHaveLength(2)
+    // Every length from 2 mm does something (2 to 7.3 mm used to give the same 4 mm back).
+    const span = async (length: number) => {
+      const s = await kernel.scene(
+        designFrom('earrings', [{ id: 'f', kind: 'finding', type: 'butterfly', length }]),
+      )
+      const box = s.nodes.get('f')!.bodies[0]!.solid.bounds()
+      return box.max[0] - box.min[0]
+    }
+    const [two, six, ten] = [await span(2), await span(6), await span(10)]
+    expect(two).toBeLessThan(4.3)
+    expect(six).toBeGreaterThan(two + 0.5)
+    expect(ten).toBeGreaterThan(six + 0.5)
+  })
+
   it('a clasp too short for its wire thins the wire and says so', async () => {
     const e = await kernel.evaluate(
       designFrom('pendant', [

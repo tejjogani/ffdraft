@@ -4,8 +4,10 @@
  * zip in the research layout (`<sku>_r<rev>_production/…`). Pure: no clocks, no network, no
  * file system. Every file the package writes itself is byte-identical for identical input. The
  * CAD files come from the kernel and are not covered: the 3DM carries object ids made at export,
- * and the STEP orders its colour records by memory layout (identical between fresh processes, not
- * always between two exports in one) — and the manifest, which holds their hashes, follows them.
+ * the STEP orders its colour records by memory layout, and the fused meshes in the STL, 3MF and
+ * OBJ can list the same triangles in another order after a kernel has re-evaluated an edited
+ * design (identical between fresh processes, not always between two exports in one warm
+ * kernel). The manifest, which holds their hashes, follows them; the geometry does not change.
  */
 
 import { METALS } from '@pave/schema'

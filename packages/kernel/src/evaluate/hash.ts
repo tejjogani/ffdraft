@@ -30,7 +30,9 @@ export function canonicalJson(value: unknown): string {
   const entries = Object.keys(value)
     .filter((key) => (value as Record<string, unknown>)[key] !== undefined)
     .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`)
+    .map(
+      (key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`,
+    )
   return `{${entries.join(',')}}`
 }
 

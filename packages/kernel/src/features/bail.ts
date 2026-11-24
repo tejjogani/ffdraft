@@ -41,6 +41,12 @@ const HANG_TILT = 5
  * pendant from the back, and the weight drags on the chain, the neck and the price.
  */
 const HEAVY_G = 30
+/**
+ * Past this, grams, a solid body that cannot be hollowed in one click is a warning, not a note:
+ * a pendant this heavy is not worn. Below it an outline body's weight is noted (info), as the
+ * only remedies are a thinner plate or a rebuild.
+ */
+const UNWEARABLE_G = 200
 /** The wall a hollowed body keeps, mm: enough under a 1.3 mm pavé seat (0.65 × stone + 0.4). */
 const HOLLOW_WALL = 1.25
 
@@ -282,16 +288,38 @@ function standPoint(solids: readonly Solid[], bounds: Bounds, node: BailNode): S
     let best: { y: number; z: number; run: number } | null = null
     for (const { y, c } of columns) if (c && (!best || c.z > best.z)) best = { y, ...c }
     if (!best) return null
-    // The foot stands across the metal that is near the top there (a plate's thickness).
+    // The foot stands across the metal that is near the top there (a plate's thickness): in its
+    // middle, or, where the ends of the foot find too little metal there (the lip of a cup seen
+    // edge on), at the place across it where they find enough and the foot stands highest. The
+    // highest, not merely the nearest: an end that drops to a plinth below a cup would stand the
+    // bail on the plinth, on a stem up the piece's front.
     const near = columns.filter((t) => t.c && t.c.z > best!.z - node.wire)
-    const y = (Math.min(...near.map((t) => t.y)) + Math.max(...near.map((t) => t.y))) / 2
-    const centre = columnAt(x, y) ?? best
-    // Both ends of the foot must have metal under them too; the foot sinks to the lowest. A
-    // ring stands on its round wire alone.
-    const sides = (node.style === 'ring' ? [] : [x - half, x + half]).map((sx) => columnAt(sx, y))
-    if (sides.some((c) => c === null)) return null
-    const z = Math.min(centre.z, ...sides.map((c) => c!.z))
-    return { at: [x, y, z], run: Math.min(centre.run, ...sides.map((c) => c!.run)) }
+    const mid = (Math.min(...near.map((t) => t.y)) + Math.max(...near.map((t) => t.y))) / 2
+    let found: { at: Vec3; run: number; off: number } | null = null
+    for (const y of [mid, ...near.map((t) => t.y)]) {
+      const centre = columnAt(x, y) ?? best
+      // Both ends of the foot must have metal under them too; the foot sinks to the lowest. A
+      // ring stands on its round wire alone.
+      const sides = (node.style === 'ring' ? [] : [x - half, x + half]).map((sx) => columnAt(sx, y))
+      if (sides.some((c) => c === null)) continue
+      const z = Math.min(centre.z, ...sides.map((c) => c!.z))
+      const run = Math.min(centre.run, ...sides.map((c) => c!.run))
+      const candidate = { at: [x, y, z] as Vec3, run, off: Math.abs(y - mid) }
+      if (beats(candidate, found)) found = candidate
+    }
+    return found
+  }
+  /** One foot beats another: carried beats not; then higher; then nearer the plate's middle. */
+  function beats(
+    a: { at: Vec3; run: number; off: number },
+    b: { at: Vec3; run: number; off: number } | null,
+  ): boolean {
+    if (!b) return true
+    const carried = a.run >= need
+    if (carried !== b.run >= need) return carried
+    if (!carried) return a.run > b.run
+    if (Math.abs(a.at[2] - b.at[2]) > 1e-6) return a.at[2] > b.at[2]
+    return a.off < b.off
   }
   const span = bounds.max[0] - bounds.min[0]
   // Nearest the centre of mass first: hanging level matters more than standing on the very top.
@@ -341,7 +369,10 @@ function standPoint(solids: readonly Solid[], bounds: Bounds, node: BailNode): S
         break search
       }
   }
-  const lift = node.style === 'hidden' ? 0 : clear - top[2]
+  // A rise smaller than the foot's own sink is taken up by the sink: a stem that short would
+  // be a sliver of metal under the casting's wall limit.
+  const rise = clear - top[2]
+  const lift = node.style === 'hidden' || rise < sinkFor(node.wire) ? 0 : rise
   const stood = top
   return {
     top: stood,
@@ -366,8 +397,11 @@ function standPoint(solids: readonly Solid[], bounds: Bounds, node: BailNode): S
     const legAt = (x: number, z: number): number | null => {
       const t = hits(meshes, [x, behind, z], [x, bounds.min[1] - 1, z])
       const y = t.length > 0 ? behind - Math.min(...t) * depth : null
-      // Metal only far in front of the back is the far wall of an open or scooped back.
-      return y !== null && y > bounds.max[1] - 2 * node.wire ? y : null
+      // Metal only far in front of the back is the far wall of an open or scooped back; on a
+      // small piece "far" is a fraction of its thickness (a 20 mm trophy's scoop is 2.4 mm deep,
+      // and a loop in there would have the chain run through the handles).
+      const near = Math.min(2 * node.wire, 0.15 * (bounds.max[1] - bounds.min[1]))
+      return y !== null && y > bounds.max[1] - near ? y : null
     }
     /** Highest metal at x across the host's thickness, or null where there is none. */
     const topAt = (x: number): number | null => {
@@ -398,7 +432,7 @@ function standPoint(solids: readonly Solid[], bounds: Bounds, node: BailNode): S
     return (
       hangsFromTop ?? {
         x: com[0],
-        zc: stood[2] - node.wire - h / 2,
+        zc: bounds.max[2] - node.wire - h / 2,
         back: bounds.max[1],
         supported: false,
       }
@@ -424,7 +458,7 @@ function heavyBody(host: NodeResult, ctx: BuildContext) {
   if (grams <= HEAVY_G) return
   const what = `${grams.toFixed(0)} g of ${METALS[metal].label}`
   ctx.report({
-    level: 'warning',
+    level: body.kind === 'meshBody' || grams > UNWEARABLE_G ? 'warning' : 'info',
     code: 'body.heavy',
     message:
       body.kind === 'meshBody'

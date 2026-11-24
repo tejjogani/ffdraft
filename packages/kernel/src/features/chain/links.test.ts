@@ -60,16 +60,27 @@ describe('tennis link', () => {
     expect(small.minBend).toBeLessThan(40)
   })
 
-  it('has no facets that collapse when written as float32 (STL), beyond a handful', () => {
-    const m = tennisLink(3.4, 0.9, 'round').template.mesh(QUALITY.production)
-    const p = new Float32Array(m.positions)
-    const key = (i: number) => `${p[i * 3]},${p[i * 3 + 1]},${p[i * 3 + 2]}`
-    let collapsed = 0
-    for (let t = 0; t < m.indices.length; t += 3) {
-      const [a, b, c] = [0, 1, 2].map((k) => key(m.indices[t + k]!))
-      if (a === b || b === c || a === c) collapsed++
-    }
-    // Was 30 per link where prong wires ended on their tip balls and walls met the plate.
-    expect(collapsed).toBeLessThanOrEqual(6)
-  })
+  it.each([
+    [3.4, 0.9],
+    [2, 0.64],
+    [6, 1.6],
+  ])(
+    'has no facets that collapse when written as float32 (STL), even 200 mm along a chain: %d mm',
+    (width, wire) => {
+      const m = tennisLink(width, wire, 'round').template.mesh(QUALITY.production)
+      // Was 30 per link where prong wires ended on their tip balls and walls met the plate, then
+      // about 5 per link of edges just over the slivers simplifying removes.
+      for (const along of [0, 200]) {
+        const p = new Float32Array(m.positions.length)
+        for (let i = 0; i < p.length; i++) p[i] = m.positions[i]! + (i % 3 === 0 ? along : 0)
+        const key = (i: number) => `${p[i * 3]},${p[i * 3 + 1]},${p[i * 3 + 2]}`
+        let collapsed = 0
+        for (let t = 0; t < m.indices.length; t += 3) {
+          const [a, b, c] = [0, 1, 2].map((k) => key(m.indices[t + k]!))
+          if (a === b || b === c || a === c) collapsed++
+        }
+        expect(collapsed, `${along} mm along`).toBe(0)
+      }
+    },
+  )
 })

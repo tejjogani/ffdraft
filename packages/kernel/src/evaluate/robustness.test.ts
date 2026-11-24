@@ -222,7 +222,8 @@ describe('evaluations that go wrong halfway', () => {
     // Aborted after the band was rebuilt for B (its A result freed), before assembly.
     await expect(own.evaluate(b, { detail: 'production', signal: abortAt(3) })).rejects.toThrow()
     const again = await own.scene(a, { detail: 'production' })
-    for (const part of again.parts) for (const s of part.sources) expect(() => s.body.solid.bounds()).not.toThrow()
+    for (const part of again.parts)
+      for (const s of part.sources) expect(() => s.body.solid.bounds()).not.toThrow()
     const step = await own.export(a, 'step')
     expect(step.bytes.length).toBeGreaterThan(1000)
     own.dispose()
@@ -232,7 +233,12 @@ describe('evaluations that go wrong halfway', () => {
     const own = createKernel()
     await own.ready()
     const design = designFrom('pendant', [
-      { id: 'm', kind: 'meshBody', source: { type: 'asset', assetId: 'x' }, height: 12 } as NodeInput,
+      {
+        id: 'm',
+        kind: 'meshBody',
+        source: { type: 'asset', assetId: 'x' },
+        height: 12,
+      } as NodeInput,
     ])
     const before = runtimeGeneration()
     const faulting = async (): Promise<Uint8Array> => {
@@ -273,7 +279,12 @@ describe('evaluations that go wrong halfway', () => {
   it('an asset that failed to load is fetched again on the next evaluation', async () => {
     const own = createKernel()
     const design = designFrom('pendant', [
-      { id: 'm', kind: 'meshBody', source: { type: 'asset', assetId: 'cube' }, height: 10 } as NodeInput,
+      {
+        id: 'm',
+        kind: 'meshBody',
+        source: { type: 'asset', assetId: 'cube' },
+        height: 10,
+      } as NodeInput,
     ])
     // Without a store, then with one that is down, then with one that works.
     expect(failedMessage(await own.evaluate(design), 'm')).toMatch(/No asset store/)
@@ -295,7 +306,16 @@ describe('evaluations that go wrong halfway', () => {
         ]
           .flatMap((f) => [f.slice(0, 3), f.slice(3)])
           .map((t) => {
-            const v = [[0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0], [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]]
+            const v = [
+              [0, 0, 0],
+              [1, 0, 0],
+              [1, 1, 0],
+              [0, 1, 0],
+              [0, 0, 1],
+              [1, 0, 1],
+              [1, 1, 1],
+              [0, 1, 1],
+            ]
             // Outward winding for the bottom face reversed, so every face points out.
             const tri = t[0] === 0 && t[1] === 1 ? [t[0], t[2], t[1]] : t
             return `facet normal 0 0 0\nouter loop\n${tri.map((i) => `vertex ${v[i!]!.join(' ')}`).join('\n')}\nendloop\nendfacet`

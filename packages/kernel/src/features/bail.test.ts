@@ -43,6 +43,62 @@ describe('bail', () => {
     60_000,
   )
 
+  // Recipe pendants beyond the templates: a halo pendant (its bail on the halo, not the head),
+  // a solitaire with a pavé role (never a hidden bail), an iced letter on a 2 mm tennis line
+  // (the hidden slot takes its depth), and a small iced trophy whose scoop is shallow.
+  const recipe = (archetype: string, chain: [string, number], extra: object) =>
+    buildDesign({
+      kind: 'pendant',
+      archetype,
+      title: 't',
+      summary: 's',
+      chain: { style: chain[0], lengthMm: 457, widthMm: chain[1] },
+      ...extra,
+    } as never)
+  const halo = {
+    stones: [
+      { role: 'center', carat: 1 },
+      { role: 'halo', widthMm: 1.3 },
+    ],
+  }
+  it.each<[string, () => ReturnType<typeof buildDesign>]>([
+    ['halo on 2 mm curb', () => recipe('halo', ['curb', 2], halo)],
+    ['halo on 8 mm Cuban', () => recipe('halo', ['cuban', 8], halo)],
+    ['halo on 1 mm box', () => recipe('halo', ['box', 1], halo)],
+    [
+      'solitaire with a pavé role',
+      () =>
+        recipe('pendantSolitaire', ['cable', 1.2], {
+          stones: [
+            { role: 'center', carat: 1 },
+            { role: 'pave', widthMm: 1.3 },
+          ],
+        }),
+    ],
+    [
+      'iced letter on 2 mm tennis',
+      () =>
+        recipe('icedPendant', ['tennis', 2], {
+          body: { heightMm: 32, text: 'A', thicknessMm: 4, iceLevel: 1 },
+          stones: [{ role: 'pave', widthMm: 1.3 }],
+        }),
+    ],
+    [
+      // A scooped-out back only 2.4 mm deep: the slot goes behind it, not into it.
+      'iced 20 mm piece on 3 mm Cuban',
+      () => recipe('icedPendant', ['cuban', 3], { body: { heightMm: 20, iceLevel: 1 } }),
+    ],
+  ])(
+    'recipe %s evaluates at production with no errors and an honest bail',
+    async (_, make) => {
+      const e = await kernel.evaluate(make(), { detail: 'production' })
+      const errors = e.diagnostics.filter((d) => d.level === 'error')
+      expect(errors.map((d) => `${d.code}: ${d.message}`)).toEqual([])
+      expect(e.diagnostics.map((d) => d.code)).not.toContain('bail.hiddenLow')
+    },
+    60_000,
+  )
+
   it.each(['Olivia', 'Mia', 'Tej', 'Isabella'])(
     'hangs the name %s level from a bail on its metal, all one casting',
     async (text) => {
@@ -183,10 +239,9 @@ describe('bail', () => {
   it('offers, at draft, an opening that clears the bail check in one click', async () => {
     // A tube on the solitaire pendant over a 2 mm tennis line: the bisection's rounded size
     // used to fall 0.1 mm short at draft, where the tube's polygon is coarse.
-    let design = template('pendant-solitaire')
-    design = applyOps(design, [
-      { t: 'update', id: 'bail', patch: { style: 'tube', opening: 4 } },
-      { t: 'update', id: 'chain', patch: { style: 'tennis', linkWidth: 2, wire: 0.64 } },
+    const design = applyOps(template('pendant-solitaire'), [
+      { t: 'update', id: 'bail', patch: { style: 'tube', opening: 4, width: 3, wire: 1.1 } },
+      { t: 'update', id: 'chain', patch: { style: 'tennis', linkWidth: 2, wire: 0.52 } },
     ]).design
     const first = await kernel.evaluate(design)
     const small = first.diagnostics.find((d) => d.code === 'bail.small')
@@ -261,6 +316,46 @@ describe('bail', () => {
     },
     60_000,
   )
+
+  it('says when a solid pendant body is heavy, with a hollow for a sculpted one', async () => {
+    const crown = designFrom('pendant', [
+      {
+        id: 'body',
+        kind: 'meshBody',
+        source: { type: 'builtin', name: 'crown' },
+        height: 35,
+        flatBack: 0.35,
+      },
+      { id: 'bail', kind: 'bail', host: 'body', style: 'tube', opening: 6, width: 4 },
+    ])
+    const solid = await kernel.evaluate(crown)
+    const heavy = solid.diagnostics.find((d) => d.code === 'body.heavy')!
+    expect(heavy.level).toBe('warning')
+    expect(heavy.value!).toBeGreaterThan(heavy.limit!)
+    const hollowed = await kernel.evaluate(applyOps(crown, heavy.fix!.ops).design)
+    expect(hollowed.diagnostics.map((d) => d.code)).not.toContain('body.heavy')
+    // Block letters 60 mm high: an outline body has no hollow yet, so no one-click fix, and
+    // under 200 g only a note.
+    const text = await kernel.evaluate(
+      designFrom('pendant', [
+        {
+          id: 'body',
+          kind: 'vectorBody',
+          source: { type: 'text', text: 'KING', font: 'block' },
+          height: 60,
+          thickness: 4,
+        },
+        { id: 'bail', kind: 'bail', host: 'body', style: 'tube', opening: 6, width: 4 },
+      ]),
+    )
+    const plate = text.diagnostics.find((d) => d.code === 'body.heavy')
+    expect(plate?.fix).toBeUndefined()
+    expect(plate?.level).toBe(plate!.value! > 200 ? 'warning' : 'info')
+    expect(plate?.message).toMatch(/cannot be hollowed yet/)
+    // A light piece says nothing.
+    const light = await kernel.evaluate(name('Mia'))
+    expect(light.diagnostics.map((d) => d.code)).not.toContain('body.heavy')
+  }, 60_000)
 
   it('hangs a hidden bail from the top rim of a scooped-out back', async () => {
     // The trophy hollowed with an open back: no back plate, but the cup's rim runs along the top.

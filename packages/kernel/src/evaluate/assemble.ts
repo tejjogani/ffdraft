@@ -90,7 +90,9 @@ export function distinctSolids(solids: readonly Solid[]): Solid[] {
   const seen = new Set<string>()
   return solids.filter((solid) => {
     const { min, max } = solid.bounds()
-    const key = [...min, ...max].map((v) => Math.round(v * 1e4)).join(',') + `|${solid.volume().toPrecision(6)}`
+    const key =
+      [...min, ...max].map((v) => Math.round(v * 1e4)).join(',') +
+      `|${solid.volume().toPrecision(6)}`
     if (seen.has(key)) return false
     seen.add(key)
     return true

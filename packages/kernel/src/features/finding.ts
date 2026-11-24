@@ -36,8 +36,12 @@ type FindingNode = NodeOf<'finding'>
 
 /** With no post to ride on, a butterfly sits where a stock post's notch would be (01-cad.md §2: 10–11 mm posts). */
 const STOCK_POST = 10
-/** Stock butterfly backs span 4–7 mm (5–6 mm typical); `length` sets it at about half. */
-const butterflySpan = (length: number) => Math.min(7, Math.max(4, 0.55 * length))
+/**
+ * Stock butterfly backs span 4–7 mm (5–6 mm typical). `length` (2–20 mm) sets the span across
+ * that range, every value doing something: 2 mm gives a 4 mm back, the default 10 a 5.5 mm one,
+ * 18 and over the largest, 7 mm. (Halving it, as before, left 2–7.3 mm all at 4 mm.)
+ */
+const butterflySpan = (length: number) => Math.min(7, Math.max(4, 4 + (3 * (length - 2)) / 16))
 /** How far a post pad may reach to find metal, and how thick it is, mm. */
 const PAD_REACH = 4
 const PAD_THICKNESS = 0.5

@@ -41,6 +41,26 @@ function missingNotes(scene: Scene, options: ExportOptions): string[] {
   return notes
 }
 
+/** Error findings shown in an export's notes; the rest are counted. */
+const NOTED_ERRORS = 5
+
+/**
+ * The evaluation's errors, as notes: a file that leaves the building with a wall too thin to
+ * cast, or a stone nothing holds, must say so where the recipient reads. Nodes left out are
+ * named by `missingNotes` instead.
+ */
+function errorNotes(scene: Scene): string[] {
+  const errors = scene.evaluation.diagnostics.filter(
+    (d) => d.level === 'error' && !d.code.startsWith('feature.') && d.code !== 'design.invalid',
+  )
+  const notes = errors.slice(0, NOTED_ERRORS).map((d) => `Check before making: ${d.message}`)
+  if (errors.length > NOTED_ERRORS)
+    notes.push(
+      `${errors.length - NOTED_ERRORS} more manufacturability errors; see the design's checks.`,
+    )
+  return notes
+}
+
 /** Nodes already checked against the schema, by identity: an edit replaces only what it touches. */
 const checked = new WeakMap<object, string | null>()
 
@@ -51,14 +71,21 @@ function nodeProblem(node: unknown): string | null {
   if (problem === undefined) {
     const parsed = NodeSchema.safeParse(node)
     const kind = (node as { kind?: unknown }).kind
-    problem = parsed.success
-      ? null
-      : parsed.error.issues[0]?.path.join('.') === 'kind'
-        ? `its kind “${String(kind)}” is not one this version knows`
-        : parsed.error.issues
-          .slice(0, 3)
-          .map((i) => `${i.path.join('.') || 'kind'}: ${i.message}`)
-          .join('; ')
+    // A value out of its range is left to the feature, which clamps it or falls back with a
+    // warning of its own (a stored measured size of 0); only a document whose shape is wrong
+    // (a field missing, a number sent as a string, an unknown kind) is refused here.
+    const issues = parsed.success
+      ? []
+      : parsed.error.issues.filter((i) => i.code !== 'too_small' && i.code !== 'too_big')
+    problem =
+      issues.length === 0
+        ? null
+        : issues[0]!.path.join('.') === 'kind'
+          ? `its kind “${String(kind)}” is not one this version knows`
+          : issues
+              .slice(0, 3)
+              .map((i) => `${i.path.join('.') || 'kind'}: ${i.message}`)
+              .join('; ')
     checked.set(node, problem)
   }
   return problem
@@ -175,7 +202,12 @@ export function createKernel(): LocalKernel {
           const invalid = prepared.issues.map((i) => `Not in this file: ${i.message}`)
           return {
             ...result,
-            notes: [...result.notes, ...missingNotes(evaluated, options), ...invalid],
+            notes: [
+              ...result.notes,
+              ...missingNotes(evaluated, options),
+              ...invalid,
+              ...errorNotes(evaluated),
+            ],
           }
         },
       )

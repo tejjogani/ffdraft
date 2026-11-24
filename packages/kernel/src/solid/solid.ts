@@ -266,7 +266,10 @@ class SolidImpl implements Solid {
       },
       { from: this, matrix },
     )
-    if (this.volumeMm3 !== undefined) moved.volumeMm3 = this.volumeMm3 * scale ** 3
+    // Always from this solid's volume, never sometimes from the moved geometry: the two differ
+    // in the last bits, and which one a copy got depended on whether the source had been
+    // measured yet, so the same design gave different volumes after different edit histories.
+    moved.volumeMm3 = this.volume() * scale ** 3
     return moved
   }
 

@@ -103,7 +103,10 @@ function wallProbe(stone: SceneStone, wall: number): [number, number, number][] 
   return points
 }
 
-/** Inside a closed mesh: a ray from the point crosses its surface an odd number of times. */
+/**
+ * Inside a closed mesh: a ray from the point crosses its surface an odd number of times. Exact
+ * parity, not a nearest-face test: the probes sit at seat rims, on sharp edges.
+ */
 const inside = (m: Manifold, p: readonly number[]) =>
   m.rayCast([p[0]!, p[1]!, p[2]!], [p[0]!, p[1]!, p[2]! + 1e3]).length % 2 === 1
 
@@ -124,9 +127,31 @@ function seatWalls(scene: Scene, profile: DfmProfile): Diagnostic[] {
   )
   if (seated.length === 0 || scene.detail !== 'production') return []
   const short = new Map<string, { count: number; worst: SceneStone; open: number }>()
+  // Neighbours from a hash grid: testing every probe against every stone was 300 million tests
+  // on a 3 000-stone pavé. A cell holds the reach of the largest seat, so a probe's neighbours
+  // are in its own cell or the 26 around it.
+  const reach = seated.reduce(
+    (r, s) => Math.max(r, s.stone.dims.length / 2 + profile.seatWall + s.stone.dims.depth),
+    1e-3,
+  )
+  const cellOf = (p: readonly number[]) => p.map((v) => Math.floor(v / reach))
+  const grid = new Map<string, SceneStone[]>()
+  for (const s of seated) {
+    const key = cellOf(s.stone.frame.origin).join(',')
+    grid.set(key, [...(grid.get(key) ?? []), s])
+  }
+  const around = (p: readonly number[]): SceneStone[] => {
+    const [x, y, z] = cellOf(p) as [number, number, number]
+    const out: SceneStone[] = []
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dz = -1; dz <= 1; dz++)
+          out.push(...(grid.get(`${x + dx},${y + dy},${z + dz}`) ?? []))
+    return out
+  }
   for (const stone of seated) {
     const neighbourSeat = (p: readonly number[]) =>
-      seated.some((other) => {
+      around(p).some((other) => {
         if (other === stone) return false
         const f = other.stone.frame
         const d = [p[0]! - f.origin[0], p[1]! - f.origin[1], p[2]! - f.origin[2]]

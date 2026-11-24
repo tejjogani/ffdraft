@@ -103,7 +103,10 @@ export class Evaluator {
   /** Frees every cached solid. The evaluator can be used again afterwards. */
   dispose(): void {
     // Solids made in a runtime that has since been discarded (by any kernel) cannot be freed.
-    if (this.generation !== runtimeGeneration()) return this.forget()
+    if (this.generation !== runtimeGeneration()) {
+      this.forget()
+      return
+    }
     try {
       for (const cache of Object.values(this.caches)) {
         for (const result of cache.nodes.values()) disposeResult(result)

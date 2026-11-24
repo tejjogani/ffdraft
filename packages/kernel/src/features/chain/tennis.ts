@@ -14,6 +14,7 @@ import type { Manifold } from 'manifold-3d'
 import { type Deletable, QUALITY, type Quality, runtime } from '../../core'
 import { circleLoop } from '../../geometry/loop'
 import { frameFromZ, frameMatrix, type Vec3 } from '../../geometry/vec'
+import { weldWithin } from '../../mesh/weld'
 import { manifoldFromTriangles, trianglesFromManifold } from '../../solid/solid'
 import { sampleCurve, segmentsFor, sweepAlong } from './centreline'
 import type { Template } from './instances'
@@ -68,6 +69,8 @@ const MAX_PRONG = 0.4
 const MAX_WALL = 0.2
 /** Edges shorter than this are collapsed after the link's union, mm. */
 const SLIVER = 1e-3
+/** Vertices closer than this are merged after simplifying, mm: well above float32 steps at 250 mm. */
+const WELD = 1e-4
 /** A prong wire ends this share of its radius short of its tip ball's centre. */
 const TIP_INSET = 0.4
 
@@ -224,8 +227,18 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
         post(back, -R, ringZ - into),
       )
       // Collapse the slivers where wires cross the box's faces at a glancing angle: below a
-      // micron they round to zero-area facets once written as float32 (STL, 3MF).
-      return trianglesFromManifold(own(own(mf.Manifold.union(parts)).simplify(SLIVER)))
+      // micron they round to zero-area facets once written as float32 (STL, 3MF). Simplifying
+      // leaves a few edges a little longer than that, which still collapse once the link is
+      // placed 200 mm out along a chain (float32 steps there are ~2e-5 mm), so those are welded
+      // shut too; if welding ever opened the mesh, the simplified one is kept.
+      const simplified = trianglesFromManifold(own(own(mf.Manifold.union(parts)).simplify(SLIVER)))
+      const welded = weldWithin(simplified, WELD)
+      try {
+        own(manifoldFromTriangles(welded))
+        return welded
+      } catch {
+        return simplified
+      }
     } finally {
       for (const m of temps) m.delete()
     }

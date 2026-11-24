@@ -26,6 +26,14 @@ const separate = (node: Node): boolean =>
   node.kind === 'group' ||
   (node.kind === 'finding' && (node.type === 'butterfly' || node.type === 'lobsterClasp'))
 
+/**
+ * A bail that places itself and found nothing to stand on has already said so (bail.unsupported)
+ * with the right advice; "move it until it overlaps" would point at a node with no position of
+ * its own, so the loose-metal checks leave it to that.
+ */
+const saidLoose = (result: NodeResult | undefined): boolean =>
+  result?.diagnostics.some((d) => d.code === 'bail.unsupported') ?? false
+
 /** Castings closer than this are touching: two alloys share a face, not a gap (mm). */
 const TOUCH = 0.01
 
@@ -53,7 +61,9 @@ function strayCastings(
   const exempt = (i: number) =>
     scene.parts[i]!.sources.some((s) => {
       const node = scene.nodes.get(s.nodeId)?.node
-      return !node || separate(node) || flagged.has(s.nodeId)
+      return (
+        !node || separate(node) || flagged.has(s.nodeId) || saidLoose(scene.nodes.get(s.nodeId))
+      )
     })
   const candidates = [...scene.parts.keys()].filter(
     (i) => !exempt(i) && scene.parts[i]!.part.volumeMm3 >= profile.fragment,
@@ -148,9 +158,7 @@ export function connectivityChecks(scene: Scene, profile: DfmProfile): Diagnosti
       loose = loose.filter((i) => !seated.includes(i))
       if (loose.length === 0) continue
     }
-    // A bail that places itself and found nothing to stand on has already said so, with the
-    // right advice; "move it" would point at a node that has no position of its own.
-    if (result.diagnostics.some((d) => d.code === 'bail.unsupported')) continue
+    if (saidLoose(result)) continue
     out.push({
       level: 'error',
       code: 'metal.disconnected',

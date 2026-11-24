@@ -5,10 +5,11 @@
  * from evaluated geometry otherwise; positions always come from geometry so leaders land on
  * the drawn lines.
  */
-import type { Evaluation, StoneInstance, StoneLot } from '@pave/kernel/types'
+import type { Evaluation, Part, StoneInstance, StoneLot } from '@pave/kernel/types'
 import { GEM_CUTS, GEM_MATERIALS, METALS } from '@pave/schema'
 import type { PieceFacts } from '../facts'
 import { DIAMETER, fmtCarat, fmtLength, type Units } from '../format'
+import { TriangleBVH } from '../geometry/bvh'
 import { transformPoint } from '../geometry/vec'
 import type { Box2, ViewLines } from './hlr'
 import { project, VIEWS, type ViewId } from './views'
@@ -206,6 +207,37 @@ function ringAnnotations(input: AnnotationInput, out: Annotation[], L: (mm: numb
   }
 }
 
+/**
+ * Where a section line (x = 0, at a height in [zMin, zMax]) first enters the part and next
+ * leaves it, along y: the plate's front and back faces, at the height nearest the middle where
+ * the line meets metal (as thick as the designed plate, when that is known). Null when it never
+ * does, and the caller falls back to the bounds.
+ */
+function plateAt(
+  part: Part,
+  zMin: number,
+  zMax: number,
+  thickness: number | undefined,
+): { front: number; back: number; z: number } | null {
+  const tree = new TriangleBVH({ positions: part.mesh.positions, indices: part.mesh.indices })
+  const start = part.bounds.min[1] - 1
+  // Mid height first, then outward: a letter can have a counter (the hole in an A) there.
+  const STEPS = 40
+  const levels = Array.from({ length: STEPS + 1 }, (_, i) => zMin + ((zMax - zMin) * i) / STEPS)
+  levels.sort((a, b) => Math.abs(a - (zMin + zMax) / 2) - Math.abs(b - (zMin + zMax) / 2))
+  for (const z of levels.slice(0, -2)) {
+    const enter = tree.raycast(0, start, z, 0, 1, 0)
+    if (!enter) continue
+    const leave = tree.raycast(0, start + enter.t, z, 0, 1, 0, 1e-4)
+    if (!leave) continue
+    // Where the line misses the plate (a letter's counter) it can meet the bail behind it
+    // instead: a crossing as thick as the designed plate is the plate.
+    if (thickness !== undefined && Math.abs(leave.t - thickness) > 0.25 * thickness) continue
+    return { front: start + enter.t, back: start + enter.t + leave.t, z }
+  }
+  return null
+}
+
 function pendantAnnotations(input: AnnotationInput, out: Annotation[], L: (mm: number) => string) {
   const { facts } = input
   const front = input.views.front
@@ -231,15 +263,24 @@ function pendantAnnotations(input: AnnotationInput, out: Annotation[], L: (mm: n
   if (input.views.section && facts.body) {
     const body = facts.body.bounds
     const zMid = (body.min[2] + body.max[2]) / 2
-    // The designed plate when the node states it: the fused part's depth is the bail's.
+    // The designed plate when the node states it: the fused part's depth is the bail's. The
+    // dimension sits on the plate itself, found along the section line (x = 0) at mid height:
+    // the part's bounds also hold the bail, which can stand far behind the plate.
+    const plate = plateAt(facts.body, body.min[2], body.max[2], facts.bodyThickness)
+    const zAt = plate?.z ?? zMid
     const yMid = (body.min[1] + body.max[1]) / 2
     const half = facts.bodyThickness === undefined ? null : facts.bodyThickness / 2
+    const [from, to] = plate
+      ? [plate.front, plate.front + (facts.bodyThickness ?? plate.back - plate.front)]
+      : half === null
+        ? [body.min[1], body.max[1]]
+        : [yMid - half, yMid + half]
     out.push({ kind: 'cutline', view: 'front', x: 0, label: 'A' })
     out.push({
       kind: 'linear',
       view: 'section',
-      a: [half === null ? body.min[1] : yMid - half, zMid],
-      b: [half === null ? body.max[1] : yMid + half, zMid],
+      a: [from, zAt],
+      b: [to, zAt],
       axis: 'h',
       side: 'below',
       text: L(facts.bodyThickness ?? body.max[1] - body.min[1]),

@@ -356,7 +356,12 @@ export const pave = defineFeature('pave', (node, ctx) => {
   ]
   const additions: Addition[] = []
   if (node.beads) {
-    const beads = layoutBeads(layout.stones, node.gap, (q) => surface.snapExact(q))
+    const beads = layoutBeads(
+      layout.stones,
+      node.gap,
+      (q) => surface.snapExact(q),
+      (p) => region.edgeDistance(p),
+    )
     if (beads.length > 0)
       additions.push({
         solid: solidFromManifold(beadSolids(beads, ctx.quality)),

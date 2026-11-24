@@ -5,12 +5,14 @@
 import type { Manifold } from 'manifold-3d'
 import type { Scene, SceneStone } from '../core'
 import { girdlesOverlap } from '../evaluate/diagnostics'
+import { fromFrame } from '../geometry/vec'
 import { runtime } from '../runtime/index'
 import { boundsOverlap, weld } from '../solid/meshing'
 import { manifoldFromTriangles } from '../solid/solid'
 import type { Bounds, Diagnostic, MeshData } from '../types'
 import type { DfmProfile } from './profile'
 import { explainedBy, stoneName } from './subjects'
+import { insideSurface, treeOf } from './trees'
 
 /** Overlap below this is tessellation noise between touching facets (mm³). */
 const NOISE_MM3 = 1e-4
@@ -151,6 +153,36 @@ function collisions(scene: Scene, gems: readonly Manifold[]): Diagnostic[] {
 }
 
 /**
+ * Points inside a stone, spread through its crown, girdle and pavilion: if none is in metal,
+ * the stone is not buried in it (to the resolution of the 8 % limit).
+ */
+function probePoints({ stone }: SceneStone): [number, number, number][] {
+  const { dims, frame } = stone
+  const points: [number, number, number][] = [[...frame.origin]]
+  // Rings at fractions of the girdle radius; heights as shares of the depth (table up, +z).
+  const rings: [number, number][] = [
+    [0.85, 0],
+    [0.6, 0.12],
+    [0.6, -0.15],
+    [0.35, -0.35],
+    [0.3, 0.2],
+  ]
+  for (const [share, height] of rings)
+    for (let k = 0; k < 8; k++) {
+      const a = (2 * Math.PI * (k + (height < 0 ? 0.5 : 0))) / 8
+      points.push(
+        fromFrame(frame, [
+          (share * dims.width * Math.cos(a)) / 2,
+          (share * dims.length * Math.sin(a)) / 2,
+          height * dims.depth,
+        ]) as [number, number, number],
+      )
+    }
+  points.push(fromFrame(frame, [0, 0, -0.55 * dims.depth]) as [number, number, number])
+  return points
+}
+
+/**
  * Stones whose volume is buried in production metal beyond what claws and bezel lips cover.
  * Each part is tested once against all the stones within its bounds (one boolean per part, as
  * production assembly batches its cutters); the pieces are given back to the stone whose centre
@@ -176,6 +208,15 @@ function buried(scene: Scene, gems: readonly Manifold[], profile: DfmProfile): D
         ? [i]
         : [],
     )
+    // Only stones that reach into the metal at all are measured exactly: a set stone's
+    // pavilion sits in its cut seat, so on a finished pavé nearly every stone is skipped here
+    // (a few dozen points per stone against the part's search tree, instead of a boolean).
+    const tree = treeOf(fused.triangles(scene.quality))
+    const reaching = near.filter((i) =>
+      probePoints(scene.stones[i]!).some((p) => insideSurface(tree, p)),
+    )
+    near.length = 0
+    near.push(...reaching)
     if (near.length === 0) continue
     // Stones go through in small, spatially sorted batches: one boolean of the whole pavé
     // against the part held gigabytes of intermediate mesh on a 100 mm iced piece.

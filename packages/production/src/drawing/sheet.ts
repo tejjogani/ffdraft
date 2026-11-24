@@ -141,17 +141,30 @@ export function composeArrangement(
 }
 
 function arrange(set: DrawingSet, measure: MeasureText, s: number, isoScale: number, maxW: number) {
-  const lay = (id: ViewId, scale = s): ViewLayout | null =>
-    set.views[id]
-      ? layoutView({
-          id,
-          lines: set.views[id]!,
-          annotations: set.annotations,
-          scale,
-          measure,
-          annotationsOnly: true,
-        })
-      : null
+  const lay = (id: ViewId, scale = s): ViewLayout | null => {
+    if (!set.views[id]) return null
+    const layout = layoutView({
+      id,
+      lines: set.views[id]!,
+      annotations: set.annotations,
+      scale,
+      measure,
+      annotationsOnly: true,
+    })
+    // The label is centred under the view and can be wider than a slim view (a bracelet's
+    // section): its box must hold the label too, or the label runs off the sheet.
+    const own = id === 'iso' && scale !== s ? scale : null
+    const half = measure(labelFor(id, own).toUpperCase(), LABEL) / 2
+    const centre = (layout.geometry.minX + layout.geometry.maxX) / 2
+    return {
+      ...layout,
+      box: {
+        ...layout.box,
+        minX: Math.min(layout.box.minX, centre - half),
+        maxX: Math.max(layout.box.maxX, centre + half),
+      },
+    }
+  }
   const front = lay('front')!
   const side = lay('side')
   const top = lay('top')

@@ -778,7 +778,11 @@ class Packer {
       // tight curve may not take the largest asked for): planned for the largest, the row is
       // skipped wherever that does not fit, and the edge goes ragged.
       const d = fit?.d ?? this.rowSize(members[f]!)
-      const levels = [this.o.margin + d / 2 + SLACK]
+      const hug = this.o.margin + d / 2 + SLACK
+      // A single row runs down the middle of its band. At the margin it would have a level set
+      // on each side of the ridge, and the walk would lay stones on one, then the other: a
+      // zigzag off-centre row with no metal left for beads on the near side.
+      const levels = fit?.rows === 1 ? [Math.max(hug, half - RIDGE_INSET * d)] : [hug]
       if (fit && fit.rows % 2 === 1 && fit.rows > 1) levels.push(half - RIDGE_INSET * d)
       for (const level of levels)
         walkLevelSets({
@@ -787,8 +791,12 @@ class Packer {
           level,
           step: ROW_STEP * d,
           starts: members[f]!,
-          visit: (p, n, sample) => {
+          visit: (p0, n0, sample0) => {
             this.tick()
+            // The level is read from samples, which seldom lie on the ridge itself: slide a
+            // single row's stone across to the middle of the band.
+            const { p, n, sample } =
+              fit?.rows === 1 ? this.centredOnRidge({ p: p0, n: n0, sample: sample0 }, d) : { p: p0, n: n0, sample: sample0 }
             if (!this.fits(p, n, d) || this.sizeFor(sample, p) < d - EPS) return 0
             this.place(p, n, d, sample)
             return ROW_STRIDE * d
@@ -932,13 +940,13 @@ class Packer {
    * it is farthest from the region's edge. Following the previous two stones alone, a row
    * drifts off a curved or slanted stroke within a few stones and breaks.
    */
-  private centredAcross(hit: Hit, dir: Vec3, d: number): Hit | null {
+  private centredAcross(hit: Hit, dir: Vec3, d: number, reach = CENTRE_REACH * d): Hit | null {
     const across = normalize(cross(hit.n, dir))
     let best = hit
     let bestEdge = this.o.edgeDistance(hit.p)
     for (let k = -CENTRE_STEPS; k <= CENTRE_STEPS; k++) {
       if (k === 0) continue
-      const q = this.snap(add(hit.p, scale(across, (k / CENTRE_STEPS) * CENTRE_REACH * d)))
+      const q = this.snap(add(hit.p, scale(across, (k / CENTRE_STEPS) * reach)))
       if (!q) continue
       const e = this.o.edgeDistance(q.p)
       if (e > bestEdge + EPS) {
@@ -947,6 +955,23 @@ class Packer {
       }
     }
     return best
+  }
+
+  /** `centredAcross` for a point on a level set, whose row runs square to the edge distance's slope. */
+  private centredOnRidge(hit: Hit, d: number): Hit {
+    const { p, n } = hit
+    const e1 = normalize(cross(n, Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]))
+    const e2 = cross(n, e1)
+    const e = this.o.edgeDistance(p)
+    const h = 0.01
+    const slope = (t: Vec3) => (this.o.edgeDistance(add(p, scale(t, h))) - e) / h
+    const g = add(scale(e1, slope(e1)), scale(e2, slope(e2)))
+    if (Math.hypot(g[0], g[1], g[2]) < 1e-6) return hit
+    const along = normalize(cross(g, n))
+    // A coarse search, then a fine one around its best: a row a few hundredths off the middle
+    // of a narrow bar leaves no room for a bead on its near side.
+    const coarse = this.centredAcross(hit, along, d) ?? hit
+    return this.centredAcross(coarse, along, d, (CENTRE_REACH * d) / CENTRE_STEPS) ?? coarse
   }
 
   private sideAwayFrom(i: number, j: number, k: number): number {

@@ -96,7 +96,7 @@ export function createContext(raw: BuildInput): PackageContext {
     .map((p) => p.id)
   const input: BuildInput = { ...raw, evaluation: { ...raw.evaluation, parts } }
   const { design, evaluation, options } = input
-  const groups = castingGroups(parts)
+  const groups = nameMirrored(castingGroups(parts), design)
   const drawn = withoutChains(evaluation, design, groups)
   const profile = resolveProfile(options.manufacturerProfile)
   const requirements = stoneRequirements(design, evaluation.report)
@@ -210,6 +210,33 @@ function castingGroups(parts: readonly Part[]): CastingGroup[] {
       volumeMm3,
     }
   })
+}
+
+/**
+ * A casting and its mirror image are a left and a right of one design (a pair of studs), not
+ * "Setting" and "Pair" after whichever nodes the kernel named them by. The one toward −x, the
+ * left in the front view, is L.
+ */
+function nameMirrored(groups: CastingGroup[], design: Design): CastingGroup[] {
+  const named = new Map<CastingGroup, string>()
+  for (const node of Object.values(design.nodes)) {
+    if (node.kind !== 'pattern' || node.type !== 'mirror') continue
+    const copy = groups.find((g) => g.key === node.id)
+    if (!copy) continue
+    const original = groups.find(
+      (g) => node.sources.includes(g.key) && g.parts[0]!.material === copy.parts[0]!.material,
+    )
+    if (!original || named.has(copy) || named.has(original)) continue
+    const base = design.kind === 'earrings' ? 'Stud' : original.name
+    const x = (g: CastingGroup) => {
+      const { min, max } = g.parts[0]!.bounds
+      return (min[0] + max[0]) / 2
+    }
+    const [left, right] = x(original) <= x(copy) ? [original, copy] : [copy, original]
+    named.set(left, `${base} L`)
+    named.set(right, `${base} R`)
+  }
+  return groups.map((g) => (named.has(g) ? { ...g, name: named.get(g)! } : g))
 }
 
 /** Where the fineness and maker's marks go, unless the designer said. */

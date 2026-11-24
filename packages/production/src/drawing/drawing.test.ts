@@ -193,6 +193,38 @@ describe('dimensions', () => {
     expect(overall?.kind === 'linear' && Number(overall.text)).toBeCloseTo(35.6, 1)
   })
 
+  it('puts the metal thickness on the plate, not across the bail behind it', () => {
+    const design = templateDesign('iced-initial')
+    const thickness = Object.values(design.nodes).find((n) => n.kind === 'vectorBody')
+    const t = thickness?.kind === 'vectorBody' ? thickness.thickness : 2
+    // One fused part: a plate at y −t..0 with a hole at mid height on x = 0 (a letter's
+    // counter), and a block behind it at the top standing out to y = 7 (the bail).
+    const plateLeft = box([-10, -t, -15], [-1, 0, 15])
+    const plateRight = box([1, -t, -15], [10, 0, 15])
+    const bridge = box([-1, -t, -15], [1, 0, -8])
+    const bail = box([-2, 0, 10], [2, 7, 15])
+    const ev = evaluationOf([{ id: 'body', mesh: plateLeft }])
+    const merged = [plateLeft, plateRight, bridge, bail].reduce((acc, m) => {
+      const offset = acc.positions.length / 3
+      return {
+        positions: new Float32Array([...acc.positions, ...m.positions]),
+        normals: new Float32Array([...acc.normals, ...m.normals]),
+        indices: new Uint32Array([...acc.indices, ...m.indices.map((i) => i + offset)]),
+      }
+    })
+    Object.assign(ev.parts[0]!, {
+      mesh: merged,
+      bounds: { min: [-10, -t, -15], max: [10, 7, 15] },
+    })
+    const f = pieceFacts(design, ev)
+    const s = buildDrawingSet(ev, f, { units: 'mm', stampLocation: 'back', resolution: 256 })
+    const dim = s.annotations.find((a) => a.kind === 'linear' && a.caption === 'metal thickness')
+    expect(dim?.kind).toBe('linear')
+    if (dim?.kind !== 'linear') return
+    expect(Math.min(dim.a[0], dim.b[0])).toBeCloseTo(-t, 3)
+    expect(Math.max(dim.a[0], dim.b[0])).toBeCloseTo(0, 3)
+  })
+
   it('stays consistent with extractAnnotations for inches', () => {
     const inch = extractAnnotations({
       facts,

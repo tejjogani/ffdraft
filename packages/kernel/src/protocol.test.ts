@@ -144,7 +144,8 @@ function deadWorker(): Port<Request, Response> & {
   return {
     onmessage: null,
     postMessage: () => {},
-    addEventListener: (type, listener) => listeners.set(type, [...(listeners.get(type) ?? []), listener]),
+    addEventListener: (type, listener) =>
+      listeners.set(type, [...(listeners.get(type) ?? []), listener]),
     raise: (type, event = {}) => {
       for (const l of listeners.get(type) ?? []) l(event)
     },

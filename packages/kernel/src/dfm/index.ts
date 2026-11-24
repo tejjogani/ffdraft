@@ -17,6 +17,7 @@ import { limitChecks } from './limits'
 import { DEFAULT_PROFILE, type DfmProfile } from './profile'
 import { sizeChecks } from './sizes'
 import { stoneChecks } from './stones'
+import { wallChecks } from './walls'
 
 export { DEFAULT_PROFILE, type DfmProfile, profileWith } from './profile'
 
@@ -30,6 +31,7 @@ const CHECKS: Record<string, (scene: Scene, profile: DfmProfile) => Diagnostic[]
   held: heldChecks,
   limits: limitChecks,
   copies: copyChecks,
+  walls: wallChecks,
 }
 
 /**

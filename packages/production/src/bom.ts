@@ -47,10 +47,39 @@ export function platingSpec(ctx: PackageContext, plating: PlatingId): string {
   return microns !== undefined ? `${microns} µm` : PLATING_DEFAULT[plating]
 }
 
+/**
+ * How many of a node the piece has: itself, and every copy a pattern makes of it (a mirror
+ * makes one, a polar or linear pattern `count − 1`), through patterns of patterns.
+ */
+function instancesOf(design: PackageContext['input']['design'], id: string, depth = 0): number {
+  if (depth > 32) return 1
+  let total = 1
+  for (const node of Object.values(design.nodes))
+    if (node.kind === 'pattern' && node.sources.includes(id))
+      total +=
+        (node.type === 'mirror' ? 1 : node.count - 1) * instancesOf(design, node.id, depth + 1)
+  return total
+}
+
 export function billOfMaterials(ctx: PackageContext): BomLine[] {
   const lines: Omit<BomLine, 'line'>[] = []
-  const { evaluation } = ctx.input
+  const { evaluation, design } = ctx.input
   const allowance = ctx.profile.castingAllowancePct
+  // A finding that became no casting of its own is fused into the one it touches (a post cast
+  // with its stud): it is metal of that casting, not an item to buy.
+  const castIn = ctx.facts.findings.filter(
+    (f) =>
+      f.visible &&
+      !evaluation.parts.some((p) => p.nodeId === f.id) &&
+      // One that was not built is not in any casting; it stays listed.
+      !evaluation.diagnostics.some((d) => d.nodeId === f.id && d.code.startsWith('feature.')),
+  )
+  const castInto = (g: (typeof ctx.groups)[number]) => {
+    const keys = new Set([g.key])
+    const node = design.nodes[g.key]
+    if (node?.kind === 'pattern') for (const id of node.sources) keys.add(id)
+    return castIn.filter((f) => keys.has(f.id) || (f.host !== undefined && keys.has(f.host)))
+  }
 
   for (const g of ctx.groups) {
     // A chain threaded on after casting is listed once, as a finding with its weight, below.
@@ -62,7 +91,11 @@ export function billOfMaterials(ctx: PackageContext): BomLine[] {
     lines.push({
       type: 'metal',
       item: g.name,
-      description: `Cast part, ${part.exact ? 'exact solid' : 'mesh'} (node ${g.key})${g.identical ? `; ${g.count} identical bodies` : g.parts.length > 1 ? `; ${g.parts.length} bodies` : ''}`,
+      description: `Cast part, ${part.exact ? 'exact solid' : 'mesh'} (node ${g.key})${g.identical ? `; ${g.count} identical bodies` : g.parts.length > 1 ? `; ${g.parts.length} bodies` : ''}${castInto(
+        g,
+      )
+        .map((f) => `; ${f.name ?? f.type} cast in`)
+        .join('')}`,
       material: metal.label,
       fineness: String(metal.fineness),
       hallmark: metal.hallmark,
@@ -111,6 +144,7 @@ export function billOfMaterials(ctx: PackageContext): BomLine[] {
     })
   }
   for (const f of ctx.facts.findings) {
+    if (castIn.includes(f)) continue
     lines.push({
       type: 'finding',
       item: f.name ?? f.type,
@@ -118,7 +152,7 @@ export function billOfMaterials(ctx: PackageContext): BomLine[] {
       material: METALS[f.material].label,
       fineness: String(METALS[f.material].fineness),
       hallmark: METALS[f.material].hallmark,
-      qtyPerPiece: 1,
+      qtyPerPiece: instancesOf(design, f.id),
       unit: 'pc',
       finish: FINISHES[f.finish].label,
       plating: PLATINGS[f.plating].label,
