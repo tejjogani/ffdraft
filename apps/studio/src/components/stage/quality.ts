@@ -34,7 +34,10 @@ export function gpuTier(gl: WebGLRenderingContext | WebGL2RenderingContext): Gpu
 
 export interface QualityPolicy {
   maxDpr: number
-  /** Gem shader quality per tier at rest and while the camera moves. */
+  /**
+   * Gem shader quality per tier at rest and while the camera moves. Only bounces differ between
+   * the two: toggling dispersion recompiles the shader, which would stall every orbit.
+   */
   rest: Record<'hero' | 'melee', GemQuality>
   moving: Record<'hero' | 'melee', GemQuality>
   /** Above this many melee stones the melee tier drops to its moving quality even at rest. */
@@ -54,7 +57,7 @@ export function qualityFor(tier: GpuTier): QualityPolicy {
       return {
         maxDpr: 1.5,
         rest: { hero: { bounces: 5, dispersion: true }, melee: { bounces: 2, dispersion: false } },
-        moving: { hero: { bounces: 2, dispersion: false }, melee: { bounces: 1, dispersion: false } },
+        moving: { hero: { bounces: 2, dispersion: true }, melee: { bounces: 1, dispersion: false } },
         meleeBudget: 600,
       }
     case 'high':

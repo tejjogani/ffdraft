@@ -241,6 +241,13 @@ function RenameInput({
   onDone(name: string | null): void
 }) {
   const [value, setValue] = useState(initial)
+  // Enter and the blur that follows it must not both finish the rename.
+  const done = useRef(false)
+  const finish = (name: string | null) => {
+    if (done.current) return
+    done.current = true
+    onDone(name)
+  }
   return (
     <Input
       bare
@@ -252,11 +259,11 @@ function RenameInput({
       onFocus={(e) => e.currentTarget.select()}
       onChange={(e) => setValue(e.target.value)}
       onClick={(e) => e.stopPropagation()}
-      onBlur={() => onDone(value)}
+      onBlur={() => finish(value)}
       onKeyDown={(e) => {
         e.stopPropagation()
-        if (e.key === 'Enter') onDone(value)
-        if (e.key === 'Escape') onDone(null)
+        if (e.key === 'Enter') finish(value)
+        if (e.key === 'Escape') finish(null)
       }}
       className="h-6 flex-1 px-1 text-sm shadow-[inset_0_0_0_1px_var(--select)]"
     />
