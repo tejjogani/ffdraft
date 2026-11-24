@@ -81,7 +81,7 @@ export interface ViewportPalette {
   clayStone: string
   /** X-ray metal: darker than clay, so a faint, see-through version still reads on the stage. */
   xrayMetal: string
-  /** Technical mode's fill: the page itself, so the piece reads as a drawing in either theme. */
+  /** Technical mode's fill: a sheet a step lighter than the stage, so the drawing never reads as a hole. */
   paper: string
   danger: string
 }
@@ -97,7 +97,7 @@ export function readPalette(el: Element): ViewportPalette {
     clayMetal: dark ? '#b9b4ab' : '#d9d4cb',
     clayStone: dark ? '#c9d0db' : '#dfe5ee',
     xrayMetal: dark ? '#d6d1c8' : '#8f8a81',
-    paper: v('--bg', dark ? '#1b1b1a' : '#fbfaf8'),
+    paper: dark ? v('--bg-inset', '#2a2a28') : v('--bg', '#ffffff'),
   }
 }
 
@@ -126,8 +126,10 @@ export function createModeMaterials(p: ViewportPalette): ModeMaterials {
     flatShading: true,
   })
   // Technical faces sit slightly behind their edges so lines are never z-fought.
+  // Not tone-mapped: the sheet is exactly the token's colour.
   const paper = new MeshBasicMaterial({
     color: p.paper,
+    toneMapped: false,
     polygonOffset: true,
     polygonOffsetFactor: 1,
     polygonOffsetUnits: 1,

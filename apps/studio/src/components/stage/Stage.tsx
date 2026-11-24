@@ -173,7 +173,7 @@ export function Stage({
   return (
     <div
       ref={host}
-      className={cn('stage relative isolate h-full w-full overflow-hidden', className)}
+      className={cn('stage relative isolate h-full w-full overflow-clip', className)}
     >
       {/* biome-ignore lint/a11y/noInteractiveElementToNoninteractiveRole: the 3D view is an application region with its own keys (arrows orbit) */}
       <canvas

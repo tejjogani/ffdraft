@@ -21,7 +21,15 @@ import {
 import { AiMark, Button, cn, Dialog, IconButton, Sheet, Spinner } from '@pave/ui'
 import { useNavigate } from '@tanstack/react-router'
 import { PanelLeft, PanelRight, Plus } from 'lucide-react'
-import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { Stage } from '../../components/stage/Stage'
 import type { Viewer, ViewerState } from '../../components/stage/viewer'
 import { assetUrl } from '../../lib/assets'
@@ -70,10 +78,12 @@ const DOCK_INSPECTOR_PX = 760
 const COMPACT_VIEW_PX = 560
 
 function useWidth(ref: RefObject<HTMLElement | null>): number {
-  const [width, setWidth] = useState(() => ref.current?.clientWidth ?? 1440)
-  useEffect(() => {
+  const [width, setWidth] = useState(1440)
+  // Measured before the first paint, so a narrow window never flashes docked panels.
+  useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
+    setWidth(el.clientWidth)
     const observer = new ResizeObserver(([entry]) => setWidth(entry!.contentRect.width))
     observer.observe(el)
     return () => observer.disconnect()
