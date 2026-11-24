@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Builds the Blender scene from a resolved job: piece, rig, world, ground and camera.
 
 Hierarchy (mirrors the three.js side so both renderers move identically):

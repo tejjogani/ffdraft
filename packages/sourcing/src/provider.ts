@@ -1,5 +1,5 @@
 /**
- * Sourcing is a provider seam so the open-source project stays vendor-neutral: Diaex is the
+ * Sourcing is a provider seam so the product stays vendor-neutral: Diaex is the
  * first-party marketplace, `none` leaves the Stones tab a plain bill of materials.
  *
  * Phases (docs/research/07-sourcing.md §6): P0 link-out needs nothing from the marketplace and

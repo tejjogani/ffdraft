@@ -137,6 +137,11 @@ used for evaluation.
   runs on all three operating systems. Blender is found through the `bpy` wheel or a user
   install.
 
+- **Licence** — Pavé is a proprietary product; the repository may be public, but it is not
+  open source ([`LICENSE`](../LICENSE)). The one exception is `workers/render`, which imports
+  Blender's GPL Python API and is therefore a separate GPL program that Pavé starts as its
+  own process. OpenCascade (LGPL) ships as a separate, replaceable `.wasm` file.
+
 ## Sourcing
 
 Every stone in a design is a structured record, so a piece has a live bill of materials. Each

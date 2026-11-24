@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Numeric render metrics for the critique loop; consumed by `assessRender` in @pave/render.
 
 Field names and definitions mirror `RenderMetrics` in packages/render/src/assess.ts.

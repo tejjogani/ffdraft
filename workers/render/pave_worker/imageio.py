@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """PNG in and out as numpy arrays (H × W × C, float32 0–1, top row first).
 
 Reading goes through Blender's image loader (no extra dependency); writing uses a tiny

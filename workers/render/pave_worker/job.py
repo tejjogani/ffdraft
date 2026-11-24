@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Typed view of the job file written by `@pave/render/node` (see packages/render/src/types.ts).
 
 The worker reads only what this module declares; every number is explicit in the job, so the

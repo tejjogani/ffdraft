@@ -126,7 +126,7 @@ Each is returned separately with its delta, never mixed into exact results.
 **Auth: recommendation.** OAuth 2.1 authorization code + PKCE, "Connect Diaex account", with Diaex as the authorization server. A grant is for one Diaex user in one org, stored on the Pavé org. Every request re-reads that user's access level, exactly as a Firebase call does, so KYC, removal and markup take effect at once. Scopes: `stones:read`, `prices:read`, `cart:write`, `requests:write`, `holds:write`, `orders:read`, `metals:read`.
 
 - Ship first: personal partner tokens created on Diaex's account page and pasted into Pavé. They write the same token rows OAuth will mint later, and they suit self-hosters.
-- Not shared SSO: a Firebase ID token carries every right the person has on Diaex, and Pavé is open source and self-hostable.
+- Not shared SSO: a Firebase ID token carries every right the person has on Diaex, and a desktop or self-hosted Pavé runs outside Diaex's control. (Written when Pavé was planned as open source; it is now a proprietary product, decided 24 November 2026, and the reasoning still holds for any installation Diaex does not operate.)
 - Not one global API key: Diaex's price gate is per company.
 
 | Endpoint | Purpose |

@@ -238,7 +238,7 @@ This section depends on question 6 (whose product the store is) and on the hosti
 
 **Principle.** Pavé is the record for everything about a piece. Diaex is the record for stones, companies and the public trade identity. Where one holds the other's data, it is a cache with a named owner and a rule for going stale.
 
-| | Pavé, open source | The hosted Pavé service (capability 9) | Diaex, closed |
+| | Pavé, the product | The hosted Pavé service (capability 9) | Diaex |
 |---|---|---|---|
 | Owns | Import; the product record; facts from CAD or the sheet; the price as shown, however question 9 settles it; stock mode and count; the catalogue API, feeds and public media; the stone list per piece | An always-on public address; storage and delivery at volume; the inbound file-drop endpoint and SFTP if offered; bulk workers; the mapping model; keys and usage; the people who help with each import | Who may have a store (company, verification, handle, takedown); the pages, in shapes A and B; live stone availability and the price rule; Terms |
 | Does not own | Anything that exists only when hosted | Catalogue logic a self-hoster would lack | A second developer API; picture files |
@@ -250,12 +250,12 @@ This section depends on question 6 (whose product the store is) and on the hosti
 3. **Stones, Diaex to the page.** Each stone requirement is resolved by Diaex's existing code, so the price and supplier rules cannot drift.
 4. **Demand.** One system must be named the record for an enquiry; a copy in both doubles the personal data. Delivering enquiries into Pavé also pulls forward the plan's inbound events and order intake, which it places last (P3).
 
-**The licence boundary (needs a lawyer; this is my reading).** Pavé is AGPL-3.0-or-later (`LICENSE`); Diaex is closed. The repo has no copyright notice, contributor agreement or contributing file.
-- The safe boundary between the two is the network only: API, feeds, webhooks, an embedded frame.
-- Hosted-only code that changes the server (bulk workers, mapping glue, keys, SFTP) would have to be published, unless the operator holds all the copyright. The first outside contribution ends that freedom unless a contributor agreement or second licence is in place first.
-- Our viewer inside Diaex's closed pages or a customer's site is AGPL code in a closed front end, unless it is served in a frame from the Pavé host or licensed separately.
-- Diaex may call Pavé but not copy its code (for example the stone-requirement mapping) without a separate licence from the owner.
-- A Diaex channel in Pavé's open tree publishes the contract between the two.
+**The licence boundary (decided 24 November 2026: Pavé is a proprietary product, not open source; the repository may be public).** An earlier draft of this section assumed an AGPL licence; that no longer applies.
+- Hosted-only code, the viewer inside Diaex's pages or a customer's site, and code shared between Pavé and Diaex raise no licence question, provided one owner holds the copyright in both or licenses one to the other in writing.
+- Still open, and for a lawyer: which legal entity holds Pavé's copyright (`LICENSE` names "Pavé" until you say), and the terms under which customers, their developers and any self-hosted or desktop installation use it.
+- A public repository with no licence grant is readable but gives nobody the right to use it. Outside contributions should not be accepted without a contributor agreement.
+- One part must stay GPL: the render runner in `workers/render` imports Blender's GPL Python API. It is a separate program that Pavé starts as its own process, so it does not affect the rest; if a desktop version ships that runner, its source ships with it.
+- Third-party parts were checked on 24 November 2026: all permissive, except OpenCascade's WebAssembly build (LGPL, shipped as a separate replaceable file) and the image library behind `sharp` (LGPL, a separate shared library). Neither stops a closed product.
 
 ## 5. What must be true first, and what each thing gates
 
@@ -293,7 +293,7 @@ In order: the first two decide whether the rest matter now, and question 3 decid
 | 14 | Would a named jeweler pay for the page, the import or the API, and how much? | Unknown; comparables suggest little for a page | It decides whether this earns anything |
 | 15 | Who runs the hosted Pavé service, and which legal entity is responsible for jewelers' catalogues and visitors' enquiries? | Open | Nothing public can exist without it |
 | 16 | Who at Diaex or Pavé may see an imported library, and how are Aska's roles kept apart? | The earlier memo's: never visible to Diaex staff | Jewelers will not upload CAD to a supplier's family otherwise |
-| 17 | Who holds Pavé's copyright, and is a contributor agreement or second licence adopted before outside contributions? | Open; needs a lawyer | It decides what the hosted service and Diaex may keep closed |
+| 17 | Which legal entity holds Pavé's copyright, and on what terms do customers and their developers use it? | Open; needs a lawyer. Decided already: proprietary, not open source | It decides who can license Pavé to Diaex and to customers |
 | 18 | Which named developer or agency wants FTP, and what do they point at it? | A feed address or manifest | SFTP is a running service |
 
 ## 7. What to ask your father for

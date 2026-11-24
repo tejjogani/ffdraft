@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Pavé render runner: a fixed, reviewed program — never generated code.
 
     python pave_render.py job.json                  # bpy wheel (workers/render/.venv)

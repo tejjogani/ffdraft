@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Cycles materials from resolved material records (research §2 "Mapping to renderers").
 
 Metals: Metallic BSDF in F82 mode. Transparent gems: Principled BSDF with native dispersion

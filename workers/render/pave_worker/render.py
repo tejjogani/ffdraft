@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
 """Cycles configuration, rendering, background compositing and video encoding.
 
 The beauty pass always renders on a transparent film; the background (display-referred, as in
