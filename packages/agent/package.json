@@ -7,13 +7,14 @@
   "exports": {
     ".": "./src/index.ts",
     "./anthropic": "./src/anthropic.ts",
-    "./studio": "./src/studio.ts"
+    "./studio": "./src/studio.ts",
+    "./photo": "./src/photo.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "1.13.0",
+    "@anthropic-ai/sdk": "1.14.0",
     "@pave/canon": "workspace:*",
     "@pave/schema": "workspace:*",
     "zod": "^4.6.7"

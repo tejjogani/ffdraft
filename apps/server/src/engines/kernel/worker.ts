@@ -9,6 +9,7 @@
 import { parentPort, workerData } from 'node:worker_threads'
 import { createKernel, type LocalKernel } from '@pave/kernel'
 import type { AssetResolver, Kernel } from '@pave/kernel/types'
+import { fitToPhoto, shade, viewCamera } from '@pave/match'
 import { buildProductionPackage } from '@pave/production/node'
 import { subjectOf } from '@pave/render'
 import type { Design } from '@pave/schema'
@@ -144,6 +145,36 @@ async function run(
         result: { zip, manifest: built.manifest, root: built.root, timings: built.timings },
         transfer: [zip.buffer],
       }
+    }
+    case 'picture': {
+      const evaluation = await kernel.evaluate(task.design, { detail: 'draft', assets, signal })
+      const hide = Object.entries(task.design.nodes)
+        .filter(([, n]) => (n as { kind: string }).kind === 'chain')
+        .map(([id]) => id)
+      // Rasterising is synchronous; check between views so a cancel lands between pictures.
+      const images: Uint8Array<ArrayBuffer>[] = []
+      for (const view of task.views) {
+        signal.throwIfAborted()
+        const camera = viewCamera(evaluation, view, { hide })
+        const size = { width: task.size, height: task.size }
+        images.push(own(shade(evaluation, camera, size, { focus: task.focus, hide })))
+      }
+      return {
+        result: { images, summary: summarize(evaluation) },
+        transfer: images.map((i) => i.buffer),
+      }
+    }
+    case 'photoFit': {
+      const out = await fitToPhoto({
+        design: task.design,
+        ...task.fit,
+        evaluate: (design, s) =>
+          kernel.evaluate(design, { detail: 'draft', assets, signal: s ?? signal }),
+        signal,
+      })
+      // The fitted design is the input plus the ops; leave it behind rather than copy it back.
+      const { design: _design, ...result } = out.result
+      return { result: { ...out, result }, transfer: [] }
     }
   }
 }

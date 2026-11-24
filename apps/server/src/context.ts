@@ -31,6 +31,11 @@ export interface Ctx {
   readonly authMode: AuthMode
   /** The command pipeline (role, validation, audit) for an explicit context; see {@link invoke}. */
   readonly execute: Execute
+  /**
+   * Aborted when whoever asked gives up, e.g. an assistant run is stopped mid-call. Long work
+   * (a fit, a render on the server) passes it on; most commands are short and ignore it.
+   */
+  readonly signal?: AbortSignal
 }
 
 export type Execute = (name: CommandName, input: unknown, ctx: Ctx) => Promise<unknown>

@@ -1,9 +1,11 @@
 /**
  * Client tools: calls only a studio window can answer (look through its viewport, read or change
- * what is on screen). The server asks one window of the run's user with a targeted
- * `client.request` event — the window that sent the message first, else any of theirs — and the
- * window answers with `client.respond`. The first answer wins; no window, or no answer in time,
- * is a typed error the model reads.
+ * what is on screen). The server asks the run's user with a targeted `client.request` event: the
+ * window that sent the message when it is still connected, else every window of theirs. The first
+ * window that succeeds answers; a window that cannot (that piece is not open there) says so, and
+ * only when every window asked has said so does the call fail. No window, or no answer in time,
+ * is a typed {@link NoWindow} error the caller can fall back from (a capture is then drawn on the
+ * server) or show the model.
  */
 import { type ClientToolName, clientTools } from '@pave/schema'
 import { z } from 'zod'
@@ -14,10 +16,21 @@ import { createId } from '../ids'
 /** How long a window has to answer (a capture waits for the kernel and renders). */
 export const CLIENT_TIMEOUT_MS = 60_000
 
+/** No window could answer: none open, every one said it cannot, or none answered in time. */
+export class NoWindow extends AppError {
+  constructor(message: string) {
+    super('conflict', message)
+    this.name = 'NoWindow'
+  }
+}
+
 interface Pending {
   orgId: string
   userId: string
   tool: ClientToolName
+  /** Windows the request reached; when all of them answered with an error, it fails. */
+  expected: number
+  errors: string[]
   resolve(output: unknown): void
   reject(err: unknown): void
 }
@@ -33,21 +46,25 @@ export class ClientBridge {
       tool: ClientToolName
       input: unknown
       signal: AbortSignal
+      /** For a capture: the committed design version the window must show first. */
+      atVersion?: number | null
       timeoutMs?: number
     },
   ): Promise<unknown> {
     const to = { userId: ctx.user.id, ...(call.clientId ? { clientId: call.clientId } : {}) }
     if (!ctx.events.isConnected(ctx.orgId, { userId: ctx.user.id }))
-      throw new AppError(
-        'conflict',
+      throw new NoWindow(
         `${call.tool} needs an open Pavé window, and the designer has none open right now. Go on without it, or ask them to open Pavé.`,
       )
+    call.signal.throwIfAborted()
     const requestId = createId('req')
     const answer = new Promise<unknown>((resolve, reject) => {
       this.#pending.set(requestId, {
         orgId: ctx.orgId,
         userId: ctx.user.id,
         tool: call.tool,
+        expected: Number.POSITIVE_INFINITY,
+        errors: [],
         resolve,
         reject,
       })
@@ -56,9 +73,8 @@ export class ClientBridge {
       () =>
         this.#settle(requestId, (p) =>
           p.reject(
-            new AppError(
-              'conflict',
-              `The Pavé window did not answer ${call.tool} in time. Go on without it.`,
+            new NoWindow(
+              `The Pavé window did not answer ${call.tool} in time${p.errors.length ? ` (${p.errors.join('; ')})` : ''}. Go on without it.`,
             ),
           ),
         ),
@@ -67,7 +83,7 @@ export class ClientBridge {
     const onAbort = () => this.#settle(requestId, (p) => p.reject(call.signal.reason))
     call.signal.addEventListener('abort', onAbort, { once: true })
     try {
-      publish(
+      const reached = publish(
         ctx,
         {
           type: 'client.request',
@@ -75,9 +91,21 @@ export class ClientBridge {
           runId: call.runId,
           tool: call.tool,
           input: call.input,
+          ...(call.atVersion !== undefined ? { atVersion: call.atVersion } : {}),
         },
         to,
       )
+      const p = this.#pending.get(requestId)
+      if (p) {
+        // Windows answer on later turns of the event loop, so the count is in place before any.
+        p.expected = reached
+        if (reached === 0)
+          this.#settle(requestId, (q) =>
+            q.reject(
+              new NoWindow(`${call.tool} needs an open Pavé window, and none is connected.`),
+            ),
+          )
+      }
       return await answer
     } finally {
       clearTimeout(timer)
@@ -86,7 +114,7 @@ export class ClientBridge {
     }
   }
 
-  /** A window's answer. Only the user the request was for can answer it; the first answer wins. */
+  /** A window's answer. Only the user the request was for can answer it; the first success wins. */
   respond(
     who: { orgId: string; userId: string },
     answer: { requestId: string; output?: unknown; error?: string },
@@ -94,9 +122,19 @@ export class ClientBridge {
     const p = this.#pending.get(answer.requestId)
     if (!p || p.orgId !== who.orgId || p.userId !== who.userId)
       throw notFound('Client request', answer.requestId)
+    if (answer.error !== undefined) {
+      p.errors.push(answer.error)
+      if (p.errors.length >= p.expected)
+        this.#settle(answer.requestId, (q) =>
+          q.reject(
+            new NoWindow(
+              `No Pavé window could do ${q.tool}: ${[...new Set(q.errors)].join('; ')}.`,
+            ),
+          ),
+        )
+      return
+    }
     this.#settle(answer.requestId, (q) => {
-      if (answer.error !== undefined)
-        return q.reject(new AppError('conflict', `The Pavé window said: ${answer.error}`))
       const checked = clientTools[q.tool].output.safeParse(answer.output)
       if (!checked.success)
         return q.reject(

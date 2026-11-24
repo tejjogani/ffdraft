@@ -51,9 +51,11 @@ import type {
   Run,
   SearchResult,
   Thread,
+  View,
 } from '@pave/schema'
 import type { NewAsset } from './assets/assets'
 import type { Invoke } from './context'
+import type { PhotoFitResult, PhotoFitTask } from './engines/kernel/protocol'
 import { NotConfiguredError } from './errors'
 import type { NewUsage } from './usage'
 
@@ -175,6 +177,22 @@ export interface GeometryService extends Service {
     sctx: ServiceContext,
     opts?: GeometryCall,
   ): Promise<{ glb: FileData; subject: RenderSubject }>
+  /**
+   * Shaded clay pictures of the design (RGBA bytes, `size`×`size`, one per view) from the
+   * software rasteriser, for when no studio window can draw it. Optional: engines without it
+   * leave the assistant without pictures when no window is open.
+   */
+  picture?(
+    design: Design,
+    opts: { views: View[]; size: number; focus: string[] } & GeometryCall,
+    sctx: ServiceContext,
+  ): Promise<{ images: Uint8Array[]; summary: EvaluationSummary }>
+  /** Fits the design's outline numbers to a photo's matte (`match.fit`). Optional, as above. */
+  fitPhoto?(
+    design: Design,
+    opts: { fit: PhotoFitTask } & GeometryCall,
+    sctx: ServiceContext,
+  ): Promise<PhotoFitResult>
 }
 
 export interface SearchService extends Service {
@@ -373,6 +391,11 @@ export interface AssistantService extends Service {
   accept(runId: string, sctx: ServiceContext): Promise<Run>
   /** Completes a pending client-tool request; the first answer wins. */
   respond(input: CommandParsedInput<'client.respond'>, sctx: ServiceContext): Promise<void>
+  /** `references.read` outside a run, on the organisation's default tier. */
+  readPhotos?(
+    input: CommandParsedInput<'references.read'>,
+    sctx: ServiceContext,
+  ): Promise<CommandOutput<'references.read'>>
   /**
    * Whether this organisation can use the assistant now (it has a key). The service is shared by
    * every organisation of the server, so `session.get` asks this for the caller's one.

@@ -6,7 +6,9 @@
  *
  * A fixture is `{ "runs": [[turn, …], …] }`: the n-th run started in this process plays
  * `runs[n % runs.length]`, one turn per model call, and a resumed run continues where it was.
- * `{{pieceId}}` anywhere in a turn is replaced by the piece the run is working on at that moment.
+ * `{{pieceId}}` anywhere in a turn is replaced by the piece the run is working on at that moment,
+ * and `{{attachment}}` by the first photo attached to the latest message (from its context
+ * message), so a fixture can read and fit "the photo the designer just sent".
  *
  * Two extras for watching the studio (screenshots, demos), neither part of the API:
  *  - `"paceMs": 40` streams the turn's text a word at a time, waiting that long between events;
@@ -111,8 +113,15 @@ export function scriptedFromEnv(env: Readonly<Record<string, string | undefined>
  * Replaces `{{pieceId}}` in a turn (through its JSON, so nested inputs are covered) and gives
  * tool calls without an id one unique in the run, as the API's own ids are.
  */
-function fill(turn: FixtureTurn, pieceId: string | null, tag: string): ScriptedTurn {
-  const json = JSON.stringify(turn).replaceAll('{{pieceId}}', pieceId ?? 'no-piece')
+function fill(
+  turn: FixtureTurn,
+  pieceId: string | null,
+  tag: string,
+  attachment: string | null,
+): ScriptedTurn {
+  const json = JSON.stringify(turn)
+    .replaceAll('{{pieceId}}', pieceId ?? 'no-piece')
+    .replaceAll('{{attachment}}', attachment ?? 'no-attachment')
   const { paceMs: _pace, error, ...filled } = JSON.parse(json) as FixtureTurn
   return {
     ...filled,
@@ -121,6 +130,17 @@ function fill(turn: FixtureTurn, pieceId: string | null, tag: string): ScriptedT
       b.type === 'tool_use' && !b.id ? { ...b, id: `toolu_${tag}_${i}` } : b,
     ),
   }
+}
+
+/** The first attachment named in the latest context message (`name (asset as_…, mime)`). */
+function latestAttachment(params: Parameters<ModelClient['stream']>[0]): string | null {
+  for (let i = params.messages.length - 1; i >= 0; i--) {
+    const m = params.messages[i]!
+    if ((m.role as string) !== 'system') continue
+    const found = /\(asset ([A-Za-z0-9_-]+),/.exec(JSON.stringify(m.content))
+    if (found) return found[1]!
+  }
+  return null
 }
 
 /** A model factory playing the fixture: one queue of turns per run, kept across its sessions. */
@@ -138,10 +158,9 @@ export function scriptedFactory(fixture: Fixture): ModelFactory {
       stream(params, options) {
         const turn = q.shift()
         const tag = `${run.runId.slice(-8)}${q.length}`
-        const stream = scriptedModel(turn ? [fill(turn, run.pieceId(), tag)] : []).stream(
-          params,
-          options,
-        )
+        const stream = scriptedModel(
+          turn ? [fill(turn, run.pieceId(), tag, latestAttachment(params))] : [],
+        ).stream(params, options)
         return turn?.paceMs ? paced(stream, turn.paceMs, options.signal) : stream
       },
     }

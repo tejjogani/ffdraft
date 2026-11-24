@@ -55,6 +55,9 @@ const DEFAULT_TIMEOUT_MS: Record<TaskKind, number> = {
   export: 300_000,
   renderInput: 300_000,
   package: 900_000,
+  picture: 120_000,
+  // The fit stops itself at its own budget (at most two minutes); this is the backstop.
+  photoFit: 180_000,
 }
 
 const VERB: Record<TaskKind, string> = {
@@ -62,10 +65,20 @@ const VERB: Record<TaskKind, string> = {
   export: 'export this design',
   renderInput: 'prepare this design for rendering',
   package: 'build this production package',
+  picture: 'draw this design',
+  photoFit: 'fit this design to the photo',
 }
 
 /** Queue order: lower first. Anything above 0 is heavy and may not take the last free worker. */
-const RANK: Record<TaskKind, number> = { evaluate: 0, export: 1, renderInput: 1, package: 2 }
+const RANK: Record<TaskKind, number> = {
+  evaluate: 0,
+  picture: 0,
+  export: 1,
+  renderInput: 1,
+  // A fit holds a worker for up to two minutes: heavy, so it never takes the last free one.
+  photoFit: 2,
+  package: 2,
+}
 const BACKGROUND_RANK = 2
 
 /** What the kernel refuses on purpose: the caller's request, not the server, is at fault. */

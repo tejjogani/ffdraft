@@ -67,11 +67,12 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
     steps: [
       {
         id: 'brief',
-        label: 'Read the brief and the spec',
+        label: 'Read the brief, the spec and any photo',
         tools: [
           'pieces.get',
           'boards.get',
           'references.search',
+          'references.read',
           'design.history',
           'freeform.analyze',
         ],
@@ -89,8 +90,8 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
       { id: 'check', label: 'Check weight, sizes and stones', tools: ['design.evaluate'] },
       {
         id: 'look',
-        label: 'Look at it and fix what is off',
-        tools: ['viewport.capture', 'viewport.select'],
+        label: 'Look at it, compare it with any photo, fix what is off',
+        tools: ['viewport.capture', 'viewport.select', 'match.fit'],
       },
     ],
   },

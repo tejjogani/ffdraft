@@ -9,7 +9,7 @@ import { and, asc, count, desc, eq, inArray, max, ne, or, type SQL, sql } from '
 import { getAssetRow, putAsset } from '../assets/assets'
 import { actorRunId, type Ctx, publish } from '../context'
 import * as t from '../db/schema'
-import { badRequest, conflict, forbidden, notFound } from '../errors'
+import { badRequest, conflict, forbidden, NotConfiguredError, notFound } from '../errors'
 import { createId } from '../ids'
 import { ensure, ensureAll, getBoard, getPiece, getReference } from '../lookups'
 import { serviceContext } from '../service-context'
@@ -415,6 +415,14 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
       orderBy: asc(t.reference.position),
     })
     return rows.map(toReference)
+  },
+
+  // Inside an assistant run the loop reads on the run's own client; this is everyone else's way.
+  'references.read': async (ctx, input) => {
+    const assistant = ctx.services.require('assistant')
+    if (!assistant.readPhotos)
+      throw new NotConfiguredError('assistant', 'This server cannot read photos.')
+    return assistant.readPhotos(input, serviceContext(ctx))
   },
 
   'references.capture': async (ctx, { id }) => {

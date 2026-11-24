@@ -6,10 +6,12 @@
  * API can show: the request shape is accepted, a tool call comes back valid, the second turn
  * reads the cache, and no replayed thinking block is dropped. Spends a little money (it prints
  * the cost); never prints the key. Reads ANTHROPIC_API_KEY from the environment or
- * apps/server/.env.
+ * apps/server/.env. Then one photo read per tier (`references.read`'s structured-output call) on
+ * a drawn solitaire, which shows the read's JSON schema is accepted and its answer validates.
  */
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { deflateSync } from 'node:zlib'
 import type {
   BetaMessage,
   BetaMessageParam,
@@ -26,6 +28,7 @@ import {
   StreamAdapter,
   toApiMessages,
 } from './anthropic'
+import { buildReadRequest, parseReadMessage } from './photo'
 import { MODELS, resolveTiers } from './pricing'
 import { renderContext } from './prompt/index'
 import { parseToolCall } from './tools'
@@ -77,6 +80,82 @@ async function turn(model: AssistantModelId, messages: BetaMessageParam[]) {
   for await (const e of stream) streamed += adapter.push(e).length
   const message: BetaMessage = await stream.finalMessage()
   return { message, adapter, streamed }
+}
+
+/** A PNG of RGBA pixels, with no image library: the smoke test runs on the agent package alone. */
+function png(rgba: Uint8Array, w: number, h: number): string {
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+    return c >>> 0
+  })
+  const crc = (b: Uint8Array) => {
+    let c = 0xffffffff
+    for (const x of b) c = crcTable[(c ^ x) & 0xff]! ^ (c >>> 8)
+    return (c ^ 0xffffffff) >>> 0
+  }
+  const chunk = (type: string, data: Uint8Array) => {
+    const out = Buffer.alloc(12 + data.length)
+    out.writeUInt32BE(data.length, 0)
+    out.write(type, 4, 'ascii')
+    Buffer.from(data).copy(out, 8)
+    out.writeUInt32BE(crc(out.subarray(4, 8 + data.length)), 8 + data.length)
+    return out
+  }
+  const header = Buffer.alloc(13)
+  header.writeUInt32BE(w, 0)
+  header.writeUInt32BE(h, 4)
+  header.set([8, 6, 0, 0, 0], 8)
+  const rows = Buffer.alloc((w * 4 + 1) * h)
+  for (let y = 0; y < h; y++)
+    Buffer.from(rgba.subarray(y * w * 4, (y + 1) * w * 4)).copy(rows, y * (w * 4 + 1) + 1)
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', header),
+    chunk('IDAT', deflateSync(rows)),
+    chunk('IEND', new Uint8Array()),
+  ]).toString('base64')
+}
+
+/** A plain drawing of a solitaire from the front: a band, a round stone, four claws. */
+function solitaireDrawing(): string {
+  const w = 512
+  const px = new Uint8Array(w * w * 4).fill(250)
+  const put = (x: number, y: number, c: [number, number, number]) => {
+    if (x < 0 || y < 0 || x >= w || y >= w) return
+    px.set([...c, 255], (y * w + x) * 4)
+  }
+  for (let y = 0; y < w; y++)
+    for (let x = 0; x < w; x++) {
+      const e = ((x - 256) / 150) ** 2 + ((y - 300) / 170) ** 2
+      if (e > 0.82 && e < 1) put(x, y, [190, 170, 120])
+      if ((x - 256) ** 2 + (y - 140) ** 2 < 48 ** 2) put(x, y, [205, 222, 240])
+      for (const [cx, cy] of [
+        [214, 104],
+        [298, 104],
+        [214, 176],
+        [298, 176],
+      ] as const)
+        if ((x - cx) ** 2 + (y - cy) ** 2 < 8 ** 2) put(x, y, [170, 150, 100])
+    }
+  return png(px, w, w)
+}
+
+async function readPhoto(model: AssistantModelId, r: Result): Promise<void> {
+  const client = anthropicModel({ apiKey: apiKey!, maxRetries: 2 })
+  const params = buildReadRequest({
+    model,
+    images: [{ label: 'drawing.png', mediaType: 'image/png', data: solitaireDrawing() }],
+  })
+  const message = await client.stream(params, {}).finalMessage()
+  r.costUsd += messageUsage(message).costUsd
+  try {
+    const read = parseReadMessage(message)
+    r.notes.push(`photo read: ${read.kind.value}, ${read.archetype.value}, view ${read.view}`)
+  } catch (err) {
+    r.ok = false
+    r.notes.push(`FAIL photo read: ${err instanceof Error ? err.message : String(err)}`)
+  }
 }
 
 async function smoke(tier: AssistantTier): Promise<Result> {
@@ -139,6 +218,8 @@ async function smoke(tier: AssistantTier): Promise<Result> {
       if (classifyStop(c.message).kind !== 'end')
         fail(`turn 3 stopped with ${c.message.stop_reason}`)
     }
+    // 4. A photo read: structured output with the read's schema, on the same model.
+    await readPhoto(model, r)
   } catch (err) {
     fail(mapError(err, { model }).message)
   }

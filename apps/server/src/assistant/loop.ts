@@ -54,7 +54,9 @@ import type {
   AiJob,
   AssistantModelId,
   ClientToolName,
+  ClientToolParsedInput,
   CommandName,
+  CommandParsedInput,
   EvaluationSummary,
   Run,
 } from '@pave/schema'
@@ -77,8 +79,11 @@ import {
   toRun,
 } from '../traces'
 import { assertBudget, recordUsage } from '../usage'
+import { NoWindow } from './bridge'
+import { captureOnServer } from './capture'
 import type { RunHost } from './host'
 import { modelImage } from './images'
+import { readPhotos } from './read'
 
 export type StepOutcome = 'continue' | 'suspended' | 'finished'
 
@@ -708,17 +713,9 @@ interface CommandRun {
 async function runCommand(host: RunHost, job: Job): Promise<CommandRun> {
   const ctx = host.forCall(job.call.id)
   const input = job.input as Record<string, unknown>
-  if (job.def.client) {
-    const value = await host.deps.bridge.request(ctx, {
-      runId: host.runId,
-      clientId: host.clientId,
-      tool: job.def.command as ClientToolName,
-      input: job.input,
-      signal: host.signal,
-    })
-    return { value, images: await captureImages(ctx, value) }
-  }
+  if (job.def.client) return runClientTool(host, job, ctx)
   const command = job.def.command as CommandName
+  if (command === 'references.read') return readInRun(host, job, ctx)
   const notes: string[] = []
   let callInput: unknown = job.input
   if (command === 'design.apply') {
@@ -731,6 +728,68 @@ async function runCommand(host: RunHost, job: Job): Promise<CommandRun> {
   const value = await host.deps.runtime.execute(command, callInput, ctx)
   await afterCommand(host, command, input, value, notes)
   return { value, notes }
+}
+
+/**
+ * A client tool, asked of the designer's windows. A capture no window can draw (none open, none
+ * showing that piece, none answering) is drawn on the server instead, and says so.
+ */
+async function runClientTool(host: RunHost, job: Job, ctx: Ctx): Promise<CommandRun> {
+  const tool = job.def.command as ClientToolName
+  const capture = tool === 'viewport.capture'
+  const pieceId = capture ? (job.input as { pieceId: string }).pieceId : null
+  // The window waits for the version just committed, so it draws the edit the model just made.
+  const atVersion = pieceId ? (await getPiece(ctx, pieceId)).version : null
+  const ask = (clientId: string | null) =>
+    host.deps.bridge.request(ctx, {
+      runId: host.runId,
+      clientId,
+      tool,
+      input: job.input,
+      signal: host.signal,
+      ...(capture ? { atVersion } : {}),
+    })
+  try {
+    let value: unknown
+    try {
+      value = await ask(host.clientId)
+    } catch (err) {
+      // The window the message came from cannot (that piece is not open there): ask them all.
+      if (host.signal.aborted || !(err instanceof NoWindow) || !host.clientId) throw err
+      value = await ask(null)
+    }
+    return { value, images: await captureImages(ctx, value) }
+  } catch (err) {
+    if (host.signal.aborted) throw host.signal.reason
+    if (!capture || !(err instanceof NoWindow)) throw err
+    const value = await captureOnServer(
+      ctx,
+      job.input as ClientToolParsedInput<'viewport.capture'>,
+      host.signal,
+    )
+    return {
+      value,
+      images: await captureImages(ctx, value),
+      notes: [
+        `${err.message} These pictures were drawn on the server instead: plain shaded clay (metal grey, stones pale blue), no materials or labels.`,
+      ],
+    }
+  }
+}
+
+/** The photo read, on the run's own client and tier, billed to the run. */
+async function readInRun(host: RunHost, job: Job, ctx: Ctx): Promise<CommandRun> {
+  const { output, tokens, costUsd } = await readPhotos({
+    ctx,
+    client: host.client,
+    model: host.model as AssistantModelId,
+    input: job.input as CommandParsedInput<'references.read'>,
+    signal: host.signal,
+    usage: { key: `${host.runId}:${job.call.id}:read`, runId: host.runId, pieceId: host.pieceId },
+  })
+  await addUsage(host.ctx, host.runId, { tokens, costUsd })
+  host.emit({ type: 'usage', tokens, costUsd })
+  return { value: output }
 }
 
 /** Bookkeeping and the notes the prompt promises after particular tools. */

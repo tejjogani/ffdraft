@@ -828,7 +828,8 @@ export class Viewer {
       for (const m of [this.materials.silhouette, this.materials.selected, this.materials.hovered])
         m.setResolution(opts.size, opts.size)
       this.safeFraction = 1
-      // A picture of the piece shows all of it: hiding in the view is a working aid only.
+      // A picture of the piece shows all of it: hiding in the view is a working aid only, and the
+      // glow on parts the assistant just edited is a cue for the person, not part of the piece.
       this.state = {
         ...this.state,
         display: opts.mode,
@@ -837,6 +838,7 @@ export class Viewer {
         hover: null,
         hidden: [],
         xray: false,
+        aiTint: [],
       }
       this.applyLook()
       this.moving = false

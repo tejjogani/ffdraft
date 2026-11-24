@@ -25,6 +25,8 @@ export interface SendOptions {
   tier?: AssistantTier
   /** Send without the composer's photos and selection (a starter, Retry, Continue). */
   bare?: boolean
+  /** Photos to send instead of the composer's (a job started from a photo). */
+  attachments?: string[]
 }
 
 /** Sends from the dock's state: its conversation, chips, photos and tier. */
@@ -39,7 +41,7 @@ export function useSend(page: AssistantContext) {
     const pieceId =
       opts.pieceId ?? pagePiece ?? (opts.bare ? undefined : s.selection?.pieceId) ?? undefined
     const tier = opts.tier ?? (threadId ? s.tierByThread[threadId] : s.draftTier) ?? undefined
-    const photos = opts.bare ? [] : s.attachments.map((a) => a.id)
+    const photos = opts.attachments ?? (opts.bare ? [] : s.attachments.map((a) => a.id))
     const input: CommandInput<'threads.send'> = {
       ...(threadId ? { threadId } : {}),
       text,

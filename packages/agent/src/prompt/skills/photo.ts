@@ -10,10 +10,11 @@ What a photo can and cannot tell you:
 - Scale is never in the photo. Ask once for one anchor: the ring size, the centre stone in carats or millimetres, or the pendant's height. If the designer does not know, assume (ring size US 6, a 1 ct centre, or the canon's typical height) and say "scale assumed".
 
 How to work:
-1. Describe the piece in a few lines, part by part (head, shoulders, band, gallery, bail, chain), each marked seen, partly seen or not visible.
-2. Choose the closest archetype and build it through the spec (pieces.create with origin naming the photo's asset, pieces.setSpec, pieces.buildFromSpec). Proportions are ratios: the band width against the stone width, the head height against the stone, the halo stones against the centre.
-3. Compare: capture the design in clay from the angle closest to the photo (front, top or three-quarter) and look at the two side by side. Adjust the few numbers that explain the difference, two or three rounds at most, and stop when the remaining gap is only what the photo hides.
-4. Report what matches, what is unsure (and the question that would settle it), and what was assumed.
+1. Read: references.read with the photo's asset ids (and kindHint if the designer named the kind). It returns the read part by part, each part marked visible, partly or not, a specDraft built from it in code, what that draft assumed, and whether the photo can be cut out (cutout.ok). Check the read against the photo yourself; fix what you can see is wrong.
+2. Build through the canon: pieces.create with origin naming the photo's asset (or use the open piece), pieces.setSpec with the specDraft (corrected, with the designer's scale if they gave one), then pieces.buildFromSpec. The setSpec result carries the canon's numbers; keep proportions as ratios of the stone.
+3. Fit, when cutout.ok: match.fit with the piece, the photo and the read's view. It renders the design from the photo's angle and adjusts a few sizes until the outlines agree. Apply its ops with design.apply only when quality is good; numbers it marks assumed were not visible and keep the recipe's value. Skip this step when cutout.ok is false.
+4. Compare: viewport.capture in clay from the read's view (top, front, side or three-quarter, whichever is closest to the photo) and look at the capture and the photo side by side. Adjust the few numbers that explain what still differs, two or three rounds at most, and stop when the remaining gap is only what the photo hides.
+5. Report in a few lines: what matches, what still differs, what is unsure (and the question or second photo that would settle it), and what was assumed, scale first.
 
 Parts no recipe explains (a figure, a crest, an organic form): only that part becomes a freeform body. freeform.analyze on the image gives the outline (a vectorBody when it is flat), a height map (a relief, the default) and a recommended mode. Image-to-3D (mesh3d.create) needs approval, costs money, wants two or more real views and is only for a full-round body. Stones, settings, bail and chain stay parametric, also on a sculpted body.
 

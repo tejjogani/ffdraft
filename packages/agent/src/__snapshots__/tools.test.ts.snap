@@ -2,7 +2,7 @@
 
 exports[`tool schemas > is sorted and stable (snapshot) 1`] = `
 {
-  "hash": "0495d5d56495ac",
+  "hash": "01f8dd0bd5ed6b",
   "tools": [
     "boards_create mutation",
     "boards_delete mutation confirm strict",
@@ -16,6 +16,7 @@ exports[`tool schemas > is sorted and stable (snapshot) 1`] = `
     "design_history query",
     "design_revert mutation",
     "freeform_analyze mutation",
+    "match_fit mutation",
     "mesh3d_create mutation confirm",
     "mesh3d_estimate query",
     "mesh3d_get query strict",
@@ -36,6 +37,7 @@ exports[`tool schemas > is sorted and stable (snapshot) 1`] = `
     "references_estimate query",
     "references_generate mutation confirm",
     "references_lineage query strict",
+    "references_read mutation",
     "references_save mutation",
     "references_search query",
     "references_similar query",

@@ -10,17 +10,19 @@ import {
   PROMPT_HASH,
   resolveTiers,
 } from '@pave/agent'
-import type { AiJob, CommandParsedInput, Run, Thread } from '@pave/schema'
+import type { AiJob, CommandOutput, CommandParsedInput, Run, Thread } from '@pave/schema'
 import { and, desc, eq } from 'drizzle-orm'
 import type { Ctx } from '../context'
 import * as t from '../db/schema'
 import { conflict, NotConfiguredError } from '../errors'
+import { createId } from '../ids'
 import { getPiece, getRun, getThread } from '../lookups'
 import type { AssistantService, ServiceContext } from '../services'
 import { addMessage, createThread, decideStep, setJob, startRun, toRun, toThread } from '../traces'
 import { isPauseReason, type PauseReason } from './driver'
 import { type AssistantDeps, RunHost } from './host'
 import { closeDangling, closeOut, closeUnanswered, publishRun, runLoop } from './loop'
+import { readPhotos } from './read'
 import { contextText, userContent } from './turn'
 
 type Send = CommandParsedInput<'threads.send'>
@@ -340,6 +342,45 @@ export class Assistant implements AssistantService {
 
   async respond(input: CommandParsedInput<'client.respond'>, sctx: ServiceContext): Promise<void> {
     this.#deps.bridge.respond({ orgId: sctx.orgId, userId: sctx.userId }, input)
+  }
+
+  /**
+   * `references.read` outside a run (a person, or MCP): on the organisation's default tier, with
+   * its own client. Inside a run the loop reads on the run's client instead (see ./loop).
+   */
+  async readPhotos(
+    input: CommandParsedInput<'references.read'>,
+    sctx: ServiceContext,
+  ): Promise<CommandOutput<'references.read'>> {
+    const ctx = await this.#ctx(sctx)
+    if (!this.#available(ctx.orgId))
+      throw new NotConfiguredError(
+        'assistant',
+        'Reading photos needs a Claude API key. An owner or admin can add one in Settings, AI.',
+      )
+    const settings = await ctx.repo.settings.first()
+    const resolved = resolveTiers(
+      settings
+        ? { assistantTier: settings.assistantTier, assistantModels: settings.assistantModels }
+        : null,
+      this.#deps.env,
+    )
+    const { model } = modelForRun(resolved, undefined)
+    const id = createId('read')
+    const client = this.#deps.model({
+      runId: id,
+      model,
+      apiKey: this.#deps.scripted ? null : await this.#deps.keys.key(ctx),
+      pieceId: () => null,
+    })
+    const { output } = await readPhotos({
+      ctx: { ...ctx, actor: sctx.actor },
+      client,
+      model,
+      input,
+      usage: { key: `${id}:llm`, runId: null, pieceId: null },
+    })
+    return output
   }
 
   /** Boot: a run cut off mid-step cannot be trusted to continue; one waiting for a person can. */

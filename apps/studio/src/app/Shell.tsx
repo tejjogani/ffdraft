@@ -2,6 +2,8 @@ import { Button, EmptyState, Spinner } from '@pave/ui'
 import { Outlet } from '@tanstack/react-router'
 import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 import { Suspense } from 'react'
+import { useUiTools } from '../features/assistant/ui-tools'
+import { useClientToolRelay } from '../lib/client-tools'
 import { useShortcutListener } from '../lib/commands'
 import { useServerEvents } from '../lib/events'
 import { useRpc } from '../lib/query'
@@ -53,6 +55,9 @@ export function Root() {
 function Shell() {
   useGlobalCommands()
   useShortcutListener()
+  // The assistant's client tools: this window answers its requests and serves ui.context/navigate.
+  useClientToolRelay()
+  useUiTools()
   const collapsed = useUI((s) => s.sidebarCollapsed)
   const dockOpen = useAssistant((s) => s.isOpen)
   return (

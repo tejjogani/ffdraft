@@ -1,19 +1,25 @@
 /**
  * A stage's AI button ("Make the CAD with AI"). It opens the job's plan before anything starts:
  * the goal (editable), the steps, the tier, then Start. Starting is the same as asking in the
- * chat; the job then shows on the piece and in the dock.
+ * chat; the job then shows on the piece and in the dock. The CAD job can start from a photo of a
+ * piece: the photo goes with the job's message and the goal says to rebuild it.
  */
 import { JOB_RECIPES } from '@pave/agent/studio'
-import type { AssistantTier, JobStage } from '@pave/schema'
-import { AiMark, Button, Popover, Textarea, toast } from '@pave/ui'
-import { Circle } from 'lucide-react'
-import { useState } from 'react'
+import type { Asset, AssistantTier, JobStage } from '@pave/schema'
+import { AiMark, Button, Popover, Spinner, Textarea, toast } from '@pave/ui'
+import { Circle, ImagePlus, X } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { uploadAsset } from '../../../lib/assets'
 import { useSession } from '../../../lib/session'
 import { assistant, useAssistant } from '../../../stores/assistant'
 import { useSend } from '../actions'
 import { TierPicker } from '../TierPicker'
 import { jobState } from './status'
 import { useStageJob } from './useJob'
+
+/** The CAD job's goal when it starts from a photo. */
+const PHOTO_GOAL =
+  'Rebuild the piece in the attached photo: read it, build it through the canon, fit it to the photo, and say what still differs and what was assumed.'
 
 export function StartJob({
   pieceId,
@@ -32,7 +38,29 @@ export function StartJob({
   const [open, setOpen] = useState(!!defaultOpen)
   const [goal, setGoal] = useState(recipe.goal)
   const [tier, setTier] = useState<AssistantTier | null>(null)
+  const [photo, setPhoto] = useState<Asset | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const file = useRef<HTMLInputElement>(null)
   const { send, pending } = useSend({ pieceId })
+
+  const addPhoto = async (f: File | undefined) => {
+    if (!f) return
+    setUploading(true)
+    try {
+      const asset = await uploadAsset(f)
+      setPhoto(asset)
+      // The goal follows the photo unless the person has written their own.
+      if (goal === recipe.goal) setGoal(PHOTO_GOAL)
+    } catch (e) {
+      toast.error('Couldn’t add the photo', e instanceof Error ? e.message : undefined)
+    } finally {
+      setUploading(false)
+    }
+  }
+  const removePhoto = () => {
+    setPhoto(null)
+    if (goal === PHOTO_GOAL) setGoal(recipe.goal)
+  }
   // One job per stage at a time: while one works, its bar is the place to steer it.
   const current = useStageJob(pieceId, stage).run
   const working = current ? ['running', 'waiting'].includes(jobState(current)) : false
@@ -44,6 +72,7 @@ export function StartJob({
         threadId: null,
         pieceId,
         bare: true,
+        ...(photo ? { attachments: [photo.id] } : {}),
         ...(tier ? { tier } : {}),
       })
       setOpen(false)
@@ -95,6 +124,44 @@ export function StartJob({
             aria-label="The job’s goal"
           />
         </div>
+        {stage === 'cad' && (
+          <div className="flex items-center gap-2">
+            <input
+              ref={file}
+              type="file"
+              accept="image/*"
+              hidden
+              aria-label="Photo of a piece to rebuild"
+              onChange={(e) => {
+                void addPhoto(e.target.files?.[0])
+                e.target.value = ''
+              }}
+            />
+            {photo ? (
+              <>
+                <img
+                  src={photo.url}
+                  alt={`To rebuild: ${photo.name}`}
+                  className="size-12 rounded-md border border-line object-cover"
+                />
+                <span className="min-w-0 flex-1 truncate text-xs text-fg-muted">{photo.name}</span>
+                <Button size="sm" variant="ghost" icon={X} onClick={removePhoto}>
+                  Remove
+                </Button>
+              </>
+            ) : (
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={uploading ? undefined : ImagePlus}
+                disabled={uploading}
+                onClick={() => file.current?.click()}
+              >
+                {uploading ? <Spinner className="size-3.5" label="Uploading" /> : 'From a photo'}
+              </Button>
+            )}
+          </div>
+        )}
         <div>
           <p className="mb-1 text-xs font-medium text-fg-subtle">Plan</p>
           <ol className="flex flex-col gap-1">

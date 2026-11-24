@@ -10,6 +10,7 @@
  */
 import { z } from 'zod'
 import { ChangeSchema, DesignSchema, OpSchema, PIECE_KINDS } from '../design/design'
+import { PhotoReadSchema } from '../design/photo-read'
 import { PieceSpecSchema } from '../design/spec'
 import {
   ASSISTANT_MODELS,
@@ -714,6 +715,69 @@ export const commands = {
     tool: { confirm: true },
     input: generateRequest.extend({ boardId: id }),
     output: z.array(ReferenceSchema),
+  }),
+  'references.read': def({
+    description:
+      'Read one to four photos of one piece (uploaded image assets): its kind, the camera angle, the archetype, each group of stones (cut, arrangement, setting, claws), the band profile and proportions as ratios, the metal, and what the photos hide, each part marked visible, partly or not. Call it first when the designer wants a design from a photo; build from `specDraft` through pieces.setSpec. It is a separate Claude call on the conversation’s tier and costs a little.',
+    kind: 'mutation',
+    tool: true,
+    input: z.object({
+      assetIds: z.array(id).min(1).max(4),
+      /** What the designer says the piece is, when the photo is ambiguous. */
+      kindHint: z.enum(PIECE_KINDS).optional(),
+      /** Anything else the designer said about the photo ("the left one", "ignore the chain"). */
+      note: z.string().max(500).optional(),
+    }),
+    output: z.object({
+      read: PhotoReadSchema,
+      /**
+       * The read as a spec the canon can fill in: categories from the read, proportions turned
+       * into millimetres through an assumed centre stone and ring size (listed in `assumed`).
+       */
+      specDraft: PieceSpecSchema,
+      assumed: z.array(z.string()),
+      /** Whether a cut-out of the piece can be made from the first photo (match.fit needs one). */
+      cutout: z.object({ ok: z.boolean(), reason: z.string() }),
+      model: z.string(),
+    }),
+  }),
+  'match.fit': def({
+    description:
+      'Fit a built piece to a photo by its outline: Pavé renders the design from the photo’s angle and adjusts a handful of sizes (the centre stone, the band’s width and thickness, claw thickness, halo stones, the bail) until the outlines agree. Use after building from a references.read whose `cutout.ok` is true. Takes up to `seconds`; returns the ops to apply with design.apply (it never changes the piece itself), the overlap reached, and which numbers the photo could not constrain. `quality: poor` means the recipe does not explain the photo: do not apply, compare by eye instead.',
+    // Changes nothing, but it is a long computation: run it in turn, never cached or refetched.
+    kind: 'mutation',
+    tool: true,
+    input: z.object({
+      pieceId: id,
+      /** The photo: an uploaded image of the piece on a plain background. */
+      assetId: id,
+      /** The angle the photo was taken from, from references.read; omitted = searched. */
+      view: z.enum(['top', 'front', 'side', 'threeQuarter', 'back', 'under']).optional(),
+      seconds: z.number().int().min(10).max(120).default(45),
+    }),
+    output: z.object({
+      quality: z.enum(['good', 'poor', 'failed']),
+      /** Why the quality is what it is, in plain words. */
+      reason: z.string(),
+      /** Outline overlap of the fitted design with the photo (1 = identical); null when not fitted. */
+      overlap: z.number().nullable(),
+      /** The design version that was fitted; apply the ops on top of it. */
+      version: z.number().int(),
+      ops: z.array(OpSchema),
+      params: z.array(
+        z.object({
+          key: z.string(),
+          from: z.number(),
+          to: z.number(),
+          /** `assumed`: the photo could not constrain it, so it keeps the recipe’s value. */
+          status: z.enum(['fitted', 'assumed', 'pinned', 'clamped', 'weak', 'unmoved']),
+        }),
+      ),
+      camera: z.object({ azimuth: z.number(), elevation: z.number() }).nullable(),
+      stopped: z.enum(['converged', 'poor', 'budget', 'aborted', 'rejected']),
+      evaluations: z.number().int(),
+      seconds: z.number(),
+    }),
   }),
 
   // ── Make it jewelry: freeform and image to 3D ─────────────────────────────────────────────

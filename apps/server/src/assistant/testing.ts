@@ -6,6 +6,7 @@ import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/m
 import { type ModelStream, type ScriptedTurn, scriptedModel } from '@pave/agent'
 import type { KeyCheck } from '@pave/agent/anthropic'
 import type { CreateAppOptions } from '../app'
+import { createEngines } from '../engines'
 import { type TestServer, testServer } from '../test/harness'
 import type { ModelFactory } from './host'
 import { type AssistantParts, createAssistant } from './index'
@@ -82,6 +83,8 @@ export async function assistantServer(
     env?: Record<string, string | undefined>
     auth?: 'local' | 'accounts'
     check?: (key: string) => KeyCheck
+    /** Also run the real engines (kernel workers): captures and fits that need geometry. */
+    engines?: boolean
   } & Pick<CreateAppOptions, 'config'> = {},
 ): Promise<AssistantServer> {
   const model = new TestModel()
@@ -99,7 +102,11 @@ export async function assistantServer(
           return opts.check?.(key) ?? { ok: true, models: ['claude-opus-5-5', 'claude-sonnet-5-5'] }
         },
       })
-      return parts.services
+      if (!opts.engines) return parts.services
+      return {
+        ...createEngines(runtime, { engineFile: null, pool: { size: 2 } }),
+        ...parts.services,
+      }
     },
     routes: (app, _runtime, withCtx) => parts?.routes(app, withCtx),
   })
@@ -107,8 +114,12 @@ export async function assistantServer(
 }
 
 /** Waits until the run's session in this process has ended. */
-export async function settled(parts: AssistantParts, runId: string): Promise<void> {
-  for (let i = 0; i < 3000 && parts.driver.isLive(runId); i++)
+export async function settled(
+  parts: AssistantParts,
+  runId: string,
+  timeoutMs = 30_000,
+): Promise<void> {
+  for (let i = 0; i < timeoutMs / 10 && parts.driver.isLive(runId); i++)
     await new Promise((r) => setTimeout(r, 10))
   if (parts.driver.isLive(runId)) throw new Error(`run ${runId} is still live`)
 }

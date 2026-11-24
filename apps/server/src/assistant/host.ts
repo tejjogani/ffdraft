@@ -105,6 +105,7 @@ export class RunHost {
     return {
       ...this.ctx,
       actor: { type: 'agent', runId: this.runId, toolCallId, model: this.model },
+      signal: this.signal,
     }
   }
 

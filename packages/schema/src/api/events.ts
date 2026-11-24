@@ -61,6 +61,11 @@ export const ServerEventSchema = z.discriminatedUnion('type', [
     runId: id.nullable(),
     tool: z.enum(CLIENT_TOOL_NAMES),
     input: z.unknown(),
+    /**
+     * For a capture: the design version the server has committed, which the window waits for
+     * before it draws, so the picture shows the edit the assistant just made.
+     */
+    atVersion: z.number().int().nullable().optional(),
   }),
 ])
 export type ServerEvent = z.infer<typeof ServerEventSchema>

@@ -99,6 +99,14 @@ export const TOOL_CHIPS = {
     running: 'Generating images',
     done: (i) => `Generated ${plural(i.count, 'image')}`,
   },
+  'references.read': {
+    running: 'Reading the photo',
+    done: (i) => (i.assetIds.length > 1 ? `Read ${i.assetIds.length} photos` : 'Read the photo'),
+  },
+  'match.fit': {
+    running: 'Fitting the design to the photo',
+    done: 'Fitted the design to the photo',
+  },
   'freeform.analyze': {
     running: 'Analysing the image',
     done: 'Analysed the image for an outline and a relief',
