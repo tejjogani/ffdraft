@@ -5,7 +5,13 @@
  * is what was asked for (a small preview still with nothing to fix).
  */
 import { join } from 'node:path'
-import { applyAdjustments, assessRender, resolveScene, type SceneAdjustment } from '@pave/render'
+import {
+  applyAdjustments,
+  assessRender,
+  draftOf,
+  resolveScene,
+  type SceneAdjustment,
+} from '@pave/render'
 import { type BlenderRenderResult, type RuntimeOptions, renderWithBlender } from '@pave/render/node'
 import { type RenderJob, type RenderScene, RenderSceneSchema } from '@pave/schema'
 import type { RenderSubject } from '../../services'
@@ -18,10 +24,6 @@ const AUTO_PATHS = new Set<SceneAdjustment['path']>([
   'camera.preset',
   'environment.intensity',
 ])
-/** Drafts are measured, not looked at: fractions of the frame need few pixels. */
-const DRAFT_LONG_SIDE = 512
-const MIN_SIDE = 256
-
 export interface TakeOptions {
   /** What was asked for. */
   scene: RenderScene
@@ -46,26 +48,6 @@ export interface TakeResult {
   critique: Critique
   seconds: number
   device: string
-}
-
-/** The request as a small preview still, same aspect ratio, for measuring. */
-export function draftOf(scene: RenderScene): RenderScene {
-  const { width, height } = scene.output
-  const k = Math.min(
-    1,
-    Math.max(DRAFT_LONG_SIDE / Math.max(width, height), MIN_SIDE / Math.min(width, height)),
-  )
-  const { animation: _still, ...rest } = scene
-  return {
-    ...rest,
-    // Spread first, so the keys keep their order and an unchanged request compares equal.
-    output: {
-      ...scene.output,
-      quality: 'preview',
-      width: Math.round(width * k),
-      height: Math.round(height * k),
-    },
-  }
 }
 
 /** One adjustment per path, from the most severe issue that proposes it. */

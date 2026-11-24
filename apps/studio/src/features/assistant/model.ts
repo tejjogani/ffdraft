@@ -11,7 +11,8 @@
 import { describeCall, type RunView, TOOL_CHIPS } from '@pave/agent/studio'
 import type { Message, Run, StoredChange } from '@pave/schema'
 
-export type CallStatus = 'running' | 'awaiting' | 'done' | 'error'
+/** `waiting`: the call started a take; its result comes when the take is finished. */
+export type CallStatus = 'running' | 'awaiting' | 'waiting' | 'done' | 'error'
 
 export interface CallItem {
   toolCallId: string
@@ -22,7 +23,7 @@ export interface CallItem {
   status: CallStatus
   /** For a call waiting on a person: what will happen, and its cost when known. */
   summary?: string
-  estimate?: { usd: number; seconds: number | null } | null
+  estimate?: { usd: number; seconds: number | null; machine?: boolean } | null
   /** Images the call produced (viewport captures), from the live run. */
   assetIds: string[]
   /** What went wrong, from the tool's result. */
@@ -122,7 +123,11 @@ export function conversationItems(stored: readonly Message[], live: RunView | nu
               ? 'error'
               : 'done'
             : 'running'
-        const { text, quiet } = callLabel(name, b.input, status === 'running' ? 'running' : 'done')
+        const { text, quiet } = callLabel(
+          name,
+          b.input,
+          status === 'running' || status === 'waiting' ? 'running' : 'done',
+        )
         const call: CallItem = {
           toolCallId: id,
           runId: m.runId,
@@ -212,10 +217,11 @@ export function tokenCount(n: number): string {
 
 /**
  * The run as shown: the stream knows it while it runs, the stored record once it has stopped
- * (suspended for an approval, or ended); whichever says it is no longer running is the newer.
+ * (suspended, or ended). Once the stored record says it stopped it wins, also over a finished
+ * stream: changes after the end (a person accepting a job's review) reach only the stored one.
+ * Until then the stream is newer than a record fetched while the run still ran.
  */
-export function newerRun(stored: Run | null, streamed: Run | null, finished: boolean): Run | null {
+export function newerRun(stored: Run | null, streamed: Run | null): Run | null {
   if (!stored || !streamed || streamed.id !== stored.id) return stored
-  if (finished) return streamed
   return stored.status !== 'running' ? stored : streamed
 }

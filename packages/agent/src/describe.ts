@@ -131,7 +131,20 @@ export const TOOL_CHIPS = {
   'scenes.update': { running: 'Adjusting the shot', done: 'Adjusted the shot' },
   'renders.list': { quiet: true, running: 'Listing renders', done: 'Listed renders' },
   'renders.get': { quiet: true, running: 'Checking the render', done: 'Checked the render' },
-  'renders.create': { running: 'Queuing a render', done: 'Queued a render' },
+  'renders.estimate': {
+    quiet: true,
+    running: 'Timing the takes',
+    done: (i) => `Timed ${plural(i.takes.length, 'take')}`,
+  },
+  'renders.create': {
+    running: 'Rendering',
+    done: (i) =>
+      i.variantLabel
+        ? `Rendered ${i.variantLabel}`
+        : i.retryOf
+          ? `Re-rendered${i.note ? `: ${i.note}` : ' a take'}`
+          : `Rendered ${i.title ? `“${i.title}”` : 'a take'}`,
+  },
   'models.list': { quiet: true, running: 'Listing models', done: 'Listed models' },
   'models.estimatePortraits': {
     quiet: true,

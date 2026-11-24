@@ -3,6 +3,7 @@ import { Outlet } from '@tanstack/react-router'
 import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 import { Suspense } from 'react'
 import { useUiTools } from '../features/assistant/ui-tools'
+import { useBrowserTakes } from '../features/render/browser-takes'
 import { useClientToolRelay } from '../lib/client-tools'
 import { useShortcutListener } from '../lib/commands'
 import { useServerEvents } from '../lib/events'
@@ -58,6 +59,8 @@ function Shell() {
   // The assistant's client tools: this window answers its requests and serves ui.context/navigate.
   useClientToolRelay()
   useUiTools()
+  // Without Blender, this window draws the person's (and their assistant's) preview takes.
+  useBrowserTakes()
   const collapsed = useUI((s) => s.sidebarCollapsed)
   const dockOpen = useAssistant((s) => s.isOpen)
   return (

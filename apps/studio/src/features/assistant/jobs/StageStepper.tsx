@@ -9,7 +9,7 @@ import { Link } from '@tanstack/react-router'
 import { Check, ChevronRight } from 'lucide-react'
 import { Fragment } from 'react'
 import { useRpc } from '../../../lib/query'
-import { jobState, latestJob, STAGE_PATH, stageLabel } from './status'
+import { isWorking, jobState, latestJob, STAGE_PATH, stageLabel } from './status'
 
 type Mark = 'job' | 'review' | 'paused' | 'done' | null
 
@@ -22,7 +22,7 @@ function markOf(
   const job = latestJob(runs, stage)
   if (job) {
     const state = jobState(job)
-    if (state === 'running' || state === 'waiting') return 'job'
+    if (isWorking(state)) return 'job'
     if (state === 'review') return 'review'
     if (state === 'paused') return 'paused'
   }

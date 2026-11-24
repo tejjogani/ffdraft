@@ -11,7 +11,7 @@ import {
   resolveTiers,
 } from '@pave/agent'
 import type { AiJob, CommandOutput, CommandParsedInput, Run, Thread } from '@pave/schema'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 import type { Ctx } from '../context'
 import * as t from '../db/schema'
 import { conflict, NotConfiguredError } from '../errors'
@@ -21,8 +21,9 @@ import type { AssistantService, ServiceContext } from '../services'
 import { addMessage, createThread, decideStep, setJob, startRun, toRun, toThread } from '../traces'
 import { isPauseReason, type PauseReason } from './driver'
 import { type AssistantDeps, RunHost } from './host'
-import { closeDangling, closeOut, closeUnanswered, publishRun, runLoop } from './loop'
+import { closeDangling, closeOut, closeUnanswered, LIVE_RUNS, publishRun, runLoop } from './loop'
 import { readPhotos } from './read'
+import type { Waiter } from './takes'
 import { contextText, userContent } from './turn'
 
 type Send = CommandParsedInput<'threads.send'>
@@ -33,7 +34,8 @@ const carriesOn = (run: Run): boolean =>
   (run.job.review === 'pending' ||
     run.status === 'paused' ||
     run.status === 'running' ||
-    run.status === 'awaiting-approval')
+    run.status === 'awaiting-approval' ||
+    run.status === 'waiting')
 
 /** A thread's title: its first message, cut at a word near 80 characters. */
 export function titleFrom(text: string): string {
@@ -194,8 +196,12 @@ export class Assistant implements AssistantService {
   async #settleThread(ctx: Ctx, threadId: string): Promise<void> {
     const live = this.#deps.driver.liveInThread(threadId)
     if (live) await this.#deps.driver.abort(live, 'cancel')
+    // A run waiting for its takes ends too; the takes carry on into the Render tab.
     const waiting = await ctx.repo.runs.many({
-      where: and(eq(t.agentRun.threadId, threadId), eq(t.agentRun.status, 'awaiting-approval'))!,
+      where: and(
+        eq(t.agentRun.threadId, threadId),
+        inArray(t.agentRun.status, ['awaiting-approval', 'waiting']),
+      )!,
     })
     for (const r of waiting) {
       await ctx.repo.steps.update(
@@ -255,8 +261,7 @@ export class Assistant implements AssistantService {
         const run = host
           ? await host.ctx.repo.runs.first(eq(t.agentRun.id, runId)).catch(() => undefined)
           : undefined
-        if (run && run.status !== 'running' && run.status !== 'awaiting-approval')
-          this.#deps.clients.delete(runId)
+        if (run && !LIVE_RUNS.includes(run.status)) this.#deps.clients.delete(runId)
       }
     })
   }
@@ -281,9 +286,44 @@ export class Assistant implements AssistantService {
     const ctx = await this.#ctx(sctx)
     if (this.#deps.driver.isLive(runId)) await this.#deps.driver.abort(runId, 'cancel')
     const run = await getRun(ctx, runId)
-    if (run.status === 'awaiting-approval' || run.status === 'running')
-      return closeOut(ctx, runId, { status: 'canceled' })
-    return toRun(run)
+    if (!LIVE_RUNS.includes(run.status)) return toRun(run)
+    await this.#cancelTakes(ctx, runId)
+    return closeOut(ctx, runId, { status: 'canceled' })
+  }
+
+  /** Stop means stop: the takes a stopped run is still waiting for are canceled with it. */
+  async #cancelTakes(ctx: Ctx, runId: string): Promise<void> {
+    const steps = await ctx.repo.steps.many({
+      where: and(eq(t.agentStep.runId, runId), eq(t.agentStep.status, 'waiting'))!,
+    })
+    for (const s of steps) {
+      const id = (s.output as { value?: { id?: string } } | null)?.value?.id
+      if (!id) continue
+      await this.#deps.runtime
+        .execute('renders.cancel', { id }, ctx)
+        // Already finished (or canceled by hand): nothing to stop.
+        .catch(() => {})
+      // Its call is then answered as canceled, not as still rendering.
+      await ctx.repo.steps.update(
+        and(eq(t.agentStep.id, s.id), eq(t.agentStep.status, 'waiting'))!,
+        {
+          status: 'canceled',
+        },
+      )
+    }
+  }
+
+  /**
+   * A take a run waited for has settled: the run goes on. The loop re-reads every take it
+   * waits on, so a wake for a run that is no longer waiting does nothing.
+   */
+  wake(w: Waiter): void {
+    void (async () => {
+      const ctx = await this.#ctx({ orgId: w.orgId, userId: w.userId })
+      const run = await ctx.repo.runs.first(eq(t.agentRun.id, w.runId))
+      if (run?.status !== 'waiting' && !this.#deps.driver.isLive(w.runId)) return
+      this.#start({ orgId: w.orgId, userId: w.userId }, w.runId, w.threadId)
+    })().catch((err) => console.error(`Waking run ${w.runId} failed:`, err))
   }
 
   /**
@@ -296,7 +336,7 @@ export class Assistant implements AssistantService {
     if (!run.job) throw conflict('Only an AI job can be paused; stop this run instead')
     if (this.#deps.driver.isLive(runId)) await this.#deps.driver.abort(runId, reason)
     const now = toRun(await getRun(ctx, runId))
-    if (now.status === 'awaiting-approval' || now.status === 'running')
+    if (LIVE_RUNS.includes(now.status))
       return closeOut(ctx, runId, { status: 'paused', pausedBy: reason })
     return now
   }
@@ -383,8 +423,16 @@ export class Assistant implements AssistantService {
     return output
   }
 
-  /** Boot: a run cut off mid-step cannot be trusted to continue; one waiting for a person can. */
+  /**
+   * Boot: a run cut off mid-step cannot be trusted to continue; one waiting for a person can, and
+   * one waiting for its takes is nudged once, so it registers them again (or goes on, if they
+   * finished while the server was down).
+   */
   async resume(run: Run, sctx: ServiceContext): Promise<void> {
+    if (run.status === 'waiting' && run.threadId) {
+      this.#start(sctx, run.id, run.threadId)
+      return
+    }
     if (run.status !== 'running') return
     const ctx = await this.#ctx(sctx)
     await closeOut(ctx, run.id, {

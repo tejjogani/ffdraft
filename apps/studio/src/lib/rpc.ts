@@ -85,6 +85,7 @@ export const QUERY_NAMES = [
   'shots.estimate',
   'renders.list',
   'renders.get',
+  'renders.estimate',
   'models.list',
   'shots.list',
   'production.list',

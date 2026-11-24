@@ -12,7 +12,7 @@ import { latestJob } from './status'
 /** The run as the stream last told it, else as stored. */
 export function useLiveRun(stored: Run | null) {
   const view = useRunStream(stored?.id ?? null, stored?.status === 'running')
-  const run = newerRun(stored, view?.run ?? null, view?.finished ?? false)
+  const run = newerRun(stored, view?.run ?? null)
   // While it runs, the stream's plan is the newest; after, the stored record has it.
   const job = run && run === view?.run && view.job ? view.job : (run?.job ?? null)
   return { run: run ? { ...run, job } : null, view }

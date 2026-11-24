@@ -20,6 +20,7 @@ import { JobPlan } from './JobPlan'
 import {
   elapsed,
   isOpenJob,
+  isWorking,
   JOB_STATE_LABEL,
   jobState,
   pausedWhy,
@@ -41,7 +42,7 @@ export function JobPanel({ pieceId, stage }: { pieceId: string; stage: JobStage 
 function JobBar({ run, open, onToggle }: { run: Run; open: boolean; onToggle: () => void }) {
   const job = run.job!
   const state = jobState(run)
-  const working = state === 'running' || state === 'waiting'
+  const working = isWorking(state)
   const { current, finished, total } = planProgress(job)
   const ms = useElapsed(run.startedAt, run.endedAt, working)
   const navigate = useNavigate()
@@ -94,7 +95,7 @@ function JobBar({ run, open, onToggle }: { run: Run; open: boolean; onToggle: ()
 function JobDetail({ run }: { run: Run }) {
   const job = run.job!
   const state = jobState(run)
-  const working = state === 'running' || state === 'waiting'
+  const working = isWorking(state)
   const actions = useRunActions()
   const pieceId = run.pieceId
   const trace = useRpc('traces.run', { id: run.id })

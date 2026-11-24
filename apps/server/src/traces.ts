@@ -25,7 +25,7 @@ import { fromMicros, toMicros } from './usage'
 type RunStatus = Run['status']
 
 /** Runs that may still change; a run that ended keeps its status. */
-const LIVE_RUN: RunStatus[] = ['running', 'awaiting-approval']
+const LIVE_RUN: RunStatus[] = ['running', 'awaiting-approval', 'waiting']
 
 export const toThread = (r: typeof t.thread.$inferSelect): Thread => ({
   id: r.id,
@@ -321,12 +321,13 @@ export async function decideStep(
 }
 
 /**
- * Puts a run that was waiting for approval back to `running`. Returns the run as it is; a run
- * that is not waiting (already resumed, canceled or finished) is left unchanged.
+ * Puts a run that was waiting (for approval, or for its takes) back to `running`. Returns the
+ * run as it is; a run that is not waiting (already resumed, canceled or finished) is left
+ * unchanged.
  */
 export async function resumeRun(ctx: Ctx, runId: string): Promise<Run> {
   const [row] = await ctx.repo.runs.update(
-    and(eq(t.agentRun.id, runId), eq(t.agentRun.status, 'awaiting-approval'))!,
+    and(eq(t.agentRun.id, runId), inArray(t.agentRun.status, ['awaiting-approval', 'waiting']))!,
     { status: 'running', endedAt: null },
   )
   return toRun(row ?? (await getRun(ctx, runId)))
@@ -424,7 +425,8 @@ export async function finishRun(
       ...(input.job ? { job: input.job } : {}),
       error: input.error ?? null,
       errorCode: input.errorCode ?? null,
-      endedAt: input.status === 'awaiting-approval' ? null : new Date(),
+      endedAt:
+        input.status === 'awaiting-approval' || input.status === 'waiting' ? null : new Date(),
       ...(input.tokens
         ? {
             tokensIn: input.tokens.input,

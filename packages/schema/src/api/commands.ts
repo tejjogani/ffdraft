@@ -28,6 +28,7 @@ import {
   GenerationInputSchema,
   IMAGE_ASPECTS,
   JOB_STAGES,
+  JOB_STATUS,
   MESH_QUALITIES,
   METERS,
   MemberSchema,
@@ -42,6 +43,7 @@ import {
   ProductionPackageSchema,
   ReferenceSchema,
   RenderEngineStatusSchema,
+  RenderEstimateSchema,
   RenderJobSchema,
   RenderSceneSchema,
   RIGHTS,
@@ -953,6 +955,8 @@ export const commands = {
       title: z.string().min(1).max(80).optional(),
       position: z.number().optional(),
       patch: mergePatch.optional(),
+      /** Swap the take this shot uses in the set (one of its takes); null = its newest. */
+      takeId: id.nullable().optional(),
     }),
     output: SavedSceneSchema,
   }),
@@ -970,6 +974,8 @@ export const commands = {
     input: z.object({
       pieceId: id.optional(),
       purpose: z.enum(['take', 'reference']).default('take'),
+      /** Only takes in these states, e.g. the queued ones a window should render. */
+      status: z.array(z.enum(JOB_STATUS)).max(5).optional(),
       before: z.string().optional(),
       limit: z.number().int().max(200).default(60),
     }),
@@ -982,11 +988,33 @@ export const commands = {
     input: z.object({ id }),
     output: RenderJobSchema,
   }),
+  'renders.estimate': def({
+    description:
+      'How long takes would keep this computer busy, before rendering them: one entry per take (a saved `sceneId` or a `scene`). Renders cost machine time on this computer, not money. Says which engine would render them and whether the time is measured on this machine or a typical figure.',
+    kind: 'query',
+    tool: true,
+    input: z.object({
+      pieceId: id,
+      takes: z
+        .array(
+          z
+            .object({ sceneId: id.optional(), scene: RenderSceneSchema.optional() })
+            .refine((v) => v.scene !== undefined || v.sceneId !== undefined, {
+              message: 'Give a scene or a saved sceneId',
+            }),
+        )
+        .min(1)
+        .max(48),
+      autoTune: z.boolean().default(true),
+      engine: z.enum(['auto', 'blender', 'browser']).default('auto'),
+    }),
+    output: RenderEstimateSchema,
+  }),
   'renders.create': def({
     description:
-      'Queue a photoreal render (still or animation) of a piece from a saved shot (`sceneId`) or a declarative scene: look, camera, environment, overrides, animation, output. `engine: auto` uses Blender when available, else the browser (preview quality). For variants ("in rose gold"), make one call per variant with a shared `groupId` and a `variantLabel`. To re-render after critique, pass `retryOf` and a short `note`. Poll renders.get for the result.',
+      'Queue a photoreal render (still or animation) of a piece from a saved shot (`sceneId`) or a declarative scene: look, camera, environment, overrides, animation, output. `engine: auto` uses Blender when available, else the browser (preview quality, labelled so). It costs machine time on this computer, not money; outside a Render job the designer approves it, and every call in one turn is approved together. For variants ("in rose gold and platinum"), make one call per variant in the same turn, with a shared `groupId`, a `variantLabel` and the metal in `scene.overrides["*"]`. To re-render after a critique, pass `retryOf` (the take it replaces) and a short `note` saying what changed. In a conversation you do not poll: the result arrives when the take is finished, with the image.',
     kind: 'mutation',
-    tool: true,
+    tool: { confirm: true },
     input: z
       .object({
         pieceId: id,

@@ -107,8 +107,11 @@ BVH-traced gem shader) and Blender Cycles through a fixed, reviewed runner
 ([research](./research/03-rendering.md)). The assistant directs shots by editing that JSON; it
 never writes Python. A look is a rig of softboxes described once, built as an environment map in
 the browser and as area lights in Blender, so the preview and the final render agree. Renders are
-checked numerically (framing, clipping, exposure, noise) before a vision pass, and the assistant
-adjusts and retries.
+checked numerically (framing, clipping, exposure, noise) in a preview draft that auto-tune may
+adjust; the vision pass is the assistant's own look at the finished take, inside a traced run.
+Without Blender, a take is drawn by one of the person's own windows from the same resolved scene
+and labelled "Preview quality". A render costs this computer's time, never money: estimates are
+machine time, learnt from this machine's finished takes.
 
 ## Assistant
 

@@ -27,6 +27,7 @@ import {
   runHasLiveChanges,
   splitQuiet,
 } from './model'
+import { RenderBatchApproval, TakeCard } from './RenderCalls'
 import { CapPill, RunError, RunFooter, Thinking, WorkingPill } from './RunStates'
 import { useRunStream } from './run-stream'
 import { QuietCalls, ToolChip } from './ToolChip'
@@ -79,7 +80,7 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
   const stored = q.data
   const latest = stored?.run ?? null
   const view = useRunStream(latest?.id ?? null, latest?.status === 'running')
-  const run = newerRun(latest, view?.run ?? null, view?.finished ?? false)
+  const run = newerRun(latest, view?.run ?? null)
   const pieceId = stored?.thread.context.pieceId ?? run?.pieceId ?? null
   useEffect(() => setThreadPieceId(pieceId), [pieceId, setThreadPieceId])
   // Started from Home: go to the piece the run made, unless the person has moved on since.
@@ -93,8 +94,8 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
   }, [pieceId, threadId, path, navigate])
   const onPiece = path.startsWith(`/pieces/${pieceId}`)
 
-  // After a reload, which calls wait for a person is in the run's steps.
-  const waiting = run?.status === 'awaiting-approval' ? run.id : null
+  // After a reload, which calls wait (for a person, or for their take) is in the run's steps.
+  const waiting = run?.status === 'awaiting-approval' || run?.status === 'waiting' ? run.id : null
   const trace = useRpc('traces.run', { id: waiting ?? '' }, { enabled: !!waiting })
   const piece = useRpc('pieces.get', { id: pieceId ?? '' }, { enabled: !!pieceId })
   const history = useRpc(
@@ -115,6 +116,7 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
               const step = steps.get(c.toolCallId)
               if (!step || c.status !== 'running') return c
               if (step.status === 'awaiting-approval') return { ...c, status: 'awaiting' }
+              if (step.status === 'waiting') return { ...c, status: 'waiting' }
               if (step.status === 'done') return { ...c, status: 'done' }
               if (step.status === 'failed') return { ...c, status: 'error' }
               return c
@@ -194,11 +196,34 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
         )
       case 'calls': {
         const { quiet, loud } = splitQuiet(item.calls)
+        // Renders asked for in one turn are approved together.
+        const batch = loud.filter((c) => c.status === 'awaiting' && c.name === 'renders.create')
+        const decideAll = async (decision: 'approve' | 'deny', note?: string) => {
+          try {
+            for (const c of batch)
+              if (c.runId)
+                await actions.decide.mutateAsync({
+                  runId: c.runId,
+                  toolCallId: c.toolCallId,
+                  decision,
+                  ...(note ? { note } : {}),
+                })
+          } catch (e) {
+            toast.error('Couldn’t send that', e instanceof Error ? e.message : undefined)
+          }
+        }
         return (
           <div key={item.key} className="flex flex-col gap-1.5">
             {quiet.length > 0 && <QuietCalls calls={quiet} />}
+            {batch.length > 1 && (
+              <RenderBatchApproval
+                calls={batch}
+                busy={actions.decide.isPending}
+                onDecide={(d, note) => void decideAll(d, note)}
+              />
+            )}
             {loud.map((c) =>
-              c.status === 'awaiting' ? (
+              batch.length > 1 && batch.includes(c) ? null : c.status === 'awaiting' ? (
                 <ApprovalCard
                   key={c.toolCallId}
                   call={c}
@@ -226,6 +251,10 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
                     onUndo={undo}
                     undoing={revert.isPending}
                   />
+                  {/* A take shows where it was asked for: progress, then the picture. */}
+                  {c.name === 'renders.create' && pieceId && (
+                    <TakeCard call={c} pieceId={pieceId} />
+                  )}
                   {/* A round of directions reads side by side, right where it was proposed. */}
                   {c.name === 'pieces.proposeDirections' && c.status === 'done' && piece.data && (
                     <DirectionCards
@@ -245,7 +274,11 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
     }
   }
 
-  const ended = run && run.status !== 'running' && run.status !== 'awaiting-approval'
+  const ended =
+    run &&
+    run.status !== 'running' &&
+    run.status !== 'awaiting-approval' &&
+    run.status !== 'waiting'
   return (
     <div className="flex h-full flex-col">
       <div
@@ -317,12 +350,18 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
           )}
         </div>
       </div>
-      {run && (run.job || run.status === 'running') && (
+      {run && (run.job || run.status === 'running' || run.status === 'waiting') && (
         <div className="flex flex-col gap-2 px-3 pb-2">
           {run.job && <JobStrip run={run} />}
           {run.status === 'running' && !run.job && (
             <WorkingPill
               label={workingLabel(items, run.id)}
+              onStop={() => actions.cancel.mutate({ runId: run.id })}
+            />
+          )}
+          {run.status === 'waiting' && !run.job && (
+            <WorkingPill
+              label="Waiting for the takes to render…"
               onStop={() => actions.cancel.mutate({ runId: run.id })}
             />
           )}

@@ -5,6 +5,7 @@ import {
   continueJob,
   endJob,
   JOB_RECIPES,
+  jobApproves,
   jobMessage,
   newJob,
   stepOfTool,
@@ -84,10 +85,12 @@ describe('AI job plans', () => {
 
   it('writes the person’s turn for each way a job starts', () => {
     const job = newJob('render')
-    expect(jobMessage(job, { type: 'start' })).toContain('Render job: Render the piece')
+    expect(jobMessage(job, { type: 'start' })).toContain('Render job: Render a studio shot set')
     expect(jobMessage(job, { type: 'start' })).toContain('1. Set up the shots')
     expect(jobMessage(job, { type: 'resume' })).toContain('keep my changes')
-    expect(jobMessage(job, { type: 'resume' })).toContain('Still to do: Set up the shots; Render')
+    expect(jobMessage(job, { type: 'resume' })).toContain(
+      'Still to do: Set up the shots and the look; Render each shot',
+    )
     expect(jobMessage(job, { type: 'redo', step: 'Render the takes' })).toContain(
       'Render the takes',
     )
@@ -112,5 +115,17 @@ describe('AI job plans', () => {
     let pick = continueJob(endJob(mix, 'done'), 'run_3').job
     pick = advanceJob(pick, 'pieces.chooseDirection')!
     expect(states(endJob(pick, 'done'))).toEqual(['done', 'done', 'done'])
+  })
+
+  it('lets a Render job render its plan’s takes without asking, up to its limit, and nothing else', () => {
+    const render = newJob('render')
+    const limit = JOB_RECIPES.render.approved!.limit
+    expect(jobApproves(render, 'renders.create', 0)).toBe(true)
+    expect(jobApproves(render, 'renders.create', limit - 1)).toBe(true)
+    expect(jobApproves(render, 'renders.create', limit)).toBe(false)
+    // Paid or destructive calls are never approved by a plan; nor is a render outside a job.
+    expect(jobApproves(render, 'references.generate', 0)).toBe(false)
+    expect(jobApproves(newJob('cad'), 'renders.create', 0)).toBe(false)
+    expect(jobApproves(null, 'renders.create', 0)).toBe(false)
   })
 })

@@ -8,6 +8,8 @@ import type { AiJob, JobStage, Run } from '@pave/schema'
 export type JobState =
   | 'running'
   | 'waiting'
+  /** Its tools started takes; it goes on by itself when they finish. */
+  | 'rendering'
   | 'paused'
   | 'review'
   | 'accepted'
@@ -21,6 +23,8 @@ export function jobState(run: Pick<Run, 'status'> & { job: AiJob | null }): JobS
       return 'running'
     case 'awaiting-approval':
       return 'waiting'
+    case 'waiting':
+      return 'rendering'
     case 'paused':
       return 'paused'
     case 'failed':
@@ -39,6 +43,7 @@ export function jobState(run: Pick<Run, 'status'> & { job: AiJob | null }): JobS
 export const JOB_STATE_LABEL: Record<JobState, string> = {
   running: 'Working',
   waiting: 'Needs your go-ahead',
+  rendering: 'Rendering',
   paused: 'Paused',
   review: 'Ready for review',
   accepted: 'Accepted',
@@ -101,3 +106,7 @@ export function elapsed(ms: number): string {
   const mm = h ? String(m % 60).padStart(2, '0') : String(m)
   return `${h ? `${h}:` : ''}${mm}:${String(s % 60).padStart(2, '0')}`
 }
+
+/** The job is still under way: working, waiting for a go-ahead, or waiting for its takes. */
+export const isWorking = (state: JobState): boolean =>
+  state === 'running' || state === 'waiting' || state === 'rendering'

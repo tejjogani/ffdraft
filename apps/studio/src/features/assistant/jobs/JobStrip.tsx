@@ -6,13 +6,20 @@ import type { Run } from '@pave/schema'
 import { AiMark, cn } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
 import { JobControls } from './JobControls'
-import { JOB_STATE_LABEL, jobState, planProgress, STAGE_PATH, stageLabel } from './status'
+import {
+  isWorking,
+  JOB_STATE_LABEL,
+  jobState,
+  planProgress,
+  STAGE_PATH,
+  stageLabel,
+} from './status'
 
 export function JobStrip({ run }: { run: Run }) {
   if (!run.job) return null
   const state = jobState(run)
   const { current, finished, total } = planProgress(run.job)
-  const working = state === 'running' || state === 'waiting'
+  const working = isWorking(state)
   return (
     <div className="flex flex-col gap-2 rounded-lg bg-bg-subtle px-3 py-2.5 shadow-[inset_0_0_0_1px_var(--line)]">
       <div className="flex items-center gap-2 text-xs">

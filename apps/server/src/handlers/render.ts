@@ -1,5 +1,6 @@
+import { BROWSER_TAKE_SECONDS, estimateTakeSeconds, rateFrom } from '@pave/render'
 import { mergePatch, type RenderJob, RenderSceneSchema, type SavedScene } from '@pave/schema'
-import { and, asc, desc, eq, inArray, isNull, lt, max, type SQL } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, isNull, lt, max, type SQL } from 'drizzle-orm'
 import { z } from 'zod'
 import { type Ctx, publish } from '../context'
 import * as t from '../db/schema'
@@ -39,6 +40,7 @@ export const toRenderJob = (r: RenderRow, pieceVersion: number): RenderJob => ({
   device: r.device,
   error: r.error,
   actor: r.actor,
+  createdBy: r.createdBy,
   createdAt: r.createdAt.toISOString(),
   finishedAt: r.finishedAt?.toISOString() ?? null,
 })
@@ -65,6 +67,7 @@ const toSavedScene = (r: SceneRow): SavedScene => ({
   title: r.title,
   scene: r.scene,
   position: r.position,
+  takeId: r.takeId,
   updatedAt: r.updatedAt.toISOString(),
 })
 
@@ -89,6 +92,32 @@ function strippedKeys(patch: Record<string, unknown>, parsed: unknown, path = ''
     if (!(k in parsed)) return [at]
     return isObject(v) ? strippedKeys(v, parsed[k], at) : []
   })
+}
+
+/** Which engine `auto` means here: Blender when the queue is set up and found it. */
+function engineFor(ctx: Ctx, asked: 'auto' | 'blender' | 'browser'): 'blender' | 'browser' {
+  if (asked !== 'auto') return asked
+  return ctx.services.isConfigured('renderQueue') && ctx.services.capabilities().blender
+    ? 'blender'
+    : 'browser'
+}
+
+/** This machine's recent finished Blender takes (not cache hits), for the time estimate. */
+async function renderHistory(ctx: Ctx) {
+  const rows = await ctx.repo.renders.many({
+    where: and(
+      eq(t.renderJob.engine, 'blender'),
+      eq(t.renderJob.status, 'done'),
+      gt(t.renderJob.seconds, 0),
+    ),
+    orderBy: desc(t.renderJob.finishedAt),
+    limit: 20,
+  })
+  return rows.map((r) => ({
+    scene: r.requestedScene ?? r.scene,
+    autoTune: r.autoTune,
+    seconds: r.seconds ?? 0,
+  }))
 }
 
 export const render: HandlerGroup<'renders' | 'scenes'> = {
@@ -119,8 +148,13 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     return toSavedScene(row)
   },
 
-  'scenes.update': async (ctx, { id, patch, ...rest }) => {
+  'scenes.update': async (ctx, { id, patch, takeId, ...rest }) => {
     const current = await getScene(ctx, id)
+    if (takeId) {
+      const take = await getRender(ctx, takeId)
+      if (take.pieceId !== current.pieceId) throw badRequest('That take is of another piece')
+      if (take.status !== 'done') throw conflict('Only a finished take can go in the set')
+    }
     let scene = current.scene
     if (patch) {
       const parsed = RenderSceneSchema.safeParse(mergePatch(current.scene, patch))
@@ -135,6 +169,7 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     }
     const [row] = await ctx.repo.scenes.update(eq(t.renderScene.id, id), {
       ...rest,
+      ...(takeId === undefined ? {} : { takeId }),
       scene,
       updatedAt: new Date(),
     })
@@ -156,6 +191,7 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
       where: and(
         eq(t.renderJob.purpose, input.purpose),
         input.pieceId ? eq(t.renderJob.pieceId, input.pieceId) : undefined,
+        input.status ? inArray(t.renderJob.status, input.status) : undefined,
         before ? lt(t.renderJob.createdAt, before) : undefined,
       ),
       orderBy: desc(t.renderJob.createdAt),
@@ -165,6 +201,38 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
   },
 
   'renders.get': async (ctx, { id }) => one(ctx, await getRender(ctx, id)),
+
+  'renders.estimate': async (ctx, input) => {
+    const piece = await getPiece(ctx, input.pieceId)
+    const scenes = await Promise.all(
+      input.takes.map(async (take) => {
+        if (take.scene) return take.scene
+        const saved = await getScene(ctx, take.sceneId!)
+        if (saved.pieceId !== null && saved.pieceId !== piece.id)
+          throw badRequest('That shot belongs to another piece')
+        return saved.scene
+      }),
+    )
+    const engine = engineFor(ctx, input.engine)
+    if (engine === 'browser')
+      return {
+        engine,
+        seconds: scenes.length * BROWSER_TAKE_SECONDS,
+        takes: scenes.map(() => BROWSER_TAKE_SECONDS),
+        basis: 'browser' as const,
+        device: null,
+      }
+    const rate = rateFrom(await renderHistory(ctx))
+    const takes = scenes.map((s) => Math.round(estimateTakeSeconds(s, input.autoTune, rate)))
+    return {
+      engine,
+      seconds: takes.reduce((a, b) => a + b, 0),
+      takes,
+      basis: rate.basis,
+      device:
+        (await ctx.services.optional('renderEngine')?.status(serviceContext(ctx)))?.device ?? null,
+    }
+  },
 
   // Blender jobs go to the render queue; browser jobs wait for the user's studio to render them
   // and deliver the result with renders.complete.
@@ -176,13 +244,7 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     await ensure(getRender, ctx, input.retryOf)
     // Asking for Blender without a render queue is refused up front (501), before any row exists.
     if (input.engine === 'blender') ctx.services.require('renderQueue')
-    const engine =
-      input.engine === 'blender' ||
-      (input.engine === 'auto' &&
-        ctx.services.isConfigured('renderQueue') &&
-        ctx.services.capabilities().blender)
-        ? 'blender'
-        : 'browser'
+    const engine = engineFor(ctx, input.engine)
     const scene = input.scene ?? saved!.scene
     const row = await ctx.repo.renders.insert({
       id: createId('rnd'),

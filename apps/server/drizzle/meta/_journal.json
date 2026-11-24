@@ -71,6 +71,13 @@
       "when": 1795558925677,
       "tag": "0009_design_directions",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1795560352139,
+      "tag": "0010_render_takes",
+      "breakpoints": true
     }
   ]
 }

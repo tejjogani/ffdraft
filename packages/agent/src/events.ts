@@ -6,7 +6,8 @@
  */
 import type { AiJob, Message, Run, RunEvent, Tokens } from '@pave/schema'
 
-export type ToolCallStatus = 'running' | 'awaiting' | 'done' | 'error'
+/** `waiting`: the call started a job (a render take) and its result comes when that settles. */
+export type ToolCallStatus = 'running' | 'awaiting' | 'waiting' | 'done' | 'error'
 
 export interface ToolCallView {
   toolCallId: string
@@ -15,9 +16,11 @@ export interface ToolCallView {
   status: ToolCallStatus
   /** For a call awaiting approval: what will happen, and what it costs when known. */
   summary?: string
-  estimate?: { usd: number; seconds: number | null } | null
+  estimate?: { usd: number; seconds: number | null; machine?: boolean } | null
   changeIds: string[]
   assetIds: string[]
+  /** For a waiting call: the job it waits for. */
+  job?: { kind: string; id: string }
 }
 
 export interface LiveBlock {
@@ -115,6 +118,8 @@ export function reduceRun(s: RunView, e: RunEvent): RunView {
         estimate: e.estimate,
       })
     }
+    case 'tool.waiting':
+      return patchTool(next, e.toolCallId, { status: 'waiting', job: e.job })
     case 'tool.finished':
       return patchTool(next, e.toolCallId, {
         status: e.isError ? 'error' : 'done',

@@ -467,6 +467,10 @@ export const SavedSceneSchema = z.object({
   scene: RenderSceneSchema,
   /** Order in the shot list. */
   position: z.number(),
+  /**
+   * The take this shot uses in the set (a person swapped it in); null = its newest finished take.
+   */
+  takeId: id.nullable(),
   updatedAt: iso,
 })
 export type SavedScene = z.infer<typeof SavedSceneSchema>
@@ -562,10 +566,25 @@ export const RenderJobSchema = z.object({
   device: z.string().nullable(),
   error: z.string().nullable(),
   actor: ActorSchema,
+  /** The person who queued it (or whose assistant did): only their window renders a browser take. */
+  createdBy: id.nullable(),
   createdAt: iso,
   finishedAt: iso.nullable(),
 })
 export type RenderJob = z.infer<typeof RenderJobSchema>
+
+/** How long takes would keep this computer busy: machine time, never money. */
+export const RenderEstimateSchema = z.object({
+  engine: z.enum(['blender', 'browser']),
+  /** All the takes together, in seconds. */
+  seconds: z.number(),
+  /** Each take, in the order asked. */
+  takes: z.array(z.number()),
+  /** `measured`: from this machine's finished takes; `typical`: a reference machine's rate. */
+  basis: z.enum(['measured', 'typical', 'browser']),
+  device: z.string().nullable(),
+})
+export type RenderEstimate = z.infer<typeof RenderEstimateSchema>
 
 /** Whether Blender can be used on this machine, and if not, why. */
 export const RenderEngineStatusSchema = z.object({
@@ -775,6 +794,11 @@ export const RUN_STATUS = [
   'awaiting-approval',
   /** An AI job a person paused (or took over, or edited by hand); Resume starts a run that replans. */
   'paused',
+  /**
+   * Waiting for work its tools started to finish (a render take), with no model call open; the
+   * run goes on by itself when the work settles.
+   */
+  'waiting',
 ] as const
 /** Why a run stopped short, so the UI can say what to do next. */
 export const RUN_ERROR_CODES = [
@@ -853,6 +877,8 @@ export type Run = z.infer<typeof RunSchema>
 export const STEP_STATUS = [
   'running',
   'awaiting-approval',
+  /** The call started a job (a render take) and its result is the job's outcome, not yet in. */
+  'waiting',
   'done',
   'failed',
   'denied',

@@ -268,6 +268,8 @@ export const renderScene = pgTable(
     title: text('title').notNull(),
     scene: jsonb('scene').$type<RenderScene>().notNull(),
     position: doublePrecision('position').notNull(),
+    /** The take a person put in the set for this shot; null = the shot's newest finished take. */
+    takeId: text('take_id'),
     createdBy: text('created_by').notNull(),
     createdAt: at('created_at'),
     updatedAt: at('updated_at'),

@@ -40,4 +40,21 @@ export * from './materials'
 export type { Quat, Vec3 } from './math'
 export { resolveScene } from './resolve'
 export { boundsRadius, type SceneSubject, subjectOf } from './subject'
+export {
+  BROWSER_TAKE_SECONDS,
+  DEFAULT_SHOTS,
+  draftOf,
+  estimateTakeSeconds,
+  LOOK_CHOICES,
+  lookLabel,
+  machineTime,
+  QUALITY_LABELS,
+  type RenderRate,
+  rateFrom,
+  type ShotPreset,
+  SIZE_PRESETS,
+  TYPICAL_RATE,
+  takePasses,
+  takeWork,
+} from './takes'
 export * from './types'

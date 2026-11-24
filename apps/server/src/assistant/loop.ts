@@ -30,6 +30,8 @@ import {
   errorResult,
   evaluationNote,
   invalidInputResult,
+  jobApproves,
+  MAX_RETAKES,
   parseToolCall,
   repeatedFailure,
   runCap,
@@ -57,12 +59,14 @@ import type {
   ClientToolName,
   ClientToolParsedInput,
   CommandName,
+  CommandOutput,
   CommandParsedInput,
   Design,
   EvaluationSummary,
+  RenderJob,
   Run,
 } from '@pave/schema'
-import { and, asc, desc, eq, gt, isNull, max, ne, or } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, isNull, max, ne, or } from 'drizzle-orm'
 import { readAsset } from '../assets/assets'
 import { type Ctx, publish } from '../context'
 import * as t from '../db/schema'
@@ -86,8 +90,12 @@ import { captureOnServer } from './capture'
 import type { RunHost } from './host'
 import { modelImage } from './images'
 import { readPhotos } from './read'
+import { expireBrowserTake, takeResult, waitFor } from './takes'
 
 export type StepOutcome = 'continue' | 'suspended' | 'finished'
+
+/** A run in one of these may still go on. */
+export const LIVE_RUNS: Run['status'][] = ['running', 'awaiting-approval', 'waiting']
 
 type MessageRow = typeof t.agentMessage.$inferSelect
 type StepRow = typeof t.agentStep.$inferSelect
@@ -95,7 +103,8 @@ type StepRow = typeof t.agentStep.$inferSelect
 /** What a tool step stores as output: the command's own output and the result the model read. */
 export interface ToolStepOutput {
   value: unknown
-  result: BetaToolResultBlockParam
+  /** Null while the call's take renders (the step is `waiting`). */
+  result: BetaToolResultBlockParam | null
 }
 
 const toolUses = (content: readonly Record<string, unknown>[]): BetaToolUseBlock[] =>
@@ -137,6 +146,20 @@ function settledResult(s: StepRow, toolUseId: string): BetaToolResultBlockParam 
     )
   }
   if (s.status === 'canceled') return closedResult(toolUseId, 'canceled')
+  if (s.status === 'waiting') {
+    const take = (s.output as { value?: { id?: string } } | null)?.value?.id
+    // Not an error: the take carries on and lands in the Render tab.
+    return {
+      type: 'tool_result',
+      tool_use_id: toolUseId,
+      content: [
+        {
+          type: 'text',
+          text: `Take ${take ?? '(unknown)'} was still rendering when this run ended; it carries on and will appear in the Render tab. Use renders.get to see how it turned out.`,
+        },
+      ],
+    }
+  }
   return null
 }
 
@@ -150,7 +173,7 @@ export async function closeOut(
   ctx: Ctx,
   runId: string,
   end: {
-    status: Exclude<Run['status'], 'running' | 'awaiting-approval'>
+    status: Exclude<Run['status'], 'running' | 'awaiting-approval' | 'waiting'>
     error?: string | null
     errorCode?: RunErrorCode | null
     emit?: RunHost['emit']
@@ -165,7 +188,7 @@ export async function closeOut(
   await ctx.repo.steps.update(
     and(
       eq(t.agentStep.runId, runId),
-      or(eq(t.agentStep.status, 'running'), eq(t.agentStep.status, 'awaiting-approval')),
+      inArray(t.agentStep.status, ['running', 'awaiting-approval', 'waiting']),
     )!,
     { status: 'canceled' },
   )
@@ -175,7 +198,7 @@ export async function closeOut(
     errorCode: end.errorCode ?? null,
     // Only a run still live settles its plan; one already ended keeps the record it ended with.
     job:
-      run?.job && (run.status === 'running' || run.status === 'awaiting-approval')
+      run?.job && LIVE_RUNS.includes(run.status)
         ? endJob(run.job, end.status, end.pausedBy ?? null)
         : undefined,
   })
@@ -285,13 +308,17 @@ export async function step(host: RunHost): Promise<StepOutcome> {
   const { ctx, runId } = host
   let run = await ctx.repo.runs.first(eq(t.agentRun.id, runId))
   if (!run) return 'finished'
-  if (run.status === 'awaiting-approval') {
-    // A decision may have landed while the last session was still suspending: go on if nothing waits.
-    const waiting = await ctx.repo.steps.first(
-      and(eq(t.agentStep.runId, runId), eq(t.agentStep.status, 'awaiting-approval')),
-    )
-    if (waiting) return 'suspended'
-    await resumeRun(ctx, runId)
+  if (run.status === 'awaiting-approval' || run.status === 'waiting') {
+    // A decision (or a take) may have landed while the last session was still suspending: go
+    // on if nothing waits any more.
+    if (await stillWaiting(host)) return 'suspended'
+    const wasWaiting = run.status === 'waiting'
+    const resumed = await resumeRun(ctx, runId)
+    if (wasWaiting && resumed.status === 'running') {
+      // Woken by its takes: windows learn the run is going again and open its stream.
+      host.emit({ type: 'run.started', run: resumed })
+      publishRun(ctx, resumed)
+    }
     run = await ctx.repo.runs.first(eq(t.agentRun.id, runId))
   }
   if (run?.status !== 'running') return 'finished'
@@ -492,6 +519,15 @@ function approvalSummary(def: ToolDef, input: unknown): string {
       return `Generate ${typeof i.count === 'number' ? i.count : 2} images from a prompt. This is paid.`
     case 'mesh3d.create':
       return 'Turn photos into a 3D model with an outside service. This is paid.'
+    case 'renders.create': {
+      const scene = i.scene as { output?: { width?: number; height?: number } } | undefined
+      const what = typeof i.variantLabel === 'string' ? ` in ${i.variantLabel}` : ''
+      const size = scene?.output?.width
+        ? ` at ${scene.output.width}×${scene.output.height ?? scene.output.width}`
+        : ''
+      const why = typeof i.note === 'string' && i.retryOf ? ` (${i.note})` : ''
+      return `${i.retryOf ? 'Re-render' : 'Render'} ${typeof i.title === 'string' ? `“${i.title}”` : 'a take'}${what}${size}${why}. It uses this computer; nothing is paid.`
+    }
     default:
       return `${describeCall(def.command, null, 'running').text}.`
   }
@@ -501,7 +537,7 @@ function approvalSummary(def: ToolDef, input: unknown): string {
 async function estimateFor(
   host: RunHost,
   job: Job,
-): Promise<{ usd: number; seconds: number | null } | null> {
+): Promise<{ usd: number; seconds: number | null; machine?: boolean } | null> {
   const run = host.deps.runtime
   const ctx = host.forCall(job.call.id)
   try {
@@ -510,6 +546,20 @@ async function estimateFor(
       return e && typeof e === 'object'
         ? { usd: (e as { usd: number }).usd, seconds: (e as { seconds?: number }).seconds ?? null }
         : null
+    }
+    if (job.def.command === 'renders.create') {
+      const i = job.input as CommandParsedInput<'renders.create'>
+      const e = (await run.execute(
+        'renders.estimate',
+        {
+          pieceId: i.pieceId,
+          takes: [{ sceneId: i.sceneId, scene: i.scene }],
+          autoTune: i.autoTune,
+          engine: i.engine,
+        },
+        ctx,
+      )) as CommandOutput<'renders.estimate'>
+      return { usd: 0, seconds: e.seconds, machine: true }
     }
     if (job.def.command === 'mesh3d.create') {
       const e = (await run.execute('mesh3d.estimate', job.input, ctx)) as {
@@ -524,6 +574,95 @@ async function estimateFor(
   return null
 }
 
+/**
+ * Whether the run must keep waiting: a call still needs a person, or a take it started has not
+ * settled. Each take still live is (re)registered, so its settling wakes the run, also after a
+ * restart.
+ */
+async function stillWaiting(host: RunHost): Promise<boolean> {
+  const { ctx, runId } = host
+  const open = await ctx.repo.steps.many({
+    where: and(
+      eq(t.agentStep.runId, runId),
+      inArray(t.agentStep.status, ['awaiting-approval', 'waiting']),
+    )!,
+  })
+  if (open.some((s) => s.status === 'awaiting-approval')) return true
+  let live = false
+  for (const s of open) {
+    const id = (s.output as { value?: { id?: string } } | null)?.value?.id
+    if (!id) continue
+    const take = await liveTake(host, id)
+    if (take) live = true
+  }
+  return live
+}
+
+const getTake = async (host: RunHost, id: string) =>
+  (await host.deps.runtime.execute('renders.get', { id }, host.ctx)) as RenderJob
+
+/**
+ * Inside a Render job, one shot is re-rendered at most {@link MAX_RETAKES} times; past that the
+ * person reviews it. Returns the refusal, or null.
+ */
+async function retakeLimit(host: RunHost, input: { retryOf?: string }): Promise<string | null> {
+  let depth = 0
+  let id = input.retryOf
+  while (id && depth <= MAX_RETAKES) {
+    depth++
+    const row = await host.ctx.repo.renders.first(eq(t.renderJob.id, id))
+    id = row?.retryOf ?? undefined
+  }
+  return depth > MAX_RETAKES
+    ? `This shot has been re-rendered ${MAX_RETAKES} times in this job already. Leave it for the designer's review and say what you would change.`
+    : null
+}
+
+/** The take if it is still rendering (registered for the wake-up), or null once it settled. */
+async function liveTake(host: RunHost, id: string): Promise<RenderJob | null> {
+  const ctx = host.ctx
+  let take = await getTake(host, id)
+  take = await expireBrowserTake(ctx, take)
+  if (take.status !== 'queued' && take.status !== 'running') return null
+  host.deps.waits.register(id, {
+    runId: host.runId,
+    threadId: host.threadId,
+    orgId: ctx.orgId,
+    userId: ctx.user.id,
+  })
+  // Settled between the read and the registration: the event is gone, so look once more.
+  const again = await getTake(host, id)
+  return again.status === 'queued' || again.status === 'running' ? again : null
+}
+
+/**
+ * A call waiting on its take: once the take settled, the call is answered with it (and the step
+ * completed); while it renders, null.
+ */
+async function settleWait(host: RunHost, step: StepRow, toolUseId: string) {
+  const id = (step.output as { value?: { id?: string } } | null)?.value?.id
+  if (!id) return closedResult(toolUseId, 'its take was lost')
+  if (await liveTake(host, id)) return null
+  const ctx = host.ctx
+  const take = await getTake(host, id)
+  const piece = await getPiece(ctx, take.pieceId)
+  const { result, isError } = await takeResult(ctx, toolUseId, take, piece.version)
+  await completeStep(ctx, host.runId, toolUseId, {
+    output: { value: take, result } satisfies ToolStepOutput,
+    isError,
+    ms: Date.now() - step.startedAt.getTime(),
+  })
+  host.emit({
+    type: 'tool.finished',
+    toolCallId: toolUseId,
+    name: step.name,
+    isError,
+    changeIds: [],
+    assetIds: take.assetIds,
+  })
+  return result
+}
+
 async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepOutcome> {
   const { ctx, runId } = host
   const steps = await loadSteps(ctx, runId)
@@ -533,9 +672,18 @@ async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepO
   const queries: Job[] = []
   const mutations: Job[] = []
   let waiting = false
+  const run = await ctx.repo.runs.first(eq(t.agentRun.id, runId))
+  // Calls a Render job's plan already approved, made so far in this run.
+  let preapproved = steps.filter((s) => s.name === 'renders.create' && s.status !== 'denied').length
 
   for (const call of calls) {
     const existing = byCall.get(call.id)
+    if (existing?.status === 'waiting') {
+      const settled = await settleWait(host, existing, call.id)
+      if (settled) results.set(call.id, settled)
+      else waiting = true
+      continue
+    }
     if (existing) {
       const settled = settledResult(existing, call.id)
       if (settled) results.set(call.id, settled)
@@ -569,10 +717,24 @@ async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepO
       )
       continue
     }
-    const admission = admit(parsed.def, ctx.role)
+    let admission = admit(parsed.def, ctx.role)
     if (admission.kind === 'refuse') {
       await refuse(errorResult(call.id, admission.message), parsed.command)
       continue
+    }
+    if (
+      admission.kind === 'approve' &&
+      jobApproves(run?.job ?? null, parsed.command, preapproved)
+    ) {
+      admission = { kind: 'run' }
+      preapproved++
+    }
+    if (parsed.command === 'renders.create' && run?.job) {
+      const retake = await retakeLimit(host, parsed.input as { retryOf?: string })
+      if (retake) {
+        await refuse(errorResult(call.id, retake), parsed.command)
+        continue
+      }
     }
     const loop = repeatedFailure(
       { name: parsed.command, input: parsed.input },
@@ -608,7 +770,11 @@ async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepO
   }
 
   // Reads at once, edits one after another in the model's order; all before any suspension.
-  const settle = async (job: Job) => results.set(job.call.id, await execute(host, job))
+  const settle = async (job: Job) => {
+    const result = await execute(host, job)
+    if (result) results.set(job.call.id, result)
+    else waiting = true
+  }
   await Promise.all(queries.map(settle))
   for (const job of mutations) {
     if (host.signal.aborted) throw host.signal.reason
@@ -617,13 +783,21 @@ async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepO
   if (host.signal.aborted) throw host.signal.reason
 
   if (waiting) {
-    const stillWaiting = await ctx.repo.steps.first(
-      and(eq(t.agentStep.runId, runId), eq(t.agentStep.status, 'awaiting-approval')),
-    )
+    const open = await ctx.repo.steps.many({
+      where: and(
+        eq(t.agentStep.runId, runId),
+        inArray(t.agentStep.status, ['awaiting-approval', 'waiting']),
+      )!,
+    })
     // A decision already landed while the others ran: carry on instead of suspending.
-    if (!stillWaiting) return 'continue'
-    const run = await finishRun(ctx, runId, { status: 'awaiting-approval' })
-    publishRun(ctx, run)
+    if (!open.length) return 'continue'
+    // A person's go-ahead is asked for first; takes keep rendering meanwhile.
+    const suspended = await finishRun(ctx, runId, {
+      status: open.some((s) => s.status === 'awaiting-approval') ? 'awaiting-approval' : 'waiting',
+    })
+    publishRun(ctx, suspended)
+    // A take that settled before it was registered sent its event to nobody: look once more.
+    if (suspended.status === 'waiting' && !(await stillWaiting(host))) return 'continue'
     return 'suspended'
   }
 
@@ -638,8 +812,11 @@ async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepO
   return 'continue'
 }
 
-/** Runs one admitted call and records it; never throws for a tool's own failure. */
-async function execute(host: RunHost, job: Job): Promise<BetaToolResultBlockParam> {
+/**
+ * Runs one admitted call and records it; never throws for a tool's own failure. A call that
+ * started a take returns null: its step waits, and is answered when the take settles.
+ */
+async function execute(host: RunHost, job: Job): Promise<BetaToolResultBlockParam | null> {
   const { ctx, runId } = host
   const id = job.call.id
   const command = job.def.command
@@ -660,6 +837,22 @@ async function execute(host: RunHost, job: Job): Promise<BetaToolResultBlockPara
   try {
     const run = await runCommand(host, job)
     value = run.value
+    const wait = waitFor(command, run.value)
+    if (wait) {
+      await completeStep(ctx, runId, id, {
+        output: { value, result: null },
+        status: 'waiting',
+        ms: Date.now() - started,
+      })
+      host.deps.waits.register(wait.id, {
+        runId,
+        threadId: host.threadId,
+        orgId: ctx.orgId,
+        userId: ctx.user.id,
+      })
+      host.emit({ type: 'tool.waiting', toolCallId: id, name: command, job: wait })
+      return null
+    }
     result = shapeResult({ toolUseId: id, output: run.value, images: run.images, notes: run.notes })
   } catch (err) {
     if (host.signal.aborted) throw host.signal.reason

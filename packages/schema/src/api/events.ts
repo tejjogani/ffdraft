@@ -112,7 +112,14 @@ export const RunEventSchema = z.discriminatedUnion('type', [
     /** One plain sentence describing what will happen. */
     summary: z.string(),
     /** Only when the service can say what it will cost. */
-    estimate: z.object({ usd: z.number(), seconds: z.number().nullable() }).nullable(),
+    estimate: z
+      .object({
+        usd: z.number(),
+        seconds: z.number().nullable(),
+        /** The seconds are this computer's own time (a render), and nothing is paid. */
+        machine: z.boolean().optional(),
+      })
+      .nullable(),
   }),
   z.object({
     type: z.literal('tool.finished'),
@@ -123,6 +130,17 @@ export const RunEventSchema = z.discriminatedUnion('type', [
     /** Design changes and assets the call produced, for chips and Undo. */
     changeIds: z.array(id),
     assetIds: z.array(id),
+  }),
+  /**
+   * The call started a job (a render take); the run now waits for it with no model call open,
+   * and goes on by itself when the job settles.
+   */
+  z.object({
+    type: z.literal('tool.waiting'),
+    ...run,
+    toolCallId: id,
+    name: z.string(),
+    job: z.object({ kind: z.enum(JOB_KINDS), id }),
   }),
   z.object({ type: z.literal('usage'), ...run, tokens: TokensSchema, costUsd: z.number() }),
   /** An AI job's plan moved (a step started or finished). */

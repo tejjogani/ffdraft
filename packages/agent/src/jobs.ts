@@ -34,6 +34,11 @@ export interface JobRecipe {
   /** The goal when the person gives none. */
   goal: string
   steps: readonly JobStep[]
+  /**
+   * Calls that need approval elsewhere but run on their own in this job, because the plan the
+   * person started showed them (the Render job's takes); at most `limit` per run.
+   */
+  approved?: { tools: readonly AgentToolName[]; limit: number }
 }
 
 export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
@@ -114,21 +119,41 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
     stage: 'render',
     label: 'Render',
     button: 'Render with AI',
-    goal: 'Render the piece in a few studio shots.',
+    goal: 'Render a studio shot set of the piece, look at every take, re-render what falls short, and hand the set over for review.',
     steps: [
       {
         id: 'setup',
-        label: 'Set up the shots',
-        tools: ['scenes.list', 'scenes.create', 'scenes.update'],
+        label: 'Set up the shots and the look',
+        tools: ['pieces.get', 'scenes.list', 'scenes.create', 'scenes.update', 'renders.estimate'],
       },
-      { id: 'render', label: 'Render the takes', tools: ['renders.create', 'shots.create'] },
+      {
+        id: 'render',
+        label: 'Render each shot, look at it, re-render what falls short',
+        tools: ['renders.create', 'renders.get', 'renders.list', 'viewport.capture'],
+      },
       {
         id: 'review',
-        label: 'Look over the takes',
-        tools: ['renders.list', 'renders.get', 'shots.list', 'shots.get'],
+        label: 'You review the set: swap, star, choose the cover',
+        tools: ['pieces.update'],
+        byPerson: true,
       },
     ],
+    // Starting the job approves the renders its plan describes; past that a person approves.
+    approved: { tools: ['renders.create'], limit: 12 },
   },
+}
+
+/** A Render job re-renders one shot at most this many times before leaving it to the person. */
+export const MAX_RETAKES = 2
+
+/**
+ * Whether a call that normally needs a person's go-ahead runs on its own inside this job:
+ * starting the job approved the work its plan shows, up to the recipe's limit (`used` is how
+ * many such calls this run has made).
+ */
+export function jobApproves(job: AiJob | null, tool: string, used: number): boolean {
+  const approved = job ? JOB_RECIPES[job.stage].approved : undefined
+  return !!approved && (approved.tools as readonly string[]).includes(tool) && used < approved.limit
 }
 
 type Plan = AiJob['plan']
@@ -197,7 +222,7 @@ export function advanceJob(job: AiJob, tool: string): AiJob | null {
  */
 export function endJob(
   job: AiJob,
-  status: Exclude<Run['status'], 'running' | 'awaiting-approval'>,
+  status: Exclude<Run['status'], 'running' | 'awaiting-approval' | 'waiting'>,
   pausedBy: AiJob['pausedBy'] = null,
 ): AiJob {
   const running: PlanStepState =

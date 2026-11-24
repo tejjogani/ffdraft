@@ -36,7 +36,7 @@ export type Unfinished = { createdAt: Date } & (
 )
 
 const INTERRUPTED = 'Interrupted by a server restart; run it again.'
-const LIVE_RUNS: Run['status'][] = ['running', 'awaiting-approval']
+const LIVE_RUNS: Run['status'][] = ['running', 'awaiting-approval', 'waiting']
 
 /**
  * Live work across all orgs: Blender renders, image-to-3D jobs, on-model shots and production

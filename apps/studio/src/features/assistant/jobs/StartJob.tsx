@@ -5,16 +5,24 @@
  * piece: the photo goes with the job's message and the goal says to rebuild it.
  */
 import { JOB_RECIPES } from '@pave/agent/studio'
-import type { Asset, AssistantTier, JobStage } from '@pave/schema'
-import { AiMark, Button, Popover, Spinner, Textarea, toast } from '@pave/ui'
+import { DEFAULT_SHOTS, LOOK_CHOICES, lookLabel, machineTime, QUALITY_LABELS } from '@pave/render'
+import {
+  type Asset,
+  type AssistantTier,
+  type JobStage,
+  type RenderScene,
+  RenderSceneSchema,
+} from '@pave/schema'
+import { AiMark, Button, Popover, Segmented, Spinner, Textarea, toast } from '@pave/ui'
 import { Circle, ImagePlus, X } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { uploadAsset } from '../../../lib/assets'
+import { useRpc } from '../../../lib/query'
 import { useSession } from '../../../lib/session'
 import { assistant, useAssistant } from '../../../stores/assistant'
 import { useSend } from '../actions'
 import { TierPicker } from '../TierPicker'
-import { jobState } from './status'
+import { isWorking, jobState } from './status'
 import { useStageJob } from './useJob'
 
 /** The CAD job's goal when it starts from a photo. */
@@ -37,6 +45,8 @@ export function StartJob({
   const { capabilities } = useSession()
   const [open, setOpen] = useState(!!defaultOpen)
   const [goal, setGoal] = useState(recipe.goal)
+  // The goal the render plan last wrote, so a person's own words are never overwritten.
+  const renderGoal = useRef(recipe.goal)
   const [tier, setTier] = useState<AssistantTier | null>(null)
   const [photo, setPhoto] = useState<Asset | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -63,7 +73,7 @@ export function StartJob({
   }
   // One job per stage at a time: while one works, its bar is the place to steer it.
   const current = useStageJob(pieceId, stage).run
-  const working = current ? ['running', 'waiting'].includes(jobState(current)) : false
+  const working = current ? isWorking(jobState(current)) : false
 
   const start = async () => {
     try {
@@ -162,6 +172,16 @@ export function StartJob({
             )}
           </div>
         )}
+        {stage === 'render' && (
+          <RenderPlan
+            pieceId={pieceId}
+            onGoal={(g) => {
+              const prev = renderGoal.current
+              renderGoal.current = g
+              setGoal((current) => (current === recipe.goal || current === prev ? g : current))
+            }}
+          />
+        )}
         <div>
           <p className="mb-1 text-xs font-medium text-fg-subtle">Plan</p>
           <ol className="flex flex-col gap-1">
@@ -184,5 +204,74 @@ export function StartJob({
         </div>
       </div>
     </Popover>
+  )
+}
+
+/**
+ * The Render job's plan in numbers: which shots, in which look, at what size and quality, and
+ * how long they would keep this computer busy. The choices become the job's goal.
+ */
+function RenderPlan({ pieceId, onGoal }: { pieceId: string; onGoal: (goal: string) => void }) {
+  const piece = useRpc('pieces.get', { id: pieceId })
+  const saved = useRpc('scenes.list', { pieceId })
+  const engine = useRpc('renders.engine', {})
+  const [look, setLook] = useState<RenderScene['look']>('catalog-white')
+  const [quality, setQuality] = useState<RenderScene['output']['quality']>('standard')
+  const shots = piece.data
+    ? saved.data?.length
+      ? saved.data.map((x) => ({ title: x.title, scene: x.scene }))
+      : DEFAULT_SHOTS(piece.data.kind).map((d) => ({
+          title: d.title,
+          scene: RenderSceneSchema.parse(d.scene),
+        }))
+    : []
+  const planned = shots.map((x) => ({ ...x.scene, look, output: { ...x.scene.output, quality } }))
+  const estimate = useRpc(
+    'renders.estimate',
+    { pieceId, takes: planned.map((scene) => ({ scene })) },
+    { enabled: planned.length > 0 },
+  )
+  const browser = engine.data ? !engine.data.available : false
+  const titles = shots.map((x) => x.title)
+  const goal = `Render ${titles.length ? titles.join(', ') : 'the standard shots'} in ${lookLabel(look)} at ${QUALITY_LABELS[quality].toLowerCase()} quality. Look at every take, re-render what falls short (at most twice per shot), and hand the set over for review.`
+  const last = useRef('')
+  useEffect(() => {
+    if (!titles.length || last.current === goal) return
+    last.current = goal
+    onGoal(goal)
+  }, [goal, onGoal, titles.length])
+  return (
+    <div className="flex flex-col gap-2 rounded-md bg-bg-muted p-2.5">
+      <div className="flex flex-wrap gap-1">
+        {LOOK_CHOICES.slice(0, 3).map((l) => (
+          <Button
+            key={l.look}
+            size="sm"
+            variant={l.look === look ? 'primary' : 'ghost'}
+            onClick={() => setLook(l.look)}
+          >
+            {l.label}
+          </Button>
+        ))}
+      </div>
+      <Segmented
+        size="sm"
+        value={quality}
+        onChange={setQuality}
+        options={(['preview', 'standard', 'final'] as const).map((q) => ({
+          value: q,
+          label: QUALITY_LABELS[q],
+        }))}
+      />
+      <p className="text-xs text-fg-muted">
+        {titles.length} shots ({titles.join(', ')}), each{' '}
+        {shots[0] ? `${shots[0].scene.output.width}×${shots[0].scene.output.height}` : ''}.{' '}
+        {browser
+          ? 'Without Blender they are drawn in the browser at preview quality, in seconds.'
+          : estimate.data
+            ? `About ${machineTime(estimate.data.seconds).replace(/^about /, '')} of this computer’s time, plus up to two re-renders a shot. Nothing is paid.`
+            : 'Working out the time…'}
+      </p>
+    </div>
   )
 }

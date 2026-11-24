@@ -50,7 +50,7 @@ export class JobWatch {
     const working = await ctx.repo.runs.many({
       where: and(
         eq(t.agentRun.pieceId, event.pieceId),
-        inArray(t.agentRun.status, ['running', 'awaiting-approval']),
+        inArray(t.agentRun.status, ['running', 'awaiting-approval', 'waiting']),
         isNotNull(t.agentRun.job),
       )!,
     })

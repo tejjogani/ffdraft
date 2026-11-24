@@ -11,6 +11,7 @@ import { DIRECTIONS_SKILL } from './skills/directions'
 import { EDITING_SKILL } from './skills/editing'
 import { PHOTO_SKILL } from './skills/photo'
 import { PRODUCTION_SKILL } from './skills/production'
+import { RENDER_SKILL } from './skills/render'
 import { SPEC_SKILL } from './skills/spec'
 import { STONE_SKILL } from './skills/stone'
 
@@ -22,6 +23,7 @@ export const SKILLS = [
   STONE_SKILL,
   PHOTO_SKILL,
   PRODUCTION_SKILL,
+  RENDER_SKILL,
   ASK_SKILL,
 ].join('\n\n')
 

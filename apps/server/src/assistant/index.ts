@@ -23,6 +23,7 @@ import { mountRunEvents } from './routes'
 import { scriptedFactory, scriptedFromEnv } from './scripted'
 import { Assistant } from './service'
 import { AssistantSetupImpl, type KeyChecker } from './setup'
+import { TakeWaits, type Waiter } from './takes'
 
 export interface AssistantOptions {
   /** apps/server/.env and the environment: the key, tier overrides, PAVE_ASSISTANT. */
@@ -41,6 +42,8 @@ export interface AssistantParts {
   feedback: FeedbackHook
   /** Pauses an AI job when a person edits its piece. */
   jobWatch: JobWatch
+  /** The takes runs wait on. */
+  waits: TakeWaits
 }
 
 const realModel: ModelFactory = ({ apiKey }) => {
@@ -64,6 +67,9 @@ export function createAssistant(runtime: Runtime, opts: AssistantOptions = {}): 
 
   const keys = new KeyStore(runtime, env.ANTHROPIC_API_KEY ?? null)
   const driver = new Driver()
+  // The assistant exists below; a take settling before then wakes nothing (nothing waits yet).
+  let wake: (w: Waiter) => void = () => {}
+  const waits = new TakeWaits(runtime, (w) => wake(w))
   const deps: AssistantDeps = {
     runtime,
     driver,
@@ -73,11 +79,13 @@ export function createAssistant(runtime: Runtime, opts: AssistantOptions = {}): 
     scripted: scripted !== null,
     env,
     clients: new Map(),
+    waits,
   }
   const feedback = new FeedbackHook(runtime)
   // `setup` decides availability; the assistant asks it, and it registers the assistant.
   let setup: AssistantSetupImpl | null = null
   const assistant = new Assistant(deps, (orgId) => setup?.hasKey(orgId) ?? false)
+  wake = (w) => assistant.wake(w)
   const jobWatch = new JobWatch(runtime, assistant)
   setup = new AssistantSetupImpl({
     runtime,
@@ -88,6 +96,7 @@ export function createAssistant(runtime: Runtime, opts: AssistantOptions = {}): 
     scripted: scripted !== null,
     dispose: async () => {
       await jobWatch.dispose()
+      waits.dispose()
       await driver.dispose()
       await feedback.dispose()
     },
@@ -99,5 +108,6 @@ export function createAssistant(runtime: Runtime, opts: AssistantOptions = {}): 
     driver,
     feedback,
     jobWatch,
+    waits,
   }
 }

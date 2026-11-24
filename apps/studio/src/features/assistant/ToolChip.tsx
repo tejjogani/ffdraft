@@ -84,7 +84,7 @@ export function ToolChip({
       )}
     >
       <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-        {call.status === 'running' ? (
+        {call.status === 'running' || call.status === 'waiting' ? (
           <Spinner className="size-3.5" label="Working" />
         ) : error ? (
           <CircleAlert className="size-3.5 text-danger" aria-hidden />
@@ -97,7 +97,7 @@ export function ToolChip({
           {error
             ? `Couldn’t finish: ${call.label.charAt(0).toLowerCase()}${call.label.slice(1)}`
             : call.label}
-          {call.status === 'running' && '…'}
+          {(call.status === 'running' || call.status === 'waiting') && '…'}
         </span>
         {error && call.errorText && (
           <span className="mt-0.5 line-clamp-3 block text-xs text-fg-subtle">{call.errorText}</span>

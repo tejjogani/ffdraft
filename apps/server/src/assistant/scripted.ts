@@ -7,8 +7,10 @@
  * A fixture is `{ "runs": [[turn, …], …] }`: the n-th run started in this process plays
  * `runs[n % runs.length]`, one turn per model call, and a resumed run continues where it was.
  * `{{pieceId}}` anywhere in a turn is replaced by the piece the run is working on at that moment,
- * and `{{attachment}}` by the first photo attached to the latest message (from its context
- * message), so a fixture can read and fit "the photo the designer just sent".
+ * `{{attachment}}` by the first photo attached to the latest message (from its context
+ * message), so a fixture can read and fit "the photo the designer just sent". `{{take1}}`,
+ * `{{take2}}` and `{{scene1}}`, `{{scene2}}` are the takes and saved shots named in the latest
+ * tool results, in order, so a fixture can adjust and re-render "the take it just looked at".
  *
  * Two extras for watching the studio (screenshots, demos), neither part of the API:
  *  - `"paceMs": 40` streams the turn's text a word at a time, waiting that long between events;
@@ -118,10 +120,15 @@ function fill(
   pieceId: string | null,
   tag: string,
   attachment: string | null,
+  named: { takes: string[]; scenes: string[] },
 ): ScriptedTurn {
   const json = JSON.stringify(turn)
     .replaceAll('{{pieceId}}', pieceId ?? 'no-piece')
     .replaceAll('{{attachment}}', attachment ?? 'no-attachment')
+    .replace(/\{\{(take|scene)([12])\}\}/g, (_, kind: string, n: string) => {
+      const list = kind === 'take' ? named.takes : named.scenes
+      return list[Number(n) - 1] ?? `no-${kind}`
+    })
   const { paceMs: _pace, error, ...filled } = JSON.parse(json) as FixtureTurn
   return {
     ...filled,
@@ -143,6 +150,18 @@ function latestAttachment(params: Parameters<ModelClient['stream']>[0]): string 
   return null
 }
 
+/** Takes and saved shots named in the latest message of tool results, in the order named. */
+function latestNamed(params: Parameters<ModelClient['stream']>[0]) {
+  for (let i = params.messages.length - 1; i >= 0; i--) {
+    const m = params.messages[i]!
+    const text = JSON.stringify(m.content)
+    if (m.role !== 'user' || !text.includes('tool_result')) continue
+    const all = (re: RegExp) => [...new Set([...text.matchAll(re)].map((x) => x[1]!))]
+    return { takes: all(/(rnd_[A-Za-z0-9_-]{16})/g), scenes: all(/(scn_[A-Za-z0-9_-]{16})/g) }
+  }
+  return { takes: [], scenes: [] }
+}
+
 /** A model factory playing the fixture: one queue of turns per run, kept across its sessions. */
 export function scriptedFactory(fixture: Fixture): ModelFactory {
   const queues = new Map<string, FixtureTurn[]>()
@@ -159,7 +178,9 @@ export function scriptedFactory(fixture: Fixture): ModelFactory {
         const turn = q.shift()
         const tag = `${run.runId.slice(-8)}${q.length}`
         const stream = scriptedModel(
-          turn ? [fill(turn, run.pieceId(), tag, latestAttachment(params))] : [],
+          turn
+            ? [fill(turn, run.pieceId(), tag, latestAttachment(params), latestNamed(params))]
+            : [],
         ).stream(params, options)
         return turn?.paceMs ? paced(stream, turn.paceMs, options.signal) : stream
       },

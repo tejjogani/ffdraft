@@ -11,7 +11,7 @@
  * lost, so `onReconnect` subscribers resynchronise.
  */
 
-import type { Piece } from '@pave/schema'
+import type { Piece, RenderJob } from '@pave/schema'
 import {
   SERVER_EVENT_TYPES,
   type ServerEvent,
@@ -72,7 +72,7 @@ function refresh(event: ServerEvent): void {
   switch (event.type) {
     case 'design.changed': {
       if (livePieces.has(event.pieceId)) {
-        invalidate(['design.history', 'pieces.list'])
+        invalidate(['design.history', 'pieces.list', 'renders.list'])
         return
       }
       // Patch the cached piece when the change is its next version; otherwise refetch it.
@@ -82,7 +82,7 @@ function refresh(event: ServerEvent): void {
       if (patched === 'refetch') invalidateFor(queryClient, 'design')
       else {
         if (patched !== 'unchanged') queryClient.setQueryData(key, patched)
-        invalidate(['design.history', 'design.evaluate', 'pieces.list'])
+        invalidate(['design.history', 'design.evaluate', 'pieces.list', 'renders.list'])
       }
       return
     }
@@ -96,6 +96,8 @@ function refresh(event: ServerEvent): void {
       invalidateFor(queryClient, 'renders')
       return
     case 'job.updated':
+      // A take's progress ticks every second: patch the ring in place rather than refetch.
+      if (event.kind === 'render' && event.status === 'running' && patchTake(event)) return
       invalidateFor(
         queryClient,
         event.kind === 'render' ? 'renders' : event.kind === 'shot' ? 'shots' : event.kind,
@@ -108,6 +110,26 @@ function refresh(event: ServerEvent): void {
     case 'client.request':
       return
   }
+}
+
+/**
+ * Writes a running take's progress into every cached list and record that holds it. False when
+ * no cache holds it yet (or it just started running), so the caller refetches instead.
+ */
+function patchTake(e: Extract<ServerEvent, { type: 'job.updated' }>): boolean {
+  let found = false
+  const patch = (j: RenderJob): RenderJob => {
+    if (j.id !== e.id) return j
+    if (j.status === 'running') found = true
+    return j.status === 'running' ? { ...j, progress: e.progress } : j
+  }
+  queryClient.setQueriesData<RenderJob[]>({ queryKey: rpcKey('renders.list') }, (list) =>
+    list?.map(patch),
+  )
+  queryClient.setQueriesData<RenderJob>({ queryKey: rpcKey('renders.get') }, (job) =>
+    job ? patch(job) : job,
+  )
+  return found
 }
 
 function dispatch(raw: string): void {

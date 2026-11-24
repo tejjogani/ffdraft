@@ -15,6 +15,7 @@ import type { Runtime } from '../runtime'
 import type { ClientBridge } from './bridge'
 import type { Driver } from './driver'
 import type { KeyStore } from './keys'
+import type { TakeWaits } from './takes'
 
 /** Builds the model client for one run. The key is null only in scripted (test) mode. */
 export type ModelFactory = (run: {
@@ -37,6 +38,8 @@ export interface AssistantDeps {
   env: Readonly<Record<string, string | undefined>>
   /** The studio window each live run's messages came from, for client tools. */
   clients: Map<string, string>
+  /** Takes runs wait on, and the wake-up when one settles (see ./takes). */
+  waits: TakeWaits
 }
 
 export class RunHost {

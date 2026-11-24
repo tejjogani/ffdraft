@@ -4,6 +4,8 @@
  * shows the spec itself, editable, with Build it as the approval and "Change something…" to
  * decline with a note the assistant reads.
  */
+
+import { machineTime } from '@pave/render'
 import type { Piece } from '@pave/schema'
 import { AiMark, Button, cn, Textarea } from '@pave/ui'
 import { ChevronRight, Hammer } from 'lucide-react'
@@ -11,6 +13,17 @@ import { useState } from 'react'
 import { SpecCard } from '../../components/SpecCard'
 import { usd } from '../../lib/format'
 import type { CallItem } from './model'
+
+/** What a call will cost: dollars for a paid service, this computer's time for a render. */
+export function EstimateLine({ estimate }: { estimate: NonNullable<CallItem['estimate']> }) {
+  return (
+    <p className="font-mono text-xs text-fg-muted tabular">
+      {estimate.machine
+        ? `About ${machineTime(estimate.seconds ?? 0).replace(/^about /, '')} of this computer’s time · nothing is paid`
+        : `About ${usd(estimate.usd)}${estimate.seconds ? ` · ${Math.round(estimate.seconds)} s` : ''}`}
+    </p>
+  )
+}
 
 export function ApprovalCard({
   call,
@@ -94,12 +107,7 @@ export function ApprovalCard({
           <AiMark className="size-3" /> Needs your go-ahead
         </p>
         <p className="text-sm">{summary}</p>
-        {call.estimate && (
-          <p className="font-mono text-xs text-fg-muted tabular">
-            About {usd(call.estimate.usd)}
-            {call.estimate.seconds ? ` · ${Math.round(call.estimate.seconds)} s` : ''}
-          </p>
-        )}
+        {call.estimate && <EstimateLine estimate={call.estimate} />}
         <button
           type="button"
           aria-expanded={details}

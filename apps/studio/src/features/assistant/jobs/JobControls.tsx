@@ -8,7 +8,7 @@ import { Button, toast } from '@pave/ui'
 import { Check, CircleStop, Hand, MessageSquare, Pause, Play } from 'lucide-react'
 import { openAssistant } from '../../../stores/assistant'
 import { useRunActions } from '../actions'
-import { jobState } from './status'
+import { isWorking, jobState } from './status'
 
 export function JobControls({
   run,
@@ -36,7 +36,7 @@ export function JobControls({
     </Button>
   )
 
-  if (state === 'running' || state === 'waiting')
+  if (isWorking(state))
     return (
       <div className="flex flex-wrap items-center gap-1.5">
         <Button
