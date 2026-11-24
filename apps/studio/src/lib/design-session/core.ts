@@ -216,6 +216,9 @@ function record(
 
 /** Shows `ops` live without recording them. A preview under another key commits the previous gesture. */
 export function preview(s: SessionState, key: string, ops: readonly Op[]): SessionState {
+  // Controls repeat a value (a scrub pinned at its minimum): the same preview again must not
+  // produce a new view, which every screen would evaluate again.
+  if (s.gesture?.key === key && JSON.stringify(s.gesture.ops) === JSON.stringify(ops)) return s
   const base = s.gesture && s.gesture.key !== key ? commitGesture(s) : s
   try {
     const view = applyOps(base.settled, ops).design

@@ -133,6 +133,12 @@ describe('design session core', () => {
     expect(s.pending[0]!.ops).toEqual(setWidth(d, 2.6))
   })
 
+  it('keeps the same view when a control repeats its last preview', () => {
+    const d = solitaire()
+    const s = core.preview(core.createSession('p1', d, 0), 'k', setWidth(d, 3))
+    expect(core.preview(s, 'k', setWidth(d, 3))).toBe(s)
+  })
+
   it('records nothing for a scrub that returns to where it started', () => {
     const d = solitaire()
     let s = core.preview(core.createSession('p1', d, 0), 'k', setWidth(d, 3))

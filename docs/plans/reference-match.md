@@ -64,7 +64,7 @@ The rule is **the lowest-freedom feature that explains the region**.
 | Body, otherwise | 1. `vectorBody` from the matte outline when the read says flat and constant thickness. 2. `relief` (the default; depth is a hint only). 3. `meshBody` only with two or more real views or on request, and only if the generated mesh, registered to the photo, overlaps the matte by at least 0.85; otherwise relief | freeform node |
 
 - The two thresholds are starting values; the `route` suite in section 12 calibrates them on known bodies.
-- **Hybrid order.** Mask stones and findings out of the photo before any generation. Fit or generate the body with stone nodes hidden (pavé makes each evaluation about a second: `iced-trophy` measured 0.7 to 1.6 s). Then lift stone marks onto the body and add `pave`, `bail`, `chain`.
+- **Hybrid order.** Mask stones and findings out of the photo before any generation. Fit or generate the body with stone nodes hidden: `iced-trophy` took 1.39 s per evaluation with its pavé and 0.17 to 0.25 s per body change without `ice` and `chain` (measured). Then lift stone marks onto the body and add `pave`, `bail`, `chain`.
 - Each part shows an **Editable** or **Sculpted** badge the jeweler can flip.
 - Depends on contract changes already planned in `ideate-and-freeform.md` §3: a mask variant of `Pave.region` and a custom `Relief.outline`. Still missing from any plan: a front and up axis on `meshBody`.
 
@@ -84,7 +84,7 @@ Scale is asked, never inferred. One tap, with a default pre-selected so it can b
 
 - **Seven numbers per photo:** azimuth, elevation, roll, distance, image span, and a two-axis shift. Distance sets perspective only; span (millimetres across the image at the piece) sets size. A cropped photo has no meaningful focal length, so none is fitted.
 - **Start:** try 60 directions (12 azimuths by 5 elevations). For each, solve span and shift directly from the mask's area and centroid, then compare at low resolution. Refine the best three. The read's view label, when there is one, orders the candidates.
-- **Distance** starts at ten times the piece's size and stays there unless a second photo or strong perspective constrains it (section 7, measured).
+- **Distance** starts at ten times the piece's size and is not fitted from a single photo: doing so made the result worse (measured, section 7). Whether two or more photos constrain it is untested.
 - **Symmetric pieces** have several equally good cameras; any of them gives the same overlay, so pose is judged by reprojection, not by angle.
 - `onBody` photos are read but not fitted.
 
@@ -114,13 +114,23 @@ The loss is a fixed weighted sum (section 12). Views marked held-out are scored 
 
 - **Bounds:** the field's declared range (`describeNode`), narrowed by the canon band the caller passes in, narrowed to a point by a pin.
 - **Search:** coordinate steps with a pattern move. After each trial build, the camera is re-polished on that build (rendering only, no kernel call), so shape and camera move together. The first prototype, which alternated them, stalled.
-- **Stop:** when the largest step is under the field's own step, or the budget is spent (300 kernel evaluations or 30 s per candidate by default), or the designer cancels.
+- **Stop:** when the largest step is under the field's own step, or the budget is spent (250 kernel evaluations or 60 s per candidate by default), or the designer cancels.
 - **Then test what the photos could see.** Each fitted number is nudged; if no fitted view changes by more than a threshold it is reset to the canon default and marked **assumed**.
-- **Ask for the right second photo.** The view that would move most under the assumed numbers is computed from the model, so the prompt can say "a photo looking through the ring fixes band thickness and head height".
+- **Ask for the right second photo.** The view that would move most under the assumed numbers is computed from the model, so the prompt can say what a second photo buys ("a photo looking through the ring shows band thickness"). Which view is best is computed, not hard-coded; that example is geometry, not a measurement.
 
 **Measured on the prototype** (synthetic solitaire, unknown camera, scale from ring size; details in research 11 §8):
 
-MEASURED_PLACEHOLDER
+| Photos given (trials) | Sizes in the image plane | Thickness and head height | Prong count | Metal weight | Carats |
+|---|---|---|---|---|---|
+| One three-quarter view (6) | median 0.06 to 0.07 mm, worst 0.45 | median 0.23 to 0.31 mm, worst 0.93 | 6 of 6 | median 5 %, worst 22 % | median 3 %, worst 16 % |
+| Top and through-the-finger (4) | median 0.03 to 0.15 mm, worst 0.21 | median 0.18 to 0.20 mm, worst 0.57 | 4 of 4 | median 4.5 %, worst 11 % | median 2 %, worst 5 % |
+| One view, outline off by ±1 px (4) | median 0.03 to 0.56 mm, worst 0.62 | median 0.40 to 0.59 mm, worst 0.66 | 4 of 4 | 9 % | median 2 %, worst 7 % |
+
+- The camera was found to a median of 0.7° (worst 2.5°). The wrong prong count scored 1.2 to 6.7 times worse.
+- One mask pixel at 192 px is about 0.2 mm on a ring, so mask quality sets the floor: fit at the photo's full resolution.
+- Fitting camera distance from one photo made depth-like numbers worse (worst 1.26 mm), so it keeps its prior.
+- The search stops short of a perfect overlay (0.88 to 0.98). Finer camera steps lifted a true-shape test from 0.963 to 0.989, so the package adds a fine final stage; untested end to end.
+- About 19 s per candidate on a busy four-core machine; three quarters of it is rendering and scoring, not the kernel.
 
 ## 8. What the jeweler sees
 
@@ -163,7 +173,7 @@ Each provider also gets a `recorded` adapter that replays stored responses by co
 
 ## 11. Cost, metering and evaluation
 
-**Per photo (all prices unverified):** about 13 small vision calls (one route, four regions three times) and one segmentation call, on the `llm` and `image` meters with keys `match:${id}:read:${n}` and `match:${id}:segment`. The fit is CPU only: measured at about 19 s per candidate for five numbers on a shared machine. A sculpted body adds one `mesh3d` job (second-hand prices in research 06: $0.08 to $0.80), behind the existing estimate, confirmation and `monthlyBudgetUsd` check. A match shows its total before it starts and never retries a paid step silently.
+**Per photo (all prices unverified):** about 13 small vision calls (one route, four regions three times) on the `llm` meter and one segmentation call (on `image`, or a new meter decided with the usage work), with idempotency keys `match:${id}:read:${n}` and `match:${id}:segment`. The fit is CPU only: measured at about 19 s per candidate with one photo and 35 s with two, for five numbers on a busy machine. A sculpted body adds one `mesh3d` job (second-hand prices in research 06: $0.08 to $0.80), behind the existing estimate, confirmation and `monthlyBudgetUsd` check. A match shows its total before it starts and never retries a paid step silently.
 
 **Evaluation in three tiers:**
 
@@ -201,6 +211,9 @@ packages/match/src/
 
 ```ts
 type Evaluate = (design: Design, signal?: AbortSignal) => Promise<Evaluation>
+type Vec3 = [number, number, number]; type Size = { width: number; height: number }
+type ScaleAnchor = { type: 'ringSize'; nodeId: string; size: RingSize } | { type: 'stone'; nodeId: string; carat?: number; widthMm?: number }
+  | { type: 'height'; nodeId: string; mm: number } | { type: 'reference'; viewId: string; mark: StoneMark; diameterMm: number } | { type: 'assumed' }
 
 interface Camera { azimuth: number; elevation: number; roll: number        // degrees; axes as @pave/render cameraBasis
   distance: number; span: number; shift: [number, number]; target: Vec3 } // mm, mm across the larger image side, fractions
@@ -228,8 +241,9 @@ searchPose(e: Evaluation, t: Prepared, o?: { distanceRatio?: number; hide?: stri
 refineCamera(e: Evaluation, c: Camera, t: Prepared, o?: { steps?: CameraSteps; fitDistance?: boolean }): { camera: Camera; score: ViewScore }
 paramsFor(d: Design, keys: string[], o?: { bands?: Record<string, [number, number]>; pins?: Record<string, number> }): FitParam[]
 opsFor(params: FitParam[], values: number[]): Op[]
-fitDesign(i: { design: Design; params: FitParam[]; views: TargetView[]; evaluate: Evaluate; cameras?: Record<string, Camera>
-  hide?: string[]; budget?: { evaluations?: number; ms?: number }; signal?: AbortSignal; onProgress?: (r: FitResult) => void }): Promise<FitResult>
+interface FitInput { design: Design; params: FitParam[]; views: TargetView[]; evaluate: Evaluate; cameras?: Record<string, Camera>
+  hide?: string[]; budget?: { evaluations?: number; ms?: number }; signal?: AbortSignal; onProgress?: (r: FitResult) => void }
+fitDesign(i: FitInput): Promise<FitResult>
 chooseDiscrete(i: FitInput & { candidates: { id: string; ops: Op[] }[]; screen?: number }): Promise<{ ranked: { id: string; loss: number; result: FitResult }[]; margin: number; decided: boolean }>
 observability(r: FitResult, i: FitInput): Promise<FitResult>                // marks unconstrained numbers assumed, resets them
 suggestView(d: Design, assumed: FitParam[], evaluate: Evaluate): Promise<{ seed: keyof typeof VIEW_SEEDS; gain: number }[]>
@@ -244,11 +258,35 @@ rankQuestions(c: { field: string; options: { id: string; massG: number; carat: n
 diffClasses(r: LabelRaster, t: Prepared): Uint8Array                        // 0 neither, 1 both, 2 model only, 3 photo only
 ```
 
-**Fixed behaviour** (so two builds agree): the loss is `0.35·(1−IoU) + 0.25·(1−stoneIoU) + 0.25·E + 0.15·Es` with stones, `0.6·(1−IoU) + 0.4·E` without, where `E = min(1, 20·edgePx / width)`. Fit resolution is 192 px, pose search 96 px. The first parameter step is 12 % of its range. Random numbers come only from `mulberry32(seed)`. The same inputs give the same `FitResult` on any V8.
+**Fixed behaviour** (so two builds agree): the loss is `0.35·(1−IoU) + 0.25·(1−stoneIoU) + 0.25·E + 0.15·Es` with stones, `0.6·(1−IoU) + 0.4·E` without, where `E = min(1, 20·edgePx / width)`. The pose search runs at 96 px and the fit at 192 px, then a final stage at 384 px with camera steps halved down to 0.06°. The first parameter step is 12 % of its range; camera steps while fitting are 1°, 1 % of span and 0.5 % of shift. A discrete choice is decided only when the runner-up's loss is at least 1.5 times the winner's. Random numbers come only from `mulberry32(seed)`. The same inputs give the same `FitResult` on any V8.
 
 **Benchmark** (`pnpm match:bench`; a six-case subset on every pull request, the full grid nightly). A case is: a template, random free parameters inside their bounds (rebuilt until the kernel reports no error), random discrete options, a ring-size or height anchor, and photos rendered by `rasterize` at random cameras (azimuth and elevation within 25° of a canon view, roll ±8°, distance 5 to 20 times the piece, fill 50 to 75 %, shift ±5 %). Three view sets: one three-quarter view; top plus through-the-finger (or front plus side for pendants); top only. Three levels: `clean`; `noisy` (outline moved ±1 px in blocks, 10 % of stone marks dropped, marks jittered 2 px); `hard` (distance 3 to 6 times the piece, 2 px erosion, 3 % anchor error, holes of up to 2 % of the area). Suites besides the round trip: `route` (a wrong recipe must be rejected, a right one kept), `scripted-read` (seeded wrong answers must end as a correct choice or a question), `scripted-jeweler` (apply the truth to the top-ranked question until within tolerance; count the taps), `lift` and `sculpt-sim`.
 
-THRESHOLDS_PLACEHOLDER
+**Pass thresholds.** "Floor" fails CI and is what the prototype already met on `solitaire`. "Target" is the goal for the built package before the server job ships; targets are unverified. A floor may be changed only with a written reason in `thresholds.ts`. Other recipes start from the same floors; a recipe that misses one is a finding to report, not a number to relax quietly.
+
+| Measure (clean level unless said) | Floor | Target |
+|---|---|---|
+| Camera direction, one view (ignoring azimuth above 70° elevation and symmetric twins) | median ≤ 2°, worst ≤ 5° | median ≤ 1° |
+| Discrete choice: decided and right; decided and wrong; left as a question | ≥ 90 %; ≤ 2 %; ≤ 20 % | ≥ 95 %; 0; ≤ 10 % |
+| Sizes in the image plane, one view | median ≤ 0.15 mm, worst ≤ 0.6 mm | median ≤ 0.1 mm, worst ≤ 0.3 mm |
+| Depth-like sizes, one view (or marked assumed) | median ≤ 0.5 mm, worst ≤ 1.0 mm | median ≤ 0.3 mm |
+| All sizes, two views | median ≤ 0.25 mm, worst ≤ 0.6 mm | median ≤ 0.1 mm, worst ≤ 0.3 mm |
+| Overlap of the fitted view, one view / two views | median ≥ 0.95, min ≥ 0.93 / median ≥ 0.92, min ≥ 0.87 | median ≥ 0.98 |
+| Overlap of a held-out view, one view / two views | median ≥ 0.92, min ≥ 0.85 / median ≥ 0.94, min ≥ 0.88 | median ≥ 0.96 |
+| Metal weight error, one view / two views | median ≤ 8 %, worst ≤ 25 % / median ≤ 6 %, worst ≤ 12 % | two views: worst ≤ 5 % |
+| Carat error, one view / two views | median ≤ 5 %, worst ≤ 20 % / worst ≤ 6 % | two views: worst ≤ 3 % |
+| `noisy` level: any size; discrete right; fitted overlap | worst ≤ 0.7 mm; ≥ 90 %; median ≥ 0.86 | worst ≤ 0.4 mm |
+| `hard` level | reported only; no invalid build; decided and wrong ≤ 10 % | |
+| Invalid builds after a fit; fits that throw | 0; 0 | |
+| Budget per candidate: kernel evaluations; renders per view (counts are deterministic; time is reported: 19 s with one view and 35 s with two, measured on a busy machine) | ≤ 250; ≤ 12,000 | ≤ 10 s per candidate |
+| Speed: one render plus score at 192 px and 10k triangles; a camera search from scratch | ≤ 4 ms; ≤ 4 s | |
+| Status honesty: numbers marked fitted that are within 0.6 mm; head height marked assumed in top-only cases | ≥ 90 %; ≥ 90 % (unmeasured) | ≥ 95 % |
+| `route`: right recipe kept; wrong recipe rejected | ≥ 95 %; ≥ 95 % (unmeasured) | |
+| `scripted-read`: a seeded wrong read ends right or as a question | 100 % (unmeasured) | |
+| `scripted-jeweler`: taps to bring every size within tolerance | median ≤ 3, worst ≤ 5 (unmeasured) | median ≤ 2 |
+| `lift`: stone centre back on the surface; melee size after snapping | median ≤ 0.15 mm; ≥ 95 % right (unmeasured) | |
+| `expectedCount` against the kernel's count on iced templates | within 10 % (unmeasured) | |
+| Unit: rendered area of a sphere and a box; camera basis against the `@pave/render` fixture; same seed twice | within 1 %; 1e-12; identical output | |
 
 ## 13. Decisions and what was rejected
 
@@ -260,7 +298,7 @@ THRESHOLDS_PLACEHOLDER
 6. **The match is a server job; the package is isomorphic.** Same trace for person and assistant; the browser only draws the live overlay.
 7. **`@pave/match` does not import `@pave/canon` or `@pave/render`.** Canon bands arrive as plain numbers; the camera convention is duplicated and locked by a fixture test.
 
-Corrections to the proposals: scale by ring size does not fix perspective, so "known camera" results overstate accuracy; the informative second ring photo is through the finger, not from the side (measured); `custom` builds nothing off rings, so a sculpted pendant must be authored by ops, not by a spec.
+Corrections to the proposals: the 0.02 mm result was with known cameras, and with an unknown camera depth-like sizes are off by 0.2 to 0.9 mm; a kernel evaluation is not the main cost of a fit, rendering and scoring are; fitting a focal or distance term from one photo hurts; `custom` builds nothing off rings, so a sculpted pendant must be authored by ops, not by a spec.
 
 ## 14. Build order
 

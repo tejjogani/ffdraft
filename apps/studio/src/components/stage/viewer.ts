@@ -437,7 +437,12 @@ export class Viewer {
       if (!(o instanceof Mesh)) return
       if (!kept.has(o.geometry) && !done.has(o.geometry)) o.geometry.dispose()
       const material = b.originals.get(o) ?? (o.material as Material)
-      if (!done.has(material)) material.dispose()
+      if (!done.has(material)) {
+        material.dispose()
+        // A gem shader's BVH lives in data textures that `Material.dispose` does not free;
+        // without this every evaluation leaks them (a software GPU runs out mid-scrub).
+        bvhOf(material)?.dispose()
+      }
       done.add(o.geometry).add(material)
     })
   }
@@ -994,6 +999,12 @@ function stoneEdges(gems: InstancedMesh): Float32Array[] {
     out.push(placed)
   }
   return out
+}
+
+function bvhOf(material: Material): { dispose(): void } | undefined {
+  const uniform = (material as { uniforms?: { bvh?: { value?: { dispose?: () => void } } } })
+    .uniforms?.bvh?.value
+  return typeof uniform?.dispose === 'function' ? (uniform as { dispose(): void }) : undefined
 }
 
 function indexForPicking(mesh: Mesh): void {
