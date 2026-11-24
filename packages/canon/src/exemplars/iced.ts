@@ -38,7 +38,7 @@ export const ICED = [
     why: [
       'Micro tier: 1.0 mm melee reads as ice at 32 mm.',
       'A 0.85 mm polished rim draws the letter.',
-      'A tube bail for the tennis chain, its hole sized for the 3.4 mm links as the kernel measures it.',
+      'A hidden bail behind the ice, its slot sized for the 3.4 mm tennis links as the kernel measures it.',
     ],
     antiTwin: {
       ops: [{ t: 'update', id: 'ice', patch: { sizeMax: 1.6 } }],
@@ -87,7 +87,7 @@ export const ICED = [
           name: 'Bail',
           material: 'au14k-yellow',
           host: 'body',
-          style: 'tube',
+          style: 'hidden',
           opening: 9.2,
           width: 4.6,
           wire: 1.6,
@@ -97,7 +97,7 @@ export const ICED = [
     },
     why: [
       '50 mm deep enough for seats: 4.25 mm (1.5 + 0.055 × H).',
-      'A 6 mm Cuban is 12 % of the height, through a 9.2 mm tube bail of 1.6 mm wire.',
+      'A 6 mm Cuban is 12 % of the height, on a hidden bail of 1.6 mm wire that leaves the top stones clear.',
       'Rim 0.85 and margin 0.4 mm: the outer stones have metal to bite.',
     ],
     antiTwin: {
@@ -175,7 +175,7 @@ export const ICED = [
           name: 'Bail',
           material: 'au14k-yellow',
           host: 'base',
-          style: 'tube',
+          style: 'hidden',
           opening: 10.4,
           width: 5.2,
           wire: 1.65,
@@ -232,7 +232,7 @@ export const ICED = [
     why: [
       'A round sculpt sliced 80 % flat at the back: under 15 mm off the chest, not 47.',
       'Every face flooded with 1.0 mm stones.',
-      'A 6 mm Cuban carries 45 mm through a tube bail.',
+      'A 6 mm Cuban carries 45 mm on a hidden bail behind the ice.',
     ],
     antiTwin: {
       ops: [{ t: 'update', id: 'ice', patch: { coverage: 0.6 } }],
@@ -283,7 +283,7 @@ export const ICED = [
           material: 'au14k-white',
           plating: 'rhodium',
           host: 'body',
-          style: 'tube',
+          style: 'hidden',
           opening: 6.9,
           width: 3.5,
           wire: 1.55,
@@ -366,7 +366,7 @@ export const ICED = [
           name: 'Bail',
           material: 'au14k-yellow',
           host: 'base',
-          style: 'tube',
+          style: 'hidden',
           opening: 13.8,
           width: 6,
           wire: 1.85,

@@ -174,7 +174,7 @@ export const PENDANTS = [
         style: ['middle eastern', 'calligraphy'],
         metal: { alloy: 'au22k-yellow' },
         body: { heightMm: 14, text: 'name', thicknessMm: 1.4 },
-        chain: { style: 'cable', lengthMm: 457, widthMm: 1.2 },
+        chain: { style: 'cable', lengthMm: 457, widthMm: 1.5 },
       },
       ops: [{ t: 'update', id: 'body', patch: { source: { type: 'svg', d: SWASH } } }],
     },

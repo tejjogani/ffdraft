@@ -146,6 +146,20 @@ export const ICED_RULES = [
     severity: 'default',
   }),
   rule({
+    id: 'iced.sculptMargin',
+    title: 'Margin on a sculpt',
+    applies: { nodeKind: 'pave', when: v('sculpt') },
+    paths: ['pave.margin'],
+    // A sculpt has no rim and its faces turn at every edge: the kernel's seat.wall check passes
+    // only with the outer stones kept well in from each face's edge.
+    band: band(0.6, 0.5, 0.8),
+    rationale:
+      'A sculpt has no polished rim: keep the stones 0.5–0.8 mm in from every edge so each seat keeps its wall.',
+    source: src('K', '§2 Edge (border + margin; kernel seat check on sculpts)'),
+    confidence: 'medium',
+    severity: 'default',
+  }),
+  rule({
     id: 'iced.coverage',
     title: 'Ice level',
     applies: { nodeKind: 'pave' },
@@ -216,8 +230,10 @@ export const ICED_RULES = [
   rule({
     id: 'iced.depth',
     title: 'Depth off the chest',
-    applies: { kinds: ['pendant', 'necklace'], when: gt(H, 14.99) },
-    paths: ['meshBody.flatBack', 'vectorBody.thickness'],
+    // Sculpts only: an outline's depth is its thickness (iced.thickness), and on a thin body
+    // the summary's depth is the bail's.
+    applies: { kinds: ['pendant', 'necklace'], when: and(v('sculpt'), gt(H, 14.99)) },
+    paths: ['meshBody.flatBack'],
     measure: 'pendantDepth',
     band: band(mul(0.2, H), mul(0.08, H), mul(0.3, H)),
     lintAt: { above: mul(0.35, H) },

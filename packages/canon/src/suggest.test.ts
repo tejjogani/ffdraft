@@ -134,8 +134,9 @@ describe('lintDesign on bad designs', () => {
       chain: { style: 'cuban', lengthMm: 559, widthMm: 8 },
     }
     const { design } = suggestDesign(spec)
-    // A tube's round hole must pass the 8 × 4 mm section with 1.5 mm to spare: 1.15·8 + 2.0.
-    expect(design.nodes.bail).toMatchObject({ style: 'tube' })
+    // Behind a flooded front, a hidden bail whose slot passes the 8 × 4 mm section with 1.5 mm
+    // to spare: 1.15·8 + 2.0.
+    expect(design.nodes.bail).toMatchObject({ style: 'hidden' })
     for (const opening of [9.5, 1.5]) {
       const bad = applyOps(design, [{ t: 'update', id: 'bail', patch: { opening } }]).design
       const f = expectFixed(bad, 'bail.opening', { spec })

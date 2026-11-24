@@ -154,15 +154,11 @@ export const SOLITAIRES = [
           },
         ],
       },
-      ops: [
-        { t: 'update', id: 'band', patch: { widthBottom: 3.5 } },
-        { t: 'update', id: 'head', patch: { material: 'au18k-yellow' } },
-      ],
     },
     why: [
       'A wide rose band that tapers to 3.5 mm carries a 10.5 mm stone like a 1940s tank ring.',
-      'Rose and yellow on separate nodes: bi-colour without fusing alloys.',
       'Heavy 1.5 mm claws and a euro base keep a big step cut upright.',
+      'One alloy: a yellow head would be soldered on, which the kernel cannot check yet.',
     ],
     antiTwin: {
       ops: [{ t: 'update', id: 'head', patch: { prongDiameter: 1.0 } }],

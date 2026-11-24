@@ -101,7 +101,8 @@ export const FACTS = {
   opening: 'bail opening (mm)',
   bailWire: 'bail wire (mm)',
   icedBail: 'the bail carries pavé (1/0)',
-  loopBail: 'loop or hidden bail, not a ring or tube (1/0)',
+  loopBail: 'teardrop loop bail (1/0)',
+  hiddenBail: 'hidden bail behind the piece (1/0)',
   hasBody: 'the bail hangs from a body with a height (1/0)',
   sculpt: 'the main body is a sculpted mesh (1/0)',
   hollow: 'sculpt hollowed to this wall (mm, 0 solid)',
@@ -316,7 +317,8 @@ function bailFacts(d: Design, b: NodeOf<'bail'> | undefined): Facts {
     opening: b.opening,
     bailWire: b.wire,
     icedBail: flag(nodesOf(d, 'pave').some((p) => p.host === b.id)),
-    loopBail: flag(b.style === 'loop' || b.style === 'hidden'),
+    loopBail: flag(b.style === 'loop'),
+    hiddenBail: flag(b.style === 'hidden'),
   }
 }
 

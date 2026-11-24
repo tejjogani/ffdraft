@@ -110,6 +110,15 @@ export const CAVEATS: readonly Caveat[] = [
     confidence: 'medium',
   },
   {
+    id: 'earring.bezelPost',
+    feature: 'Posts on bezel studs',
+    fallback:
+      'the kernel cannot fix a post to a bezel cup yet: build a basket, or a bezel with a maker note for the post',
+    applies: { kinds: ['earrings'] },
+    source: src('K', 'kernel metal.disconnected on bezel studs, 2026-11-24'),
+    confidence: 'high',
+  },
+  {
     id: 'earring.hollowHoops',
     feature: 'Hollow hoops',
     fallback: 'offer the solid wire limit for the hoop size, or a maker note',

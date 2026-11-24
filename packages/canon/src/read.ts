@@ -192,23 +192,58 @@ export function readDesign(
     : hero && GEM_CUTS[hero.cut].outline === 'round' && !second && !mirrored
       ? 'radial'
       : 'bilateral'
-  const stones: DesignRead['stones'] = [
+  // Each stone with the kernel lots that are its own, in the kernel's vocabulary (gems: any
+  // role; halos and rows: accent; pavé: melee; tennis: four-prong), matched on cut and size.
+  const near = (a: number, b: number) => Math.abs(a - b) < 0.011
+  type Lot = EvaluationSummary['lots'][number]
+  const read: (DesignRead['stones'][number] & { mine: (l: Lot) => boolean })[] = [
     ...ofKind(d, 'gem').map((g) => ({
       role: g.id === hero?.id ? 'center' : 'side',
       cut: g.cut,
       setting: ofKind(d, 'setting').find((s) => s.gem === g.id)?.style ?? 'loose',
+      mine: (l: Lot) => l.cut === g.cut && near(l.width, g.width) && l.role !== 'melee',
     })),
-    ...ofKind(d, 'halo').map((h) => ({ role: 'halo', cut: h.cut, setting: 'halo' })),
-    ...ofKind(d, 'gemRow').map((r) => ({ role: 'accent', cut: r.cut, setting: r.setting })),
-    ...ofKind(d, 'pave').map((p) => ({ role: 'pave', cut: p.cut, setting: 'pave' })),
+    ...ofKind(d, 'halo').map((h) => ({
+      role: 'halo',
+      cut: h.cut,
+      setting: 'halo',
+      mine: (l: Lot) => l.cut === h.cut && l.role === 'accent' && near(l.width, h.stoneWidth),
+    })),
+    ...ofKind(d, 'gemRow').map((r) => ({
+      role: 'accent',
+      cut: r.cut,
+      setting: r.setting,
+      mine: (l: Lot) =>
+        l.cut === r.cut &&
+        l.role === 'accent' &&
+        l.setting === r.setting &&
+        l.width <= r.stoneWidth + 0.011 &&
+        l.width >= Math.min(r.stoneWidth, r.graduateTo ?? r.stoneWidth) - 0.011,
+    })),
+    ...ofKind(d, 'pave').map((p) => ({
+      role: 'pave',
+      cut: p.cut,
+      setting: 'pave',
+      mine: (l: Lot) =>
+        l.cut === p.cut &&
+        l.role === 'melee' &&
+        l.width >= p.sizeMin - 0.011 &&
+        l.width <= p.sizeMax + 0.011,
+    })),
     ...ofKind(d, 'chain')
       .filter((c) => c.style === 'tennis')
-      .map((c) => ({ role: 'accent', cut: c.cut, setting: 'tennis' })),
-  ].map((s) => {
-    const lot = summary?.lots.find(
-      (l) => l.cut === s.cut && (l.role === s.role || l.setting === s.setting),
-    )
-    return lot ? { ...s, count: lot.count } : s
+      .map((c) => ({
+        role: 'accent',
+        cut: c.cut,
+        setting: 'tennis',
+        mine: (l: Lot) => l.cut === c.cut && l.setting === 'four-prong',
+      })),
+  ]
+  // A lot two stones could own (a halo and a row of one size) is counted for neither.
+  const owners = (l: Lot) => read.filter((r) => r.mine(l)).length
+  const stones: DesignRead['stones'] = read.map(({ mine, ...s }) => {
+    const lots = summary?.lots.filter((l) => mine(l) && owners(l) === 1) ?? []
+    return lots.length ? { ...s, count: lots.reduce((n, l) => n + l.count, 0) } : s
   })
   const motifs = [
     f.halo ? (f.haloRows && f.haloRows > 1 ? 'double halo' : 'halo') : undefined,

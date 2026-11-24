@@ -11,7 +11,10 @@ const design = {
 describe('checks wording', () => {
   it('names features instead of ids and drops the worst-instance detail', () => {
     expect(readableMessage('Stones center:0 and row:7 overlap (worst: halo:1)', design)).toBe(
-      'Stones Centre stone, stone 1 and Shoulder stones, stone 8 overlap',
+      'Stones Centre stone and Shoulder stones (stone 8) overlap',
+    )
+    expect(readableMessage('26 % of stone row:2 is inside metal', design)).toBe(
+      '26 % of stone 3 of Shoulder stones is inside metal',
     )
     expect(readableMessage('"halo_xpc5mp" does not touch "Band"', design)).toBe(
       '"Stone row" does not touch "Band"',

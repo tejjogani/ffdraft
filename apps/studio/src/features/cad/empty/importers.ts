@@ -52,6 +52,8 @@ export const meshNode = (assetId: string, fileName: string): NodeInput => ({
 export const builtinNode = (name: 'trophy' | 'crown' | 'dice'): NodeInput => ({
   id: newId('meshBody'),
   kind: 'meshBody',
+  // Named after the model, as an import is named after its file.
+  name: name[0]!.toUpperCase() + name.slice(1),
   source: { type: 'builtin', name },
 })
 

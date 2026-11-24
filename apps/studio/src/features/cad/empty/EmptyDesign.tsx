@@ -442,6 +442,7 @@ function QuickStart({ busy, onBuild }: { busy: boolean; onBuild(spec: PieceSpecI
           value={kind}
           onChange={setKind}
           size="md"
+          className="w-fit"
           options={[
             { value: 'ring', label: 'Ring' },
             { value: 'pendant', label: 'Pendant' },

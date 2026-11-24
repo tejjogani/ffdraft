@@ -12,8 +12,9 @@ const hyp = (a: Expr, b: Expr) => pow(add(sq(a), sq(b)), 0.5)
 /**
  * The least opening whose measured hole passes the chain with the kernel's 1.5 mm clearance,
  * fitted on the kernel (production detail, 2026-11-24) for 1.2–10 mm chains and kept 0.1–0.2
- * mm above it. A ring or tube hole is round, so a square section needs its diagonal; the
- * kernel's loop is a narrow teardrop, about twice the chain, and grows with its wire.
+ * mm above it. A ring or tube hole is round, so a square section needs its diagonal; a hidden
+ * bail's slot is shallow, so it needs about twice a round chain; the kernel's loop is a narrow
+ * teardrop, about twice the chain, and grows with its wire.
  */
 const ringOpen = iff(
   v('tennis'),
@@ -32,9 +33,15 @@ const loopOpen = add(
   ),
   mul(2.2, max(0, sub(wire, 1.1))),
 )
-const minOpen = iff(v('loopBail'), loopOpen, ringOpen)
+/** A hidden bail's slot is shallow (0.45 of its opening): it needs room for the chain's depth. */
+const hiddenOpen = iff(
+  v('tennis'),
+  add(mul(2.05, chainW), 3.6),
+  iff(v('flatLink'), add(mul(1.15, chainW), 2.0), add(mul(2.18, chainW), 0.95)),
+)
+const minOpen = iff(v('loopBail'), loopOpen, iff(v('hiddenBail'), hiddenOpen, ringOpen))
 /** Bail outer height 15 % of a body's height at least (§2), so the opening grows with H. */
-const forHeight = iff(v('hasBody'), sub(mul(0.15, H), mul(2, wire)), 0)
+const forHeight = iff(and(v('hasBody'), lt(v('hiddenBail'), 0.5)), sub(mul(0.15, H), mul(2, wire)), 0)
 const opening = max(add(minOpen, 0.3), forHeight)
 const smallWire = add(max(0.8, add(mul(0.08, W), 0.3)), ALLOY_ADD)
 /** Wire grows with the piece: an under-built bail is a named failure mode (09 §6). */
@@ -153,7 +160,7 @@ export const PENDANT_RULES = [
   rule({
     id: 'bail.heightRatio',
     title: 'Bail to pendant',
-    applies: { nodeKind: 'bail', when: gt(H, 14.99) },
+    applies: { nodeKind: 'bail', when: and(gt(H, 14.99), lt(v('hiddenBail'), 0.5)) },
     paths: ['bail.opening', 'bail.wire'],
     measure: 'bailRatio',
     band: band(0.18, 0.15, 0.22),
@@ -188,7 +195,7 @@ export const PENDANT_RULES = [
     band: band(0, 0, 0),
     lintAt: { above: 0.5 },
     rationale:
-      'A chain wants a round hole: a ring on fine chain, a tube on heavy or round chain. The teardrop loop needs twice the link to pass it.',
+      'A chain wants a round hole: a ring on fine chain, a tube on heavy chain, a hidden bail behind ice. A teardrop loop needs twice the link.',
     source: src('K', '§2 Bail and chain (round chains want tube or ring; kernel loop hole)'),
     confidence: 'medium',
     severity: 'info',

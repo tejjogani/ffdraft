@@ -6,6 +6,7 @@ import { ARCHETYPES } from '@pave/schema'
 import { EXEMPLAR_SOURCES } from './exemplars/index'
 import { printExpr } from './expr'
 import type { CanonSlice, SliceRule } from './model'
+import { PRINCIPLES } from './rubric'
 import { RULE_FAMILIES } from './rules/index'
 import { STYLES } from './styles/index'
 import { CANON_VERSION } from './version'
@@ -13,17 +14,10 @@ import { CANON_VERSION } from './version'
 const n = (x: number) => String(Number(x.toFixed(2)))
 
 /** Research 09 §6 principles, briefing and directions, and §7 practice, as standing instructions. */
-export const UNIVERSAL_PRINCIPLES = `Design principles (canon ${CANON_VERSION}):
-- One hero: one element wins in a blink; the second-largest stone is at most 0.85 of the hero.
-- One variant per piece (delicate, classic or bold): every number sits in that variant's band.
-- Unity: at most two metal colours and two finishes, one claw-tip family, a motif once or three times and more.
-- Every view is designed: top, profile, under-gallery and back, not the front alone.
-- Absolute sizes with clamps, not bare ratios; the kernel outranks the canon.
-- Read references before geometry: fix scale from one anchor (ring size or stone size, else assume ID 16.5 or 19.8 and say so), record ratios not millimetres, never infer what a view hides, never count or measure from pixels.
-- Ask only what changes geometry or cost, three questions a turn at most: size, stone, metal, active hands, flush-fit band (bridal); face size and content (signet); artwork, height, ice level, stone tier, chain (iced). Never ask for claw wire, elevation, gaps or margins.
-- Offer 2–3 directions that differ on at least two axes (silhouette, setting vocabulary, variant, profile, surface); hold what the client fixed; name each in 2–4 words, no brands; give grams, carats, height and one trade-off.
-- Say plainly what cannot be built and offer the nearest stand-in plus a maker note.
-- Numbers gate first (kernel diagnostics, style findings); pictures judge only gestalt.`
+export const UNIVERSAL_PRINCIPLES = [
+  `Design principles (canon ${CANON_VERSION}):`,
+  ...PRINCIPLES.map((l) => `- ${l}`),
+].join('\n')
 
 const short = (id: string) => id.split('.').slice(1).join('.')
 

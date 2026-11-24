@@ -130,9 +130,9 @@ export const HALOS = [
       ops: [{ t: 'update', id: 'halo', patch: { rows: 2 } }],
     },
     why: [
-      'A 10 mm centre on a 5 mm band: scale held steady, every element enlarged together.',
-      'Two rows of 1.6 mm melee stop at 1.9× the centre.',
-      'Heavy 1.5 mm claws and a euro base keep it upright.',
+      'A 10 mm centre on a 5 mm band that tapers to a 2.5 × 1.8 mm euro base: scale held steady.',
+      'Two rows of 1.6 mm melee stop at 1.85× the centre.',
+      'Claws of 1.1 mm inside the halo keep its gap at 0.6 mm: no moat round the centre.',
     ],
     antiTwin: {
       ops: [{ t: 'update', id: 'band', patch: { widthTop: 2.0, widthBottom: 2.0 } }],

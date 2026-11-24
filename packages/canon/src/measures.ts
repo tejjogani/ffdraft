@@ -400,7 +400,7 @@ export const MEASURES: Record<string, Measure> = {
 
   loopOnChain: ({ node }) =>
     node?.kind === 'bail'
-      ? { value: node.style === 'loop' || node.style === 'hidden' ? 1 : 0 }
+      ? { value: node.style === 'loop' ? 1 : 0 }
       : undefined,
 
   chainToPendantMass: ({ facts, summary }) => {

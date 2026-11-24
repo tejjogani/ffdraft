@@ -307,8 +307,10 @@ const CHOICES: Partial<Record<RecipeParam, Choice>> = {
     // stand-in for fine pavé (09 §1 "Shared prong"; French/U-cut is a maker note).
     ruleId: 'rows.sharedProng',
     pick: (f, n, { pinned }) => {
-      if (n.kind !== 'gemRow' || n.setting !== 'pave' || !pinned.has('row.stoneWidth'))
-        return undefined
+      if (n.kind !== 'gemRow' || n.setting !== 'pave') return undefined
+      // Walled seats on arched cathedral shoulders fail the kernel's seat check; shared claws pass.
+      if (f.cathedral) return 'sharedProng'
+      if (!pinned.has('row.stoneWidth')) return undefined
       const walled = walledMax(f)
       const shared = sharedMax(f)
       return walled !== undefined &&
@@ -321,14 +323,16 @@ const CHOICES: Partial<Record<RecipeParam, Choice>> = {
   },
   'bail.style': {
     // The kernel's loop hole is a narrow teardrop (twice the link to pass a chain): a ring on
-    // fine round chain, a tube on everything heavier (09 §2 "Bail and chain").
+    // fine round chain, a tube on everything heavier (09 §2 "Bail and chain"), and behind a
+    // flooded front a hidden bail, which leaves its top stones clear.
     ruleId: 'bail.chainStyle',
-    pick: (f, n) =>
-      n.kind !== 'bail' || f.chainW === undefined || n.style === 'hidden'
-        ? undefined
-        : f.chainW <= 2 && !f.flatLink && !f.tennis
-          ? 'ring'
-          : 'tube',
+    pick: (f, n, { design }) => {
+      if (n.kind !== 'bail' || f.chainW === undefined) return undefined
+      // A bail on top covers the top stones of a flooded front: hang it behind instead.
+      const iced = Object.values(design.nodes).some((p) => p?.kind === 'pave' && p.host === n.host)
+      if (iced) return 'hidden'
+      return f.chainW <= 2 && !f.flatLink && !f.tennis ? 'ring' : 'tube'
+    },
   },
 }
 

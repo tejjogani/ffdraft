@@ -61,7 +61,7 @@ describe('manufacturability', () => {
     }
   })
 
-  it('walled rows keep 0.4 mm of wall each side and bails clear the chain by 1.5 mm', () => {
+  it('walled rows keep 0.5 mm of wall each side and bails clear the chain by 1.5 mm', () => {
     for (const e of evals) {
       const f = e.facts
       if (
@@ -70,7 +70,7 @@ describe('manufacturability', () => {
         f.bandW !== undefined &&
         f.bandW >= 1.6
       )
-        expect(e.hull.max + 0.8, e.item.id).toBeLessThanOrEqual(f.bandW + EPS)
+        expect(e.hull.max + 1.0, e.item.id).toBeLessThanOrEqual(f.bandW + EPS)
       if (e.rule.id === 'bail.opening' && f.chainW !== undefined)
         expect(e.hull.min, e.item.id).toBeGreaterThanOrEqual(f.chainW + 1.5 - EPS)
       if (e.rule.id === 'iced.edge')

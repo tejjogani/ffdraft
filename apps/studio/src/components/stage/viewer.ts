@@ -702,14 +702,14 @@ export class Viewer {
    * Frames a point (a diagnostic's location) with enough of its surroundings to recognise
    * where it is: at least `radius` mm around it, or the whole of `nodeId` when that is larger.
    */
-  frameAt(at: Vec3, nodeId?: string, radius = 6): void {
+  frameAt(at: Vec3, nodeId?: string, radius = 4): void {
     const { azimuth, elevation } = this.orbitAngles()
     const around = corners({
       min: at.map((v) => v - radius) as Vec3,
       max: at.map((v) => v + radius) as Vec3,
     })
     const node = nodeId ? this.nodePoints([nodeId]) : []
-    this.look(azimuth, elevation, [...around, ...node], 0.6, true)
+    this.look(azimuth, elevation, [...around, ...node], 0.75, true)
   }
 
   view(preset: CameraPreset, animate = true): void {

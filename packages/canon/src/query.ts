@@ -28,7 +28,7 @@ import { MEASURES } from './measures'
 import type { CanonSlice, Caveat, Exemplar, ExemplarCard, Rule, SliceRule, Variant } from './model'
 import { fieldInfo } from './paths'
 import { renderCanonForPrompt } from './prompt'
-import { FAILURE_MODES } from './rubric'
+import { FAILURE_MODES, QUESTIONS } from './rubric'
 import { RULE_FAMILIES } from './rules/index'
 import { suggestDesign } from './suggest'
 import { CANON_VERSION, hash } from './version'
@@ -126,48 +126,6 @@ const FAMILY_OF: Record<Archetype, keyof typeof RULE_FAMILIES | undefined> = {
 const FAMILY: ReadonlyMap<string, string> = new Map(
   Object.entries(RULE_FAMILIES).flatMap(([family, rules]) => rules.map((r) => [r.id, family])),
 )
-
-/** Questions that change geometry or cost (research 09 §6 "Briefing"), by archetype. */
-const QUESTIONS: Record<Archetype, readonly string[]> = {
-  solitaire: [
-    'Ring size?',
-    'Centre stone: shape, size or carat, natural or lab?',
-    'Metal, and active hands or a flush-fit wedding band beside it?',
-  ],
-  halo: [
-    'Ring size?',
-    'Centre stone: shape, size or carat, natural or lab?',
-    'Metal, and pavé on the band or plain?',
-  ],
-  threeStone: ['Ring size?', 'Centre and side stones: shapes and sizes?', 'Metal?'],
-  eternity: [
-    'Ring size (a full eternity cannot be resized)?',
-    'Stone size and setting: pavé, channel or shared claws?',
-    'Full, three-quarter or half?',
-  ],
-  band: [
-    'Ring size?',
-    'Width and profile?',
-    'Metal and finish, and does it sit beside an engagement ring?',
-  ],
-  signet: [
-    'Face size and what goes on it: crest, monogram or seal?',
-    'Ring size and finger?',
-    'Metal?',
-  ],
-  pendantSolitaire: ['Stone and size?', 'Metal and chain length?'],
-  namePendant: ['The exact text and lettering?', 'Height and metal?', 'Chain length?'],
-  icedPendant: [
-    'Artwork and height?',
-    'Ice level and stone tier: natural, lab or moissanite?',
-    'Chain style, width and length?',
-  ],
-  medallion: ['Artwork for the relief, and the right to use it?', 'Diameter and metal?', 'Chain?'],
-  studs: ['Stone size per ear (retail carats are pair totals)?', 'Metal and back?'],
-  tennis: ['Wrist or neck measurement?', 'Stone size and quality?', 'Metal?'],
-  cuban: ['Width, length and metal?', 'Clasp?'],
-  custom: ['References or a sketch?', 'Size and metal?', 'Who wears it, and how often?'],
-}
 
 const SEVERITY = { warning: 3, info: 2, default: 1 } as const
 const CONFIDENCE = { high: 3, medium: 2, low: 1 } as const
