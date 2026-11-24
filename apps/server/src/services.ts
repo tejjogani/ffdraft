@@ -362,6 +362,15 @@ export interface AssistantService extends Service {
   /** The run belongs to the caller, who is a person. */
   decide(input: CommandParsedInput<'runs.decide'>, sctx: ServiceContext): Promise<Run>
   cancel(runId: string, sctx: ServiceContext): Promise<Run>
+  /** AI jobs: pause one where it is (a person paused it, took over, or edited the piece). */
+  pause(runId: string, reason: 'pause' | 'takeover' | 'edit', sctx: ServiceContext): Promise<Run>
+  /** AI jobs: carry one on in a new run that replans from the piece as it is now. */
+  resumeJob(
+    input: CommandParsedInput<'runs.resume'>,
+    sctx: ServiceContext,
+  ): Promise<{ thread: Thread; run: Run }>
+  /** AI jobs: accept a finished job's outputs. */
+  accept(runId: string, sctx: ServiceContext): Promise<Run>
   /** Completes a pending client-tool request; the first answer wins. */
   respond(input: CommandParsedInput<'client.respond'>, sctx: ServiceContext): Promise<void>
   /**
@@ -524,6 +533,9 @@ const DEFAULTS: Services = {
     send: missing('assistant'),
     decide: missing('assistant'),
     cancel: missing('assistant'),
+    pause: missing('assistant'),
+    resumeJob: missing('assistant'),
+    accept: missing('assistant'),
     respond: missing('assistant'),
   },
   assistantSetup: {

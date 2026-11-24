@@ -1,10 +1,10 @@
-import { AiMark, Chip, IconButton } from '@pave/ui'
+import { AiMark, IconButton } from '@pave/ui'
 import { useMatch } from '@tanstack/react-router'
-import { X } from 'lucide-react'
+import { History, SquarePen, X } from 'lucide-react'
 import { motion } from 'motion/react'
 import { type KeyboardEvent, type PointerEvent, useRef } from 'react'
 import { AssistantPanel } from '../features/assistant'
-import { useRpc } from '../lib/query'
+import { useSession } from '../lib/session'
 import { type AssistantContext, DOCK_MAX, DOCK_MIN, useAssistant } from '../stores/assistant'
 
 /** The page the user is on, as assistant context. */
@@ -22,8 +22,11 @@ export function AssistantDock() {
   const width = useAssistant((s) => s.width)
   const setWidth = useAssistant((s) => s.setWidth)
   const close = useAssistant((s) => s.close)
+  const showThreads = useAssistant((s) => s.showThreads)
+  const setShowThreads = useAssistant((s) => s.setShowThreads)
+  const openThread = useAssistant((s) => s.openThread)
+  const available = useSession().capabilities.assistant
   const context = useRouteContext()
-  const piece = useRpc('pieces.get', { id: context.pieceId ?? '' }, { enabled: !!context.pieceId })
   const drag = useRef<{ x: number; w: number } | null>(null)
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
@@ -49,7 +52,7 @@ export function AssistantDock() {
       exit={{ opacity: 0, x: 8 }}
       transition={{ duration: 0.18, ease: [0.2, 0.8, 0.2, 1] }}
       style={{ width }}
-      className="relative flex h-full shrink-0 flex-col border-l border-line bg-bg"
+      className="relative flex h-full shrink-0 flex-col border-l border-line bg-bg max-sm:fixed max-sm:inset-0 max-sm:z-40 max-sm:w-full! max-sm:border-l-0"
     >
       {/* biome-ignore lint/a11y/useSemanticElements: a focusable separator is the ARIA pattern for a resizable splitter */}
       <div
@@ -71,18 +74,24 @@ export function AssistantDock() {
       <header className="app-drag flex h-11 shrink-0 items-center gap-2 pr-[calc(8px+var(--chrome-right))] pl-4">
         <AiMark className="size-3.5" />
         <span className="text-sm font-medium">Assistant</span>
-        {piece.data && (
-          <Chip outline className="app-no-drag max-w-40 truncate">
-            {piece.data.title || 'Untitled'}
-          </Chip>
-        )}
-        <IconButton
-          icon={X}
-          label="Close assistant"
-          shortcut="mod+j"
-          onClick={close}
-          className="app-no-drag ml-auto"
-        />
+        <span className="app-no-drag ml-auto flex items-center">
+          {available && (
+            <>
+              <IconButton
+                icon={History}
+                label={showThreads ? 'Back to the conversation' : 'Conversations'}
+                aria-pressed={showThreads}
+                onClick={() => setShowThreads(!showThreads)}
+              />
+              <IconButton
+                icon={SquarePen}
+                label="New conversation"
+                onClick={() => openThread(null)}
+              />
+            </>
+          )}
+          <IconButton icon={X} label="Close assistant" shortcut="mod+j" onClick={close} />
+        </span>
       </header>
       <div className="min-h-0 flex-1">
         <AssistantPanel context={context} />

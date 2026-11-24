@@ -17,6 +17,7 @@ import { ClientBridge } from './bridge'
 import { Driver } from './driver'
 import { FeedbackHook } from './feedback'
 import type { AssistantDeps, ModelFactory } from './host'
+import { JobWatch } from './job-watch'
 import { KeyStore } from './keys'
 import { mountRunEvents } from './routes'
 import { scriptedFactory, scriptedFromEnv } from './scripted'
@@ -38,6 +39,8 @@ export interface AssistantParts {
   routes(app: App, withCtx: MiddlewareHandler<Env>): void
   driver: Driver
   feedback: FeedbackHook
+  /** Pauses an AI job when a person edits its piece. */
+  jobWatch: JobWatch
 }
 
 const realModel: ModelFactory = ({ apiKey }) => {
@@ -75,6 +78,7 @@ export function createAssistant(runtime: Runtime, opts: AssistantOptions = {}): 
   // `setup` decides availability; the assistant asks it, and it registers the assistant.
   let setup: AssistantSetupImpl | null = null
   const assistant = new Assistant(deps, (orgId) => setup?.hasKey(orgId) ?? false)
+  const jobWatch = new JobWatch(runtime, assistant)
   setup = new AssistantSetupImpl({
     runtime,
     keys,
@@ -83,6 +87,7 @@ export function createAssistant(runtime: Runtime, opts: AssistantOptions = {}): 
     env,
     scripted: scripted !== null,
     dispose: async () => {
+      await jobWatch.dispose()
       await driver.dispose()
       await feedback.dispose()
     },
@@ -93,5 +98,6 @@ export function createAssistant(runtime: Runtime, opts: AssistantOptions = {}): 
     routes: (app, withCtx) => mountRunEvents(app, driver, withCtx),
     driver,
     feedback,
+    jobWatch,
   }
 }

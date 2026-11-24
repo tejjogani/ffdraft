@@ -89,6 +89,8 @@ export interface ViewerState {
   hover: ViewerPick | null
   hidden: readonly string[]
   xray: boolean
+  /** Nodes an assistant just edited, tinted once in the AI colour (cleared by the caller). */
+  aiTint?: readonly string[]
 }
 
 export interface CaptureOptions {
@@ -528,9 +530,12 @@ export class Viewer {
     this.addGhosts()
 
     const selected = new Set(selection)
-    this.outline(b, (id) => selected.has(id), stone, m.selected, true)
+    const aiTint = new Set(this.state.aiTint ?? [])
+    if (aiTint.size)
+      this.outline(b, (id) => aiTint.has(id) && !selected.has(id), null, null, m.aiTint)
+    this.outline(b, (id) => selected.has(id), stone, m.selected, m.tint)
     if (hover && !selected.has(hover.nodeId))
-      this.outline(b, (id) => id === hover.nodeId, hover.stoneId ?? null, m.hovered, false)
+      this.outline(b, (id) => id === hover.nodeId, hover.stoneId ?? null, m.hovered, null)
     this.invalidate()
   }
 
@@ -549,15 +554,15 @@ export class Viewer {
     b: Built,
     match: (nodeId: string) => boolean,
     stone: string | null,
-    material: OutlineMaterial,
-    tint: boolean,
+    material: OutlineMaterial | null,
+    tint: MeshBasicMaterial | null,
   ): void {
     const hidden = new Set(this.state.hidden)
     for (const mesh of b.metals) {
       const id = mesh.userData.nodeId as string
       if (!match(id) || hidden.has(id)) continue
-      this.overlay.add(new Mesh(mesh.geometry, material))
-      if (tint) this.overlay.add(new Mesh(mesh.geometry, this.materials.tint))
+      if (material) this.overlay.add(new Mesh(mesh.geometry, material))
+      if (tint) this.overlay.add(new Mesh(mesh.geometry, tint))
     }
     for (const gems of b.gems) {
       const ids = gems.userData.stoneIds as string[]
@@ -567,17 +572,15 @@ export class Viewer {
           stone ? id === stone : match(stoneNode(id)) && !hidden.has(stoneNode(id)),
         )
       if (!picked.length) continue
-      const batch = new InstancedMesh(gems.geometry, material, picked.length)
-      const tinted = tint
-        ? new InstancedMesh(gems.geometry, this.materials.tint, picked.length)
-        : null
+      const batch = material ? new InstancedMesh(gems.geometry, material, picked.length) : null
+      const tinted = tint ? new InstancedMesh(gems.geometry, tint, picked.length) : null
       const mat = new Matrix4()
       picked.forEach(([, i], k) => {
         gems.getMatrixAt(i, mat)
-        batch.setMatrixAt(k, mat)
+        batch?.setMatrixAt(k, mat)
         tinted?.setMatrixAt(k, mat)
       })
-      this.overlay.add(batch)
+      if (batch) this.overlay.add(batch)
       if (tinted) this.overlay.add(tinted)
     }
   }

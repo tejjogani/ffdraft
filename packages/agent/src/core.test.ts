@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { describeCall, TOOL_CHIPS } from './describe'
 import { initialRunView, reduceRun, replayRun } from './events'
 import { detectFeedback } from './feedback'
+import { advanceJob, newJob } from './jobs'
 import { ScriptAbortError, scriptedModel } from './model'
 import { evaluationNote, MAX_RESULT_CHARS, shapeResult } from './shape'
 import { AGENT_TOOLS } from './tools'
@@ -23,6 +24,7 @@ const run = (status: Run['status']): Run => ({
   endedAt: null,
   error: null,
   errorCode: null,
+  job: null,
 })
 
 const message = (id: string, role: Message['role']): Message => ({
@@ -36,6 +38,21 @@ const message = (id: string, role: Message['role']): Message => ({
 })
 
 describe('reduceRun', () => {
+  it('follows an AI job’s plan as it moves', () => {
+    const job = newJob('cad')
+    const started = reduceRun(initialRunView('run_1'), {
+      type: 'run.started',
+      runId: 'run_1',
+      seq: 1,
+      run: { ...run('running'), job },
+    })
+    expect(started.job).toEqual(job)
+    const moved = advanceJob(job, 'design.apply')!
+    const s = reduceRun(started, { type: 'job.updated', runId: 'run_1', seq: 2, job: moved })
+    expect(s.job?.plan[2]?.state).toBe('running')
+    expect(s.run?.job).toEqual(moved)
+  })
+
   const events: RunEvent[] = [
     { type: 'run.started', runId: 'run_1', seq: 1, run: run('running') },
     { type: 'thinking.delta', runId: 'run_1', seq: 2, index: 0, text: 'Plan' },

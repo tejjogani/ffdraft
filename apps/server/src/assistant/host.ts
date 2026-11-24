@@ -55,6 +55,8 @@ export class RunHost {
   truncationRetries = 0
   streamRetries = 0
   featureRetry = false
+  /** Moves of an AI job's plan, one after another (see `moveJob` in ./loop). */
+  jobChain: Promise<void> = Promise.resolve()
   /** The design version the model last saw, per piece, from what its calls returned. */
   readonly seen = new Map<string, number>()
 

@@ -6,7 +6,8 @@
   "description": "The assistant core: tools from the command registry, the frozen prompt, the Claude request builder and stream adapter, run-event reducer and pricing.",
   "exports": {
     ".": "./src/index.ts",
-    "./anthropic": "./src/anthropic.ts"
+    "./anthropic": "./src/anthropic.ts",
+    "./studio": "./src/studio.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"

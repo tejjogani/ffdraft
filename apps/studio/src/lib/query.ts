@@ -29,7 +29,7 @@ export const rpcQuery = <N extends QueryName>(name: N, input: CommandInput<N>) =
 
 const DOMAIN_QUERIES: Record<string, QueryName[]> = {
   session: ['session.get'],
-  org: ['session.get', 'org.members', 'org.settings.get'],
+  org: ['session.get', 'org.members', 'org.settings.get', 'assistant.setup.get'],
   collections: ['collections.list', 'pieces.list'],
   pieces: ['pieces.list', 'pieces.get', 'collections.list', 'design.history', 'design.evaluate'],
   design: ['pieces.get', 'pieces.list', 'design.history', 'design.evaluate'],
@@ -40,6 +40,8 @@ const DOMAIN_QUERIES: Record<string, QueryName[]> = {
   shots: ['shots.list'],
   production: ['production.list'],
   threads: ['threads.list', 'threads.get'],
+  runs: ['threads.list', 'threads.get', 'traces.runs', 'traces.run'],
+  assistant: ['assistant.setup.get', 'session.get'],
   traces: ['traces.runs', 'traces.run'],
   usage: ['usage.summary'],
 }

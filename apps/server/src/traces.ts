@@ -4,7 +4,16 @@
  * traces; every write here is safe to repeat where the loop may resume (messages by
  * `clientMessageId`, tool steps by `toolCallId`).
  */
-import type { AssistantTier, Feedback, Message, Run, Step, Thread, Tokens } from '@pave/schema'
+import type {
+  AiJob,
+  AssistantTier,
+  Feedback,
+  Message,
+  Run,
+  Step,
+  Thread,
+  Tokens,
+} from '@pave/schema'
 import { and, eq, inArray, max, ne, sql } from 'drizzle-orm'
 import type { Ctx } from './context'
 import * as t from './db/schema'
@@ -56,6 +65,7 @@ export const toRun = (r: typeof t.agentRun.$inferSelect): Run => ({
   endedAt: r.endedAt?.toISOString() ?? null,
   error: r.error,
   errorCode: r.errorCode,
+  job: r.job ?? null,
 })
 
 export const toStep = (r: typeof t.agentStep.$inferSelect): Step => ({
@@ -127,6 +137,8 @@ export async function startRun(
     /** Design version the model is shown, so the run can be replayed against it. */
     baseSeq?: number | null
     origin?: Run['origin']
+    /** An AI job's stage, goal and plan. */
+    job?: AiJob | null
   },
 ): Promise<Run> {
   await ensure(getThread, ctx, input.threadId)
@@ -143,7 +155,15 @@ export async function startRun(
     pieceId: input.pieceId ?? null,
     parentRunId: input.parentRunId ?? null,
     baseSeq: input.baseSeq ?? null,
+    job: input.job ?? null,
   })
+  return toRun(row)
+}
+
+/** Replaces an AI job's record on its run (its plan moved, or its review ended). */
+export async function setJob(ctx: Ctx, runId: string, job: AiJob): Promise<Run> {
+  const [row] = await ctx.repo.runs.update(eq(t.agentRun.id, runId), { job })
+  if (!row) throw notFound('Run', runId)
   return toRun(row)
 }
 
@@ -393,12 +413,15 @@ export async function finishRun(
     costUsd?: number
     error?: string | null
     errorCode?: Run['errorCode']
+    /** The job record as the run ends (its plan settled, its review opened). */
+    job?: AiJob
   },
 ): Promise<Run> {
   const [row] = await ctx.repo.runs.update(
     and(eq(t.agentRun.id, runId), inArray(t.agentRun.status, LIVE_RUN))!,
     {
       status: input.status,
+      ...(input.job ? { job: input.job } : {}),
       error: input.error ?? null,
       errorCode: input.errorCode ?? null,
       endedAt: input.status === 'awaiting-approval' ? null : new Date(),

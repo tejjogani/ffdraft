@@ -2,20 +2,36 @@
  * The assistant service: `threads.send`, `runs.decide`, `runs.cancel`, `client.respond` and boot
  * recovery, over the loop (./loop) and the live-run driver (./driver).
  */
-import { modelForRun, PROMPT_HASH, resolveTiers } from '@pave/agent'
-import type { CommandParsedInput, Run, Thread } from '@pave/schema'
-import { and, eq } from 'drizzle-orm'
+import {
+  continueJob,
+  jobMessage,
+  modelForRun,
+  newJob,
+  PROMPT_HASH,
+  resolveTiers,
+} from '@pave/agent'
+import type { AiJob, CommandParsedInput, Run, Thread } from '@pave/schema'
+import { and, desc, eq } from 'drizzle-orm'
 import type { Ctx } from '../context'
 import * as t from '../db/schema'
 import { conflict, NotConfiguredError } from '../errors'
 import { getPiece, getRun, getThread } from '../lookups'
 import type { AssistantService, ServiceContext } from '../services'
-import { addMessage, createThread, decideStep, startRun, toRun, toThread } from '../traces'
+import { addMessage, createThread, decideStep, setJob, startRun, toRun, toThread } from '../traces'
+import { isPauseReason, type PauseReason } from './driver'
 import { type AssistantDeps, RunHost } from './host'
 import { closeDangling, closeOut, closeUnanswered, publishRun, runLoop } from './loop'
 import { contextText, userContent } from './turn'
 
 type Send = CommandParsedInput<'threads.send'>
+
+/** A job that a new message in its thread carries on: its outputs await review, or it was cut short. */
+const carriesOn = (run: Run): boolean =>
+  !!run.job &&
+  (run.job.review === 'pending' ||
+    run.status === 'paused' ||
+    run.status === 'running' ||
+    run.status === 'awaiting-approval')
 
 /** A thread's title: its first message, cut at a word near 80 characters. */
 export function titleFrom(text: string): string {
@@ -46,16 +62,20 @@ export class Assistant implements AssistantService {
     return this.#deps.runtime.context({ userId: sctx.userId, orgId: sctx.orgId })
   }
 
-  send(input: Send, sctx: ServiceContext): Promise<{ thread: Thread; run: Run }> {
+  send(input: Send, sctx: ServiceContext, carried?: AiJob): Promise<{ thread: Thread; run: Run }> {
     const key = `${sctx.orgId}:${sctx.userId}:${input.clientMessageId}`
     const inFlight = this.#sending.get(key)
     if (inFlight) return inFlight
-    const p = this.#send(input, sctx).finally(() => this.#sending.delete(key))
+    const p = this.#send(input, sctx, carried).finally(() => this.#sending.delete(key))
     this.#sending.set(key, p)
     return p
   }
 
-  async #send(input: Send, sctx: ServiceContext): Promise<{ thread: Thread; run: Run }> {
+  async #send(
+    input: Send,
+    sctx: ServiceContext,
+    carried?: AiJob,
+  ): Promise<{ thread: Thread; run: Run }> {
     const ctx = await this.#ctx(sctx)
     if (!this.#available(ctx.orgId))
       throw new NotConfiguredError(
@@ -74,6 +94,24 @@ export class Assistant implements AssistantService {
       const thread = await getThread(ctx, sent.threadId)
       if (!sent.runId) throw conflict('This message was already sent')
       return { thread: toThread(thread), run: toRun(await getRun(ctx, sent.runId)) }
+    }
+
+    // The AI job this run is: a new one for a stage, one carried on by Resume, or the thread's
+    // last job carried on by a message about it (asked before the thread is settled, which
+    // stops a running job).
+    let job: AiJob | null = carried ?? (input.job ? newJob(input.job.stage, input.job.goal) : null)
+    if (!job && input.threadId) {
+      const last = await ctx.repo.runs.first(
+        eq(t.agentRun.threadId, input.threadId),
+        desc(t.agentRun.startedAt),
+      )
+      if (last && carriesOn(toRun(last))) job = continueJob(last.job!, last.id).job
+    }
+    // A job started from a stage reads as its plan; the person's own words follow it.
+    if (input.job && job) {
+      const plan = jobMessage(job, { type: 'start' })
+      const note = input.text.trim()
+      input = { ...input, text: note && note !== job.goal ? `${plan}\n\n${note}` : plan }
     }
 
     const thread = input.threadId
@@ -103,6 +141,7 @@ export class Assistant implements AssistantService {
       threadId: thread.id,
       pieceId,
       baseSeq: piece?.version ?? null,
+      job,
     })
     try {
       const { content, skipped } = await userContent(ctx, input)
@@ -190,10 +229,12 @@ export class Assistant implements AssistantService {
         const emit = host ? host.emit.bind(host) : undefined
         if (signal.aborted) {
           const shutdown = signal.reason === 'shutdown'
+          const pause = isPauseReason(signal.reason) ? signal.reason : null
           await closeOut(ctx, runId, {
-            status: shutdown ? 'failed' : 'canceled',
+            status: shutdown ? 'failed' : pause ? 'paused' : 'canceled',
             error: shutdown ? 'Interrupted: the server stopped. Send the message again.' : null,
             errorCode: shutdown ? 'interrupted' : null,
+            pausedBy: pause,
             emit,
           }).catch((e) => console.error('Ending a stopped run failed:', e))
           return
@@ -241,6 +282,60 @@ export class Assistant implements AssistantService {
     if (run.status === 'awaiting-approval' || run.status === 'running')
       return closeOut(ctx, runId, { status: 'canceled' })
     return toRun(run)
+  }
+
+  /**
+   * Pauses an AI job where it is: a live run is stopped (its edits stay), one waiting for an
+   * approval stops waiting. Resume starts a new run that replans from the piece as it is then.
+   */
+  async pause(runId: string, reason: PauseReason, sctx: ServiceContext): Promise<Run> {
+    const ctx = await this.#ctx(sctx)
+    const run = toRun(await getRun(ctx, runId))
+    if (!run.job) throw conflict('Only an AI job can be paused; stop this run instead')
+    if (this.#deps.driver.isLive(runId)) await this.#deps.driver.abort(runId, reason)
+    const now = toRun(await getRun(ctx, runId))
+    if (now.status === 'awaiting-approval' || now.status === 'running')
+      return closeOut(ctx, runId, { status: 'paused', pausedBy: reason })
+    return now
+  }
+
+  /** Carries an AI job on in a new run of its thread (Resume, or redoing a step). */
+  async resumeJob(
+    input: CommandParsedInput<'runs.resume'>,
+    sctx: ServiceContext,
+  ): Promise<{ thread: Thread; run: Run }> {
+    const ctx = await this.#ctx(sctx)
+    const run = toRun(await getRun(ctx, input.runId))
+    if (!run.job || !run.threadId) throw conflict('Only an AI job can be resumed')
+    if (input.redoStepId && !run.job.plan.some((s) => s.id === input.redoStepId))
+      throw conflict(`The job has no step ${input.redoStepId}`)
+    const { job, redo } = continueJob(run.job, run.id, input.redoStepId)
+    const text = jobMessage(job, redo ? { type: 'redo', step: redo.label } : { type: 'resume' })
+    return this.send(
+      {
+        threadId: run.threadId,
+        text,
+        attachments: [],
+        referenceIds: [],
+        context: { pieceId: run.pieceId ?? undefined, selection: [] },
+        tier: input.tier ?? run.tier ?? undefined,
+        clientId: input.clientId,
+        clientMessageId: input.clientMessageId,
+      },
+      sctx,
+      job,
+    )
+  }
+
+  /** Ends an AI job's review: its outputs are accepted as they are now. */
+  async accept(runId: string, sctx: ServiceContext): Promise<Run> {
+    const ctx = await this.#ctx(sctx)
+    const run = toRun(await getRun(ctx, runId))
+    if (run.job?.review !== 'pending' || !run.job)
+      throw conflict('Nothing of this run waits for review')
+    const accepted = await setJob(ctx, runId, { ...run.job, review: 'accepted' })
+    publishRun(ctx, accepted)
+    return accepted
   }
 
   async respond(input: CommandParsedInput<'client.respond'>, sctx: ServiceContext): Promise<void> {

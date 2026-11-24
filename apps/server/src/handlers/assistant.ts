@@ -138,6 +138,25 @@ export const assistant: HandlerGroup<'threads' | 'runs' | 'client' | 'traces' | 
     return ctx.services.require('assistant').cancel(runId, serviceContext(ctx))
   },
 
+  'runs.pause': async (ctx, { runId, takeover }) => {
+    await ownRun(ctx, runId)
+    return ctx.services
+      .require('assistant')
+      .pause(runId, takeover ? 'takeover' : 'pause', serviceContext(ctx))
+  },
+
+  'runs.resume': async (ctx, input) => {
+    if (ctx.actor.type !== 'user') throw forbidden('Only a person can resume an AI job')
+    await ownRun(ctx, input.runId)
+    return ctx.services.require('assistant').resumeJob(input, serviceContext(ctx))
+  },
+
+  'runs.accept': async (ctx, { runId }) => {
+    if (ctx.actor.type !== 'user') throw forbidden('Only a person can accept an AI job’s work')
+    await ownRun(ctx, runId)
+    return ctx.services.require('assistant').accept(runId, serviceContext(ctx))
+  },
+
   'client.respond': async (ctx, input) => {
     await ctx.services.require('assistant').respond(input, serviceContext(ctx))
     return { ok: true }

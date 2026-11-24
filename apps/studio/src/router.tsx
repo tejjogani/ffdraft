@@ -12,10 +12,12 @@ import { AcceptInvitePage } from './pages/auth/AcceptInvitePage'
 import { HomePage } from './pages/home/HomePage'
 import { LIBRARY_TABS, LibraryPage, type LibraryTab } from './pages/library/LibraryPage'
 import { NotFound, RouteError } from './pages/NotFound'
+import { PieceDirections } from './pages/piece/PieceDirections'
 import { PieceHistory } from './pages/piece/PieceHistory'
 import { PieceOverview } from './pages/piece/PieceOverview'
 import { PiecePage, PieceTab } from './pages/piece/PiecePage'
 import { PiecesPage, type PiecesSearch } from './pages/pieces/PiecesPage'
+import { AiSettings } from './pages/settings/AiSettings'
 import { GeneralSettings } from './pages/settings/GeneralSettings'
 import { IntegrationsSettings } from './pages/settings/IntegrationsSettings'
 import { MembersSettings } from './pages/settings/MembersSettings'
@@ -157,6 +159,7 @@ const routeTree = rootRoute.addChildren([
   collectionRoute,
   pieceRoute.addChildren([
     pieceTab('/', PieceOverview),
+    pieceTab('directions', PieceDirections),
     pieceTab('design', PieceDesign, true),
     pieceTab('render', PieceRender, true),
     pieceTab('on-model', PieceOnModel),
@@ -182,6 +185,7 @@ const routeTree = rootRoute.addChildren([
     }),
     setting('general', GeneralSettings),
     setting('members', MembersSettings),
+    setting('ai', AiSettings),
     setting('usage', UsageSettings),
     setting('traces', TracesSettings),
     traceRoute,

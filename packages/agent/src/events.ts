@@ -4,7 +4,7 @@
  * below the last applied `seq` is a duplicate from a reconnect and is ignored, so replaying a
  * stream from any point gives the same state.
  */
-import type { Message, Run, RunEvent, Tokens } from '@pave/schema'
+import type { AiJob, Message, Run, RunEvent, Tokens } from '@pave/schema'
 
 export type ToolCallStatus = 'running' | 'awaiting' | 'done' | 'error'
 
@@ -40,6 +40,8 @@ export interface RunView {
   toolOrder: string[]
   tokens: Tokens
   costUsd: number
+  /** An AI job's latest record (its plan as it moves), when the run is one. */
+  job: AiJob | null
   finished: boolean
 }
 
@@ -54,6 +56,7 @@ export function initialRunView(runId: string): RunView {
     toolOrder: [],
     tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     costUsd: 0,
+    job: null,
     finished: false,
   }
 }
@@ -89,7 +92,7 @@ export function reduceRun(s: RunView, e: RunEvent): RunView {
   const next: RunView = { ...s, seq: e.seq }
   switch (e.type) {
     case 'run.started':
-      return { ...next, run: e.run }
+      return { ...next, run: e.run, job: e.run.job }
     case 'text.delta':
       return { ...next, live: appendLive(s.live, 'text', e.index, e.text) }
     case 'thinking.delta':
@@ -120,8 +123,10 @@ export function reduceRun(s: RunView, e: RunEvent): RunView {
       })
     case 'usage':
       return { ...next, tokens: e.tokens, costUsd: e.costUsd }
+    case 'job.updated':
+      return { ...next, run: next.run ? { ...next.run, job: e.job } : next.run, job: e.job }
     case 'run.finished':
-      return { ...next, run: e.run, live: [], finished: true }
+      return { ...next, run: e.run, job: e.run.job, live: [], finished: true }
   }
 }
 

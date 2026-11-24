@@ -1,4 +1,4 @@
-import type { Piece } from '@pave/schema'
+import type { JobStage, Piece } from '@pave/schema'
 import {
   AiChip,
   Button,
@@ -26,6 +26,9 @@ import { type ReactNode, Suspense, useEffect, useState } from 'react'
 import { KindGlyph } from '../../components/KindGlyph'
 import { Column, PageHeader } from '../../components/Page'
 import { StagePicker } from '../../components/StageChip'
+import { JobPanel } from '../../features/assistant/jobs/JobPanel'
+import { StageStepper } from '../../features/assistant/jobs/StageStepper'
+import { StartJob } from '../../features/assistant/jobs/StartJob'
 import { type Command, useRegisterCommands } from '../../lib/commands'
 import { KIND_LABEL, metalLabel, metalSwatch } from '../../lib/domain'
 import { carats, grams } from '../../lib/format'
@@ -33,25 +36,31 @@ import { useDeletePiece, useUpdatePiece } from '../../lib/pieces'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { assistant } from '../../stores/assistant'
 
+/** The tabs after the stage stepper (Design → CAD → Render). */
 const TABS = [
-  { to: '/pieces/$id', label: 'Overview', exact: true },
-  { to: '/pieces/$id/design', label: 'Design' },
-  { to: '/pieces/$id/render', label: 'Render' },
   { to: '/pieces/$id/on-model', label: 'On model' },
   { to: '/pieces/$id/sourcing', label: 'Sourcing' },
   { to: '/pieces/$id/production', label: 'Production' },
   { to: '/pieces/$id/history', label: 'History' },
 ] as const
 
-/** The piece page: a Notion-like header (icon, title, properties) above stage tabs. */
+/**
+ * The piece page: a Notion-like header (icon, title, properties) above its tabs. The middle
+ * tabs are the piece's three stages in order, Design, CAD and Render, each done by hand or by
+ * an AI job; a stage's job shows in a bar under the tabs while it wants attention.
+ */
 export function PiecePage({ id }: { id: string }) {
   const piece = useRpc('pieces.get', { id })
   const matchRoute = useMatchRoute()
-  // Design and Render are workspaces: the title block folds into the header to give them room.
-  const bleed = !!(
-    matchRoute({ to: '/pieces/$id/design', params: { id } }) ||
-    matchRoute({ to: '/pieces/$id/render', params: { id } })
-  )
+  const stage: JobStage | null = matchRoute({ to: '/pieces/$id/directions', params: { id } })
+    ? 'design'
+    : matchRoute({ to: '/pieces/$id/design', params: { id } })
+      ? 'cad'
+      : matchRoute({ to: '/pieces/$id/render', params: { id } })
+        ? 'render'
+        : null
+  // CAD and Render are workspaces: the title block folds into the header to give them room.
+  const bleed = stage === 'cad' || stage === 'render'
 
   if (piece.isError)
     return (
@@ -78,19 +87,31 @@ export function PiecePage({ id }: { id: string }) {
   const p = piece.data
   return (
     <div className="flex min-h-full flex-col">
-      <PieceHeader piece={p} />
+      <PieceHeader piece={p} stage={stage} />
       {!bleed && (
         <Column className="pb-0!">{p ? <PieceHero piece={p} /> : <HeroSkeleton />}</Column>
       )}
       <div className="sticky top-11 z-10 bg-bg">
         <div className={bleed ? '' : 'mx-auto w-full max-w-[880px] px-6 sm:px-12'}>
-          <nav aria-label="Piece sections" className={cn(tabListClass, bleed && 'px-4')}>
+          <nav aria-label="Piece sections" className={cn(tabListClass, 'gap-4', bleed && 'px-4')}>
+            <Link
+              to="/pieces/$id"
+              params={{ id }}
+              activeOptions={{ exact: true }}
+              activeProps={{ 'aria-current': 'page' }}
+              className={cn(
+                tabClass,
+                'aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-0 aria-[current=page]:after:-bottom-px aria-[current=page]:after:h-px aria-[current=page]:after:bg-fg',
+              )}
+            >
+              Overview
+            </Link>
+            {p && <StageStepper piece={p} className="mx-1" />}
             {TABS.map((t) => (
               <Link
                 key={t.to}
                 to={t.to}
                 params={{ id }}
-                activeOptions={{ exact: 'exact' in t }}
                 activeProps={{ 'aria-current': 'page' }}
                 className={cn(
                   tabClass,
@@ -101,12 +122,13 @@ export function PiecePage({ id }: { id: string }) {
               </Link>
             ))}
             {bleed && p && (
-              <div className="ml-auto">
+              <div className="ml-auto pl-3">
                 <PieceStage piece={p} />
               </div>
             )}
           </nav>
         </div>
+        {p && stage && <JobPanel pieceId={p.id} stage={stage} />}
       </div>
       <Outlet />
     </div>
@@ -127,7 +149,7 @@ function PieceStage({ piece }: { piece: Piece }) {
   )
 }
 
-function PieceHeader({ piece }: { piece: Piece | undefined }) {
+function PieceHeader({ piece, stage }: { piece: Piece | undefined; stage: JobStage | null }) {
   const collections = useRpc('collections.list', {})
   const collection = collections.data?.find((c) => c.id === piece?.collectionId)
   const navigate = useNavigate()
@@ -178,6 +200,8 @@ function PieceHeader({ piece }: { piece: Piece | undefined }) {
         actions={
           piece && (
             <>
+              {/* The stage's AI job: the plan shows before anything starts. */}
+              {stage && <StartJob pieceId={piece.id} stage={stage} />}
               <Button
                 variant="ghost"
                 size="sm"

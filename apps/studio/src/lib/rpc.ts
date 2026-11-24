@@ -93,6 +93,8 @@ export const QUERY_NAMES = [
   'traces.runs',
   'traces.run',
   'usage.summary',
+  'assistant.setup.get',
+  'assistant.key.test',
 ] as const satisfies readonly CommandName[]
 
 export type QueryName = (typeof QUERY_NAMES)[number]

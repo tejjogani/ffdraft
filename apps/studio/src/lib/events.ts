@@ -10,6 +10,8 @@
  * EventSource reconnects on its own after network errors; events sent while it was away are
  * lost, so `onReconnect` subscribers resynchronise.
  */
+
+import type { Piece } from '@pave/schema'
 import {
   SERVER_EVENT_TYPES,
   type ServerEvent,
@@ -17,6 +19,7 @@ import {
   type ServerEventType,
 } from '@pave/schema'
 import { useEffect } from 'react'
+import { patchPiece } from './piece-cache'
 import { invalidateFor, queryClient, rpcKey } from './query'
 import type { QueryName } from './rpc'
 
@@ -67,10 +70,22 @@ const invalidate = (names: QueryName[]) => {
 /** What each event refreshes. Domains follow `invalidateFor`; a live design is skipped. */
 function refresh(event: ServerEvent): void {
   switch (event.type) {
-    case 'design.changed':
-      if (livePieces.has(event.pieceId)) invalidate(['design.history', 'pieces.list'])
-      else invalidateFor(queryClient, 'design')
+    case 'design.changed': {
+      if (livePieces.has(event.pieceId)) {
+        invalidate(['design.history', 'pieces.list'])
+        return
+      }
+      // Patch the cached piece when the change is its next version; otherwise refetch it.
+      const key = rpcKey('pieces.get', { id: event.pieceId })
+      const cached = queryClient.getQueryData<Piece>(key)
+      const patched = cached ? patchPiece(cached, event) : 'refetch'
+      if (patched === 'refetch') invalidateFor(queryClient, 'design')
+      else {
+        if (patched !== 'unchanged') queryClient.setQueryData(key, patched)
+        invalidate(['design.history', 'design.evaluate', 'pieces.list'])
+      }
       return
+    }
     case 'piece.updated':
       invalidateFor(queryClient, 'pieces')
       return
@@ -88,6 +103,7 @@ function refresh(event: ServerEvent): void {
       return
     case 'run.updated':
       invalidateFor(queryClient, 'threads')
+      invalidateFor(queryClient, 'traces')
       return
     case 'client.request':
       return

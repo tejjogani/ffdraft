@@ -9,6 +9,7 @@
 import { z } from 'zod'
 import { CLIENT_TOOL_NAMES } from './client-tools'
 import {
+  AiJobSchema,
   JOB_KINDS,
   JOB_STATUS,
   MessageSchema,
@@ -119,7 +120,12 @@ export const RunEventSchema = z.discriminatedUnion('type', [
     assetIds: z.array(id),
   }),
   z.object({ type: z.literal('usage'), ...run, tokens: TokensSchema, costUsd: z.number() }),
+  /** An AI job's plan moved (a step started or finished). */
+  z.object({ type: z.literal('job.updated'), ...run, job: AiJobSchema }),
   z.object({ type: z.literal('run.finished'), ...run, run: RunSchema }),
 ])
 export type RunEvent = z.infer<typeof RunEventSchema>
 export type RunEventType = RunEvent['type']
+export const RUN_EVENT_TYPES = RunEventSchema.options.map(
+  (o) => o.shape.type.value,
+) as RunEventType[]

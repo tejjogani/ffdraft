@@ -4,11 +4,11 @@ import { Link } from '@tanstack/react-router'
 import { ImageIcon, Lightbulb, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { SectionTitle } from '../../components/Page'
+import { SpecCard } from '../../components/SpecCard'
 import { assetUrl } from '../../lib/assets'
 import { plural, relativeTime } from '../../lib/format'
 import { useUpdatePiece } from '../../lib/pieces'
 import { useRpc, useRpcMutation } from '../../lib/query'
-import { SpecCard } from './SpecCard'
 
 export function PieceOverview({ pieceId }: { pieceId: string }) {
   const piece = useRpc('pieces.get', { id: pieceId })
@@ -29,7 +29,7 @@ export function PieceOverview({ pieceId }: { pieceId: string }) {
   )
 }
 
-function Brief({ piece }: { piece: Piece }) {
+export function Brief({ piece }: { piece: Piece }) {
   const update = useUpdatePiece()
   const [brief, setBrief] = useState(piece.brief)
   useEffect(() => setBrief(piece.brief), [piece.brief])
@@ -49,7 +49,7 @@ function Brief({ piece }: { piece: Piece }) {
   )
 }
 
-function Moodboards({ pieceId }: { pieceId: string }) {
+export function Moodboards({ pieceId }: { pieceId: string }) {
   const boards = useRpc('boards.list', { pieceId })
   const create = useRpcMutation('boards.create')
   return (

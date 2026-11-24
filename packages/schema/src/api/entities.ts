@@ -762,7 +762,15 @@ export const ASSISTANT_MODELS = [
 ] as const
 export type AssistantModelId = (typeof ASSISTANT_MODELS)[number]
 
-export const RUN_STATUS = ['running', 'done', 'failed', 'canceled', 'awaiting-approval'] as const
+export const RUN_STATUS = [
+  'running',
+  'done',
+  'failed',
+  'canceled',
+  'awaiting-approval',
+  /** An AI job a person paused (or took over, or edited by hand); Resume starts a run that replans. */
+  'paused',
+] as const
 /** Why a run stopped short, so the UI can say what to do next. */
 export const RUN_ERROR_CODES = [
   'rate_limited',
@@ -786,6 +794,35 @@ export const TokensSchema = z.object({
 })
 export type Tokens = z.infer<typeof TokensSchema>
 
+/**
+ * A piece moves through three stages, each done by hand or by an AI job: Design (directions),
+ * CAD (design to CAD) and Render (CAD to renders).
+ */
+export const JOB_STAGES = ['design', 'cad', 'render'] as const
+export type JobStage = (typeof JOB_STAGES)[number]
+
+export const PLAN_STEP_STATES = ['pending', 'running', 'done', 'failed', 'skipped'] as const
+export type PlanStepState = (typeof PLAN_STEP_STATES)[number]
+
+/**
+ * An AI job: an assistant run with a stage, a one-sentence goal and a short plan shown before
+ * it starts. The server moves the plan along as the run's tool calls go (the stage's recipe in
+ * @pave/agent says which tools belong to which step), so every window shows the same progress.
+ * Its outputs are the design changes (and, later, directions and takes) its run made.
+ */
+export const AiJobSchema = z.object({
+  stage: z.enum(JOB_STAGES),
+  goal: z.string(),
+  plan: z.array(z.object({ id: z.string(), label: z.string(), state: z.enum(PLAN_STEP_STATES) })),
+  /** The job run this one carries on (Resume, a re-run step, a change asked for in review). */
+  continues: id.nullable(),
+  /** Set when the run ends well: its outputs wait for a person, who accepts them. */
+  review: z.enum(['pending', 'accepted']).nullable(),
+  /** Why a paused job stopped: a person paused it, took over, or edited the piece by hand. */
+  pausedBy: z.enum(['pause', 'takeover', 'edit']).nullable(),
+})
+export type AiJob = z.infer<typeof AiJobSchema>
+
 export const RunSchema = z.object({
   id,
   threadId: id.nullable(),
@@ -803,6 +840,8 @@ export const RunSchema = z.object({
   endedAt: iso.nullable(),
   error: z.string().nullable(),
   errorCode: z.enum(RUN_ERROR_CODES).nullable(),
+  /** Set when the run is an AI job (started from a stage, or continuing one). */
+  job: AiJobSchema.nullable(),
 })
 export type Run = z.infer<typeof RunSchema>
 

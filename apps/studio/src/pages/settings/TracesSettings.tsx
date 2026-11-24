@@ -14,6 +14,7 @@ const STATUS_TONE: Record<Run['status'], ChipTone> = {
   failed: 'danger',
   canceled: 'neutral',
   'awaiting-approval': 'warn',
+  paused: 'warn',
 }
 const STATUS_LABEL: Record<Run['status'], string> = {
   running: 'Running',
@@ -21,6 +22,7 @@ const STATUS_LABEL: Record<Run['status'], string> = {
   failed: 'Failed',
   canceled: 'Canceled',
   'awaiting-approval': 'Needs approval',
+  paused: 'Paused',
 }
 
 const duration = (r: Run) =>

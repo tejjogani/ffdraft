@@ -29,8 +29,8 @@ import {
 import { useNavigate } from '@tanstack/react-router'
 import { Check, CircleHelp, Hammer } from 'lucide-react'
 import { type ReactNode, useEffect, useState } from 'react'
-import { queryClient, rpcKey, useRpcMutation } from '../../lib/query'
-import { assistant } from '../../stores/assistant'
+import { queryClient, rpcKey, useRpcMutation } from '../lib/query'
+import { assistant } from '../stores/assistant'
 
 const ROLE_LABEL: Record<StoneSpec['role'], string> = {
   center: 'Centre',
@@ -91,8 +91,21 @@ const sizeSystemOptions = RING_SIZE_SYSTEMS.map((s) => ({
 /**
  * The spec as a human-readable, editable plan. Every edit saves the whole spec; open questions
  * are highlighted because the assistant should not guess them.
+ *
+ * `inline` is the variant the assistant's conversation shows: the same editable plan (an edit
+ * is a person's `pieces.setSpec`), with the caller's footer (Build it, as the approval) in place
+ * of the page's build button.
  */
-export function SpecCard({ piece }: { piece: Piece }) {
+export function SpecCard({
+  piece,
+  variant = 'full',
+  footer,
+}: {
+  piece: Piece
+  variant?: 'full' | 'inline'
+  footer?: ReactNode
+}) {
+  const inline = variant === 'inline'
   const [draft, setDraft] = useState(piece.spec)
   useEffect(() => setDraft(piece.spec), [piece.spec])
   const setSpec = useRpcMutation('pieces.setSpec', {
@@ -431,7 +444,7 @@ export function SpecCard({ piece }: { piece: Piece }) {
         </div>
       )}
 
-      <BuildFooter piece={piece} openQuestions={draft.openQuestions.length} />
+      {inline ? footer : <BuildFooter piece={piece} openQuestions={draft.openQuestions.length} />}
     </Card>
   )
 }

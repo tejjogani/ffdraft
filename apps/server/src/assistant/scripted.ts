@@ -7,16 +7,75 @@
  * A fixture is `{ "runs": [[turn, …], …] }`: the n-th run started in this process plays
  * `runs[n % runs.length]`, one turn per model call, and a resumed run continues where it was.
  * `{{pieceId}}` anywhere in a turn is replaced by the piece the run is working on at that moment.
+ *
+ * Two extras for watching the studio (screenshots, demos), neither part of the API:
+ *  - `"paceMs": 40` streams the turn's text a word at a time, waiting that long between events;
+ *  - `"error": {"status": 429, "type": "rate_limit_error", "message": "…"}` fails the call with
+ *    the SDK's own typed error for that status, and `"error": {"connection": true}` with a
+ *    connection error, so each error state can be seen as a person would meet it.
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { type ModelClient, type ScriptedTurn, scriptedModel } from '@pave/agent'
+import { APIConnectionError, APIError } from '@anthropic-ai/sdk'
+import type { BetaRawMessageStreamEvent } from '@anthropic-ai/sdk/resources/beta/messages/messages'
+import { type ModelClient, type ModelStream, type ScriptedTurn, scriptedModel } from '@pave/agent'
 import type { ModelFactory } from './host'
 
 const NAME = /^[a-z0-9][a-z0-9-]{0,63}$/
 
+type FixtureError = { status: number; type: string; message: string } | { connection: true }
+
+export type FixtureTurn = Omit<ScriptedTurn, 'error'> & {
+  paceMs?: number
+  error?: FixtureError
+}
+
 export interface Fixture {
-  runs: ScriptedTurn[][]
+  runs: FixtureTurn[][]
+}
+
+/** The SDK error a fixture names, built the way the SDK builds it from a response. */
+function sdkError(e: FixtureError): Error {
+  if ('connection' in e) return new APIConnectionError({ message: 'Connection error.' })
+  return APIError.generate(
+    e.status,
+    { type: 'error', error: { type: e.type, message: e.message } },
+    e.message,
+    new Headers(),
+  )
+}
+
+const wait = (ms: number, signal: AbortSignal | undefined) =>
+  new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms)
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer)
+        resolve()
+      },
+      { once: true },
+    )
+  })
+
+/** Replays a stream slowly: text a few words per event, `ms` apart. The final message is unchanged. */
+function paced(inner: ModelStream, ms: number, signal: AbortSignal | undefined): ModelStream {
+  async function* events(): AsyncGenerator<BetaRawMessageStreamEvent> {
+    for await (const event of inner) {
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        const words = event.delta.text.match(/\S+\s*|\s+/g) ?? [event.delta.text]
+        for (let i = 0; i < words.length; i += 2) {
+          await wait(ms, signal)
+          yield { ...event, delta: { ...event.delta, text: words.slice(i, i + 2).join('') } }
+        }
+        continue
+      }
+      await wait(ms, signal)
+      yield event
+    }
+  }
+  const it = events()
+  return { [Symbol.asyncIterator]: () => it, finalMessage: () => inner.finalMessage() }
 }
 
 export const FIXTURES_DIR = join(import.meta.dirname, 'fixtures')
@@ -52,11 +111,12 @@ export function scriptedFromEnv(env: Readonly<Record<string, string | undefined>
  * Replaces `{{pieceId}}` in a turn (through its JSON, so nested inputs are covered) and gives
  * tool calls without an id one unique in the run, as the API's own ids are.
  */
-function fill(turn: ScriptedTurn, pieceId: string | null, tag: string): ScriptedTurn {
+function fill(turn: FixtureTurn, pieceId: string | null, tag: string): ScriptedTurn {
   const json = JSON.stringify(turn).replaceAll('{{pieceId}}', pieceId ?? 'no-piece')
-  const filled = JSON.parse(json) as ScriptedTurn
+  const { paceMs: _pace, error, ...filled } = JSON.parse(json) as FixtureTurn
   return {
     ...filled,
+    ...(error ? { error: sdkError(error) } : {}),
     content: filled.content.map((b, i) =>
       b.type === 'tool_use' && !b.id ? { ...b, id: `toolu_${tag}_${i}` } : b,
     ),
@@ -65,7 +125,7 @@ function fill(turn: ScriptedTurn, pieceId: string | null, tag: string): Scripted
 
 /** A model factory playing the fixture: one queue of turns per run, kept across its sessions. */
 export function scriptedFactory(fixture: Fixture): ModelFactory {
-  const queues = new Map<string, ScriptedTurn[]>()
+  const queues = new Map<string, FixtureTurn[]>()
   let started = 0
   return (run) => {
     let queue = queues.get(run.runId)
@@ -78,7 +138,11 @@ export function scriptedFactory(fixture: Fixture): ModelFactory {
       stream(params, options) {
         const turn = q.shift()
         const tag = `${run.runId.slice(-8)}${q.length}`
-        return scriptedModel(turn ? [fill(turn, run.pieceId(), tag)] : []).stream(params, options)
+        const stream = scriptedModel(turn ? [fill(turn, run.pieceId(), tag)] : []).stream(
+          params,
+          options,
+        )
+        return turn?.paceMs ? paced(stream, turn.paceMs, options.signal) : stream
       },
     }
     return client

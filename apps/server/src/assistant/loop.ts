@@ -20,11 +20,13 @@ import type {
 } from '@anthropic-ai/sdk/resources/beta/messages/messages'
 import {
   admit,
+  advanceJob,
   canonText,
   capMessage,
   checkOverlap,
   closedResult,
   describeCall,
+  endJob,
   errorResult,
   evaluationNote,
   invalidInputResult,
@@ -49,6 +51,7 @@ import {
 } from '@pave/agent/anthropic'
 import { lintDesign } from '@pave/canon'
 import type {
+  AiJob,
   AssistantModelId,
   ClientToolName,
   CommandName,
@@ -70,6 +73,7 @@ import {
   completeStep,
   finishRun,
   resumeRun,
+  setJob,
   toRun,
 } from '../traces'
 import { assertBudget, recordUsage } from '../usage'
@@ -143,6 +147,8 @@ export async function closeOut(
     error?: string | null
     errorCode?: RunErrorCode | null
     emit?: RunHost['emit']
+    /** For a paused AI job: what paused it. */
+    pausedBy?: AiJob['pausedBy']
   },
 ): Promise<Run> {
   const run = await ctx.repo.runs.first(eq(t.agentRun.id, runId))
@@ -160,7 +166,13 @@ export async function closeOut(
     status: end.status,
     error: end.error ?? null,
     errorCode: end.errorCode ?? null,
+    // Only a run still live settles its plan; one already ended keeps the record it ended with.
+    job:
+      run?.job && (run.status === 'running' || run.status === 'awaiting-approval')
+        ? endJob(run.job, end.status, end.pausedBy ?? null)
+        : undefined,
   })
+  if (finished.job) end.emit?.({ type: 'job.updated', job: finished.job })
   end.emit?.({ type: 'run.finished', run: finished })
   publishRun(ctx, finished)
   return finished
@@ -233,6 +245,23 @@ export function publishRun(ctx: Ctx, run: Run): void {
     { type: 'run.updated', runId: run.id, threadId: run.threadId, status: run.status },
     { userId: run.userId },
   )
+}
+
+/**
+ * An AI job's plan follows its tool calls (`advanceJob`). Reads run at once, so moves are
+ * chained per run: each reads the plan the previous one wrote.
+ */
+function moveJob(host: RunHost, command: string): Promise<void> {
+  const next = host.jobChain.then(async () => {
+    const run = await host.ctx.repo.runs.first(eq(t.agentRun.id, host.runId))
+    const moved = run?.job ? advanceJob(run.job, command) : null
+    if (!moved) return
+    await setJob(host.ctx, host.runId, moved)
+    host.emit({ type: 'job.updated', job: moved })
+  })
+  // A failed move must not block later ones; the plan is progress, not truth.
+  host.jobChain = next.catch((err) => console.error('Moving a job plan failed:', err))
+  return host.jobChain
 }
 
 // ── One step ─────────────────────────────────────────────────────────────────────────────────
@@ -556,6 +585,7 @@ async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepO
         input: parsed.input,
         awaitingApproval: true,
       })
+      await moveJob(host, parsed.command)
       host.emit({
         type: 'tool.awaiting',
         toolCallId: call.id,
@@ -615,6 +645,7 @@ async function execute(host: RunHost, job: Job): Promise<BetaToolResultBlockPara
     input: job.input,
   })
   host.emit({ type: 'tool.started', toolCallId: id, name: command, input: job.input })
+  await moveJob(host, command)
 
   let value: unknown = null
   let result: BetaToolResultBlockParam

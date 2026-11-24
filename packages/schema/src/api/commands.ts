@@ -25,6 +25,7 @@ import {
   GENERATION_ROLES,
   GenerationInputSchema,
   IMAGE_ASPECTS,
+  JOB_STAGES,
   MESH_QUALITIES,
   METERS,
   MemberSchema,
@@ -1106,11 +1107,45 @@ export const commands = {
         .default({ selection: [] }),
       /** The model tier for this run (the composer's picker); omitted = the organisation's default. */
       tier: z.enum(ASSISTANT_TIERS).optional(),
+      /**
+       * Start an AI job for a stage of the piece (a stage's button, or a starter in the dock):
+       * the run gets the stage's plan. Without it, a message in a thread whose last job waits for
+       * review or is paused carries that job on (a change asked for by chat).
+       */
+      job: z
+        .object({ stage: z.enum(JOB_STAGES), goal: z.string().trim().min(1).max(300).optional() })
+        .optional(),
       /** The studio window sending it, which client tools are asked first. */
       clientId: z.string().min(1).max(64),
       clientMessageId: z.string().min(1).max(64),
     }),
     output: z.object({ thread: ThreadSchema, run: RunSchema }),
+  }),
+  'runs.pause': def({
+    description:
+      'Pause a running AI job: it stops where it is, keeping its edits. `takeover` says the person is carrying on by hand. Resume replans from the piece as it is then.',
+    kind: 'mutation',
+    input: z.object({ runId: id, takeover: z.boolean().default(false) }),
+    output: RunSchema,
+  }),
+  'runs.resume': def({
+    description:
+      'Carry a paused, stopped or finished AI job on in a new run of the same conversation, replanning from the piece as it is now (a person’s edits since are kept). With `redoStepId`, that step and the ones after it are done again.',
+    kind: 'mutation',
+    input: z.object({
+      runId: id,
+      redoStepId: z.string().min(1).max(64).optional(),
+      tier: z.enum(ASSISTANT_TIERS).optional(),
+      clientId: z.string().min(1).max(64),
+      clientMessageId: z.string().min(1).max(64),
+    }),
+    output: z.object({ thread: ThreadSchema, run: RunSchema }),
+  }),
+  'runs.accept': def({
+    description: 'Accept the outputs of a finished AI job, ending its review.',
+    kind: 'mutation',
+    input: z.object({ runId: id }),
+    output: RunSchema,
   }),
   'runs.decide': def({
     description:

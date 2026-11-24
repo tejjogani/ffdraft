@@ -17,7 +17,11 @@ const BUFFER = 2000
 /** How long a finished run's events stay for late subscribers. */
 const RETAIN_MS = 60_000
 
-export type AbortReason = 'cancel' | 'shutdown'
+/** Why a live run is aborted; the three pause reasons end an AI job as paused, saying why. */
+export type AbortReason = 'cancel' | 'shutdown' | PauseReason
+export type PauseReason = 'pause' | 'takeover' | 'edit'
+export const isPauseReason = (r: unknown): r is PauseReason =>
+  r === 'pause' || r === 'takeover' || r === 'edit'
 
 export interface RunListener {
   event(e: RunEvent): void

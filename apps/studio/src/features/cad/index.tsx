@@ -41,6 +41,9 @@ import { usePieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { activeOrg, useSession } from '../../lib/session'
+import { useAssistant } from '../../stores/assistant'
+import { planProgress } from '../assistant/jobs/status'
+import { useLiveRun } from '../assistant/jobs/useJob'
 import { useViewportTools } from './capture-tool'
 import { useCadCommands } from './commands'
 import { captureCover } from './cover'
@@ -185,6 +188,36 @@ function Workspace({ piece }: { piece: Piece }) {
     () => new Set(run ? [...Object.keys(run.prior), ...run.added] : []),
     [run],
   )
+  // The parts an assistant edit just touched glow once in the AI colour (not under reduced
+  // motion, where the feature list's AI badge says the same without movement).
+  const [aiTint, setAiTint] = useState<string[]>([])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a landed change is the trigger
+  useEffect(() => {
+    if (!landed || !latestRun) return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    setAiTint([...Object.keys(latestRun.prior), ...latestRun.added])
+    const t = setTimeout(() => setAiTint([]), 1800)
+    return () => clearTimeout(t)
+  }, [landed])
+
+  // ── The assistant at work on this piece ──────────────────────────────────────────────────
+  const activity = useAssistant((s) => (s.activity?.pieceId === pieceId ? s.activity : null))
+  // Any live run on this piece, whether or not the dock that started it is open.
+  const pieceRuns = useRpc('traces.runs', { pieceId, limit: 10 })
+  const liveRun = useLiveRun(pieceRuns.data?.find((r) => r.status === 'running') ?? null).run
+  const working = liveRun?.status === 'running' ? liveRun : null
+  const workingRunId = working?.id ?? activity?.runId ?? null
+  const workingLabel =
+    (activity?.runId === workingRunId ? activity?.label : undefined) ??
+    (working?.job ? planProgress(working.job).current?.label : undefined) ??
+    'Assistant is working'
+  const stopRun = useRpcMutation('runs.cancel', { meta: { silent: true } })
+  // What is selected here goes along when the assistant is opened with mod+j.
+  useEffect(() => {
+    const set = useAssistant.getState().setLiveSelection
+    set(selection.length ? { pieceId, nodeIds: [...selection] } : null)
+  }, [selection, pieceId])
+  useEffect(() => () => useAssistant.getState().setLiveSelection(null), [])
 
   // ── Actions ──────────────────────────────────────────────────────────────────────────────
   const requestDelete = useCallback(
@@ -302,8 +335,8 @@ function Workspace({ piece }: { piece: Piece }) {
   })
 
   const viewerState = useMemo<ViewerState>(
-    () => ({ display, selection, stone, hover, hidden, xray }),
-    [display, selection, stone, hover, hidden, xray],
+    () => ({ display, selection, stone, hover, hidden, xray, aiTint }),
+    [display, selection, stone, hover, hidden, xray, aiTint],
   )
 
   const empty = view.order.length === 0
@@ -446,7 +479,29 @@ function Workspace({ piece }: { piece: Piece }) {
               )}
             </div>
           </div>
-          {run && (
+          {workingRunId && (
+            <div className="pointer-events-none absolute inset-x-0 top-16 z-30 flex justify-center">
+              <div
+                role="status"
+                data-assistant-working={workingRunId}
+                className="glass pointer-events-auto flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm shadow-sm"
+              >
+                <AiMark className="size-3.5 animate-pulse" />
+                <span className="max-w-72 truncate">{workingLabel}</span>
+                <span aria-hidden className="text-fg-subtle">
+                  ·
+                </span>
+                <button
+                  type="button"
+                  className="font-medium hover:underline"
+                  onClick={() => stopRun.mutate({ runId: workingRunId })}
+                >
+                  Stop
+                </button>
+              </div>
+            </div>
+          )}
+          {run && !workingRunId && (
             <div className="absolute inset-x-0 top-16 z-20 flex justify-center">
               <ChangeChip
                 run={run}

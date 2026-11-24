@@ -34,6 +34,7 @@ export {
   type TextareaProps,
 } from './components/input'
 export { Kbd, shortcutKeys } from './components/kbd'
+export { inline, Markdown, parseBlocks } from './components/markdown'
 export {
   ContextMenu,
   Menu,

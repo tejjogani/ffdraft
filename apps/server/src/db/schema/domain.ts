@@ -6,6 +6,7 @@
  */
 import type {
   Actor,
+  AiJob,
   AssistantModelId,
   AssistantTier,
   BrandModel,
@@ -453,6 +454,8 @@ export const agentRun = pgTable(
     costMicros: bigint('cost_micros', { mode: 'number' }).notNull().default(0),
     error: text('error'),
     errorCode: text('error_code').$type<NonNullable<Run['errorCode']>>(),
+    /** Set when the run is an AI job: its stage, goal, plan and review. */
+    job: jsonb('job').$type<AiJob>(),
     startedAt: at('started_at'),
     endedAt: timestamp('ended_at', { withTimezone: true }),
   },
