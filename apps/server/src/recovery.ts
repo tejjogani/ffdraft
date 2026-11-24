@@ -221,7 +221,10 @@ async function resumeOne(ctx: Ctx, item: Unfinished): Promise<void> {
       }
       return packager.resume(pkg, request, handle, sctx).catch((err: unknown) => {
         console.error(`Resuming production package ${item.id} failed:`, err)
-        return handle.update({ status: 'failed', manifest: { error: { message: engineError(err) } } })
+        return handle.update({
+          status: 'failed',
+          manifest: { error: { message: engineError(err) } },
+        })
       })
     }
     case 'run': {

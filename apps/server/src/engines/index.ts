@@ -20,20 +20,31 @@ export interface EnginesConfig {
   /** Blender takes at once. */
   renderConcurrency?: number
   renderTimeoutMs?: RenderQueueOptions['timeoutMs']
+  /** Where Blender works. Default: `<dataDir>/render-work`, or a private temporary folder. */
+  renderWorkRoot?: string
   /** Where the Blender choice is saved; null keeps it in memory. */
   engineFile: string | null
 }
 
 const EnvSchema = z.object({
   PAVE_KERNEL_WORKERS: z.coerce.number().int().min(1).max(64).optional(),
+  PAVE_KERNEL_MEMORY_MB: z.coerce.number().int().min(256).optional(),
+  PAVE_KERNEL_PIECES_PER_WORKER: z.coerce.number().int().min(1).max(64).optional(),
   PAVE_PRODUCTION_CONCURRENCY: z.coerce.number().int().min(1).max(16).optional(),
   PAVE_RENDER_CONCURRENCY: z.coerce.number().int().min(1).max(16).optional(),
 })
 
 export function enginesConfigFromEnv(env: NodeJS.ProcessEnv, config: Config): EnginesConfig {
   const e = EnvSchema.parse(env)
+  const pool: KernelPoolOptions = {
+    ...(e.PAVE_KERNEL_WORKERS === undefined ? {} : { size: e.PAVE_KERNEL_WORKERS }),
+    ...(e.PAVE_KERNEL_MEMORY_MB === undefined ? {} : { memoryBudgetMb: e.PAVE_KERNEL_MEMORY_MB }),
+    ...(e.PAVE_KERNEL_PIECES_PER_WORKER === undefined
+      ? {}
+      : { kernelsPerWorker: e.PAVE_KERNEL_PIECES_PER_WORKER }),
+  }
   return {
-    ...(e.PAVE_KERNEL_WORKERS === undefined ? {} : { pool: { size: e.PAVE_KERNEL_WORKERS } }),
+    pool,
     ...(e.PAVE_PRODUCTION_CONCURRENCY === undefined
       ? {}
       : { productionConcurrency: e.PAVE_PRODUCTION_CONCURRENCY }),
@@ -49,6 +60,8 @@ export function createEngines(
   config: EnginesConfig,
 ): Pick<Services, 'geometry' | 'production' | 'renderQueue' | 'renderEngine'> {
   const pool = new KernelPool(config.pool)
+  const { dataDir } = runtime.config
+  const workRoot = config.renderWorkRoot ?? (dataDir && join(dataDir, 'render-work'))
   const blender = new BlenderSetup({ file: config.engineFile })
   const renderEngine: RenderEngineService = {
     status: async () => {
@@ -65,6 +78,8 @@ export function createEngines(
       geometry: () => runtime.services.get('geometry'),
       concurrency: config.renderConcurrency ?? 1,
       ...(config.renderTimeoutMs ? { timeoutMs: config.renderTimeoutMs } : {}),
+      ...(workRoot ? { workRoot } : {}),
+      engineOutput: runtime.config.auth === 'local',
     }),
     renderEngine,
   }

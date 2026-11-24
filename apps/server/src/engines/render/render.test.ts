@@ -6,7 +6,7 @@
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import { detectBlender } from '@pave/render/node'
 import type { RenderJob } from '@pave/schema'
 import sharp from 'sharp'
@@ -33,7 +33,7 @@ async function blenderProcesses(jobId: string): Promise<string[]> {
   for (const pid of await readdir('/proc')) {
     if (!/^\d+$/.test(pid)) continue
     const cmdline = await readFile(`/proc/${pid}/cmdline`, 'utf8').catch(() => '')
-    if (cmdline.includes('pave_render.py') && cmdline.includes(`pave-render-${jobId}-`))
+    if (cmdline.includes('pave_render.py') && cmdline.includes(`${sep}${jobId}${sep}`))
       found.push(pid)
   }
   return found
@@ -125,6 +125,33 @@ describe.skipIf(!blender.available)('Blender render queue', () => {
       assetIds: [],
     })
   })
+
+  it.skipIf(process.platform !== 'linux')(
+    'kills a Blender that ignores the cancel, and moves on to the next job',
+    async () => {
+      const piece = await api.call('pieces.create', { templateId: 'solitaire' })
+      const hung = await api.call('renders.create', {
+        pieceId: piece.id,
+        scene: small('standard', 768),
+        autoTune: false,
+      })
+      const next = await api.call('renders.create', {
+        pieceId: piece.id,
+        scene: small('preview', 256),
+        autoTune: false,
+      })
+      const [pid] = await waitForBlender(hung.id)
+      // A stopped process cannot act on SIGTERM: the queue must not wait on it for ever.
+      process.kill(Number(pid), 'SIGSTOP')
+      const started = performance.now()
+      expect((await api.call('renders.cancel', { id: hung.id })).status).toBe('canceled')
+      expect(performance.now() - started).toBeLessThan(10_000)
+      expect(await blenderProcesses(hung.id)).toEqual([])
+      const done = await until(() => api.call('renders.get', { id: next.id }), settled)
+      expect(done.status).toBe('done')
+    },
+    180_000,
+  )
 })
 
 describe.skipIf(!blender.available)('Blender render queue across a restart', () => {

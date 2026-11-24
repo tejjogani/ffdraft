@@ -29,10 +29,12 @@ export const toPackage = (r: typeof t.productionPackage.$inferSelect): Productio
  */
 async function assertProducible(ctx: Ctx, piece: { id: string; design: Design }): Promise<void> {
   if (!ctx.services.isConfigured('geometry')) return
+  // Only a definite answer refuses; if the check itself fails, the build reports why.
   const draft = await ctx.services
     .get('geometry')
     .evaluate(piece.design, { detail: 'draft', pieceId: piece.id }, serviceContext(ctx))
-  if (draft.metalMassG === 0 && draft.stoneCount === 0)
+    .catch(() => null)
+  if (draft && draft.metalMassG === 0 && draft.stoneCount === 0)
     throw conflict('Nothing to produce: the piece has no metal or stones.')
 }
 

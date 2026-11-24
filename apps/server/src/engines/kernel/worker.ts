@@ -81,10 +81,7 @@ async function missingBodies(
   const { diagnostics } = await kernel.evaluate(design, { detail: 'production', assets, signal })
   return diagnostics
     .filter((d) => d.level === 'error' && d.code === 'feature.failed')
-    .map((d) => {
-      const name = (d.nodeId && design.nodes[d.nodeId]?.name) || d.nodeId || 'A feature'
-      return `${name} could not be built and is not in this file: ${d.message}`
-    })
+    .map((d) => `${d.message.replace(/[.\s]+$/, '')} — it is not in this file.`)
 }
 
 async function run(

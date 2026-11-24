@@ -74,6 +74,34 @@ describe('geometry engine', () => {
     expect(widened.facts!.caratTotal).toBeCloseTo(first.facts!.caratTotal, 6)
   })
 
+  it('caches facts from production detail only, so they never flip with who asked last', async () => {
+    // Seats are cut at production detail: a draft overstates an eternity's metal by a third.
+    const piece = await api.call('pieces.create', { templateId: 'eternity' })
+    const cached = await until(
+      () => api.call('pieces.get', { id: piece.id }),
+      (p) => p.facts !== null,
+    )
+    const production = await api.call('design.evaluate', {
+      pieceId: piece.id,
+      detail: 'production',
+    })
+    expect(cached.facts!.metalMassG).toBeCloseTo(production.metalMassG, 6)
+    const draft = await api.call('design.evaluate', { pieceId: piece.id, detail: 'draft' })
+    expect(draft.metalMassG).toBeGreaterThan(production.metalMassG + 0.1)
+    expect((await api.call('pieces.get', { id: piece.id })).facts).toEqual(cached.facts)
+  })
+
+  it('refuses to export or produce a piece with nothing in it, as a conflict', async () => {
+    const empty = await api.call('pieces.create', { title: 'Nothing yet' })
+    const exported = await api.fail('design.export', { pieceId: empty.id, format: 'stl' })
+    expect([exported.status, exported.error.message]).toEqual([
+      409,
+      expect.stringMatching(/^Nothing to export/),
+    ])
+    expect((await api.fail('production.create', { pieceId: empty.id })).status).toBe(409)
+    expect(await api.call('production.list', { pieceId: empty.id })).toEqual([])
+  })
+
   it('exports STL, STEP, 3DM and GLB files that parse', async () => {
     const piece = await api.call('pieces.create', { templateId: 'solitaire' })
     const files: Record<string, Uint8Array> = {}

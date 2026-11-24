@@ -2,11 +2,13 @@
  * `renderQueue`: Blender takes, `concurrency` at a time (one by default — Cycles uses every
  * core), served round-robin across organisations so one org's batch cannot starve another's.
  *
- * Cancel and shutdown abort the Blender process and wait for it to exit. A canceled job is
- * marked by the handler; a job cut off by shutdown is left live for boot recovery to resume.
+ * Cancel and shutdown abort the Blender process and wait (bounded) for it to exit, killing it
+ * outright if it ignores the request. A canceled job is marked by the handler; a job cut off by
+ * shutdown is left live for boot recovery to resume. Each job works in `<workRoot>/<jobId>/`, so
+ * a process a crashed server left behind is found by its path and killed at the next boot.
  */
 import { createHash } from 'node:crypto'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { extname, join } from 'node:path'
 import { RESOLVED_SCENE_VERSION } from '@pave/render'
@@ -20,6 +22,7 @@ import type {
   ServiceContext,
 } from '../../services'
 import type { BlenderSetup } from './blender'
+import { killRenderProcessesIn } from './processes'
 import { renderTake } from './take'
 
 export interface RenderQueueOptions {
@@ -27,9 +30,15 @@ export interface RenderQueueOptions {
   /** Resolved per job, so the queue uses whichever geometry engine is registered. */
   geometry: () => GeometryService
   concurrency?: number
-  /** Where Blender writes; a fresh folder per job, removed afterwards. */
-  workDir?: string
+  /**
+   * Where Blender writes, one folder per job, removed afterwards. Owned by this server alone:
+   * whatever is in it at boot is left from a crash, and is killed and deleted. Unset: a private
+   * temporary folder, removed on dispose.
+   */
+  workRoot?: string
   timeoutMs?: (scene: RenderScene) => number
+  /** Show Blender's own output in a failed job; only for a local server, whose user runs it. */
+  engineOutput?: boolean
 }
 
 const MINUTE = 60_000
@@ -41,8 +50,10 @@ const TIMEOUT_BY_QUALITY: Record<RenderScene['output']['quality'], number> = {
 const defaultTimeout = (scene: RenderScene) =>
   TIMEOUT_BY_QUALITY[scene.output.quality] * (scene.animation ? 4 : 1)
 
-/** How long `cancel` waits for Blender to exit before letting the handler mark the job. */
-const CANCEL_WAIT_MS = 15_000
+/** How long `cancel` and shutdown wait for Blender to exit before letting go of the job. */
+const STOP_WAIT_MS = 15_000
+/** How long Blender has to act on the abort before it is killed outright. */
+const KILL_AFTER_MS = 5_000
 const PROGRESS_EVERY_MS = 1_000
 
 interface Entry {
@@ -52,6 +63,8 @@ interface Entry {
   sctx: ServiceContext
   controller: AbortController
   done?: Promise<void>
+  /** Set once the job has a folder to work in. */
+  workDir?: string
 }
 
 /** JSON with sorted keys, so equal scenes hash equally whatever order their keys arrived in. */
@@ -80,12 +93,27 @@ export function cacheKeyOf(job: RenderJob, blenderVersion: string | null): strin
   return `sha256:${createHash('sha256').update(key).digest('hex')}`
 }
 
-/** What a failed take shows: Blender's own words are useful to whoever runs this server. */
-function failure(err: unknown): string {
+/**
+ * What a failed take shows. Blender's own words (with this server's paths) help whoever runs a
+ * local server; tenants of a shared one get a plain message, and the log keeps the rest.
+ */
+function failure(err: unknown, engineOutput: boolean): string {
   if (err instanceof AppError) return err.message
-  if (err instanceof Error && err.message.startsWith('Blender render'))
+  if (engineOutput && err instanceof Error && err.message.startsWith('Blender render'))
     return err.message.slice(0, 2_000)
   return 'The render failed; try again.'
+}
+
+const settlesWithin = async (done: Promise<void> | undefined, ms: number): Promise<boolean> => {
+  let timer: NodeJS.Timeout | undefined
+  const settled = await Promise.race([
+    (done ?? Promise.resolve()).then(() => true),
+    new Promise<boolean>((resolve) => {
+      timer = setTimeout(() => resolve(false), ms)
+    }),
+  ])
+  clearTimeout(timer)
+  return settled
 }
 
 const slug = (title: string) =>
@@ -103,6 +131,31 @@ export function createRenderQueue(o: RenderQueueOptions) {
   const waiting = new Map<string, Entry[]>()
   const active = new Map<string, Entry>()
   let closing = false
+  let privateRoot: Promise<string> | null = null
+  const workRoot = (): Promise<string> => {
+    if (o.workRoot) return Promise.resolve(o.workRoot)
+    privateRoot ??= mkdtemp(join(tmpdir(), 'pave-render-'))
+    return privateRoot
+  }
+
+  /** Kills and deletes whatever a previous run of this server left in its work root. */
+  async function sweep(root: string): Promise<void> {
+    const left = await readdir(root).catch(() => [])
+    if (left.length === 0) return
+    const killed = await killRenderProcessesIn(root)
+    if (killed.length)
+      console.error(`Killed render processes left by a crash: ${killed.join(', ')}`)
+    await Promise.all(left.map((name) => rm(join(root, name), { recursive: true, force: true })))
+  }
+
+  /** Aborts a running take; kills Blender if it ignores that; waits at most `STOP_WAIT_MS`. */
+  async function stop(entry: Entry, reason: string): Promise<void> {
+    entry.controller.abort(new DOMException(reason, 'AbortError'))
+    if (await settlesWithin(entry.done, KILL_AFTER_MS)) return
+    // `@pave/render` sends one SIGTERM and nothing more; a hung Blender would hold the slot.
+    if (entry.workDir) await killRenderProcessesIn(entry.workDir)
+    await settlesWithin(entry.done, STOP_WAIT_MS - KILL_AFTER_MS)
+  }
 
   function next(): Entry | undefined {
     for (const [org, queue] of waiting) {
@@ -130,7 +183,6 @@ export function createRenderQueue(o: RenderQueueOptions) {
   async function run(entry: Entry): Promise<void> {
     const { job, piece, handle, sctx } = entry
     const { signal } = entry.controller
-    let workDir: string | null = null
     try {
       await o.blender.probed
       const engine = o.blender.status()
@@ -157,10 +209,16 @@ export function createRenderQueue(o: RenderQueueOptions) {
       }
 
       await handle.update({ status: 'running', progress: 0.01, cacheKey })
-      workDir = await mkdtemp(join(o.workDir ?? tmpdir(), `pave-render-${job.id}-`))
+      const workDir = join(await workRoot(), job.id)
+      // A folder left by an attempt before a restart is stale.
+      await rm(workDir, { recursive: true, force: true })
+      await mkdir(workDir, { recursive: true })
+      entry.workDir = workDir
       const { glb, subject } = await o
         .geometry()
         .renderInput(piece.design, sctx, { pieceId: piece.id, signal })
+      if (subject.parts.length === 0 && subject.stones.length === 0)
+        throw new AppError('conflict', 'Nothing to render: the piece has no metal or stones.')
       let reported = 0
       const result = await renderTake({
         scene: job.requestedScene,
@@ -213,10 +271,10 @@ export function createRenderQueue(o: RenderQueueOptions) {
     } catch (err) {
       // Canceled: the handler marks it. Shutting down: it stays live for boot recovery.
       if (signal.aborted || closing) return
-      if (!(err instanceof AppError)) console.error(`Render ${job.id} failed:`, err)
-      await handle.update({ status: 'failed', error: failure(err) })
+      console.error(`Render ${job.id} failed:`, err)
+      await handle.update({ status: 'failed', error: failure(err, o.engineOutput ?? false) })
     } finally {
-      if (workDir) await rm(workDir, { recursive: true, force: true })
+      if (entry.workDir) await rm(entry.workDir, { recursive: true, force: true })
     }
   }
 
@@ -233,9 +291,16 @@ export function createRenderQueue(o: RenderQueueOptions) {
     get capabilities() {
       return { blender: o.blender.available }
     },
-    ready: () => o.blender.ready,
+    async ready() {
+      if (o.workRoot) await sweep(o.workRoot)
+      await o.blender.ready
+    },
     submit: accept,
-    resume: accept,
+    // Back to `queued` until it really starts: the progress it had belongs to a process that is gone.
+    async resume(job, piece, handle, sctx) {
+      await handle.update({ status: 'queued', progress: 0 })
+      await accept(job, piece, handle, sctx)
+    },
     async cancel(jobId: string, sctx: ServiceContext) {
       const queue = waiting.get(sctx.orgId)
       const at = queue?.findIndex((e) => e.job.id === jobId) ?? -1
@@ -246,22 +311,13 @@ export function createRenderQueue(o: RenderQueueOptions) {
       }
       const entry = active.get(jobId)
       if (!entry || entry.sctx.orgId !== sctx.orgId) return
-      entry.controller.abort(new DOMException('The render was canceled', 'AbortError'))
-      let timer: NodeJS.Timeout | undefined
-      await Promise.race([
-        entry.done,
-        new Promise((resolve) => {
-          timer = setTimeout(resolve, CANCEL_WAIT_MS)
-        }),
-      ])
-      clearTimeout(timer)
+      await stop(entry, 'The render was canceled')
     },
     async dispose() {
       closing = true
       waiting.clear()
-      for (const entry of active.values())
-        entry.controller.abort(new DOMException('The server is shutting down', 'AbortError'))
-      await Promise.allSettled([...active.values()].map((e) => e.done))
+      await Promise.all([...active.values()].map((e) => stop(e, 'The server is shutting down')))
+      if (privateRoot) await rm(await privateRoot, { recursive: true, force: true })
     },
   } satisfies RenderQueue
 }

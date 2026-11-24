@@ -1,8 +1,22 @@
 /** The bounded auto-tune: which draft is rendered and which measured fixes are applied. */
 import type { RenderIssue } from '@pave/render'
+import type { BlenderRenderResult } from '@pave/render/node'
 import { RenderSceneSchema } from '@pave/schema'
-import { describe, expect, it } from 'vitest'
-import { autoFixes, draftOf } from './take'
+import { describe, expect, it, vi } from 'vitest'
+import { autoFixes, draftOf, renderTake } from './take'
+
+const blender = vi.hoisted(() => ({ calls: 0 }))
+vi.mock('@pave/render/node', () => ({
+  renderWithBlender: async (): Promise<BlenderRenderResult> => {
+    blender.calls++
+    return {
+      files: { image: 'pass.png', mask: 'mask.png' },
+      metrics: {} as BlenderRenderResult['metrics'],
+      device: 'CPU',
+      seconds: 1,
+    }
+  },
+}))
 
 const scene = (output: object, extra: object = {}) => RenderSceneSchema.parse({ output, ...extra })
 
@@ -46,5 +60,39 @@ describe('autoFixes', () => {
       { path: 'environment.intensity', value: 1.4 },
     ])
     expect(autoFixes([])).toEqual([])
+  })
+})
+
+describe('renderTake', () => {
+  const subject = {
+    bounds: { min: [-10, -10, 0], max: [10, 10, 20] },
+    parts: [],
+    stones: [],
+  } as Parameters<typeof renderTake>[0]['subject']
+
+  it('starts no further pass, and stores nothing more, once canceled between passes', async () => {
+    blender.calls = 0
+    const controller = new AbortController()
+    const stored: string[] = []
+    const take = renderTake({
+      scene: scene({ quality: 'standard', width: 1024, height: 1024 }),
+      autoTune: true,
+      glb: new Uint8Array(),
+      subject,
+      workDir: 'unused',
+      runtime: {},
+      signal: controller.signal,
+      timeoutMs: () => 60_000,
+      onProgress: () => {},
+      // The cancel lands just as the draft's process exits.
+      onPass: async () => controller.abort(new DOMException('canceled', 'AbortError')),
+      store: async (path, role) => {
+        stored.push(`${role}:${path}`)
+        return 'asset'
+      },
+    })
+    await expect(take).rejects.toThrow(/canceled/)
+    expect(blender.calls).toBe(1)
+    expect(stored).toEqual([])
   })
 })

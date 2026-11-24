@@ -286,11 +286,7 @@ async function flush(byPiece: Map<string, FactsRefresh>, key: string, pieceId: s
   try {
     const summary = await ctx.services
       .get('geometry')
-      .evaluate(
-        design,
-        { detail: FACTS_DETAIL, pieceId, background: true },
-        serviceContext(ctx),
-      )
+      .evaluate(design, { detail: FACTS_DETAIL, pieceId, background: true }, serviceContext(ctx))
     await storeFacts(ctx, pieceId, version, summary)
   } catch (err) {
     // The server closing under a pending refresh is not a failure worth reporting.

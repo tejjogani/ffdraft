@@ -93,6 +93,31 @@ describe('production engine', () => {
   })
 })
 
+describe('production engine failures', () => {
+  let server: TestServer
+  let api: Client
+  beforeAll(async () => {
+    // No package can be built in 50 ms: every build fails, for a reason worth showing.
+    server = await engineServer({ engines: { pool: { size: 2, timeoutMs: { package: 50 } } } })
+    api = client(server)
+  }, BOOT_TIMEOUT)
+  afterAll(() => server.dispose())
+
+  it('records why a build failed on the package', async () => {
+    const piece = await api.call('pieces.create', { templateId: 'wedding-band' })
+    await api.call('production.create', { pieceId: piece.id })
+    const failed = await until(
+      async () => (await api.call('production.list', { pieceId: piece.id }))[0]!,
+      (p) => p.status !== 'queued' && p.status !== 'running',
+    )
+    expect(failed).toMatchObject({
+      status: 'failed',
+      assetId: null,
+      manifest: { error: { message: expect.stringMatching(/^Stopped trying to build/) } },
+    })
+  })
+})
+
 describe('production engine across a restart', () => {
   let dir: string
   beforeAll(async () => {

@@ -85,7 +85,10 @@ const sameScene = (a: RenderScene, b: RenderScene) => JSON.stringify(a) === JSON
 export async function renderTake(o: TakeOptions): Promise<TakeResult> {
   let seconds = 0
   let pass = 0
+  // `renderWithBlender` only reacts to an abort that comes after it has started its process, so
+  // a cancel that lands between passes (or while one is being stored) must be caught here.
   const blend = async (scene: RenderScene, from: number, to: number) => {
+    o.signal.throwIfAborted()
     const result = await renderWithBlender({
       ...o.runtime,
       resolved: resolveScene(scene, o.subject),
@@ -97,7 +100,13 @@ export async function renderTake(o: TakeOptions): Promise<TakeResult> {
     })
     seconds += result.seconds
     await o.onPass(pass++, result)
+    o.signal.throwIfAborted()
     return result
+  }
+  const store = async (path: string, role: 'draft' | 'take') => {
+    const assetId = await o.store(path, role)
+    o.signal.throwIfAborted()
+    return assetId
   }
 
   const passes: Critique['passes'] = []
@@ -110,11 +119,11 @@ export async function renderTake(o: TakeOptions): Promise<TakeResult> {
     const fixes = autoFixes(issues)
     const tuned = fixes.length ? RenderSceneSchema.safeParse(applyAdjustments(scene, fixes)) : null
     if (!tuned?.success && draftIsTake) {
-      const assetId = await o.store(draft.files.image!, 'take')
+      const assetId = await store(draft.files.image!, 'take')
       passes.push({ adjustments: [], issues, draftAssetId: null })
       return { scene, assetIds: [assetId], critique: { passes }, seconds, device: draft.device }
     }
-    const draftAssetId = await o.store(draft.files.image!, 'draft')
+    const draftAssetId = await store(draft.files.image!, 'draft')
     passes.push({ adjustments: tuned?.success ? fixes : [], issues, draftAssetId })
     if (tuned?.success) scene = tuned.data
   }
@@ -127,6 +136,6 @@ export async function renderTake(o: TakeOptions): Promise<TakeResult> {
       ? [take.files.video]
       : (take.files.frames ?? [])
   const assetIds: string[] = []
-  for (const path of outputs) assetIds.push(await o.store(path, 'take'))
+  for (const path of outputs) assetIds.push(await store(path, 'take'))
   return { scene, assetIds, critique: { passes }, seconds, device: take.device }
 }

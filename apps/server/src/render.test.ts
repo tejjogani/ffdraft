@@ -269,7 +269,12 @@ describe('saved shots and takes', () => {
     const running = await traces.startRun(ctx, { model: 'm' })
     const waiting = await traces.startRun(ctx, { model: 'm' })
     await traces.finishRun(ctx, waiting.id, { status: 'awaiting-approval' })
-    expect((await server.runtime.unfinished()).map((u) => [u.kind, u.id])).toEqual(
+    const live = await server.runtime.unfinished()
+    // Oldest first, so queues fill again in the order the work was asked for.
+    expect(live.map((u) => u.createdAt.getTime())).toEqual(
+      live.map((u) => u.createdAt.getTime()).toSorted((a, b) => a - b),
+    )
+    expect(live.map((u) => [u.kind, u.id])).toEqual(
       expect.arrayContaining([
         ['render', job.id],
         ['run', running.id],
