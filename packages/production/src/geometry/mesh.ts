@@ -19,6 +19,7 @@ const nextPow2 = (n: number) => 2 ** Math.ceil(Math.log2(Math.max(16, n)))
 /**
  * Maps every vertex to a canonical vertex at the same position (within `tolerance` mm), so
  * hard-edge vertex splits do not break adjacency. Returns the canonical index per vertex.
+ * `tolerance` 0 merges only bit-identical positions.
  */
 export function weld(positions: Float32Array, tolerance = 1e-5): Uint32Array {
   const n = positions.length / 3
@@ -28,10 +29,14 @@ export function weld(positions: Float32Array, tolerance = 1e-5): Uint32Array {
   const table = new Int32Array(size).fill(-1)
   const q = new Int32Array(n * 3)
   const inv = 1 / tolerance
+  // +0 folds −0 into +0 before the bits are read.
+  const bits =
+    tolerance === 0 ? new Int32Array(Float32Array.from(positions, (v) => v + 0).buffer) : null
+  const key = (k: number) => (bits ? bits[k]! : Math.round(positions[k]! * inv))
   for (let i = 0; i < n; i++) {
-    const x = Math.round(positions[i * 3]! * inv)
-    const y = Math.round(positions[i * 3 + 1]! * inv)
-    const z = Math.round(positions[i * 3 + 2]! * inv)
+    const x = key(i * 3)
+    const y = key(i * 3 + 1)
+    const z = key(i * 3 + 2)
     q[i * 3] = x
     q[i * 3 + 1] = y
     q[i * 3 + 2] = z
@@ -141,7 +146,10 @@ export interface Topology {
 
 /** Closed/manifold/orientation/shell analysis — the checks casters run on upload. */
 export function analyzeTopology(positions: Float32Array, indices: Uint32Array): Topology {
-  const canon = weld(positions)
+  // Exact positions, as the kernel's watertight check uses: an STL stores each shared vertex
+  // bit-identically, and a 10 µm grid would merge distinct vertices of sub-micron slivers into
+  // non-manifold edges the exported mesh does not have.
+  const canon = weld(positions, 0)
   const edges = edgeTable(indices, canon)
   let boundaryEdges = 0
   let nonManifoldEdges = 0

@@ -17,6 +17,18 @@ function solidOf(result: NodeResult, ctx: BuildContext): Solid {
   return solids.length === 1 ? solids[0]! : union(solids, { prefer: 'mesh', quality: ctx.quality })
 }
 
+/** The mesh kernel's failures in words a designer can act on; anything else passes through. */
+function designerReason(op: 'union' | 'subtract' | 'intersect', error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  if (message.startsWith('Mesh body is empty'))
+    return op === 'subtract'
+      ? 'nothing is left after the cut: the tools cover the whole body; make them smaller or move them'
+      : 'the bodies do not overlap, so nothing is common to them; move them together'
+  if (message.startsWith('Surface is not a closed manifold'))
+    return 'one of the bodies is not closed (it has holes or loose faces), so it cannot be combined; repair or rebuild it first'
+  return message
+}
+
 export const booleanFeature = defineFeature('boolean', (node, ctx) => {
   const target = ctx.input(node.target)
   const tools = node.tools.map((id) => ctx.input(id))
@@ -30,12 +42,17 @@ export const booleanFeature = defineFeature('boolean', (node, ctx) => {
   } as const
   const operands = tools.map((t) => solidOf(t, ctx))
   const base = solidOf(target, ctx)
-  const solid =
-    node.op === 'union'
-      ? union([base, ...operands], options)
-      : node.op === 'subtract'
-        ? subtract(base, operands, options)
-        : intersect(base, operands, options)
+  let solid: Solid
+  try {
+    solid =
+      node.op === 'union'
+        ? union([base, ...operands], options)
+        : node.op === 'subtract'
+          ? subtract(base, operands, options)
+          : intersect(base, operands, options)
+  } catch (error) {
+    throw new Error(designerReason(node.op, error))
+  }
   return {
     bodies: [{ solid, material: first.material, finish: first.finish, plating: first.plating }],
     consumes: [node.target, ...node.tools],

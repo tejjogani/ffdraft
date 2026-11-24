@@ -4,15 +4,17 @@
  * Templates are just specs, which keeps "start from a template" and "the assistant planned
  * this with you" on one code path.
  */
-import { type Design, type PieceKind, designFrom } from '../design/design'
-import type { NodeInput } from '../design/nodes'
+import { z } from 'zod'
+import { type Design, designFrom, type PieceKind } from '../design/design'
+import { NODE_SCHEMAS, type NodeInput } from '../design/nodes'
 import {
+  type Archetype,
   type PieceSpec,
   type PieceSpecInput,
   PieceSpecSchema,
   type StoneSpec,
 } from '../design/spec'
-import { gemDimsFromCarat } from '../domain/gems'
+import { GEM_CUTS, type GemCutId, gemDimsFromCarat } from '../domain/gems'
 import { ringInnerDiameter } from '../domain/sizes'
 
 const FACE_FRONT: [number, number, number] = [90, 0, 0]
@@ -23,6 +25,13 @@ const widthOf = (s: StoneSpec | undefined, fallback: number): number =>
     : s.carat
       ? Number(gemDimsFromCarat(s.cut, s.carat, s.stone, s.lw).width.toFixed(2))
       : (s.widthMm ?? fallback)
+
+/**
+ * The length : width a stone is built with: the spec's, or the cut's own. Always written on
+ * the gem, so the stone is the one its carat was sized for (an absent ratio would otherwise
+ * be read as square by a cut that allows square, and a 1 ct radiant would weigh 0.8 ct).
+ */
+const lwOf = (s: StoneSpec | undefined, cut: GemCutId): number => s?.lw ?? GEM_CUTS[cut].lw.default
 
 const byRole = (spec: PieceSpec, role: StoneSpec['role']) =>
   spec.stones.find((s) => s.role === role)
@@ -93,7 +102,7 @@ function ring(spec: PieceSpec): NodeInput[] {
         cut: center?.cut ?? 'round',
         stone: center?.stone ?? 'diamond',
         width: w,
-        ...(center?.lw ? { lw: center.lw } : {}),
+        lw: lwOf(center, center?.cut ?? 'round'),
         placement: { type: 'ringTop', shank: 'band', angle: 0, elevation: 1.2, spin: 0 },
       },
       {
@@ -137,6 +146,7 @@ function ring(spec: PieceSpec): NodeInput[] {
             cut: side?.cut ?? 'round',
             stone: side?.stone ?? 'diamond',
             width: sw,
+            lw: lwOf(side, side?.cut ?? 'round'),
             placement: {
               type: 'ringTop',
               shank: 'band',
@@ -188,7 +198,7 @@ function ring(spec: PieceSpec): NodeInput[] {
   return nodes
 }
 
-function pendant(spec: PieceSpec): NodeInput[] {
+function pendant(spec: PieceSpec, notes: string[]): NodeInput[] {
   const metal = {
     material: spec.metal.alloy,
     finish: spec.metal.finish,
@@ -200,7 +210,8 @@ function pendant(spec: PieceSpec): NodeInput[] {
   const nodes: NodeInput[] = []
   let host = 'body'
 
-  if (a === 'pendantSolitaire') {
+  // A solitaire or halo asked for as a pendant is the solitaire pendant (with its halo).
+  if (a === 'pendantSolitaire' || a === 'solitaire' || a === 'halo') {
     const center = byRole(spec, 'center')
     host = 'head'
     nodes.push(
@@ -211,7 +222,7 @@ function pendant(spec: PieceSpec): NodeInput[] {
         cut: center?.cut ?? 'round',
         stone: center?.stone ?? 'diamond',
         width: widthOf(center, 5),
-        ...(center?.lw ? { lw: center.lw } : {}),
+        lw: lwOf(center, center?.cut ?? 'round'),
         transform: { position: [0, 0, 0], rotation: FACE_FRONT, scale: 1 },
       },
       {
@@ -224,6 +235,19 @@ function pendant(spec: PieceSpec): NodeInput[] {
         prongCount: center?.prongs ?? 4,
       },
     )
+    if (a === 'halo') {
+      const h = byRole(spec, 'halo')
+      nodes.push({
+        id: 'halo',
+        kind: 'halo',
+        name: 'Halo',
+        ...metal,
+        around: 'center',
+        cut: 'round',
+        stone: h?.stone ?? 'diamond',
+        stoneWidth: widthOf(h, 1.3),
+      })
+    }
   } else if (a === 'namePendant') {
     nodes.push({
       id: 'body',
@@ -249,6 +273,11 @@ function pendant(spec: PieceSpec): NodeInput[] {
     })
   } else {
     // icedPendant and anything sculptural: a mesh when we have one, otherwise an outline shape.
+    // A cast body this size is hollowed to a wall that still takes the pavé's deepest seat
+    // (0.65 × the largest stone + 0.4 mm), and flat-backed so it lies against the chest: the
+    // trade scoops the back of an iced piece, or a 45 mm trophy weighs 130 g.
+    const wall = Number(Math.max(1.2, 0.65 * paveMax(spec) + 0.4).toFixed(2))
+    const sculpt = { height, flatBack: 0.5, hollow: wall }
     nodes.push(
       b?.meshAssetId
         ? {
@@ -257,8 +286,7 @@ function pendant(spec: PieceSpec): NodeInput[] {
             name: b.shape ?? 'Sculpt',
             ...metal,
             source: { type: 'asset', assetId: b.meshAssetId },
-            height,
-            flatBack: 0.35,
+            ...sculpt,
           }
         : b?.text
           ? {
@@ -279,48 +307,151 @@ function pendant(spec: PieceSpec): NodeInput[] {
               name: b?.shape ?? 'Trophy',
               ...metal,
               source: { type: 'builtin', name: 'trophy' },
-              height,
-              flatBack: 0.35,
+              ...sculpt,
             },
     )
   }
 
   const pave = byRole(spec, 'pave')
-  if (a === 'icedPendant' || pave) {
+  const ice = b?.iceLevel ?? 1
+  if ((a === 'icedPendant' || pave) && ice > 0) {
+    const sizeMax = paveMax(spec)
     nodes.push({
       id: 'ice',
       kind: 'pave',
       name: 'Pavé',
       host,
       stone: pave?.stone ?? 'diamond',
-      sizeMax: pave?.widthMm ?? 1.8,
-      sizeMin: 1,
-      coverage: b?.iceLevel ?? 1,
+      sizeMax,
+      // 1 mm and up: the 0.8 mm melee that would reach narrower parts sits too near their edges
+      // to keep a seat wall (seat.wall on the trophy rises from 11 to 17 stones).
+      sizeMin: Math.min(1, sizeMax),
+      // Half a millimetre of metal from the field's edge, so the outer seats keep their wall.
+      margin: 0.5,
+      coverage: ice,
     })
-  }
+  } else if (ice === 0 && (a === 'icedPendant' || pave))
+    notes.push('Ice level 0 leaves the piece unset, so no pavé was added.')
 
-  const chain = spec.chain
-  nodes.push({
-    id: 'bail',
-    kind: 'bail',
-    name: 'Bail',
-    ...metal,
-    host,
-    style: a === 'namePendant' ? 'ring' : 'loop',
-    opening: Math.max(3.5, (chain?.widthMm ?? 2) + 2),
-    width: a === 'icedPendant' ? 5 : 3,
-  })
-  if (chain) nodes.push(chainNode(spec, 'bail'))
+  const body = a === 'pendantSolitaire' || a === 'solitaire' || a === 'halo' ? undefined : height
+  nodes.push(
+    bailNode(
+      spec,
+      host,
+      body,
+      nodes.some((n) => n.kind === 'pave'),
+    ),
+  )
+  if (spec.chain) nodes.push(chainNode(spec, notes, 'bail'))
   return nodes
 }
 
-function chainNode(spec: PieceSpec, through?: string): NodeInput {
+/** The largest pavé stone: the spec's, or 1.3 mm, which a 1.25 mm wall seats. */
+const paveMax = (spec: PieceSpec) => byRole(spec, 'pave')?.widthMm ?? 1.3
+
+/**
+ * The bail for the pendant's chain. Its hole passes the chain's section with the 1.5 mm the
+ * kernel's bail check asks for, by the same fits the canon's `bail.opening` rule uses (holes
+ * measured on the kernel): in a ring or tube, round chain needs its width + 1.7, flat links
+ * 1.15 × width + 2, box chain its diagonal, a tennis chain the diagonal of its deeper section. A ring on fine round chain, a tube on
+ * everything heavier, and behind a paved front a hidden bail, so the top stones stay clear of
+ * it (canon `bail.chainStyle`). On a body, wire, width and opening grow with the piece, as the
+ * canon's `bail.wire` and `bail.opening` rules do, so a heavy piece is not hung on a fine wire.
+ */
+function bailNode(
+  spec: PieceSpec,
+  host: string,
+  bodyHeight: number | undefined,
+  iced: boolean,
+): NodeInput {
+  const style = spec.chain?.style ?? 'cable'
+  const w = spec.chain?.widthMm ?? 1.2
+  const round = style === 'cable' || style === 'rope'
+  const flat = !round && style !== 'box' && style !== 'tennis'
+  const hidden = iced
+  // The hidden slot is `opening` high and 0.6 of that deep: it must take the chain's width up
+  // and its thickness across (flat links half their width, a tennis box 1.25 of it).
+  const across = flat ? 0.5 * w : style === 'tennis' ? 1.25 * w : w
+  const need = hidden
+    ? Math.max(w + 1.5, (across + 1.5) / 0.6)
+    : style === 'tennis'
+      ? Math.hypot(w + 1.5, w + 2.1) + 0.2
+      : style === 'box'
+        ? 1.415 * (w + 1.5) + 0.1
+        : round
+          ? w + 1.7
+          : 1.15 * w + 2.0
+  const wire = bodyHeight ? Math.min(2.5, Math.max(1.1, 1.0 + 0.012 * bodyHeight)) : 1.1
+  const forHeight = bodyHeight && !hidden ? 0.15 * bodyHeight - 2 * wire : 0
+  // Above the fit: 0.3 mm, or 0.5 in a hidden slot, whose rounded corners take some of it.
+  const opening = Math.max(need + (hidden ? 0.5 : 0.3), forHeight)
+  return {
+    id: 'bail',
+    kind: 'bail',
+    name: 'Bail',
+    material: spec.metal.alloy,
+    finish: spec.metal.finish,
+    plating: spec.metal.plating,
+    host,
+    style: hidden ? 'hidden' : round && w <= 2 ? 'ring' : 'tube',
+    opening: Number(opening.toFixed(2)),
+    width: Number(Math.min(6, Math.max(2.5, 0.5 * opening)).toFixed(2)),
+    wire: Number(wire.toFixed(2)),
+  }
+}
+
+/**
+ * Wire for each chain style, as the kernel builds it best: thin enough that it is not thinned
+ * (no `chain.wireThinned`), and for tennis the accent prong a stone of that size takes.
+ */
+function chainWire(style: string, width: number, stone: number): number {
+  const wire =
+    style === 'cable'
+      ? width / 3.9
+      : style === 'rope'
+        ? width / 8
+        : style === 'box'
+          ? width / 5.5
+          : style === 'figaro' || style === 'curb'
+            ? 0.22 * width
+            : style === 'tennis'
+              ? Math.min(0.4 * stone, Math.max(0.8, 0.3 * stone))
+              : 0.26 * width
+  return Number(Math.max(0.3, wire).toFixed(2))
+}
+
+/** Narrowest tennis link the kernel builds, mm. */
+const TENNIS_MIN = 1.8
+
+function chainNode(spec: PieceSpec, notes: string[], through?: string): NodeInput {
   const c = spec.chain ?? {
     style: spec.archetype === 'tennis' ? ('tennis' as const) : ('cuban' as const),
     lengthMm: spec.kind === 'bracelet' ? 180 : 457,
-    widthMm: spec.archetype === 'tennis' ? 3 : 8,
+    widthMm: spec.archetype === 'tennis' ? 3.4 : 8,
   }
   const accent = byRole(spec, 'accent') ?? byRole(spec, 'pave')
+  let linkWidth = c.widthMm
+  // A tennis line is specified by its stones: the link is the stone plus its box wall (the
+  // kernel's tennis link takes a wall of half the prong wire, at least 0.4 mm). Only when the
+  // line is the piece: a pendant's accent or pavé stones are its own, not its chain's.
+  const line = through ? undefined : byRole(spec, 'accent')
+  if (c.style === 'tennis' && line?.widthMm) {
+    const prong = chainWire('tennis', 0, line.widthMm)
+    const fromStone = Number((line.widthMm + Math.max(0.4, 0.5 * prong)).toFixed(2))
+    if (Math.abs(fromStone - linkWidth) > 0.2)
+      notes.push(
+        `${line.widthMm} mm stones need ${fromStone} mm tennis links; the chain's ${linkWidth} mm was changed to match.`,
+      )
+    linkWidth = fromStone
+  }
+  // Under this the kernel's tennis box leaves no room for its hinge (the link fails to build).
+  if (c.style === 'tennis' && linkWidth < TENNIS_MIN) {
+    notes.push(
+      `Tennis links under ${TENNIS_MIN} mm cannot carry their hinge; ${TENNIS_MIN} mm links were used.`,
+    )
+    linkWidth = TENNIS_MIN
+  }
+  const stoneWidth = c.style === 'tennis' ? (line?.widthMm ?? linkWidth - 0.4) : linkWidth
   return {
     id: 'chain',
     kind: 'chain',
@@ -330,9 +461,10 @@ function chainNode(spec: PieceSpec, through?: string): NodeInput {
     plating: spec.metal.plating,
     style: c.style,
     length: c.lengthMm,
-    linkWidth: c.widthMm,
-    wire: Number(Math.max(0.4, c.widthMm * 0.26).toFixed(2)),
+    linkWidth,
+    wire: chainWire(c.style, linkWidth, stoneWidth),
     stone: accent?.stone ?? 'diamond',
+    ...(c.style === 'tennis' && line ? { cut: line.cut } : {}),
     ...(through ? { through } : {}),
   }
 }
@@ -344,14 +476,18 @@ function studs(spec: PieceSpec): NodeInput[] {
     plating: spec.metal.plating,
   }
   const center = byRole(spec, 'center')
+  const cut = center?.cut ?? 'round'
+  // A flush setting sinks the stone into a host body; a stud has none, so it gets a bezel.
+  const style = headStyle(center)
   return [
     {
       id: 'stone',
       kind: 'gem',
       name: 'Stone',
-      cut: center?.cut ?? 'round',
+      cut,
       stone: center?.stone ?? 'diamond',
       width: widthOf(center, 5),
+      lw: lwOf(center, cut),
       transform: { position: [-7, 0, 0], rotation: FACE_FRONT, scale: 1 },
     },
     {
@@ -360,7 +496,7 @@ function studs(spec: PieceSpec): NodeInput[] {
       name: 'Setting',
       ...metal,
       gem: 'stone',
-      style: headStyle(center) === 'prong' ? 'basket' : headStyle(center),
+      style: style === 'prong' ? 'basket' : style === 'flush' ? 'bezel' : style,
       prongCount: center?.prongs ?? 4,
       prongDiameter: 0.8,
     },
@@ -376,20 +512,128 @@ function studs(spec: PieceSpec): NodeInput[] {
   ]
 }
 
+/** Archetypes each kind has a recipe for; any other pairing is reported, not guessed at. */
+const RECIPES: Record<PieceKind, readonly Archetype[]> = {
+  ring: ['solitaire', 'halo', 'threeStone', 'eternity', 'band', 'signet', 'custom'],
+  pendant: [
+    'pendantSolitaire',
+    'solitaire',
+    'halo',
+    'namePendant',
+    'icedPendant',
+    'medallion',
+    'tennis',
+    'cuban',
+    'custom',
+  ],
+  necklace: [
+    'pendantSolitaire',
+    'solitaire',
+    'halo',
+    'namePendant',
+    'icedPendant',
+    'medallion',
+    'tennis',
+    'cuban',
+    'custom',
+  ],
+  earrings: ['studs', 'solitaire', 'halo', 'custom'],
+  bracelet: ['tennis', 'cuban', 'custom'],
+  chain: ['tennis', 'cuban', 'custom'],
+  brooch: ['icedPendant', 'medallion', 'namePendant', 'custom'],
+  other: [
+    'pendantSolitaire',
+    'namePendant',
+    'icedPendant',
+    'medallion',
+    'studs',
+    'tennis',
+    'cuban',
+    'custom',
+  ],
+}
+
+/** A node field's declared range, read from its schema so the numbers live in one place. */
+function rangeOf(
+  kind: NodeInput['kind'],
+  key: string,
+): { min: number; max: number; title: string } | null {
+  let field: unknown = (NODE_SCHEMAS[kind] as unknown as { shape: Record<string, unknown> }).shape[
+    key
+  ]
+  let title = key
+  while (field instanceof z.ZodDefault || field instanceof z.ZodOptional) {
+    title = (z.globalRegistry.get(field)?.title as string | undefined) ?? title
+    field = field.unwrap()
+  }
+  if (!(field instanceof z.ZodNumber)) return null
+  title = (z.globalRegistry.get(field)?.title as string | undefined) ?? title
+  return { min: field.minValue ?? -Infinity, max: field.maxValue ?? Infinity, title }
+}
+
+/**
+ * Makes the recipe total over every spec the spec schema accepts: each number copied or derived
+ * into a node is brought inside that node field's range, and each change is noted for the
+ * designer. Without this a valid spec (a 25 mm chain, a 200 mm name) fails the whole build.
+ */
+function fitNodes(nodes: NodeInput[], notes: string[]): NodeInput[] {
+  return nodes.map((node) => {
+    const out: Record<string, unknown> = { ...node }
+    for (const [key, value] of Object.entries(node)) {
+      if (typeof value !== 'number') continue
+      const range = rangeOf(node.kind, key)
+      if (!range) continue
+      const fitted = Math.min(range.max, Math.max(range.min, value))
+      if (fitted === value) continue
+      out[key] = fitted
+      notes.push(
+        `${node.name ?? node.id}: ${range.title.toLowerCase()} ${Number(value.toFixed(2))} is outside ${range.min}–${range.max}, so ${fitted} was used.`,
+      )
+    }
+    if (node.kind === 'ringShank' && node.size) {
+      const value = Math.min(80, Math.max(0, node.size.value))
+      if (value !== node.size.value) {
+        notes.push(`Ring size ${node.size.value} is outside 0–80, so ${value} was used.`)
+        out.size = { ...node.size, value }
+      }
+    }
+    // The pavé's smallest stone can never be larger than its largest.
+    if (node.kind === 'pave' && typeof out.sizeMin === 'number' && typeof out.sizeMax === 'number')
+      out.sizeMin = Math.min(out.sizeMin, out.sizeMax)
+    return out as NodeInput
+  })
+}
+
+/** What a recipe built, and what it had to change or could not do, for the designer. */
+export interface RecipeResult {
+  design: Design
+  notes: string[]
+}
+
+/** Builds the first editable design for a spec, with notes on anything adjusted. */
+export function planDesign(input: PieceSpecInput): RecipeResult {
+  const spec = PieceSpecSchema.parse(input)
+  const notes: string[] = []
+  const kind = spec.kind as PieceKind
+  const a = spec.archetype
+  let nodes: NodeInput[]
+  if (!RECIPES[kind].includes(a)) {
+    notes.push(
+      `There is no recipe for a ${kind} built as ${a}, so the design starts empty; pick an archetype made for a ${kind} (${RECIPES[kind].join(', ')}).`,
+    )
+    nodes = []
+  } else if (a === 'custom') nodes = []
+  else if (kind === 'ring') nodes = ring(spec)
+  else if (a === 'studs' || kind === 'earrings') nodes = studs(spec)
+  else if (a === 'tennis' || a === 'cuban' || kind === 'chain' || kind === 'bracelet')
+    nodes = [chainNode(spec, notes)]
+  else nodes = pendant(spec, notes)
+  return { design: designFrom(kind, fitNodes(nodes, notes)), notes }
+}
+
 /** Builds the first editable design for a spec. */
 export function buildDesign(input: PieceSpecInput): Design {
-  const spec = PieceSpecSchema.parse(input)
-  const nodes =
-    spec.kind === 'ring'
-      ? ring(spec)
-      : spec.archetype === 'studs' || spec.kind === 'earrings'
-        ? studs(spec)
-        : spec.archetype === 'tennis' || spec.archetype === 'cuban' || spec.kind === 'chain'
-          ? [chainNode(spec)]
-          : spec.archetype === 'custom'
-            ? []
-            : pendant(spec)
-  return designFrom(spec.kind as PieceKind, nodes)
+  return planDesign(input).design
 }
 
 export interface Template {
@@ -539,11 +783,11 @@ export const TEMPLATES: readonly Template[] = [
       kind: 'pendant',
       archetype: 'icedPendant',
       title: 'Iced-out trophy',
-      summary: 'A sculpted trophy, fully paved, on a Cuban link.',
+      summary: 'A hollow sculpted trophy with a pavé face, on a Cuban link.',
       style: ['hip hop', 'statement'],
       metal: { alloy: 'au14k-yellow' },
       body: { heightMm: 45, shape: 'Trophy', iceLevel: 1 },
-      stones: [{ role: 'pave', stone: 'diamond-lab', widthMm: 1.8 }],
+      stones: [{ role: 'pave', stone: 'diamond-lab', widthMm: 1.3 }],
       chain: { style: 'cuban', lengthMm: 559, widthMm: 8 },
     },
   },
@@ -558,7 +802,7 @@ export const TEMPLATES: readonly Template[] = [
       style: ['hip hop'],
       metal: { alloy: 'au14k-white', plating: 'rhodium' },
       body: { heightMm: 32, text: 'A', thicknessMm: 4, iceLevel: 1 },
-      stones: [{ role: 'pave', stone: 'moissanite', widthMm: 1.6 }],
+      stones: [{ role: 'pave', stone: 'moissanite', widthMm: 1.3 }],
       chain: { style: 'tennis', lengthMm: 508, widthMm: 3 },
     },
   },

@@ -10,6 +10,7 @@ import { BUILTINS } from '../builtin/index'
 import { type BuildContext, defineFeature, metalOf, solidFromManifold } from '../core'
 import { flatBack, flatPlacement, scaleToHeight } from '../mesh/fit'
 import { parseMesh } from '../mesh/parse/index'
+import type { HiddenSurfaces } from '../mesh/pave/region'
 import { solidPieceCount } from '../mesh/pieces'
 import { repairMesh } from '../mesh/repair'
 import { hollowBody } from '../mesh/shell'
@@ -37,8 +38,12 @@ async function sourceManifold(node: MeshBodyNode, ctx: BuildContext): Promise<Ma
     report.holes > 0 && `closed ${report.holes} hole${report.holes > 1 ? 's' : ''}`,
     report.flipped > 0 && `fixed the winding of ${report.flipped.toLocaleString('en')} triangles`,
     report.shells > 1 && `fused ${report.shells} overlapping shells`,
+    report.voids > 0 &&
+      `filled ${report.voids === 1 ? 'a sealed inner void' : `${report.voids} sealed inner voids`} (a closed cavity cannot be cast; use Hollow for one with escape holes)`,
     report.fragments > 0 &&
       `removed ${report.fragments} loose fragment${report.fragments > 1 ? 's' : ''}`,
+    report.specks > 0 &&
+      `removed ${report.specks} loose speck${report.specks > 1 ? 's' : ''} floating clear of the model`,
   ].filter(Boolean)
   if (report.resurfaced)
     ctx.report({
@@ -75,6 +80,8 @@ export const meshBody = defineFeature('meshBody', async (node, ctx) => {
   const trimmed = keep(flatBack(m, node.flatBack))
   const offset = flatPlacement(trimmed)
   let body = keep(trimmed.translate(offset))
+  // Faces pavé must leave alone: the flat back (on y = 0 after placement) and any cavity.
+  const hidden: HiddenSurfaces = { within: 0, ...(trimmed !== m && { back: 0 }) }
 
   if (node.hollow > 0) {
     // The cavity is offset from the body as it was before its back was sliced off, so a
@@ -90,6 +97,9 @@ export const meshBody = defineFeature('meshBody', async (node, ctx) => {
       })
     else {
       body = keep(hollowed.manifold)
+      // Cavity faces lie on the cut surface; the outside is at least a wall away from it.
+      hidden.cavity = hollowed.cavity
+      hidden.within = node.hollow / 2
       if (hollowed.drains > 0)
         ctx.report({
           level: 'info',
@@ -107,6 +117,17 @@ export const meshBody = defineFeature('meshBody', async (node, ctx) => {
       })
   }
 
+  // A closed sheet thinner than any casting can hold passes every topology check.
+  const box = body.boundingBox()
+  const thinnest = Math.min(...[0, 1, 2].map((k) => box.max[k]! - box.min[k]!))
+  if (thinnest < MIN_HOLLOW_WALL)
+    ctx.report({
+      level: 'warning',
+      code: 'wall.thin',
+      message: `The body is only ${thinnest < 0.01 ? thinnest.toExponential(1) : thinnest.toFixed(2)} mm thick; casting needs at least ${MIN_HOLLOW_WALL} mm of metal.`,
+      value: thinnest,
+      limit: MIN_HOLLOW_WALL,
+    })
   // Sealed voids are shells too (of negative volume); only solid pieces cast apart.
   const pieces = solidPieceCount(body)
   if (pieces > 1)
@@ -116,5 +137,8 @@ export const meshBody = defineFeature('meshBody', async (node, ctx) => {
       message: `The body is in ${pieces} separate pieces; join them so it casts as one part.`,
     })
   // The solid owns a handle of its own; `body` stays tracked and is freed with the build.
-  return { bodies: [{ solid: solidFromManifold(body.translate([0, 0, 0])), ...metalOf(node) }] }
+  return {
+    bodies: [{ solid: solidFromManifold(body.translate([0, 0, 0])), ...metalOf(node) }],
+    data: { hidden },
+  }
 })

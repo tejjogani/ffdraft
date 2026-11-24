@@ -99,7 +99,7 @@ function anchor(
   const low = path.closed ? path.at(0).point : path.at(path.length / 2).point
   if (bail && opening) {
     const hole = holeProfile(bail.bodies, opening, ctx.quality)
-    // The chain stays curved across the bail, so it sags below its seat where it leaves.
+    // The chain stays curved across the bail, so it climbs above its seat where it leaves.
     const halfSpan = Math.max(
       ...bail.bodies.flatMap((b) => {
         const { min, max } = b.solid.bounds()

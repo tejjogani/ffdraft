@@ -10,6 +10,7 @@
  */
 import type { Font, PathCommand } from 'opentype.js'
 import * as opentypeModule from 'opentype.js'
+import { gposKerning, type PairKerning } from './fonts/gposKerning'
 import type { Vec2 } from './geometry/vec'
 import { loadBundledAsset } from './runtime/host'
 
@@ -29,6 +30,8 @@ const namespace = opentypeModule as unknown as Partial<Opentype> & Record<string
 const opentype = (typeof namespace.parse === 'function' ? namespace : namespace.default) as Opentype
 
 const fonts = new Map<FontId, Promise<Font>>()
+/** GPOS pair kerning opentype.js cannot read (see fonts/gposKerning.ts), per parsed font. */
+const pairKerning = new WeakMap<Font, PairKerning>()
 
 /** Loads and parses a bundled font once. */
 export function loadFont(id: FontId): Promise<Font> {
@@ -38,7 +41,10 @@ export function loadFont(id: FontId): Promise<Font> {
       // opentype wants an ArrayBuffer that holds exactly the font.
       const copy = new Uint8Array(bytes.byteLength)
       copy.set(bytes)
-      return opentype.parse(copy.buffer)
+      const font = opentype.parse(copy.buffer)
+      const kerning = gposKerning(copy)
+      if (kerning) pairKerning.set(font, kerning)
+      return font
     })
     fonts.set(id, font)
     font.catch(() => fonts.delete(id))
@@ -137,17 +143,23 @@ export function layoutText(font: Font, text: string, size: number, tolerance = 0
   const unit = em / font.unitsPerEm
   const lineHeight = size * 1.6
   const glyphs: GlyphOutline[] = []
+  const extra = pairKerning.get(font)
   let width = 0
   text.split('\n').forEach((line, index) => {
     let pen = 0
     // One glyph per character: opentype.js cannot apply every substitution table these fonts
     // carry (contextual alternates), and engraved text does not need ligatures.
     const run = Array.from(line, (character) => font.charToGlyph(character))
+    const ids = Array.from(line, (character) => font.charToGlyphIndex(character))
     run.forEach((glyph, i) => {
       const from = pen
       pen += (glyph.advanceWidth ?? 0) * unit
       const next = run[i + 1]
-      if (next) pen += font.getKerningValue(glyph, next) * unit
+      if (next) {
+        // opentype.js reads `kern` tables and plain GPOS pairs; the rest comes from our reader.
+        const k = font.getKerningValue(glyph, next) || (extra?.(ids[i]!, ids[i + 1]!) ?? 0)
+        pen += k * unit
+      }
       const contours = contoursOf(glyph.getPath(from, index * lineHeight, em).commands, tolerance)
       if (contours.length > 0) glyphs.push({ contours, from, to: pen, line: index })
     })

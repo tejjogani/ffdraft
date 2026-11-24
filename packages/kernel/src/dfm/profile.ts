@@ -28,6 +28,8 @@ export interface DfmProfile {
   maxTriangles: number
   /** Upload limit for the STL, MB (Cooksongold: 50 MB). */
   maxStlMegabytes: number
+  /** Metal weight above which a piece is almost certainly mis-sized (g). */
+  maxMetalG: number
   /** Largest piece a caster takes, sorted smallest to largest (Cooksongold: 30 × 50 × 70 mm). */
   envelope: [number, number, number]
 }
@@ -45,6 +47,7 @@ export const DEFAULT_PROFILE: DfmProfile = {
   maxTriangles: 1_000_000,
   maxStlMegabytes: 50,
   envelope: [30, 50, 70],
+  maxMetalG: 1000,
 }
 
 /** The default profile with some values replaced. */

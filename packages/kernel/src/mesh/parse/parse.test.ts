@@ -153,3 +153,14 @@ describe('mesh import', () => {
     expect(() => parseMesh(strToU8('v 0 0 0\nf 1 2 3\n'))).toThrow(/vertex 2/)
   })
 })
+
+describe('a cut-short file', () => {
+  it('says a binary STL ends early instead of calling it an unknown format', () => {
+    const whole = binaryStl()
+    expect(() => parseMesh(whole.slice(0, 84 + 50 * 5 + 17))).toThrow(
+      /STL file ends early: it promises 12 triangles but holds 5/,
+    )
+    // Other bytes that are no mesh still get the general message.
+    expect(() => parseMesh(new Uint8Array(200).fill(0xff))).toThrow(/not a mesh format/)
+  })
+})

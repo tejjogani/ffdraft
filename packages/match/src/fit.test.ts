@@ -1,5 +1,6 @@
 import { applyOps } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
+import { boundsDiagonal, visibleBounds } from './camera'
 import { chooseDiscrete } from './choose'
 import { fitDesign } from './fit'
 import { draftKernel, template } from './kernel.testkit'
@@ -57,7 +58,7 @@ describe('pose and fit on a real kernel (draft solitaire)', () => {
     }
     const t = prepareTarget(viewFrom(e, truth, 192))
     const t0 = performance.now()
-    const r = searchPose(e, t)
+    const r = await searchPose(e, t)
     const ms = performance.now() - t0
     // The solitaire is mirror-symmetric in X and in Y: az, −az, 180 − az and 180 + az draw the same.
     const twins = [
@@ -243,7 +244,8 @@ describe('pose and fit on a real kernel (draft solitaire)', () => {
       value: params[1]!.start,
     })
     expect(byKey['band.widthTop']!.status).not.toBe('assumed')
-    expect(byKey['band.widthTop']!.sensitivity).toBeGreaterThan(0.0015)
+    expect(byKey['band.widthTop']!.status).not.toBe('weak')
+    expect(byKey['band.widthTop']!.sensitivity).toBeGreaterThan(0)
 
     // Head height: a top view barely sees it; a side or front view does.
     const [height] = paramsFor(start, ['center.placement.elevation'])
@@ -252,5 +254,123 @@ describe('pose and fit on a real kernel (draft solitaire)', () => {
     expect(ranked.find((x) => x.seed === 'side')!.gain).toBeGreaterThan(
       ranked.find((x) => x.seed === 'top')!.gain,
     )
+  })
+
+  it('marks head height weak from a top view: the camera absorbs it, so it is not observable', async () => {
+    const start = template('solitaire')
+    const params = paramsFor(start, ['band.widthTop', 'center.placement.elevation'], {
+      bands: { 'band.widthTop': [1.6, 4], 'center.placement.elevation': [0.5, 3] },
+      ties: { 'band.widthTop': ['band.widthBottom'] },
+    })
+    const e = await k.evaluate(applyOps(start, opsFor(params, [3, 2.4])).design)
+    const { diag, target } = bounds(e)
+    const cam: Camera = {
+      azimuth: 10,
+      elevation: 86,
+      roll: 0,
+      distance: diag * 10,
+      span: diag / 0.62,
+      shift: [0, 0],
+      target,
+    }
+    const input = {
+      design: start,
+      params,
+      views: [viewFrom(e, cam, 128)],
+      evaluate: k.evaluate,
+      cameras: { v: cam },
+      budget: { evaluations: 40, reserve: 6 },
+    }
+    const r = await observability(await fitDesign(input), input)
+    const byKey = Object.fromEntries(r.params.map((p) => [p.key, p]))
+    expect(['weak', 'assumed']).toContain(byKey['center.placement.elevation']!.status)
+    expect(byKey['center.placement.elevation']!.uncertainty).toBeGreaterThan(0.5)
+    expect(byKey['band.widthTop']!.status).toBe('fitted')
+    expect(Math.abs(byKey['band.widthTop']!.value - 3)).toBeLessThan(0.25)
+    expect(r.evaluations).toBeLessThanOrEqual(40)
+  })
+
+  it('hops out of the thickness and head-height valley a coordinate search stalls in', async () => {
+    // Regression: without restarts this case stopped at loss 0.026 (head height 1.95 against 2.4).
+    const start = template('solitaire')
+    const params = paramsFor(
+      start,
+      ['band.widthTop', 'center.placement.elevation', 'band.thicknessTop'],
+      {
+        bands: {
+          'band.widthTop': [1.6, 4],
+          'center.placement.elevation': [0.5, 3],
+          'band.thicknessTop': [1.3, 2.6],
+        },
+        ties: { 'band.widthTop': ['band.widthBottom'] },
+      },
+    )
+    const e = await k.evaluate(applyOps(start, opsFor(params, [3, 2.4, 2.2])).design)
+    const { diag, target } = bounds(e)
+    const cam: Camera = {
+      azimuth: 40,
+      elevation: 38,
+      roll: 0,
+      distance: diag * 10,
+      span: diag / 0.62,
+      shift: [0, 0],
+      target,
+    }
+    const r = await fitDesign({
+      design: start,
+      params,
+      views: [viewFrom(e, cam, 128)],
+      evaluate: k.evaluate,
+      cameras: { v: cam },
+    })
+    const v = Object.fromEntries(r.params.map((p) => [p.key, p.value]))
+    expect(r.loss).toBeLessThan(0.015)
+    expect(Math.abs(v['center.placement.elevation']! - 2.4)).toBeLessThan(0.3)
+    expect(Math.abs(v['band.thicknessTop']! - 2.2)).toBeLessThan(0.3)
+  })
+
+  it('a photo of a piece the recipe cannot draw ends poor, never converged', async () => {
+    // A wedding band read as a solitaire: the photo shows no stones, the recipe draws one.
+    const band = await k.evaluate(template('wedding-band'))
+    const { diag, target } = bounds(band)
+    const cam: Camera = {
+      azimuth: 40,
+      elevation: 38,
+      roll: 3,
+      distance: diag * 10,
+      span: diag / 0.62,
+      shift: [0, 0],
+      target,
+    }
+    const start = template('solitaire')
+    const r = await fitDesign({
+      design: start,
+      params: paramsFor(start, ['center.width'], { bands: { 'center.width': [5, 9] } }),
+      views: [viewFrom(band, cam, 96)],
+      evaluate: k.evaluate,
+      budget: { evaluations: 8 },
+    })
+    expect(r.quality).toBe('poor')
+    expect(r.stopped).not.toBe('converged')
+    expect(r.diagnostics.map((d) => d.code)).toContain('match.poorFit')
+  })
+
+  it('finds a photo turned by 90 degrees', async () => {
+    const e = await k.evaluate(template('pendant-solitaire'))
+    const hide = ['chain']
+    const b = visibleBounds(e, hide)
+    const diag = boundsDiagonal(b)
+    const truth: Camera = {
+      azimuth: 40,
+      elevation: 38,
+      roll: 90,
+      distance: diag * 10,
+      span: diag / 0.62,
+      shift: [0, 0],
+      target: [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2],
+    }
+    const r = await searchPose(e, prepareTarget(viewFrom(e, truth, 192, 'v', hide)), { hide })
+    expect(r.found).toBe(true)
+    expect(r.score.iou).toBeGreaterThan(0.95)
   })
 })

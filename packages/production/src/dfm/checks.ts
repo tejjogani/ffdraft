@@ -97,8 +97,19 @@ export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmRepor
       .filter((d) => prefixes.some((p) => d.code.startsWith(p)))
       .map(fromDiagnostic)
   const nodes = design.order.map((id) => design.nodes[id]!).filter(Boolean)
-  // Identical repeated bodies (a chain's links) are checked once, through their first body.
-  const measured = ctx.groups.flatMap((g) => (g.identical ? [g.parts[0]!] : g.parts))
+  // A chain (by node kind, or many identical links) is a component made or bought apart: its
+  // links are separate shells by design, it is never in the flask with the piece, and its wire
+  // has its own rule. The casting checks below leave it out.
+  const chainNodes = new Set(nodes.filter((n) => n.kind === 'chain').map((n) => n.id))
+  const chainGroups = new Set(
+    ctx.groups
+      .filter((g) => chainNodes.has(g.key) || (g.identical && g.count > 8))
+      .map((g) => g.key),
+  )
+  // Identical repeated bodies are checked once, through their first body.
+  const measured = ctx.groups
+    .filter((g) => !chainGroups.has(g.key))
+    .flatMap((g) => (g.identical ? [g.parts[0]!] : g.parts))
   const bvhs = new Map<string, TriangleBVH>()
   const bvhOf = (part: Part) => {
     let b = bvhs.get(part.id)
@@ -151,7 +162,7 @@ export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmRepor
         })
       const solids = t.shellVolumes.filter((v) => v > SHELL_EPS).length
       const fragments = t.shellVolumes.filter((v) => Math.abs(v) <= SHELL_EPS).length
-      if (solids > s.bodies)
+      if (solids > s.bodies && !chainGroups.has(s.nodeId))
         f.push({
           ...base,
           severity: 'error',
@@ -260,7 +271,7 @@ export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmRepor
 
   // ── Wall thickness (measured) ──
   const thickness: Record<string, ThicknessReport> = {}
-  const inPaveZone = paveZones(evaluation.stones)
+  const inPaveZone = stoneZones(evaluation.stones)
   {
     const f: Finding[] = []
     for (const part of measured) {
@@ -268,13 +279,16 @@ export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmRepor
       const r = wallThickness(tris, bvhOf(part), { threshold: P.wall.warnMm, exclude: inPaveZone })
       thickness[part.id] = r
       // A region needs two readings: a single ray can graze a seat edge or a sliver facet.
-      for (const g of r.regions.filter((g) => g.samples >= 2)) {
+      // One finding per part, at its thinnest region, with how many thin regions it has.
+      const thin = r.regions.filter((g) => g.samples >= 2)
+      if (thin.length > 0) {
+        const g = thin.reduce((a, b) => (b.thicknessMm < a.thicknessMm ? b : a))
         const severity: Severity = g.thicknessMm < P.wall.errorMm ? 'error' : 'warning'
         f.push({
           source: 'pave',
           severity,
           code: 'wall.thin',
-          message: `${part.name}: wall ${mm(g.thicknessMm)} near (${g.at.map((v) => v.toFixed(1)).join(', ')}) — ${g.samples} thin readings`,
+          message: `${part.name}: wall ${mm(g.thicknessMm)} near (${g.at.map((v) => v.toFixed(1)).join(', ')})${thin.length > 1 ? ` — thinnest of ${thin.length} thin regions` : ''}`,
           value: round3(g.thicknessMm),
           limit: severity === 'error' ? P.wall.errorMm : P.wall.warnMm,
           unit: 'mm',
@@ -310,7 +324,7 @@ export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmRepor
       'Wall thickness',
       `< ${P.wall.errorMm} mm error; < ${P.wall.warnMm} mm warn; ring shank < ${P.wall.ringShankWarnMm} mm warn`,
       f,
-      `Sampled inward ray casts on each casting mesh (deterministic)${skipped ? '; pavé seat zones are left to the seat, bead and border rules' : ''}.`,
+      `Sampled inward ray casts on each casting mesh (deterministic)${skipped ? '; metal at the stones (claws, bezels, seats, beads) is left to the prong, bezel, seat, bead and border rules' : ''}.`,
     )
   }
 
@@ -781,17 +795,22 @@ export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmRepor
 }
 
 /**
- * Points within a pavé stone's seat zone (girdle radius + 0.35 mm of its centre): beads and seat
- * walls there are governed by the bead, seat and border rules, not the structural wall rule.
+ * Points in the metal that holds a stone: within a pavé stone's seat zone (girdle radius +
+ * 0.35 mm), or around any other stone where its claws, bezel or basket rails are (girdle radius
+ * + 1 mm). That metal is governed by the prong, bezel, seat, bead and border rules — a claw is
+ * meant to be a slender wire — not by the structural wall rule.
  */
-function paveZones(stones: readonly StoneInstance[]): (x: number, y: number, z: number) => boolean {
-  const melee = stones.filter((s) => s.role === 'melee' || s.setting === 'pave')
-  if (!melee.length) return () => false
-  const cell = 2
+function stoneZones(
+  stones: readonly StoneInstance[],
+): (x: number, y: number, z: number) => boolean {
+  if (!stones.length) return () => false
+  const reach = (s: StoneInstance) =>
+    s.dims.width / 2 + (s.role === 'melee' || s.setting === 'pave' ? 0.35 : 1)
+  const cell = stones.reduce((c, s) => Math.max(c, 2 * reach(s)), 2)
   const grid = new Map<string, StoneInstance[]>()
   const key = (x: number, y: number, z: number) =>
     `${Math.floor(x / cell)},${Math.floor(y / cell)},${Math.floor(z / cell)}`
-  for (const s of melee) {
+  for (const s of stones) {
     const k = key(s.matrix[12]!, s.matrix[13]!, s.matrix[14]!)
     grid.set(k, [...(grid.get(k) ?? []), s])
   }
@@ -802,9 +821,7 @@ function paveZones(stones: readonly StoneInstance[]): (x: number, y: number, z: 
           const list = grid.get(key(x + i * cell, y + j * cell, z + k * cell))
           if (
             list?.some(
-              (s) =>
-                Math.hypot(x - s.matrix[12]!, y - s.matrix[13]!, z - s.matrix[14]!) <
-                s.dims.width / 2 + 0.35,
+              (s) => Math.hypot(x - s.matrix[12]!, y - s.matrix[13]!, z - s.matrix[14]!) < reach(s),
             )
           )
             return true

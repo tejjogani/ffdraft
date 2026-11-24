@@ -42,6 +42,18 @@ export const QUALITY = {
   production: { chord: 0.005, angle: 0.3 },
 } as const satisfies Record<string, Quality>
 
+/**
+ * The chord tolerance never asks for more than one part in 10 000 of the body's size: a 0.005 mm
+ * chord is right for a ring but would mesh a 200 mm sculpture (or a mistyped 1 km sphere) into
+ * tens of millions of triangles. Bodies under 50 mm across are unaffected.
+ */
+const RELATIVE_CHORD = 1e-4
+function relativeQuality(quality: Quality, box: Bounds): Quality {
+  const size = Math.hypot(box.max[0] - box.min[0], box.max[1] - box.min[1], box.max[2] - box.min[2])
+  const chord = Math.max(quality.chord, size * RELATIVE_CHORD)
+  return chord === quality.chord ? quality : { ...quality, chord }
+}
+
 interface Level {
   surface?: SurfaceMesh
   manifold?: Manifold
@@ -137,6 +149,11 @@ class SolidImpl implements Solid {
 
   get exact(): boolean {
     return this.shape !== null || this.recipe?.brep !== undefined
+  }
+
+  /** Backed by a Manifold, which cannot hold an open or non-manifold surface. */
+  get closedByConstruction(): boolean {
+    return this.native !== null
   }
 
   brep(): Shape3D | null {
@@ -291,7 +308,7 @@ class SolidImpl implements Solid {
     else {
       const shape = this.brep()
       if (!shape) throw new Error('Solid has neither a B-rep nor a mesh')
-      const mesh = tessellateShape(shape, quality)
+      const mesh = tessellateShape(shape, relativeQuality(quality, this.bounds()))
       const welded = weld(mesh.positions, mesh.indices)
       level.surface = welded
       // Keep the kernel's surface normals for display; creases come from the welded mesh.
@@ -300,6 +317,10 @@ class SolidImpl implements Solid {
     return level.surface
   }
 }
+
+/** True for solids that are a Manifold already, so checking their surface would be wasted work. */
+export const isClosedByConstruction = (solid: Solid): boolean =>
+  solid instanceof SolidImpl && solid.closedByConstruction
 
 /** Wraps an exact B-rep. The solid owns the shape from here on. */
 export const solidFromBrep = (shape: Shape3D): Solid => new SolidImpl(shape, null, null)

@@ -155,4 +155,25 @@ describe('mesh repair', () => {
     })
     expect(() => repairMesh(soup(disc))).toThrow(/enclose a volume/)
   })
+
+  it('removes a closed crumb floating clear of the model, so it cannot set the size', () => {
+    // A 0.4 mm crumb 10 mm above a 20 mm sphere: kept, it would make the model 40 mm tall.
+    const { manifold, report } = repairMesh(
+      soup([...sphereSoup(10), ...sphereSoup(0.2, 8, 8, [0, 0, 20])]),
+    )
+    expect(report.specks).toBe(1)
+    expect(manifold.decompose().length).toBe(1)
+    const box = manifold.boundingBox()
+    expect(box.max[2] - box.min[2]).toBeCloseTo(20, 1)
+    manifold.delete()
+  })
+
+  it('names a sealed inner void it fills, rather than calling it a winding fix', () => {
+    // A 10 mm sphere with a correctly wound (inward) 3 mm void inside.
+    const { manifold, report } = repairMesh(soup([...sphereSoup(10), ...sphereSoup(3).map(flip)]))
+    expect(report.voids).toBe(1)
+    expect(report.flipped).toBe(0)
+    expect(report.shells).toBe(0)
+    manifold.delete()
+  })
 })

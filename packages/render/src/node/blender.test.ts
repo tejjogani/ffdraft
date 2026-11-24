@@ -86,3 +86,65 @@ describe.skipIf(!capability.available)('renderWithBlender', () => {
     await expect(job).rejects.toThrow(/aborted/)
   }, 60_000)
 })
+
+// Cancellation against a stand-in worker (a script that ignores SIGTERM and "renders" for ten
+// minutes), so it runs without Blender. POSIX only: it relies on a shebang and signals.
+describe.skipIf(process.platform === 'win32')('cancelling a render', () => {
+  const fake = async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'pave-render-cancel-'))
+    const script = join(dir, 'fake-worker')
+    const marker = join(dir, 'started')
+    const { writeFile, chmod } = await import('node:fs/promises')
+    await writeFile(
+      script,
+      `#!/usr/bin/env python3\nimport signal, time\nopen(${JSON.stringify(marker)}, 'w').write('1')\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\ntime.sleep(600)\n`,
+    )
+    await chmod(script, 0o755)
+    return { dir, script, marker }
+  }
+  const job = (script: string, outDir: string, signal: AbortSignal, timeoutMs?: number) =>
+    renderWithBlender({
+      resolved: {} as never,
+      glb: new Uint8Array(),
+      outDir,
+      pythonPath: script,
+      signal,
+      ...(timeoutMs ? { timeoutMs } : {}),
+    })
+  const exists = (path: string) =>
+    readFile(path).then(
+      () => true,
+      () => false,
+    )
+
+  it('never starts a process for a job cancelled before it starts', async () => {
+    const { dir, script, marker } = await fake()
+    const controller = new AbortController()
+    controller.abort()
+    await expect(job(script, join(dir, 'out'), controller.signal)).rejects.toThrow(/abort/i)
+    await new Promise((r) => setTimeout(r, 300))
+    expect(await exists(marker)).toBe(false)
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('kills a process that ignores SIGTERM, on abort and on timeout', async () => {
+    for (const how of ['abort', 'timeout'] as const) {
+      const { dir, script, marker } = await fake()
+      const controller = new AbortController()
+      const started = performance.now()
+      const running = job(
+        script,
+        join(dir, 'out'),
+        controller.signal,
+        how === 'timeout' ? 1000 : undefined,
+      )
+      for (let i = 0; i < 50 && !(await exists(marker)); i++)
+        await new Promise((r) => setTimeout(r, 100))
+      if (how === 'abort') controller.abort()
+      await expect(running, how).rejects.toThrow(how === 'abort' ? /aborted/ : /timed out/)
+      // SIGTERM, then SIGKILL after the grace period: settled well before the 10-minute sleep.
+      expect(performance.now() - started, how).toBeLessThan(15_000)
+      await rm(dir, { recursive: true, force: true })
+    }
+  }, 40_000)
+})

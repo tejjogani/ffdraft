@@ -48,7 +48,13 @@ export interface Manifest {
     count: number
     fineness: number
     densityGcm3: number
+    /** Design volume: exact solids where the design is parametric. */
     volumeMm3: number
+    /**
+     * Volume enclosed by the STL that ships, which a caster's software measures: the facets cut
+     * a little inside curved surfaces, so it is slightly less than the design volume.
+     */
+    fileVolumeMm3: number
     areaMm2: number
     triangles: number
     netWeightG: number
@@ -145,6 +151,7 @@ export async function buildManifest(
         fineness: METALS[p.material].fineness,
         densityGcm3: METALS[p.material].density,
         volumeMm3: r(g.volumeMm3, 3),
+        fileVolumeMm3: r(s?.topology.shellVolumes.reduce((t, v) => t + v, 0) ?? g.volumeMm3, 3),
         areaMm2: r(
           g.parts.reduce((t, x) => t + x.areaMm2, 0),
           2,

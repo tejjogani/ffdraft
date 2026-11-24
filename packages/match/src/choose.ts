@@ -1,7 +1,7 @@
 /**
  * Discrete choices (prong count, head style, cut) are settled by building each candidate and
  * fitting it, never by a model's word alone (plan §7). The winner is "decided" only with a clear
- * margin; otherwise the choice goes to the jeweler as a question.
+ * margin and a fit at or above the floor; otherwise the choice goes to the jeweler as a question.
  */
 import { applyOps, type Op } from '@pave/schema'
 import { fitDesign } from './fit'
@@ -46,11 +46,17 @@ export async function chooseDiscrete(
       const base = applyOps(i.design, s.ops).design
       const values = new Map(r.params.map((p) => [p.key, p.value]))
       const params = i.params.map((p) => ({ ...p, start: values.get(p.key) ?? p.start }))
+      // Only fitted views' cameras carry over: a held-out camera was searched on the screening
+      // build alone and must be searched again on the finished one.
+      const fittedIds = new Set(i.views.filter((v) => !v.heldOut).map((v) => v.id))
+      const carried = Object.fromEntries(
+        Object.entries(r.cameras).filter(([id]) => fittedIds.has(id)),
+      )
       const more = await fitDesign({
         ...i,
         design: base,
         params,
-        cameras: { ...r.cameras, ...i.cameras },
+        cameras: { ...carried, ...i.cameras },
         budget: { ...i.budget, evaluations: Math.max(1, total - r.evaluations) },
       })
       r = {
@@ -67,6 +73,9 @@ export async function chooseDiscrete(
   return {
     ranked: finished,
     margin,
-    decided: margin >= DECIDE_MARGIN && Number.isFinite(finished[0]!.loss),
+    decided:
+      margin >= DECIDE_MARGIN &&
+      Number.isFinite(finished[0]!.loss) &&
+      finished[0]!.result.quality === 'good',
   }
 }

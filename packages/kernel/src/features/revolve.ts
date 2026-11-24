@@ -29,10 +29,56 @@ function profileEdges(path: SubPath): Edge[] {
   return edges
 }
 
+/** The profile as a polygon in the half-plane it is turned in (Béziers sampled). */
+function outline(path: SubPath): Vec2[] {
+  const points: Vec2[] = []
+  for (const segment of path.segments) {
+    const [p0, p1, p2, p3] = segment.points
+    if (segment.type === 'line') points.push([Math.max(0, p0[0]), p0[1]])
+    else
+      for (let i = 0; i < 8; i++) {
+        const t = i / 8
+        const u = 1 - t
+        const at = (k: 0 | 1) =>
+          u * u * u * p0[k] + 3 * u * u * t * p1![k] + 3 * u * t * t * p2![k] + t * t * t * p3![k]
+        points.push([Math.max(0, at(0)), at(1)])
+      }
+  }
+  return points
+}
+
+const cross = (o: Vec2, a: Vec2, b: Vec2) =>
+  (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+/**
+ * Rejects profiles OpenCascade would turn into an open or self-intersecting surface without
+ * complaint, with a reason the designer can act on.
+ */
+function checkProfile(path: SubPath): void {
+  const ring = outline(path)
+  // Crossings first: the two lobes of a bow-tie cancel, so it would read as "no area".
+  const n = ring.length
+  for (let i = 0; i < n; i++)
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue
+      const [a, b, c, d] = [ring[i]!, ring[(i + 1) % n]!, ring[j]!, ring[(j + 1) % n]!]
+      if (cross(a, b, c) * cross(a, b, d) < 0 && cross(c, d, a) * cross(c, d, b) < 0)
+        throw new Error('the profile crosses itself; reorder its points so the outline does not')
+    }
+  let area = 0
+  ring.forEach((p, i) => {
+    area += cross([0, 0], p, ring[(i + 1) % ring.length]!)
+  })
+  const size = Math.max(...ring.flat().map(Math.abs), 1)
+  if (Math.abs(area) / 2 < 1e-6 * size * size)
+    throw new Error('the profile encloses no area (its points lie on one line, or on the axis)')
+}
+
 export const revolve = defineFeature('revolve', (node, ctx) => {
   const paths = parsePathData(node.profile)
   if (paths.length === 0) throw new Error('the profile is empty')
   const bodies = paths.map((path) => {
+    checkProfile(path)
     const edges = profileEdges(path).map((e) => ctx.track(e))
     if (edges.length < 2)
       throw new Error('the profile needs at least two segments to enclose an area')

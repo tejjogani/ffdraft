@@ -46,7 +46,7 @@ export function sizeChecks(scene: Scene, profile: DfmProfile): Diagnostic[] {
           )
         break
       }
-      case 'finding':
+      case 'finding': {
         if (node.type === 'earringPost' && node.wire < profile.postWire.warn)
           thin(
             node.wire < profile.postWire.error ? 'error' : 'warning',
@@ -55,12 +55,12 @@ export function sizeChecks(scene: Scene, profile: DfmProfile): Diagnostic[] {
             node.wire,
             profile.postWire.warn,
           )
-        if (
-          (node.type === 'jumpRing' || node.type === 'lobsterClasp') &&
-          node.wire < profile.ringWire
-        )
-          thin('warning', 'ring.thin', 'The ring wire', node.wire, profile.ringWire)
+        // A jump ring is built with at most a third of its diameter in wire: check what is built.
+        const ring = node.type === 'jumpRing' ? Math.min(node.wire, node.length / 3) : node.wire
+        if ((node.type === 'jumpRing' || node.type === 'lobsterClasp') && ring < profile.ringWire)
+          thin('warning', 'ring.thin', 'The ring wire', ring, profile.ringWire)
         break
+      }
       case 'bail':
         if (node.wire < profile.bailWire)
           thin('warning', 'bail.thin', 'The bail wire', node.wire, profile.bailWire)

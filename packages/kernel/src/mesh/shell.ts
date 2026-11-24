@@ -8,7 +8,9 @@
  */
 import type { Manifold } from 'manifold-3d'
 import { runtime } from '../runtime/index'
+import type { IndexedTriangles } from '../solid/meshing'
 import { trianglesFromManifold } from '../solid/solid'
+import { dropSpecks } from './pieces'
 import { distanceGrid, levelSetOf } from './sdf'
 
 const DRAIN_RADIUS = 1
@@ -22,11 +24,22 @@ const MAX_CELLS = 160
 
 /** Cavity pieces smaller than this (mm³) are specks where the inset barely opens, not hollows. */
 const MIN_CAVITY = 1
+/**
+ * The cavity is never seen, so its level-set mesh (hundreds of thousands of triangles on a
+ * 40 mm piece) is thinned to this share of the wall before it is cut. The inset grows by the
+ * same amount, so the thinned cavity never comes closer to the outside than the wall asked for.
+ */
+const CAVITY_TOLERANCE = 0.1
 
 export interface Hollowed {
   manifold: Manifold
   /** Escape holes drilled through the back (none where a cavity opens through a flat back). */
   drains: number
+  /**
+   * The surface that was cut away (cavities and their escape holes), in the body's space. Every
+   * face of the result that lies on it is inside the piece: pavé must leave those faces alone.
+   */
+  cavity: IndexedTriangles
 }
 
 /**
@@ -46,8 +59,13 @@ export function hollowBody(body: Manifold, envelope: Manifold, wall: number): Ho
     band: wall + 3 * spacing,
     votes: 1,
   })
-  // Interpolation can pull the iso-surface up to ~¼ cell toward the outside; keep walls ≥ wall.
-  const inset = levelSetOf(grid, wall + spacing / 4)
+  // Interpolation can pull the iso-surface up to ~¼ cell toward the outside, and thinning the
+  // cavity moves it by up to its tolerance; keep walls ≥ wall.
+  const level = levelSetOf(grid, wall * (1 + CAVITY_TOLERANCE) + spacing / 4)
+  // Thinned before anything is decided from it: thinning later could close a cavity's opening
+  // through the flat back, leaving a sealed void that was meant to be a scoop.
+  const inset = level.simplify(wall * CAVITY_TOLERANCE)
+  level.delete()
   const pieces = inset.decompose()
   inset.delete()
   const owned: Manifold[] = [...pieces]
@@ -70,12 +88,12 @@ export function hollowBody(body: Manifold, envelope: Manifold, wall: number): Ho
     if (tools.length === 0) return null
     const tool = mf.Manifold.union(tools)
     owned.push(tool)
-    const result = body.subtract(tool)
+    const result = dropSpecks(body.subtract(tool))
     if (result.isEmpty() || result.volume() >= body.volume()) {
       result.delete()
       return null
     }
-    return { manifold: result, drains }
+    return { manifold: result, drains, cavity: trianglesFromManifold(tool) }
   } finally {
     for (const m of owned) m.delete()
   }

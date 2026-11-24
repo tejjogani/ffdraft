@@ -6,7 +6,7 @@ import type { IndexedTriangles } from '../../solid/meshing'
 import { isGlb, parseGlb } from './glb'
 import { looksLikeObj, parseObj } from './obj'
 import { looksLikePly, parsePly } from './ply'
-import { isBinaryStl, looksLikeAsciiStl, parseStl } from './stl'
+import { isBinaryStl, looksLikeAsciiStl, parseStl, truncatedStl } from './stl'
 import { headText } from './text'
 import { isZip, parse3mf } from './threemf'
 
@@ -34,6 +34,11 @@ const PARSERS: Record<MeshFormat, (bytes: Uint8Array) => IndexedTriangles> = {
 export function parseMesh(bytes: Uint8Array): { mesh: IndexedTriangles; format: MeshFormat } {
   const format = sniffMeshFormat(bytes)
   if (!format) {
+    const cut = truncatedStl(bytes)
+    if (cut)
+      throw new Error(
+        `The STL file ends early: it promises ${cut.promised.toLocaleString('en')} triangles but holds ${cut.present.toLocaleString('en')}. Export or download it again.`,
+      )
     const head = headText(bytes, 64).trimStart()
     throw new Error(
       head.startsWith('{')

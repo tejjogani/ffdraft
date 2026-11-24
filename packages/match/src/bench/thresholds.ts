@@ -4,7 +4,19 @@
  * floors: a miss is a finding to report, not a number to relax. A floor changes only with a
  * written reason here.
  *
- * Changes to floors: none yet.
+ * Changes to floors:
+ * - 2026-11-24, camera direction: the plan's degree floor (median ≤ 2°, worst ≤ 5°) is measured
+ *   as a reprojection instead, because an angle cannot tell a symmetric twin from a miss (it
+ *   reported 16.9° for an eternity ring that overlaps at 0.956, and cannot handle a plain band).
+ *   Converted by measurement (solitaire, plain band and eternity at the benchmark's framing): a 1°
+ *   turn reads 0.1 to 0.23 %, 15° reads 0.8 to 1.3 % (nearest-point distances saturate as points
+ *   slide along the piece), so 2° ≈ 0.3 % and 5° ≈ 0.8 %: median ≤ 0.3 %, worst ≤ 0.8 % of the side.
+ * - 2026-11-24, status honesty: `clamped` numbers count beside `fitted` ones (a number clamped at
+ *   the wrong bound was left out before), and numbers marked `weak` count as not measured, like
+ *   `assumed`. The top-only check of the plan (head height assumed in top-only cases) is added.
+ *
+ * Every floor is judged only on the cases run. "floor met" on the six pull-request cases says
+ * nothing about the grid; `recipeTable` and a grid run say per recipe what misses.
  */
 import type { CaseResult } from './run'
 
@@ -28,8 +40,14 @@ const min = (xs: number[]) => (xs.length ? Math.min(...xs) : Number.NaN)
 const f = (x: number, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : 'n/a')
 const pct = (n: number, d: number) => (d ? `${((n / d) * 100).toFixed(0)} %` : 'n/a')
 
+/** Statuses that claim a measurement: the number is reported as read from the photos. */
+const MEASURED = new Set(['fitted', 'clamped'])
+/** Statuses that say "not observable from these photos". */
+const UNSEEN = new Set(['assumed', 'weak'])
+
 export function checkThresholds(all: CaseResult[]): Check[] {
-  const ok = all.filter((r) => !r.threw)
+  const ok = all.filter((r) => !r.threw && r.level !== 'misspec')
+  const misspec = all.filter((r) => !r.threw && r.level === 'misspec')
   const clean = ok.filter((r) => r.level === 'clean')
   const one = clean.filter((r) => r.viewSet === 'one')
   const two = clean.filter((r) => r.viewSet === 'two')
@@ -53,14 +71,14 @@ export function checkThresholds(all: CaseResult[]): Check[] {
       cases: cases.length,
     })
 
-  const cam = one.map((r) => r.cameraErrDeg).filter((x): x is number => x !== null)
+  const cam = one.map((r) => r.reprojPct).filter((x): x is number => x !== null)
   add(
-    'Camera direction, one view (deg)',
+    'Camera reprojection, one view (% of side)',
     one,
-    `median ${f(median(cam), 1)}, worst ${f(max(cam), 1)}`,
-    'median ≤ 2, worst ≤ 5',
-    'median ≤ 1',
-    median(cam) <= 2 && max(cam) <= 5,
+    `median ${f(median(cam), 2)}, worst ${f(max(cam), 2)}`,
+    'median ≤ 0.3, worst ≤ 0.8 (from 2°, 5°)',
+    'median ≤ 0.15',
+    median(cam) <= 0.3 && max(cam) <= 0.8,
   )
 
   const disc = clean.filter((r) => r.discrete)
@@ -92,9 +110,9 @@ export function checkThresholds(all: CaseResult[]): Check[] {
     'median ≤ 0.1, worst ≤ 0.3',
     median(inPlane) <= 0.15 && max(inPlane) <= 0.6,
   )
-  const depth = sizes(one, (p) => p.depthLike && p.status !== 'assumed')
+  const depth = sizes(one, (p) => p.depthLike && !UNSEEN.has(p.status))
   add(
-    'Depth-like sizes, one view, not marked assumed (mm)',
+    'Depth-like sizes, one view, not marked assumed or weak (mm)',
     one,
     `median ${f(median(depth))}, worst ${f(max(depth))}`,
     'median ≤ 0.5, worst ≤ 1.0',
@@ -233,15 +251,87 @@ export function checkThresholds(all: CaseResult[]): Check[] {
     max(perCand) <= 250 && max(rpv) <= 12_000,
   )
 
-  const fitted = ok.flatMap((r) => r.params.filter((p) => p.status === 'fitted'))
+  const fitted = ok.flatMap((r) => r.params.filter((p) => MEASURED.has(p.status)))
   const honest = fitted.filter((p) => p.errMm <= 0.6).length
   add(
-    'Status honesty: numbers marked fitted within 0.6 mm',
+    'Status honesty: numbers marked fitted or clamped within 0.6 mm',
     ok,
-    pct(honest, fitted.length),
-    '≥ 90 % (unmeasured)',
+    `${pct(honest, fitted.length)} of ${fitted.length}`,
+    '≥ 90 %',
     '≥ 95 %',
     honest >= 0.9 * fitted.length,
   )
+  const top = ok.filter((r) => r.viewSet === 'top')
+  const heights = top.flatMap((r) => r.params.filter((p) => p.key === 'center.placement.elevation'))
+  const hidden = heights.filter((p) => UNSEEN.has(p.status)).length
+  add(
+    'Status honesty: head height assumed or weak in top-only cases',
+    top.filter((r) => r.params.some((p) => p.key === 'center.placement.elevation')),
+    `${pct(hidden, heights.length)} of ${heights.length}`,
+    '≥ 90 %',
+    '',
+    hidden >= 0.9 * heights.length,
+  )
+  // Reported only: how much the photos could not see, per view set.
+  const unseen = (rs: CaseResult[]) => {
+    const ps = rs.flatMap((r) => r.params.filter((p) => p.status !== 'pinned'))
+    return `${ps.filter((p) => UNSEEN.has(p.status)).length} of ${ps.length}`
+  }
+  out.push({
+    measure: 'Not observable (assumed or weak): one / two / top views',
+    value: `${unseen(ok.filter((r) => r.viewSet === 'one'))} / ${unseen(ok.filter((r) => r.viewSet === 'two'))} / ${unseen(top)}`,
+    floor: 'reported',
+    target: '',
+    pass: null,
+    cases: ok.length,
+  })
+  const poor = ok.filter((r) => r.quality !== 'good').length
+  out.push({
+    measure: 'Fits reported poor or failed (closed-world levels)',
+    value: `${poor} of ${ok.length}`,
+    floor: 'reported',
+    target: '',
+    pass: null,
+    cases: ok.length,
+  })
+  if (misspec.length) {
+    const mFitted = misspec.flatMap((r) => r.params.filter((p) => MEASURED.has(p.status)))
+    const mHonest = mFitted.filter((p) => p.errMm <= 0.6).length
+    const flagged = misspec.filter((r) => r.quality !== 'good').length
+    const mSizes = sizes(misspec, (p) => MEASURED.has(p.status))
+    out.push({
+      measure: 'misspec: poor or failed; measured within 0.6 mm; worst measured size; worst weight',
+      value: `${flagged} of ${misspec.length}; ${pct(mHonest, mFitted.length)} of ${mFitted.length}; ${f(max(mSizes))} mm; ${f(max(misspec.map((r) => r.weightErrPct)), 1)} %`,
+      floor: 'reported',
+      target: 'measured within 0.6 mm ≥ 90 %',
+      pass: null,
+      cases: misspec.length,
+    })
+  }
   return out
+}
+
+/**
+ * The plan's speed floors, from timings the CLI takes: one render plus score at 192 px of a piece
+ * of about 10k triangles, and a camera search from scratch. Wall time on a shared machine.
+ */
+export function speedChecks(renderMs: number, poseMs: number, triangles: number): Check[] {
+  return [
+    {
+      measure: `Speed: render plus score, 192 px, ${triangles} triangles (ms)`,
+      value: f(renderMs, 2),
+      floor: '≤ 4',
+      target: '',
+      pass: renderMs <= 4,
+      cases: 1,
+    },
+    {
+      measure: 'Speed: camera search from scratch (s)',
+      value: f(poseMs / 1000, 1),
+      floor: '≤ 4',
+      target: '',
+      pass: poseMs <= 4000,
+      cases: 1,
+    },
+  ]
 }

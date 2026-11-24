@@ -12,6 +12,7 @@ import { boundsOfPositions, type IndexedTriangles } from '../solid/meshing'
 import { manifoldFromTriangles } from '../solid/solid'
 import { fillHoles } from './fill'
 import { orientOutward } from './orient'
+import { keepPieces } from './pieces'
 import { NO_VOLUME, resurface } from './resurface'
 import { edgeTopology, triangleComponents } from './topology'
 import { compact, weldWithin } from './weld'
@@ -27,6 +28,10 @@ export interface RepairReport {
   shells: number
   /** Small loose open pieces (stray faces, fins) removed. */
   fragments: number
+  /** Tiny closed crumbs floating clear of the model, removed. */
+  specks: number
+  /** Sealed voids inside the model, filled (a closed cavity cannot be cast). */
+  voids: number
   /** The surface was rebuilt from a distance field (detail finer than the grid is lost). */
   resurfaced: boolean
 }
@@ -48,6 +53,8 @@ export function repairMesh(soup: IndexedTriangles): { manifold: Manifold; report
     flipped: 0,
     shells: 0,
     fragments: 0,
+    specks: 0,
+    voids: 0,
     resurfaced: false,
   }
   const inputVertices = soup.positions.length / 3
@@ -78,16 +85,46 @@ export function repairMesh(soup: IndexedTriangles): { manifold: Manifold; report
   }
   const fused = fuseShells(manifold)
   report.shells = fused.shells
+  // A void wound inward is turned outward with every other shell and then swallowed by the
+  // shell around it: say so, rather than calling it a winding fix.
+  report.voids = Math.min(first.inverted, fused.swallowed)
+  if (report.voids > 0) {
+    // Fusing one shell with nothing is no fusing at all.
+    const overlapping = report.shells - report.voids
+    report.shells = overlapping > 1 ? overlapping : 0
+    // Every inside-out shell was a void: its triangles were never wrongly wound.
+    if (report.voids === first.inverted) report.flipped -= first.invertedTriangles
+  }
+  // Shells left apart after the union do not touch. A crumb among them would join the bounds
+  // that set the overall height, so the model would be built at the wrong size.
+  const before = fused.manifold.decompose()
+  const count = before.length
+  for (const piece of before) piece.delete()
+  const cleaned = keepPieces(fused.manifold, (volume, largest) => volume >= SPECK * largest)
+  report.specks = count - (cleaned === fused.manifold ? count : pieceCount(cleaned))
+  // A crumb that never touched the model was not an overlapping shell either.
+  if (report.specks > 0) {
+    const overlapping = report.shells - report.specks
+    report.shells = overlapping > 1 ? overlapping : 0
+  }
   // A closed surface around no volume (a capped flat sheet) is not a solid either.
-  if (!(fused.manifold.volume() > 1e-9 * diagonal ** 3)) {
-    fused.manifold.delete()
+  if (!(cleaned.volume() > 1e-9 * diagonal ** 3)) {
+    cleaned.delete()
     return rebuild()
   }
-  return { manifold: fused.manifold, report }
+  return { manifold: cleaned, report }
 }
 
 /** Open pieces with fewer than this share of the triangles are debris, not part of the model. */
 const FRAGMENT = 0.005
+/** Separate closed shells below this share of the largest one's volume are crumbs, not parts. */
+const SPECK = 0.001
+
+function pieceCount(m: Manifold): number {
+  const pieces = m.decompose()
+  for (const p of pieces) p.delete()
+  return pieces.length
+}
 
 /**
  * Removes small connected pieces that have an open boundary — stray faces and fins left by
@@ -115,17 +152,29 @@ function dropFragments(mesh: IndexedTriangles): { mesh: IndexedTriangles; droppe
   return { mesh: compact(mesh.positions, Uint32Array.from(indices)), dropped }
 }
 
-/** Unions separate shells (overlapping parts of a model); inside-out leftovers are dropped. */
-function fuseShells(manifold: Manifold): { manifold: Manifold; shells: number } {
+/**
+ * Unions separate shells (overlapping parts of a model); inside-out leftovers are dropped.
+ * `swallowed` counts shells that disappeared whole inside another (the union is no bigger
+ * without them).
+ */
+function fuseShells(manifold: Manifold): { manifold: Manifold; shells: number; swallowed: number } {
   const parts = manifold.decompose()
   if (parts.length <= 1) {
     for (const p of parts) p.delete()
-    return { manifold, shells: 0 }
+    return { manifold, shells: 0, swallowed: 0 }
   }
   const { manifold: mf } = runtime()
   const solid = parts.filter((p) => p.volume() > 0)
   const fused = mf.Manifold.union(solid)
+  const largest = solid.reduce((a, b) => (b.volume() > a.volume() ? b : a), solid[0]!)
+  let swallowed = 0
+  for (const p of solid) {
+    if (p === largest) continue
+    const overlap = p.intersect(largest)
+    if (overlap.volume() > 0.999 * p.volume()) swallowed++
+    overlap.delete()
+  }
   for (const p of parts) p.delete()
   manifold.delete()
-  return { manifold: fused, shells: solid.length }
+  return { manifold: fused, shells: solid.length, swallowed }
 }

@@ -16,7 +16,14 @@ function flip(indices: Uint32Array, t: number): void {
  * turns every connected component outward (positive signed volume). Returns a new mesh and the
  * number of triangles flipped.
  */
-export function orientOutward(mesh: IndexedTriangles): { mesh: IndexedTriangles; flipped: number } {
+export function orientOutward(mesh: IndexedTriangles): {
+  mesh: IndexedTriangles
+  flipped: number
+  /** Closed components that were wound inside out as a whole (a sealed void is one). */
+  inverted: number
+  /** Triangles in those components. */
+  invertedTriangles: number
+} {
   const indices = mesh.indices.slice()
   const triangles = indices.length / 3
   const { twin } = edgeTopology(mesh)
@@ -56,16 +63,21 @@ export function orientOutward(mesh: IndexedTriangles): { mesh: IndexedTriangles;
   const { id, count } = triangleComponents(triangles, edgeTopology(oriented).twin)
   const members: number[][] = Array.from({ length: count }, () => [])
   for (let t = 0; t < triangles; t++) members[id[t]!]!.push(t)
+  let inverted = 0
+  let invertedTriangles = 0
   for (const list of members) {
     const sub = new Uint32Array(list.length * 3)
     list.forEach((t, i) => {
       sub.set(indices.subarray(t * 3, t * 3 + 3), i * 3)
     })
-    if (meshVolume({ positions: mesh.positions, indices: sub }) < 0)
+    if (meshVolume({ positions: mesh.positions, indices: sub }) < 0) {
+      inverted++
+      invertedTriangles += list.length
       for (const t of list) {
         flip(indices, t)
         flipped++
       }
+    }
   }
-  return { mesh: oriented, flipped }
+  return { mesh: oriented, flipped, inverted, invertedTriangles }
 }

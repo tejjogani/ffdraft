@@ -1,20 +1,40 @@
 /**
- * What the photos could see (plan §7). A fitted number that barely changes any fitted view's
- * silhouette was not measured, only guessed: it goes back to its start and is marked assumed.
+ * What the photos could see (plan §7). Each fitted number is nudged both ways; the nudged build
+ * gets its own camera re-polish (the camera can absorb a change: a thicker band seen from above
+ * is matched by tilting the camera), and the loss rise that is left is the number's signal.
+ *
+ * - No pixel of any fitted view changes: **assumed**, back to its start.
+ * - The signal is too small to stand out of the fit's residual (or a supplied mask-noise
+ *   estimate): **weak**. Its `uncertainty` says how far it could move unseen. It keeps the
+ *   fitted value, which still carries some evidence (a head height fitted to 1.95 mm against a
+ *   truth of 2.4 beat its start of 1.2), unless that value sits on a bound of its band: a weak
+ *   number on a bound is the search running off, not a reading, so it goes back to its start.
+ * - Otherwise its status from the fit stands (`fitted`, `clamped` or `unmoved`).
+ *
  * The same nudges, rendered from the canon views, say which second photo would help most.
  */
 import type { Evaluation } from '@pave/kernel/types'
 import { applyOps, type Design } from '@pave/schema'
 import { defaultCamera, VIEW_SEEDS, type ViewSeed } from './camera'
-import { viewAt, WORK_PX } from './fit'
+import { FINE_PX, opsOn, viewAt, WORK_PX, withoutHidden } from './fit'
+import { makeGuard, Stop } from './guard'
 import { opsFor, settle } from './params'
+import { FIT_CAMERA_STEPS, refineCamera } from './pose'
 import { rasterize } from './raster'
-import { prepareTarget, scoreView } from './score'
-import type { Camera, Evaluate, FitInput, FitParam, FitResult, Size } from './types'
+import { prepareTarget, underFloor } from './score'
+import type { Camera, Evaluate, FitInput, FitParam, FitResult, Prepared, Stats } from './types'
 
-/** Changed pixels, as a fraction of the subject, below which a number counts as unseen. Unmeasured. */
+/** Changed pixels, as a fraction of the subject, below which a number counts as unseen. */
 export const OBSERVE_THRESHOLD = 0.0015
 export const NUDGE = 0.1
+/**
+ * A change whose loss rise is under `HIDE_FRACTION` of the residual is taken to be hidden by it.
+ * With a quadratic loss, the change that could hide is nudge · √(HIDE_FRACTION · residual / rise).
+ * Calibrated on the synthetic benchmark only; unverified on photos.
+ */
+export const HIDE_FRACTION = 0.5
+/** A number whose hidden change exceeds min(this, a quarter of its band) is weak. Field units (mm). */
+export const TOLERANCE = 0.5
 
 function changedFraction(a: Uint8Array, b: Uint8Array): number {
   let changed = 0
@@ -27,86 +47,137 @@ function changedFraction(a: Uint8Array, b: Uint8Array): number {
 }
 
 export async function observability(r: FitResult, i: FitInput): Promise<FitResult> {
+  if (r.quality === 'failed') return r
   const hide = i.hide ?? []
+  const stats: Stats = { rasters: 0 }
+  const guard = makeGuard(i.signal, performance.now() + (i.budget?.ms ?? 60_000))
+  // The check runs under the same evaluation budget as the fit (see `budget.reserve`).
+  const maxEvals = i.budget?.evaluations ?? 250
+  let evaluations = 0
   const fitted = i.views.filter((v) => !v.heldOut && r.cameras[v.id])
-  const sizes: Size[] = fitted.map((v) => {
-    const w = viewAt(v, WORK_PX)
-    return { width: w.width, height: w.height }
-  })
-  const cams: Camera[] = fitted.map((v) => r.cameras[v.id]!)
+  const work: Prepared[] = fitted.map((v) => prepareTarget(viewAt(v, WORK_PX)))
   const values = i.params.map((p) => r.params.find((x) => x.key === p.key)?.value ?? p.start)
   // Built on the fitted design, so ops a discrete choice added before the fit are kept.
-  const evalOf = (vals: number[]) =>
-    i.evaluate(applyOps(r.design, opsFor(i.params, vals)).design, i.signal)
-  const baseEv = await evalOf(values)
-  let evaluations = 1
-  let rasters = 0
-  const render = (e: Evaluation, j: number) => {
-    rasters++
-    return rasterize(e, cams[j]!, sizes[j]!, { hide }).cls
+  const lean = withoutHidden(r.design, hide)
+  const evalOf = (vals: number[]) => {
+    guard.check()
+    evaluations++
+    return i.evaluate(applyOps(lean, opsOn(lean, opsFor(i.params, vals))).design, i.signal)
   }
-  const base = fitted.map((_, j) => render(baseEv, j))
+  const polish = async (e: Evaluation, cams: Camera[]) => {
+    const out: { cams: Camera[]; loss: number; cls: Uint8Array[] } = { cams: [], loss: 0, cls: [] }
+    for (const [j, t] of work.entries()) {
+      const p = await refineCamera(e, cams[j]!, t, { steps: FIT_CAMERA_STEPS, hide, stats, guard })
+      out.cams.push(p.camera)
+      out.loss += p.score.loss / work.length
+      stats.rasters++
+      out.cls.push(
+        rasterize(e, cams[j]!, { width: t.view.width, height: t.view.height }, { hide }).cls,
+      )
+    }
+    return out
+  }
 
   const out = r.params.map((x) => ({ ...x }))
+  const notes: FitResult['diagnostics'] = []
   let reset = false
-  for (const [j, p] of i.params.entries()) {
-    const st = out[j]!
-    if (st.status === 'pinned' || p.max <= p.min) continue
-    let sens = 0
-    for (const sgn of [1, -1]) {
-      const y = values.slice()
-      y[j] = settle(p, values[j]! + sgn * NUDGE * (p.max - p.min))
-      if (y[j] === values[j]) continue
-      const e = await evalOf(y)
-      evaluations++
-      if (e.diagnostics.some((d) => d.level === 'error')) continue
-      for (let v = 0; v < fitted.length; v++)
-        sens = Math.max(sens, changedFraction(base[v]!, render(e, v)))
+  try {
+    const baseEv = await evalOf(values)
+    const base = await polish(
+      baseEv,
+      fitted.map((v) => r.cameras[v.id]!),
+    )
+    // The residual the fit could not remove: mask noise plus whatever the recipe cannot draw.
+    const noise = Math.max(base.loss, i.noiseLoss ?? 0, 1e-6)
+    for (const [j, p] of i.params.entries()) {
+      const st = out[j]!
+      if (st.status === 'pinned' || p.max <= p.min) continue
+      if (evaluations + 2 > maxEvals) {
+        notes.push({
+          level: 'warning',
+          code: 'match.observeSkipped',
+          message: `No budget left to check "${p.key}"; its status is the fit's own.`,
+        })
+        continue
+      }
+      let rise = Infinity
+      let changed = 0
+      let nudged = 0
+      for (const sgn of [1, -1]) {
+        const y = values.slice()
+        y[j] = settle(p, values[j]! + sgn * NUDGE * (p.max - p.min))
+        if (y[j] === values[j]) continue
+        const e = await evalOf(y)
+        if (e.diagnostics.some((d) => d.level === 'error')) continue
+        const n = await polish(e, base.cams)
+        // At the base camera: did any pixel change at all?
+        for (let v = 0; v < fitted.length; v++)
+          changed = Math.max(changed, changedFraction(base.cls[v]!, n.cls[v]!))
+        // The rise that is left after the camera has had its chance to absorb the change.
+        rise = Math.min(rise, Math.max(0, n.loss - base.loss))
+        nudged = Math.max(nudged, Math.abs(y[j]! - values[j]!))
+      }
+      if (!Number.isFinite(rise)) continue
+      st.sensitivity = rise
+      st.uncertainty = rise > 0 ? nudged * Math.sqrt((HIDE_FRACTION * noise) / rise) : Infinity
+      const tolerance = Math.min(TOLERANCE, 0.25 * (p.max - p.min))
+      const status =
+        changed < OBSERVE_THRESHOLD ? 'assumed' : st.uncertainty > tolerance ? 'weak' : null
+      if (!status) continue
+      const onBound = values[j] === p.min || values[j] === p.max
+      st.status = status
+      if (status === 'assumed' || onBound) {
+        st.value = settle(p, p.start)
+        reset = reset || st.value !== values[j]
+        values[j] = st.value
+      }
     }
-    st.sensitivity = sens
-    if (sens < OBSERVE_THRESHOLD) {
-      st.status = 'assumed'
-      st.value = settle(p, p.start)
-      values[j] = st.value
-      reset = true
-    }
+  } catch (err) {
+    if (!(err instanceof Stop)) throw err
+    notes.push({
+      level: 'warning',
+      code: 'match.observeStopped',
+      message: `The visibility check was ${err.reason === 'aborted' ? 'cancelled' : 'out of budget'}; unchecked numbers keep the fit's status.`,
+    })
   }
-  if (!reset)
-    return {
-      ...r,
-      params: out,
-      evaluations: r.evaluations + evaluations,
-      rasters: r.rasters + rasters,
-    }
+  const counted = {
+    evaluations: r.evaluations + evaluations,
+    rasters: r.rasters + stats.rasters,
+  }
+  if (!reset) return { ...r, params: out, ...counted, diagnostics: [...r.diagnostics, ...notes] }
 
-  // Rebuild and rescore with the assumed numbers back at their starts.
+  // Rebuild and rescore with the reset numbers back at their starts, with one camera re-polish.
   const ops = opsFor(i.params, values)
   const design = applyOps(r.design, ops).design
-  const ev = await i.evaluate(design, i.signal)
-  evaluations++
+  const ev = await i.evaluate(withoutHidden(design, hide), i.signal)
+  counted.evaluations++
   const scores = { ...r.scores }
-  for (const v of i.views) {
-    const c = r.cameras[v.id]
-    if (!c) continue
-    const t = prepareTarget(viewAt(v, 384))
-    rasters++
-    scores[v.id] = scoreView(
-      rasterize(ev, c, { width: t.view.width, height: t.view.height }, { hide }),
-      t,
-      c,
-    )
+  const cameras = { ...r.cameras }
+  for (const v of fitted) {
+    const t = prepareTarget(viewAt(v, FINE_PX))
+    const p = await refineCamera(ev, r.cameras[v.id]!, t, { steps: FIT_CAMERA_STEPS, hide, stats })
+    cameras[v.id] = p.camera
+    scores[v.id] = p.score
   }
+  counted.rasters = r.rasters + stats.rasters
   const fittedScores = fitted.map((v) => scores[v.id]!)
+  const poor = fittedScores.some((s) => underFloor(s, i.floor))
   return {
     ...r,
     design,
     ops: [...r.ops, ...ops],
+    cameras,
     scores,
     loss: fittedScores.reduce((s, x) => s + x.loss, 0) / Math.max(1, fittedScores.length),
     params: out,
-    evaluations: r.evaluations + evaluations,
-    rasters: r.rasters + rasters,
-    diagnostics: ev.diagnostics,
+    ...counted,
+    quality: poor ? 'poor' : r.quality,
+    stopped: poor && r.stopped === 'converged' ? 'poor' : r.stopped,
+    diagnostics: [
+      ...ev.diagnostics,
+      ...r.diagnostics.filter((d) => d.code.startsWith('match.')),
+      ...notes,
+    ],
   }
 }
 

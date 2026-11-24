@@ -53,6 +53,20 @@ export interface Part {
   bounds: Bounds
   /** Exact B-rep exists for this part (it will be in STEP exports); otherwise it is a mesh. */
   exact: boolean
+  /**
+   * Nodes fused into this part whose finish or plating differs from the part's own. At
+   * production every body of one alloy is one casting, so a rhodium-plated head or a matte face
+   * on a polished band is finished selectively on that casting; this keeps it on record.
+   */
+  regions?: PartRegion[]
+}
+
+/** A node's metal inside a fused part, finished or plated differently from the rest of it. */
+export interface PartRegion {
+  nodeId: string
+  name: string
+  finish: FinishId
+  plating: PlatingId
 }
 
 /**

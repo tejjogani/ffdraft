@@ -1,0 +1,230 @@
+import { applyOps, buildDesign, designFrom, type NodeInput, TEMPLATES } from '@pave/schema'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createKernel, type LocalKernel } from '../kernel'
+import { clearSpan, holeProfile } from './chain/seat'
+
+let kernel: LocalKernel
+beforeAll(() => {
+  kernel = createKernel()
+})
+afterAll(() => kernel.dispose())
+
+const template = (id: string) => buildDesign(TEMPLATES.find((t) => t.id === id)!.spec)
+const name = (text: string) =>
+  buildDesign({
+    kind: 'pendant',
+    archetype: 'namePendant',
+    title: text,
+    summary: text,
+    body: { heightMm: 9, text },
+    chain: { style: 'cable', lengthMm: 406, widthMm: 1.2 },
+  })
+
+describe('bail', () => {
+  it.each(['pendant-solitaire', 'name-pendant', 'iced-trophy', 'iced-initial'])(
+    '%s evaluates at production with no errors, and the chain is not cast into the pendant',
+    async (id) => {
+      const design = template(id)
+      const scene = await kernel.scene(design, { detail: 'production' })
+      const errors = scene.evaluation.diagnostics.filter((d) => d.level === 'error')
+      expect(errors.map((d) => `${d.code}: ${d.message}`)).toEqual([])
+      // The chain is its own part with exactly its own metal; the casting holds no links.
+      const chain = scene.nodes.get('chain')!
+      const parts = scene.evaluation.parts
+      const chainPart = parts.find((p) => p.nodeId === 'chain')!
+      expect(chainPart.volumeMm3).toBeCloseTo(chain.bodies[0]!.solid.volume(), 3)
+      const casting = parts.filter((p) => p !== chainPart)
+      expect(casting).toHaveLength(1)
+      const box = casting[0]!.bounds
+      const chainLow = chain.bodies[0]!.solid.bounds().min[2]
+      // Nothing of the casting reaches far up the chain (links fused on would).
+      expect(box.max[2]).toBeLessThan(chainLow + 12)
+    },
+    60_000,
+  )
+
+  it.each(['Olivia', 'Mia', 'Tej', 'Isabella'])(
+    'hangs the name %s level from a bail on its metal, all one casting',
+    async (text) => {
+      const scene = await kernel.scene(name(text), { detail: 'production' })
+      const codes = scene.evaluation.diagnostics
+        .filter((d) => d.level !== 'info')
+        .map((d) => d.code)
+      expect(codes).not.toContain('metal.disconnected')
+      expect(codes).not.toContain('outline.disconnected')
+      expect(codes).not.toContain('chain.clash')
+      expect(scene.evaluation.parts.filter((p) => p.nodeId !== 'chain')).toHaveLength(1)
+      // The opening is over the name's centre of mass, or the nearest metal to it (a gap between
+      // two letters can put that 1.5 mm away, about 14° off level on a 9 mm name).
+      const body = scene.nodes.get('body')!.bodies[0]!.solid.triangles(scene.quality)
+      let v = 0
+      let cx = 0
+      const p = body.positions
+      for (let i = 0; i < body.indices.length; i += 3) {
+        const [a, b, c] = [0, 1, 2].map((k) => body.indices[i + k]! * 3) as [number, number, number]
+        const d =
+          p[a]! * (p[b + 1]! * p[c + 2]! - p[b + 2]! * p[c + 1]!) -
+          p[a + 1]! * (p[b]! * p[c + 2]! - p[b + 2]! * p[c]!) +
+          p[a + 2]! * (p[b]! * p[c + 1]! - p[b + 1]! * p[c]!)
+        v += d
+        cx += d * (p[a]! + p[b]! + p[c]!)
+      }
+      const opening = scene.nodes.get('bail')!.frames.opening!.origin
+      expect(Math.abs(cx / (4 * v) - opening[0])).toBeLessThan(1.6)
+    },
+    60_000,
+  )
+
+  it('makes a loop bail’s hole as wide as it is high', async () => {
+    const scene = await kernel.scene(
+      designFrom('pendant', [
+        { id: 'p', kind: 'primitive', shape: 'box', size: [10, 2, 10] },
+        { id: 'bail', kind: 'bail', host: 'p', style: 'loop', opening: 5, wire: 1, width: 3 },
+      ]),
+    )
+    const bail = scene.nodes.get('bail')!
+    const hole = holeProfile(bail.bodies, bail.frames.opening!, scene.quality)!
+    const { height, width } = clearSpan(hole)
+    expect(height).toBeGreaterThan(4.6)
+    expect(width).toBeGreaterThan(0.95 * height)
+  })
+
+  it.each<[string, NodeInput]>([
+    [
+      'the open top of a crown',
+      {
+        id: 'body',
+        kind: 'meshBody',
+        source: { type: 'builtin', name: 'crown' },
+        height: 35,
+        flatBack: 0.35,
+      },
+    ],
+    [
+      'the cleft of a heart',
+      {
+        id: 'body',
+        kind: 'vectorBody',
+        source: { type: 'shape', shape: 'heart' },
+        height: 16,
+        thickness: 1.6,
+      },
+    ],
+  ])(
+    'stands on metal over %s',
+    async (_, body) => {
+      for (const style of ['loop', 'tube', 'ring'] as const) {
+        const scene = await kernel.scene(
+          designFrom('pendant', [
+            body,
+            { id: 'bail', kind: 'bail', host: 'body', style, opening: 4 },
+          ]),
+          { detail: 'production' },
+        )
+        const codes = scene.evaluation.diagnostics.map((d) => d.code)
+        expect(codes).not.toContain('metal.disconnected')
+        expect(codes).not.toContain('bail.unsupported')
+        expect(scene.evaluation.parts).toHaveLength(1)
+      }
+    },
+    60_000,
+  )
+
+  it('says when nothing under the bail can carry it', async () => {
+    // Two posts far apart: the bail's foot cannot reach either from the centre of mass, but it
+    // walks out to one; with no metal at all near the top it reports.
+    const e = await kernel.evaluate(
+      designFrom('pendant', [
+        {
+          id: 'p',
+          kind: 'primitive',
+          shape: 'torus',
+          size: [10, 10, 1],
+          tube: 0.2,
+          transform: { position: [0, 0, 0], rotation: [90, 0, 0], scale: 1 },
+        },
+        { id: 'bail', kind: 'bail', host: 'p', style: 'tube', opening: 4, width: 14 },
+      ]),
+    )
+    expect(e.diagnostics.map((d) => d.code)).toContain('bail.unsupported')
+  })
+
+  it('closes a hidden bail on the piece’s back, and its fix clears the bail check in one step', async () => {
+    let design = designFrom('pendant', [
+      {
+        id: 'body',
+        kind: 'vectorBody',
+        source: { type: 'shape', shape: 'heart' },
+        height: 30,
+        thickness: 2,
+      },
+      { id: 'bail', kind: 'bail', host: 'body', style: 'hidden', opening: 3, width: 3 },
+      {
+        id: 'c',
+        kind: 'chain',
+        style: 'cuban',
+        linkWidth: 4,
+        wire: 1,
+        length: 457,
+        through: 'bail',
+      },
+    ])
+    const first = await kernel.evaluate(design, { detail: 'production' })
+    const small = first.diagnostics.find((d) => d.code === 'bail.small')
+    expect(small?.fix).toBeDefined()
+    design = applyOps(design, small!.fix!.ops).design
+    const fixed = await kernel.evaluate(design, { detail: 'production' })
+    const codes = fixed.diagnostics.map((d) => d.code)
+    expect(codes).not.toContain('bail.small')
+    expect(codes).not.toContain('chain.clash')
+    expect(codes).not.toContain('metal.disconnected')
+  }, 60_000)
+
+  it('warns when a hidden bail cannot hang a small piece face out', async () => {
+    const e = await kernel.evaluate(
+      designFrom('pendant', [
+        {
+          id: 'body',
+          kind: 'vectorBody',
+          source: { type: 'shape', shape: 'heart' },
+          height: 8,
+          thickness: 1.6,
+        },
+        { id: 'bail', kind: 'bail', host: 'body', style: 'hidden', opening: 4 },
+      ]),
+    )
+    const low = e.diagnostics.find((d) => d.code === 'bail.hiddenLow')
+    expect(low?.fix?.ops).toEqual([{ t: 'update', id: 'bail', patch: { style: 'tube' } }])
+  })
+
+  it('reports a chain that runs through the pendant, not only through the bail', async () => {
+    // A ring bail sunk deep in a tall plate: the hung chain passes through the plate's top.
+    const e = await kernel.evaluate(
+      designFrom('pendant', [
+        { id: 'p', kind: 'primitive', shape: 'box', size: [30, 2, 10] },
+        {
+          id: 'q',
+          kind: 'primitive',
+          shape: 'box',
+          size: [4, 2, 4],
+          transform: { position: [-9, 0, 7], rotation: [0, 0, 0], scale: 1 },
+        },
+        { id: 'u', kind: 'boolean', op: 'union', target: 'p', tools: ['q'] },
+        { id: 'bail', kind: 'bail', host: 'u', style: 'ring', opening: 3 },
+        {
+          id: 'c',
+          kind: 'chain',
+          style: 'cable',
+          linkWidth: 1.2,
+          wire: 0.3,
+          length: 400,
+          through: 'bail',
+          layout: 'straight',
+        },
+      ]),
+      { detail: 'production' },
+    )
+    const clash = e.diagnostics.filter((d) => d.code === 'chain.clash')
+    expect(clash.map((d) => d.message).join(' ')).toMatch(/through the pendant/)
+  }, 60_000)
+})

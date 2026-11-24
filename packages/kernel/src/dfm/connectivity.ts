@@ -7,8 +7,9 @@
  *
  * Also reports slivers left behind by cuts.
  */
-import { type Node, nodeRefs } from '@pave/schema'
+import { METALS, type Node, nodeRefs } from '@pave/schema'
 import type { NodeResult, Scene } from '../core'
+import { boundsOverlap } from '../solid/meshing'
 import type { Bounds, Diagnostic } from '../types'
 import type { DfmProfile } from './profile'
 
@@ -24,6 +25,73 @@ const separate = (node: Node): boolean =>
   node.kind === 'pattern' ||
   node.kind === 'group' ||
   (node.kind === 'finding' && (node.type === 'butterfly' || node.type === 'lobsterClasp'))
+
+/** Castings closer than this are touching: two alloys share a face, not a gap (mm). */
+const TOUCH = 0.01
+
+/** True when two production parts touch or overlap. */
+function touching(scene: Scene, a: number, b: number): boolean {
+  const pa = scene.parts[a]!
+  const pb = scene.parts[b]!
+  if (!pa.fused || !pb.fused || !boundsOverlap(pa.part.bounds, pb.part.bounds, TOUCH)) return false
+  return (
+    pa.fused.manifold(scene.quality).minGap(pb.fused.manifold(scene.quality), 2 * TOUCH) < TOUCH
+  )
+}
+
+/**
+ * Shells that touch nothing of the piece and build on nothing: a ball placed beside a ring,
+ * referencing no node, passes every rule above, yet comes out of the mould as a second casting.
+ * Everything reachable from the largest casting through touching shells is the piece.
+ */
+function strayCastings(
+  scene: Scene,
+  reported: readonly Diagnostic[],
+  profile: DfmProfile,
+): Diagnostic[] {
+  const flagged = new Set(reported.map((d) => d.nodeId))
+  const exempt = (i: number) =>
+    scene.parts[i]!.sources.some((s) => {
+      const node = scene.nodes.get(s.nodeId)?.node
+      return !node || separate(node) || flagged.has(s.nodeId)
+    })
+  const candidates = [...scene.parts.keys()].filter(
+    (i) => !exempt(i) && scene.parts[i]!.part.volumeMm3 >= profile.fragment,
+  )
+  if (candidates.length < 2) return []
+  const main = candidates.reduce((a, b) =>
+    scene.parts[b]!.part.volumeMm3 > scene.parts[a]!.part.volumeMm3 ? b : a,
+  )
+  // Shells of one node belong together (a head cast as two claw pairs), whatever they touch.
+  const nodesOf = (i: number) => new Set(scene.parts[i]!.sources.map((s) => s.nodeId))
+  const reached = new Set([main])
+  for (let grew = true; grew; ) {
+    grew = false
+    for (const i of candidates) {
+      if (reached.has(i)) continue
+      const mine = nodesOf(i)
+      if (
+        [...reached].some((r) => [...nodesOf(r)].some((n) => mine.has(n)) || touching(scene, i, r))
+      ) {
+        reached.add(i)
+        grew = true
+      }
+    }
+  }
+  return candidates
+    .filter((i) => !reached.has(i))
+    .map((i) => {
+      const { part } = scene.parts[i]!
+      const name = scene.nodes.get(part.nodeId)?.node.name ?? part.nodeId
+      return {
+        level: 'warning' as const,
+        code: 'metal.separate',
+        nodeId: part.nodeId,
+        message: `“${name}” touches nothing else in the piece, so it would cast as a separate part. Move it until it overlaps, or remove it.`,
+        at: centre(part.bounds),
+      }
+    })
+}
 
 export function connectivityChecks(scene: Scene, profile: DfmProfile): Diagnostic[] {
   if (scene.detail !== 'production') return []
@@ -58,9 +126,28 @@ export function connectivityChecks(scene: Scene, profile: DfmProfile): Diagnosti
     if (!own || separate(node)) continue
     const bases = foundations(node, result.id)
     if (bases.length === 0) continue
-    const loose = [...own].filter((i) => !bases.some((b) => partsOf.get(b)!.has(i)))
+    const baseParts = [...new Set(bases.flatMap((b) => [...partsOf.get(b)!]))]
+    let loose = [...own].filter((i) => !baseParts.includes(i))
     if (loose.length === 0) continue
     const names = bases.map((b) => `“${scene.nodes.get(b)!.node.name ?? b}”`).join(' or ')
+    // A shell of another alloy is its own casting by necessity: it is loose only if it does not
+    // even touch the metal it builds on (it is assembled onto it after casting).
+    const otherAlloy = loose.filter((i) =>
+      baseParts.every((b) => scene.parts[b]!.part.material !== scene.parts[i]!.part.material),
+    )
+    const seated = otherAlloy.filter((i) => baseParts.some((b) => touching(scene, i, b)))
+    if (seated.length > 0) {
+      const metal = METALS[scene.parts[seated[0]!]!.part.material].label
+      out.push({
+        level: 'info',
+        code: 'metal.separateCasting',
+        nodeId: result.id,
+        message: `“${node.name ?? result.id}” is cast separately in ${metal} (${seated.length === 1 ? 'one piece' : `${seated.length} pieces`}) and assembled onto ${names}.`,
+        at: centre(scene.parts[seated[0]!]!.part.bounds),
+      })
+      loose = loose.filter((i) => !seated.includes(i))
+      if (loose.length === 0) continue
+    }
     out.push({
       level: 'error',
       code: 'metal.disconnected',
@@ -69,6 +156,7 @@ export function connectivityChecks(scene: Scene, profile: DfmProfile): Diagnosti
       at: centre(scene.parts[loose[0]!]!.part.bounds),
     })
   }
+  out.push(...strayCastings(scene, out, profile))
   for (const { part } of scene.parts)
     if (part.volumeMm3 < profile.fragment)
       out.push({

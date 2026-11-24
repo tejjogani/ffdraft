@@ -32,6 +32,8 @@ export interface Profile {
  */
 const ROUND_STEPS = 6
 const PILLOW_STEPS = 8
+/** Extra pillow contours inside the first step, in steps (see edgeProfile). */
+const PILLOW_RIM = [0.25, 0.5]
 /** Offset contours are thinned to this deviation (mm) before extrusion; booleans scale with vertices. */
 const CONTOUR_TOLERANCE = 0.002
 /** Vertical offset between the bases of successive slabs, mm. */
@@ -79,9 +81,11 @@ export function edgeProfile(
   // rolls over vertically and the crest is flat; the slabs follow the arc evenly.
   const rise = Math.min(size, thickness - 0.3)
   const D = Math.max(reach, 1e-3)
-  const steps = Array.from(
-    { length: PILLOW_STEPS + 1 },
-    (_, k) => D * 0.98 * (1 - Math.cos((Math.PI / 2) * (k / PILLOW_STEPS))),
+  // The dome stands vertical at the rim, so the first band climbs a fifth of the rise in a
+  // fraction of a millimetre: two extra contours there keep the rim's highlight from going
+  // saw-toothed where triangles cut across the band at different angles.
+  const steps = [0, ...PILLOW_RIM, ...Array.from({ length: PILLOW_STEPS }, (_, k) => k + 1)].map(
+    (k) => D * 0.98 * (1 - Math.cos((Math.PI / 2) * (k / PILLOW_STEPS))),
   )
   return {
     height: (d) => {

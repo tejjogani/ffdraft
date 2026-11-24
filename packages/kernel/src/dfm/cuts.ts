@@ -20,11 +20,19 @@ const centre = (b: Bounds): [number, number, number] => [
 /** Settings whose stones sit in a seat cut into metal, so metal must surround the seat. */
 const SEATED = new Set(['pave', 'channel', 'flush', 'bar'])
 
-/** Number of separate shells (decompose, then free the pieces). */
+/**
+ * Number of separate pieces of metal (decompose, then free the pieces). A cutter wholly inside
+ * the metal leaves an internal void, whose surface decomposes as a shell of negative volume:
+ * that is not metal cut off, so only shells enclosing metal count.
+ */
 function shellCount(m: Manifold): number {
   const pieces = m.decompose()
-  for (const p of pieces) p.delete()
-  return pieces.length
+  let count = 0
+  for (const p of pieces) {
+    if (p.volume() > 1e-3) count++
+    p.delete()
+  }
+  return count
 }
 
 /**

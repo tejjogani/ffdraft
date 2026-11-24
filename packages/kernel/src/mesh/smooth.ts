@@ -6,6 +6,7 @@
 import type { Manifold } from 'manifold-3d'
 import type { IndexedTriangles } from '../solid/meshing'
 import { manifoldFromTriangles, trianglesFromManifold } from '../solid/solid'
+import { dropSpecks } from './pieces'
 import { vertexRings } from './topology'
 
 const LAMBDA = 0.5
@@ -61,7 +62,7 @@ export function smoothManifold(m: Manifold, level: number, edge: number): Manifo
   // The refinement is only needed while smoothing: thin it again wherever the surface stayed
   // flat, within a deviation far below casting resolution.
   try {
-    return smooth.simplify(edge * RETHIN)
+    return dropSpecks(smooth.simplify(edge * RETHIN))
   } finally {
     smooth.delete()
   }

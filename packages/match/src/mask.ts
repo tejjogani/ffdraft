@@ -21,10 +21,10 @@ export function moments(mask: Uint8Array, size: Size): Moments {
   return { area: a / (w * h), cx: sx / a / w, cy: sy / a / h }
 }
 
-/** Set pixels with an unset 4-neighbour; outside the image counts as unset. */
-export function edges(mask: Uint8Array, size: Size): Uint8Array {
+/** Set pixels with an unset 4-neighbour; outside the image counts as unset. `into` is reused when given. */
+export function edges(mask: Uint8Array, size: Size, into?: Uint8Array): Uint8Array {
   const { width: w, height: h } = size
-  const out = new Uint8Array(w * h)
+  const out = into ? into.fill(0) : new Uint8Array(w * h)
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++) {
       const k = y * w + x
@@ -42,9 +42,9 @@ const BIG = 1e9
  * 1 and √2 (exact along rows, columns and diagonals; at most about 8 % long elsewhere). An empty
  * mask gives 1e9 everywhere.
  */
-export function distanceTransform(mask: Uint8Array, size: Size): Float32Array {
+export function distanceTransform(mask: Uint8Array, size: Size, into?: Float32Array): Float32Array {
   const { width: w, height: h } = size
-  const d = new Float32Array(w * h)
+  const d = into ?? new Float32Array(w * h)
   const D = Math.SQRT2
   for (let k = 0; k < w * h; k++) d[k] = mask[k] ? 0 : BIG
   for (let y = 0; y < h; y++)

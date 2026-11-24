@@ -36,11 +36,14 @@ export function configureRuntime(next: RuntimeSources): void {
 
 /** Emscripten options for a source: bytes are handed over, URLs are left for it to fetch. */
 function moduleOptions(source: WasmSource): Record<string, unknown> {
+  // OpenCascade reports progress (e.g. STEP "Statistics on Transfer") on stdout; in a server or
+  // CLI that is noise in the caller's output, and nothing in it is needed. Errors still go out.
+  const quiet = { print: () => {} }
   if (typeof source === 'string' || source instanceof URL) {
     const href = source.toString()
-    return { locateFile: () => href }
+    return { ...quiet, locateFile: () => href }
   }
-  return { wasmBinary: source }
+  return { ...quiet, wasmBinary: source }
 }
 
 async function resolveSources(): Promise<Required<RuntimeSources>> {
@@ -89,4 +92,20 @@ export function loadRuntime(): Promise<Runtime> {
 export function runtime(): Runtime {
   if (!loaded) throw new Error('Kernel runtime is not loaded; await kernel.ready() first')
   return loaded
+}
+
+/**
+ * True for a fault inside a WASM module (out-of-bounds memory or table access, `unreachable`):
+ * the module's heap can no longer be trusted, so nothing allocated in it may be reused.
+ */
+export const isRuntimeFault = (error: unknown): boolean =>
+  typeof WebAssembly !== 'undefined' && error instanceof WebAssembly.RuntimeError
+
+/**
+ * Drops the loaded runtimes after a fault so the next `loadRuntime()` instantiates fresh ones.
+ * Objects allocated in the old heaps must be forgotten, not deleted: their memory is gone with it.
+ */
+export function discardRuntime(): void {
+  loaded = null
+  loading = null
 }

@@ -84,15 +84,52 @@ function check(node: EngravingNode, ctx: BuildContext): void {
     })
 }
 
+/** Share of a band's round that wrapped text may take, leaving a gap between its ends. */
+const MAX_WRAP = 0.97
+
+/**
+ * Text longer than the round it wraps laps over itself (and the overlap cuts through the band).
+ * Says so with a size that fits; returns false when the text cannot be wrapped.
+ */
+function fitsAround(
+  node: EngravingNode,
+  host: NodeResult,
+  width: number,
+  ctx: BuildContext,
+): boolean {
+  if (node.where !== 'insideBand' && node.where !== 'outsideBand') return true
+  const shank = shankData(host)
+  const radius =
+    node.where === 'insideBand' ? shank.innerRadius : shank.outer(node.angle * DEG).radius
+  const room = MAX_WRAP * 2 * Math.PI * radius
+  if (width <= room) return true
+  const size = Math.floor(((node.size * room) / width) * 10) / 10
+  ctx.report({
+    level: 'error',
+    code: 'engraving.tooLong',
+    message: `The text is ${width.toFixed(1)} mm long, more than the ${room.toFixed(1)} mm around the ${node.where === 'insideBand' ? 'inside' : 'outside'} of the band, so it would lap over itself; shorten it or use letters ${size} mm tall.`,
+    value: width,
+    limit: room,
+    ...(size > 0 && {
+      fix: {
+        label: `Letters ${size} mm tall`,
+        ops: [{ t: 'update', id: node.id, patch: { size } }],
+      },
+    }),
+  })
+  return false
+}
+
 export const engraving = defineFeature('engraving', async (node, ctx) => {
   const host = ctx.input(node.host)
   const place = placement(node, host)
   check(node, ctx)
   const emboss = node.mode === 'emboss'
-  if (node.text.trim() === '' || (!emboss && ctx.detail !== 'production')) return {}
-
+  if (node.text.trim() === '') return {}
+  // Laid out at every detail, so a text too long for its band is reported while designing.
   const outline = await textOutline(node.text, node.font, node.size, ctx.quality.chord)
-  if (outline.glyphs.length === 0) return {}
+  if (outline.glyphs.length === 0 || !fitsAround(node, host, outline.width, ctx)) return {}
+  if (!emboss && ctx.detail !== 'production') return {}
   const slab = ctx.track(
     emboss
       ? textSlab(outline, node.size, -ROOT, node.depth)

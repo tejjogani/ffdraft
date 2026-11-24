@@ -5,6 +5,7 @@
  * and identical input gives identical output.
  */
 import {
+  applyOps,
   buildDesign,
   designFrom,
   MELEE_SIZES_MM,
@@ -22,6 +23,7 @@ import { seededRandom } from '../mesh/random'
 import { edgeTopology } from '../mesh/topology'
 import { meshVolume } from '../solid/meshing'
 import { QUALITY } from '../solid/solid'
+import { layoutText, loadFont } from '../text'
 import type { AssetResolver, StoneInstance } from '../types'
 
 const kernel: LocalKernel = createKernel()
@@ -502,7 +504,7 @@ describe('pave', () => {
     border: 0.8,
   }
 
-  it('fills a bordered field with stock stones, spaced, inside the field and its margin', async () => {
+  it('fills a bordered field with stock stones, spaced, inside the field and up to its rim', async () => {
     const c = iced(heart, { sizeMax: 1.5, sizeMin: 1, gap: 0.2, margin: 0.35 })
     const scene = await kernel.scene(c.design)
     const stones = scene.evaluation.stones.filter((s) => s.nodeId === 'ice')
@@ -515,7 +517,8 @@ describe('pave', () => {
     for (const s of stones) {
       const [x, , z] = transformPoint(toLocal, centre(s))
       expect(field.inside(x, z)).toBe(true)
-      expect(field.distance(x, z)).toBeGreaterThanOrEqual(s.dims.width / 2 + 0.35 - 0.02)
+      // The rim is the seat wall: stones keep half a gap from it, not the 0.4 mm of an open edge.
+      expect(field.distance(x, z)).toBeGreaterThanOrEqual(s.dims.width / 2 + 0.1 - 0.02)
     }
     // Honeycomb: most stones are the largest size, with six neighbours inside the field.
     const largest = stones.filter((s) => s.dims.width === 1.5).length
@@ -662,6 +665,204 @@ describe('pave', () => {
     expect(e.diagnostics.map((d) => d.code)).toContain('pave.empty')
     const off = await kernel.evaluate(iced(heart, { sizeMin: 1.15, sizeMax: 1.15 }).design)
     expect(off.diagnostics.map((d) => d.code)).toContain('pave.sizeRange')
+  })
+})
+
+describe('pave on hollow and many-sided bodies', () => {
+  const dice = (extra: Partial<MeshInput>): MeshInput => ({
+    id: 'body',
+    kind: 'meshBody',
+    source: { type: 'builtin', name: 'dice' },
+    height: 20,
+    ...extra,
+  })
+
+  it('never sets stones on the walls of a cavity or on a flat back', async () => {
+    for (const extra of [{ hollow: 3 }, { hollow: 2 }, { hollow: 3, flatBack: 0.3 }]) {
+      const c = iced(dice(extra), { sizeMax: 1.8, sizeMin: 1, region: { type: 'all' } })
+      const scene = await kernel.scene(c.design)
+      const stones = scene.evaluation.stones.filter((s) => s.nodeId === 'ice')
+      expect(stones.length, JSON.stringify(extra)).toBeGreaterThan(150)
+      const b = scene.nodes.get('body')!.bodies[0]!.solid.bounds()
+      const mid = [0, 1, 2].map((k) => (b.min[k]! + b.max[k]!) / 2)
+      for (const s of stones) {
+        const p = centre(s)
+        const n = [s.matrix[8]!, s.matrix[9]!, s.matrix[10]!]
+        // A stone on the outside faces away from the middle; one in the cavity faces into it.
+        expect(n.reduce((sum, v, k) => sum + v * (p[k]! - mid[k]!), 0)).toBeGreaterThan(0)
+        // None on the flat back (y = 0, facing +Y).
+        if (extra.flatBack) expect(n[1]! / Math.hypot(n[0]!, n[1]!, n[2]!)).toBeLessThan(0.9)
+      }
+    }
+  })
+
+  it('cuts seats from neighbouring faces without tunnels between them', async () => {
+    // A 14 mm dice paved all over: seats and holes on faces at right angles meet inside the
+    // corner unless each is checked against the others. The casting gains no handles.
+    const c = iced(dice({ height: 14 }), { sizeMax: 1.8, sizeMin: 1, region: { type: 'all' } })
+    const scene = await kernel.scene(c.design, { detail: 'production' })
+    expect(scene.evaluation.stones.filter((s) => s.nodeId === 'ice').length).toBeGreaterThan(100)
+    expect(scene.nodes.get('body')!.bodies[0]!.solid.manifold().genus()).toBe(0)
+    expect(scene.parts).toHaveLength(1)
+    expect(scene.parts[0]!.fused!.manifold().genus()).toBe(0)
+  }, 60_000)
+
+  it('says when walls are too thin for the stones, with a hollow that takes them', async () => {
+    const c = iced(dice({ height: 30, hollow: 0.7 }), { sizeMax: 1.8, sizeMin: 1.8 })
+    const e = await kernel.evaluate(c.design)
+    const thin = e.diagnostics.find((d) => d.code === 'pave.thin')
+    expect(thin?.message).toMatch(/a 1\.8 mm stone needs 1\.57 mm/)
+    expect(thin?.fix?.ops).toEqual([{ t: 'update', id: 'body', patch: { hollow: 1.6 } }])
+    expect(e.diagnostics.map((d) => d.code)).not.toContain('pave.sparse')
+  })
+
+  it('keeps sound hollow and smoothed bodies in one piece, without zero-volume specks', async () => {
+    for (const extra of [
+      { source: { type: 'builtin', name: 'trophy' }, height: 40, flatBack: 0.5, hollow: 0.7 },
+      { source: { type: 'builtin', name: 'dice' }, height: 40, smooth: 2, detail: 0.02 },
+    ] as Partial<MeshInput>[]) {
+      const scene = await kernel.scene(pendant({ ...dice({}), ...extra }))
+      const codes = scene.evaluation.diagnostics.map((d) => d.code)
+      expect(codes, JSON.stringify(extra)).not.toContain('mesh.disconnected')
+      expect(scene.nodes.get('body')!.bodies[0]!.solid.manifold().decompose().length).toBe(1)
+    }
+  }, 60_000)
+})
+
+describe('outline bodies: what the engine pass found', () => {
+  it('ties the dots and capitals of a script name into one piece', async () => {
+    for (const text of ['Olivia', 'Tej', 'William']) {
+      const scene = await kernel.scene(
+        pendant({
+          id: 'v',
+          kind: 'vectorBody',
+          source: { type: 'text', text, font: 'script' },
+          height: 14,
+        }),
+      )
+      const codes = scene.evaluation.diagnostics.map((d) => d.code)
+      expect(codes, text).toContain('outline.joined')
+      expect(codes, text).not.toContain('outline.disconnected')
+      expect(scene.nodes.get('v')!.bodies[0]!.solid.manifold().decompose().length, text).toBe(1)
+    }
+  })
+
+  it('meets the overall height on pointed shapes, whose corners are softened', async () => {
+    for (const shape of ['star', 'heart', 'teardrop'] as const) {
+      const e = await kernel.evaluate(
+        pendant({ id: 'v', kind: 'vectorBody', source: { type: 'shape', shape }, height: 22 }),
+      )
+      const b = e.parts[0]!.bounds
+      expect(b.max[2] - b.min[2], shape).toBeCloseTo(22, 2)
+    }
+  })
+
+  it('fits a bevel to a thin plate instead of failing', async () => {
+    const scene = await kernel.scene(
+      pendant({
+        id: 'v',
+        kind: 'vectorBody',
+        source: { type: 'text', text: 'A', font: 'block' },
+        height: 30,
+        thickness: 0.6,
+        bevel: 'pillow',
+        bevelSize: 0.8,
+        border: 0.8,
+      }),
+    )
+    expect(scene.nodes.get('v')!.status).toBe('ok')
+    expect(scene.evaluation.diagnostics.map((d) => d.code)).toContain('outline.bevelReduced')
+  })
+
+  it('kerns sans and serif pairs, whose kerning sits in extension lookups', async () => {
+    for (const font of ['sans', 'serif'] as const) {
+      const f = await loadFont(font)
+      const width = (t: string) => layoutText(f, t, 10).width
+      expect(width('AV'), font).toBeLessThan(width('A') + width('V') - 0.3)
+      expect(width('HH'), font).toBeCloseTo(2 * width('H'), 6)
+    }
+  })
+
+  it('sets an accented letter the font lacks as its base letter, and flags a dropped one', async () => {
+    const scene = await kernel.scene(
+      pendant({
+        id: 'v',
+        kind: 'vectorBody',
+        source: { type: 'text', text: 'ŻÓŁĆ☆', font: 'sans' },
+      }),
+    )
+    const d = scene.evaluation.diagnostics
+    expect(d.find((x) => x.code === 'text.accentDropped')?.message).toMatch(/“Ż” was set as “Z”/)
+    expect(d.find((x) => x.code === 'text.missingGlyph')?.level).toBe('error')
+  })
+})
+
+describe('engraving around a band', () => {
+  it('says text longer than the band laps over itself, with letters that fit', async () => {
+    const band = (size: number, text: string) =>
+      buildDesign({
+        title: 't',
+        summary: 's',
+        kind: 'ring',
+        archetype: 'band',
+        ring: { size: { system: 'us', value: size } },
+        engraving: text,
+      })
+    const long = 'forever and always '.repeat(4).slice(0, 60)
+    const e = await kernel.evaluate(band(4, long))
+    const d = e.diagnostics.find((x) => x.code === 'engraving.tooLong')
+    expect(d?.message).toMatch(/lap over itself/)
+    const op = d?.fix?.ops[0]
+    const size = op?.t === 'update' ? Number(op.patch.size) : 0
+    expect(size).toBeGreaterThan(0.5)
+    // The suggested letters fit; a bigger ring takes the same text as it is.
+    expect(
+      (await kernel.evaluate(applyOps(band(4, long), d!.fix!.ops).design)).diagnostics.map(
+        (x) => x.code,
+      ),
+    ).not.toContain('engraving.tooLong')
+    expect((await kernel.evaluate(band(9, long))).diagnostics.map((x) => x.code)).not.toContain(
+      'engraving.tooLong',
+    )
+  })
+})
+
+describe('meshBody: what the engine pass found', () => {
+  it('warns about a closed sheet too thin to cast', async () => {
+    // An ASCII STL box w × d × h: corners by bit (x, y, z), two triangles per face.
+    const box = (w: number, d: number, h: number) => {
+      const v = (i: number) => [i & 1 ? w : 0, i & 2 ? d : 0, i & 4 ? h : 0].join(' ')
+      const quads = [
+        [0, 2, 3, 1],
+        [4, 5, 7, 6],
+        [0, 1, 5, 4],
+        [2, 6, 7, 3],
+        [0, 4, 6, 2],
+        [1, 3, 7, 5],
+      ]
+      const facets = quads.flatMap(([a, b, c, e]) => [
+        [a!, b!, c!],
+        [a!, c!, e!],
+      ])
+      const body = facets
+        .map(
+          (t) =>
+            `facet normal 0 0 0\nouter loop\n${t.map((i) => `vertex ${v(i)}`).join('\n')}\nendloop\nendfacet`,
+        )
+        .join('\n')
+      return `solid s\n${body}\nendsolid s\n`
+    }
+    const assets: AssetResolver = async () => new TextEncoder().encode(box(40, 0.001, 40))
+    const scene = await kernel.scene(
+      pendant({
+        id: 'm',
+        kind: 'meshBody',
+        source: { type: 'asset', assetId: 'sheet' },
+        height: 40,
+      }),
+      { assets },
+    )
+    expect(scene.evaluation.diagnostics.map((d) => d.code)).toContain('wall.thin')
   })
 })
 

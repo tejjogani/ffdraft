@@ -22,6 +22,20 @@ const NEIGHBOUR_SLACK = 0.5
 const MAX_OPEN_ANGLE = (150 * Math.PI) / 180
 /** Beads must not touch each other or sit on a stone's table. */
 const CLEARANCE = 0.05
+/** Edge beads added per stone at most, and the angle step when searching an open arc for a spot. */
+const MAX_EDGE_BEADS = 4
+const ARC_STEP = Math.PI / 12
+
+/** The open arcs between bead angles (sorted, radians), widest first; one full turn when none. */
+function openArcs(angles: readonly number[]): { from: number; width: number }[] {
+  if (angles.length === 0) return [{ from: 0, width: 2 * Math.PI }]
+  return angles
+    .map((angle, a) => ({
+      from: angle,
+      width: (a + 1 < angles.length ? angles[a + 1]! : angles[0]! + 2 * Math.PI) - angle,
+    }))
+    .sort((a, b) => b.width - a.width)
+}
 
 export function layoutBeads(
   stones: readonly PlacedStone[],
@@ -98,36 +112,41 @@ export function layoutBeads(
     }
   })
 
-  // Edge beads where a stone's grip is open on one side.
+  // Edge beads where a stone's grip is open on one side. The middle of the widest open arc is
+  // the best spot, but in a single row it is often where the next stone sits: so step round
+  // the arc from its middle until a spot is free, then try the next widest arc.
   stones.forEach((s, i) => {
     const u = perpendicular(s.normal)
     const v = cross(s.normal, u)
     const diameter = RULES.beadDiameter(s.diameter)
-    for (let pass = 0; pass < 4; pass++) {
+    const reach = s.diameter / 2 + diameter * 0.45
+    // Beads an arc must leave between it and its ends: about a bead's width of angle.
+    const keepOff = Math.min(Math.PI / 6, diameter / reach)
+    for (let pass = 0; pass < MAX_EDGE_BEADS; pass++) {
       const angles = owners[i]!.map((b) => {
         const d = sub(beads[b]!.position, s.position)
         return Math.atan2(dot(d, v), dot(d, u))
       }).sort((a, b) => a - b)
-      let widest = angles.length === 0 ? 2 * Math.PI : 0
-      let from = 0
-      angles.forEach((angle, a) => {
-        const gap = (a + 1 < angles.length ? angles[a + 1]! : angles[0]! + 2 * Math.PI) - angle
-        if (gap > widest) {
-          widest = gap
-          from = angle
-        }
-      })
-      if (angles.length >= 3 && widest <= MAX_OPEN_ANGLE) break
-      const mid = from + widest / 2
-      const dir = add(scale(u, Math.cos(mid)), scale(v, Math.sin(mid)))
-      const before = owners[i]!.length
-      add3(
-        add(s.position, scale(dir, s.diameter / 2 + diameter * 0.45)),
-        diameter,
-        [i],
-        [...neighbours[i]!, i],
-      )
-      if (owners[i]!.length === before) break
+      const arcs = openArcs(angles)
+      if (angles.length >= 3 && arcs[0]!.width <= MAX_OPEN_ANGLE) break
+      let placed = false
+      for (const arc of arcs) {
+        if (arc.width <= MAX_OPEN_ANGLE && angles.length >= 3) break
+        const half = arc.width / 2 - (angles.length > 0 ? keepOff : 0)
+        for (let k = 0; !placed && k * ARC_STEP <= half; k++)
+          for (const sign of k === 0 ? [1] : [1, -1]) {
+            const angle = arc.from + arc.width / 2 + sign * k * ARC_STEP
+            const dir = add(scale(u, Math.cos(angle)), scale(v, Math.sin(angle)))
+            const before = owners[i]!.length
+            add3(add(s.position, scale(dir, reach)), diameter, [i], [...neighbours[i]!, i])
+            if (owners[i]!.length > before) {
+              placed = true
+              break
+            }
+          }
+        if (placed) break
+      }
+      if (!placed) break
     }
   })
   return beads

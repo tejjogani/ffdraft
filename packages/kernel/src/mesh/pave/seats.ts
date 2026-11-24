@@ -26,6 +26,26 @@ export interface Seat {
 
 /** Hole depths are rounded down to this step (mm) so seats of one size share a few units. */
 const HOLE_STEP = 0.1
+/**
+ * Chord tolerance (mm) for the instanced seat and bead units. Every stone carries a copy of
+ * each, so their triangles multiply the fused mesh (about 540 per stone at the finest chord);
+ * a hundredth of a millimetre is below what casting and polishing keep.
+ */
+const UNIT_TOLERANCE = 0.01
+
+/**
+ * Triangles a stone adds to the fused body, roughly: its seat and hole, and its share of
+ * beads. Used to keep a fully iced piece within what a browser can boolean (see pave.ts).
+ */
+export const TRIANGLES_PER_SEAT = 95
+export const TRIANGLES_PER_HOLE = 110
+export const TRIANGLES_PER_BEAD = 70
+
+/** Thousands of copies: facets finer than UNIT_TOLERANCE (or 0.5 rad) are lost in casting anyway. */
+const unitQuality = (q: Quality): Quality => ({
+  chord: Math.max(q.chord, UNIT_TOLERANCE),
+  angle: Math.max(q.angle, 0.5),
+})
 
 /** All seats as one Manifold (the caller owns it). */
 export function seatCutters(seats: readonly Seat[], spec: SeatSpec, quality: Quality): Manifold {
@@ -38,7 +58,10 @@ export function seatCutters(seats: readonly Seat[], spec: SeatSpec, quality: Qua
       const key = `${Math.round(stone.dims.width * 1000)}:${steps}`
       let unit = units.get(key)
       if (!unit) {
-        unit = unitSeat({ ...stone, frame: WORLD }, steps * HOLE_STEP, spec, quality)
+        const q = unitQuality(quality)
+        const exact = unitSeat({ ...stone, frame: WORLD }, steps * HOLE_STEP, spec, q)
+        unit = exact.simplify(q.chord)
+        exact.delete()
         units.set(key, unit)
       }
       placed.push(
@@ -90,9 +113,10 @@ export function beadSolids(beads: readonly Bead[], quality: Quality): Manifold {
       const key = Math.round(b.diameter * 1000)
       let unit = units.get(key)
       if (!unit) {
+        const chord = Math.max(quality.chord, UNIT_TOLERANCE)
         const segments = Math.max(
-          12,
-          Math.min(32, Math.ceil(Math.PI / Math.acos(Math.max(0, 1 - quality.chord / r)))),
+          8,
+          Math.min(32, Math.ceil(Math.PI / Math.acos(Math.max(0, 1 - chord / r)))),
         )
         unit = mf.Manifold.sphere(r, segments)
         units.set(key, unit)

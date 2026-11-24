@@ -11,8 +11,19 @@ const STL_HEADER_BYTES = 84
 const STL_TRIANGLE_BYTES = 50
 
 export function limitChecks(scene: Scene, profile: DfmProfile): Diagnostic[] {
-  if (scene.detail !== 'production' || scene.parts.length === 0) return []
+  if (scene.parts.length === 0) return []
   const out: Diagnostic[] = []
+  // At any detail: a size or scale typed wrong shows first as an absurd weight.
+  const mass = scene.evaluation.report.metalMassG
+  if (mass > profile.maxMetalG)
+    out.push({
+      level: 'warning',
+      code: 'metal.heavy',
+      message: `This piece would use ${mass >= 1000 ? `${(mass / 1000).toFixed(1)} kg` : `${mass.toFixed(0)} g`} of metal; check its size and scale.`,
+      value: mass,
+      limit: profile.maxMetalG,
+    })
+  if (scene.detail !== 'production') return out
   let triangles = 0
   for (const { part, fused } of scene.parts) {
     if (!fused) continue
@@ -43,7 +54,14 @@ export function limitChecks(scene: Scene, profile: DfmProfile): Diagnostic[] {
       value: megabytes,
       limit: profile.maxStlMegabytes,
     })
-  const box = unionBounds(scene.parts.map((p) => p.part.bounds))
+  // A chain is bought or cast apart and threaded on after, so it never goes in the flask with
+  // the piece.
+  const chains = new Set(
+    [...scene.nodes.values()].filter((r) => r.node.kind === 'chain').map((r) => r.id),
+  )
+  const cast = scene.parts.filter((p) => !p.sources.every((s) => chains.has(s.nodeId)))
+  if (cast.length === 0) return out
+  const box = unionBounds(cast.map((p) => p.part.bounds))
   const size = [0, 1, 2].map((k) => box.max[k]! - box.min[k]!).sort((a, b) => a - b)
   if (size.some((v, k) => v > profile.envelope[k]!))
     out.push({

@@ -18,17 +18,17 @@ import {
 import { IDENTITY, multiply } from '../../geometry/vec'
 import { manifoldFromTriangles, trianglesFromManifold } from '../../solid/solid'
 import { segmentsFor } from './centreline'
-import { alongArc, atTightestBend, GAP_RATIO, tautPitch } from './contact'
+import { alongArc, atTightestBend, GAP_RATIO, InterlockError, tautPitch } from './contact'
 import type { Template } from './instances'
 import type { LinkSet } from './links'
 
 /** Strip no thicker than this fraction of the box, so its hole stays open. */
 const MAX_STRIP = 1 / 5.5
 /**
- * How far a link may turn against its neighbour on a bend. Box chain is stiff, but ~9° per link
- * lets it drape round a neck (about 4 link widths of bend radius).
+ * How far a link may turn against its neighbour on a bend. Box chain is stiff, but ~6° per link
+ * lets it drape round a neck (about 8 link widths of bend radius).
  */
-const BOX_TURN = 0.15
+const BOX_TURN = 0.1
 /** Overlap below this is meshing noise between walls that only touch (mm³). */
 const TOUCH_MM3 = 1e-6
 
@@ -67,8 +67,14 @@ export function boxChain(width: number, wire: number): LinkSet {
   // Shallow enough that a wall of it passes through the neighbour's hole with air either side,
   // even with the neighbour turned by BOX_TURN on a bend (and a gap more, so the fattened test
   // links below pass too).
+  // The neighbour turns about its own centre, so the wall it passes through this link's hole
+  // swings sideways by half the box's width times the sine of the turn, not by its own
+  // thickness; and straight, the whole depth must still pass the fattened hole.
   const hole = width - 2 * strip - gap
-  const depth = (hole - (strip + gap) * Math.sin(BOX_TURN)) / Math.cos(BOX_TURN) - 2 * gap
+  const depth = Math.min(
+    (hole - (width + gap) * Math.sin(BOX_TURN)) / Math.cos(BOX_TURN) - 2 * gap,
+    hole - 2 * gap,
+  )
   const mesh = (quality: Quality) => tubeMesh(width, strip, depth, quality)
   // Clearance is tested on links fattened by the gap all round: if those do not overlap, the
   // real links are at least a gap apart and never touch.
@@ -96,9 +102,21 @@ export function boxChain(width: number, wire: number): LinkSet {
   }
   try {
     // Pulled taut, a wall of each link rests against the far wall of the next one's hole.
-    const { solved: pitch, minBend } = atTightestBend(width, (bend) =>
-      tautPitch((p) => clears(p, bend), width - 2 * strip - gap, strip / 8),
-    )
+    // The scan is bounded to a few dozen steps whatever the strip (a fine strip would otherwise
+    // step a hundred times through mesh intersections), then refined by bisection.
+    let solved: { solved: number; minBend: number }
+    try {
+      solved = atTightestBend(width, (bend) =>
+        tautPitch((p) => clears(p, bend), width - 2 * strip - gap, Math.max(strip / 8, width / 32)),
+      )
+    } catch (error) {
+      if (!(error instanceof InterlockError)) throw error
+      // Thinner strip never helps a box link (its hole only grows), so say what does.
+      throw new Error(
+        `A ${width} mm box chain cannot be threaded with ${strip.toFixed(2)} mm strip; use a strip under ${(width * MAX_STRIP).toFixed(2)} mm or wider links`,
+      )
+    }
+    const { solved: pitch, minBend } = solved
     const template: Template = { mesh }
     return {
       templates: [template],

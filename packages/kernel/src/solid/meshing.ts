@@ -24,7 +24,14 @@ export const CREASE_ANGLE = (32 * Math.PI) / 180
 /**
  * Merges vertices with identical coordinates (B-rep tessellators emit each face separately but
  * share the edge discretisation exactly) and drops triangles that collapse.
+ *
+ * Coordinates within {@link ZERO_SNAP} of zero count as zero: a pole of a revolved or
+ * B-spline surface (an ellipsoid, a dome) is evaluated per face as sin(π)·r ≈ 1e-16, which
+ * float32 keeps distinct, so the faces meeting there would otherwise never weld.
  */
+const ZERO_SNAP = 1e-9
+const snapZero = (v: number): number => (Math.abs(v) < ZERO_SNAP ? 0 : v)
+
 export function weld(positions: Float32Array, indices: Uint32Array): IndexedTriangles {
   const count = positions.length / 3
   const scratch = new Float32Array(3)
@@ -37,9 +44,9 @@ export function weld(positions: Float32Array, indices: Uint32Array): IndexedTria
   let n = 0
   for (let i = 0; i < count; i++) {
     // +0 and −0 compare equal but have different bit patterns; adding 0 folds them together.
-    const x = positions[i * 3]! + 0
-    const y = positions[i * 3 + 1]! + 0
-    const z = positions[i * 3 + 2]! + 0
+    const x = snapZero(positions[i * 3]!) + 0
+    const y = snapZero(positions[i * 3 + 1]!) + 0
+    const z = snapZero(positions[i * 3 + 2]!) + 0
     scratch[0] = x
     scratch[1] = y
     scratch[2] = z
@@ -281,6 +288,40 @@ export function meshVolume({ positions: p, indices }: IndexedTriangles): number 
       p[a + 2]! * (p[b]! * p[c + 1]! - p[b + 1]! * p[c]!)
   }
   return v / 6
+}
+
+/**
+ * Edges that keep a welded surface from being a closed, consistently wound 2-manifold: an edge
+ * must be used exactly twice, once in each direction. Sort-based (typed arrays only), so it
+ * stays cheap on meshes of millions of triangles where a Map of edges would not.
+ */
+export function surfaceDefects({ positions, indices }: IndexedTriangles): {
+  open: number
+  nonManifold: number
+} {
+  const vertices = positions.length / 3
+  const keys = new Float64Array(indices.length)
+  for (let t = 0; t < indices.length; t += 3)
+    for (let e = 0; e < 3; e++) {
+      const a = indices[t + e]!
+      const b = indices[t + ((e + 1) % 3)]!
+      // Undirected edge id times two, plus the direction: equal edges sort next to each other.
+      keys[t + e] = (a < b ? a * vertices + b : b * vertices + a) * 2 + (a < b ? 0 : 1)
+    }
+  keys.sort()
+  let open = 0
+  let nonManifold = 0
+  for (let i = 0; i < keys.length; ) {
+    const edge = Math.floor(keys[i]! / 2)
+    let forward = 0
+    let backward = 0
+    for (; i < keys.length && Math.floor(keys[i]! / 2) === edge; i++)
+      if (keys[i]! % 2 === 0) forward++
+      else backward++
+    if (forward + backward > 2) nonManifold++
+    else if (forward !== 1 || backward !== 1) open += forward + backward
+  }
+  return { open, nonManifold }
 }
 
 export function meshArea(tris: IndexedTriangles): number {

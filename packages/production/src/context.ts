@@ -52,8 +52,9 @@ export interface PackageContext {
   /** Casting groups in evaluation order: one STL and one BOM line each. */
   groups: CastingGroup[]
   /**
-   * The piece as drawn and dimensioned: the evaluation without chains (a chain is a finding,
-   * specified by style and length, not a dimensioned view), with bounds to match.
+   * The piece as drawn and dimensioned: the evaluation without chains and their stones (a chain
+   * is a finding, specified by style and length, not a dimensioned view), with bounds to match.
+   * A piece that is only a chain is drawn as it is.
    */
   drawn: Evaluation
   facts: PieceFacts
@@ -64,8 +65,15 @@ export interface PackageContext {
   units: Units
   quantity: number
   lots: LotInfo[]
-  /** Per piece, with the profile's casting allowance. */
+  /** Per piece, with the profile's casting allowance: all the metal in the piece (for cost). */
   metals: MetalRequirement[]
+  /** The same for the metal that is cast: what the casting-grain order is for (no bought chains). */
+  castMetals: MetalRequirement[]
+  /**
+   * Node ids of chains that are findings — bought or made apart and threaded on — rather than
+   * the piece itself. Their weight is listed with the finding, not in the casting-grain order.
+   */
+  boughtChains: Set<string>
 }
 
 /** FTC Jewelry Guides vocabulary: lab-grown diamonds, lab-created gems, simulants. */
@@ -110,6 +118,23 @@ export function createContext(raw: BuildInput): PackageContext {
     }
   })
   const sku = input.piece.sku?.trim() || input.piece.id
+  // A chain on a pendant is a finding; a chain sold on its own is the piece and is cast.
+  const chainIds = new Set(design.order.filter((id) => design.nodes[id]?.kind === 'chain'))
+  const boughtChains = groups.some((g) => !chainIds.has(g.key))
+    ? new Set(groups.filter((g) => chainIds.has(g.key)).map((g) => g.key))
+    : new Set<string>()
+  const chainVolume = new Map<string, number>()
+  for (const g of groups)
+    if (boughtChains.has(g.key)) {
+      const m = g.parts[0]!.material
+      chainVolume.set(m, (chainVolume.get(m) ?? 0) + g.volumeMm3)
+    }
+  const castReport = {
+    ...evaluation.report,
+    metals: evaluation.report.metals
+      .map((m) => ({ ...m, volumeMm3: m.volumeMm3 - (chainVolume.get(m.material) ?? 0) }))
+      .filter((m) => m.volumeMm3 > 1e-6),
+  }
   return {
     input,
     emptyParts,
@@ -123,6 +148,8 @@ export function createContext(raw: BuildInput): PackageContext {
     quantity: options.quantity,
     lots,
     metals: metalRequirements(evaluation.report, profile.castingAllowancePct),
+    castMetals: metalRequirements(castReport, profile.castingAllowancePct),
+    boughtChains,
   }
 }
 
@@ -131,13 +158,16 @@ const LINKS = 8
 
 function withoutChains(evaluation: Evaluation, design: Design, groups: CastingGroup[]): Evaluation {
   const chains = new Set(design.order.filter((id) => design.nodes[id]?.kind === 'chain'))
-  const links = new Set(
-    groups
-      .filter((g) => chains.has(g.key) || (g.identical && g.count > LINKS))
-      .flatMap((g) => g.parts),
-  )
+  const linkGroups = groups.filter((g) => chains.has(g.key) || (g.identical && g.count > LINKS))
+  const links = new Set(linkGroups.flatMap((g) => g.parts))
   if (!links.size) return evaluation
   const parts = evaluation.parts.filter((p) => !links.has(p))
+  // A chain is the whole piece (a plain or tennis chain sold on its own): draw it as it is.
+  if (parts.length === 0) return evaluation
+  // A chain's stones (a tennis chain's) go with its links, or the drawing would show loose
+  // stones around the pendant and size the piece by the chain.
+  const chainNodes = new Set([...chains, ...linkGroups.map((g) => g.key)])
+  const stones = evaluation.stones.filter((s) => !chainNodes.has(s.nodeId))
   const min: [number, number, number] = [Infinity, Infinity, Infinity]
   const max: [number, number, number] = [-Infinity, -Infinity, -Infinity]
   const grow = (v: readonly number[]) => {
@@ -150,12 +180,12 @@ function withoutChains(evaluation: Evaluation, design: Design, groups: CastingGr
     grow(p.bounds.min)
     grow(p.bounds.max)
   }
-  for (const s of evaluation.stones) {
+  for (const s of stones) {
     const r = Math.max(s.dims.length, s.dims.width) / 2
     grow([s.matrix[12]! - r, s.matrix[13]! - r, s.matrix[14]! - r])
     grow([s.matrix[12]! + r, s.matrix[13]! + r, s.matrix[14]! + r])
   }
-  return { ...evaluation, parts, report: { ...evaluation.report, bounds: { min, max } } }
+  return { ...evaluation, parts, stones, report: { ...evaluation.report, bounds: { min, max } } }
 }
 
 function castingGroups(parts: readonly Part[]): CastingGroup[] {

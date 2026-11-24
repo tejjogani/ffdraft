@@ -49,7 +49,8 @@ export function instanceStones(
   }
   // Among individually placed gems the largest are the centre stones; the rest flank them.
   const singles = stones.filter((s) => s.instance.role === 'center')
-  const widest = Math.max(0, ...singles.map((s) => s.stone.dims.width))
+  // A loop, not Math.max(...list): spreading 100 000+ stones overflows the call stack.
+  const widest = singles.reduce((w, s) => Math.max(w, s.stone.dims.width), 0)
   for (const s of singles) if (s.stone.dims.width < widest * 0.95) s.instance.role = 'side'
   return { stones, gemMeshes }
 }

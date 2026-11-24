@@ -13,7 +13,9 @@ Progress goes to stdout as one JSON object per line: {"progress": 0.42}.
 from __future__ import annotations
 
 import json
+import os
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -34,6 +36,31 @@ from pave_worker.scene import build_scene  # noqa: E402
 
 def progress(value: float) -> None:
     print(json.dumps({"progress": round(min(1.0, max(0.0, value)), 3)}), flush=True)
+
+
+def exit_with_parent() -> None:
+    """Exits when the process that started us goes away.
+
+    @pave/render keeps our stdin open as a pipe for the whole render; when that process ends in
+    any way (even killed outright, when it cannot clean up) the pipe closes and the read below
+    returns. A render nobody is waiting for must not keep a GPU busy for hours. Only when the
+    runner says so (PAVE_RENDER_STDIN_WATCH=1): run by hand, or with stdin from /dev/null, stdin
+    says nothing about a parent.
+    """
+    if os.environ.get("PAVE_RENDER_STDIN_WATCH") != "1":
+        return
+
+    def watch() -> None:
+        # The raw descriptor, not sys.stdin: a daemon thread parked in a buffered read holds the
+        # reader's lock, and Python then aborts at a normal exit trying to take it.
+        try:
+            while os.read(0, 65536):
+                pass
+        except OSError:
+            pass
+        os._exit(130)
+
+    threading.Thread(target=watch, name="parent-watch", daemon=True).start()
 
 
 def job_argument(argv: list[str]) -> Path:
@@ -86,4 +113,5 @@ def run(job_path: Path) -> dict[str, object]:
 
 
 if __name__ == "__main__":
+    exit_with_parent()
     run(job_argument(sys.argv))

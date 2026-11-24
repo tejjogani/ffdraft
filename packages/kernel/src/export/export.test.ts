@@ -333,3 +333,94 @@ describe('export edge cases', () => {
     expect(notes).toMatch(/Chain links are separate shells/)
   })
 })
+
+describe('export fidelity', () => {
+  const pair = () =>
+    designFrom('other', [
+      { id: 'a', kind: 'primitive', name: 'Block', shape: 'box', size: [4, 4, 4] },
+      {
+        id: 'b',
+        kind: 'primitive',
+        name: 'Block',
+        material: 'pt950',
+        shape: 'box',
+        size: [4, 4, 4],
+        transform: { position: [10, 0, 0], rotation: [0, 0, 0], scale: 1 },
+      },
+    ])
+
+  it('STEP: colours as the swatch shows them, repeated names numbered, no clock in the header', async () => {
+    const text = new TextDecoder().decode((await exportOf(pair(), 'step')).bytes)
+    expect(text).toContain("'Block — 18k Yellow Gold'")
+    expect(text).toContain("'Block — Platinum 950'")
+    const twins = designFrom('other', [
+      { id: 'a', kind: 'primitive', name: 'Claw', shape: 'box', size: [1, 1, 1] },
+      {
+        id: 'b',
+        kind: 'primitive',
+        name: 'Claw',
+        shape: 'box',
+        size: [1, 1, 1],
+        transform: { position: [5, 0, 0], rotation: [0, 0, 0], scale: 1 },
+      },
+    ])
+    const named = new TextDecoder().decode((await exportOf(twins, 'step')).bytes)
+    expect(named).toContain("'Claw — 18k Yellow Gold'")
+    expect(named).toContain("'Claw — 18k Yellow Gold 2'")
+    // 18k yellow #E6BE6A: OpenCascade gamma-encodes what it is given, so it must get linear RGB.
+    const [r, g, b] = (METALS['au18k-yellow'].swatch.match(/[0-9a-f]{2}/gi) ?? []).map(
+      (h) => Number.parseInt(h, 16) / 255,
+    )
+    const colours = [...text.matchAll(/COLOUR_RGB\('[^']*',([\d.E+-]+),([\d.E+-]+),([\d.E+-]+)\)/g)]
+    expect(
+      colours.some(
+        (c) =>
+          Math.abs(Number(c[1]) - r!) < 0.02 &&
+          Math.abs(Number(c[2]) - g!) < 0.02 &&
+          Math.abs(Number(c[3]) - b!) < 0.02,
+      ),
+    ).toBe(true)
+    expect(text).toMatch(/FILE_NAME\('[^']*','2000-01-01T00:00:00'/)
+  })
+
+  it('STEP: cuts the same seats on every export (the cutters survive the first cut)', async () => {
+    const design = buildDesign(TEMPLATES.find((t) => t.id === 'three-stone')!.spec)
+    const first = await kernel.export(design, 'step')
+    const second = await kernel.export(design, 'step')
+    for (const r of [first, second]) expect(r.notes.join(' ')).not.toMatch(/without seats cut/)
+    expect(second.bytes.length).toBe(first.bytes.length)
+  }, 120_000)
+
+  it('says in every format when a node could not be built', async () => {
+    const design = designFrom('ring', [
+      { id: 'band', kind: 'ringShank' },
+      { id: 'logo', kind: 'revolve', name: 'Logo', profile: 'M 0 0 L 0 5 Z' },
+    ])
+    for (const format of ['stl', 'step', 'obj', '3mf', 'glb'] as const) {
+      const notes = (await exportOf(design, format)).notes.join(' ')
+      expect(notes, format).toMatch(/Not in this file: “Logo” \(revolve\)/)
+    }
+  })
+
+  it('OBJ: coordinates read back as the same float32 values', async () => {
+    const text = new TextDecoder().decode((await exportOf(solitaire(), 'obj')).bytes)
+    const values = [...text.matchAll(/^v (\S+) (\S+) (\S+)$/gm)].flatMap((m) =>
+      m.slice(1).map(Number),
+    )
+    expect(values.length).toBeGreaterThan(0)
+    for (const v of values) expect(Math.fround(v)).toBe(Math.fround(Math.fround(v)))
+    // Finer than the old 0.1 µm grid somewhere: slivers keep their vertices apart.
+    expect(values.some((v) => Math.abs(v * 1e4 - Math.round(v * 1e4)) > 1e-3)).toBe(true)
+  })
+
+  it('GLB: each alloy in its own colour', async () => {
+    const bytes = (await exportOf(pair(), 'glb')).bytes
+    const length = new DataView(bytes.buffer, bytes.byteOffset).getUint32(12, true)
+    const json = JSON.parse(new TextDecoder().decode(bytes.subarray(20, 20 + length))) as {
+      materials: { name: string; pbrMetallicRoughness: { baseColorFactor: number[] } }[]
+    }
+    const colour = (name: string) =>
+      json.materials.find((m) => m.name === name)!.pbrMetallicRoughness.baseColorFactor.join()
+    expect(colour('au18k-yellow')).not.toBe(colour('pt950'))
+  })
+})

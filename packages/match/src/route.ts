@@ -5,6 +5,8 @@
 export const ROUTE_THRESHOLDS = {
   /** Part overlap at or above which the recipe's node is kept. */
   iou: 0.9,
+  /** Stone overlap at or above which, where stones were looked for, the node is kept. */
+  stoneIou: 0.5,
   /** Mean outline distance, as a fraction of the part's size, at or below which it is kept. */
   edgeFraction: 0.03,
   /** A generated mesh registered to the photo must overlap the matte this much. */
@@ -20,10 +22,15 @@ export function routePart(i: {
   flat: boolean
   realViews: number
   meshOverlap?: number
+  /** Stone overlap where the photo's stones were looked for (an empty stone mask counts). */
+  stoneIou?: number | null
 }): { route: 'parametric' | 'outline' | 'relief' | 'mesh'; reason: string } {
   const T = ROUTE_THRESHOLDS
-  const fit = `overlap ${i.iou.toFixed(2)}, edges ${i.edgeMm.toFixed(2)} mm on ${i.sizeMm.toFixed(1)} mm`
-  if (i.iou >= T.iou && i.edgeMm <= T.edgeFraction * i.sizeMm)
+  const stones =
+    i.stoneIou === undefined || i.stoneIou === null ? '' : `, stones ${i.stoneIou.toFixed(2)}`
+  const fit = `overlap ${i.iou.toFixed(2)}${stones}, edges ${i.edgeMm.toFixed(2)} mm on ${i.sizeMm.toFixed(1)} mm`
+  const stonesOk = i.stoneIou === undefined || i.stoneIou === null || i.stoneIou >= T.stoneIou
+  if (i.iou >= T.iou && stonesOk && i.edgeMm <= T.edgeFraction * i.sizeMm)
     return { route: 'parametric', reason: `The recipe explains it (${fit}).` }
   if (i.flat)
     return {

@@ -2,7 +2,10 @@
  * buildProductionPackage: one finished CAD in, the casting house's whole package out — drawings,
  * spec sheet, CAD, BOM, stone list, cost estimate, DFM report, RFQ and manifest — as files and a
  * zip in the research layout (`<sku>_r<rev>_production/…`). Pure: no clocks, no network, no
- * file system; identical input gives identical bytes.
+ * file system. Every file the package writes itself is byte-identical for identical input. The
+ * CAD files come from the kernel and are not covered: the 3DM carries object ids made at export,
+ * and the STEP orders its colour records by memory layout (identical between fresh processes, not
+ * always between two exports in one) — and the manifest, which holds their hashes, follows them.
  */
 
 import { METALS } from '@pave/schema'

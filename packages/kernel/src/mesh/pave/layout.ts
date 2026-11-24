@@ -20,7 +20,17 @@
  *
  * Deterministic: the only randomness is the seeded lattice phase.
  */
-import { add, cross, dot, normalize, scale, sub, type Vec3 } from '../../geometry/vec'
+import {
+  add,
+  cross,
+  dot,
+  normalize,
+  perpendicular,
+  scale,
+  sub,
+  type Vec3,
+} from '../../geometry/vec'
+import { RULES } from '../../rules'
 import { PointGrid } from '../grid'
 import { MinHeap } from '../heap'
 import { seededRandom } from '../random'
@@ -56,18 +66,49 @@ export interface PlacedStone {
 }
 
 export interface Layout {
+  /** The stones the ice level keeps. */
   stones: PlacedStone[]
+  /** Every stone of the full packing, and their order of spreading ice (indices into it). */
+  all: PlacedStone[]
+  spread: number[]
   /** Area the full (ice level 1) packing covers, each stone counted with half the gap, mm². */
   packedArea: number
   /** Share of the region where the smallest stone is allowed (not too curved, thin or near an edge). */
   fillable: number
+  /**
+   * Where curvature and margin allow the largest stone but the metal under it is too thin: the
+   * share of such samples and the median metal depth there (mm). Tells a thin wall from a
+   * tight curve or a narrow field when the diagnostics explain a sparse layout.
+   */
+  thin: { share: number; thickness: number }
 }
+
+/** Samples examined for the thin-metal summary (thickness rays are not free). */
+const THIN_SAMPLES = 4000
 
 /** Metal under a seat, and seat depth per mm of stone (06-freeform.md §5 step 1). */
 const FLOOR_METAL = 0.4
 const SEAT_DEPTH_PER_MM = 0.65
+/** Metal depth a seat for a stone of diameter d needs (seat plus floor), mm. */
+export const seatMetal = (d: number): number => SEAT_DEPTH_PER_MM * d + FLOOR_METAL
+/** The widest stone a metal depth t takes, mm (0 when none). */
+export const stoneForMetal = (t: number): number =>
+  Math.max(0, (t - FLOOR_METAL) / SEAT_DEPTH_PER_MM)
 /** The drill hole under a seat reaches at most one stone deeper, and never into the floor metal. */
 const MAX_HOLE_PER_MM = 1
+/**
+ * A seat is checked across its width, not only down its axis: rays at these shares of its
+ * radius, this many round, must each find the seat's depth there plus the floor metal. One
+ * axial ray misses a cavity's corner or the far face beside a step.
+ */
+const SEAT_RINGS = [0.5, 0.9]
+const RING_RAYS = 6
+/** Seats whose axes differ by more than this are checked against each other for a clash. */
+const CLASH_COS = Math.cos((20 * Math.PI) / 180)
+/** Metal left between two seats cut from different faces, mm. */
+const CLASH_WALL = 0.1
+/** The seat's rim (the girdle's lower edge) lies this share of the stone below its girdle centre. */
+const GIRDLE_BAND = 0.02
 /** Stones are at most R/3 (convex) or R/5 (concave) of the local radius of curvature. */
 const CONVEX_CAP = 3
 const CONCAVE_CAP = 5
@@ -103,6 +144,9 @@ const ROW_STRIDE = 0.85
 /** Faces are joined through samples this many spacings inside the edge, linked this far apart. */
 const FACE_INTERIOR = 0.6
 const FACE_LINK = 1.8
+/** Samples asked when choosing a frame row's size, and the share of them that must take it. */
+const ROW_PROBES = 200
+const ROW_FITS = 0.5
 /** Stones whose gap is up to this much wider than specified are neighbours when ice spreads. */
 const NEIGHBOUR_SLACK = 0.3
 const EPS = 1e-9
@@ -120,6 +164,33 @@ export function layoutPave(surface: PaveSurface, options: LayoutOptions): Layout
   return new Packer(surface, options).run()
 }
 
+/**
+ * The ice level: stones in the order ice spreads over the field (`spread`), until `coverage`
+ * of the full packing's area is kept. Ice starts at the heart of the region (its deepest stone)
+ * and spreads through neighbouring stones, so a part-iced piece shows one solid patch growing
+ * outward and whole sections (a bowl, a step) filled before the next — never a sprinkle across
+ * the region. Stones are only dropped, never moved, so the full packing can be reused for any
+ * level.
+ */
+export function iceLevel(
+  all: readonly PlacedStone[],
+  spread: readonly number[],
+  coverage: number,
+  gap: number,
+): PlacedStone[] {
+  if (coverage >= 1) return [...all]
+  const areaOf = (s: PlacedStone) => Math.PI * (s.diameter / 2 + gap / 2) ** 2
+  const full = all.reduce((sum, s) => sum + areaOf(s), 0)
+  const keep = new Set<number>()
+  let area = 0
+  for (const i of spread) {
+    if (area >= coverage * full) break
+    keep.add(i)
+    area += areaOf(all[i]!)
+  }
+  return all.filter((_, i) => keep.has(i))
+}
+
 class Packer {
   private readonly sizes: readonly number[]
   private readonly smallest: number
@@ -134,6 +205,8 @@ class Packer {
   private readonly stones: PlacedStone[] = []
   private readonly depth: number[] = []
   private readonly random: () => number
+  /** Per sample and size index: 1 the whole seat has metal under it, 0 not, −1 not yet known. */
+  private readonly seatOk: Int8Array
   private work = 0
   private seedCursor = 0
   private front: FrontPlan
@@ -153,6 +226,7 @@ class Packer {
     this.order = Uint32Array.from(ids)
     this.grid = new PointGrid(this.largest + o.gap)
     this.random = seededRandom(o.seed)
+    this.seatOk = new Int8Array(surface.count * o.sizes.length).fill(-1)
     this.front = this.openField()
   }
 
@@ -170,16 +244,39 @@ class Packer {
       first = false
     }
     for (const size of this.sizes) this.fillVoids(size)
+    this.trimHoles()
     const full = this.stones.reduce(
       (sum, s) => sum + Math.PI * (s.diameter / 2 + this.o.gap / 2) ** 2,
       0,
     )
     let fillable = 0
     for (let i = 0; i < this.surface.count; i++) if (this.sizeAt(i) > 0) fillable++
+    const spread = this.spreadOrder()
     return {
-      stones: this.select(full),
+      stones: iceLevel(this.stones, spread, this.o.coverage, this.o.gap),
+      all: this.stones,
+      spread,
       packedArea: full,
       fillable: this.surface.count > 0 ? fillable / this.surface.count : 0,
+      thin: this.thinSummary(),
+    }
+  }
+
+  /** See {@link Layout.thin}. */
+  private thinSummary(): { share: number; thickness: number } {
+    const stride = Math.max(1, Math.floor(this.surface.count / THIN_SAMPLES))
+    let open = 0
+    const thin: number[] = []
+    for (let i = 0; i < this.surface.count; i += stride) {
+      if (this.sizeAt(i) < this.largest - EPS) continue
+      open++
+      const t = this.surface.thickness(i)
+      if (t < SEAT_DEPTH_PER_MM * this.largest + FLOOR_METAL) thin.push(t)
+    }
+    thin.sort((a, b) => a - b)
+    return {
+      share: open > 0 ? thin.length / open : 0,
+      thickness: thin.length > 0 ? thin[Math.floor(thin.length / 2)]! : 0,
     }
   }
 
@@ -225,8 +322,139 @@ class Packer {
     const d = this.sizeAt(i)
     if (d === 0) return 0
     const margin = 2 * (this.o.edgeDistance(p) - this.o.margin)
-    const thickness = (this.surface.thickness(i) - FLOOR_METAL) / SEAT_DEPTH_PER_MM
-    return this.stock(Math.min(d, margin, thickness, this.front.limit))
+    const thickness = stoneForMetal(this.surface.thickness(i))
+    let limit = Math.min(d, margin, thickness, this.front.limit)
+    if (limit < this.smallest - EPS) return 0
+    // The sample's thickness is cached; the footprint can sit a little off it, and over a thin
+    // or uneven wall that little matters: check the metal under the footprint itself too.
+    const n = this.surface.normal(i)
+    limit = Math.min(
+      limit,
+      stoneForMetal(this.surface.metalAlong(add(p, scale(n, this.surface.spacing)), scale(n, -1))),
+    )
+    // The axial thickness is a bound; the seat's whole width must also have metal under it.
+    for (let k = 0; k < this.sizes.length; k++)
+      if (this.sizes[k]! <= limit + EPS && this.seatHasMetal(i, k)) return this.sizes[k]!
+    return 0
+  }
+
+  /** Seat depth below the surface at `r` from its axis: the pavilion's cone, to the girdle at the rim. */
+  private seatDepth(r: number, d: number): number {
+    const rim = this.o.sink + GIRDLE_BAND
+    return d * (SEAT_DEPTH_PER_MM - (SEAT_DEPTH_PER_MM - rim) * Math.min(1, (2 * r) / d))
+  }
+
+  /** The least metal beyond the seat's depth on a ring of rays `r` from sample i's axis. */
+  private ringSpare(i: number, d: number, r: number, rays: number): number {
+    const s = this.surface.point(i)
+    const n = this.surface.normal(i)
+    const u = perpendicular(n)
+    const v = cross(n, u)
+    const down = scale(n, -1)
+    // Start well above the surface: a curved face falls away from the tangent plane.
+    const lift = 0.5 * d + this.surface.spacing
+    let spare = Infinity
+    for (let a = 0; a < rays; a++) {
+      const angle = (2 * Math.PI * a) / rays
+      const o = add(
+        s,
+        add(scale(n, lift), add(scale(u, r * Math.cos(angle)), scale(v, r * Math.sin(angle)))),
+      )
+      spare = Math.min(spare, this.surface.metalAlong(o, down) - this.seatDepth(r, d))
+    }
+    return spare
+  }
+
+  /** Whether a seat of size index k at sample i keeps the floor metal across its width. */
+  private seatHasMetal(i: number, k: number): boolean {
+    const key = i * this.sizes.length + k
+    let ok = this.seatOk[key]!
+    if (ok < 0) {
+      const d = this.sizes[k]!
+      ok = 1
+      for (const share of SEAT_RINGS)
+        if (this.ringSpare(i, d, (share * d) / 2, RING_RAYS) < FLOOR_METAL) {
+          ok = 0
+          break
+        }
+      this.seatOk[key] = ok
+    }
+    return ok === 1
+  }
+
+  /**
+   * Whether a seat of diameter d with its girdle at c and axis n would run into the seat of a
+   * placed stone cut from another face (across an edge, inside a fold, from the far side of a
+   * thin wall). Each seat is its pavilion's cone; points on each cone are tested in the other.
+   */
+  private clashes(c: Vec3, n: Vec3, d: number, near: readonly number[]): boolean {
+    for (const j of near) {
+      const o = this.stones[j]!
+      if (dot(n, o.normal) > CLASH_COS) continue
+      if (this.coneHits(c, n, d, 0, o.position, o.normal, o.diameter, 0)) return true
+      if (this.coneHits(o.position, o.normal, o.diameter, 0, c, n, d, 0)) return true
+    }
+    return false
+  }
+
+  /**
+   * Whether any point of seat a (girdle centre, axis, diameter, drill-hole depth) lies inside
+   * seat b, with CLASH_WALL of metal to spare. A seat is its pavilion's cone plus its hole.
+   */
+  private coneHits(
+    a: Vec3,
+    na: Vec3,
+    da: number,
+    holeA: number,
+    b: Vec3,
+    nb: Vec3,
+    db: number,
+    holeB: number,
+  ): boolean {
+    const depthA = this.seatDepth(0, da) - this.o.sink * da
+    const depthB = this.seatDepth(0, db) - this.o.sink * db
+    const u = perpendicular(na)
+    const v = cross(na, u)
+    const rhB = (RULES.seatHole * db) / 2
+    const inside = (q: Vec3): boolean => {
+      const w = sub(q, b)
+      const z = dot(w, nb)
+      if (z < -depthB - holeB - CLASH_WALL || z > this.o.sink * db) return false
+      const radial = Math.sqrt(Math.max(0, dot(w, w) - z * z))
+      const cone = z >= 0 ? db / 2 : (db / 2) * (1 + z / depthB)
+      const r = Math.max(cone, holeB > 0 && z < 0 ? rhB : 0)
+      return radial < Math.max(0, r) + CLASH_WALL
+    }
+    for (let k = 0; k <= 4; k++) {
+      const z = -(k / 4) * depthA
+      const rho = (da / 2) * (1 - k / 4)
+      const centre = add(a, scale(na, z))
+      if (k === 4) {
+        if (inside(centre)) return true
+        break
+      }
+      for (let t = 0; t < 8; t++) {
+        const angle = (t * Math.PI) / 4
+        if (
+          inside(add(centre, add(scale(u, rho * Math.cos(angle)), scale(v, rho * Math.sin(angle)))))
+        )
+          return true
+      }
+    }
+    // The drill hole: its axis and rim from the culet down.
+    const rh = (RULES.seatHole * da) / 2
+    for (let k = 1; k <= 3 && holeA > 0; k++) {
+      const centre = add(a, scale(na, -depthA - (k / 3) * holeA))
+      if (inside(centre)) return true
+      for (let t = 0; t < 4; t++) {
+        const angle = (t * Math.PI) / 2
+        if (
+          inside(add(centre, add(scale(u, rh * Math.cos(angle)), scale(v, rh * Math.sin(angle)))))
+        )
+          return true
+      }
+    }
+    return false
   }
 
   /** Girdle centre of a stone of diameter d whose footprint is centred on surface point p. */
@@ -242,7 +470,16 @@ class Packer {
       const min = (d + this.stones[j]!.diameter) / 2 + this.o.gap
       if (d2 < (min - EPS) * (min - EPS)) ok = false
     })
-    return ok
+    return ok && !this.clashNear(c, n, d)
+  }
+
+  /** {@link clashes} against every placed stone close enough for the seats to meet. */
+  private clashNear(c: Vec3, n: Vec3, d: number): boolean {
+    const near: number[] = []
+    // A seat (holes come later, see trimHoles) reaches its depth (≈0.6 d) below its girdle and
+    // its radius across: two can only meet with girdles closer than the sum of both.
+    this.grid.near(c[0], c[1], c[2], 1.2 * (d + this.largest), (j) => near.push(j))
+    return this.clashes(c, n, d, near)
   }
 
   /**
@@ -267,7 +504,8 @@ class Packer {
         const away = dist > EPS ? scale(sub(c, other.position), 1 / dist) : cur.n
         push = add(push, scale(away, min - dist + SLACK))
       })
-      if (worst === 0) return this.place(cur.p, cur.n, d, cur.sample)
+      if (worst === 0)
+        return this.clashNear(c, cur.n, d) ? -1 : this.place(cur.p, cur.n, d, cur.sample)
       if (worst > DRIFT * d) return -1
       const next = this.snap(add(cur.p, sub(push, scale(cur.n, dot(push, cur.n)))))
       if (!next || this.sizeFor(next.sample, next.p) < d - EPS) return -1
@@ -279,7 +517,13 @@ class Packer {
   private place(p: Vec3, n: Vec3, d: number, sample: number): number {
     const index = this.stones.length
     const c = this.girdle(p, n, d)
-    const spare = this.surface.thickness(sample) - SEAT_DEPTH_PER_MM * d - FLOOR_METAL
+    // The hole takes only the metal left under the seat across its own width as well.
+    const rh = (RULES.seatHole * d) / 2
+    const spare =
+      Math.min(
+        this.surface.thickness(sample) - SEAT_DEPTH_PER_MM * d,
+        this.ringSpare(sample, d, rh, 4) + this.seatDepth(rh, d) - SEAT_DEPTH_PER_MM * d,
+      ) - FLOOR_METAL
     const hole = Math.min(Math.max(spare, 0), MAX_HOLE_PER_MM * d)
     this.stones.push({ position: c, normal: n, diameter: d, hole })
     this.depth.push(this.surface.depth[sample]!)
@@ -289,6 +533,36 @@ class Packer {
       this.dead[j] = 1
     })
     return index
+  }
+
+  /**
+   * Drill holes are sized after placement (each from the metal under its own seat), so a hole
+   * that would reach a seat cut from another face is dropped: the stone keeps its seat, and the
+   * piece gains no tunnel.
+   */
+  private trimHoles(): void {
+    this.stones.forEach((s, i) => {
+      if (s.hole <= 0) return
+      const c = s.position
+      this.grid.near(c[0], c[1], c[2], 2 * (s.diameter + this.largest) + s.hole, (j) => {
+        const o = this.stones[j]!
+        if (j === i || s.hole <= 0 || dot(s.normal, o.normal) > CLASH_COS) return
+        if (
+          this.coneHits(
+            c,
+            s.normal,
+            s.diameter,
+            s.hole,
+            o.position,
+            o.normal,
+            o.diameter,
+            o.hole,
+          ) ||
+          this.coneHits(o.position, o.normal, o.diameter, o.hole, c, s.normal, s.diameter, s.hole)
+        )
+          s.hole = 0
+      })
+    })
   }
 
   // ── Fronts ─────────────────────────────────────────────────────────────────────────────────
@@ -500,7 +774,10 @@ class Packer {
         half < OPEN_FIELD * this.largest
           ? this.rowsFor(2 * (half - this.o.margin), this.largest)
           : null
-      const d = fit?.d ?? this.largest
+      // An open field's frame row takes the largest stone its edge allows (a thin rim or a
+      // tight curve may not take the largest asked for): planned for the largest, the row is
+      // skipped wherever that does not fit, and the edge goes ragged.
+      const d = fit?.d ?? this.rowSize(members[f]!)
       const levels = [this.o.margin + d / 2 + SLACK]
       if (fit && fit.rows % 2 === 1 && fit.rows > 1) levels.push(half - RIDGE_INSET * d)
       for (const level of levels)
@@ -519,6 +796,30 @@ class Packer {
           checkpoint: this.o.checkpoint,
         })
     }
+  }
+
+  /**
+   * The largest size that fits along most of a face's frame row: for each size, the samples
+   * where its row would run (a margin and half a stone in from the edge) are asked whether
+   * they take it.
+   */
+  private rowSize(members: readonly number[]): number {
+    const s = this.surface
+    for (const d of this.sizes) {
+      const level = this.o.margin + d / 2
+      // Just inside the row's level, so the margin itself never rules a size out.
+      const along = members.filter((i) => s.edge[i]! >= level && s.edge[i]! < level + 2 * s.spacing)
+      if (along.length === 0) continue
+      const stride = Math.max(1, Math.floor(along.length / ROW_PROBES))
+      let probed = 0
+      let fit = 0
+      for (let k = 0; k < along.length; k += stride) {
+        probed++
+        if (this.sizeFor(along[k]!, s.point(along[k]!)) >= d - EPS) fit++
+      }
+      if (fit >= ROW_FITS * probed) return d
+    }
+    return this.smallest
   }
 
   private grow(seed: number, first: boolean): void {
@@ -754,26 +1055,6 @@ class Packer {
       }
     }
     return best
-  }
-
-  /**
-   * The ice level: stones in the order ice spreads over the field, until `coverage` of it is
-   * kept. Ice starts at the heart of the region (its deepest stone) and spreads through
-   * neighbouring stones, so a part-iced piece shows one solid patch growing outward and whole
-   * sections (a bowl, a step) filled before the next — never a sprinkle across the region. Stones
-   * are only dropped, never moved.
-   */
-  private select(full: number): PlacedStone[] {
-    if (this.o.coverage >= 1) return this.stones
-    const order = this.spreadOrder()
-    const keep = new Set<number>()
-    let area = 0
-    for (const i of order) {
-      if (area >= this.o.coverage * full) break
-      keep.add(i)
-      area += Math.PI * (this.stones[i]!.diameter / 2 + this.o.gap / 2) ** 2
-    }
-    return this.stones.filter((_, i) => keep.has(i))
   }
 
   /** Stones by distance through their neighbours from the deepest one; each separate patch after the last, deepest first. */

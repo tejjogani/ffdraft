@@ -68,7 +68,10 @@ export interface TargetView {
   height: number
   /** Subject matte, 0 or 1 per pixel. */
   matte: Uint8Array
-  /** Union of stone instances, 0 or 1 per pixel. */
+  /**
+   * Union of stone instances, 0 or 1 per pixel. All zeros means "no stones seen" and penalises a
+   * model that draws one; leave it undefined when the segmenter did not look for stones.
+   */
   stones?: Uint8Array
   /** Named regions (head, band, body) and the nodes that should cover them. */
   parts?: { key: string; mask: Uint8Array; nodeIds: string[] }[]
@@ -104,6 +107,8 @@ export interface Prepared {
 export interface ViewScore {
   loss: number
   iou: number
+  /** Overlap forgiving disagreement within `looseRadius` px of the target's outline; the floor tests it. */
+  looseIou: number
   stoneIou: number | null
   /** Mean outline distance, both ways, in pixels. */
   edgePx: number
@@ -131,7 +136,16 @@ export interface FitParam {
   snap?: 'melee'
 }
 
-export type ParamStatus = 'fitted' | 'assumed' | 'pinned' | 'clamped'
+/**
+ * - `fitted`: measured; the photos constrain it to within the tolerance (`observability`).
+ * - `clamped`: the search ended on a bound of its band; the truth may lie beyond it.
+ * - `weak`: the photos change, but by less than the fit's own residual can hide, so the value is
+ *   not observable from these photos; it goes back to its start, like `assumed`.
+ * - `unmoved`: free, but the search never moved it from its start (unchecked or a stalled search).
+ * - `assumed`: no fitted view changes at all; back at its start.
+ * - `pinned`: fixed by the anchor or the jeweler.
+ */
+export type ParamStatus = 'fitted' | 'assumed' | 'pinned' | 'clamped' | 'weak' | 'unmoved'
 
 export interface FitInput {
   design: Design
@@ -142,8 +156,19 @@ export interface FitInput {
   cameras?: Record<string, Camera>
   /** Node ids left out of rendering (pavé, chain). */
   hide?: string[]
-  /** Defaults: 250 evaluations and 60,000 ms. The evaluation count is deterministic; time is a cap. */
-  budget?: { evaluations?: number; ms?: number }
+  /**
+   * Defaults: 250 evaluations and 60,000 ms. The evaluation count is deterministic; time is a cap.
+   * `reserve`: evaluations kept back from the search for `observability`, which runs after it
+   * under the same budget.
+   */
+  budget?: { evaluations?: number; ms?: number; reserve?: number }
+  /**
+   * The loss the true design would score against these masks, if the segmenter can estimate it.
+   * `observability` compares each number's signal with the larger of this and the fit's residual.
+   */
+  noiseLoss?: number
+  /** Per fitted view; defaults to `FIT_FLOOR`. Under it the fit is `poor`. */
+  floor?: { looseIou?: number; stoneIou?: number }
   signal?: AbortSignal
   onProgress?: (r: FitResult) => void
 }
@@ -156,10 +181,27 @@ export interface FitResult {
   scores: Record<string, ViewScore>
   /** Mean loss over the fitted views. */
   loss: number
-  params: { key: string; value: number; status: ParamStatus; sensitivity: number }[]
+  /**
+   * `sensitivity`: the loss rise a nudge of the number causes after the camera is re-polished
+   * on the nudged build (0 until `observability` runs). `uncertainty`: the change in the number (in its own unit)
+   * that the fit's residual could hide, from the same nudges (null until then).
+   */
+  params: {
+    key: string
+    value: number
+    status: ParamStatus
+    sensitivity: number
+    uncertainty?: number | null
+  }[]
   evaluations: number
   rasters: number
-  stopped: 'converged' | 'budget' | 'aborted'
+  /**
+   * Why the search ended. `poor`: it finished, but a fitted view is under the floor, so the
+   * recipe does not explain the photo. `rejected`: a target was refused before any build.
+   */
+  stopped: 'converged' | 'poor' | 'budget' | 'aborted' | 'rejected'
+  /** `good` only when every fitted view is at or above the floor; `failed` when nothing was fitted. */
+  quality: 'good' | 'poor' | 'failed'
   diagnostics: Diagnostic[]
 }
 

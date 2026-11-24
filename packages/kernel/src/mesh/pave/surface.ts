@@ -49,6 +49,8 @@ export class PaveSurface {
   private readonly host: IndexedTriangles
   /** Region label per host triangle. */
   private readonly inside: Uint8Array
+  /** Face normals per host triangle. */
+  private readonly faceNormals: Float64Array
 
   constructor(host: IndexedTriangles, region: Region, options: SurfaceOptions) {
     this.spacing = Math.max(options.spacing, Math.sqrt(region.area / MAX_SAMPLES))
@@ -86,6 +88,7 @@ export class PaveSurface {
     this.depth = this.geodesicDepth(options.edgeCap)
     this.host = host
     this.inside = region.inside
+    this.faceNormals = region.normals
     this.thicknessCache = new Float64Array(this.count).fill(-1)
   }
 
@@ -155,6 +158,37 @@ export class PaveSurface {
       this.thicknessCache[i] = t
     }
     return t
+  }
+
+  /**
+   * Metal along the unit ray o + t·d, which starts outside the body: from where it enters to
+   * where it next leaves, halved when it leaves through the region (that wall is seated from
+   * its own side too, as in {@link thickness}). 0 when the ray misses the body or starts inside
+   * it — metal above a seat's rim is as much a clash as none below it.
+   */
+  metalAlong(o: Vec3, d: Vec3): number {
+    this.bvh ??= new TriangleBvh(this.host)
+    const entry = this.bvh.firstHit(o[0], o[1], o[2], d[0], d[1], d[2])
+    if (entry.triangle < 0 || this.facing(entry.triangle, d) >= 0) return 0
+    const exit = this.bvh.firstHit(
+      o[0],
+      o[1],
+      o[2],
+      d[0],
+      d[1],
+      d[2],
+      entry.t + 1e-6,
+      Infinity,
+      entry.triangle,
+    )
+    if (exit.triangle < 0) return 0
+    return (exit.t - entry.t) * (this.inside[exit.triangle] ? 0.5 : 1)
+  }
+
+  /** Cosine between a host triangle's outward normal and a direction. */
+  private facing(triangle: number, d: Vec3): number {
+    const n = this.faceNormals
+    return n[triangle * 3]! * d[0] + n[triangle * 3 + 1]! * d[1] + n[triangle * 3 + 2]! * d[2]
   }
 
   private smoothNormals(face: Float64Array, radius: number): Float64Array {

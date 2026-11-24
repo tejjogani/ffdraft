@@ -12,7 +12,7 @@ import { type BuildContext, defineFeature, metalOf, runtime, solidFromManifold }
 import { OutlineDistance } from '../mesh/outline/distance'
 import { edgeProfile, flatProfile, membraneDome, profiledSlab } from '../mesh/outline/profile'
 import { SHAPES } from '../mesh/outline/shapes'
-import { MIN_STROKE, thickenStrokes } from '../mesh/outline/stroke'
+import { joinIslands, MIN_STROKE, TIE_WIDTH, thickenStrokes } from '../mesh/outline/stroke'
 import { type Contour, parseSvgPath } from '../mesh/outline/svgPath'
 import type { PaveField } from '../mesh/pave/region'
 import { type FontId, loadFont, textOutline } from '../text'
@@ -40,6 +40,16 @@ const FIELD_MIN_RADIUS = 6
  */
 const recessFor = (border: number, thickness: number) =>
   Math.min(Math.max(0.8 * border, 0.3), 0.6, thickness / 3)
+/**
+ * Cells the membrane dome is solved on at most. Its relaxation costs cells × width, so a 150 mm
+ * plaque at the usual spacing took seconds per slider step; the dome is smooth (curvature
+ * bounded by FIELD_MIN_RADIUS) and interpolated, so a coarser grid reads the same.
+ */
+const DOME_CELLS = 40_000
+const domeSpacing = (field: CrossSection, resolution: number): number => {
+  const { min, max } = field.bounds()
+  return Math.max(resolution / 2, Math.sqrt(((max[0] - min[0]) * (max[1] - min[1])) / DOME_CELLS))
+}
 /** The rim's edge treatment takes at most this share of the border; the rest is at full height. */
 const RIM_EDGE = 0.75
 
@@ -101,31 +111,51 @@ function artwork(d: string, tolerance: number): Contour[] {
   return contours
 }
 
+/** Letters with no canonical decomposition, and the base letter they are set with. */
+const BASE_LETTER: Record<string, string> = { Ł: 'L', ł: 'l', Đ: 'D', đ: 'd', Ħ: 'H', ħ: 'h' }
+
 /**
- * The text without the characters the font has no glyph for, which would otherwise come out as
- * the font's "missing glyph" box — engraved into gold. Warns naming them, or throws when
- * nothing is left.
+ * The text as the font can draw it. A character the font lacks would come out as its "missing
+ * glyph" box — engraved into gold — so an accented letter is set as its base letter (Ż as Z),
+ * with a warning, and anything else is left out, as an error: the name has changed. Throws
+ * when nothing is left.
  */
 async function drawableText(text: string, font: FontId, ctx: BuildContext): Promise<string> {
   const face = await loadFont(font)
+  const has = (c: string) => c === '\n' || face.charToGlyphIndex(c) !== 0
+  const replaced = new Map<string, string>()
   const missing = new Set<string>()
-  const kept = Array.from(text).filter((c) => {
-    if (c === '\n' || face.charToGlyphIndex(c) !== 0) return true
-    if (c.trim() !== '') missing.add(c)
-    return false
-  })
-  const list = [...missing].map((c) => `“${c}”`).join(' ')
+  const kept: string[] = []
+  for (const c of Array.from(text)) {
+    if (has(c)) {
+      kept.push(c)
+      continue
+    }
+    const base = BASE_LETTER[c] ?? c.normalize('NFD').replace(/\p{M}/gu, '')
+    if (base !== c && base !== '' && Array.from(base).every(has)) {
+      replaced.set(c, base)
+      kept.push(base)
+    } else if (c.trim() !== '') missing.add(c)
+  }
+  const quote = (c: string) => `“${c}”`
+  const list = [...missing].map(quote).join(' ')
   if (kept.join('').trim() === '')
     throw new Error(
       missing.size > 0
         ? `The ${font} font has no letters for ${list}; choose another font or other characters`
         : 'The text is empty',
     )
-  if (missing.size > 0)
+  if (replaced.size > 0)
     ctx.report({
       level: 'warning',
+      code: 'text.accentDropped',
+      message: `The ${font} font has no ${[...replaced.keys()].map(quote).join(' ')}, so ${[...replaced].map(([c, b]) => `${quote(c)} was set as ${quote(b)}`).join(', ')}; check the name reads right without the accent.`,
+    })
+  if (missing.size > 0)
+    ctx.report({
+      level: 'error',
       code: 'text.missingGlyph',
-      message: `The ${font} font has no letters for ${list}, so ${missing.size > 1 ? 'they were' : 'it was'} left out; choose another font to keep ${missing.size > 1 ? 'them' : 'it'}.`,
+      message: `The ${font} font has no letters for ${list}, so ${missing.size > 1 ? 'they were' : 'it was'} left out and the text no longer reads as written; choose other characters or another font.`,
     })
   return kept.join('')
 }
@@ -173,6 +203,15 @@ export const vectorBody = defineFeature('vectorBody', async (node, ctx) => {
         SEGMENTS,
       ),
     )
+    // Softening shortens points (a star's tips, a heart's point): scale back to the height asked.
+    const soft = outline.bounds()
+    const back = node.height / (soft.max[1] - soft.min[1])
+    if (Math.abs(back - 1) > 1e-6)
+      outline = own(
+        own(
+          outline.translate([-(soft.min[0] + soft.max[0]) / 2, -(soft.min[1] + soft.max[1]) / 2]),
+        ).scale(back),
+      )
   }
   const thickened = thickenStrokes(outline, MIN_STROKE, SEGMENTS)
   if (thickened) {
@@ -184,7 +223,22 @@ export const vectorBody = defineFeature('vectorBody', async (node, ctx) => {
       limit: MIN_STROKE,
     })
   }
+  if (node.source.type === 'text') {
+    // Lettering must cast as one piece: dots, accents and script capitals that do not reach
+    // the next letter are tied to it.
+    const joined = joinIslands(outline, TIE_WIDTH, SEGMENTS)
+    if (joined) {
+      outline = own(joined.section)
+      ctx.report({
+        level: 'info',
+        code: 'outline.joined',
+        message: `${joined.ties} loose part${joined.ties > 1 ? 's' : ''} of the lettering (dots, accents, letters that do not touch) ${joined.ties > 1 ? 'were' : 'was'} tied to the rest with ${TIE_WIDTH} mm links so it casts as one piece.`,
+        value: joined.ties,
+      })
+    }
+  }
   reportPieces(outline, node, ctx)
+  const bevel = fittedBevel(node, ctx)
 
   // Fine enough for the profile to read smoothly, coarse enough to stay interactive.
   const resolution = Math.min(Math.max(node.height / 90, 0.12), 0.6)
@@ -192,16 +246,11 @@ export const vectorBody = defineFeature('vectorBody', async (node, ctx) => {
   const field = node.border > 0 ? borderField(outline, node, ctx) : null
   const slab = own(
     field
-      ? borderedSlab(outline, distance, field, node, resolution)
+      ? borderedSlab(outline, distance, field, { ...node, bevelSize: bevel }, resolution)
       : profiledSlab({
           outline,
           distance,
-          profile: edgeProfile(
-            node.bevel,
-            node.bevelSize,
-            node.thickness,
-            innerReach(outline, distance),
-          ),
+          profile: edgeProfile(node.bevel, bevel, node.thickness, innerReach(outline, distance)),
           segments: SEGMENTS,
           resolution,
         }),
@@ -210,9 +259,42 @@ export const vectorBody = defineFeature('vectorBody', async (node, ctx) => {
   // Outline (u, v) and thickness z  →  x = u, z = v, front toward −Y with the back on y = 0.
   const body = slab.rotate([90, 0, 0])
   const data: { paveField?: PaveField } = {}
-  if (field) data.paveField = { outline: field.toPolygons().map((c) => c.map(([u, v]) => [u, v])) }
+  if (field)
+    data.paveField = {
+      outline: field.toPolygons().map((c) => c.map(([u, v]) => [u, v])),
+      rim: node.border,
+    }
   return { bodies: [{ solid: solidFromManifold(body), ...metalOf(node) }], data }
 })
+
+/** Metal kept under the deepest point of an edge treatment, mm. */
+const MIN_BASE = 0.3
+
+/**
+ * The bevel or pillow size the thickness allows (a dome may not reach through the back), with
+ * a note when it is less than asked.
+ */
+function fittedBevel(node: VectorBodyNode, ctx: BuildContext): number {
+  if (node.bevel === 'flat') return node.bevelSize
+  // A pillow keeps MIN_BASE under its edge (inside a border, under the recessed field it
+  // domes); a chamfer or round edge may take 90 % of the thickness, as edgeProfile allows.
+  const room =
+    node.bevel !== 'pillow'
+      ? node.thickness * 0.9
+      : (node.border > 0
+          ? node.thickness - recessFor(node.border, node.thickness)
+          : node.thickness) - MIN_BASE
+  const fitted = Math.max(0, Math.min(node.bevelSize, room))
+  if (fitted < node.bevelSize - 0.01)
+    ctx.report({
+      level: 'info',
+      code: 'outline.bevelReduced',
+      message: `A ${node.bevelSize} mm ${node.bevel} does not fit a ${node.thickness} mm plate${node.border > 0 ? ' with a recessed field' : ''}, so it was made ${fitted.toFixed(2)} mm.`,
+      value: fitted,
+      limit: node.bevelSize,
+    })
+  return fitted
+}
 
 /** The field inside a raised border, or null (with a warning) when the border fills the outline. */
 function borderField(
@@ -261,7 +343,7 @@ function borderedSlab(
           node.bevelSize,
           floor,
           FIELD_MIN_RADIUS,
-          resolution / 2,
+          domeSpacing(field, resolution),
         )
       : flatProfile(floor)
   const rim = profiledSlab({

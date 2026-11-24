@@ -3,7 +3,7 @@
  * handles for solids — tessellation, transforms, booleans, integral properties — lives here so
  * features never see an untyped WASM object or an opaque `WebAssembly.Exception`.
  */
-import { type AnyShape, cast, makeCompound, measureArea, type Shape3D } from 'replicad'
+import { type AnyShape, cast, measureArea, type Shape3D } from 'replicad'
 import type { TopoDS_Shape } from 'replicad-opencascadejs'
 import type { Mat4 } from '../geometry/vec'
 import { runtime } from '../runtime/index'
@@ -114,6 +114,22 @@ export function shapeBounds(shape: Shape3D): Bounds {
 export type BooleanOp = 'union' | 'subtract' | 'intersect'
 
 /**
+ * A compound holding `shapes`, which stay valid and owned by the caller. (replicad's
+ * `makeCompound` deletes its inputs: used on cutters that belong to cached node results, it
+ * freed their B-reps, so every exact cut after the first silently fell back to a mesh.)
+ */
+export function compoundOf(shapes: readonly Shape3D[]): Shape3D {
+  const { oc } = runtime()
+  return scoped((own) => {
+    const builder = own(new oc.TopoDS_Builder())
+    const compound = own(new oc.TopoDS_Compound())
+    builder.MakeCompound(compound)
+    for (const s of shapes) builder.Add(compound, s.wrapped)
+    return cast(compound) as Shape3D
+  })
+}
+
+/**
  * Exact boolean of `target` with `tools`. The tools are applied as one compound (looping `cut`
  * is ~6× slower, docs/research/01-cad.md §4), so the caller must make sure they do not overlap
  * each other for `subtract`; unions and intersections are folded pairwise.
@@ -122,7 +138,7 @@ export function booleanShapes(op: BooleanOp, target: Shape3D, tools: readonly Sh
   try {
     if (op === 'subtract') {
       if (tools.length === 1) return target.cut(tools[0]!)
-      const compound = makeCompound([...tools]) as Shape3D
+      const compound = compoundOf(tools)
       try {
         return target.cut(compound)
       } finally {

@@ -9,7 +9,7 @@
  *      created by `pnpm --filter @pave/render setup:blender`.
  * Processes are spawned without a shell, with argument arrays only.
  */
-import { spawn } from 'node:child_process'
+import { type ChildProcess, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
@@ -84,24 +84,86 @@ interface RunResult {
 
 const TAIL = 16_000
 
+/** How long a process gets to exit after SIGTERM before it is killed outright. */
+const KILL_GRACE_MS = 5_000
+
+/**
+ * Every Blender process this module started and has not seen exit. When this process ends —
+ * normally, on SIGINT or SIGTERM — they are killed too, so no render outlives the app that
+ * asked for it. (A hard kill of this process cannot run handlers: the worker then exits when
+ * its stdin pipe closes, see pave_render.py.)
+ */
+const children = new Set<ChildProcess>()
+
+function killChildren(): void {
+  for (const child of children) child.kill('SIGKILL')
+  children.clear()
+}
+
+/** Kills the children, then lets the signal do what it would have done without this handler. */
+function onSignal(signal: NodeJS.Signals): void {
+  killChildren()
+  untrack()
+  process.kill(process.pid, signal)
+}
+
+function track(child: ChildProcess): void {
+  if (children.size === 0) {
+    process.on('exit', killChildren)
+    process.once('SIGINT', onSignal)
+    process.once('SIGTERM', onSignal)
+  }
+  children.add(child)
+}
+
+function untrack(child?: ChildProcess): void {
+  if (child) children.delete(child)
+  if (children.size > 0) return
+  process.off('exit', killChildren)
+  process.off('SIGINT', onSignal)
+  process.off('SIGTERM', onSignal)
+}
+
 function run(
   command: string,
   args: string[],
   opts: { cwd?: string; signal?: AbortSignal; timeoutMs: number; onLine?: (line: string) => void },
 ): Promise<RunResult> {
   return new Promise((resolvePromise, reject) => {
+    // Never start a process for a job that is already cancelled.
+    if (opts.signal?.aborted) {
+      reject(new Error('Blender render aborted'))
+      return
+    }
     const child = spawn(command, args, {
       cwd: opts.cwd,
       shell: false,
       windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      // stdin stays open for the worker's lifetime: it exits when the pipe closes (we died).
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, PAVE_RENDER_STDIN_WATCH: '1' },
     })
+    track(child)
     let stdout = ''
     let stderr = ''
     let killedFor: string | null = null
+    let escalate: ReturnType<typeof setTimeout> | undefined
+    let settled = false
+    const finish = (settle: () => void) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      clearTimeout(escalate)
+      opts.signal?.removeEventListener('abort', onAbort)
+      untrack(child)
+      settle()
+    }
     const kill = (why: string) => {
+      if (killedFor) return
       killedFor = why
-      child.kill()
+      child.kill('SIGTERM')
+      // A process that ignores SIGTERM (Blender mid-render can) is killed outright.
+      escalate = setTimeout(() => child.kill('SIGKILL'), KILL_GRACE_MS)
     }
     const timer = setTimeout(
       () => kill(`timed out after ${Math.round(opts.timeoutMs / 1000)} s`),
@@ -109,24 +171,21 @@ function run(
     )
     const onAbort = () => kill('aborted')
     opts.signal?.addEventListener('abort', onAbort, { once: true })
-    createInterface({ input: child.stdout }).on('line', (line) => {
+    child.stdin?.on('error', () => {}) // the worker may exit before reading; that is fine
+    createInterface({ input: child.stdout! }).on('line', (line) => {
       stdout = `${stdout}${line}\n`.slice(-TAIL)
       opts.onLine?.(line)
     })
-    child.stderr.on('data', (chunk: Buffer) => {
+    child.stderr!.on('data', (chunk: Buffer) => {
       stderr = (stderr + chunk.toString()).slice(-TAIL)
     })
-    child.on('error', (err) => {
-      clearTimeout(timer)
-      opts.signal?.removeEventListener('abort', onAbort)
-      reject(err)
+    child.on('error', (err) => finish(() => reject(err)))
+    // A killed process settles on 'exit': 'close' also waits for its pipes, which a grandchild
+    // (an encoder) can hold open.
+    child.on('exit', () => {
+      if (killedFor) finish(() => reject(new Error(`Blender render ${killedFor}`)))
     })
-    child.on('close', (code) => {
-      clearTimeout(timer)
-      opts.signal?.removeEventListener('abort', onAbort)
-      if (killedFor) reject(new Error(`Blender render ${killedFor}`))
-      else resolvePromise({ code, stdout, stderr })
-    })
+    child.on('close', (code) => finish(() => resolvePromise({ code, stdout, stderr })))
   })
 }
 
@@ -207,6 +266,7 @@ export interface RenderWithBlenderOptions extends Omit<RuntimeOptions, 'env' | '
 export async function renderWithBlender(
   options: RenderWithBlenderOptions,
 ): Promise<BlenderRenderResult> {
+  options.signal?.throwIfAborted()
   const runtime = resolveRuntime(options)
   const outDir = resolve(options.outDir)
   await mkdir(outDir, { recursive: true })
@@ -214,6 +274,8 @@ export async function renderWithBlender(
   const jobPath = join(outDir, 'job.json')
   await writeFile(glbPath, options.glb)
   await writeFile(jobPath, JSON.stringify({ scene: options.resolved, glb: glbPath, outDir }))
+  // Cancelled while the job files were written: do not start Blender for it.
+  options.signal?.throwIfAborted()
 
   const { code, stdout, stderr } = await run(
     runtime.command,

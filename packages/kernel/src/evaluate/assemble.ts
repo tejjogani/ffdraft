@@ -29,7 +29,7 @@ import {
   unionBounds,
 } from '../solid/meshing'
 import { manifoldFromTriangles, trianglesFromManifold } from '../solid/solid'
-import type { Bounds, Part } from '../types'
+import type { Bounds, Part, PartRegion } from '../types'
 import { labelOf } from './build'
 import { hashString } from './hash'
 
@@ -119,6 +119,26 @@ function partOf(
     bounds: unionBounds(solids.map((s) => s.bounds())),
     exact: solids.every((s) => s.exact),
   }
+}
+
+/** Source nodes whose finish or plating differ from the part's (see `Part.regions`). */
+function regionsOf(
+  part: Part,
+  sources: readonly Source[],
+  results: ReadonlyMap<string, NodeResult>,
+): PartRegion[] | undefined {
+  const regions = new Map<string, PartRegion>()
+  for (const { nodeId, body } of sources) {
+    if (body.finish === part.finish && body.plating === part.plating) continue
+    const result = results.get(nodeId)
+    regions.set(nodeId, {
+      nodeId,
+      name: result ? labelOf(result.node) : nodeId,
+      finish: body.finish,
+      plating: body.plating,
+    })
+  }
+  return regions.size > 0 ? [...regions.values()] : undefined
 }
 
 // ── Draft ────────────────────────────────────────────────────────────────────────────────────
@@ -303,6 +323,9 @@ export function assembleProduction(
           }
       }
 
+    const chains = new Set(
+      active.filter((r) => r.node.kind === 'chain').flatMap((r) => r.bodies.map((b) => b.solid)),
+    )
     const groups = new Map<MetalId, MetalGroup>()
     const groupFor = (spec: MetalSpec): MetalGroup => {
       let group = groups.get(spec.material)
@@ -343,7 +366,16 @@ export function assembleProduction(
     const cutterBoxes = [...everywhere, ...[...groups.values()].flatMap((g) => g.late)].map((c) =>
       c.bounds(),
     )
-    for (const [material, group] of groups) {
+    /** Every alloy fused so far: a later alloy gives up the metal it shares with an earlier one. */
+    const castSoFar: { metal: Manifold; box: Bounds }[] = []
+    // Smallest alloy first, so where castings of two alloys share metal the smaller one (a head,
+    // an accent) keeps its shape and the larger one (the band) is cut to receive it — as a
+    // jeweler seats a separately cast head. Parts are put back in design order afterwards.
+    const designOrder = [...groups.keys()]
+    const metalOf = (g: MetalGroup) => g.solids.reduce((sum, s) => sum + s.volume(), 0)
+    const bySize =
+      groups.size > 1 ? [...groups].sort(([, a], [, b]) => metalOf(a) - metalOf(b)) : [...groups]
+    for (const [material, group] of bySize) {
       // A mesh body can hold many separate shells (the links of a chain). Shells that touch
       // nothing outside their own body need no boolean at all — and fusing a thousand links
       // with a pendant they never touch would take most of a minute — so they are set aside
@@ -353,6 +385,12 @@ export function assembleProduction(
       for (const solid of group.solids) {
         const tris = solid.triangles(quality)
         const found = shellsIn(tris)
+        // A chain is a separate component, bought or cast apart and threaded on after: its links
+        // never fuse with the piece, even where they touch it (the chain checks report that).
+        if (chains.has(solid)) {
+          multi.set(solid, { tris, shells: found, loose: new Set(found.boxes.keys()) })
+          continue
+        }
         // Dust shells (slivers a mesh pipeline left behind) do not make a body "multi-shell".
         if (found.volumes.filter((v) => v > DUST_MM3).length > 1)
           multi.set(solid, { tris, shells: found, loose: new Set() })
@@ -373,10 +411,12 @@ export function assembleProduction(
           ...singleBoxes,
           ...precutBoxes,
           ...cutterBoxes,
-          ...[...multi].flatMap(([other, b]) => (other === solid ? [] : b.shells.boxes)),
+          ...[...multi].flatMap(([other, b]) =>
+            other === solid || chains.has(other) ? [] : b.shells.boxes,
+          ),
         ]
         body.shells.boxes.forEach((box, index) => {
-          if (body.shells.volumes[index]! <= DUST_MM3) return
+          if (body.shells.volumes[index]! <= DUST_MM3 || body.loose.has(index)) return
           if (!foreign.some((f) => boundsOverlap(f, box))) {
             body.loose.add(index)
             return
@@ -410,6 +450,13 @@ export function assembleProduction(
         if (seats) fused = temp(fused.subtract(seats))
         if (group.late.length > 0)
           fused = temp(mf.Manifold.union([fused, ...batch(group.late, quality, temp)]))
+        // Two-tone: where a head of one alloy sinks into a band of another, the metal is the
+        // smaller casting's, or it would be weighed in both and the castings would not fit.
+        const box = boundsOfManifold(fused)
+        const overlapping = castSoFar.filter((c) => boundsOverlap(c.box, box))
+        if (overlapping.length > 0)
+          fused = temp(fused.subtract(fuse(overlapping.map((c) => c.metal))))
+        castSoFar.push({ metal: fused, box })
         for (const raw of fused.decompose()) {
           const same = untouched(boundsOfManifold(raw), raw.volume())
           if (same) {
@@ -490,6 +537,8 @@ export function assembleProduction(
           volume + deficitOf(sources),
         )
         part.exact = sources.length > 0 && sources.every((s) => s.body.solid.exact)
+        const regions = regionsOf(part, sources, results)
+        if (regions) part.regions = regions
         parts.push({ part, fused: solid, sources })
       })
       for (const [home, body] of loose) {
@@ -514,6 +563,9 @@ export function assembleProduction(
         parts.push({ part, fused: solid, sources })
       }
     }
+    parts.sort(
+      (a, b) => designOrder.indexOf(a.part.material) - designOrder.indexOf(b.part.material),
+    )
     return {
       parts,
       dispose: () => {

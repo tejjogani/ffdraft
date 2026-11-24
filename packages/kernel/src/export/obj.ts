@@ -8,8 +8,16 @@ import { type MeshObject, MM_NOTE, metalNotes, sceneObjects } from './meshes'
 /** OBJ names may not contain whitespace in every reader. */
 const objName = (name: string) => name.replace(/\s+/g, '_')
 
-/** Shortest decimal that round-trips a float32 coordinate at 0.1 µm. */
-const num = (v: number) => (Math.round(v * 1e4) / 1e4).toString()
+/**
+ * A float32 coordinate written so it reads back as the same float32 (9 significant digits, then
+ * trimmed). Rounding to a fixed 0.1 µm grid collapsed the sliver triangles a fused casting
+ * keeps, which a reader then sees as degenerate faces and non-manifold edges.
+ */
+const num = (v: number) => {
+  const f = Math.fround(v)
+  if (f === 0) return '0'
+  return Number.parseFloat(f.toPrecision(9)).toString()
+}
 
 export function writeObj(objects: readonly MeshObject[]): Uint8Array {
   const lines: string[] = ['# Pave OBJ export', '# units: millimetres']

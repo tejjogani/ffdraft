@@ -27,7 +27,9 @@ export function caseTable(rs: CaseResult[]): string {
       'evals',
       'renders/view',
       's',
+      'reproj %',
       'stopped',
+      'quality',
       'failure',
     ],
     rs.map((r) => [
@@ -44,7 +46,9 @@ export function caseTable(rs: CaseResult[]): string {
       String(r.evaluations),
       f(r.rastersPerView, 0),
       f(r.ms / 1000, 1),
+      f(r.reprojPct, 2),
       r.stopped ?? '—',
+      r.quality ?? '—',
       r.threw ? `threw: ${r.threw.split('\n')[0]}` : r.invalid ? 'invalid build' : '',
     ]),
   )
@@ -72,7 +76,7 @@ export function paramTable(rs: CaseResult[]): string {
         f(p.value),
         f(p.errMm),
         f(p.errPct, 1),
-        p.status,
+        p.status === 'weak' || p.status === 'assumed' ? `${p.status} (not observable)` : p.status,
         p.depthLike ? 'yes' : '',
       ]),
     ),
@@ -88,7 +92,68 @@ export function checkTable(cs: Check[]): string {
       c.value,
       c.floor,
       c.target,
-      c.pass === null ? 'no cases' : c.pass ? 'yes' : 'NO',
+      c.pass === null ? (c.floor === 'reported' ? 'reported' : 'no cases') : c.pass ? 'yes' : 'NO',
     ]),
+  )
+}
+
+const med = (xs: number[]) => {
+  if (!xs.length) return Number.NaN
+  const s = xs.slice().sort((a, b) => a - b)
+  const m = s.length >> 1
+  return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2
+}
+const worst = (xs: number[]) => (xs.length ? Math.max(...xs) : Number.NaN)
+
+/**
+ * Per recipe, view set and level: so a floor "met" overall cannot hide a recipe that misses it.
+ * Sizes are over numbers reported as measured (fitted or clamped); "not obs." counts the numbers
+ * marked assumed or weak.
+ */
+export function recipeTable(rs: CaseResult[]): string {
+  const groups = new Map<string, CaseResult[]>()
+  for (const r of rs) {
+    const k = `${r.templateId}/${r.viewSet}/${r.level}`
+    groups.set(k, [...(groups.get(k) ?? []), r])
+  }
+  return table(
+    [
+      'recipe / views / level',
+      'cases',
+      'IoU after (min)',
+      'measured size mm (median / worst)',
+      'not obs.',
+      'weight % (worst)',
+      'carat % (worst)',
+      'discrete right / wrong / asked',
+      'poor / failed',
+      'threw',
+    ],
+    [...groups].map(([k, g]) => {
+      const ok = g.filter((r) => !r.threw)
+      const sizes = ok.flatMap((r) =>
+        r.params.filter((p) => p.status === 'fitted' || p.status === 'clamped').map((p) => p.errMm),
+      )
+      const unseen = ok.flatMap((r) =>
+        r.params.filter((p) => p.status === 'assumed' || p.status === 'weak'),
+      ).length
+      const d = ok.filter((r) => r.discrete)
+      const right = d.filter((r) => r.discrete!.decided && r.discrete!.picked === r.discrete!.truth)
+      const wrong = d.filter((r) => r.discrete!.decided && r.discrete!.picked !== r.discrete!.truth)
+      const asked = d.filter((r) => !r.discrete!.decided)
+      const carats = ok.map((r) => r.caratErrPct).filter((x): x is number => x !== null)
+      return [
+        k,
+        String(g.length),
+        f(Math.min(...ok.flatMap((r) => r.iouAfter)), 3),
+        `${f(med(sizes))} / ${f(worst(sizes))}`,
+        String(unseen),
+        f(worst(ok.map((r) => r.weightErrPct)), 1),
+        f(worst(carats), 1),
+        d.length ? `${right.length} / ${wrong.length} / ${asked.length}` : '—',
+        `${ok.filter((r) => r.quality === 'poor').length} / ${ok.filter((r) => r.quality === 'failed').length}`,
+        String(g.length - ok.length),
+      ]
+    }),
   )
 }

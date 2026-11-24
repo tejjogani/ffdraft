@@ -139,3 +139,54 @@ export function defaultCamera(
     target: [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2],
   }
 }
+
+/**
+ * A fitted camera in the terms of `@pave/render`'s `ResolvedCamera` (its fields duplicated here:
+ * this package may not import the render layer, plan decision 7), so a clay render can be drawn
+ * from the fitted camera. Same orbit basis, so azimuth, elevation, target and distance carry over;
+ * the focal length follows from the span (render: f_px = N · focalLength / sensorWidth; here:
+ * f_px = N · distance / span). The render layer has no roll and no principal-point shift: turn its
+ * image by `rollDeg` (counter-clockwise) and move it by `shiftPx`; `exact` is true when neither
+ * is needed.
+ */
+export function toRenderCamera(
+  c: Camera,
+  size: Size,
+  sensorWidth = 36,
+): {
+  camera: {
+    target: Vec3
+    azimuth: number
+    elevation: number
+    distance: number
+    focalLength: number
+    sensorWidth: number
+    focusDistance: number
+    fStop: null
+    near: number
+    far: number
+  }
+  rollDeg: number
+  shiftPx: [number, number]
+  exact: boolean
+} {
+  const n = Math.max(size.width, size.height)
+  const shiftPx: [number, number] = [c.shift[0] * n, c.shift[1] * n]
+  return {
+    camera: {
+      target: [...c.target],
+      azimuth: c.azimuth,
+      elevation: c.elevation,
+      distance: c.distance,
+      focalLength: (sensorWidth * c.distance) / c.span,
+      sensorWidth,
+      focusDistance: c.distance,
+      fStop: null,
+      near: c.distance / 100,
+      far: c.distance * 100,
+    },
+    rollDeg: c.roll,
+    shiftPx,
+    exact: Math.abs(c.roll) < 1e-9 && Math.abs(shiftPx[0]) < 1e-9 && Math.abs(shiftPx[1]) < 1e-9,
+  }
+}

@@ -35,6 +35,12 @@ export interface TennisLink {
 
 /** Space between neighbouring boxes; pitch ≈ stone + 0.3–0.6 mm (06-freeform.md §6). */
 const BOX_GAP = 0.3
+/**
+ * On bigger links the gap grows with the box: the bend a pair allows grows with the square of
+ * the link over the gap, so a fixed gap leaves a 6 mm line unable to drape round a neck. At
+ * 8 % of the width the tightest bend stays near 7–10 link widths.
+ */
+const GAP_PER_WIDTH = 0.08
 const CLEARANCE = 0.03
 /** Prongs overlap the girdle by 15 % of their diameter (Stuller, 01-cad.md §2). */
 const PRONG_OVERLAP = 0.15
@@ -50,6 +56,10 @@ const MIN_PRONG = 0.45
  */
 const MAX_PRONG = 0.4
 const MAX_WALL = 0.2
+/** Edges shorter than this are collapsed after the link's union, mm. */
+const SLIVER = 1e-3
+/** A prong wire ends this share of its radius short of its tip ball's centre. */
+const TIP_INSET = 0.4
 
 /** Distance from the stone's centre to its girdle in the direction `angle` (from +x). */
 function girdleReach(cut: GemCutId, dims: GemDims, angle: number): number {
@@ -105,7 +115,7 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
   })
   // Prong tips must stay inside the link's own pitch cell, or they meet the neighbour's.
   const overhangX = Math.max(...prongs.map((p) => Math.abs(p.tip[0]))) + prong / 2 - lx / 2
-  const gap = Math.max(BOX_GAP, 2 * (overhangX + CLEARANCE))
+  const gap = Math.max(BOX_GAP, GAP_PER_WIDTH * width, 2 * (overhangX + CLEARANCE))
   const pitch = lx + gap
   const halfY = Math.max(ly / 2, ...prongs.map((p) => Math.abs(p.tip[1]) + prong / 2))
 
@@ -155,21 +165,26 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
     try {
       const outer = rounded(lx, ly, corner)
       const hole = rounded(lx - 2 * wall, ly - 2 * wall, innerCorner)
-      // Walls rise from the bottom of the plate, so walls and plate overlap and fuse.
-      const walls = own(
-        own(own(outer.subtract(hole)).extrude(top - bottom)).translate(0, 0, bottom),
-      )
+      // Walls and plate are one cup: the outline extruded full height with the box's hole
+      // cut down to the plate. Two solids sharing the outline would fuse along coincident
+      // faces into zero-area facets.
+      const block = own(own(outer.extrude(top - bottom)).translate(0, 0, bottom))
+      const cavity = own(own(hole.extrude(top - bottom)).translate(0, 0, bottom + wall))
       const lightHoleCutter = own(
         own(
           mf.Manifold.cylinder(wall * 3, lightHole, undefined, seg(stoneWidth / 3), true),
         ).translate(0, 0, bottom + wall / 2),
       )
-      const plate = own(
-        own(own(outer.extrude(wall)).translate(0, 0, bottom)).subtract(lightHoleCutter),
-      )
-      const parts: Manifold[] = [walls, plate]
+      const cup = own(own(block.subtract(cavity)).subtract(lightHoleCutter))
+      const parts: Manifold[] = [cup]
       for (const { base, tip } of prongs) {
-        parts.push(own(cylinderBetween(mf, base, tip, prong / 2, seg(prong / 2))))
+        // The wire stops inside the tip ball: ending exactly at its centre would lay the wire's
+        // rim on the ball's surface, and the union of coincident surfaces leaves zero-area
+        // facets and non-manifold edges that STL readers see (the mesh is fine by index only).
+        const run = Math.hypot(tip[0] - base[0], tip[1] - base[1], tip[2] - base[2])
+        const short = 1 - (TIP_INSET * prong) / 2 / run
+        const end: Vec3 = [0, 1, 2].map((k) => base[k]! + (tip[k]! - base[k]!) * short) as never
+        parts.push(own(cylinderBetween(mf, base, end, prong / 2, seg(prong / 2))))
         parts.push(own(own(mf.Manifold.sphere(prong * 0.5, seg(prong / 2))).translate(tip)))
       }
       const loop = (normal: 'y' | 'z', x: number) => {
@@ -193,8 +208,17 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
       parts.push(loop('y', front), loop('z', back))
       const post = (x: number, y: number, from: number) =>
         own(cylinderBetween(mf, [x, y, from], [x, y, bottom + wall / 2], ring / 2, seg(ring / 2)))
-      parts.push(post(front, 0, ringZ + R), post(back, R, ringZ), post(back, -R, ringZ))
-      return trianglesFromManifold(own(mf.Manifold.union(parts)))
+      // Posts start a quarter wire inside their ring, not on its centre line, for the same
+      // reason: a post cap centred in the ring's tube touches its surface exactly.
+      const into = ring / 4
+      parts.push(
+        post(front, 0, ringZ + R - into),
+        post(back, R, ringZ - into),
+        post(back, -R, ringZ - into),
+      )
+      // Collapse the slivers where wires cross the box's faces at a glancing angle: below a
+      // micron they round to zero-area facets once written as float32 (STL, 3MF).
+      return trianglesFromManifold(own(own(mf.Manifold.union(parts)).simplify(SLIVER)))
     } finally {
       for (const m of temps) m.delete()
     }

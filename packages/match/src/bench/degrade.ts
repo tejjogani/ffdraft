@@ -3,12 +3,13 @@
  * outline by a pixel in blocks, blurs it, offsets the crop by up to 2 px, drops 10 % of the stone
  * marks and jitters the rest by 2 px; `hard` adds a 2 px erosion and holes of up to 2 % of the
  * area (its camera distance and anchor error are drawn in `synth`). How close this is to real
- * mask noise on polished metal is unverified.
+ * mask noise on polished metal is unverified. `misspec` keeps the masks clean: its difficulty is
+ * in the truth (`synth`), which the recipe cannot draw exactly.
  */
 import { dilate, erode } from '../mask'
 import type { Size, StoneMark, TargetView } from '../types'
 
-export type Level = 'clean' | 'noisy' | 'hard'
+export type Level = 'clean' | 'noisy' | 'hard' | 'misspec'
 
 const BLOCK = 16
 
@@ -82,7 +83,7 @@ function holes(m: Uint8Array, size: Size, rnd: () => number, fraction: number): 
 }
 
 export function degrade(v: TargetView, level: Level, rnd: () => number): TargetView {
-  if (level === 'clean') return v
+  if (level === 'clean' || level === 'misspec') return v
   const size = { width: v.width, height: v.height }
   const bw = Math.ceil(v.width / BLOCK)
   const bh = Math.ceil(v.height / BLOCK)

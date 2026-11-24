@@ -14,6 +14,7 @@ import { OutlineDistance } from '../mesh/outline/distance'
 import { edgeProfile, profiledSlab } from '../mesh/outline/profile'
 import { SHAPES } from '../mesh/outline/shapes'
 import { parseSvgPath } from '../mesh/outline/svgPath'
+import { dropSpecks } from '../mesh/pieces'
 
 type ReliefNode = NodeOf<'relief'>
 
@@ -159,7 +160,8 @@ export const relief = defineFeature('relief', async (node, ctx) => {
       ),
     )
   }
-  const body = own(mf.Manifold.union(parts))
+  // The union leaves zero-volume slivers where the rim grazes the relief.
+  const body = own(dropSpecks(mf.Manifold.union(parts)))
   // Outline plane (x, y) and relief height z → x, z and depth toward −Y, back on y = 0.
   return { bodies: [{ solid: solidFromManifold(body.rotate([90, 0, 0])), ...metalOf(node) }] }
 })

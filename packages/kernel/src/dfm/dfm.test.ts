@@ -133,15 +133,110 @@ describe('manufacturability checks', () => {
     expect(new Set(walls.map((d) => d.nodeId)).size).toBe(walls.length)
   })
 
-  it('finds stones that collide or sit in metal without a seat', async () => {
-    const codes = await codesOf([
+  it('finds stones that collide or sit in metal without a seat, each pair once', async () => {
+    const design = designFrom('other', [
       { id: 'a', kind: 'gem', width: 3, transform: at(0, 0, 20) },
       { id: 'b', kind: 'gem', width: 3, transform: at(2, 0, 20) },
       plate,
       { id: 'sunk', kind: 'gem', width: 2, transform: at(4, 0, 0) },
     ])
-    expect(codes).toContain('stone.collision')
+    const e = await kernel.evaluate(design, { detail: 'production' })
+    const codes = e.diagnostics.map((d) => d.code)
+    // Girdles that cross are the evaluator's stone.overlap; the exact check does not repeat them.
+    expect(codes.filter((c) => c === 'stone.overlap')).toHaveLength(1)
+    expect(codes).not.toContain('stone.collision')
     expect(codes).toContain('stone.inMetal')
+  })
+
+  it('finds pavilions that cross below girdles that do not touch', async () => {
+    // Two stones tilted towards each other: girdles apart, pavilions through each other.
+    const tilt = (x: number, angle: number) => ({
+      ...at(x, 0, 20),
+      rotation: [0, angle, 0] as [number, number, number],
+    })
+    const codes = await codesOf([
+      { id: 'a', kind: 'gem', width: 4, transform: tilt(-1.2, -60) },
+      { id: 'b', kind: 'gem', width: 4, transform: tilt(1.2, 60) },
+    ])
+    expect(codes).toContain('stone.collision')
+  })
+
+  it('tells a stone entombed in metal (an error) from a seat cutting metal off', async () => {
+    const codes = await kernel.evaluate(
+      designFrom('other', [
+        { id: 'plate', kind: 'primitive', name: 'Plate', shape: 'box', size: [16, 16, 2] },
+        { id: 'sunk', kind: 'gem', width: 2, transform: at(4, 0, 0.6) },
+      ]),
+      { detail: 'production' },
+    )
+    expect(codes.diagnostics.map((d) => d.code)).not.toContain('seat.through')
+    expect(codes.diagnostics.find((d) => d.code === 'stone.inMetal')?.level).toBe('error')
+  })
+
+  it('finds stones that nothing holds', async () => {
+    const solitaire = buildDesign(TEMPLATES.find((t) => t.id === 'solitaire')!.spec)
+    for (const detail of ['draft', 'production'] as const)
+      expect(
+        (await kernel.evaluate(solitaire, { detail })).diagnostics.map((d) => d.code),
+      ).not.toContain('stone.unheld')
+    const moved = applyOps(solitaire, [
+      { t: 'update', id: 'head', patch: { transform: at(8, 0, 0) } },
+    ]).design
+    const draft = await kernel.evaluate(moved)
+    expect(draft.diagnostics.find((d) => d.code === 'stone.unheld')?.level).toBe('warning')
+    const production = await kernel.evaluate(moved, { detail: 'production' })
+    expect(production.diagnostics.find((d) => d.code === 'stone.unheld')?.level).toBe('error')
+  })
+
+  it('reports metal that touches nothing else as a separate casting', async () => {
+    const codes = await codesOf([
+      { id: 'band', kind: 'ringShank' },
+      { id: 'ball', kind: 'primitive', shape: 'sphere', size: [2, 2, 2], transform: at(0, 0, 16) },
+    ])
+    expect(codes).toContain('metal.separate')
+    expect(await codesOf([{ id: 'band', kind: 'ringShank' }])).not.toContain('metal.separate')
+  })
+
+  it('takes a two-tone head as a separate casting seated on the band, weighed once', async () => {
+    const solitaire = buildDesign(TEMPLATES.find((t) => t.id === 'solitaire')!.spec)
+    const one = await kernel.evaluate(solitaire, { detail: 'production' })
+    const twoTone = applyOps(solitaire, [
+      { t: 'update', id: 'head', patch: { material: 'au18k-yellow' } },
+    ]).design
+    const two = await kernel.evaluate(twoTone, { detail: 'production' })
+    const codes = two.diagnostics.map((d) => d.code)
+    expect(codes).not.toContain('metal.disconnected')
+    expect(codes).toContain('metal.separateCasting')
+    const total = (e: typeof one) => e.parts.reduce((sum, p) => sum + p.volumeMm3, 0)
+    expect(total(two)).toBeCloseTo(total(one), 0)
+    const moved = applyOps(twoTone, [
+      { t: 'update', id: 'head', patch: { transform: at(0, 0, 3) } },
+    ])
+    expect(
+      (await kernel.evaluate(moved.design, { detail: 'production' })).diagnostics.map(
+        (d) => d.code,
+      ),
+    ).toContain('metal.disconnected')
+  })
+
+  it('runs the size rules at draft too, and warns about an absurd weight', async () => {
+    const e = await kernel.evaluate(
+      designFrom('other', [
+        plate,
+        { id: 'post', kind: 'finding', type: 'earringPost', host: 'plate', wire: 0.5 },
+      ]),
+    )
+    expect(e.diagnostics.map((d) => d.code)).toContain('post.thin')
+    const huge = await kernel.evaluate(
+      designFrom('other', [{ ...plate, size: [80, 80, 20] } as NodeInput]),
+    )
+    expect(huge.diagnostics.map((d) => d.code)).toContain('metal.heavy')
+  })
+
+  it('leaves a chain out of the caster’s envelope', async () => {
+    const pendant = buildDesign(TEMPLATES.find((t) => t.id === 'pendant-solitaire')!.spec)
+    const e = await kernel.evaluate(pendant, { detail: 'production' })
+    expect(e.diagnostics.map((d) => d.code)).not.toContain('piece.large')
   })
 
   it('applies the profile’s casting limits', async () => {

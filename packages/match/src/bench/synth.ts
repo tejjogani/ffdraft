@@ -1,11 +1,18 @@
 /**
  * Benchmark cases (plan §12): a template, free numbers drawn inside their bands, a discrete
  * option, a scale anchor, and target views rendered from the TRUE design at random cameras near
- * a canon view. The fit then starts from the template's defaults and only sees the masks.
+ * a canon view. The fit then starts from the template's defaults and only sees the masks, which
+ * carry the stone mask and named part masks (head and band, body and bail) a segmenter would give.
  *
  * The bands below stand in for the canon's (this package may not import `@pave/canon`): they
  * are plausible ranges for each recipe, narrower than the schema's declared ranges, which also
  * allow pieces nobody would make.
+ *
+ * Every level but `misspec` is closed-world: the truth is drawn from the very bands that bound
+ * the search and differs from the start only in the free numbers. `misspec` breaks that, as a
+ * real piece would: the truth's numbers come from bands widened by 30 % on each side (inside the
+ * schema's range), and fields the fit holds fixed are changed too (band profile, shoulders, taper
+ * of the band, ring size, head taper and prong tips). Its masks are clean.
  */
 import type { Evaluation } from '@pave/kernel/types'
 import {
@@ -45,6 +52,8 @@ export interface BenchRecipe {
   /** Two-view set: rings use top and through-the-finger, pendants front and side. */
   two: [ViewSeed, ViewSeed]
   heldOut: ViewSeed
+  /** Named regions of the masks and the nodes that draw them. */
+  parts?: { key: string; nodeIds: string[] }[]
 }
 
 const ringSize = (d: Design): ScaleAnchor => ({
@@ -63,6 +72,14 @@ const pendant = {
   two: ['front', 'side'] as [ViewSeed, ViewSeed],
   heldOut: 'threeQuarter' as ViewSeed,
 }
+const headAndBand = (head: string[]) => [
+  { key: 'head', nodeIds: head },
+  { key: 'band', nodeIds: ['band'] },
+]
+const bodyAndBail = (body: string[]) => [
+  { key: 'body', nodeIds: body },
+  { key: 'bail', nodeIds: ['bail'] },
+]
 const bandTie = { 'band.widthTop': ['band.widthBottom'] }
 
 export const BENCH_RECIPES: Record<string, BenchRecipe> = {
@@ -86,6 +103,7 @@ export const BENCH_RECIPES: Record<string, BenchRecipe> = {
     ties: bandTie,
     discrete: { field: 'head.prongCount', options: ['4', '6'] },
     depthLike: ['band.thicknessTop', 'center.placement.elevation'],
+    parts: headAndBand(['head', 'center']),
   },
   halo: {
     ...ring,
@@ -101,6 +119,7 @@ export const BENCH_RECIPES: Record<string, BenchRecipe> = {
     discrete: { field: 'halo.rows', options: ['1', '2'] },
     hide: ['row'],
     depthLike: [],
+    parts: headAndBand(['head', 'center', 'halo']),
   },
   'three-stone': {
     ...ring,
@@ -109,6 +128,7 @@ export const BENCH_RECIPES: Record<string, BenchRecipe> = {
     bands: { 'center.width': [4.5, 7.5], 'side1.width': [2.5, 4.5], 'band.widthTop': [1.6, 3.5] },
     ties: { ...bandTie, 'side1.width': ['side2.width'] },
     depthLike: [],
+    parts: headAndBand(['head', 'center', 'sideHead1', 'side1', 'sideHead2', 'side2']),
   },
   'wedding-band': {
     ...ring,
@@ -143,6 +163,7 @@ export const BENCH_RECIPES: Record<string, BenchRecipe> = {
     },
     discrete: { field: 'face.outline', options: ['cushion', 'oval'] },
     depthLike: ['band.thicknessTop'],
+    parts: headAndBand(['face']),
   },
   'pendant-solitaire': {
     ...pendant,
@@ -152,6 +173,7 @@ export const BENCH_RECIPES: Record<string, BenchRecipe> = {
     discrete: { field: 'bail.style', options: ['loop', 'tube'] },
     hide: ['chain'],
     depthLike: [],
+    parts: bodyAndBail(['head', 'center']),
     // The jeweler states the stone (0.5 ct in the template); its width sets the scale.
     anchor: (d) => ({
       type: 'stone',
@@ -166,6 +188,7 @@ export const BENCH_RECIPES: Record<string, BenchRecipe> = {
     bands: { 'body.thickness': [1, 2.5], 'bail.opening': [2.5, 5], 'bail.width': [2, 4] },
     hide: ['chain'],
     depthLike: ['body.thickness'],
+    parts: bodyAndBail(['body']),
     anchor: (d) => ({
       type: 'height',
       nodeId: 'body',
@@ -179,6 +202,10 @@ export const BENCH_RECIPES: Record<string, BenchRecipe> = {
     bands: { 'head.prongDiameter': [0.6, 1.2], 'post.length': [8, 12] },
     discrete: { field: 'head.prongCount', options: ['4', '6'] },
     depthLike: ['post.length'],
+    parts: [
+      { key: 'head', nodeIds: ['head', 'stone'] },
+      { key: 'post', nodeIds: ['post'] },
+    ],
     anchor: (d) => ({
       type: 'stone',
       nodeId: 'stone',
@@ -194,6 +221,7 @@ export const BENCH_RECIPES: Record<string, BenchRecipe> = {
     bands: { 'body.thickness': [2.5, 5.5], 'bail.opening': [3, 7], 'bail.width': [3, 7] },
     hide: ['ice', 'chain'],
     depthLike: ['body.thickness'],
+    parts: bodyAndBail(['body']),
     anchor: (d) => ({
       type: 'height',
       nodeId: 'body',
@@ -293,16 +321,31 @@ function cameraNear(
   return cam
 }
 
-function viewOf(e: Evaluation, c: Camera, px: number, id: string, hide: string[]): TargetView {
+function viewOf(
+  e: Evaluation,
+  c: Camera,
+  px: number,
+  id: string,
+  hide: string[],
+  partsOf: BenchRecipe['parts'] = [],
+): TargetView {
   const size = { width: px, height: px }
   const r = rasterize(e, c, size, { hide })
   const marks = projectStones(e, c, size).filter((m) => !hide.includes(m.id.split(':')[0]!))
+  // Part masks as a segmenter would draw them: each region's visible pixels.
+  const parts = partsOf
+    .map((p) => {
+      const want = new Set(p.nodeIds.map((n) => r.nodeIds.indexOf(n) + 1).filter((k) => k > 0))
+      return { ...p, mask: Uint8Array.from(r.node, (n) => (want.has(n) ? 1 : 0)) }
+    })
+    .filter((p) => p.mask.some((x) => x))
   return {
     id,
     width: px,
     height: px,
     matte: r.cls.map((v) => (v ? 1 : 0)),
     stones: r.cls.map((v) => (v === 2 ? 1 : 0)),
+    ...(parts.length ? { parts } : {}),
     // Feature stones only: pavé fields are counted, not matched one by one.
     ...(marks.length && marks.length <= 12
       ? { marks: marks.map(({ x, y, d }) => ({ x, y, d })) }
@@ -328,13 +371,21 @@ export async function makeCase(
   const hide = recipe.hide ?? []
   const params = paramsFor(o.template, recipe.keys, { bands: recipe.bands, ties: recipe.ties })
 
-  // Truth: uniform inside the bands, redrawn until the kernel reports no error.
+  // Truth: uniform inside the bands (widened for `misspec`), redrawn until the kernel reports no error.
+  const misspec = o.level === 'misspec'
+  const schemaRange = paramsFor(o.template, recipe.keys)
+  const drawFrom = params.map((p, j) => {
+    if (!misspec) return p
+    const pad = 0.3 * (p.max - p.min)
+    const s = schemaRange[j]!
+    return { ...p, min: Math.max(s.min, p.min - pad), max: Math.min(s.max, p.max + pad) }
+  })
   let truth: Design | null = null
   let truthEv: Evaluation | null = null
   let truthValues: number[] = []
   let truthOption: string | null = null
   for (let tries = 0; tries < 20 && !truth; tries++) {
-    truthValues = params.map((p) => {
+    truthValues = drawFrom.map((p) => {
       const v = p.min + (p.max - p.min) * rnd()
       return p.integer ? Math.round(v) : Math.round(v * 100) / 100
     })
@@ -343,7 +394,14 @@ export async function makeCase(
       : null
     const extra =
       recipe.discrete && truthOption ? [fieldOp(recipe.discrete.field, truthOption)] : []
-    const d = applyOps(o.template, [...extra, ...opsFor(params, truthValues)]).design
+    const held = misspec ? heldFieldOps(o.template, recipe, rnd) : []
+    // Held fields first; the free numbers (and the taper's own bottom width) after.
+    const d = applyOps(o.template, [
+      ...held,
+      ...extra,
+      ...opsFor(drawFrom, truthValues),
+      ...(misspec ? taperOps(o.template, recipe, truthValues, params, rnd) : []),
+    ]).design
     const e = await evaluate(d)
     if (!hasError(e)) {
       truth = d
@@ -382,7 +440,11 @@ export async function makeCase(
     const id = j < seeds.length ? `${s}` : `held-${s}`
     const cam = cameraNear(truthEv, s, rnd, hide, near)
     truthCameras[id] = cam
-    const v = degrade(viewOf(truthEv, cam, px, id, hide), j < seeds.length ? o.level : 'clean', rnd)
+    const v = degrade(
+      viewOf(truthEv, cam, px, id, hide, recipe.parts),
+      j < seeds.length ? o.level : 'clean',
+      rnd,
+    )
     // The read's view label seeds the pose search: a camera off by up to 25°.
     views.push({
       ...v,
@@ -413,4 +475,48 @@ export async function makeCase(
     truthWeightG: facts.weightG,
     truthCarat: facts.carat,
   }
+}
+
+/**
+ * `misspec`: changes to fields the fit holds fixed, as a real piece has them. Only fields the
+ * template has, and never the recipe's own discrete field.
+ */
+function heldFieldOps(d: Design, recipe: BenchRecipe, rnd: () => number): Op[] {
+  const pick = <T>(xs: readonly T[]) => xs[Math.floor(rnd() * xs.length)]!
+  const own = recipe.discrete?.field
+  const ops: Op[] = []
+  const band = d.nodes.band as { kind?: string } | undefined
+  if (band?.kind === 'ringShank') {
+    const patch: Record<string, unknown> = {
+      size: { system: 'us', value: Math.round((4.5 + rnd() * 5.5) * 4) / 4 },
+    }
+    if (own !== 'band.profile')
+      patch.profile = pick(['court', 'dShape', 'flat', 'flatCourt', 'knifeEdge'])
+    // Shoulders only where a head rises from the band.
+    if (d.nodes.head) patch.shoulder = pick(['plain', 'cathedral', 'split'])
+    ops.push({ t: 'update', id: 'band', patch })
+  }
+  const head = d.nodes.head as { kind?: string; style?: string } | undefined
+  if (head?.kind === 'setting' && (head.style ?? 'prong') === 'prong') {
+    const patch: Record<string, unknown> = { taper: Math.round(rnd() * 80) / 100 }
+    if (own !== 'head.prongTip') patch.prongTip = pick(['round', 'claw', 'tab', 'double'])
+    ops.push({ t: 'update', id: 'head', patch })
+  }
+  return ops
+}
+
+/** `misspec`: a tapered band, its base 50 to 100 % of its top, where the recipe ties the two. */
+function taperOps(
+  d: Design,
+  recipe: BenchRecipe,
+  values: number[],
+  params: FitParam[],
+  rnd: () => number,
+): Op[] {
+  const j = params.findIndex((p) => p.key === 'band.widthTop')
+  if (j < 0 || !recipe.ties?.['band.widthTop']?.includes('band.widthBottom')) return []
+  if ((d.nodes.band as { kind?: string } | undefined)?.kind !== 'ringShank') return []
+  const top = values[j]!
+  const bottom = Math.max(1, Math.round(top * (0.5 + 0.5 * rnd()) * 100) / 100)
+  return [{ t: 'update', id: 'band', patch: { widthBottom: bottom } }]
 }

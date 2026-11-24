@@ -37,6 +37,11 @@ export interface PieceFacts {
   bail?: { node: NodeOf<'bail'>; part?: Part; built: boolean }
   /** The body a pendant hangs from (the bail's host), when it is its own part. */
   body?: Part
+  /**
+   * The body's metal thickness as designed, when its node states one. At production the body is
+   * fused with its bail, so the part's depth is the bail's, not the plate's.
+   */
+  bodyThickness?: number
   settings: NodeOf<'setting'>[]
   engravings: NodeOf<'engraving'>[]
   findings: NodeOf<'finding'>[]
@@ -88,6 +93,7 @@ export function pieceFacts(design: Design, evaluation: Evaluation): PieceFacts {
         }
       : {}),
     ...(bailNode?.host && partOf(bailNode.host) ? { body: partOf(bailNode.host)! } : {}),
+    ...thicknessOf(bailNode?.host ? design.nodes[bailNode.host] : undefined),
     settings: nodesOf(design, 'setting'),
     engravings: nodesOf(design, 'engraving'),
     findings: built(nodesOf(design, 'finding')),
@@ -119,4 +125,11 @@ function stoneFacts(node: NodeOf<'gem'>, evaluation: Evaluation): StoneFacts {
     ...(instance ? { instance, carat: instance.carat } : {}),
     dims: instance?.dims ?? gemDims(node.cut, node.width, node.lw),
   }
+}
+
+/** The designed thickness of a pendant body, for the kinds that have one. */
+function thicknessOf(node: Design['nodes'][string] | undefined): { bodyThickness?: number } {
+  if (node?.kind === 'vectorBody') return { bodyThickness: node.thickness }
+  if (node?.kind === 'relief') return { bodyThickness: node.baseThickness + node.depth }
+  return {}
 }

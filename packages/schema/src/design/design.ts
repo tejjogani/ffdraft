@@ -110,15 +110,36 @@ export function mergePatch(target: unknown, patch: unknown): unknown {
   return out
 }
 
-/** The patch that undoes `patch` when applied to the result of merging it into `prev`. */
-function invertPatch(prev: unknown, patch: Record<string, unknown>): Record<string, unknown> {
+const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
+
+/**
+ * The merge patch that turns `from` into `to`. Undo is computed from the stored node before and
+ * after the update, not from the patch: parsing can drop or fill fields the patch never named
+ * (switching a variant drops the old variant's fields), and only the stored values restore them.
+ */
+function diffPatch(
+  from: Record<string, unknown>,
+  to: Record<string, unknown>,
+): Record<string, unknown> {
   const out: Record<string, unknown> = {}
-  const p = isObject(prev) ? prev : {}
-  for (const [k, v] of Object.entries(patch)) {
-    const before = p[k]
-    out[k] = isObject(v) && isObject(before) ? invertPatch(before, v) : (before ?? null)
+  for (const k of Object.keys(from)) if (!Object.hasOwn(to, k)) out[k] = null
+  for (const [k, v] of Object.entries(to)) {
+    const before = from[k]
+    if (sameJson(before, v)) continue
+    if (isObject(before) && isObject(v)) {
+      // Parsing can reorder an object's keys without changing a value; that is not a change.
+      const inner = diffPatch(before, v)
+      if (Object.keys(inner).length > 0) out[k] = inner
+    } else out[k] = v
   }
   return out
+}
+
+/** An op as OpSchema reads it: callers that skip the wire schema (studio, scripts) get the same checks. */
+function parseOp(raw: unknown): Op {
+  const r = OpSchema.safeParse(raw)
+  if (!r.success) throw new OpError(`Invalid op: ${z.prettifyError(r.error)}`, raw as Op)
+  return r.data as Op
 }
 
 function parseNode(raw: unknown, op: Op): Node {
@@ -139,7 +160,9 @@ function dependents(design: Design, id: string): string[] {
  * Pure: the input is not mutated. Throws {@link OpError}; nothing is applied on failure.
  */
 export function applyOps(design: Design, ops: readonly Op[]): { design: Design; inverse: Op[] } {
-  const nodes = { ...design.nodes }
+  // Own-property lookups only: ids such as "constructor" or "__proto__" are ordinary ids.
+  const nodes: Record<string, Node> = Object.assign(Object.create(null), design.nodes)
+  const has = (id: string) => Object.hasOwn(nodes, id)
   let order = [...design.order]
   let kind = design.kind
   const inverse: Op[] = []
@@ -151,27 +174,30 @@ export function applyOps(design: Design, ops: readonly Op[]): { design: Design; 
     order = order.filter((x) => x !== id)
   }
 
-  for (const op of ops) {
+  for (const raw of ops) {
+    const op = parseOp(raw)
     switch (op.t) {
       case 'add': {
         const node = parseNode(op.node, op)
-        if (nodes[node.id]) throw new OpError(`Node "${node.id}" already exists`, op)
+        if (node.id === '') throw new OpError('A node id cannot be empty', op)
+        if (has(node.id)) throw new OpError(`Node "${node.id}" already exists`, op)
         nodes[node.id] = node
         order.splice(Math.min(op.index ?? order.length, order.length), 0, node.id)
         inverse.unshift({ t: 'remove', id: node.id })
         break
       }
       case 'update': {
-        const prev = nodes[op.id]
+        const prev = has(op.id) ? nodes[op.id] : undefined
         if (!prev) throw new OpError(`No node "${op.id}"`, op)
         if ('id' in op.patch || 'kind' in op.patch)
           throw new OpError('id and kind cannot be changed; add a new node instead', op)
-        nodes[op.id] = parseNode(mergePatch(prev, op.patch), op)
-        inverse.unshift({ t: 'update', id: op.id, patch: invertPatch(prev, op.patch) })
+        const updated = parseNode(mergePatch(prev, op.patch), op)
+        nodes[op.id] = updated
+        inverse.unshift({ t: 'update', id: op.id, patch: diffPatch(updated, prev) })
         break
       }
       case 'remove': {
-        if (!nodes[op.id]) throw new OpError(`No node "${op.id}"`, op)
+        if (!has(op.id)) throw new OpError(`No node "${op.id}"`, op)
         const visit = (id: string) => {
           const deps = dependents({ ...design, nodes, order }, id)
           if (deps.length && !op.cascade)
@@ -179,7 +205,7 @@ export function applyOps(design: Design, ops: readonly Op[]): { design: Design; 
               `"${id}" is used by ${deps.map((d) => `"${d}"`).join(', ')}; remove those first or pass cascade`,
               op,
             )
-          for (const d of deps) if (nodes[d]) visit(d)
+          for (const d of deps) if (has(d)) visit(d)
           removeOne(id)
         }
         visit(op.id)
@@ -201,7 +227,7 @@ export function applyOps(design: Design, ops: readonly Op[]): { design: Design; 
     }
   }
 
-  const next: Design = { schemaVersion: 1, kind, nodes, order }
+  const next: Design = { schemaVersion: 1, kind, nodes: { ...nodes }, order }
   const issues = validateDesign(next).filter((i) => i.level === 'error')
   if (issues.length) throw new OpError(issues.map((i) => i.message).join('; '), ops[0]!)
   return { design: next, inverse }

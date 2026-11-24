@@ -95,7 +95,9 @@ export class Canvas {
     rotate = 0,
   ) {
     const safe = this.ts.safe(text, style.family, style.weight)
-    if (!safe) return
+    // A view with no geometry has no extent to place its labels against; skip them rather
+    // than abort the whole sheet on a NaN position.
+    if (!safe || !Number.isFinite(x) || !Number.isFinite(y)) return
     const w = this.ts.measure(safe, style)
     const shift = anchor === 'start' ? 0 : anchor === 'middle' ? w / 2 : w
     const rad = (rotate * Math.PI) / 180

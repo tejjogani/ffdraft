@@ -34,6 +34,16 @@ function probe(stone: SceneStone): Probe {
   return { stone, unit, reach: Math.hypot(dims.length / 2, dims.depth), girdle }
 }
 
+/**
+ * True when either stone's girdle enters the other: the pairs `stoneDiagnostics` reports as
+ * `stone.overlap`. The exact production check uses it so a pair is never reported twice.
+ */
+export const girdlesOverlap = (a: SceneStone, b: SceneStone): boolean => {
+  const pa = probe(a)
+  const pb = probe(b)
+  return enters(pa, pb) || enters(pb, pa)
+}
+
 /** True when any girdle point of `a` lies inside the body of `b`. */
 function enters(a: Probe, b: Probe): boolean {
   const { dims, frame } = b.stone.stone
@@ -49,7 +59,8 @@ function enters(a: Probe, b: Probe): boolean {
 export function stoneDiagnostics(stones: readonly SceneStone[]): Diagnostic[] {
   if (stones.length < 2) return []
   const probes = stones.map(probe)
-  const cell = 2 * Math.max(...probes.map((p) => p.reach))
+  // A loop, not Math.max(...list): spreading 100 000+ probes overflows the call stack.
+  const cell = 2 * probes.reduce((r, p) => Math.max(r, p.reach), 0)
   const grid = new Map<string, number[]>()
   const key = (p: Vec3, dx = 0, dy = 0, dz = 0) =>
     `${Math.floor(p[0] / cell) + dx},${Math.floor(p[1] / cell) + dy},${Math.floor(p[2] / cell) + dz}`

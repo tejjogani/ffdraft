@@ -316,6 +316,8 @@ function build(style: WireStyle, width: number, wire: number): LinkSet {
  */
 export function wireChain(style: WireStyle, width: number, requestedWire: number): LinkSet {
   let wire = Math.min(requestedWire, maxWire(width))
+  // A box link caps its own strip and fails for reasons a thinner one cannot fix.
+  if (style === 'box') return build(style, width, wire)
   for (let attempt = 0; ; attempt++) {
     try {
       return build(style, width, wire)

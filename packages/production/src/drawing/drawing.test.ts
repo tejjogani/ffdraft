@@ -180,7 +180,11 @@ describe('dimensions', () => {
     const notes = s.annotations
       .filter((a) => a.kind === 'note')
       .map((a) => (a.kind === 'note' ? a.lines[0] : ''))
-    expect(notes).toContain('Bail opening 5.00')
+    // The note reads the bail node's own opening (the template's value, whatever it is today).
+    const opening = Object.values(design.nodes).find((n) => n.kind === 'bail')
+    expect(opening?.kind).toBe('bail')
+    if (opening?.kind === 'bail')
+      expect(notes).toContain(`Bail opening ${opening.opening.toFixed(2)}`)
     const bodyH = s.annotations.find((a) => a.kind === 'linear' && a.caption === 'body')
     expect(bodyH?.kind === 'linear' && bodyH.text).toBe('30.00')
     const overall = s.annotations.find(

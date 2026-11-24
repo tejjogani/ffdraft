@@ -18,7 +18,8 @@ import {
   transformFrame,
   uniformScaleOf,
 } from '../geometry/vec'
-import { withSolidScope } from '../solid/solid'
+import { meshVolume, surfaceDefects } from '../solid/meshing'
+import { isClosedByConstruction, withSolidScope } from '../solid/solid'
 import type { AssetResolver, Detail, Diagnostic } from '../types'
 
 export interface BuildEnvironment {
@@ -66,6 +67,58 @@ function place(out: FeatureOutput, matrix: Mat4): Placed {
     ),
     consumes: out.consumes ?? [],
     data: out.data,
+  }
+}
+
+/**
+ * What one node may ask of the kernel. Nothing in the document bounds geometry by itself —
+ * nested patterns multiply, scale multiplies through hosts — so a few schema-valid edits could
+ * otherwise hang the kernel or exhaust the WASM heap. Over a limit the node fails with the
+ * number and the limit, and the rest of the piece still evaluates.
+ */
+export const NODE_LIMITS = {
+  stones: 50_000,
+  triangles: { draft: 2_000_000, production: 6_000_000 },
+} as const
+
+const count = (n: number) => Math.round(n).toLocaleString('en-US')
+
+/**
+ * Tessellates every solid the node returned and rejects any that is not a closed body with
+ * volume. Solids are lazy, so without this a bad body would only fail later, in assembly or an
+ * export, where it takes the whole evaluation down instead of this one node. The triangles are
+ * cached on the solid, so the work is not repeated by assembly. Cutters are only used (and so
+ * only checked) at production.
+ */
+function checkGeometry(placed: Placed, env: BuildEnvironment): void {
+  const solids = [
+    ...placed.bodies.map((b) => b.solid),
+    ...placed.additions.map((a) => a.solid),
+    ...(env.detail === 'production' ? placed.cuts.map((c) => c.solid) : []),
+  ]
+  if (placed.stones.length > NODE_LIMITS.stones)
+    throw new Error(
+      `it places ${count(placed.stones.length)} stones; the limit is ${count(NODE_LIMITS.stones)}. Use fewer copies or larger stones`,
+    )
+  const budget = NODE_LIMITS.triangles[env.detail]
+  let triangles = 0
+  for (const solid of solids) {
+    const tris = solid.triangles(env.quality)
+    // Checked as the meshes are made, so a runaway pattern stops at the limit, not after it.
+    triangles += tris.indices.length / 3
+    if (triangles > budget)
+      throw new Error(
+        `it needs more than ${count(budget)} triangles of geometry; use fewer copies, a smaller scale or simpler shapes`,
+      )
+    if (isClosedByConstruction(solid)) continue
+    if (tris.indices.length === 0) throw new Error('the shape it describes has no surface')
+    const { open, nonManifold } = surfaceDefects(tris)
+    if (open > 0 || nonManifold > 0)
+      throw new Error(
+        'the shape it describes is not a closed solid (its surface has gaps or crosses itself); check its profile, path or size',
+      )
+    if (!(meshVolume(tris) > 1e-9))
+      throw new Error('the shape it describes encloses no volume; check its profile or size')
   }
 }
 
@@ -158,14 +211,14 @@ export async function buildNode(
 
   const matrix = matrixOf(node)
   try {
-    const placed = await withSolidScope(
-      async () =>
-        place(
-          await (feature.build as (n: Node, c: BuildContext) => FeatureOutput)(node, ctx),
-          matrix,
-        ),
-      solidsOf,
-    )
+    const placed = await withSolidScope(async () => {
+      const out = place(
+        await (feature.build as (n: Node, c: BuildContext) => FeatureOutput)(node, ctx),
+        matrix,
+      )
+      checkGeometry(out, env)
+      return out
+    }, solidsOf)
     return {
       id: node.id,
       node,
@@ -198,6 +251,30 @@ export async function buildNode(
   } finally {
     for (const t of temporaries.reverse()) t.delete()
   }
+}
+
+/**
+ * The same node marked `failed`: used when its solids turn out to be unusable after the build
+ * (in assembly), so the piece still evaluates without it. Takes ownership of `result`'s solids
+ * and frees them.
+ */
+export function failedResult(result: NodeResult, reason: string): NodeResult {
+  disposeResult(result)
+  return without(
+    result.node,
+    result.hash,
+    'failed',
+    [
+      ...result.diagnostics,
+      {
+        level: 'error',
+        code: 'feature.failed',
+        nodeId: result.id,
+        message: `“${labelOf(result.node)}” could not be built: ${reason}`,
+      },
+    ],
+    result.ms,
+  )
 }
 
 export function disposeResult(result: NodeResult): void {

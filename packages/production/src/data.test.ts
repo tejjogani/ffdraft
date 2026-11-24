@@ -1,5 +1,6 @@
 import { METALS } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
+import { billOfMaterials } from './bom'
 import { createContext } from './context'
 import { estimateCost } from './cost'
 import { csvCell, encodeCsv, toCsv } from './csv'
@@ -175,5 +176,58 @@ describe('file names', () => {
       'A-2.stl',
       'a-3.stl',
     ])
+  })
+})
+
+describe('chains in the package', () => {
+  const base = (
+    design: ReturnType<typeof templateDesign>,
+    evaluation: BuildInput['evaluation'],
+  ): BuildInput => ({
+    piece: { id: 'p', title: 'Test', kind: 'pendant', sku: 'T-1' },
+    revision: 1,
+    design,
+    evaluation,
+    kernel: fixtureKernel(evaluation),
+    fonts: {
+      sans: { regular: new Uint8Array(), medium: new Uint8Array(), semibold: new Uint8Array() },
+      serif: new Uint8Array(),
+    },
+    options: { quantity: 1, date: '2026-11-23', author: { name: 'A' }, org: { name: 'O' } },
+  })
+
+  it('draws and casts a chain that is the whole piece', () => {
+    const evaluation = evaluationOf([
+      { id: 'chain', name: 'Chain', mesh: box([0, 0, 0], [4, 100, 4]) },
+    ])
+    const ctx = createContext(base(templateDesign('cuban'), evaluation))
+    expect(ctx.drawn.parts).toHaveLength(1)
+    expect(Number.isFinite(ctx.drawn.report.bounds.max[1])).toBe(true)
+    const bom = billOfMaterials(ctx)
+    expect(bom.filter((l) => l.type === 'metal')).toHaveLength(1)
+    expect(bom.filter((l) => l.type === 'finding')).toHaveLength(0)
+  })
+
+  it('leaves a threaded chain and its stones out of the drawing and the casting order', () => {
+    const evaluation = evaluationOf(
+      [
+        { id: 'head', name: 'Head', mesh: box([-4, -2, -4], [4, 2, 4]) },
+        { id: 'chain', name: 'Chain', mesh: box([-60, -1, 0], [60, 1, 200]) },
+      ],
+      [
+        stoneAt('center:0', 'center', 6, [0, 0, 3]),
+        stoneAt('chain:0', 'chain', 3, [50, 0, 150], 'melee'),
+      ],
+    )
+    const ctx = createContext(base(templateDesign('pendant-solitaire'), evaluation))
+    expect(ctx.drawn.stones.map((s) => s.id)).toEqual(['center:0'])
+    expect(ctx.drawn.report.bounds.max[2]).toBeLessThan(10)
+    const bom = billOfMaterials(ctx)
+    expect(bom.filter((l) => l.type === 'metal').map((l) => l.item)).toEqual(['Head'])
+    const chain = bom.find((l) => l.type === 'finding' && l.item.toLowerCase().includes('chain'))
+    expect(chain?.netWeightG).toBeGreaterThan(0)
+    const order = bom.find((l) => l.type === 'metal-order')!
+    const head = bom.find((l) => l.type === 'metal')!
+    expect(order.netWeightG).toBeCloseTo(head.netWeightG!, 3)
   })
 })

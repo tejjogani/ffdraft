@@ -84,9 +84,10 @@ function halfWidth(section: ChainSection, dz: number): number {
 
 /**
  * The highest height for the centre of a chain section at which it stays `clearance` clear of
- * the hole all round, given that the chain droops `sag` lower where it leaves the bail. Gravity
- * seats a hung chain against the top of the hole, but never in a part narrower than the chain.
- * Null when it does not fit.
+ * the hole all round, given that the hung chain rises `sag` higher where it leaves the bail (it
+ * is the low point of a curve that climbs either side toward the neck). Gravity seats a hung
+ * chain against the top of the hole, but never in a part narrower than the chain. Null when it
+ * does not fit.
  */
 export function seatHeight(
   hole: HoleProfile,
@@ -95,14 +96,14 @@ export function seatHeight(
   sag: number,
 ): number | null {
   const step = (hole.top - hole.bottom) / LEVELS / 2
-  for (let c = hole.top - section.up - clearance; ; c -= step) {
-    const lo = c - section.up - sag - clearance
+  for (let c = hole.top - section.up - sag - clearance; ; c -= step) {
+    const lo = c - section.up - clearance
     if (lo < hole.bottom) return null
-    const hi = c + section.up + clearance
+    const hi = c + section.up + sag + clearance
     const fits = hole.levels.every((l) => {
       if (l.z < lo || l.z > hi) return true
-      // Below the centre the drooping ends sweep the section down by up to `sag`.
-      const dz = l.z > c ? l.z - c : Math.max(0, c - l.z - sag)
+      // Above the centre the climbing ends sweep the section up by up to `sag`.
+      const dz = l.z > c ? Math.max(0, l.z - c - sag) : c - l.z
       const need = halfWidth(section, dz) + clearance
       return l.left >= need && l.right >= need
     })

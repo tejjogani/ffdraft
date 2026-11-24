@@ -116,6 +116,47 @@ function padRadius(host: NodeResult, at: Frame, ctx: BuildContext): number | nul
   return Number.isFinite(nearest) ? nearest + EMBED : null
 }
 
+/** Wall of the cup that closes an open bezel's back, mm (a casting's thinnest sure wall). */
+const CUP_WALL = 0.6
+
+/**
+ * A ring of host metal straight in front of a pad (toward the stone): the largest radius at
+ * which rays from the pad's plane meet the host within reach in at least 6 of 8 directions —
+ * the outer part of a bezel's back rim — and how far forward that metal is.
+ */
+function cupTo(
+  host: NodeResult,
+  at: Frame,
+  ctx: BuildContext,
+): { radius: number; length: number } | null {
+  const forward: Vec3 = [-at.z[0], -at.z[1], -at.z[2]]
+  for (let r = PAD_REACH; r >= CUP_WALL + 0.2; r -= 0.1) {
+    let hit = 0
+    let far = 0
+    for (let i = 0; i < 8; i++) {
+      const a = (2 * Math.PI * i) / 8
+      const o: [number, number, number] = [0, 1, 2].map(
+        (k) => at.origin[k]! + r * (at.x[k]! * Math.cos(a) + at.y[k]! * Math.sin(a)),
+      ) as [number, number, number]
+      const to: [number, number, number] = [0, 1, 2].map(
+        (k) => o[k]! + forward[k]! * PAD_REACH,
+      ) as [number, number, number]
+      let nearest = Infinity
+      for (const b of host.bodies) {
+        const h = b.solid.manifold(ctx.quality).rayCast(o, to)[0]
+        if (h) nearest = Math.min(nearest, Math.hypot(...h.position.map((v, k) => v - o[k]!)))
+      }
+      if (Number.isFinite(nearest)) {
+        hit++
+        far = Math.max(far, nearest)
+      }
+    }
+    // Back off half the wall so the whole tube lands on the rim, then sink it in.
+    if (hit >= 6) return { radius: r - CUP_WALL / 2, length: far + EMBED }
+  }
+  return null
+}
+
 /**
  * The post and, when its foot would land in the open back of a basket, a pad soldered across
  * to the nearest metal — as a bench jeweller would. The pad stands clear of the culet.
@@ -132,8 +173,20 @@ function post(
     return { solids: [rod(mount)], tip: along(mount, node.length) }
   const padAt = along(mount, RULES.culetClearance + PAD_THICKNESS / 2)
   const radius = padRadius(host, padAt, ctx)
-  if (radius === null) return { solids: [rod(mount)], tip: along(mount, node.length) }
   const foot = along(padAt, EMBED - PAD_THICKNESS / 2)
+  if (radius === null) {
+    // Nothing beside the pad: an open bezel or rim whose metal ends in front of the culet.
+    // Close the back with a cup, a pad and a short tube forward onto the rim.
+    const cup = cupTo(host, padAt, ctx)
+    if (!cup) return { solids: [rod(mount)], tip: along(mount, node.length) }
+    const outer = makeCylinder(cup.radius, cup.length, [0, 0, -cup.length])
+    const inner = makeCylinder(cup.radius - CUP_WALL, cup.length + 1, [0, 0, -cup.length - 0.5])
+    const tube = solidFromBrep(outer.cut(inner)).transformed(frameMatrix(padAt))
+    const pad = solidFromBrep(
+      makeCylinder(cup.radius, PAD_THICKNESS, [0, 0, -PAD_THICKNESS / 2]),
+    ).transformed(frameMatrix(padAt))
+    return { solids: [rod(foot), pad, tube], tip: along(foot, node.length) }
+  }
   const pad = solidFromBrep(
     makeCylinder(radius, PAD_THICKNESS, [0, 0, -PAD_THICKNESS / 2]),
   ).transformed(frameMatrix(padAt))
@@ -169,13 +222,24 @@ function build(
         post && tip
           ? along(tip, -notchFromTip(post.length))
           : along(backMount(host, ctx), STOCK_POST - notchFromTip(STOCK_POST))
-      const mesh = butterflyMesh(butterflySpan(node.length), node.wire, ctx.quality)
+      // The hole fits the post it rides on, not the butterfly's own wire field, so a heavier
+      // post does not run through the back's metal.
+      const mesh = butterflyMesh(butterflySpan(node.length), post?.wire ?? node.wire, ctx.quality)
       return {
         solids: [solidFromManifold(manifoldFromTriangles(mesh)).transformed(frameMatrix(seat))],
       }
     }
     case 'jumpRing': {
       // Standing across the piece (axis along X) so a chain runs through it like a bail.
+      const built = Math.min(node.wire, node.length / 3)
+      if (built < node.wire - 1e-9)
+        ctx.report({
+          level: 'info',
+          code: 'finding.wireThinned',
+          message: `A ${node.length} mm jump ring cannot be made of ${node.wire} mm wire and keep a hole; it uses ${built.toFixed(2)} mm. Make the ring larger for heavier wire.`,
+          value: built,
+          limit: node.wire,
+        })
       const top = topMount(host, ctx)
       const centre = along(top, host ? node.length / 2 - EMBED : 0)
       const ring = frameFromZ(centre.origin, [1, 0, 0], [0, 0, 1])

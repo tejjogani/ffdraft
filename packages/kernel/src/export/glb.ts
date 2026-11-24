@@ -11,7 +11,9 @@
  * - Normals are written as authored (flat facets on gems, smoothed metals); importers must not
  *   recompute them. No Draco or meshopt: bpy's importer cannot decode either (research §0).
  */
+import { GEM_MATERIALS, type GemMaterialId, METALS, type MetalId } from '@pave/schema'
 import type { Evaluation, MeshData } from '../types'
+import { linearRgb } from './color'
 
 export interface GlbOptions {
   /** Include stones. Default true. */
@@ -98,6 +100,9 @@ class BinaryBuilder {
 
 const pad4 = (n: number) => (n + 3) & ~3
 
+const swatch = (hex: string | undefined): [number, number, number] =>
+  hex && /^#[0-9a-fA-F]{6}$/.test(hex) ? linearRgb(hex) : [1, 1, 1]
+
 export function writeGlb(evaluation: Evaluation, options: GlbOptions = {}): Uint8Array {
   const bin = new BinaryBuilder()
   const meshes: object[] = []
@@ -112,9 +117,18 @@ export function writeGlb(evaluation: Evaluation, options: GlbOptions = {}): Uint
       index = materials.length
       materials.push({
         name,
+        // Each alloy and stone in its own colour; glTF colour factors are linear, swatches sRGB.
         pbrMetallicRoughness: metal
-          ? { baseColorFactor: [0.9, 0.85, 0.75, 1], metallicFactor: 1, roughnessFactor: 0.15 }
-          : { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0, roughnessFactor: 0 },
+          ? {
+              baseColorFactor: [...swatch(METALS[name as MetalId]?.swatch), 1],
+              metallicFactor: 1,
+              roughnessFactor: 0.15,
+            }
+          : {
+              baseColorFactor: [...swatch(GEM_MATERIALS[name as GemMaterialId]?.color), 1],
+              metallicFactor: 0,
+              roughnessFactor: 0,
+            },
       })
       materialIndex.set(name, index)
     }

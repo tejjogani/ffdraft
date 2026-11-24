@@ -14,9 +14,19 @@ export function pieceVolumes(m: Manifold): number[] {
   return volumes
 }
 
-/** Pieces that are solid parts: positive volume above `minVolume` (mm³). */
-export const solidPieceCount = (m: Manifold, minVolume = 0): number =>
+/**
+ * Shells smaller than this (mm³, either sign) are boolean debris: a few triangles enclosing
+ * nothing, left where a cut grazes a surface. No casting has a part that small.
+ */
+export const SPECK_VOLUME = 1e-3
+
+/** Pieces that are solid parts: positive volume above `minVolume` (mm³), specks never. */
+export const solidPieceCount = (m: Manifold, minVolume = SPECK_VOLUME): number =>
   pieceVolumes(m).filter((v) => v > minVolume).length
+
+/** `m` without its speck shells (see SPECK_VOLUME). Consumes `m`; returns it when it has none. */
+export const dropSpecks = (m: Manifold): Manifold =>
+  keepPieces(m, (volume) => Math.abs(volume) >= SPECK_VOLUME)
 
 /**
  * The pieces for which `keep(volume, largest)` holds, composed into one body. Consumes `m`;

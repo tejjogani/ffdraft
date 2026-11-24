@@ -231,15 +231,18 @@ function pendantAnnotations(input: AnnotationInput, out: Annotation[], L: (mm: n
   if (input.views.section && facts.body) {
     const body = facts.body.bounds
     const zMid = (body.min[2] + body.max[2]) / 2
+    // The designed plate when the node states it: the fused part's depth is the bail's.
+    const yMid = (body.min[1] + body.max[1]) / 2
+    const half = facts.bodyThickness === undefined ? null : facts.bodyThickness / 2
     out.push({ kind: 'cutline', view: 'front', x: 0, label: 'A' })
     out.push({
       kind: 'linear',
       view: 'section',
-      a: [body.min[1], zMid],
-      b: [body.max[1], zMid],
+      a: [half === null ? body.min[1] : yMid - half, zMid],
+      b: [half === null ? body.max[1] : yMid + half, zMid],
       axis: 'h',
       side: 'below',
-      text: L(body.max[1] - body.min[1]),
+      text: L(facts.bodyThickness ?? body.max[1] - body.min[1]),
       caption: 'metal thickness',
     })
   }

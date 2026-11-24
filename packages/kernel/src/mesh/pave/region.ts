@@ -16,6 +16,7 @@ import {
   type Vec3,
 } from '../../geometry/vec'
 import type { IndexedTriangles } from '../../solid/meshing'
+import { type ClosestHit, TriangleBvh } from '../bvh'
 import { PointGrid } from '../grid'
 import { OutlineDistance } from '../outline/distance'
 import type { Contour } from '../outline/svgPath'
@@ -25,6 +26,29 @@ import { edgeTopology } from '../topology'
 export interface PaveField {
   /** Closed contours in the body's local XZ plane (x, z), mm. */
   outline: Contour[]
+  /** Width of the raised rim around the field, mm: metal that walls in the outer seats. */
+  rim?: number
+}
+
+/**
+ * Faces of a body that are inside the piece or against the skin, published in its `data` so no
+ * pavé region ever covers them: the walls of a hollow's cavity (and its escape holes), and a
+ * flat back. Stones there would be counted, weighed and seated from inside the metal.
+ */
+export interface HiddenSurfaces {
+  /** The surface the cavity was cut with, in the body's local space. */
+  cavity?: IndexedTriangles
+  /** A face within this distance of the cavity surface lies on it (mm, local). */
+  within: number
+  /** The flat back: faces on this local plane y = back that face +Y. */
+  back?: number
+}
+
+/** Hidden surfaces tied to the world placement of the body that published them. */
+export interface PlacedHidden {
+  hidden: HiddenSurfaces
+  /** Host node matrix: local → world. */
+  matrix: Mat4
 }
 
 export type RegionSpec = { type: 'all' } | { type: 'facing'; direction: Vec3; maxAngle: number }
@@ -66,6 +90,7 @@ export function selectRegion(
   placed: PlacedField | null,
   resolution: number,
   edgeCap: number,
+  hidden: PlacedHidden | null = null,
 ): Region {
   const { positions: p, indices } = mesh
   const triangles = indices.length / 3
@@ -101,15 +126,18 @@ export function selectRegion(
   const cosMax = spec.type === 'facing' ? Math.cos(spec.maxAngle * DEG) : -2
   const dir = spec.type === 'facing' ? unit(spec.direction) : ([0, 0, 0] as Vec3)
   const field = placed ? new FieldTest(placed) : null
+  const hide = hidden ? new HiddenTest(hidden) : null
   const specks: number[] = []
   for (let t = 0; t < triangles; t++) {
+    const centroid: Vec3 = [centroids[t * 3]!, centroids[t * 3 + 1]!, centroids[t * 3 + 2]!]
+    const n: Vec3 = [normals[t * 3]!, normals[t * 3 + 1]!, normals[t * 3 + 2]!]
+    // Hidden faces are out whatever their size, so a cavity's specks cannot pull it back in.
+    if (hide?.covers(centroid, n)) continue
     if (areas[t]! < speck) {
       specks.push(t)
       continue
     }
-    const n: Vec3 = [normals[t * 3]!, normals[t * 3 + 1]!, normals[t * 3 + 2]!]
     const facing = spec.type === 'all' || n[0] * dir[0] + n[1] * dir[1] + n[2] * dir[2] >= cosMax
-    const centroid: Vec3 = [centroids[t * 3]!, centroids[t * 3 + 1]!, centroids[t * 3 + 2]!]
     inside[t] = facing && (!field || field.covers(centroid, n)) ? 1 : 0
   }
   // Specks take the label of their labelled neighbours (a few passes reach clusters of them).
@@ -196,6 +224,37 @@ class FieldTest {
   edgeDistance(p: Vec3, cap: number): number {
     const q = transformPoint(this.toLocal, p)
     return this.outline.distance(q[0], q[2], cap / this.scale) * this.scale
+  }
+}
+
+/** Whether a face of the host lies on its published cavity or flat back. */
+class HiddenTest {
+  private readonly toLocal: Mat4
+  private readonly within: number
+  private readonly bvh: TriangleBvh | null
+  private readonly back: number | undefined
+  private readonly backNormal: Vec3
+  private readonly hit: ClosestHit = { d2: 0, x: 0, y: 0, z: 0, triangle: -1 }
+
+  constructor({ hidden, matrix }: PlacedHidden) {
+    this.toLocal = invertSimilarity(matrix)
+    this.within = hidden.within
+    this.bvh =
+      hidden.cavity && hidden.cavity.indices.length > 0 ? new TriangleBvh(hidden.cavity) : null
+    this.back = hidden.back
+    const m = matrix
+    this.backNormal = unit([m[4]!, m[5]!, m[6]!])
+  }
+
+  covers(p: Vec3, n: Vec3): boolean {
+    const q = transformPoint(this.toLocal, p)
+    if (
+      this.back !== undefined &&
+      Math.abs(q[1] - this.back) < 1e-3 &&
+      n[0] * this.backNormal[0] + n[1] * this.backNormal[1] + n[2] * this.backNormal[2] > 0.9
+    )
+      return true
+    return this.bvh?.closest(q[0], q[1], q[2], this.hit, this.within) ?? false
   }
 }
 

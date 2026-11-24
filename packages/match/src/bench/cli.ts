@@ -5,13 +5,15 @@
  *   --suite pr|grid           pr (default): the six pull-request cases; grid: templates × seeds × views × levels
  *   --templates a,b           grid templates (default: the v1 list)
  *   --views one,two,top       grid view sets (default: all three)
- *   --levels clean,noisy,hard grid levels (default: all three)
+ *   --levels clean,noisy,hard,misspec   grid levels (default: all four)
  *   --seeds 1,2               grid seeds (default 1..8)
  *   --only 0,2                run only these pr case indices
  *   --budget 250              kernel evaluations per candidate
  *   --px 192                  target mask size
  *   --overlays DIR            write target | fit | difference PNGs per case
  *   --json FILE               write the raw results
+ *   --check                   exit 1 when a floor is missed (for CI)
+ *   --no-speed                skip the speed probe (one render plus score; one camera search)
  */
 /// <reference types="node" />
 /// <reference path="../../../kernel/src/runtime/opentype.d.ts" />
@@ -22,17 +24,19 @@ import { join } from 'node:path'
 import { deflateSync } from 'node:zlib'
 import { createKernel } from '@pave/kernel'
 import { buildDesign, TEMPLATES } from '@pave/schema'
+import { defaultCamera } from '../camera'
 import { viewAt, WORK_PX } from '../fit'
 import { edges } from '../mask'
 import { diffClasses } from '../overlay'
-import { rasterize } from '../raster'
-import { prepareTarget } from '../score'
+import { searchPose } from '../pose'
+import { rasterize, triangleCount } from '../raster'
+import { prepareTarget, scoreView } from '../score'
 import type { Evaluate, FitResult, TargetView } from '../types'
 import type { Level } from './degrade'
-import { caseTable, checkTable, paramTable } from './report'
+import { caseTable, checkTable, paramTable, recipeTable } from './report'
 import { type CaseResult, runCase } from './run'
 import { BENCH_RECIPES, type BenchCase, makeCase, PR_CASES, type ViewSet } from './synth'
-import { checkThresholds } from './thresholds'
+import { type Check, checkThresholds, speedChecks } from './thresholds'
 
 const args = new Map<string, string>()
 for (let i = 2; i < process.argv.length; i++) {
@@ -60,7 +64,7 @@ if ((args.get('suite') ?? 'pr') === 'grid') {
   for (const t of list('templates', V1))
     for (const s of list('seeds', ['1', '2', '3', '4', '5', '6', '7', '8']))
       for (const v of list('views', ['one', 'two', 'top']))
-        for (const l of list('levels', ['clean', 'noisy', 'hard']))
+        for (const l of list('levels', ['clean', 'noisy', 'hard', 'misspec']))
           cases.push({ templateId: t, views: v as ViewSet, level: l as Level, seed: Number(s) })
 } else {
   const only = args.get('only')?.split(',').map(Number)
@@ -97,10 +101,40 @@ console.log(
 console.log(caseTable(results))
 console.log('\n## Parameters\n')
 console.log(paramTable(results))
+console.log('\n## Per recipe\n')
+console.log(recipeTable(results))
+const checks: Check[] = checkThresholds(results)
+if (!args.has('no-speed')) checks.push(...(await speedProbe()))
 console.log('\n## Thresholds\n')
-console.log(checkTable(checkThresholds(results)))
+console.log(checkTable(checks))
 if (args.get('json')) writeFileSync(args.get('json')!, JSON.stringify(results, null, 2))
-process.exit(0)
+const missed = checks.filter((c) => c.pass === false)
+if (missed.length)
+  console.log(`\n${missed.length} floor(s) missed: ${missed.map((c) => c.measure).join('; ')}`)
+process.exit(args.has('check') && missed.length ? 1 : 0)
+
+/** The plan's speed floors on the solitaire template (about 8k triangles at draft detail). */
+async function speedProbe(): Promise<Check[]> {
+  const tpl = TEMPLATES.find((t) => t.id === 'solitaire')!
+  const e = await evaluate(buildDesign(tpl.spec))
+  const cam = { ...defaultCamera(e, 'threeQuarter'), roll: 3 }
+  const size = { width: 192, height: 192 }
+  const r = rasterize(e, cam, size)
+  const t = prepareTarget({
+    id: 'speed',
+    ...size,
+    matte: r.cls.map((v) => (v ? 1 : 0)),
+    stones: r.cls.map((v) => (v === 2 ? 1 : 0)),
+  })
+  const n = 200
+  const t0 = performance.now()
+  for (let k = 0; k < n; k++)
+    scoreView(rasterize(e, { ...cam, azimuth: cam.azimuth + k * 0.01 }, size), t, cam)
+  const renderMs = (performance.now() - t0) / n
+  const t1 = performance.now()
+  await searchPose(e, t)
+  return speedChecks(renderMs, performance.now() - t1, triangleCount(e))
+}
 
 /** One row per view: target | fit | difference (grey both, orange model only, blue photo only). */
 async function writeOverlay(path: string, c: BenchCase, r: FitResult, ev: Evaluate) {
