@@ -47,14 +47,19 @@ describe('design', () => {
       { t: 'add', node: { id: 'halo', kind: 'halo', around: 'center' } },
       { t: 'remove', id: 'head' },
     ])
-    expect(d1.nodes.center).toMatchObject({ width: 7.4, placement: { type: 'ringTop', elevation: 2 } })
+    expect(d1.nodes.center).toMatchObject({
+      width: 7.4,
+      placement: { type: 'ringTop', elevation: 2 },
+    })
     expect(d1.nodes.head).toBeUndefined()
     expect(applyOps(d1, inverse).design).toEqual(d0)
   })
   it('rejects dangling references and guards removal', () => {
     const d = buildDesign(TEMPLATES[0]!.spec)
     expect(() => applyOps(d, [{ t: 'remove', id: 'band' }])).toThrow(/used by/)
-    expect(Object.keys(applyOps(d, [{ t: 'remove', id: 'band', cascade: true }]).design.nodes)).toEqual([])
+    expect(
+      Object.keys(applyOps(d, [{ t: 'remove', id: 'band', cascade: true }]).design.nodes),
+    ).toEqual([])
     expect(() => applyOps(d, [{ t: 'update', id: 'center', patch: { width: 900 } }])).toThrow()
   })
   it('exposes field metadata through JSON Schema', () => {

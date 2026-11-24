@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
-  BOOT_TIMEOUT,
   authPost,
+  BOOT_TIMEOUT,
   type Client,
   client,
   signUp,

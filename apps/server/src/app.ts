@@ -1,7 +1,7 @@
+import type { MiddlewareHandler } from 'hono'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { createMiddleware } from 'hono/factory'
-import type { MiddlewareHandler } from 'hono'
 import { logger } from 'hono/logger'
 import { type BlobStore, FsBlobStore } from './assets/blob-store'
 import { createAuth } from './auth/auth'

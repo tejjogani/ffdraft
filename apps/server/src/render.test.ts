@@ -5,14 +5,15 @@ import { putAsset } from './assets/assets'
 import type { Ctx } from './context'
 import type { JobHandle, ModelShotPatch, Services } from './services'
 import {
-  BOOT_TIMEOUT,
   authPost,
+  BOOT_TIMEOUT,
   type Client,
   client,
   signUp,
   type TestServer,
   testServer,
 } from './test/harness'
+import { traces } from './traces'
 
 const card = {
   description: 'Warm, editorial',
@@ -72,6 +73,12 @@ describe('saved shots and takes', () => {
       patch: { camera: { focalLength: 9000 } },
     })
     expect(invalid.status).toBe(400)
+    // A misspelt key is refused, not silently dropped while the call "succeeds".
+    const misspelt = await api.fail('scenes.update', {
+      id: hero.id,
+      patch: { bogus: 1, camera: { focalLenght: 105 } },
+    })
+    expect([misspelt.status, misspelt.error.paths]).toEqual([400, ['bogus', 'camera.focalLenght']])
 
     await api.call('scenes.delete', { id: macro.id })
     off()
@@ -138,6 +145,7 @@ describe('saved shots and takes', () => {
 
     const starred = await api.call('renders.update', { id: job.id, starred: true, title: 'Keeper' })
     expect(starred).toMatchObject({ starred: true, title: 'Keeper' })
+    expect((await api.fail('renders.update', { id: job.id })).status).toBe(400)
 
     await api.call('design.apply', {
       pieceId: piece.id,
@@ -236,6 +244,78 @@ describe('saved shots and takes', () => {
       assetIds: [],
     })
     expect((await api.fail('renders.complete', { id: job.id, error: 'x' })).status).toBe(409)
+
+    // A queue that will not take the job fails it, rather than leaving it queued for ever.
+    server.runtime.services.register('renderQueue', {
+      capabilities: { blender: true },
+      submit: async () => {
+        throw new Error('blender crashed')
+      },
+      cancel: async () => {},
+    })
+    expect((await api.fail('renders.create', { pieceId: piece.id, scene: {} })).status).toBe(500)
+    const [failed] = await api.call('renders.list', { pieceId: piece.id })
+    expect(failed).toMatchObject({ engine: 'blender', status: 'failed' })
+  })
+
+  it('hands work left unfinished by a restart back to its services, as whoever queued it', async () => {
+    server.runtime.services.register('renderQueue', {
+      capabilities: { blender: true },
+      submit: async () => {},
+      cancel: async () => {},
+    })
+    const piece = await api.call('pieces.create', { templateId: 'solitaire' })
+    const job = await api.call('renders.create', { pieceId: piece.id, scene: {} })
+    const running = await traces.startRun(ctx, { model: 'm' })
+    const waiting = await traces.startRun(ctx, { model: 'm' })
+    await traces.finishRun(ctx, waiting.id, { status: 'awaiting-approval' })
+    expect((await server.runtime.unfinished()).map((u) => [u.kind, u.id])).toEqual(
+      expect.arrayContaining([
+        ['render', job.id],
+        ['run', running.id],
+        ['run', waiting.id],
+      ]),
+    )
+
+    const resume = vi.fn<NonNullable<Services['renderQueue']['resume']>>(async () => {})
+    server.runtime.services.register('renderQueue', {
+      capabilities: { blender: true },
+      submit: async () => {},
+      resume,
+      cancel: async () => {},
+    })
+    await server.runtime.recover()
+    const [resumed, subject, handle, sctx] = resume.mock.calls.find(([j]) => j.id === job.id)!
+    expect([resumed.status, subject.id, sctx.userId, sctx.actor]).toEqual([
+      'queued',
+      piece.id,
+      server.runtime.local!.userId,
+      { type: 'user', id: server.runtime.local!.userId },
+    ])
+    await handle.update({ status: 'done', progress: 1, assetIds: [], cacheKey: 'sha256:k1' })
+    expect((await sctx.cachedRender('sha256:k1'))?.id).toBe(job.id)
+    expect(await sctx.cachedRender('sha256:other')).toBeNull()
+
+    // Without an assistant runtime, a run cut off mid-step fails; one awaiting approval waits.
+    const runs = await api.call('traces.runs', {})
+    expect(runs.find((r) => r.id === running.id)).toMatchObject({
+      status: 'failed',
+      errorCode: 'interrupted',
+    })
+    expect(runs.find((r) => r.id === waiting.id)?.status).toBe('awaiting-approval')
+
+    // A job whose service cannot resume it is failed, not left live.
+    const stuck = await api.call('renders.create', { pieceId: piece.id, scene: {} })
+    server.runtime.services.register('renderQueue', {
+      capabilities: { blender: true },
+      submit: async () => {},
+      cancel: async () => {},
+    })
+    await server.runtime.recover()
+    expect(await api.call('renders.get', { id: stuck.id })).toMatchObject({
+      status: 'failed',
+      error: expect.stringContaining('Interrupted'),
+    })
   })
 })
 
@@ -431,6 +511,21 @@ describe('brand models and on-model images', () => {
     await api.call('shots.delete', { id: shots[1]!.id })
     expect((await api.call('shots.list', { pieceId: piece.id })).map((s) => s.id)).toEqual([
       shots[0]!.id,
+    ])
+
+    // If the pipeline refuses a shot, it and the shots not yet handed over fail; none stay queued.
+    submitShot.mockRejectedValueOnce(new Error('provider down'))
+    const refused = await api.fail('shots.create', {
+      modelId: model.id,
+      pieceId: piece.id,
+      placement: 'hand',
+      count: 2,
+    })
+    expect(refused.status).toBe(500)
+    const after = await api.call('shots.list', { pieceId: piece.id })
+    expect(after.filter((s) => s.id !== shots[0]!.id).map((s) => s.status)).toEqual([
+      'failed',
+      'failed',
     ])
   })
 })

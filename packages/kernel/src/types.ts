@@ -28,7 +28,11 @@ export interface Bounds {
   max: [number, number, number]
 }
 
-/** One solid metal body. `id` is the node id that produced it (stable across evaluations). */
+/**
+ * One metal body. At draft: one part per node (`id` is the node id). At production: one
+ * watertight shell per connected casting, plus one part per node for bodies made of many
+ * separate shells that touch nothing else (the links of a chain).
+ */
 export interface Part {
   id: string
   nodeId: string

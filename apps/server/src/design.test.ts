@@ -229,7 +229,11 @@ describe('undo', () => {
     const widen = (widthTop: number) =>
       server.runtime.invoke(
         'design.apply',
-        { pieceId: piece.id, label: `Width ${widthTop}`, ops: [{ t: 'update', id: 'band', patch: { widthTop } }] },
+        {
+          pieceId: piece.id,
+          label: `Width ${widthTop}`,
+          ops: [{ t: 'update', id: 'band', patch: { widthTop } }],
+        },
         agent,
       )
     await widen(5)

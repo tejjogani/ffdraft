@@ -671,7 +671,10 @@ function updatePhrase(node: Node | undefined, id: string, patch: Record<string, 
     const from = at(node, [...prefix, 'type'])
     const to = at(patch, [...prefix, 'type'])
     if (from !== to)
-      parts.push({ title: field.title, text: `${field.title} ${variantTitle(from)} → ${variantTitle(to)}` })
+      parts.push({
+        title: field.title,
+        text: `${field.title} ${variantTitle(from)} → ${variantTitle(to)}`,
+      })
   }
   // A leaf inside a whole-value field (a ring size) reads as a change of that field.
   const wholes = new Map<string, { path: string[]; field: FieldInfo }>()
@@ -695,7 +698,10 @@ function updatePhrase(node: Node | undefined, id: string, patch: Record<string, 
     const was = at(node, path)
     const now = at(after, path)
     if (JSON.stringify(was) === JSON.stringify(now)) continue
-    parts.push({ title: field.title, text: `${field.title} ${show(was, field)} → ${show(now, field)}` })
+    parts.push({
+      title: field.title,
+      text: `${field.title} ${show(was, field)} → ${show(now, field)}`,
+    })
   }
   if (parts.length === 0) return null
   if (parts.length === 1) return parts[0]!.text

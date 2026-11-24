@@ -266,7 +266,10 @@ describe('making jewelry from a picture', () => {
     const photo = await putAsset(ctx, { bytes: await png(), name: 'c.png' })
     const piece = await api.call('pieces.create', { kind: 'pendant' })
     submit.mockRejectedValueOnce(new Error('invalid API key'))
-    const refused = await api.fail('mesh3d.create', { pieceId: piece.id, imageAssetIds: [photo.id] })
+    const refused = await api.fail('mesh3d.create', {
+      pieceId: piece.id,
+      imageAssetIds: [photo.id],
+    })
     expect(refused.status).toBe(500)
     const [failed] = await api.call('mesh3d.list', { pieceId: piece.id })
     expect(failed).toMatchObject({

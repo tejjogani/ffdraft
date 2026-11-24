@@ -61,6 +61,8 @@ const CONCAVE_CAP = 5
 const SLACK = 0.012
 /** Overlaps up to this share of a stone are construction drift, settled rather than refused. */
 const DRIFT = 0.06
+/** Depth changing this many times faster across a seed than along it marks a band. */
+const BAND_ANISOTROPY = 4
 const EPS = 1e-9
 
 export function layoutPave(surface: PaveSurface, options: LayoutOptions): Layout {
@@ -71,7 +73,7 @@ class Packer {
   private readonly sizes: readonly number[]
   private readonly smallest: number
   private readonly largest: number
-  private readonly allowed: Float32Array
+  private readonly allowed: Float64Array
   private readonly dead: Uint8Array
   /** Samples from the heart of the region outward. */
   private readonly order: Uint32Array
@@ -89,7 +91,7 @@ class Packer {
     this.sizes = o.sizes
     this.largest = o.sizes[0]!
     this.smallest = o.sizes.at(-1)!
-    this.allowed = new Float32Array(surface.count).fill(-1)
+    this.allowed = new Float64Array(surface.count).fill(-1)
     this.dead = new Uint8Array(surface.count)
     const ids = Array.from({ length: surface.count }, (_, i) => i)
     ids.sort((a, b) => surface.depth[b]! - surface.depth[a]! || a - b)
@@ -225,13 +227,13 @@ class Packer {
   // ── Fronts ─────────────────────────────────────────────────────────────────────────────────
 
   /**
-   * The deepest live sample with room for a stone; after the first front, only where a whole
-   * ring of stones would fit, so new fronts start in unreached parts rather than in gaps.
-   * Stones are only ever added, so a rejected sample stays rejected: the scan resumes where the
-   * previous one stopped.
+   * The deepest live sample with room for a stone; after the first front, only where a row of
+   * three fits along the local row direction, so new fronts start in unreached parts (another
+   * face, the next step of a plinth) rather than in the gaps between fronts, which are filled
+   * afterwards. Stones are only ever added, so a rejected sample stays rejected: the scan
+   * resumes where the previous one stopped.
    */
   private nextSeed(first: boolean): number {
-    const clearance = first ? 0 : 2 * (this.largest + this.o.gap)
     for (; this.seedCursor < this.order.length; this.seedCursor++) {
       const i = this.order[this.seedCursor]!
       if (this.dead[i] || this.sizeAt(i) === 0) continue
@@ -239,68 +241,93 @@ class Packer {
       const n = this.surface.normal(i)
       const d = this.sizeFor(i, p)
       if (d === 0 || !this.fits(p, n, d)) continue
-      if (clearance > 0) {
-        let crowded = false
-        this.grid.near(p[0], p[1], p[2], clearance + d, () => {
-          crowded = true
-        })
-        if (crowded) continue
-      }
+      if (!first && !this.roomForRow(i, p, n, d)) continue
       return i
     }
     return -1
   }
 
-  /** Rows direction in the tangent plane at a point (falls back to any tangent). */
+  private roomForRow(i: number, p: Vec3, n: Vec3, d: number): boolean {
+    const { rows } = this.rowsAt(i, n)
+    for (const side of [1, -1]) {
+      const q = this.snap(add(p, scale(rows, side * (d + this.o.gap + SLACK))))
+      if (!q || this.sizeFor(q.sample, q.p) < d - EPS || !this.fits(q.p, q.n, d)) return false
+    }
+    return true
+  }
+
   /**
-   * Row direction at a seed: along the region where it is narrow (perpendicular to the depth
-   * gradient, so a stroke of a letter is paved in rows that follow it), the preferred direction
-   * in open fields; turned by the seed's lattice angle either way.
+   * Row direction at a seed: along the region where it is a band (so a stroke of a letter or the
+   * face of a step is paved in rows that follow it), the preferred direction in open fields;
+   * turned by the seed's lattice angle either way. Seeds sit on the ridge of the depth field,
+   * where its gradient vanishes, so the band is read from how depth varies by direction: the
+   * structure tensor Σ Δdepth² · t tᵀ of the unit tangent directions t to nearby samples has
+   * its larger axis across the band.
    */
-  private rowsAt(seed: number, n: Vec3): Vec3 {
+  private rowsAt(seed: number, n: Vec3): { rows: Vec3; banded: boolean } {
     const angle = (((this.o.seed - 1) * 23) % 60) * (Math.PI / 180)
     const p = this.surface.point(seed)
-    const reach = 2 * this.largest
-    let g: Vec3 = [0, 0, 0]
-    this.surface.near(p, reach, (j) => {
-      g = add(
-        g,
-        scale(sub(this.surface.point(j), p), this.surface.depth[j]! - this.surface.depth[seed]!),
-      )
+    const e1 = normalize(cross(n, Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]))
+    const e2 = cross(n, e1)
+    let xx = 0
+    let xy = 0
+    let yy = 0
+    this.surface.near(p, 2 * this.largest, (j, d2) => {
+      if (d2 < EPS) return
+      const dp = sub(this.surface.point(j), p)
+      const u = dot(dp, e1)
+      const v = dot(dp, e2)
+      const w = (this.surface.depth[j]! - this.surface.depth[seed]!) ** 2 / d2
+      const t2 = u * u + v * v || 1
+      xx += (w * u * u) / t2
+      xy += (w * u * v) / t2
+      yy += (w * v * v) / t2
     })
-    g = sub(g, scale(n, dot(g, n)))
-    // A clear slope across the footprint means the seed sits in a band, not an open field.
+    const mean = (xx + yy) / 2
+    const spread = Math.hypot((xx - yy) / 2, xy)
+    // Depth falls at least BAND_ANISOTROPY times faster across than along: a band.
     const banded =
-      Math.hypot(g[0], g[1], g[2]) > 1e-3 * reach ** 4 &&
-      this.surface.depth[seed]! < 2 * this.largest
-    let e = banded ? cross(n, g) : sub(this.o.rowDirection, scale(n, dot(this.o.rowDirection, n)))
+      mean - spread > 0
+        ? (mean + spread) / (mean - spread) > BAND_ANISOTROPY
+        : spread > 0
+    const band = banded && this.surface.depth[seed]! < 2 * this.largest
+    let e: Vec3
+    if (band) {
+      // Eigenvector of the smaller eigenvalue: the direction along which depth stays level.
+      const theta = 0.5 * Math.atan2(2 * xy, xx - yy) + Math.PI / 2
+      e = add(scale(e1, Math.cos(theta)), scale(e2, Math.sin(theta)))
+    } else e = sub(this.o.rowDirection, scale(n, dot(this.o.rowDirection, n)))
     if (Math.hypot(e[0], e[1], e[2]) < 1e-3) e = cross(n, [0, 0, 1])
-    e = normalize(e, normalize(cross(n, [1, 0, 0])))
+    e = normalize(e, e1)
     const f = cross(n, e)
-    return normalize(add(scale(e, Math.cos(angle)), scale(f, Math.sin(angle))))
+    return { rows: normalize(add(scale(e, Math.cos(angle)), scale(f, Math.sin(angle)))), banded: band }
   }
 
   private grow(seed: number, first: boolean): void {
     let start = this.surface.point(seed)
     const n0 = this.surface.normal(seed)
-    const rows = this.rowsAt(seed, n0)
+    const { rows, banded } = this.rowsAt(seed, n0)
     if (first) {
-      // Seeded phase: shift the lattice by up to half a pitch so layouts differ per seed.
+      // Seeded phase: shift the lattice by up to half a pitch so layouts differ per seed — only
+      // along a band, never off its centre line, and never onto a spot that takes a smaller stone.
       const pitch = this.largest + this.o.gap
+      const across = banded ? 0 : (this.random() - 0.5) * pitch
       const shifted = this.snap(
         add(
           add(start, scale(rows, (this.random() - 0.5) * pitch)),
-          scale(cross(n0, rows), (this.random() - 0.5) * pitch),
+          scale(cross(n0, rows), across),
         ),
       )
       const d = shifted ? this.sizeFor(shifted.sample, shifted.p) : 0
-      if (shifted && d > 0 && this.fits(shifted.p, shifted.n, d)) start = shifted.p
+      if (shifted && d >= this.sizeFor(seed, start) && this.fits(shifted.p, shifted.n, d))
+        start = shifted.p
     }
     const root = this.snap(start)
     if (!root) return
     const d0 = this.sizeFor(root.sample, root.p)
     if (d0 === 0 || !this.fits(root.p, root.n, d0)) return
     const a = this.place(root.p, root.n, d0, root.sample)
+    if (process.env.TRACE) console.log('why', this.sizeAt(root.sample), this.surface.convex[root.sample], this.surface.concave[root.sample], this.o.edgeDistance(root.p), this.surface.thickness(root.sample), this.surface.edge[root.sample])
     if (process.env.TRACE) console.log('seed', a, root.p.map((x) => x.toFixed(2)), d0, 'rows', rows.map((x) => x.toFixed(2)))
 
     // The second stone sets the row direction; try the six lattice directions in turn.

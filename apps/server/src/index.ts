@@ -3,9 +3,9 @@
  * server, engines, desktop shell).
  */
 export { type CreateAppOptions, createApp, type PaveServer } from './app'
-export { compose, servicesFromEnv } from './compose'
 export { type AssetKind, type NewAsset, putAsset, readAsset } from './assets/assets'
 export { type BlobStore, FsBlobStore } from './assets/blob-store'
+export { compose, servicesFromEnv } from './compose'
 export { type AuthMode, type Config, configFromEnv } from './config'
 export type { Ctx, Execute, Invoke } from './context'
 export { invoke, publish } from './context'

@@ -11,8 +11,14 @@ import { describe, expect, it } from 'vitest'
 import * as core from './core'
 import { createDesignSession, type SessionTransport } from './session'
 
-const solitaire = () => buildDesign(TEMPLATES.find((t) => t.id === 'solitaire')!.spec)
 const bandId = (d: Design) => d.order.find((id) => d.nodes[id]!.kind === 'ringShank')!
+/** The solitaire template with the band at known values. */
+const solitaire = () => {
+  const d = buildDesign(TEMPLATES.find((t) => t.id === 'solitaire')!.spec)
+  return applyOps(d, [
+    { t: 'update', id: bandId(d), patch: { widthTop: 2.2, thicknessTop: 1.8, profile: 'court' } },
+  ]).design
+}
 const width = (d: Design) => (d.nodes[bandId(d)] as { widthTop: number }).widthTop
 const setWidth = (d: Design, v: number): Op[] => [
   { t: 'update', id: bandId(d), patch: { widthTop: v } },

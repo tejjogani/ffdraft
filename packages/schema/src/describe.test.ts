@@ -370,7 +370,9 @@ describe('describeFields', () => {
       fields.flatMap((f) => [`${prefix}${f.key}`, ...paths(f.fields ?? [], `${prefix}${f.key}.`)])
     const fields = describeFields(RenderSceneSchema)
     expect(paths(fields).toSorted()).toEqual(titled.toSorted())
-    const lens = fields.find((f) => f.key === 'camera')!.fields!.find((f) => f.key === 'focalLength')
+    const lens = fields
+      .find((f) => f.key === 'camera')!
+      .fields!.find((f) => f.key === 'focalLength')
     expect(lens).toMatchObject({ title: 'Lens', meta: { unit: 'mm', widget: 'slider' } })
   })
 

@@ -5,8 +5,8 @@ import { type Ctx, publish } from '../context'
 import * as t from '../db/schema'
 import { AppError, badRequest, conflict, forbidden } from '../errors'
 import { createId } from '../ids'
-import { ensure, ensureAll, getPiece, getRender, getScene } from '../lookups'
 import { renderHandle, stopJob, submitJob, updateRender } from '../jobs'
+import { ensure, ensureAll, getPiece, getRender, getScene } from '../lookups'
 import { isTerminal, publishJob, serviceContext } from '../service-context'
 import { toPiece } from './pieces'
 import type { HandlerGroup } from './types'
@@ -174,14 +174,15 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     if (saved && saved.pieceId !== null && saved.pieceId !== piece.id)
       throw badRequest('That shot belongs to another piece')
     await ensure(getRender, ctx, input.retryOf)
+    // Asking for Blender without a render queue is refused up front (501), before any row exists.
+    if (input.engine === 'blender') ctx.services.require('renderQueue')
     const engine =
-      input.engine === 'blender'
-        ? (ctx.services.require('renderQueue'), 'blender')
-        : input.engine === 'auto' &&
-            ctx.services.isConfigured('renderQueue') &&
-            ctx.services.capabilities().blender
-          ? 'blender'
-          : 'browser'
+      input.engine === 'blender' ||
+      (input.engine === 'auto' &&
+        ctx.services.isConfigured('renderQueue') &&
+        ctx.services.capabilities().blender)
+        ? 'blender'
+        : 'browser'
     const scene = input.scene ?? saved!.scene
     const row = await ctx.repo.renders.insert({
       id: createId('rnd'),

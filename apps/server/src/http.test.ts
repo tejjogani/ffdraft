@@ -109,3 +109,48 @@ describe('welcome workspace', () => {
     }
   })
 })
+
+describe('composition', () => {
+  it('builds engines with the runtime, mounts extra routes before the catch-all, and listens across orgs', async () => {
+    let built: unknown = null
+    const server = await testServer({
+      services: (runtime) => {
+        built = runtime
+        return { vision: { describe: async () => ({ tags: [], flags: [] }) } }
+      },
+      routes: (app, runtime, withCtx) => {
+        app.use('/api/runs/*', withCtx)
+        app.get('/api/runs/:id/events', (c) =>
+          c.json({ run: c.req.param('id'), user: c.var.ctx.user.id, local: runtime.local?.userId }),
+        )
+      },
+    })
+    try {
+      expect(built).toBe(server.runtime)
+      const api = client(server)
+      expect((await api.call('session.get', {})).capabilities.vision).toBe(true)
+      const res = await api.request('/api/runs/run_1/events')
+      expect(await res.json()).toEqual({
+        run: 'run_1',
+        user: server.runtime.local!.userId,
+        local: server.runtime.local!.userId,
+      })
+      expect((await api.request('/api/runs')).status).toBe(404)
+
+      const seen: [string, string][] = []
+      const off = server.runtime.events.subscribeAll((orgId, e) => seen.push([orgId, e.type]))
+      const { orgId, userId } = server.runtime.local!
+      server.runtime.events.publish(orgId, { type: 'piece.updated', pieceId: 'p' })
+      server.runtime.events.publish(
+        orgId,
+        { type: 'client.request', requestId: 'q', runId: null, tool: 'ui.context', input: {} },
+        { userId },
+      )
+      off()
+      server.runtime.events.publish(orgId, { type: 'piece.updated', pieceId: 'p' })
+      expect(seen).toEqual([[orgId, 'piece.updated']])
+    } finally {
+      await server.dispose()
+    }
+  })
+})

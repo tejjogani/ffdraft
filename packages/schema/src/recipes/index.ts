@@ -6,7 +6,12 @@
  */
 import { type Design, type PieceKind, designFrom } from '../design/design'
 import type { NodeInput } from '../design/nodes'
-import { type PieceSpec, type PieceSpecInput, PieceSpecSchema, type StoneSpec } from '../design/spec'
+import {
+  type PieceSpec,
+  type PieceSpecInput,
+  PieceSpecSchema,
+  type StoneSpec,
+} from '../design/spec'
 import { gemDimsFromCarat } from '../domain/gems'
 import { ringInnerDiameter } from '../domain/sizes'
 
@@ -19,15 +24,23 @@ const widthOf = (s: StoneSpec | undefined, fallback: number): number =>
       ? Number(gemDimsFromCarat(s.cut, s.carat, s.stone, s.lw).width.toFixed(2))
       : (s.widthMm ?? fallback)
 
-const byRole = (spec: PieceSpec, role: StoneSpec['role']) => spec.stones.find((s) => s.role === role)
+const byRole = (spec: PieceSpec, role: StoneSpec['role']) =>
+  spec.stones.find((s) => s.role === role)
 
 const headStyle = (s: StoneSpec | undefined) =>
-  s?.setting === 'bezel' || s?.setting === 'halfBezel' || s?.setting === 'basket' || s?.setting === 'flush'
+  s?.setting === 'bezel' ||
+  s?.setting === 'halfBezel' ||
+  s?.setting === 'basket' ||
+  s?.setting === 'flush'
     ? s.setting
     : 'prong'
 
 function ring(spec: PieceSpec): NodeInput[] {
-  const metal = { material: spec.metal.alloy, finish: spec.metal.finish, plating: spec.metal.plating }
+  const metal = {
+    material: spec.metal.alloy,
+    finish: spec.metal.finish,
+    plating: spec.metal.plating,
+  }
   const r = spec.ring
   const size = r?.size ?? { system: 'us' as const, value: 6 }
   const radius = ringInnerDiameter(size) / 2
@@ -112,7 +125,9 @@ function ring(spec: PieceSpec): NodeInput[] {
     if (a === 'threeStone') {
       const side = byRole(spec, 'side')
       const sw = widthOf(side, Number((w * 0.62).toFixed(2)))
-      const angle = Number((((w / 2 + sw / 2 + 0.5) / (radius + thickness + 2)) * (180 / Math.PI)).toFixed(1))
+      const angle = Number(
+        (((w / 2 + sw / 2 + 0.5) / (radius + thickness + 2)) * (180 / Math.PI)).toFixed(1),
+      )
       for (const [i, sign] of [-1, 1].entries()) {
         nodes.push(
           {
@@ -122,7 +137,13 @@ function ring(spec: PieceSpec): NodeInput[] {
             cut: side?.cut ?? 'round',
             stone: side?.stone ?? 'diamond',
             width: sw,
-            placement: { type: 'ringTop', shank: 'band', angle: sign * angle, elevation: 0.9, spin: 0 },
+            placement: {
+              type: 'ringTop',
+              shank: 'band',
+              angle: sign * angle,
+              elevation: 0.9,
+              spin: 0,
+            },
           },
           {
             id: `sideHead${i + 1}`,
@@ -156,13 +177,23 @@ function ring(spec: PieceSpec): NodeInput[] {
   }
 
   if (spec.engraving) {
-    nodes.push({ id: 'engraving', kind: 'engraving', name: 'Engraving', host: 'band', text: spec.engraving })
+    nodes.push({
+      id: 'engraving',
+      kind: 'engraving',
+      name: 'Engraving',
+      host: 'band',
+      text: spec.engraving,
+    })
   }
   return nodes
 }
 
 function pendant(spec: PieceSpec): NodeInput[] {
-  const metal = { material: spec.metal.alloy, finish: spec.metal.finish, plating: spec.metal.plating }
+  const metal = {
+    material: spec.metal.alloy,
+    finish: spec.metal.finish,
+    plating: spec.metal.plating,
+  }
   const a = spec.archetype
   const b = spec.body
   const height = b?.heightMm ?? 24
@@ -307,7 +338,11 @@ function chainNode(spec: PieceSpec, through?: string): NodeInput {
 }
 
 function studs(spec: PieceSpec): NodeInput[] {
-  const metal = { material: spec.metal.alloy, finish: spec.metal.finish, plating: spec.metal.plating }
+  const metal = {
+    material: spec.metal.alloy,
+    finish: spec.metal.finish,
+    plating: spec.metal.plating,
+  }
   const center = byRole(spec, 'center')
   return [
     {
@@ -330,7 +365,14 @@ function studs(spec: PieceSpec): NodeInput[] {
       prongDiameter: 0.8,
     },
     { id: 'post', kind: 'finding', name: 'Post', ...metal, type: 'earringPost', host: 'head' },
-    { id: 'pair', kind: 'pattern', name: 'Pair', sources: ['stone', 'head', 'post'], type: 'mirror', axis: 'x' },
+    {
+      id: 'pair',
+      kind: 'pattern',
+      name: 'Pair',
+      sources: ['stone', 'head', 'post'],
+      type: 'mirror',
+      axis: 'x',
+    },
   ]
 }
 
