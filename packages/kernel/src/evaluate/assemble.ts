@@ -121,6 +121,26 @@ function partOf(
   }
 }
 
+/**
+ * The finish and plating most of a fused casting's metal carries, by volume. A casting fuses
+ * bodies of one alloy that may be finished differently; the odd ones become regions. Taking the
+ * first body's spec instead would make a small rhodium-plated head, listed first, the casting's
+ * plating and the band its exception.
+ */
+function majoritySpec(sources: readonly Source[], fallback: MetalSpec): MetalSpec {
+  const totals = new Map<string, { spec: MetalSpec; volume: number }>()
+  for (const { body } of sources) {
+    const key = `${body.finish}/${body.plating}`
+    const entry = totals.get(key) ?? { spec: specOf(body), volume: 0 }
+    entry.volume += body.solid.volume()
+    totals.set(key, entry)
+  }
+  let best: { spec: MetalSpec; volume: number } | undefined
+  // Ties go to the first spec met, so the choice is stable for a given design.
+  for (const entry of totals.values()) if (!best || entry.volume > best.volume) best = entry
+  return best ? { ...best.spec, material: fallback.material } : fallback
+}
+
 /** Source nodes whose finish or plating differ from the part's (see `Part.regions`). */
 function regionsOf(
   part: Part,
@@ -531,7 +551,7 @@ export function assembleProduction(
           first?.id ?? material,
           rev,
           kept.length === 1 || !first ? METALS[material].label : labelOf(first.node),
-          group.spec,
+          majoritySpec(sources.length > 0 ? sources : fusedSources, group.spec),
           [solid],
           quality,
           volume + deficitOf(sources),

@@ -12,7 +12,7 @@ import type { Manifold } from 'manifold-3d'
 import type { Shape3D } from 'replicad'
 import type { Solid, SolidRecipe, SurfaceMesh } from '../core'
 import { type Mat4, uniformScaleOf } from '../geometry/vec'
-import { runtime } from '../runtime/index'
+import { isRuntimeFault, runtime } from '../runtime/index'
 import type { Bounds } from '../types'
 import {
   boundsOfPositions,
@@ -80,17 +80,21 @@ export async function withSolidScope<T>(
   if (scope) throw new Error('Solid scopes do not nest; evaluations run one node at a time')
   const created = new Set<SolidImpl>()
   scope = created
-  let kept: Set<Solid> | null = null
   try {
     const value = await fn()
-    kept = new Set(keep(value))
+    const kept = new Set(keep(value))
     for (const solid of kept)
       if (!created.has(solid as SolidImpl))
         throw new Error('A feature returned a solid it does not own; return a transformed copy')
-    return value
-  } finally {
     scope = null
-    for (const solid of created) if (!kept?.has(solid)) solid.dispose()
+    for (const solid of created) if (!kept.has(solid)) solid.dispose()
+    return value
+  } catch (error) {
+    scope = null
+    // After a fault the heap is corrupt: freeing would touch it again and could replace the
+    // fault with a misleading error. The solids are forgotten with the runtime instead.
+    if (!isRuntimeFault(error)) for (const solid of created) solid.dispose()
+    throw error
   }
 }
 

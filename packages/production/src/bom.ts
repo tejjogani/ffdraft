@@ -148,49 +148,66 @@ export function billOfMaterials(ctx: PackageContext): BomLine[] {
     })
   }
   // A fused casting can carry regions finished or plated differently (a rhodium-plated head on
-  // a yellow band): each finish and plating names exactly the surfaces it applies to.
+  // a yellow band). Each finish and plating line names exactly the surfaces that get it: whole
+  // castings, less their regions that do not ("except …", to be masked), plus regions of other
+  // castings that do. Which body the casting's own spec came from must not matter.
+  type Treatment = 'finish' | 'plating'
+  const surfaces = (key: Treatment, value: string) => {
+    const whole: string[] = []
+    const areas: string[] = []
+    let masked = false
+    for (const g of ctx.groups) {
+      const part = g.parts[0]!
+      const regions = g.parts.flatMap((p) => p.regions ?? [])
+      if (part[key] === value) {
+        const except = [...new Set(regions.filter((r) => r[key] !== value).map((r) => r.name))]
+        if (except.length) masked = true
+        whole.push(`${g.name}${except.length ? ` except ${except.join(', ')}` : ''}`)
+      } else {
+        const here = [...new Set(regions.filter((r) => r[key] === value).map((r) => r.name))]
+        if (here.length) masked = true
+        areas.push(...here)
+      }
+    }
+    const text = [
+      whole.length ? `All surfaces of ${whole.join('; ')}` : '',
+      areas.length ? `${whole.length ? 'and ' : ''}${areas.join(', ')}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+    return { text, masked }
+  }
   const regions = evaluation.parts.flatMap((p) => p.regions ?? [])
   const finishes = [...new Set([...evaluation.parts, ...regions].map((p) => p.finish))]
   for (const f of finishes) {
-    const parts = ctx.groups.filter((g) => g.parts[0]!.finish === f).map((g) => g.name)
-    const areas = regions.filter((r) => r.finish === f).map((r) => r.name)
-    const others = regions.filter((r) => r.finish !== f).map((r) => r.name)
+    const { text, masked } = surfaces('finish', f)
     lines.push({
       type: 'finish',
       item: FINISHES[f].label,
-      description: [
-        parts.length
-          ? `All surfaces of ${parts.join(', ')}${others.length ? ` except ${others.join(', ')}` : ''}`
-          : '',
-        areas.length ? `${parts.length ? 'and ' : ''}${areas.join(', ')}` : '',
-      ]
-        .filter(Boolean)
-        .join(' '),
+      description: text,
       material: '',
       fineness: '',
       hallmark: '',
       qtyPerPiece: 1,
       unit: 'op',
+      ...(masked ? { notes: 'Selective finish: mask the surfaces not listed' } : {}),
     })
   }
   const platings = [...new Set([...evaluation.parts, ...regions].map((p) => p.plating))].filter(
     (p) => p !== 'none',
   )
   for (const p of platings) {
-    const where = [
-      ...ctx.groups.filter((g) => g.parts[0]!.plating === p).map((g) => g.name),
-      ...regions.filter((r) => r.plating === p).map((r) => r.name),
-    ]
+    const { text, masked } = surfaces('plating', p)
     lines.push({
       type: 'plating',
       item: PLATINGS[p].label,
-      description: `${platingSpec(ctx, p)}${ctx.input.options.plating?.layers ? `, ${ctx.input.options.plating.layers}` : ''}${where.length ? `; ${where.join(', ')}` : ''}`,
+      description: `${platingSpec(ctx, p)}${ctx.input.options.plating?.layers ? `, ${ctx.input.options.plating.layers}` : ''}${text ? `; ${text}` : ''}`,
       material: '',
       fineness: '',
       hallmark: '',
       qtyPerPiece: 1,
       unit: 'op',
-      notes: regions.some((r) => r.plating === p)
+      notes: masked
         ? 'Selective plating: mask the rest. Verify thickness by XRF'
         : 'Verify thickness by XRF',
     })

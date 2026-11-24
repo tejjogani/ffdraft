@@ -7,6 +7,7 @@ import { csvCell, encodeCsv, toCsv } from './csv'
 import { bundleRoot, safeSegment, skuSlug, uniqueName } from './paths'
 import { evaluationOf, fixtureKernel, stoneAt, templateDesign } from './testing/fixtures'
 import { box } from './testing/shapes'
+import type { Part, PartRegion } from '@pave/kernel/types'
 import type { BuildInput } from './types'
 
 /** A 1000 mm³ Pt950 block with one 6.5 mm round diamond, priced with explicit rates. */
@@ -229,5 +230,43 @@ describe('chains in the package', () => {
     const order = bom.find((l) => l.type === 'metal-order')!
     const head = bom.find((l) => l.type === 'metal')!
     expect(order.netWeightG).toBeCloseTo(head.netWeightG!, 3)
+  })
+})
+
+describe('selective finishing in the BOM', () => {
+  /** One fused casting; the part's own spec and its regions as the kernel records them. */
+  const bomFor = (
+    part: { finish: Part['finish']; plating: Part['plating'] },
+    regions: PartRegion[],
+  ) => {
+    const evaluation = evaluationOf([{ id: 'band', name: 'Ring', mesh: box([0, 0, 0], [8, 8, 2]) }])
+    Object.assign(evaluation.parts[0]!, part, { regions })
+    return billOfMaterials(
+      createContext({ ...input(), evaluation, kernel: fixtureKernel(evaluation) }),
+    )
+  }
+  const line = (bom: ReturnType<typeof billOfMaterials>, type: string) =>
+    bom.filter((l) => l.type === type)
+
+  it('masks the unplated head when the band carries the plating', () => {
+    const bom = bomFor({ finish: 'polished', plating: 'rhodium' }, [
+      { nodeId: 'head', name: 'Head', finish: 'polished', plating: 'none' },
+    ])
+    const [plating] = line(bom, 'plating')
+    expect(plating?.description).toMatch(/All surfaces of .* except Head/)
+    expect(plating?.notes).toMatch(/mask/i)
+    // The head differs only in plating: it is not an exception to the polish.
+    expect(line(bom, 'finish').map((l) => l.description)).toEqual([
+      expect.not.stringMatching(/Head/),
+    ])
+  })
+
+  it('names only the plated head when the band is bare', () => {
+    const bom = bomFor({ finish: 'polished', plating: 'none' }, [
+      { nodeId: 'head', name: 'Head', finish: 'polished', plating: 'rhodium' },
+    ])
+    const [plating] = line(bom, 'plating')
+    expect(plating?.description).toMatch(/; Head$/)
+    expect(plating?.notes).toMatch(/mask/i)
   })
 })

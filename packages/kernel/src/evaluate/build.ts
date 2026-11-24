@@ -18,6 +18,7 @@ import {
   transformFrame,
   uniformScaleOf,
 } from '../geometry/vec'
+import { isRuntimeFault } from '../runtime/index'
 import { meshVolume, surfaceDefects } from '../solid/meshing'
 import { isClosedByConstruction, withSolidScope } from '../solid/solid'
 import type { AssetResolver, Detail, Diagnostic } from '../types'
@@ -179,6 +180,21 @@ export async function buildNode(
   const diagnostics: Diagnostic[] = []
   const temporaries: Deletable[] = []
   const refs = new Set(nodeRefs(node))
+  // Whether the build depended on the asset store, and whether the store let it down: such a
+  // failure says nothing about the node and must not be memoised (see NodeResult.transient).
+  let wantedAssets = false
+  let assetFailed = false
+  const resolver = env.assets
+  const assets =
+    resolver &&
+    (async (assetId: string) => {
+      try {
+        return await resolver(assetId)
+      } catch (error) {
+        assetFailed = true
+        throw error
+      }
+    })
   const tryInput = (id: string): NodeResult | null => {
     if (!refs.has(id))
       throw new Error(`${node.kind} read node “${id}”, which is not one of its references`)
@@ -189,7 +205,10 @@ export async function buildNode(
     detail: env.detail,
     quality: env.quality,
     signal: env.signal,
-    assets: env.assets,
+    get assets() {
+      wantedAssets = true
+      return assets
+    },
     tryInput,
     input(id) {
       const result = tryInput(id)
@@ -210,6 +229,7 @@ export async function buildNode(
   }
 
   const matrix = matrixOf(node)
+  let faulted = false
   try {
     const placed = await withSolidScope(async () => {
       const out = place(
@@ -231,6 +251,13 @@ export async function buildNode(
     }
   } catch (error) {
     if (env.signal?.aborted) throw error
+    // A fault inside a WASM runtime is not this node's failure: the heap is corrupt, and only
+    // the evaluator can recover (forget every cached solid, reload the runtime). Caching it as
+    // `feature.failed` would keep using the corrupt heap and memoise the fault.
+    if (isRuntimeFault(error)) {
+      faulted = true
+      throw error
+    }
     const blocked = error instanceof BlockedError
     const reason = error instanceof Error ? error.message : 'the geometry kernel rejected it'
     diagnostics.push({
@@ -241,15 +268,22 @@ export async function buildNode(
         ? `“${labelOf(node)}” was left out because ${reason}.`
         : `“${labelOf(node)}” could not be built: ${reason}`,
     })
-    return without(
-      node,
-      hash,
-      blocked ? 'blocked' : 'failed',
-      diagnostics,
-      performance.now() - started,
-    )
+    const transient = blocked
+      ? env.results.get(error.inputId)?.transient === true
+      : assetFailed || (wantedAssets && !resolver)
+    return {
+      ...without(
+        node,
+        hash,
+        blocked ? 'blocked' : 'failed',
+        diagnostics,
+        performance.now() - started,
+      ),
+      ...(transient ? { transient } : {}),
+    }
   } finally {
-    for (const t of temporaries.reverse()) t.delete()
+    // Raw temporaries live in the heap a fault corrupted; they are forgotten with it.
+    if (!faulted) for (const t of temporaries.reverse()) t.delete()
   }
 }
 

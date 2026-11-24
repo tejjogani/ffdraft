@@ -19,10 +19,25 @@ export function hashString(text: string): string {
 // their hash is computed once.
 const byIdentity = new WeakMap<Node, string>()
 
+/**
+ * JSON with every object's keys sorted, so the same content hashes the same however it was
+ * stored: Postgres jsonb, for one, gives keys back in its own order, and a design reloaded from
+ * it must not rebuild the whole piece.
+ */
+export function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`
+  const entries = Object.keys(value)
+    .filter((key) => (value as Record<string, unknown>)[key] !== undefined)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`)
+  return `{${entries.join(',')}}`
+}
+
 export function hashNode(node: Node): string {
   let hash = byIdentity.get(node)
   if (hash === undefined) {
-    hash = hashString(JSON.stringify(node))
+    hash = hashString(canonicalJson(node))
     byIdentity.set(node, hash)
   }
   return hash

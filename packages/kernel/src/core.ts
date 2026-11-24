@@ -248,6 +248,11 @@ export interface NodeResult {
   readonly diagnostics: readonly Diagnostic[]
   /** Build time in ms (0 when served from cache). */
   readonly ms: number
+  /**
+   * Not ok because of something outside the document (an asset that could not be loaded, or
+   * no asset store yet): rebuilt on the next evaluation instead of being served from cache.
+   */
+  readonly transient?: boolean
 }
 
 export interface BuildContext {

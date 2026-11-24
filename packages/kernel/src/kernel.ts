@@ -66,10 +66,17 @@ export function createKernel(): LocalKernel {
         throw new Error(
           `Export to ${format} is not available in this build (available: ${[...exporters.keys()].join(', ') || 'none'})`,
         )
-      const evaluated = await scene(design, { detail: exporter.detail, assets: options.assets })
-      // An exporter works on the cached solids, so a WASM fault there must reset them too.
-      const result = await evaluator.guarded(async () => exporter.run(evaluated, options))
-      return { ...result, notes: [...result.notes, ...missingNotes(evaluated, options)] }
+      await loadRuntime()
+      // The exporter reads the cached solids, so it runs in the same exclusive, fault-guarded
+      // job as the evaluation: no other request can free them halfway through a file.
+      return evaluator.withScene(
+        resolveDesign(design),
+        { detail: exporter.detail, assets: options.assets },
+        async (evaluated) => {
+          const result = await exporter.run(evaluated, options)
+          return { ...result, notes: [...result.notes, ...missingNotes(evaluated, options)] }
+        },
+      )
     },
     dispose: () => evaluator.dispose(),
   }

@@ -5,7 +5,7 @@
 import { type Design, evaluationOrder, type Node, nodeRefs } from '@pave/schema'
 import { type AnyFeature, type NodeResult, QUALITY, type Scene } from '../core'
 import { manufacturabilityDiagnostics } from '../dfm/index'
-import { discardRuntime, isRuntimeFault } from '../runtime/index'
+import { discardRuntime, isRuntimeFault, runtimeGeneration } from '../runtime/index'
 import type { Detail, Diagnostic, EvaluateOptions, Evaluation } from '../types'
 import {
   type Assembly,
@@ -32,14 +32,21 @@ interface DetailCache {
 
 const LEVEL_ORDER = { error: 0, warning: 1, info: 2 } as const
 
+/**
+ * Every evaluator in a thread shares the WASM heaps and the module-level solid scope, so all of
+ * them run strictly one job at a time through this one queue. A queue per evaluator let two
+ * kernels interleave, and the second one's nodes failed with "Solid scopes do not nest".
+ */
+let queue: Promise<unknown> = Promise.resolve()
+
 export class Evaluator {
   private readonly features: ReadonlyMap<string, AnyFeature>
   private readonly caches: Record<Detail, DetailCache> = {
     draft: { nodes: new Map(), draftParts: new Map(), assembly: null, checks: null },
     production: { nodes: new Map(), draftParts: new Map(), assembly: null, checks: null },
   }
-  /** Evaluations share the WASM heap and the solid scope, so they run strictly one at a time. */
-  private queue: Promise<unknown> = Promise.resolve()
+  /** The runtime the cached solids were made in (see `runtimeGeneration`). */
+  private generation = runtimeGeneration()
 
   constructor(features: readonly AnyFeature[]) {
     this.features = new Map(features.map((f) => [f.kind, f]))
@@ -50,8 +57,25 @@ export class Evaluator {
   }
 
   scene(design: Design, options: EvaluateOptions = {}): Promise<Scene> {
-    const run = this.queue.then(() => this.guarded(() => this.evaluate(design, options)))
-    this.queue = run.catch(() => {})
+    return this.exclusive(() => this.evaluate(design, options))
+  }
+
+  /**
+   * Evaluates and runs `use` on the scene before any other job may start, so nothing can
+   * dispose the solids it reads (an exporter awaiting between files, a newer evaluation).
+   */
+  withScene<T>(
+    design: Design,
+    options: EvaluateOptions,
+    use: (scene: Scene) => T | Promise<T>,
+  ): Promise<T> {
+    return this.exclusive(async () => use(await this.evaluate(design, options)))
+  }
+
+  /** Runs `fn` after every job queued before it, in any evaluator, guarded against faults. */
+  private exclusive<T>(fn: () => Promise<T>): Promise<T> {
+    const run = queue.then(() => this.guarded(fn))
+    queue = run.catch(() => {})
     return run
   }
 
@@ -66,8 +90,8 @@ export class Evaluator {
       return await fn()
     } catch (error) {
       if (!isRuntimeFault(error)) throw error
-      this.forget()
       discardRuntime()
+      this.forget()
       throw new Error(
         'The geometry engine ran out of room on this design and was restarted. Make the design lighter (fewer or larger stones, a smaller piece) and try again.',
         { cause: error },
@@ -77,6 +101,8 @@ export class Evaluator {
 
   /** Frees every cached solid. The evaluator can be used again afterwards. */
   dispose(): void {
+    // Solids made in a runtime that has since been discarded (by any kernel) cannot be freed.
+    if (this.generation !== runtimeGeneration()) return this.forget()
     try {
       for (const cache of Object.values(this.caches)) {
         for (const result of cache.nodes.values()) disposeResult(result)
@@ -95,6 +121,7 @@ export class Evaluator {
 
   /** Drops every cached result without touching WASM memory. */
   private forget(): void {
+    this.generation = runtimeGeneration()
     for (const cache of Object.values(this.caches)) {
       cache.nodes.clear()
       cache.draftParts.clear()
@@ -103,8 +130,24 @@ export class Evaluator {
     }
   }
 
+  /**
+   * Drops what was assembled from a node's cached result before that result is freed. The draft
+   * parts and the production assembly are keyed on node hashes, so after an aborted evaluation
+   * replaced a node, re-evaluating the earlier design would otherwise hit them and hand out
+   * parts whose sources are freed solids (STEP reads those sources).
+   */
+  private release(cache: DetailCache, result: NodeResult): void {
+    cache.draftParts.delete(result.id)
+    cache.assembly?.value.dispose()
+    cache.assembly = null
+    disposeResult(result)
+  }
+
   private async evaluate(design: Design, options: EvaluateOptions): Promise<Scene> {
     const started = performance.now()
+    // Another kernel in this thread may have faulted and replaced the shared runtime: what this
+    // one cached lives in the dropped heap and must be forgotten (never freed, never reused).
+    if (this.generation !== runtimeGeneration()) this.forget()
     const detail = options.detail ?? 'draft'
     const quality = QUALITY[detail]
     const cache = this.caches[detail]
@@ -141,7 +184,7 @@ export class Evaluator {
         ...nodeRefs(node).map((ref) => results.get(ref)?.hash ?? '-'),
       ])
       let result = cache.nodes.get(id)
-      if (result?.hash !== hash) {
+      if (result?.hash !== hash || result.transient) {
         await breathe()
         const built = await buildNode(this.features.get(node.kind), node, hash, {
           detail,
@@ -152,7 +195,7 @@ export class Evaluator {
         })
         // Replace the cache entry only once the new result exists, so an abort mid-build
         // leaves the cache consistent.
-        if (result) disposeResult(result)
+        if (result) this.release(cache, result)
         cache.nodes.set(id, built)
         result = built
         timings[id] = built.ms
@@ -161,7 +204,7 @@ export class Evaluator {
     }
     for (const [id, stale] of cache.nodes)
       if (!results.has(id)) {
-        disposeResult(stale)
+        this.release(cache, stale)
         cache.nodes.delete(id)
       }
 

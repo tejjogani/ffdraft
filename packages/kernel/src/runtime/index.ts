@@ -27,6 +27,12 @@ export interface RuntimeSources {
 let sources: RuntimeSources = {}
 let loading: Promise<Runtime> | null = null
 let loaded: Runtime | null = null
+/**
+ * Counts runtime replacements. Every kernel in a thread shares the one runtime, so when any of
+ * them faults and discards it, the others must notice that the solids they cached live in the
+ * dropped heap (see `Evaluator`).
+ */
+let generation = 0
 
 /** Sets where the binaries come from. Call before the first `loadRuntime()`; browsers must. */
 export function configureRuntime(next: RuntimeSources): void {
@@ -108,4 +114,8 @@ export const isRuntimeFault = (error: unknown): boolean =>
 export function discardRuntime(): void {
   loaded = null
   loading = null
+  generation++
 }
+
+/** Which runtime is current: changes each time `discardRuntime()` drops one. */
+export const runtimeGeneration = (): number => generation
