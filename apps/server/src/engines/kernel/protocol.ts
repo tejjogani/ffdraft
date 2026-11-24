@@ -31,15 +31,25 @@ export interface TaskResults {
   package: { zip: Uint8Array; manifest: Manifest; root: string; timings: Record<string, number> }
 }
 
+/** What the pool tells a worker when it starts. */
+export interface WorkerConfig {
+  /** Kernels (one per organisation and piece) the worker keeps warm. */
+  kernels: number
+}
+
 export type ToWorker =
-  /** `tenant` keeps each organisation's geometry cache apart inside a worker. */
-  | { type: 'run'; id: number; tenant: string; task: KernelTask }
+  /**
+   * `cache` names the kernel to run on: one per organisation and piece, so a tenant's geometry
+   * (built from its private assets) never answers another's request.
+   */
+  | { type: 'run'; id: number; cache: string; task: KernelTask }
   | { type: 'abort'; id: number }
   | { type: 'asset'; request: number; bytes?: Uint8Array; error?: string }
 
+/** `memory` is what the worker's isolate holds after the task (JS heap and WASM), in bytes. */
 export type FromWorker =
-  | { type: 'done'; id: number; result: TaskResults[TaskKind] }
-  | { type: 'failed'; id: number; message: string; aborted: boolean }
+  | { type: 'done'; id: number; result: TaskResults[TaskKind]; memory: number }
+  | { type: 'failed'; id: number; message: string; aborted: boolean; memory: number }
   | { type: 'progress'; id: number; value: number }
   /** The worker needs an asset's bytes; only the main thread can read the org's store. */
   | { type: 'asset'; id: number; request: number; assetId: string }

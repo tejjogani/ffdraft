@@ -3,7 +3,7 @@
  * operating systems — Windows reports STL as `application/vnd.ms-pki.stl`, many systems report
  * nothing), then turned into the node that makes them castable.
  */
-import { newId, type NodeInput } from '@pave/schema'
+import { type NodeInput, newId } from '@pave/schema'
 
 export type ImportKind = 'mesh' | 'svg' | 'image'
 

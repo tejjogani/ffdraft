@@ -9,9 +9,9 @@ import { Eye, EyeOff, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useMemo } from 'react'
 import type { DesignSession } from '../../../lib/design-session/store'
 import { carats, mm } from '../../../lib/format'
-import { setField, setIncluded, switchVariant } from '../ops'
+import { setIncluded } from '../ops'
 import { useWorkspace } from '../state/workspace'
-import { type FieldEdit, FieldEditContext } from './edit'
+import { FieldEditContext, useNodeEdit } from './edit'
 import { FieldControl } from './FieldControl'
 import { inspectorModel } from './model'
 
@@ -26,40 +26,26 @@ export interface InspectorProps {
   empty: React.ReactNode
 }
 
-export function Inspector({ design, session, evaluation, prior, readOnly, onDelete, empty }: InspectorProps) {
+export function Inspector({
+  design,
+  session,
+  evaluation,
+  prior,
+  readOnly,
+  onDelete,
+  empty,
+}: InspectorProps) {
   const selection = useWorkspace((s) => s.selection)
   const stone = useWorkspace((s) => s.stone)
   const fineTune = useWorkspace((s) => s.fineTune)
   const setFineTune = useWorkspace((s) => s.setFineTune)
   const node = design.nodes[selection.at(-1) ?? '']
-  const model = useMemo(() => (node ? inspectorModel(node, { advanced: fineTune }) : null), [node, fineTune])
+  const model = useMemo(
+    () => (node ? inspectorModel(node, { advanced: fineTune }) : null),
+    [node, fineTune],
+  )
 
-  const edit = useMemo<FieldEdit | null>(() => {
-    if (!node) return null
-    const key = (path: readonly string[]) => `${node.id}.${path.join('.')}`
-    return {
-      node,
-      design,
-      readOnly: readOnly || !session,
-      preview: (path, value) => session?.preview(key(path), [setField(node.id, path, value)]),
-      commit: (path, value) => {
-        // The released value wins over the last preview; one gesture becomes one change.
-        session?.preview(key(path), [setField(node.id, path, value)])
-        session?.commitGesture()
-      },
-      switchVariant: (path, next) => {
-        const { ops, missing } = switchVariant(design, node, path, next)
-        if (ops.length) session?.commit(ops)
-        return missing.length ? `Add a ${missing.map((m) => m.refKinds?.join(' or ') ?? m.title).join(', ')} first.` : null
-      },
-      prior: (path) => {
-        const before = prior?.[node.id]
-        return before && path.length && path[0]! in before
-          ? { changed: true, value: before[path[0]!] }
-          : { changed: false, value: undefined }
-      },
-    }
-  }, [node, design, session, readOnly, prior])
+  const edit = useNodeEdit(node, design, session, readOnly, prior)
 
   if (!node || !model || !edit) return <>{empty}</>
 
@@ -71,8 +57,8 @@ export function Inspector({ design, session, evaluation, prior, readOnly, onDele
         <header className="flex items-start gap-2 border-b border-line px-4 pt-3.5 pb-3">
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-sm font-medium text-fg">{nodeTitle(node)}</h2>
-            <p className="mt-0.5 truncate text-xs text-fg-subtle">
-              {node.name ? model.title : (model.description ?? model.title)}
+            <p className="mt-0.5 truncate text-xs text-fg-subtle" title={model.description}>
+              {nodeTitle(node) === model.title ? (model.description ?? model.title) : model.title}
             </p>
           </div>
           {selection.length > 1 && <Chip>{selection.length} selected</Chip>}
@@ -82,7 +68,8 @@ export function Inspector({ design, session, evaluation, prior, readOnly, onDele
             <span className="text-fg-subtle">This stone</span>
             <span className="font-mono tabular text-fg">
               {mm(picked.dims.width)}
-              {picked.dims.length !== picked.dims.width && ` × ${mm(picked.dims.length)}`} · {carats(picked.carat)}
+              {picked.dims.length !== picked.dims.width && ` × ${mm(picked.dims.length)}`} ·{' '}
+              {carats(picked.carat)}
             </span>
           </div>
         )}
@@ -115,9 +102,13 @@ export function Inspector({ design, session, evaluation, prior, readOnly, onDele
                   {fineTune ? 'Fewer settings' : `Fine-tune · ${model.advanced} more`}
                 </Button>
               )}
-              <label className="flex items-center justify-between gap-3 py-1 text-sm text-fg-muted">
+              <div className="flex items-center justify-between gap-3 py-1 text-sm text-fg-muted">
                 <span className="flex items-center gap-2">
-                  {included ? <Eye className="size-4" aria-hidden /> : <EyeOff className="size-4" aria-hidden />}
+                  {included ? (
+                    <Eye className="size-4" aria-hidden />
+                  ) : (
+                    <EyeOff className="size-4" aria-hidden />
+                  )}
                   Part of the piece
                 </span>
                 <Switch
@@ -126,10 +117,11 @@ export function Inspector({ design, session, evaluation, prior, readOnly, onDele
                   aria-label="Part of the piece"
                   onChange={(on) => session?.commit([setIncluded(node.id, on)])}
                 />
-              </label>
+              </div>
               {!included && (
                 <p className="-mt-1 text-xs text-fg-subtle">
-                  Excluded: not weighed, not exported. Hiding it with the eye in the list only hides it from view.
+                  Excluded: not weighed, not exported. Hiding it with the eye in the list only hides
+                  it from view.
                 </p>
               )}
               {!edit.readOnly && (

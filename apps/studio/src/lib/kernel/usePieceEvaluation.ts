@@ -43,8 +43,7 @@ function sessionDesign(session: DesignSession | null, detail: Detail) {
     if (!s.gesture || detail !== 'draft' || !session) return s.view
     const scheduler = evaluationScheduler(detail)
     const touched = new Set(s.gesture.ops.flatMap((op) => ('id' in op ? [op.id] : [])))
-    for (const id of touched)
-      if (scheduler.costOf(s.settled, id) > LIVE_BUDGET_MS) return s.settled
+    for (const id of touched) if (scheduler.costOf(s.settled, id) > LIVE_BUDGET_MS) return s.settled
     return s.view
   }
 }

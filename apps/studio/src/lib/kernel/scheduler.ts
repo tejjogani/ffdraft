@@ -29,8 +29,6 @@ const ALPHA = 0.3
 export interface EvaluationScheduler {
   /** Resolves with the evaluation of `design`, or null when a newer request for `key` replaced it. */
   request(key: string, design: Design): Promise<Evaluation | null>
-  /** The cached evaluation of exactly this design object, if any. */
-  cached(design: Design): Evaluation | undefined
   /** Smoothed cost (ms) of re-evaluating `nodeId` and everything that depends on it. */
   costOf(design: Design, nodeId: string): number
   /** Smoothed wall-clock time of a whole evaluation (ms). */
@@ -95,7 +93,6 @@ export function createScheduler(
         void run()
       })
     },
-    cached: (design) => cache.get(design),
     costOf(design, nodeId) {
       const closure = new Set([nodeId])
       for (let grew = true; grew; ) {

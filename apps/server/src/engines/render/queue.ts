@@ -132,7 +132,7 @@ export function createRenderQueue(o: RenderQueueOptions) {
     const { signal } = entry.controller
     let workDir: string | null = null
     try {
-      await o.blender.ready
+      await o.blender.probed
       const engine = o.blender.status()
       if (!engine.available)
         throw new AppError('not_configured', `Blender is not available: ${engine.reason}`)
@@ -233,6 +233,7 @@ export function createRenderQueue(o: RenderQueueOptions) {
     get capabilities() {
       return { blender: o.blender.available }
     },
+    ready: () => o.blender.ready,
     submit: accept,
     resume: accept,
     async cancel(jobId: string, sctx: ServiceContext) {

@@ -1,6 +1,7 @@
 /**
  * Findings: an earring post (with its friction notch) on the back of its host, a butterfly
- * back where that post's notch would be, a jump ring and a lobster clasp on top of their host.
+ * back on the notch of the post it is hosted on, a jump ring and a lobster clasp on top of
+ * their host.
  * Without a host they stand at the origin: posts along +Y (the back of a piece facing −Y),
  * rings and clasps on +Z.
  */
@@ -24,16 +25,19 @@ import { manifoldFromTriangles } from '../solid/solid'
 import {
   butterflyMesh,
   EMBED,
+  lobsterEyeWire,
   lobsterMesh,
-  NOTCH_FROM_TIP,
+  notchFromTip,
   postShape,
   ringShape,
 } from './finding/shapes'
 
 type FindingNode = NodeOf<'finding'>
 
-/** Butterflies are placed on the notch of a stock post of this length (01-cad.md §2: 10–11 mm). */
+/** With no post to ride on, a butterfly sits where a stock post's notch would be (01-cad.md §2: 10–11 mm posts). */
 const STOCK_POST = 10
+/** Stock butterfly backs span 4–7 mm (5–6 mm typical); `length` sets it at about half. */
+const butterflySpan = (length: number) => Math.min(7, Math.max(4, 0.55 * length))
 /** How far a post pad may reach to find metal, and how thick it is, mm. */
 const PAD_REACH = 4
 const PAD_THICKNESS = 0.5
@@ -156,8 +160,16 @@ function build(
       return { solids, frames: { tip } }
     }
     case 'butterfly': {
-      const seat = along(backMount(host, ctx), STOCK_POST - NOTCH_FROM_TIP)
-      const mesh = butterflyMesh(node.length, node.wire, ctx.quality)
+      // Hosted on a post: on its notch, a little back from its tip. On a piece: where a stock
+      // post's notch would be.
+      const post =
+        host?.node.kind === 'finding' && host.node.type === 'earringPost' ? host.node : null
+      const tip = host?.frames.tip
+      const seat =
+        post && tip
+          ? along(tip, -notchFromTip(post.length))
+          : along(backMount(host, ctx), STOCK_POST - notchFromTip(STOCK_POST))
+      const mesh = butterflyMesh(butterflySpan(node.length), node.wire, ctx.quality)
       return {
         solids: [solidFromManifold(manifoldFromTriangles(mesh)).transformed(frameMatrix(seat))],
       }
@@ -174,7 +186,16 @@ function build(
     }
     case 'lobsterClasp': {
       const base = along(topMount(host, ctx), host ? -EMBED : 0)
-      const mesh = lobsterMesh(node.length, node.wire, ctx.quality)
+      const eye = lobsterEyeWire(node.length, node.wire)
+      if (eye < node.wire - 1e-9)
+        ctx.report({
+          level: 'info',
+          code: 'finding.wireThinned',
+          message: `A ${node.length} mm clasp cannot carry ${node.wire} mm wire; its eye uses ${eye.toFixed(2)} mm. Make the clasp longer for heavier wire.`,
+          value: eye,
+          limit: node.wire,
+        })
+      const mesh = lobsterMesh(node.length, eye, ctx.quality)
       return {
         solids: [solidFromManifold(manifoldFromTriangles(mesh)).transformed(frameMatrix(base))],
         frames: { eye: base },

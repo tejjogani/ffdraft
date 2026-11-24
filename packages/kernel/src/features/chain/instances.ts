@@ -65,48 +65,64 @@ export function mergeTriangles(parts: readonly IndexedTriangles[]): IndexedTrian
 const qualityKey = (q: Quality) => `${q.chord}/${q.angle}`
 
 /**
- * A draft chain is capped at about this many triangles: a 22" fine cable has ~600 links and a
- * rope twice that, and the viewport only needs them to read as links. Each template is re-meshed
- * at a coarser tolerance until one copy fits its per-copy share.
+ * Triangle caps for a whole instanced body. Draft: a 22" fine cable has ~600 links and a rope
+ * several times that, and the viewport only needs them to read as links. Production: fine chain
+ * is a visual and quote item that is normally bought, not cast (06-freeform.md §6), so it is
+ * kept well under the 1 M triangles the strictest bureau accepts (02-production.md §2), leaving
+ * room for the piece it hangs from.
  */
-const DRAFT_TRIANGLES = 250_000
-/** Never coarser than this facet angle: hexagonal wire at worst. */
-const COARSEST_ANGLE = Math.PI / 3
+const BUDGET = { draft: 250_000, production: 750_000 } as const
+/** Coarsening steps tried before a template is accepted as it is. */
+const MAX_COARSENING = 8
 
-function budgeted(template: Template, quality: Quality, share: number): IndexedTriangles {
+const budgetFor = (quality: Quality) =>
+  quality.chord < QUALITY.draft.chord ? BUDGET.production : BUDGET.draft
+
+/** Re-meshes a template at coarser tolerances until one copy fits its share of the budget. */
+function budgeted(template: Template, quality: Quality, share: number) {
   let q = quality
   let tris = template.mesh(q)
-  if (quality.chord < QUALITY.draft.chord) return tris
-  while (tris.indices.length / 3 > share && q.angle < COARSEST_ANGLE) {
-    q = { chord: q.chord * 2, angle: Math.min(COARSEST_ANGLE, q.angle * 1.4) }
+  let steps = 0
+  for (; tris.indices.length / 3 > share && steps < MAX_COARSENING; steps++) {
+    q = { chord: q.chord * 2, angle: Math.min(Math.PI / 2, q.angle * 1.4) }
     tris = template.mesh(q)
   }
-  return tris
+  return { tris, reduced: steps > 0 }
+}
+
+export interface InstancedSolid {
+  solid: Solid
+  /** Whether the copies had to be meshed coarser than `quality` to stay within the budget. */
+  reduced(quality: Quality): boolean
 }
 
 export function instancedSolid(
   templates: readonly Template[],
   instances: readonly Instance[],
-): Solid {
-  const cache = new Map<string, { tris: IndexedTriangles; display: Tessellation }[]>()
+): InstancedSolid {
+  const cache = new Map<
+    string,
+    { tris: IndexedTriangles; display: Tessellation; reduced: boolean }[]
+  >()
   const meshed = (quality: Quality) => {
     const key = qualityKey(quality)
     let entry = cache.get(key)
     if (!entry) {
+      const share = budgetFor(quality) / instances.length
       entry = templates.map((t) => {
-        const tris = budgeted(t, quality, DRAFT_TRIANGLES / instances.length)
+        const { tris, reduced } = budgeted(t, quality, share)
         const display =
           t.crease === undefined
             ? tessellationOf(tris)
             : { mesh: creaseNormals(tris, t.crease), edges: featureEdges(tris, t.crease) }
-        return { tris, display }
+        return { tris, display, reduced }
       })
       cache.set(key, entry)
     }
     return entry
   }
   const exact = templates.every((t) => t.brep)
-  return lazySolid({
+  const solid = lazySolid({
     mesh: (quality): SurfaceMesh => {
       const parts = meshed(quality)
       const placed = instances.map(({ template, matrix }) => ({ part: parts[template]!, matrix }))
@@ -117,9 +133,10 @@ export function instancedSolid(
         ),
       }
     },
+    // From the full-detail template, not the budgeted copies: mass must not drop with detail.
     volume: () => {
-      const parts = meshed(QUALITY.production)
-      return instances.reduce((sum, { template }) => sum + meshVolume(parts[template]!.tris), 0)
+      const each = templates.map((t) => meshVolume(t.mesh(QUALITY.production)))
+      return instances.reduce((sum, { template }) => sum + each[template]!, 0)
     },
     ...(exact && {
       brep: () => {
@@ -135,4 +152,5 @@ export function instancedSolid(
       },
     }),
   })
+  return { solid, reduced: (quality) => meshed(quality).some((t) => t.reduced) }
 }

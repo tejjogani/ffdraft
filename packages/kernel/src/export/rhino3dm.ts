@@ -11,30 +11,22 @@ import { defineExporter, type Scene } from '../core'
 import type { ChainData } from '../features/chain'
 import { fromFrame } from '../geometry/vec'
 import { isNode, readPackageFile } from '../runtime/host'
-import type { WasmSource } from '../runtime/index'
-import { type MeshObject, objectColor, sceneObjects } from './meshes'
+import { type MeshObject, metalNotes, objectColor, sceneObjects } from './meshes'
 
-let source: WasmSource | undefined
 let loading: Promise<RhinoModule> | null = null
 
 /**
- * Where rhino3dm.wasm comes from. Node finds it in the installed package; a browser Worker must
- * pass a URL (e.g. Vite's `import url from 'rhino3dm/rhino3dm.wasm?url'`) before exporting.
+ * rhino3dm, loaded on first use from its ES-module build (the CommonJS entry names Node's `ws`
+ * package, which breaks browser bundles). Node reads the binary from the installed package, as
+ * the core does for its WASM; in a browser the bundler serves it and Vite's `?url` import gives
+ * its address — so 3DM export needs no setup from the host, in a Worker or anywhere else.
  */
-export function configureRhino3dm(next: WasmSource): void {
-  source = next
-}
-
 function loadRhino(): Promise<RhinoModule> {
   loading ??= (async () => {
-    const wasm = source ?? (isNode() ? await readPackageFile('rhino3dm/rhino3dm.wasm') : undefined)
-    if (!wasm) throw new Error('3DM export needs configureRhino3dm(url) in a browser')
-    const { default: factory } = await import('rhino3dm')
-    return factory(
-      typeof wasm === 'string' || wasm instanceof URL
-        ? { locateFile: () => wasm.toString() }
-        : { wasmBinary: wasm },
-    )
+    const { default: factory } = await import('rhino3dm/rhino3dm.module.js')
+    if (isNode()) return factory({ wasmBinary: await readPackageFile('rhino3dm/rhino3dm.wasm') })
+    const { default: url } = await import('rhino3dm/rhino3dm.wasm?url')
+    return factory({ locateFile: () => url })
   })().catch((error) => {
     loading = null
     throw error
@@ -192,6 +184,8 @@ export const rhino3dm = defineExporter({
         '3DM carries meshes and curves only — JavaScript cannot write general Rhino B-reps. For exact NURBS solids use the STEP export.',
         'Millimetres. Layers: one per alloy under Metal, Stones, and Curves (chain centre lines, stone girdles).',
         'Each object carries user strings: node ids, alloy, finish and plating for metal; stone, cut, carat and size for stones.',
+        ...metalNotes(scene, objects),
+        'OpenNURBS stamps each file with fresh object ids and the time it was written (rhino3dm cannot set them), so two exports of the same design differ byte for byte; the geometry is identical.',
       ],
     }
   },

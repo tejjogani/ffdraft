@@ -1,6 +1,6 @@
 /** The floating controls over the viewport: history, display, framing, x-ray; and on the right, saving and export. */
 import type { ExportFormat } from '@pave/kernel'
-import { Button, Chip, cn, IconButton, Menu, MenuGroup, MenuItem, Segmented, Tooltip } from '@pave/ui'
+import { Button, cn, IconButton, Menu, MenuGroup, MenuItem, Segmented, Tooltip } from '@pave/ui'
 import { ChevronDown, Crosshair, Download, Focus, Gauge, Redo2, ScanEye, Undo2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { runCommand } from '../../../lib/commands'
@@ -12,7 +12,9 @@ import { useWorkspace } from '../state/workspace'
 
 function Cluster({ children, className }: { children: ReactNode; className?: string }) {
   return (
-    <div className={cn('glass shadow-sm flex h-9 items-center gap-0.5 rounded-lg px-1', className)}>{children}</div>
+    <div className={cn('glass shadow-sm flex h-9 items-center gap-0.5 rounded-lg px-1', className)}>
+      {children}
+    </div>
   )
 }
 
@@ -23,8 +25,20 @@ export function ViewToolbar({ canUndo, canRedo }: { canUndo: boolean; canRedo: b
   const xray = useWorkspace((s) => s.xray)
   return (
     <Cluster>
-      <IconButton icon={Undo2} label="Undo" shortcut="mod+z" disabled={!canUndo} onClick={() => runCommand('design.undo')} />
-      <IconButton icon={Redo2} label="Redo" shortcut="mod+shift+z" disabled={!canRedo} onClick={() => runCommand('design.redo')} />
+      <IconButton
+        icon={Undo2}
+        label="Undo"
+        shortcut="mod+z"
+        disabled={!canUndo}
+        onClick={() => runCommand('design.undo')}
+      />
+      <IconButton
+        icon={Redo2}
+        label="Redo"
+        shortcut="mod+shift+z"
+        disabled={!canRedo}
+        onClick={() => runCommand('design.redo')}
+      />
       <Divider />
       <Segmented
         value={display}
@@ -33,15 +47,30 @@ export function ViewToolbar({ canUndo, canRedo }: { canUndo: boolean; canRedo: b
         options={DISPLAY_MODES.map((m) => ({ value: m.id, label: m.title, icon: m.icon }))}
       />
       <Divider />
-      <IconButton icon={Focus} label="Fit to view" shortcut="f" onClick={() => runCommand('view.fit')} />
-      <Menu trigger={<IconButton icon={Crosshair} label="Views" />} align="start" className="min-w-44">
+      <IconButton
+        icon={Focus}
+        label="Fit to view"
+        shortcut="f"
+        onClick={() => runCommand('view.fit')}
+      />
+      <Menu
+        trigger={<IconButton icon={Crosshair} label="Views" />}
+        align="start"
+        className="min-w-44"
+      >
         {(['hero', 'front', 'side', 'top'] as const).map((v, i) => (
           <MenuItem key={v} shortcut={String(i + 1)} onClick={() => runCommand(`view.${v}`)}>
             {v === 'hero' ? 'Hero' : v[0]!.toUpperCase() + v.slice(1)}
           </MenuItem>
         ))}
       </Menu>
-      <IconButton icon={ScanEye} label="X-ray metal" shortcut="x" active={xray} onClick={() => runCommand('view.xray')} />
+      <IconButton
+        icon={ScanEye}
+        label="X-ray metal"
+        shortcut="x"
+        active={xray}
+        onClick={() => runCommand('view.xray')}
+      />
     </Cluster>
   )
 }
@@ -58,10 +87,14 @@ export function FileToolbar({
   return (
     <div className="flex items-center gap-2">
       {simplified && (
-        <Tooltip content="This device draws 3D in software, so the viewport uses simpler materials. Your design is unaffected.">
-          <Chip icon={<Gauge aria-hidden />} className="glass h-7 px-2">
-            Simplified graphics
-          </Chip>
+        <Tooltip content="Simplified graphics: this device draws 3D in software, so the viewport uses lighter materials. The design is unaffected.">
+          <span
+            role="img"
+            aria-label="Simplified graphics"
+            className="glass flex size-9 items-center justify-center rounded-lg text-fg-subtle shadow-sm"
+          >
+            <Gauge className="size-4" aria-hidden />
+          </span>
         </Tooltip>
       )}
       <Cluster className="pr-1 pl-0.5">

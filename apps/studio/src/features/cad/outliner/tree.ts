@@ -41,7 +41,9 @@ export function treeRows(design: Design, collapsed: ReadonlySet<string>): TreeRo
 }
 
 /** The most severe diagnostic level per node. */
-export function diagnosticLevels(diagnostics: readonly Diagnostic[]): Map<string, Diagnostic['level']> {
+export function diagnosticLevels(
+  diagnostics: readonly Diagnostic[],
+): Map<string, Diagnostic['level']> {
   const rank = { info: 0, warning: 1, error: 2 }
   const out = new Map<string, Diagnostic['level']>()
   for (const d of diagnostics) {

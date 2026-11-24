@@ -2,9 +2,14 @@
  * The kernel off the event loop: a small pool of `worker_threads` (./worker), each running one
  * task at a time, so an evaluation never stalls other requests.
  *
- *  - Workers start on demand and stop after a while idle (their caches go with them).
- *  - Work for one piece goes back to the worker that last handled it when that worker is no
- *    busier than any other: its per-node cache makes a repeat evaluation nearly free.
+ *  - One queue for the whole pool, dispatched whenever a worker is free: interactive evaluation
+ *    first, then exports and render input, then packages and background work. Heavy work never
+ *    takes the last worker (when there is more than one), so an evaluation never waits behind
+ *    a 30 s STEP export.
+ *  - Work for one piece goes to the worker that last handled it when that worker is free: its
+ *    kernel for the piece caches every node, so a repeat evaluation is nearly free.
+ *  - Workers start on demand, stop after a while idle, and are retired once idle when their
+ *    memory (WASM heaps never shrink) exceeds the budget; the next task starts a fresh one.
  *  - A task that outlives its timeout, or is aborted and does not stop within a grace period,
  *    has its worker terminated (WASM cannot be interrupted mid-feature); a worker that dies is
  *    replaced. Either way only that task fails; the queue behind it carries on.
@@ -13,14 +18,16 @@ import { createRequire } from 'node:module'
 import { availableParallelism } from 'node:os'
 import { pathToFileURL } from 'node:url'
 import { Worker } from 'node:worker_threads'
-import { AppError } from '../../errors'
-import type { FromWorker, KernelTask, TaskKind, TaskResults } from './protocol'
+import { AppError, type ErrorCode } from '../../errors'
+import type { FromWorker, KernelTask, TaskKind, TaskResults, WorkerConfig } from './protocol'
 
 export interface RunOptions {
-  /** The organisation the work is for; workers keep each one's cache apart. */
+  /** The organisation the work is for; workers keep each one's caches apart. */
   tenant: string
-  /** Work sharing a key (one piece) prefers the worker that last did it. */
+  /** Work sharing a key (one piece) runs on its own warm kernel, on the worker that last did it. */
   affinity?: string
+  /** Nobody is waiting on it (a facts refresh): it runs after everything else. */
+  background?: boolean
   signal?: AbortSignal
   /** Overrides the pool's timeout for this kind of task. */
   timeoutMs?: number
@@ -37,6 +44,10 @@ export interface KernelPoolOptions {
   idleMs?: number
   /** How long an aborted task may take to notice before its worker is terminated. */
   graceMs?: number
+  /** A worker holding more than this (JS heap and WASM) after a task is retired. */
+  memoryBudgetMb?: number
+  /** Pieces each worker keeps warm; each costs memory until the budget retires the worker. */
+  kernelsPerWorker?: number
 }
 
 const DEFAULT_TIMEOUT_MS: Record<TaskKind, number> = {
@@ -52,6 +63,17 @@ const VERB: Record<TaskKind, string> = {
   renderInput: 'prepare this design for rendering',
   package: 'build this production package',
 }
+
+/** Queue order: lower first. Anything above 0 is heavy and may not take the last free worker. */
+const RANK: Record<TaskKind, number> = { evaluate: 0, export: 1, renderInput: 1, package: 2 }
+const BACKGROUND_RANK = 2
+
+/** What the kernel refuses on purpose: the caller's request, not the server, is at fault. */
+const REFUSALS: [RegExp, ErrorCode][] = [
+  [/^Nothing to export/, 'conflict'],
+  [/reference each other in a cycle/, 'bad_request'],
+  [/is not available in this build/, 'bad_request'],
+]
 
 /** Remembered piece → worker routes; the oldest are forgotten beyond this. */
 const MAX_ROUTES = 2_000
@@ -70,12 +92,23 @@ function workerEntry(): { url: URL; execArgv: string[] } {
 const abortError = (signal?: AbortSignal): unknown =>
   signal?.reason ?? new DOMException('The geometry task was aborted', 'AbortError')
 
+function failure(kind: TaskKind, message: string): AppError {
+  const refused = REFUSALS.find(([pattern]) => pattern.test(message))
+  return refused
+    ? new AppError(refused[1], message.slice(0, 500))
+    : new AppError(
+        'internal',
+        `The geometry engine could not ${VERB[kind]}: ${message.slice(0, 500)}`,
+      )
+}
+
 interface Job {
   id: number
-  tenant: string
   task: KernelTask
   options: RunOptions
-  slot: Slot
+  rank: number
+  /** Where it runs; null while it waits in the queue. */
+  slot: Slot | null
   timeoutMs: number
   resolve(value: unknown): void
   reject(error: unknown): void
@@ -90,8 +123,9 @@ interface Slot {
   index: number
   worker: Worker | null
   current: Job | null
-  queue: Job[]
   idle: NodeJS.Timeout | null
+  /** What the worker reported holding after its last task, in bytes. */
+  memory: number
 }
 
 export class KernelPool {
@@ -99,7 +133,11 @@ export class KernelPool {
   readonly #timeouts: Record<TaskKind, number>
   readonly #idleMs: number
   readonly #graceMs: number
+  readonly #budget: number
+  readonly #workerConfig: WorkerConfig
   readonly #slots: Slot[]
+  /** Waiting jobs, by rank and then arrival. */
+  #queue: Job[] = []
   readonly #routes = new Map<string, number>()
   readonly #entry = workerEntry()
   #nextId = 0
@@ -108,14 +146,16 @@ export class KernelPool {
   constructor(options: KernelPoolOptions = {}) {
     this.size = Math.max(1, Math.floor(options.size ?? defaultPoolSize()))
     this.#timeouts = { ...DEFAULT_TIMEOUT_MS, ...options.timeoutMs }
-    this.#idleMs = options.idleMs ?? 10 * 60_000
+    this.#idleMs = options.idleMs ?? 2 * 60_000
     this.#graceMs = options.graceMs ?? 3_000
+    this.#budget = (options.memoryBudgetMb ?? 1_536) * 1024 * 1024
+    this.#workerConfig = { kernels: Math.max(1, Math.floor(options.kernelsPerWorker ?? 3)) }
     this.#slots = Array.from({ length: this.size }, (_, index) => ({
       index,
       worker: null,
       current: null,
-      queue: [],
       idle: null,
+      memory: 0,
     }))
   }
 
@@ -131,13 +171,12 @@ export class KernelPool {
     return new Promise<TaskResults[K]>((resolve, reject) => {
       if (this.#disposed) return reject(abortError())
       if (options.signal?.aborted) return reject(abortError(options.signal))
-      const slot = this.#pick(options.affinity)
       const job: Job = {
         id: this.#nextId++,
-        tenant: options.tenant,
         task,
         options,
-        slot,
+        rank: options.background ? BACKGROUND_RANK : RANK[task.kind],
+        slot: null,
         timeoutMs: options.timeoutMs ?? this.#timeouts[task.kind],
         resolve: resolve as (value: unknown) => void,
         reject,
@@ -147,8 +186,9 @@ export class KernelPool {
         job.onAbort = () => this.#abort(job)
         options.signal.addEventListener('abort', job.onAbort, { once: true })
       }
-      slot.queue.push(job)
-      if (!slot.current) this.#next(slot)
+      const at = this.#queue.findIndex((queued) => queued.rank > job.rank)
+      this.#queue.splice(at < 0 ? this.#queue.length : at, 0, job)
+      this.#dispatch()
     })
   }
 
@@ -156,15 +196,15 @@ export class KernelPool {
   async dispose(): Promise<void> {
     if (this.#disposed) return
     this.#disposed = true
+    for (const job of this.#queue) this.#answer(job, { error: abortError() })
+    this.#queue = []
     const exits: Promise<number>[] = []
     for (const slot of this.#slots) {
-      for (const job of [slot.current, ...slot.queue]) {
-        if (!job) continue
-        this.#clearTimers(job)
-        this.#answer(job, { error: abortError() })
+      if (slot.current) {
+        this.#clearTimers(slot.current)
+        this.#answer(slot.current, { error: abortError() })
       }
       slot.current = null
-      slot.queue = []
       if (slot.idle) clearTimeout(slot.idle)
       if (slot.worker) exits.push(slot.worker.terminate())
       slot.worker = null
@@ -172,20 +212,37 @@ export class KernelPool {
     await Promise.allSettled(exits)
   }
 
-  #load(slot: Slot): number {
-    return (slot.current ? 1 : 0) + slot.queue.length
+  /** Starts queued work on free workers, highest rank first, then lets the rest idle. */
+  #dispatch(): void {
+    if (this.#disposed) return
+    const maxHeavy = Math.max(1, this.size - 1)
+    let heavy = this.#slots.filter((s) => s.current && s.current.rank > 0).length
+    for (let i = 0; i < this.#queue.length; ) {
+      const free = this.#slots.filter((s) => !s.current)
+      if (free.length === 0) break
+      const job = this.#queue[i]!
+      if (job.rank > 0 && heavy >= maxHeavy) {
+        i++
+        continue
+      }
+      this.#queue.splice(i, 1)
+      if (job.rank > 0) heavy++
+      this.#start(this.#choose(job, free), job)
+    }
+    for (const slot of this.#slots)
+      if (slot.worker && !slot.current && !slot.idle)
+        slot.idle = setTimeout(() => {
+          slot.idle = null
+          if (!slot.current) this.#terminate(slot)
+        }, this.#idleMs).unref()
   }
 
-  #pick(affinity: string | undefined): Slot {
-    const min = Math.min(...this.#slots.map((s) => this.#load(s)))
+  /** The piece's own worker if free; else a running worker before starting another. */
+  #choose(job: Job, free: Slot[]): Slot {
+    const { affinity } = job.options
     const routed = affinity === undefined ? undefined : this.#routes.get(affinity)
     const slot =
-      routed !== undefined && this.#load(this.#slots[routed]!) <= min
-        ? this.#slots[routed]!
-        : // Among the least loaded, a running worker before starting another.
-          this.#slots
-            .filter((s) => this.#load(s) === min)
-            .sort((a, b) => Number(!!b.worker) - Number(!!a.worker))[0]!
+      free.find((s) => s.index === routed) ?? free.find((s) => s.worker !== null) ?? free[0]!
     if (affinity !== undefined) {
       this.#routes.delete(affinity)
       this.#routes.set(affinity, slot.index)
@@ -194,30 +251,26 @@ export class KernelPool {
     return slot
   }
 
-  /** Starts the slot's next task, or lets its worker idle. */
-  #next(slot: Slot): void {
-    if (this.#disposed) return
-    const job = slot.queue.shift()
-    if (!job) {
-      if (slot.worker && !slot.idle)
-        slot.idle = setTimeout(() => {
-          slot.idle = null
-          if (!slot.current && slot.queue.length === 0) this.#terminate(slot)
-        }, this.#idleMs).unref()
-      return
-    }
+  #start(slot: Slot, job: Job): void {
     if (slot.idle) clearTimeout(slot.idle)
     slot.idle = null
     slot.current = job
+    job.slot = slot
     const worker = slot.worker ?? this.#spawn(slot)
     job.timer = setTimeout(() => this.#timedOut(job), job.timeoutMs)
-    worker.postMessage({ type: 'run', id: job.id, tenant: job.tenant, task: job.task })
+    // The tenant is part of the key whatever the affinity says, so caches never cross orgs.
+    const cache = `${job.options.tenant}\u0000${job.options.affinity ?? ''}`
+    worker.postMessage({ type: 'run', id: job.id, cache, task: job.task })
   }
 
   #spawn(slot: Slot): Worker {
+    const budgetMb = Math.round(this.#budget / 1024 / 1024)
     const worker = new Worker(this.#entry.url, {
       execArgv: this.#entry.execArgv,
       name: `pave-kernel-${slot.index}`,
+      workerData: this.#workerConfig,
+      // Geometry lives in WASM memory, outside this limit; it only stops a runaway JS heap.
+      resourceLimits: { maxOldGenerationSizeMb: Math.max(512, budgetMb) },
       // OpenCascade's STEP writer prints transfer statistics to stdout; errors use stderr.
       stdout: true,
     })
@@ -235,6 +288,7 @@ export class KernelPool {
       // Workers this pool stopped itself are already detached from their slot.
       if (slot.worker !== worker) return
       slot.worker = null
+      slot.memory = 0
       console.error(`Kernel worker ${slot.index} exited (code ${code}):`, lastError ?? '')
       const job = slot.current
       if (!job) return
@@ -247,6 +301,7 @@ export class KernelPool {
       this.#finish(slot, job)
     })
     slot.worker = worker
+    slot.memory = 0
     return worker
   }
 
@@ -255,34 +310,47 @@ export class KernelPool {
     if (!job || job.id !== message.id) return
     switch (message.type) {
       case 'done':
+        slot.memory = message.memory
         this.#answer(job, { value: message.result })
-        return this.#finish(slot, job)
+        this.#finish(slot, job)
+        return
       case 'failed':
+        slot.memory = message.memory
         this.#answer(job, {
           error: message.aborted
             ? abortError(job.options.signal)
-            : new AppError(
-                'internal',
-                `The geometry engine could not ${VERB[job.task.kind]}: ${message.message.slice(0, 500)}`,
-              ),
+            : failure(job.task.kind, message.message),
         })
-        return this.#finish(slot, job)
+        this.#finish(slot, job)
+        return
       case 'progress':
         if (!job.answered) job.options.onProgress?.(message.value)
         return
       case 'asset': {
         const reply = (bytes?: Uint8Array, error?: string) => {
           if (slot.worker !== worker) return
-          worker.postMessage(
-            { type: 'asset', request: message.request, bytes, error },
-            bytes ? [bytes.buffer as ArrayBuffer] : [],
-          )
+          try {
+            worker.postMessage(
+              { type: 'asset', request: message.request, bytes, error },
+              bytes ? [bytes.buffer as ArrayBuffer] : [],
+            )
+          } catch (err) {
+            worker.postMessage({
+              type: 'asset',
+              request: message.request,
+              error: err instanceof Error ? err.message : String(err),
+            })
+          }
         }
         const read = job.options.readAsset
-        if (!read) return reply(undefined, 'Assets cannot be read here')
+        if (!read) {
+          reply(undefined, 'Assets cannot be read here')
+          return
+        }
         read(message.assetId).then(
-          // A copy, so the transfer cannot detach a buffer the asset store still holds.
-          (bytes) => reply(bytes.slice()),
+          // A real copy in a buffer of its own: transferring it can never detach (or trip over)
+          // a buffer the asset store still holds, pooled or cached.
+          (bytes) => reply(new Uint8Array(bytes)),
           (err: unknown) => reply(undefined, err instanceof Error ? err.message : String(err)),
         )
         return
@@ -292,11 +360,12 @@ export class KernelPool {
 
   #abort(job: Job): void {
     const { slot } = job
-    if (slot.current !== job) {
-      slot.queue = slot.queue.filter((j) => j !== job)
-      return this.#answer(job, { error: abortError(job.options.signal) })
-    }
     this.#answer(job, { error: abortError(job.options.signal) })
+    if (!slot) {
+      this.#queue = this.#queue.filter((j) => j !== job)
+      return
+    }
+    if (slot.current !== job) return
     slot.worker?.postMessage({ type: 'abort', id: job.id })
     job.grace = setTimeout(() => {
       if (slot.current !== job) return
@@ -307,7 +376,7 @@ export class KernelPool {
 
   #timedOut(job: Job): void {
     const { slot } = job
-    if (slot.current !== job) return
+    if (!slot || slot.current !== job) return
     this.#answer(job, {
       error: new AppError(
         'internal',
@@ -332,16 +401,25 @@ export class KernelPool {
     clearTimeout(job.grace)
   }
 
-  /** The worker is free of `job`: move on to the next. */
+  /** The worker is free of `job`: retire it if it grew too big, then hand out the next task. */
   #finish(slot: Slot, job: Job): void {
     this.#clearTimers(job)
     if (slot.current === job) slot.current = null
-    this.#next(slot)
+    if (slot.worker && slot.memory > this.#budget) {
+      console.info(
+        `Kernel worker ${slot.index} retired holding ${Math.round(slot.memory / 1024 / 1024)} MB.`,
+      )
+      this.#terminate(slot)
+    }
+    this.#dispatch()
   }
 
   #terminate(slot: Slot): void {
     const worker = slot.worker
     slot.worker = null
+    slot.memory = 0
+    if (slot.idle) clearTimeout(slot.idle)
+    slot.idle = null
     void worker?.terminate()
   }
 }

@@ -8,7 +8,7 @@ import type { ExportFormat } from '@pave/kernel'
 import { type Design, originNeedsAttestation, type Piece } from '@pave/schema'
 import { toast } from '@pave/ui'
 import { assetUrl } from '../../lib/assets'
-import { exportKernel, resolveAsset } from '../../lib/kernel/client'
+import { exportDesign } from '../../lib/kernel/client'
 import { rpc } from '../../lib/rpc'
 import { safeFileName, saveFile } from '../../lib/save-file'
 
@@ -29,7 +29,8 @@ export async function runExport(piece: Piece, design: Design, format: ExportForm
   if (originNeedsAttestation(piece.origin)) {
     toast({
       title: 'Confirm you may use the artwork first',
-      description: 'This piece was made from uploaded or referenced artwork. Confirm your rights on its Overview, then export.',
+      description:
+        'This piece was made from uploaded or referenced artwork. Confirm your rights on its Overview, then export.',
     })
     return
   }
@@ -40,7 +41,7 @@ export async function runExport(piece: Piece, design: Design, format: ExportForm
     let notes: string[]
     let extension: string = format
     try {
-      const result = await exportKernel().export(design, format, { assets: resolveAsset })
+      const result = await exportDesign(design, format)
       blob = new Blob([result.bytes as BlobPart], { type: result.mime })
       notes = result.notes
       extension = result.extension.replace(/^\./, '')
@@ -59,11 +60,15 @@ export async function runExport(piece: Piece, design: Design, format: ExportForm
     if (saved)
       toast({
         title: `Exported ${format.toUpperCase()}`,
-        description: notes.length ? notes.join(' ') : undefined,
+        // The first note is the one that matters (what the format can't carry); the rest is detail.
+        description: notes[0],
         type: 'success',
       })
   } catch (e) {
     toast.dismiss(pending)
-    toast.error(`Couldn’t export ${format.toUpperCase()}`, e instanceof Error ? e.message : String(e))
+    toast.error(
+      `Couldn’t export ${format.toUpperCase()}`,
+      e instanceof Error ? e.message : String(e),
+    )
   }
 }

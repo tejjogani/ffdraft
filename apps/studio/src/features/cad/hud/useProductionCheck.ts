@@ -15,7 +15,11 @@ export type ProductionCheck =
 
 const IDLE_MS = 2000
 
-export function useProductionCheck(pieceId: string, design: Design | null, enabled: boolean): ProductionCheck {
+export function useProductionCheck(
+  pieceId: string,
+  design: Design | null,
+  enabled: boolean,
+): ProductionCheck {
   const [result, setResult] = useState<{ design: Design; check: ProductionCheck } | null>(null)
 
   useEffect(() => {
@@ -27,7 +31,8 @@ export function useProductionCheck(pieceId: string, design: Design | null, enabl
         .request(`${pieceId}:check`, design)
         .then(
           (e) => {
-            if (current && e) setResult({ design, check: { state: 'done', diagnostics: e.diagnostics } })
+            if (current && e)
+              setResult({ design, check: { state: 'done', diagnostics: e.diagnostics } })
           },
           (err: unknown) => {
             if (current) setResult({ design, check: { state: 'failed', error: String(err) } })

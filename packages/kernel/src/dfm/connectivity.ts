@@ -1,9 +1,14 @@
 /**
- * Metal that will not come out of the mould as part of its piece: a finding or bail that does
- * not touch the body it is meant to be fused to, and slivers left behind by cuts.
+ * Metal that will not come out of the mould as part of its piece. Every node that builds on
+ * another node's metal — a setting on its gem's shank, a halo, a gem row, a bail or post on its
+ * host — must end up in the same production shell as that metal. A shell that holds such a node
+ * but none of the metal it builds on would cast loose. Parts that are separate by nature are
+ * exempt: chains, butterfly backs and lobster clasps, and the copies a pattern makes.
+ *
+ * Also reports slivers left behind by cuts.
  */
-import type { Body, Scene } from '../core'
-import { runtime } from '../runtime/index'
+import { type Node, nodeRefs } from '@pave/schema'
+import type { NodeResult, Scene } from '../core'
 import type { Bounds, Diagnostic } from '../types'
 import type { DfmProfile } from './profile'
 
@@ -13,47 +18,55 @@ const centre = (b: Bounds): [number, number, number] => [
   (b.min[2] + b.max[2]) / 2,
 ]
 
-/** The node currently carrying `id`'s metal (following booleans and groups that consumed it). */
-function carrier(scene: Scene, id: string): string {
-  const consumedBy = new Map<string, string>()
-  for (const r of scene.nodes.values()) for (const c of r.consumes) consumedBy.set(c, r.id)
-  let current = id
-  for (let hops = 0; consumedBy.has(current) && hops < 64; hops++)
-    current = consumedBy.get(current)!
-  return current
-}
-
-/** Overlap below this is touching, not fused (mm³). */
-const FUSED_MM3 = 1e-4
-
-/** Whether two sets of bodies share metal (so they fuse into one casting). */
-function fused(a: readonly Body[], b: readonly Body[], scene: Scene): boolean {
-  const { manifold: mf } = runtime()
-  const left = mf.Manifold.union(a.map((x) => x.solid.manifold(scene.quality)))
-  const right = mf.Manifold.union(b.map((x) => x.solid.manifold(scene.quality)))
-  const shared = left.intersect(right)
-  try {
-    return shared.volume() > FUSED_MM3
-  } finally {
-    for (const m of [left, right, shared]) m.delete()
-  }
-}
+/** Nodes whose metal is a separate part by design, not something to fuse to its references. */
+const separate = (node: Node): boolean =>
+  node.kind === 'chain' ||
+  node.kind === 'pattern' ||
+  node.kind === 'group' ||
+  (node.kind === 'finding' && (node.type === 'butterfly' || node.type === 'lobsterClasp'))
 
 export function connectivityChecks(scene: Scene, profile: DfmProfile): Diagnostic[] {
   if (scene.detail !== 'production') return []
+  const consumedBy = new Map<string, string>()
+  for (const r of scene.nodes.values()) for (const c of r.consumes) consumedBy.set(c, r.id)
+  /** The node currently carrying `id`'s metal (following booleans and groups that consumed it). */
+  const carrier = (id: string): NodeResult | undefined => {
+    let current = id
+    for (let hops = 0; consumedBy.has(current) && hops < 64; hops++)
+      current = consumedBy.get(current)!
+    return scene.nodes.get(current)
+  }
+  /** Which production parts hold metal from each node. */
+  const partsOf = new Map<string, Set<number>>()
+  scene.parts.forEach(({ sources }, i) => {
+    for (const { nodeId } of sources) partsOf.set(nodeId, (partsOf.get(nodeId) ?? new Set()).add(i))
+  })
+  /** The metal-carrying nodes a node builds on: its references, looking through stone-only nodes. */
+  const foundations = (node: Node, self: string, seen = new Set<string>()): string[] =>
+    nodeRefs(node).flatMap((ref) => {
+      const carried = carrier(ref)
+      if (!carried || carried.status !== 'ok' || carried.id === self || seen.has(carried.id))
+        return []
+      seen.add(carried.id)
+      return partsOf.has(carried.id) ? [carried.id] : foundations(carried.node, self, seen)
+    })
+
   const out: Diagnostic[] = []
   for (const result of scene.nodes.values()) {
     const node = result.node
-    if (result.status !== 'ok' || !node.visible || result.bodies.length === 0) continue
-    if ((node.kind !== 'finding' && node.kind !== 'bail') || !node.host) continue
-    const host = scene.nodes.get(carrier(scene, node.host))
-    if (!host || host.bodies.length === 0 || fused(result.bodies, host.bodies, scene)) continue
+    const own = partsOf.get(result.id)
+    if (!own || separate(node)) continue
+    const bases = foundations(node, result.id)
+    if (bases.length === 0) continue
+    const loose = [...own].filter((i) => !bases.some((b) => partsOf.get(b)!.has(i)))
+    if (loose.length === 0) continue
+    const names = bases.map((b) => `“${scene.nodes.get(b)!.node.name ?? b}”`).join(' or ')
     out.push({
       level: 'error',
       code: 'metal.disconnected',
-      nodeId: node.id,
-      message: `“${node.name ?? node.id}” does not touch the piece it belongs to, so it would cast loose. Move it until it overlaps.`,
-      at: centre(result.bodies[0]!.solid.bounds()),
+      nodeId: result.id,
+      message: `“${node.name ?? result.id}” does not touch ${names}, so it would cast loose. Move it until it overlaps.`,
+      at: centre(scene.parts[loose[0]!]!.part.bounds),
     })
   }
   for (const { part } of scene.parts)

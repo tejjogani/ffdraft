@@ -1,38 +1,48 @@
 /**
- * A kernel worker thread: runs one task at a time for the pool (see ./pool). Each organisation
- * gets its own kernel here, so one tenant's cached geometry (built from its private assets) can
- * never answer another's request; the WASM runtime underneath is loaded once and shared.
+ * A kernel worker thread: runs one task at a time for the pool (see ./pool). It keeps a few
+ * kernels warm, one per organisation and piece: a kernel caches exactly one design (nodes the
+ * current design lacks are disposed), so sharing one between pieces would throw each piece's
+ * cache away whenever another is evaluated. Keyed by organisation too, so one tenant's geometry
+ * (built from its private assets) can never answer another's request. The WASM runtime
+ * underneath is loaded once and shared by every kernel here.
  */
-import { parentPort } from 'node:worker_threads'
+import { parentPort, workerData } from 'node:worker_threads'
 import { createKernel, type LocalKernel } from '@pave/kernel'
 import type { AssetResolver, Kernel } from '@pave/kernel/types'
 import { buildProductionPackage } from '@pave/production/node'
 import { subjectOf } from '@pave/render'
-import type { FromWorker, KernelTask, TaskResults, ToWorker } from './protocol'
+import type { Design } from '@pave/schema'
+import type { FromWorker, KernelTask, TaskResults, ToWorker, WorkerConfig } from './protocol'
 import { summarize } from './summary'
 
 if (!parentPort) throw new Error('The kernel worker must run in a worker thread')
 const port = parentPort
+const config = workerData as WorkerConfig
 
-/** Kernels kept warm per tenant; the least recently used is disposed beyond this. */
-const TENANTS_PER_WORKER = 3
 const kernels = new Map<string, LocalKernel>()
 
-function kernelFor(tenant: string): LocalKernel {
-  const warm = kernels.get(tenant)
+/** The kernel for `key`, most recently used last; the least recently used beyond the limit is freed. */
+function kernelFor(key: string): LocalKernel {
+  const warm = kernels.get(key)
   if (warm) {
-    kernels.delete(tenant)
-    kernels.set(tenant, warm)
+    kernels.delete(key)
+    kernels.set(key, warm)
     return warm
   }
   const kernel = createKernel()
-  kernels.set(tenant, kernel)
+  kernels.set(key, kernel)
   for (const [oldest, cold] of kernels) {
-    if (kernels.size <= TENANTS_PER_WORKER) break
+    if (kernels.size <= Math.max(1, config.kernels)) break
     cold.dispose()
     kernels.delete(oldest)
   }
   return kernel
+}
+
+/** JS heap plus WASM memory (counted as external) of this isolate: what retiring the worker frees. */
+const memory = () => {
+  const { heapUsed, external } = process.memoryUsage()
+  return heapUsed + external
 }
 
 const post = (message: FromWorker, transfer: ArrayBuffer[] = []) =>
@@ -57,13 +67,33 @@ const resolverFor =
       post({ type: 'asset', id, request, assetId })
     })
 
+/**
+ * One note per feature that failed to build: an export silently missing a body is worse than
+ * no file, and the exporter itself cannot tell a missing body from an absent one.
+ */
+async function missingBodies(
+  kernel: LocalKernel,
+  design: Design,
+  assets: AssetResolver,
+  signal: AbortSignal,
+): Promise<string[]> {
+  // Every CAD exporter writes production geometry, which the export has just cached.
+  const { diagnostics } = await kernel.evaluate(design, { detail: 'production', assets, signal })
+  return diagnostics
+    .filter((d) => d.level === 'error' && d.code === 'feature.failed')
+    .map((d) => {
+      const name = (d.nodeId && design.nodes[d.nodeId]?.name) || d.nodeId || 'A feature'
+      return `${name} could not be built and is not in this file: ${d.message}`
+    })
+}
+
 async function run(
   id: number,
-  tenant: string,
+  cache: string,
   task: KernelTask,
   signal: AbortSignal,
 ): Promise<{ result: TaskResults[KernelTask['kind']]; transfer: ArrayBuffer[] }> {
-  const kernel = kernelFor(tenant)
+  const kernel = kernelFor(cache)
   const assets = resolverFor(id)
   switch (task.kind) {
     case 'evaluate': {
@@ -76,7 +106,11 @@ async function run(
         assets,
       })
       const bytes = own(exported.bytes)
-      return { result: { ...exported, bytes }, transfer: [bytes.buffer] }
+      const missing = await missingBodies(kernel, task.design, assets, signal)
+      return {
+        result: { ...exported, bytes, notes: [...missing, ...exported.notes] },
+        transfer: [bytes.buffer],
+      }
     }
     case 'renderInput': {
       // GLB is written from a production evaluation; the subject comes from the same one,
@@ -124,15 +158,17 @@ port.on('message', (message: ToWorker) => {
     case 'run': {
       const controller = new AbortController()
       running.set(message.id, controller)
-      run(message.id, message.tenant, message.task, controller.signal)
+      run(message.id, message.cache, message.task, controller.signal)
         .then(
-          ({ result, transfer }) => post({ type: 'done', id: message.id, result }, transfer),
+          ({ result, transfer }) =>
+            post({ type: 'done', id: message.id, result, memory: memory() }, transfer),
           (error: unknown) =>
             post({
               type: 'failed',
               id: message.id,
               message: error instanceof Error ? error.message : String(error),
               aborted: controller.signal.aborted,
+              memory: memory(),
             }),
         )
         .finally(() => running.delete(message.id))

@@ -31,8 +31,8 @@ const livePieces = new Set<string>()
 
 /** Subscribes to one event type; returns the unsubscribe function. */
 export function onServerEvent<T extends ServerEventType>(type: T, handler: Handler<T>): () => void {
-  let set = handlers.get(type)
-  if (!set) handlers.set(type, (set = new Set()))
+  const set = handlers.get(type) ?? new Set<AnyHandler>()
+  handlers.set(type, set)
   // Dispatch only calls a handler with events of its own type.
   const h = handler as unknown as AnyHandler
   set.add(h)
@@ -66,8 +66,7 @@ function refresh(event: ServerEvent): void {
       else invalidateFor(queryClient, 'design')
       return
     case 'piece.updated':
-      if (livePieces.has(event.pieceId)) invalidate(['pieces.list', 'collections.list'])
-      else invalidateFor(queryClient, 'pieces')
+      invalidateFor(queryClient, 'pieces')
       return
     case 'board.updated':
       invalidateFor(queryClient, 'boards')

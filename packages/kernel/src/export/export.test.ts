@@ -277,3 +277,59 @@ describe('STEP round trip', () => {
     expect(new TextDecoder().decode(mesh.bytes)).toContain('Loop')
   })
 })
+
+describe('export edge cases', () => {
+  it('writes the same bytes for the same design (STL, 3MF, OBJ)', async () => {
+    const design = solitaire()
+    const first = createKernel()
+    const second = createKernel()
+    try {
+      for (const format of ['stl', '3mf', 'obj'] as const) {
+        const a = await first.export(design, format, { stones: true })
+        // Zip times have two-second resolution: a clock-stamped archive would differ by now.
+        await new Promise((resolve) => setTimeout(resolve, 2100))
+        const b = await second.export(design, format, { stones: true })
+        expect(Buffer.from(a.bytes).equals(Buffer.from(b.bytes)), format).toBe(true)
+      }
+    } finally {
+      first.dispose()
+      second.dispose()
+    }
+  }, 60_000)
+
+  it('refuses to write an empty file', async () => {
+    for (const format of ['stl', '3mf', 'obj', '3dm'] as const)
+      await expect(kernel.export(solitaire(), format, { only: ['nope'] }), format).rejects.toThrow(
+        /Nothing to export/,
+      )
+  })
+
+  it('3MF: stones are resources, never build items', async () => {
+    const files = unzipSync((await exportOf(solitaire(), '3mf', true)).bytes)
+    const xml = new TextDecoder().decode(files['3D/3dmodel.model'])
+    const others = [...xml.matchAll(/<object id="(\d+)" type="other"/g)].map((m) => m[1])
+    expect(others.length).toBeGreaterThan(0)
+    const items = [...xml.matchAll(/<item objectid="(\d+)"/g)].map((m) => m[1])
+    expect(items.length).toBeGreaterThan(0)
+    for (const id of others) expect(items).not.toContain(id)
+  })
+
+  it('counts the shells it writes and says when a chain is included', async () => {
+    const design = designFrom('chain', [
+      {
+        id: 'c',
+        kind: 'chain',
+        style: 'cable',
+        layout: 'straight',
+        length: 100,
+        linkWidth: 3,
+        wire: 0.8,
+      },
+    ])
+    const scene = await kernel.scene(design, { detail: 'production' })
+    const links = (scene.nodes.get('c')!.data as { links: number }).links
+    const notes = (await exportOf(design, 'stl')).notes.join(' ')
+    expect(notes).toContain(`1 metal part in ${links} watertight shells`)
+    expect(notes).toMatch(/Chain links are separate shells/)
+  })
+})

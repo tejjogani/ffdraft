@@ -35,6 +35,7 @@ import {
   BufferAttribute,
   BufferGeometry,
   Clock,
+  EdgesGeometry,
   type Group,
   InstancedMesh,
   LineSegments,
@@ -59,7 +60,7 @@ import {
   contactShadowTexture,
   createModeMaterials,
   type ModeMaterials,
-  OutlineMaterial,
+  type OutlineMaterial,
   readPalette,
 } from './materials'
 import { type GpuTier, gpuTier, type QualityPolicy, qualityFor } from './quality'
@@ -148,7 +149,10 @@ export class Viewer {
   private disposed = false
   /** Milliseconds the last frames took to submit (CPU side), for the performance readout. */
   readonly frameTimes: number[] = []
-  onRender?: () => void
+  private readonly renderListeners = new Set<() => void>()
+  /** Nodes the default framing is about (e.g. a pendant without its chain); empty = everything. */
+  private frameFocus: readonly string[] = []
+  private shadowAllowed = false
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -208,7 +212,28 @@ export class Viewer {
     this.renderer.render(this.scene, this.camera)
     this.frameTimes.push(performance.now() - start)
     if (this.frameTimes.length > 60) this.frameTimes.shift()
-    this.onRender?.()
+    for (const l of this.renderListeners) l()
+  }
+
+  /** Calls `listener` after every drawn frame (to pin HTML to the model); returns the unsubscribe. */
+  onRender(listener: () => void): () => void {
+    this.renderListeners.add(listener)
+    return () => this.renderListeners.delete(listener)
+  }
+
+  /** Where a model point (Z-up mm) appears, in CSS pixels from the canvas's top-left. */
+  project(point: Vec3): { x: number; y: number; visible: boolean } {
+    const p = toThreePoint(point).project(this.camera)
+    return {
+      x: ((p.x + 1) / 2) * this.width,
+      y: ((1 - p.y) / 2) * this.height,
+      visible: p.z > -1 && p.z < 1 && Math.abs(p.x) <= 1.05 && Math.abs(p.y) <= 1.05,
+    }
+  }
+
+  /** Which nodes the default views and "fit" frame; the rest may extend outside (a long chain). */
+  setFrameFocus(nodeIds: readonly string[]): void {
+    this.frameFocus = nodeIds
   }
 
   private readonly startMoving = (): void => {
@@ -278,7 +303,8 @@ export class Viewer {
     for (const part of evaluation.parts)
       if (!failed.has(part.nodeId)) this.lastGood.delete(part.nodeId)
     const byNode = new Map<string, Part[]>()
-    for (const part of evaluation.parts) byNode.set(part.nodeId, [...(byNode.get(part.nodeId) ?? []), part])
+    for (const part of evaluation.parts)
+      byNode.set(part.nodeId, [...(byNode.get(part.nodeId) ?? []), part])
     for (const [nodeId, parts] of byNode) this.lastGood.set(nodeId, parts)
 
     this.evaluation = evaluation
@@ -291,7 +317,11 @@ export class Viewer {
     const radius = resolved.subject.radius
     if (!this.environment || Math.abs(radius - this.envRadius) / this.envRadius > 0.3) {
       this.environment?.dispose()
-      this.environment = createEnvironment(this.renderer, resolved, this.tier === 'software' ? 128 : 256)
+      this.environment = createEnvironment(
+        this.renderer,
+        resolved,
+        this.tier === 'software' ? 128 : 256,
+      )
       this.envRadius = radius
       this.scene.environment = this.environment.texture
     }
@@ -319,7 +349,7 @@ export class Viewer {
     this.scene.add(model.object)
     previous?.model.dispose()
 
-    this.placeShadow(evaluation.report.bounds)
+    this.placeShadow(evaluation.report.bounds, evaluation.report.ringInnerDiameter !== undefined)
     this.applyGemQuality()
     this.applyLook()
     if (!this.framedOnce && evaluation.parts.length + evaluation.stones.length > 0) {
@@ -328,12 +358,14 @@ export class Viewer {
     }
   }
 
-  private placeShadow(b: Bounds): void {
+  /** A ring stands on the stage, so it gets a contact shadow; pendants and earrings hang. */
+  private placeShadow(b: Bounds, standing: boolean): void {
     const sx = (b.max[0] - b.min[0]) * 1.5 + 2
     const sy = (b.max[1] - b.min[1]) * 1.5 + 2
+    this.shadowAllowed = standing && Number.isFinite(sx) && Number.isFinite(sy)
+    if (!this.shadowAllowed) return
     this.shadow.scale.set(Math.max(sx, sy * 0.6), Math.max(sy, sx * 0.6), 1)
     this.shadow.position.set((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, b.min[2] - 0.05)
-    this.shadow.visible = Number.isFinite(sx)
   }
 
   setState(next: Partial<ViewerState>): void {
@@ -345,7 +377,10 @@ export class Viewer {
   private applyLook(): void {
     const b = this.built
     this.clearOverlay()
-    if (!b || !this.evaluation) return this.invalidate()
+    if (!b || !this.evaluation) {
+      this.invalidate()
+      return
+    }
     const { display, xray, hidden, selection, hover, stone } = this.state
     const m = this.materials
     const hiddenSet = new Set(hidden)
@@ -365,7 +400,11 @@ export class Viewer {
     const zero = new Matrix4().makeScale(0, 0, 0).elements
     for (const gems of b.gems) {
       gems.material =
-        display === 'clay' ? m.clayStone : display === 'technical' ? m.paper : b.originals.get(gems)!
+        display === 'clay'
+          ? m.clayStone
+          : display === 'technical'
+            ? m.paper
+            : b.originals.get(gems)!
       const ids = gems.userData.stoneIds as string[]
       const original = b.matrices.get(gems)!
       const arr = gems.instanceMatrix.array as Float32Array
@@ -375,7 +414,7 @@ export class Viewer {
       })
       gems.instanceMatrix.needsUpdate = true
     }
-    this.shadow.visible = display !== 'technical' && !xray
+    this.shadow.visible = this.shadowAllowed && display !== 'technical' && !xray
     if (display === 'technical') this.addTechnical(b)
     this.addGhosts()
 
@@ -413,10 +452,14 @@ export class Viewer {
       const ids = gems.userData.stoneIds as string[]
       const picked = ids
         .map((id, i) => [id, i] as const)
-        .filter(([id]) => (stone ? id === stone : match(stoneNode(id)) && !hidden.has(stoneNode(id))))
+        .filter(([id]) =>
+          stone ? id === stone : match(stoneNode(id)) && !hidden.has(stoneNode(id)),
+        )
       if (!picked.length) continue
       const batch = new InstancedMesh(gems.geometry, material, picked.length)
-      const tinted = tint ? new InstancedMesh(gems.geometry, this.materials.tint, picked.length) : null
+      const tinted = tint
+        ? new InstancedMesh(gems.geometry, this.materials.tint, picked.length)
+        : null
       const mat = new Matrix4()
       picked.forEach(([, i], k) => {
         gems.getMatrixAt(i, mat)
@@ -441,14 +484,16 @@ export class Viewer {
       outline.instanceMatrix.copy(gems.instanceMatrix)
       this.overlay.add(outline)
     }
-    const parts = this.evaluation!.parts.filter((p) => !hidden.has(p.nodeId) && p.edges.length)
-    if (parts.length) {
-      const total = parts.reduce((n, p) => n + p.edges.length, 0)
+    const chunks = this.evaluation!.parts.filter((p) => !hidden.has(p.nodeId)).map((p) => p.edges)
+    const stones = b.gems.reduce((n, g) => n + g.count, 0)
+    if (stones <= MAX_EDGED_STONES) for (const gems of b.gems) chunks.push(...stoneEdges(gems))
+    const total = chunks.reduce((n, c) => n + c.length, 0)
+    if (total) {
       const positions = new Float32Array(total)
       let offset = 0
-      for (const p of parts) {
-        positions.set(p.edges, offset)
-        offset += p.edges.length
+      for (const c of chunks) {
+        positions.set(c, offset)
+        offset += c.length
       }
       const g = new BufferGeometry()
       g.setAttribute('position', new BufferAttribute(positions, 3))
@@ -479,10 +524,20 @@ export class Viewer {
   private pointsFor(nodeIds?: readonly string[]): Vec3[] {
     const e = this.evaluation
     if (!e) return []
+    if (!nodeIds?.length && this.frameFocus.length) {
+      const focused = this.nodePoints(this.frameFocus)
+      if (focused.length) return focused
+    }
     if (!nodeIds?.length) {
       const subject = subjectOf(e)
       return subject.silhouette ?? corners(e.report.bounds)
     }
+    const pts = this.nodePoints(nodeIds)
+    return pts.length ? pts : this.pointsFor()
+  }
+
+  private nodePoints(nodeIds: readonly string[]): Vec3[] {
+    const e = this.evaluation!
     const ids = new Set(nodeIds)
     const pts: Vec3[] = []
     for (const p of e.parts) if (ids.has(p.nodeId)) pts.push(...corners(p.bounds))
@@ -490,15 +545,30 @@ export class Viewer {
       if (ids.has(s.nodeId)) {
         const r = s.dims.width * 0.6
         const c: Vec3 = [s.matrix[12]!, s.matrix[13]!, s.matrix[14]!]
-        pts.push(...corners({ min: [c[0] - r, c[1] - r, c[2] - r], max: [c[0] + r, c[1] + r, c[2] + r] }))
+        pts.push(
+          ...corners({ min: [c[0] - r, c[1] - r, c[2] - r], max: [c[0] + r, c[1] + r, c[2] + r] }),
+        )
       }
-    return pts.length ? pts : this.pointsFor()
+    return pts
   }
 
   /** Points the camera from an orbit angle (degrees, Z-up: azimuth 0 = front) at `pts`. */
-  private look(azimuth: number, elevation: number, pts: Vec3[], fill: number, animate: boolean): void {
+  private look(
+    azimuth: number,
+    elevation: number,
+    pts: Vec3[],
+    fill: number,
+    animate: boolean,
+  ): void {
     if (!pts.length) return
-    const { target, distance } = framePoints(pts, azimuth, elevation, FOCAL_MM, this.camera.aspect, fill)
+    const { target, distance } = framePoints(
+      pts,
+      azimuth,
+      elevation,
+      FOCAL_MM,
+      this.camera.aspect,
+      fill,
+    )
     const { back } = cameraBasis(azimuth, elevation)
     const pos = toThreePoint([
       target[0] + back[0] * distance,
@@ -513,7 +583,9 @@ export class Viewer {
   }
 
   private defaultView(): CameraPreset {
-    return this.evaluation && this.evaluation.report.ringInnerDiameter !== undefined ? 'hero' : 'front'
+    return this.evaluation && this.evaluation.report.ringInnerDiameter !== undefined
+      ? 'hero'
+      : 'front'
   }
 
   /** Frames the whole piece (or the given nodes) from the current direction. */
@@ -526,7 +598,13 @@ export class Viewer {
   /** Frames a point (a diagnostic's location) closely. */
   frameAt(at: Vec3, radius = 2): void {
     const { azimuth, elevation } = this.orbitAngles()
-    this.look(azimuth, elevation, corners({ min: at.map((v) => v - radius) as Vec3, max: at.map((v) => v + radius) as Vec3 }), 0.4, true)
+    this.look(
+      azimuth,
+      elevation,
+      corners({ min: at.map((v) => v - radius) as Vec3, max: at.map((v) => v + radius) as Vec3 }),
+      0.4,
+      true,
+    )
   }
 
   view(preset: CameraPreset, animate = true): void {
@@ -572,7 +650,8 @@ export class Viewer {
     )
     const targets = [...b.gems, ...b.metals.filter((m) => m.visible)]
     for (const t of targets)
-      if (!t.geometry.boundsTree) (t.geometry as unknown as { computeBoundsTree(): void }).computeBoundsTree()
+      if (!t.geometry.boundsTree)
+        (t.geometry as unknown as { computeBoundsTree(): void }).computeBoundsTree()
     const hit = this.raycaster.intersectObjects(targets, false)[0]
     if (!hit) return null
     if (hit.object instanceof InstancedMesh && hit.instanceId !== undefined) {
@@ -701,6 +780,32 @@ export class Viewer {
     this.canvas.removeEventListener('webglcontextrestored', this.onContextRestored)
     this.renderer.dispose()
   }
+}
+
+/** Above this many stones, technical mode outlines stones without drawing their facets. */
+const MAX_EDGED_STONES = 600
+const unitEdges = new WeakMap<BufferGeometry, Float32Array>()
+
+/** Facet edges of every visible stone of a batch, in model space (hidden stones have zero scale). */
+function stoneEdges(gems: InstancedMesh): Float32Array[] {
+  let unit = unitEdges.get(gems.geometry)
+  if (!unit) {
+    const edges = new EdgesGeometry(gems.geometry, 20)
+    unit = edges.getAttribute('position').array as Float32Array
+    edges.dispose()
+    unitEdges.set(gems.geometry, unit)
+  }
+  const m = new Matrix4()
+  const v = new Vector3()
+  const out: Float32Array[] = []
+  for (let i = 0; i < gems.count; i++) {
+    gems.getMatrixAt(i, m)
+    if (m.determinant() === 0) continue
+    const placed = new Float32Array(unit.length)
+    for (let k = 0; k < unit.length; k += 3) v.fromArray(unit, k).applyMatrix4(m).toArray(placed, k)
+    out.push(placed)
+  }
+  return out
 }
 
 function corners(b: Bounds): Vec3[] {

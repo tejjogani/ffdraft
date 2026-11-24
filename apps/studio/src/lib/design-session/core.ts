@@ -26,8 +26,8 @@ import {
   newId,
   type Op,
   OpError,
-  squashOps,
   type StoredChange,
+  squashOps,
 } from '@pave/schema'
 
 export interface PendingChange {
@@ -164,7 +164,11 @@ export interface CommitOptions {
  * Records `ops` as one change on top of what the window shows (committing any live gesture
  * first). Ops that do not apply are refused with an OpError; ops that change nothing are ignored.
  */
-export function commit(s: SessionState, ops: readonly Op[], opts: CommitOptions = {}): SessionState {
+export function commit(
+  s: SessionState,
+  ops: readonly Op[],
+  opts: CommitOptions = {},
+): SessionState {
   const base = s.gesture ? commitGesture(s) : s
   return record(base, squashOps(ops), opts, 'edit')
 }
@@ -295,8 +299,10 @@ function revertOwn(s: SessionState, id: string, kind: 'undo' | 'redo'): SessionS
   const change = s.own[id]
   if (!change) return s
   const ops = guardedInverse(change, s.settled)
-  const label = kind === 'undo' ? `Undo ${change.label}` : `Redo ${change.label.replace(/^Undo /, '')}`
-  if (ops.length === 0) return { ...s, notices: [...s.notices, { type: 'nothing-to-undo', label: change.label }] }
+  const label =
+    kind === 'undo' ? `Undo ${change.label}` : `Redo ${change.label.replace(/^Undo /, '')}`
+  if (ops.length === 0)
+    return { ...s, notices: [...s.notices, { type: 'nothing-to-undo', label: change.label }] }
   try {
     return record(s, ops, { label: label.slice(0, 200), reverts: [id] }, kind)
   } catch (err) {
@@ -377,7 +383,9 @@ export function receive(s: SessionState, change: StoredChange): SessionState {
       version: c.seq,
       inbox,
       pending: next.pending.filter((p) => p.id !== c!.id),
-      own: ownChange ? { ...next.own, [c.id]: { ...ownChange, inverse: c.inverse as Op[] } } : next.own,
+      own: ownChange
+        ? { ...next.own, [c.id]: { ...ownChange, inverse: c.inverse as Op[] } }
+        : next.own,
       runs: trackRun(next.runs, c, before),
     }
     c = next.inbox[next.version + 1]

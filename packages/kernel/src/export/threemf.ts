@@ -1,13 +1,14 @@
 /**
  * 3MF (3D Manufacturing Format): a zip holding one XML model — one object per part with its
  * name and alloy as a base material with display colour, units millimetre. Stones, when asked
- * for, are `other` objects (reference, not printed) coloured by material.
+ * for, are `other` objects coloured by material: resources only, never build items, because
+ * the core spec does not let a build item reference an object of type `other`.
  */
 
 import { GEM_MATERIALS, METALS } from '@pave/schema'
 import { zipSync } from 'fflate'
 import { defineExporter } from '../core'
-import { type MeshObject, MM_NOTE, objectColor, sceneObjects } from './meshes'
+import { type MeshObject, MM_NOTE, metalNotes, objectColor, sceneObjects } from './meshes'
 
 const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>`
@@ -48,15 +49,20 @@ export function writeThreeMf(objects: readonly MeshObject[]): Uint8Array {
   })
   out.push(
     '</resources>',
-    `<build>${objects.map((_, i) => `<item objectid="${i + 2}"/>`).join('')}</build>`,
+    `<build>${objects.flatMap((o, i) => (o.kind === 'metal' ? [`<item objectid="${i + 2}"/>`] : [])).join('')}</build>`,
     '</model>',
   )
   const encode = (s: string) => new TextEncoder().encode(s)
-  return zipSync({
-    '[Content_Types].xml': encode(CONTENT_TYPES),
-    '_rels/.rels': encode(RELS),
-    '3D/3dmodel.model': encode(out.join('\n')),
-  })
+  return zipSync(
+    {
+      '[Content_Types].xml': encode(CONTENT_TYPES),
+      '_rels/.rels': encode(RELS),
+      '3D/3dmodel.model': encode(out.join('\n')),
+    },
+    // A fixed timestamp keeps identical designs byte-identical. Zip stores local time, so the
+    // date is given in local components (the zip epoch) and reads the same in every time zone.
+    { mtime: new Date(1980, 0, 1) },
+  )
 }
 
 export const threeMf = defineExporter({
@@ -65,8 +71,15 @@ export const threeMf = defineExporter({
   run(scene, options) {
     const stones = options.stones ?? false
     const objects = sceneObjects(scene, { stones, ...(options.only && { only: options.only }) })
-    const notes = [MM_NOTE, 'One object per watertight metal part, named and coloured by alloy.']
-    if (stones) notes.push('Stones are included as non-printing reference objects.')
+    const notes = [
+      MM_NOTE,
+      'One object per metal part, named and coloured by alloy.',
+      ...metalNotes(scene, objects),
+    ]
+    if (stones)
+      notes.push(
+        'Stones are included as reference objects that are not placed on the build plate; some viewers do not show them.',
+      )
     return { bytes: writeThreeMf(objects), mime: 'model/3mf', extension: '3mf', notes }
   },
 })

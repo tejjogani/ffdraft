@@ -2,8 +2,8 @@
  * The tennis link: a stone in a four-prong box, hinged to its neighbours underneath.
  *
  * Link-local space: girdle plane z = 0, table toward +z, chain along x. The box is a rounded
- * square tube one wall thick whose top edge carries the pavilion (the stone's girdle overhangs
- * it by half a wall), closed below by a plate with a light hole of ≈ 0.66 × stone Ø
+ * tube one wall thick whose top edge carries the pavilion (the stone's girdle overhangs it by
+ * half a wall), closed below by a plate with a light hole of ≈ 0.66 × stone Ø
  * (docs/research/01-cad.md §2). Four prongs rise from the box corners and lean in over the
  * girdle. The hinge is a pair of interlocking rings under the plate — horizontal at the back on
  * two posts, vertical at the front — so links swing both ways like a cable chain without ever
@@ -11,7 +11,7 @@
  */
 import { GEM_CUTS, type GemCutId, type GemDims, gemDims, snapToMelee } from '@pave/schema'
 import type { Manifold } from 'manifold-3d'
-import { type Deletable, type Quality, runtime } from '../../core'
+import { type Deletable, QUALITY, type Quality, runtime } from '../../core'
 import { circleLoop } from '../../geometry/loop'
 import { frameFromZ, frameMatrix, type Vec3 } from '../../geometry/vec'
 import { manifoldFromTriangles, trianglesFromManifold } from '../../solid/solid'
@@ -29,6 +29,8 @@ export interface TennisLink {
   half: { y: number; z: number }
   /** Height of the link's middle above the girdle plane: the chain's centre line runs there. */
   middle: number
+  /** Prong wire actually used (thinner than asked when the stone is too small to carry it). */
+  prong: number
 }
 
 /** Space between neighbouring boxes; pitch ≈ stone + 0.3–0.6 mm (06-freeform.md §6). */
@@ -38,6 +40,16 @@ const CLEARANCE = 0.03
 const PRONG_OVERLAP = 0.15
 /** Light hole under the stone, as a fraction of its width (JewelCraft, 01-cad.md §2). */
 const LIGHT_HOLE = 0.66
+/** Thinnest box wall and prong a caster holds (02-production.md §3: claws ≥ 0.5, walls ≥ 0.4). */
+const MIN_WALL = 0.4
+const MIN_PRONG = 0.45
+/**
+ * Upper limits relative to the stone: a prong past ~0.4 × the stone hides it (accent prongs run
+ * 0.3–0.4 × stone, JewelCraft presets in rules.ts), and the wall may take at most a fifth of the
+ * link's width so the stone stays the link.
+ */
+const MAX_PRONG = 0.4
+const MAX_WALL = 0.2
 
 /** Distance from the stone's centre to its girdle in the direction `angle` (from +x). */
 function girdleReach(cut: GemCutId, dims: GemDims, angle: number): number {
@@ -56,10 +68,10 @@ function girdleReach(cut: GemCutId, dims: GemDims, angle: number): number {
 }
 
 export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLink {
-  const prong = Math.max(0.45, wire)
-  const wall = Math.max(0.4, 0.5 * prong)
+  const wall = Math.min(Math.max(MIN_WALL, 0.5 * wire), MAX_WALL * width)
   const nominal = width - wall
   const stoneWidth = nominal <= 4 ? snapToMelee(nominal) : Math.round(nominal * 20) / 20
+  const prong = Math.min(Math.max(MIN_PRONG, wire), MAX_PRONG * stoneWidth)
   const dims = gemDims(cut, stoneWidth)
   const proportions = GEM_CUTS[cut]
   const girdle = (proportions.girdlePct * stoneWidth) / 2
@@ -71,20 +83,64 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
   const top = -(girdle + (pavilion - girdle) * (1 - opening / (stoneWidth / 2)))
   const plateTop = -pavilion - CLEARANCE
   const bottom = plateTop - wall
-  const corner = 1.5 * wall
+  // Corner radii stay below half the side, or the rounded outline collapses to nothing.
+  const corner = Math.min(1.5 * wall, 0.45 * Math.min(lx, ly))
+  const innerCorner = Math.min(Math.max(corner - wall, 0.05), 0.45 * (Math.min(lx, ly) - 2 * wall))
   const crown = proportions.crownPct * stoneWidth + girdle
 
-  const pitch = lx + BOX_GAP
-  // Hinge rings: room inside for the other ring's wire plus play to swing.
+  // Prongs: from the box corners, leaning in to bite the girdle.
+  const prongs = (
+    [
+      [1, 1],
+      [-1, 1],
+      [-1, -1],
+      [1, -1],
+    ] as const
+  ).map(([sx, sy]) => {
+    const angle = Math.atan2(sy * ly, sx * lx)
+    const reach = girdleReach(cut, dims, angle) + prong / 2 - PRONG_OVERLAP * prong
+    const base: Vec3 = [sx * (lx / 2 - corner * 0.6), sy * (ly / 2 - corner * 0.6), top - wall]
+    const tip: Vec3 = [Math.cos(angle) * reach, Math.sin(angle) * reach, girdle + 0.3 * prong]
+    return { base, tip }
+  })
+  // Prong tips must stay inside the link's own pitch cell, or they meet the neighbour's.
+  const overhangX = Math.max(...prongs.map((p) => Math.abs(p.tip[0]))) + prong / 2 - lx / 2
+  const gap = Math.max(BOX_GAP, 2 * (overhangX + CLEARANCE))
+  const pitch = lx + gap
+  const halfY = Math.max(ly / 2, ...prongs.map((p) => Math.abs(p.tip[1]) + prong / 2))
+
+  // Hinge: a horizontal ring hangs on two posts under the back wall, and the next link's
+  // vertical front ring, on a post under its front edge, threads it. Two rings of radius R and
+  // wire `ring` stay threaded and clear while their centres are `ring` to `2R − ring` apart; the
+  // centres sit at the middle of that range where the box gap allows, so the hinge swings both
+  // ways, and R grows only as far as the gap between the boxes needs.
   const ring = Math.max(0.3, 0.35 * prong)
-  const inner = 2.6 * ring
-  const holeRadius = (LIGHT_HOLE * stoneWidth) / 2
-  // The front ring hangs from the plate midway between the light hole and the wall; the back
-  // ring of the previous link sits one taut cable pitch behind it (contact.ts).
-  const front = -(holeRadius + lx / 2) / 2
-  const back = front + pitch - (inner - CLEARANCE)
-  // From the table down to the bottom of the hinge rings.
-  const lowest = bottom - inner - 1.5 * ring
+  const back = lx / 2 - wall / 2 - ring / 2
+  const frontmost = lx / 2 - ring / 2
+  const span = pitch - back - frontmost
+  const R = Math.max(1.8 * ring, (span + ring + CLEARANCE) / 2 + CLEARANCE)
+  const centres = Math.max(span, R)
+  const front = -(pitch - centres - back)
+  const lightHole = (LIGHT_HOLE * stoneWidth) / 2
+  // Inside the plate's rounded outline and outside its light hole, by half a ring wire.
+  const onPlate = (x: number, y: number) => {
+    const inset = ring / 2 - 1e-9
+    const qx = Math.abs(x) - (lx / 2 - corner)
+    const qy = Math.abs(y) - (ly / 2 - corner)
+    const inside =
+      qx > 0 && qy > 0
+        ? Math.hypot(qx, qy) <= corner - inset
+        : Math.abs(x) <= lx / 2 - inset && Math.abs(y) <= ly / 2 - inset
+    return inside && Math.hypot(x, y) - ring / 2 >= lightHole
+  }
+  if (!onPlate(front, 0) || !onPlate(back, R))
+    throw new Error(
+      `A ${stoneWidth} mm stone leaves no room for the tennis link's hinge under it: use wider links.`,
+    )
+  // The rings hang one ring wire below the plate, so the front ring's arc passes under the
+  // previous link's plate without touching it.
+  const ringZ = bottom - R - ring - CLEARANCE
+  const lowest = ringZ - R - ring / 2
 
   const mesh = (quality: Quality) => {
     const { manifold: mf } = runtime()
@@ -98,40 +154,24 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
       own(own(mf.CrossSection.square([x - 2 * r, y - 2 * r], true)).offset(r, 'Round', 2, seg(r)))
     try {
       const outer = rounded(lx, ly, corner)
-      const hole = rounded(lx - 2 * wall, ly - 2 * wall, Math.max(corner - wall, 0.05))
+      const hole = rounded(lx - 2 * wall, ly - 2 * wall, innerCorner)
+      // Walls rise from the bottom of the plate, so walls and plate overlap and fuse.
       const walls = own(
-        own(own(outer.subtract(hole)).extrude(top - plateTop)).translate(0, 0, plateTop),
+        own(own(outer.subtract(hole)).extrude(top - bottom)).translate(0, 0, bottom),
       )
-      const lightHole = own(
+      const lightHoleCutter = own(
         own(
-          mf.Manifold.cylinder(
-            wall * 3,
-            (LIGHT_HOLE * stoneWidth) / 2,
-            undefined,
-            seg(stoneWidth / 3),
-            true,
-          ),
+          mf.Manifold.cylinder(wall * 3, lightHole, undefined, seg(stoneWidth / 3), true),
         ).translate(0, 0, bottom + wall / 2),
       )
-      const plate = own(own(own(outer.extrude(wall)).translate(0, 0, bottom)).subtract(lightHole))
+      const plate = own(
+        own(own(outer.extrude(wall)).translate(0, 0, bottom)).subtract(lightHoleCutter),
+      )
       const parts: Manifold[] = [walls, plate]
-      for (const [sx, sy] of [
-        [1, 1],
-        [-1, 1],
-        [-1, -1],
-        [1, -1],
-      ] as const) {
-        const angle = Math.atan2(sy * ly, sx * lx)
-        const dir: Vec3 = [Math.cos(angle), Math.sin(angle), 0]
-        const base: Vec3 = [sx * (lx / 2 - corner * 0.6), sy * (ly / 2 - corner * 0.6), top - wall]
-        const reach = girdleReach(cut, dims, angle) + prong / 2 - PRONG_OVERLAP * prong
-        const tip: Vec3 = [dir[0] * reach, dir[1] * reach, girdle + 0.3 * prong]
+      for (const { base, tip } of prongs) {
         parts.push(own(cylinderBetween(mf, base, tip, prong / 2, seg(prong / 2))))
         parts.push(own(own(mf.Manifold.sphere(prong * 0.5, seg(prong / 2))).translate(tip)))
       }
-      // Hinge: a vertical ring at the front, a horizontal ring on two posts at the back.
-      const R = (inner + ring) / 2
-      const ringZ = bottom - R
       const loop = (normal: 'y' | 'z', x: number) => {
         const line = sampleCurve(
           (t) => {
@@ -143,42 +183,50 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
           16,
           true,
         )
-        const wire = sweepAlong(line, circleLoop(ring / 2))
+        const swept = sweepAlong(line, circleLoop(ring / 2))
         try {
-          return own(manifoldFromTriangles(wire.triangles(quality)))
+          return own(manifoldFromTriangles(swept.triangles(quality)))
         } finally {
-          wire.dispose()
+          swept.dispose()
         }
       }
       parts.push(loop('y', front), loop('z', back))
-      for (const side of [-1, 1])
-        parts.push(
-          own(
-            cylinderBetween(
-              mf,
-              [back, side * R, ringZ],
-              [back, side * R, bottom + wall / 2],
-              ring / 2,
-              seg(ring / 2),
-            ),
-          ),
-        )
+      const post = (x: number, y: number, from: number) =>
+        own(cylinderBetween(mf, [x, y, from], [x, y, bottom + wall / 2], ring / 2, seg(ring / 2)))
+      parts.push(post(front, 0, ringZ + R), post(back, R, ringZ), post(back, -R, ringZ))
       return trianglesFromManifold(own(mf.Manifold.union(parts)))
     } finally {
       for (const m of temps) m.delete()
     }
   }
 
+  assertOneShell(mesh)
+
   // Neighbouring boxes rotate about the hinge; their inner corners close by width·θ/2.
-  const minBend = (pitch * ly) / (2 * (BOX_GAP - CLEARANCE))
+  const minBend = (pitch * 2 * halfY) / (2 * (gap - CLEARANCE))
   return {
     template: { mesh },
     dims,
     length: lx,
     pitch,
     minBend,
-    half: { y: ly / 2, z: (crown - lowest) / 2 },
+    half: { y: halfY, z: (crown - lowest) / 2 },
     middle: (crown + lowest) / 2,
+    prong,
+  }
+}
+
+/** A link that falls apart into loose pieces is a bug in the proportions above, not a design. */
+function assertOneShell(mesh: (quality: Quality) => ReturnType<typeof trianglesFromManifold>) {
+  const link = manifoldFromTriangles(mesh(QUALITY.draft))
+  const pieces = link.decompose()
+  try {
+    if (pieces.length !== 1)
+      throw new Error(
+        `The tennis link came out in ${pieces.length} pieces; try another link width or wire.`,
+      )
+  } finally {
+    for (const m of [link, ...pieces]) m.delete()
   }
 }
 

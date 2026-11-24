@@ -4,13 +4,17 @@
  * Windows forbids `<>:"/\|?*`, control characters, trailing dots and spaces, and device names
  * such as `CON` or `LPT1` even with an extension.
  */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what Windows forbids
 const FORBIDDEN = /[<>:"/\\|?*\u0000-\u001f]/g
 const DEVICE = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])$/i
 const MAX = 120
 
 export function safeFileName(name: string, extension: string): string {
   let base = name.normalize('NFC').replace(FORBIDDEN, ' ').replace(/\s+/g, ' ').trim()
-  base = base.replace(/[. ]+$/, '').slice(0, MAX - extension.length - 1).replace(/[. ]+$/, '')
+  base = base
+    .replace(/[. ]+$/, '')
+    .slice(0, MAX - extension.length - 1)
+    .replace(/[. ]+$/, '')
   if (!base || DEVICE.test(base)) base = base ? `${base}_` : 'Untitled'
   return `${base}.${extension}`
 }
@@ -19,7 +23,9 @@ interface SavePicker {
   showSaveFilePicker?: (opts: {
     suggestedName: string
     types?: { description: string; accept: Record<string, string[]> }[]
-  }) => Promise<{ createWritable(): Promise<{ write(data: Blob): Promise<void>; close(): Promise<void> }> }>
+  }) => Promise<{
+    createWritable(): Promise<{ write(data: Blob): Promise<void>; close(): Promise<void> }>
+  }>
 }
 
 /** Resolves `false` when the person cancelled the dialog. */

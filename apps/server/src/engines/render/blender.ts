@@ -23,18 +23,48 @@ const UNPROBED: RenderEngineStatus = {
   reason: 'Looking for Blender…',
 }
 
+/** How long boot waits for a first probe when there is no saved one to trust. */
+const BOOT_WAIT_MS = 20_000
+
 export class BlenderSetup {
   readonly #file: string | null
+  /** Saves run one after another, each writing the state current when it starts. */
+  #saving: Promise<void> = Promise.resolve()
   #blenderPath: string | null = null
   #status: RenderEngineStatus = UNPROBED
-  /** Settles once the saved choice is loaded and probed. */
+  /** Settles once the status is known well enough to boot on: a trusted saved probe, or a fresh one. */
   readonly ready: Promise<void>
+  /** Settles once this run's own probe has finished. */
+  readonly probed: Promise<void>
 
   constructor(opts: { file: string | null }) {
     this.#file = opts.file
-    this.ready = this.#init().catch((err: unknown) => {
-      console.error('Looking for Blender failed:', err)
-      this.#status = { ...UNPROBED, reason: 'Blender could not be checked on this machine.' }
+    const loaded = this.#load().then((saved) => {
+      this.#blenderPath = saved?.blenderPath ?? null
+      const last = saved?.status
+      // Trust the last good probe while re-probing, if what it ran is still there.
+      if (last?.available && last.path && existsSync(last.path)) this.#status = last
+      return this.#status.available
+    })
+    this.probed = loaded
+      .then(async () => {
+        this.#status = await probe(this.#blenderPath, this.#status.device)
+        await this.#save()
+      })
+      .catch((err: unknown) => {
+        console.error('Looking for Blender failed:', err)
+        this.#status = { ...UNPROBED, reason: 'Blender could not be checked on this machine.' }
+      })
+    this.ready = loaded.then(async (trusted) => {
+      if (trusted) return
+      let timer: NodeJS.Timeout | undefined
+      await Promise.race([
+        this.probed,
+        new Promise((resolve) => {
+          timer = setTimeout(resolve, BOOT_WAIT_MS)
+        }),
+      ])
+      clearTimeout(timer)
     })
   }
 
@@ -53,7 +83,7 @@ export class BlenderSetup {
 
   /** Probes `blenderPath` (null = discover again) and switches to it only if it works. */
   async configure(blenderPath: string | null): Promise<RenderEngineStatus> {
-    await this.ready
+    await this.probed
     const probed = await probe(blenderPath, null)
     if (!probed.available) return probed
     this.#blenderPath = blenderPath
@@ -69,16 +99,6 @@ export class BlenderSetup {
     void this.#save().catch((err: unknown) => console.error('Saving engine.json failed:', err))
   }
 
-  async #init(): Promise<void> {
-    const saved = await this.#load()
-    this.#blenderPath = saved?.blenderPath ?? null
-    // Trust the last good probe while re-probing, if what it ran is still there.
-    if (saved?.status?.available && saved.status.path && existsSync(saved.status.path))
-      this.#status = saved.status
-    this.#status = await probe(this.#blenderPath, this.#status.device)
-    await this.#save()
-  }
-
   async #load(): Promise<Saved | null> {
     if (!this.#file) return null
     try {
@@ -88,18 +108,27 @@ export class BlenderSetup {
     }
   }
 
-  async #save(): Promise<void> {
-    if (!this.#file) return
-    const saved: Saved = { blenderPath: this.#blenderPath, status: this.#status }
-    await mkdir(dirname(this.#file), { recursive: true })
-    // Write then rename, so a crash never leaves half a file behind.
-    const temp = `${this.#file}.${process.pid}.tmp`
-    await writeFile(temp, JSON.stringify(saved, null, 2))
-    await rename(temp, this.#file)
+  #save(): Promise<void> {
+    const file = this.#file
+    if (!file) return Promise.resolve()
+    const write = async () => {
+      const saved: Saved = { blenderPath: this.#blenderPath, status: this.#status }
+      await mkdir(dirname(file), { recursive: true })
+      // Write then rename, so a crash never leaves half a file behind.
+      const temp = `${file}.${process.pid}.tmp`
+      await writeFile(temp, JSON.stringify(saved, null, 2))
+      await rename(temp, file)
+    }
+    const next = this.#saving.then(write)
+    this.#saving = next.catch(() => {})
+    return next
   }
 }
 
-async function probe(blenderPath: string | null, device: string | null): Promise<RenderEngineStatus> {
+async function probe(
+  blenderPath: string | null,
+  device: string | null,
+): Promise<RenderEngineStatus> {
   const found = await detectBlender(blenderPath === null ? {} : { blenderPath })
   return {
     available: found.available,

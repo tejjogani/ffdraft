@@ -4,7 +4,11 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { KernelPool } from './pool'
 
 const design = (id: string) => buildDesign(TEMPLATES.find((t) => t.id === id)!.spec)
-const evaluate = (pool: KernelPool, id: string, extra: Partial<Parameters<KernelPool['run']>[1]> = {}) =>
+const evaluate = (
+  pool: KernelPool,
+  id: string,
+  extra: Partial<Parameters<KernelPool['run']>[1]> = {},
+) =>
   pool.run(
     { kind: 'evaluate', design: design(id), detail: 'production' },
     { tenant: 'org_test', ...extra },

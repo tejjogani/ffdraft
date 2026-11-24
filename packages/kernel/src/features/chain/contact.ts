@@ -5,6 +5,9 @@
  */
 import type { Mat4 } from '../../geometry/vec'
 
+/** Air left between links (× wire) so they never touch, in every pose a pitch is solved for. */
+export const GAP_RATIO = 0.06
+
 /** A closed centreline (rows of xyz) and the radius of the wire around it. */
 export interface WireLoop {
   points: Float64Array
@@ -134,9 +137,47 @@ export function linking(a: WireLoop, b: WireLoop): number {
   return total / (4 * Math.PI)
 }
 
-/** True when the loops are threaded through each other once and do not touch. */
-export const interlocked = (a: WireLoop, b: WireLoop, gap: number): boolean =>
-  clearance(a, b) >= gap && Math.abs(Math.abs(linking(a, b)) - 1) < 0.25
+/**
+ * Where a link sits when its centre is `s` along an arc of radius `bend` that starts at the
+ * origin heading along x and turns about z (negative bends turn the other way; Infinity is a
+ * straight line). On the drape, links turn with the path about their face normal like this.
+ */
+export function alongArc(s: number, bend: number): Mat4 {
+  if (!Number.isFinite(bend)) return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, s, 0, 0, 1]
+  const a = s / bend
+  const c = Math.cos(a)
+  const n = Math.sin(a)
+  return [c, n, 0, 0, -n, c, 0, 0, 0, 0, 1, 0, bend * n, bend * (1 - c), 0, 1]
+}
+
+/** Consecutive links from link 0: each one's loop in its own frame and its centre along the chain. */
+export interface LinkRun {
+  count: number
+  loop(k: number): WireLoop
+  centre(k: number): number
+}
+
+/**
+ * Whether link 0 is threaded by exactly the next `threads` links and clears every link of the
+ * run by `gap` — laid straight, and bent both ways at radius `bend`, because on the drape each
+ * link turns against its neighbour by pitch / bend, which eats into the gap.
+ */
+export function runClears(run: LinkRun, threads: number, gap: number, bend: number): boolean {
+  const loops = Array.from({ length: run.count }, (_, k) => ({
+    loop: run.loop(k),
+    s: run.centre(k),
+  }))
+  for (const radius of [Infinity, bend, -bend]) {
+    const first = moveLoop(loops[0]!.loop, alongArc(loops[0]!.s, radius))
+    for (let k = 1; k < loops.length; k++) {
+      const other = moveLoop(loops[k]!.loop, alongArc(loops[k]!.s, radius))
+      if (clearance(first, other) < gap) return false
+      const linked = Math.abs(linking(first, other))
+      if (k <= threads ? Math.abs(linked - 1) > 0.25 : linked > 0.25) return false
+    }
+  }
+  return true
+}
 
 /** Thrown when two links cannot be threaded together without touching. */
 export class InterlockError extends Error {
@@ -146,42 +187,60 @@ export class InterlockError extends Error {
   }
 }
 
-/** Pitches at which two links stay threaded and clear: nested tight (min) to pulled taut (max). */
-export interface PitchRange {
-  min: number
-  max: number
-}
-
 /**
- * The interval of pitches at which `pair(p)` keeps two loops interlocked with at least `gap`
- * between them. Scans down from `start` (links apart) to the first interlocked pitch, then
- * refines both ends of that interval by bisection.
+ * The largest pitch at which `ok` holds (links pulled taut): scans down from `start` in `step`s
+ * to the first pitch that works, then refines between it and the one above by bisection.
  */
-export function pitchRange(
-  pair: (pitch: number) => [WireLoop, WireLoop],
-  start: number,
-  step: number,
-  gap: number,
-): PitchRange {
-  const ok = (p: number) => {
-    const [a, b] = pair(p)
-    return interlocked(a, b, gap)
-  }
-  const refine = (inside: number, outside: number) => {
-    let a = inside
-    let b = outside
-    for (let i = 0; i < 12; i++) {
-      const mid = (a + b) / 2
-      if (ok(mid)) a = mid
-      else b = mid
-    }
-    return a
-  }
+export function tautPitch(ok: (pitch: number) => boolean, start: number, step: number): number {
   let p = start
   while (p > step && !ok(p)) p -= step
   if (p <= step) throw new InterlockError()
-  const max = refine(p, p + step)
-  let q = p
-  while (q > step && ok(q - step)) q -= step
-  return { min: refine(q, q - step), max }
+  let a = p
+  let b = p + step
+  for (let i = 0; i < 12; i++) {
+    const mid = (a + b) / 2
+    if (ok(mid)) a = mid
+    else b = mid
+  }
+  return a
+}
+
+/**
+ * The smallest pitch at which `ok` holds (links packed as densely as they clear): scans up from
+ * `step` to `limit`, then refines between the first pitch that works and the one below.
+ */
+export function densePitch(ok: (pitch: number) => boolean, step: number, limit: number): number {
+  let p = step
+  while (p < limit && !ok(p)) p += step
+  if (p >= limit) throw new InterlockError()
+  let a = p - step
+  let b = p
+  for (let i = 0; i < 12; i++) {
+    const mid = (a + b) / 2
+    if (ok(mid)) b = mid
+    else a = mid
+  }
+  return b
+}
+
+/** Tightest drape bends tried, in link lengths: the first at which the links clear is the chain's. */
+const BEND_LADDER = [2, 3, 4, 6, 8, 12]
+
+/**
+ * Solves a chain's pitches for the tightest bend its links allow: `solve(bend)` returns the
+ * pitches that clear at that bend or throws `InterlockError`, and wider bends are tried in turn.
+ */
+export function atTightestBend<T>(
+  linkLength: number,
+  solve: (bend: number) => T,
+): { solved: T; minBend: number } {
+  for (const factor of BEND_LADDER) {
+    const bend = factor * linkLength
+    try {
+      return { solved: solve(bend), minBend: bend }
+    } catch (error) {
+      if (!(error instanceof InterlockError)) throw error
+    }
+  }
+  throw new InterlockError()
 }

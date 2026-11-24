@@ -19,7 +19,9 @@ export function captureCover(
   if (!changed || !canEdit || !piece.coverAuto || viewer.tier === 'software') return
   captureViewport({ views: ['hero'], mode: 'rendered', size: 768 })
     .then(([blob]) => uploadAsset(new File([blob!], 'cover.png', { type: 'image/png' })))
-    .then((asset) => rpc.call('pieces.update', { id: piece.id, coverAssetId: asset.id, coverAuto: true }))
+    .then((asset) =>
+      rpc.call('pieces.update', { id: piece.id, coverAssetId: asset.id, coverAuto: true }),
+    )
     .catch(() => {
       // A missed cover is harmless; the next visit tries again.
     })

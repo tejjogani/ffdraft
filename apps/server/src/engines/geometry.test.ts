@@ -108,9 +108,7 @@ describe('geometry engine', () => {
     const gltf = JSON.parse(new TextDecoder().decode(glb.subarray(20, 20 + jsonLength))) as {
       nodes: { extras?: { role?: string } }[]
     }
-    expect(gltf.nodes.map((n) => n.extras?.role)).toEqual(
-      expect.arrayContaining(['metal', 'gem']),
-    )
+    expect(gltf.nodes.map((n) => n.extras?.role)).toEqual(expect.arrayContaining(['metal', 'gem']))
   })
 
   it('keeps serving other requests while a heavy piece evaluates', async () => {

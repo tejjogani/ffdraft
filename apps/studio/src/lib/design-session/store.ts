@@ -162,8 +162,7 @@ export function useSessionState<T>(
   session: DesignSession | null,
   select: (s: SessionStore) => T,
 ): T | undefined {
-  return useSyncExternalStore(
-    session ? session.store.subscribe : noop,
-    () => (session ? select(session.store.getState()) : undefined),
+  return useSyncExternalStore(session ? session.store.subscribe : noop, () =>
+    session ? select(session.store.getState()) : undefined,
   )
 }

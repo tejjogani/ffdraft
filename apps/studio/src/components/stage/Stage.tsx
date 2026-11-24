@@ -16,9 +16,10 @@ import { classifyWheel, type WheelDevice } from './wheel'
 export interface StageProps {
   evaluation: Evaluation | null
   state: ViewerState
+  /** Nodes the default views frame (e.g. a pendant without its chain); omitted = everything. */
+  frameNodeIds?: readonly string[]
   onPick?: (pick: ViewerPick | null, opts: { additive: boolean }) => void
   onHover?: (pick: ViewerPick | null) => void
-  onContextMenu?: (pick: ViewerPick | null) => void
   /** The viewer once created, or null when WebGL is unavailable. */
   onViewer?: (viewer: Viewer | null, tier: GpuTier | null) => void
   /** Last chance to use the viewer (e.g. capture a cover) before it is disposed. */
@@ -34,9 +35,9 @@ const CLICK_SLOP_PX = 4
 export function Stage({
   evaluation,
   state,
+  frameNodeIds,
   onPick,
   onHover,
-  onContextMenu,
   onViewer,
   onBeforeDispose,
   wheel = 'auto',
@@ -48,8 +49,8 @@ export function Stage({
   const canvas = useRef<HTMLCanvasElement>(null)
   const viewer = useRef<Viewer | null>(null)
   const [failed, setFailed] = useState(false)
-  const callbacks = useRef({ onPick, onHover, onContextMenu, onViewer, onBeforeDispose, wheel })
-  callbacks.current = { onPick, onHover, onContextMenu, onViewer, onBeforeDispose, wheel }
+  const callbacks = useRef({ onPick, onHover, onViewer, onBeforeDispose, wheel })
+  callbacks.current = { onPick, onHover, onViewer, onBeforeDispose, wheel }
 
   useEffect(() => {
     const el = host.current!
@@ -113,10 +114,6 @@ export function Stage({
       e.stopPropagation()
       v.orbit(-intent.dx * 0.25, -intent.dy * 0.25)
     }
-    const onContext = (e: MouseEvent) => {
-      const [x, y] = local(e)
-      callbacks.current.onContextMenu?.(v.pick(x, y))
-    }
     // Middle-click paste on Linux would drop clipboard text into whatever has focus.
     const onAuxClick = (e: MouseEvent) => {
       if (e.button === 1) e.preventDefault()
@@ -126,7 +123,6 @@ export function Stage({
     el.addEventListener('pointermove', onPointerMove)
     el.addEventListener('pointerleave', onPointerLeave)
     el.addEventListener('wheel', onWheel, { capture: true, passive: false })
-    el.addEventListener('contextmenu', onContext)
     el.addEventListener('auxclick', onAuxClick)
     return () => {
       cancelAnimationFrame(hoverFrame)
@@ -137,7 +133,6 @@ export function Stage({
       el.removeEventListener('pointermove', onPointerMove)
       el.removeEventListener('pointerleave', onPointerLeave)
       el.removeEventListener('wheel', onWheel, { capture: true })
-      el.removeEventListener('contextmenu', onContext)
       el.removeEventListener('auxclick', onAuxClick)
       callbacks.current.onBeforeDispose?.(v)
       setLiveViewer(null)
@@ -146,6 +141,12 @@ export function Stage({
       v.dispose()
     }
   }, [])
+
+  const focus = frameNodeIds?.join(',') ?? ''
+  // Before the evaluation effect, so the first framing already knows what to frame.
+  useEffect(() => {
+    viewer.current?.setFrameFocus(focus ? focus.split(',') : [])
+  }, [focus])
 
   useEffect(() => {
     if (evaluation) viewer.current?.setEvaluation(evaluation)
@@ -156,7 +157,10 @@ export function Stage({
   }, [state])
 
   return (
-    <div ref={host} className={cn('stage relative isolate h-full w-full overflow-hidden', className)}>
+    <div
+      ref={host}
+      className={cn('stage relative isolate h-full w-full overflow-hidden', className)}
+    >
       <canvas
         ref={canvas}
         aria-label={label}

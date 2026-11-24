@@ -216,7 +216,17 @@ const factsFrom = (s: EvaluationSummary): NonNullable<PieceSummary['facts']> => 
   metal: s.metals.toSorted((a, b) => b.massG - a.massG)[0]?.material ?? '',
 })
 
-/** Caches evaluation facts on the piece, unless the design moved on since `version`. */
+/**
+ * The one detail level cached facts come from. Draft leaves stone seats uncut and overstates
+ * metal by up to a third, so facts written at both levels would flip with whoever wrote last;
+ * production is what a caster weighs, and the cost estimates on cards are built on it.
+ */
+export const FACTS_DETAIL: 'draft' | 'production' = 'production'
+
+/**
+ * Caches evaluation facts (at {@link FACTS_DETAIL}) on the piece, unless the design moved on
+ * since `version`.
+ */
 export async function storeFacts(
   ctx: Ctx,
   pieceId: string,
@@ -233,7 +243,7 @@ export async function storeFacts(
 }
 
 /** How long a piece must stay unchanged before its facts are re-evaluated. */
-export const FACTS_DEBOUNCE_MS = 300
+const FACTS_DEBOUNCE_MS = 300
 
 interface FactsRefresh {
   timer: NodeJS.Timeout | null
@@ -276,7 +286,11 @@ async function flush(byPiece: Map<string, FactsRefresh>, key: string, pieceId: s
   try {
     const summary = await ctx.services
       .get('geometry')
-      .evaluate(design, { detail: 'draft', pieceId }, serviceContext(ctx))
+      .evaluate(
+        design,
+        { detail: FACTS_DETAIL, pieceId, background: true },
+        serviceContext(ctx),
+      )
     await storeFacts(ctx, pieceId, version, summary)
   } catch (err) {
     // The server closing under a pending refresh is not a failure worth reporting.

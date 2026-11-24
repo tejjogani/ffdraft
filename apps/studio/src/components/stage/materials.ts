@@ -143,7 +143,7 @@ export function createModeMaterials(p: ViewportPalette): ModeMaterials {
   const tint = new MeshBasicMaterial({
     color: p.select,
     transparent: true,
-    opacity: 0.14,
+    opacity: 0.1,
     depthWrite: false,
     polygonOffset: true,
     polygonOffsetFactor: -1,

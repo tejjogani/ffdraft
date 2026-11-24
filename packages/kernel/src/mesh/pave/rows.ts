@@ -17,13 +17,19 @@ export interface LevelWalk {
   level: number
   /** Distance between successive points of the walk, mm. */
   step: number
-  /** Called for every point of the walk, in order along each row. */
-  visit: (p: Vec3, n: Vec3, sample: number) => void
+  /** Samples a walk may start from (all when absent). */
+  starts?: readonly number[]
+  /**
+   * Called for every point of the walk, in order along each row; returns how far ahead the
+   * next point may be (0 for the usual step) — after placing a stone, nothing fits for most of
+   * a stone's width, so the walk can stride over it.
+   */
+  visit: (p: Vec3, n: Vec3, sample: number) => number
   checkpoint?: () => void
 }
 
-/** Finite-difference step for the edge-distance gradient, mm. */
-const H = 0.02
+/** Finite-difference step for the edge-distance gradient, mm (well below any stone). */
+const H = 0.01
 /** Newton steps that bring a point onto the level. */
 const PROJECT_ITERATIONS = 4
 const LEVEL_TOLERANCE = 1e-4
@@ -43,12 +49,17 @@ interface OnLevel {
 /** Walks every loop of the level set once, calling `visit` along it. */
 export function walkLevelSets(o: LevelWalk): void {
   const s = o.surface
-  const trail: Trail = { walk: new Int32Array(s.count).fill(-1), at: new Int32Array(s.count), clock: 0 }
+  const trail: Trail = {
+    walk: new Int32Array(s.count).fill(-1),
+    at: new Int32Array(s.count),
+    clock: 0,
+  }
   // No loop is longer than the region can hold at this step; the bound only stops runaways.
   const maxSteps = Math.ceil((4 * s.count * s.spacing) / o.step) + 16
   let walks = 0
-  // Samples are visited in index order, which is fixed by the surface's own seeded sampling.
-  for (let i = 0; i < s.count; i++) {
+  // Starts are tried in a fixed order (the surface's own seeded sampling), so walks are repeatable.
+  const starts = o.starts ?? Array.from({ length: s.count }, (_, i) => i)
+  for (const i of starts) {
     if (trail.walk[i]! >= 0 || Math.abs(s.edge[i]! - o.level) > s.spacing) continue
     const start = project(o, s.point(i))
     if (!start) continue
@@ -94,20 +105,33 @@ function walk(
     const owner = trail.walk[at.sample]!
     if (owner === id && k > fresh && trail.clock - trail.at[at.sample]! > fresh) return true
     if (owner >= 0 && owner !== id) return false
-    if (!(skipFirst && k === 0)) o.visit(at.p, at.n, at.sample)
+    const stride = skipFirst && k === 0 ? o.step : Math.max(o.step, o.visit(at.p, at.n, at.sample))
     mark(at.sample)
-    s.near(at.p, reach, (j) => {
+    // The samples a stride passes over are marked too, so no later walk starts among them.
+    s.near(add(at.p, scale(dir, (stride - o.step) / 2)), reach + (stride - o.step) / 2, (j) => {
       if (Math.abs(s.edge[j]! - o.level) <= s.spacing) mark(j)
     })
     trail.clock++
-    const next = project(o, add(at.p, scale(dir, o.step)))
+    const next =
+      advance(o, at, dir, stride) ?? (stride > o.step ? advance(o, at, dir, o.step) : null)
     if (!next) return false
-    const nextDir = scale(next.along, dot(next.along, dir) >= 0 ? 1 : -1)
-    if (dot(nextDir, dir) < MIN_TURN_COS) return false
-    at = next
-    dir = nextDir
+    at = next.at
+    dir = next.dir
   }
   return false
+}
+
+/** The point `length` further along the level, or null where the level ends or kinks. */
+function advance(
+  o: LevelWalk,
+  at: OnLevel,
+  dir: Vec3,
+  length: number,
+): { at: OnLevel; dir: Vec3 } | null {
+  const next = project(o, add(at.p, scale(dir, length)))
+  if (!next) return null
+  const nextDir = scale(next.along, dot(next.along, dir) >= 0 ? 1 : -1)
+  return dot(nextDir, dir) < MIN_TURN_COS ? null : { at: next, dir: nextDir }
 }
 
 /** The point of the level nearest to q, with its surface normal and direction along the level. */
@@ -117,7 +141,7 @@ function project(o: LevelWalk, q: Vec3): OnLevel | null {
     const hit = o.surface.snap(p)
     if (!hit) return null
     const e = o.edgeDistance(hit.p)
-    const g = gradient(o, hit.p, hit.n)
+    const g = gradient(o, hit.p, hit.n, e)
     const slope2 = dot(g, g)
     if (slope2 < MIN_SLOPE * MIN_SLOPE) return null
     if (Math.abs(e - o.level) < LEVEL_TOLERANCE)
@@ -127,11 +151,10 @@ function project(o: LevelWalk, q: Vec3): OnLevel | null {
   return null
 }
 
-/** The gradient of the edge distance in the tangent plane at p. */
-function gradient(o: LevelWalk, p: Vec3, n: Vec3): Vec3 {
+/** The gradient of the edge distance in the tangent plane at p, where it is `e` (forward differences). */
+function gradient(o: LevelWalk, p: Vec3, n: Vec3, e: number): Vec3 {
   const e1 = normalize(cross(n, Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0]))
   const e2 = cross(n, e1)
-  const d = (e: Vec3) =>
-    (o.edgeDistance(add(p, scale(e, H))) - o.edgeDistance(sub(p, scale(e, H)))) / (2 * H)
+  const d = (t: Vec3) => (o.edgeDistance(add(p, scale(t, H))) - e) / H
   return add(scale(e1, d(e1)), scale(e2, d(e2)))
 }

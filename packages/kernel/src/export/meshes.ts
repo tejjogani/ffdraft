@@ -5,6 +5,7 @@
 import { GEM_MATERIALS, METALS } from '@pave/schema'
 import type { IndexedTriangles, MetalSpec, Scene, ScenePart } from '../core'
 import { mergeTriangles } from '../features/chain/instances'
+import { edgeTopology, triangleComponents } from '../mesh/topology'
 import { weld } from '../solid/meshing'
 import type { MeshData, StoneInstance } from '../types'
 
@@ -62,6 +63,7 @@ function placedGem(mesh: MeshData, m: readonly number[]): IndexedTriangles {
   return { positions: out, indices: welded.indices }
 }
 
+/** Every mesh export: one object per part, and per stone when asked; never an empty file. */
 export function sceneObjects(scene: Scene, selection: MeshSelection): MeshObject[] {
   const only = selection.only && new Set(selection.only)
   const metal: MetalObject[] = scene.parts
@@ -86,7 +88,34 @@ export function sceneObjects(scene: Scene, selection: MeshSelection): MeshObject
           ...placedGem(scene.evaluation.gemMeshes[instance.meshKey]!, instance.matrix),
         }))
     : []
-  return [...uniqueNames(metal), ...stones]
+  const objects = [...uniqueNames(metal), ...stones]
+  if (objects.length === 0)
+    throw new Error(
+      selection.only
+        ? `Nothing to export: no metal${selection.stones ? ' or stones' : ''} comes from ${selection.only.join(', ')}.`
+        : `Nothing to export: the piece has no metal${selection.stones ? ' or stones' : ''}.`,
+    )
+  return objects
+}
+
+const shellsOf = (tris: IndexedTriangles) =>
+  triangleComponents(tris.indices.length / 3, edgeTopology(tris).twin).count
+
+/** What the metal in an export amounts to, counted from the triangles actually written. */
+export function metalNotes(scene: Scene, objects: readonly MeshObject[]): string[] {
+  const metal = objects.filter((o) => o.kind === 'metal')
+  const shells = metal.reduce((n, o) => n + shellsOf(o), 0)
+  const notes = [
+    `${metal.length} metal part${metal.length === 1 ? '' : 's'} in ${shells} watertight shell${shells === 1 ? '' : 's'}, seats and engravings cut; nominal size — the caster applies shrinkage.`,
+  ]
+  const chains = new Set(
+    [...scene.nodes.values()].filter((r) => r.node.kind === 'chain').map((r) => r.id),
+  )
+  if (metal.some((o) => o.nodeIds.some((id) => chains.has(id))))
+    notes.push(
+      'Chain links are separate shells, one per link; fine chain is normally bought rather than cast.',
+    )
+  return notes
 }
 
 /** sRGB hex colour for an object: the alloy's swatch, or the stone's body colour. */

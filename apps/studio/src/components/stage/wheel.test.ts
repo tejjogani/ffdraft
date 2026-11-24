@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { classifyWheel } from './wheel'
 
-const wheel = (deltaX: number, deltaY: number, deltaMode = 0, ctrlKey = false) => ({ deltaX, deltaY, deltaMode, ctrlKey })
+const wheel = (deltaX: number, deltaY: number, deltaMode = 0, ctrlKey = false) => ({
+  deltaX,
+  deltaY,
+  deltaMode,
+  ctrlKey,
+})
 
 describe('wheel classifier', () => {
   it('reads a pinch (ctrl-wheel) as zoom', () => {

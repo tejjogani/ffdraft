@@ -19,14 +19,17 @@ export const EMBED = 0.3
  * Friction notch: a V groove about 2 mm from the tip of a 10–11 mm post, where the butterfly's
  * scrolls click in (stock posts, 01-cad.md §2 "Earring post").
  */
-export const NOTCH_FROM_TIP = 2
+const NOTCH_FROM_TIP = 2
 const NOTCH_WIDTH = 0.4
 const NOTCH_DEPTH_RATIO = 0.15
+
+/** Where a post of `length` has its notch, measured back from the tip (mid-post on short posts). */
+export const notchFromTip = (length: number): number => Math.min(NOTCH_FROM_TIP, length / 2)
 
 /** A round post along +z from −EMBED to `length`, domed tip, notched near the end. */
 export function postShape(length: number, wire: number): Shape3D {
   const r = wire / 2
-  const notch = Math.max(length - NOTCH_FROM_TIP, length / 2)
+  const notch = length - notchFromTip(length)
   const depth = NOTCH_DEPTH_RATIO * wire
   const profile = draw([0, -EMBED])
     .hLineTo(r)
@@ -120,6 +123,14 @@ export function butterflyMesh(span: number, post: number, quality: Quality): Ind
  * plane: a claw-shaped body open on one side, a spring gate closing it with its thumb lever,
  * and an eye for the jump ring. Proportions are those of stock 10–12 mm clasps.
  */
+/**
+ * The eye wire a lobster clasp of `length` can carry: stock clasps use about 0.06–0.12 × their
+ * length (a 10 mm clasp has a 0.6–1.2 mm eye); heavier wire would close the eye up.
+ */
+export const lobsterEyeWire = (length: number, wire: number): number =>
+  Math.min(Math.max(wire, 0.06 * length), 0.12 * length)
+
+/** `wire` is the eye's wire, already limited by {@link lobsterEyeWire}. */
 export function lobsterMesh(length: number, wire: number, quality: Quality): IndexedTriangles {
   const { manifold: mf } = runtime()
   const L = length
@@ -174,7 +185,7 @@ export function lobsterMesh(length: number, wire: number, quality: Quality): Ind
         lever[2],
       ]),
     )
-    const ring = Math.max(wire, 0.06 * L)
+    const ring = wire
     const eyeRadius = 0.065 * L + ring / 2
     const eye = own(
       sweptWire(

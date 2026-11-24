@@ -11,6 +11,7 @@ export function poolOptions(sctx: ServiceContext, call: GeometryCall = {}): RunO
     tenant: sctx.orgId,
     ...(call.pieceId === undefined ? {} : { affinity: `${sctx.orgId}:${call.pieceId}` }),
     ...(call.signal === undefined ? {} : { signal: call.signal }),
+    ...(call.background ? { background: true } : {}),
     readAsset: async (assetId) => (await sctx.readAsset(assetId)).bytes,
   }
 }
@@ -32,7 +33,10 @@ export function createGeometry(pool: KernelPool): GeometryService {
     },
 
     async renderInput(design, sctx, call) {
-      const { glb, subject } = await pool.run({ kind: 'renderInput', design }, poolOptions(sctx, call))
+      const { glb, subject } = await pool.run(
+        { kind: 'renderInput', design },
+        poolOptions(sctx, call),
+      )
       return { glb: { bytes: glb, name: 'piece.glb', mime: 'model/gltf-binary' }, subject }
     },
 

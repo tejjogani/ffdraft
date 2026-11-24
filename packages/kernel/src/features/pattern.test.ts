@@ -121,11 +121,12 @@ describe('pattern', () => {
 })
 
 describe('group', () => {
-  it('is organisational without a transform and moves its children as a unit with one', async () => {
+  it('carries its children, and moves them as a unit when it has a transform', async () => {
     const still = await kernel.scene(
       designFrom('other', [cone, gem, { id: 'grp', kind: 'group', children: ['cone', 'g'] }]),
     )
-    expect(still.evaluation.parts.map((p) => p.nodeId)).toEqual(['cone'])
+    expect(still.evaluation.parts.map((p) => p.nodeId)).toEqual(['grp'])
+    expect(still.evaluation.stones).toHaveLength(1)
     const moved = await kernel.scene(
       designFrom('other', [
         cone,
@@ -141,5 +142,59 @@ describe('group', () => {
     expect(moved.evaluation.stones).toHaveLength(1)
     expect(moved.evaluation.stones[0]!.matrix[14]).toBeCloseTo(10, 6)
     expect(moved.nodes.get('grp')!.frames['g/stone']).toBeDefined()
+  })
+
+  it('a plain group nested in a moved group moves with it', async () => {
+    const scene = await kernel.scene(
+      designFrom('other', [
+        cone,
+        gem,
+        { id: 'box', kind: 'primitive', shape: 'box', size: [2, 2, 2] },
+        { id: 'inner', kind: 'group', children: ['cone', 'g'] },
+        { id: 'outer', kind: 'group', children: ['inner', 'box'], transform: at(20, 0, 0) },
+      ]),
+    )
+    const box = scene.evaluation.parts[0]!.bounds
+    // Cone (x 4..6) and box (x −1..1), both 20 further along.
+    expect(box.min[0]).toBeCloseTo(19, 4)
+    expect(box.max[0]).toBeCloseTo(26, 4)
+    expect(scene.evaluation.stones[0]!.matrix[12]).toBeCloseTo(25, 6)
+  })
+
+  it('a pattern of a plain group copies everything in it', async () => {
+    const scene = await kernel.scene(
+      designFrom('other', [
+        cone,
+        gem,
+        { id: 'grp', kind: 'group', children: ['cone', 'g'] },
+        {
+          id: 'row',
+          kind: 'pattern',
+          sources: ['grp'],
+          type: 'linear',
+          axis: 'z',
+          count: 3,
+          spacing: 10,
+        },
+      ]),
+    )
+    expect(scene.evaluation.stones).toHaveLength(3)
+    const [source, copies] = scene.evaluation.parts
+    expect(copies!.nodeId).toBe('row')
+    expect(copies!.volumeMm3).toBeCloseTo(2 * source!.volumeMm3, 3)
+    expect(copies!.bounds.max[2]).toBeCloseTo(source!.bounds.max[2] + 20, 4)
+  })
+
+  it('reports a node outside a moved group that refers to something inside it', async () => {
+    const scene = await kernel.scene(
+      designFrom('pendant', [
+        { id: 'box', kind: 'primitive', shape: 'box', size: [6, 2, 6] },
+        { id: 'grp', kind: 'group', children: ['box'], transform: at(20, 0, 0) },
+        { id: 'ring', kind: 'finding', type: 'jumpRing', host: 'box' },
+      ]),
+      { detail: 'production' },
+    )
+    const codes = scene.evaluation.diagnostics.filter((d) => d.nodeId === 'ring').map((d) => d.code)
+    expect(codes).toContain('group.reference')
   })
 })

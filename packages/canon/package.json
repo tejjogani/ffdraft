@@ -1,0 +1,18 @@
+{
+  "name": "@pave/canon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Jewelry design canon: rules, style guides and exemplars as data, with suggestion, lint and prompt rendering.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@pave/kernel": "workspace:*",
+    "@pave/schema": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}

@@ -28,7 +28,10 @@ export interface AddGroup {
 /** How the menu is organised; any kind not listed lands under "More". */
 const GROUPS: { label: string; kinds: NodeKind[] }[] = [
   { label: 'Stones', kinds: ['gem', 'setting', 'halo', 'gemRow', 'pave'] },
-  { label: 'Bodies', kinds: ['ringShank', 'vectorBody', 'meshBody', 'relief', 'revolve', 'pipe', 'primitive'] },
+  {
+    label: 'Bodies',
+    kinds: ['ringShank', 'vectorBody', 'meshBody', 'relief', 'revolve', 'pipe', 'primitive'],
+  },
   { label: 'Attach', kinds: ['bail', 'chain', 'finding', 'engraving'] },
   { label: 'Arrange', kinds: ['pattern', 'boolean', 'group'] },
 ]
@@ -37,7 +40,14 @@ function option(design: Design, kind: NodeKind, target?: string): AddOption {
   const d = describeNode(kind)
   const { missing } = defaultNode(kind, design, { target })
   const needs = missing
-    .map((m) => (m.refKinds ? m.refKinds.map((k) => describeNode(k as NodeKind).title).slice(0, 2).join(' or ') : m.title))
+    .map((m) =>
+      m.refKinds
+        ? m.refKinds
+            .map((k) => describeNode(k as NodeKind).title)
+            .slice(0, 2)
+            .join(' or ')
+        : m.title,
+    )
     .join(', ')
   return {
     kind,
@@ -75,15 +85,26 @@ export function nextSteps(design: Design, kinds: readonly string[]): NextStep[] 
     nodes.some((n) => n.kind === kind && nodeRefs(n).includes(id))
   const out: NextStep[] = []
   const band = nodes.find((n) => n.kind === 'ringShank')
-  if (band && !nodes.some((n) => n.kind === 'gem')) out.push({ label: 'Add a stone', kind: 'gem', target: band.id })
-  const unset = nodes.find((n) => n.kind === 'gem' && !referencing(n.id, 'setting') && !referencing(n.id, 'halo'))
+  if (band && !nodes.some((n) => n.kind === 'gem'))
+    out.push({ label: 'Add a stone', kind: 'gem', target: band.id })
+  const unset = nodes.find(
+    (n) => n.kind === 'gem' && !referencing(n.id, 'setting') && !referencing(n.id, 'halo'),
+  )
   if (unset) out.push({ label: 'Set the stone', kind: 'setting', target: unset.id })
   const body = nodes.find((n) => BODY_FOR_ICE.has(n.kind))
-  if (body && !referencing(body.id, 'pave')) out.push({ label: 'Ice it out', kind: 'pave', target: body.id })
+  if (body && !referencing(body.id, 'pave'))
+    out.push({ label: 'Ice it out', kind: 'pave', target: body.id })
   const bail = nodes.find((n) => n.kind === 'bail')
-  if (body && !bail && design.kind === 'pendant') out.push({ label: 'Add a bail', kind: 'bail', target: body.id })
-  if (bail && !nodes.some((n) => n.kind === 'chain')) out.push({ label: 'Hang on a chain', kind: 'chain', target: bail.id })
+  if (body && !bail && design.kind === 'pendant')
+    out.push({ label: 'Add a bail', kind: 'bail', target: body.id })
+  if (bail && !nodes.some((n) => n.kind === 'chain'))
+    out.push({ label: 'Hang on a chain', kind: 'chain', target: bail.id })
   if (band && nodes.some((n) => n.kind === 'gem') && !nodes.some((n) => n.kind === 'gemRow'))
     out.push({ label: 'Pavé the band', kind: 'gemRow', target: band.id })
-  return out.filter((s) => kinds.includes(s.kind) && !defaultNode(s.kind, design, { target: s.target }).missing.length).slice(0, 3)
+  return out
+    .filter(
+      (s) =>
+        kinds.includes(s.kind) && !defaultNode(s.kind, design, { target: s.target }).missing.length,
+    )
+    .slice(0, 3)
 }

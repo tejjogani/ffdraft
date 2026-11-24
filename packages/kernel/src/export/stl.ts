@@ -4,7 +4,7 @@
  * out unless asked for, and then appended as separate shells flagged as reference geometry.
  */
 import { defineExporter } from '../core'
-import { type MeshObject, MM_NOTE, sceneObjects } from './meshes'
+import { type MeshObject, MM_NOTE, metalNotes, sceneObjects } from './meshes'
 
 const HEADER_BYTES = 80
 const TRIANGLE_BYTES = 50
@@ -63,10 +63,9 @@ export const stl = defineExporter({
   run(scene, options) {
     const stones = options.stones ?? false
     const objects = sceneObjects(scene, { stones, ...(options.only && { only: options.only }) })
-    const metal = objects.filter((o) => o.kind === 'metal')
     const notes = [
       MM_NOTE,
-      `${metal.length} watertight metal shell${metal.length === 1 ? '' : 's'}, seats and engravings cut; nominal size — the caster applies shrinkage.`,
+      ...metalNotes(scene, objects),
       'STL carries no units, names or colours; use 3MF or 3DM when those matter.',
     ]
     if (stones)

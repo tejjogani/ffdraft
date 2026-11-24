@@ -16,6 +16,8 @@ export interface ChainPath {
   closed: boolean
   /** Out of the chain's face: the way the stones and diamond-cut faces look. */
   face: Vec3
+  /** Tightest radius the path turns through (Infinity when straight). */
+  minRadius: number
 }
 
 /** Half the neck width a necklace drapes over, mm (an average adult neck is ~110–120 mm wide). */
@@ -26,6 +28,7 @@ export function straightPath(length: number): ChainPath {
     length,
     closed: false,
     face: [0, 0, 1],
+    minRadius: Infinity,
     at: (s) => ({ point: [s - length / 2, 0, 0] }),
   }
 }
@@ -47,6 +50,7 @@ export function drapePath(length: number, bend: number): ChainPath {
       length,
       closed: true,
       face,
+      minRadius: radius,
       at(s) {
         const a = s / radius - Math.PI / 2
         return { point: [radius * Math.cos(a), 0, radius * Math.sin(a) + radius] }
@@ -84,6 +88,7 @@ export function drapePath(length: number, bend: number): ChainPath {
     length: total,
     closed: true,
     face,
+    minRadius: r,
     at(input) {
       const s = ((input % total) + total) % total
       if (s < tip) return onCircle(tipCentre, r, -Math.PI / 2 + s / r)

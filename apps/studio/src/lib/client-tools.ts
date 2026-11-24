@@ -11,12 +11,17 @@ import {
   clientTools,
 } from '@pave/schema'
 
-type Handler<N extends ClientToolName> = (input: ClientToolParsedInput<N>) => Promise<ClientToolOutput<N>>
+type Handler<N extends ClientToolName> = (
+  input: ClientToolParsedInput<N>,
+) => Promise<ClientToolOutput<N>>
 
 const handlers = new Map<ClientToolName, Handler<never>>()
 
 /** Serves `name` until the returned function is called. A later registration takes over. */
-export function registerClientTool<N extends ClientToolName>(name: N, handler: Handler<N>): () => void {
+export function registerClientTool<N extends ClientToolName>(
+  name: N,
+  handler: Handler<N>,
+): () => void {
   handlers.set(name, handler as unknown as Handler<never>)
   return () => {
     if (handlers.get(name) === (handler as unknown)) handlers.delete(name)
@@ -37,4 +42,5 @@ export async function runClientTool<N extends ClientToolName>(
 }
 
 // Development and e2e hook: lets a test call a client tool the way the assistant's relay will.
-if (import.meta.env.DEV) (window as { paveClientTools?: unknown }).paveClientTools = { run: runClientTool }
+if (import.meta.env.DEV)
+  (window as { paveClientTools?: unknown }).paveClientTools = { run: runClientTool }

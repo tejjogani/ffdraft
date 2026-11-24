@@ -2,7 +2,7 @@ import { applyOps, type Design, type Op, OpError } from '@pave/schema'
 import { and, desc, eq, lt, sql } from 'drizzle-orm'
 import { putAsset } from '../assets/assets'
 import * as t from '../db/schema'
-import { commitChange, storeFacts, toStoredChange } from '../design'
+import { commitChange, FACTS_DETAIL, storeFacts, toStoredChange } from '../design'
 import { conflict, notFound } from '../errors'
 import { getPiece } from '../lookups'
 import { serviceContext } from '../service-context'
@@ -184,7 +184,8 @@ export const design: HandlerGroup<'design'> = {
     const summary = await ctx.services
       .get('geometry')
       .evaluate(piece.design, { detail: input.detail, pieceId: piece.id }, serviceContext(ctx))
-    await storeFacts(ctx, piece.id, piece.version, summary)
+    // Facts come from one detail level only, so a draft answer never overwrites production facts.
+    if (input.detail === FACTS_DETAIL) await storeFacts(ctx, piece.id, piece.version, summary)
     return summary
   },
 

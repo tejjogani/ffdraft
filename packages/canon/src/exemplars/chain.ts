@@ -1,0 +1,152 @@
+/** Tennis and Cuban exemplars: research 09 §2 "Chains". */
+import { exemplar } from './define'
+
+export const CHAINS = [
+  exemplar({
+    id: 'tennis-bracelet-classic',
+    title: 'Classic tennis bracelet',
+    kind: 'bracelet',
+    archetype: 'tennis',
+    styles: ['classic'],
+    variant: 'classic',
+    build: {
+      spec: {
+        kind: 'bracelet',
+        archetype: 'tennis',
+        title: 'Classic tennis bracelet',
+        summary: 'A line of 3 mm rounds, 7 inches.',
+        style: ['classic'],
+        metal: { alloy: 'au18k-white' },
+        chain: { style: 'tennis', lengthMm: 178, widthMm: 3.4 },
+        stones: [{ role: 'accent', cut: 'round', widthMm: 3 }],
+      },
+    },
+    why: [
+      '3 mm stones in 3.4 mm links: the classic line.',
+      '0.8 mm claws, the floor for 3 mm stones.',
+      '178 mm: wrist plus 13–25 mm.',
+    ],
+    antiTwin: {
+      ops: [{ t: 'update', id: 'chain', patch: { wire: 0.6 } }],
+      fault: 'Claws too fine for 3 mm stones',
+      ruleId: 'chain.tennis.wire',
+    },
+    sizeKey: { W: 3 },
+  }),
+  exemplar({
+    id: 'tennis-bracelet-delicate',
+    title: 'Fine tennis bracelet',
+    kind: 'bracelet',
+    archetype: 'tennis',
+    styles: ['delicate'],
+    variant: 'delicate',
+    build: {
+      spec: {
+        kind: 'bracelet',
+        archetype: 'tennis',
+        title: 'Fine tennis bracelet',
+        summary: 'A line of 2 mm rounds in yellow gold.',
+        style: ['delicate'],
+        metal: { alloy: 'au14k-yellow' },
+        chain: { style: 'tennis', lengthMm: 170, widthMm: 2.4 },
+        stones: [{ role: 'accent', cut: 'round', widthMm: 2 }],
+      },
+    },
+    why: [
+      '2 mm stones read as a fine line of light.',
+      'Yellow gold with white stones is classic without rhodium.',
+    ],
+    antiTwin: {
+      ops: [{ t: 'update', id: 'chain', patch: { stone: 'cz' } }],
+      fault: 'CZ set in 14k',
+      ruleId: 'metals.czMetal',
+    },
+    sizeKey: { W: 2 },
+  }),
+  exemplar({
+    id: 'tennis-necklace-bold',
+    title: 'Iced tennis necklace',
+    kind: 'necklace',
+    archetype: 'tennis',
+    styles: ['iced out', 'hip hop'],
+    variant: 'bold',
+    build: {
+      spec: {
+        kind: 'necklace',
+        archetype: 'tennis',
+        title: 'Iced tennis necklace',
+        summary: 'A 4.6 mm tennis necklace, 20 inches, in white gold.',
+        style: ['iced out', 'hip hop'],
+        metal: { alloy: 'au14k-white' },
+        chain: { style: 'tennis', lengthMm: 508, widthMm: 4.6 },
+        stones: [{ role: 'accent', cut: 'round', widthMm: 4.2 }],
+      },
+    },
+    why: [
+      '4.2 mm stones: a bold line that reads across a room.',
+      'Rhodium-plated white gold: all ice.',
+    ],
+    antiTwin: {
+      ops: [{ t: 'update', id: 'chain', patch: { plating: 'none' } }],
+      fault: 'Unplated white gold beside white stones',
+      ruleId: 'metals.rhodium',
+    },
+    sizeKey: { W: 4.2 },
+  }),
+  exemplar({
+    id: 'cuban-chain-statement',
+    title: 'Miami Cuban, 10 mm',
+    kind: 'chain',
+    archetype: 'cuban',
+    styles: ['iced out', 'hip hop'],
+    variant: 'bold',
+    build: {
+      spec: {
+        kind: 'chain',
+        archetype: 'cuban',
+        title: 'Miami Cuban, 10 mm',
+        summary: 'A 10 mm Cuban link, 22 inches, in 14k yellow.',
+        style: ['iced out', 'hip hop'],
+        metal: { alloy: 'au14k-yellow' },
+        chain: { style: 'cuban', lengthMm: 559, widthMm: 10 },
+      },
+    },
+    why: [
+      "10 mm is the statement width; 22 inches the men's default.",
+      'Wire at 0.26 of the link width lets the links lie flat.',
+      'About 170 g in 14k: quote it from the report.',
+    ],
+    antiTwin: {
+      ops: [{ t: 'update', id: 'chain', patch: { wire: 3.5 } }],
+      fault: 'Links too thick to twist flat',
+      ruleId: 'chain.cuban.wire',
+    },
+    sizeKey: {},
+  }),
+  exemplar({
+    id: 'cuban-bracelet',
+    title: 'Cuban bracelet, 8 mm',
+    kind: 'bracelet',
+    archetype: 'cuban',
+    styles: ["men's", 'hip hop'],
+    variant: 'bold',
+    build: {
+      spec: {
+        kind: 'bracelet',
+        archetype: 'cuban',
+        title: 'Cuban bracelet, 8 mm',
+        summary: 'An 8 mm Cuban bracelet, 8.5 inches.',
+        style: ["men's", 'hip hop'],
+        metal: { alloy: 'au14k-yellow' },
+        chain: { style: 'cuban', lengthMm: 216, widthMm: 8 },
+      },
+    },
+    why: ["8 mm on a man's wrist matches a 10 mm chain.", '216 mm sits loose on the wrist bone.'],
+    antiTwin: {
+      ops: [{ t: 'update', id: 'chain', patch: { wire: 2.6 } }],
+      fault: 'Links too thick to twist flat',
+      ruleId: 'chain.cuban.wire',
+    },
+    sizeKey: {},
+  }),
+]

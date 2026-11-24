@@ -108,6 +108,8 @@ describe('production engine across a restart', () => {
     const api1 = client(first)
     const piece = await api1.call('pieces.create', { templateId: 'wedding-band' })
     const pkg = await api1.call('production.create', { pieceId: piece.id, quantity: 2 })
+    const [live] = await api1.call('production.list', { pieceId: piece.id })
+    expect(['queued', 'running']).toContain(live!.status)
     await first.dispose()
 
     const second = await boot()

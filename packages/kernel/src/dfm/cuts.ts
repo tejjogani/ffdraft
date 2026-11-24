@@ -97,11 +97,14 @@ function wallProbe(stone: SceneStone, wall: number): [number, number, number][] 
 const inside = (m: Manifold, p: readonly number[]) =>
   m.rayCast([p[0]!, p[1]!, p[2]!], [p[0]!, p[1]!, p[2]! + 1e3]).length % 2 === 1
 
-/** Seated stones need `seatWall` of metal all round; neighbouring seats may share theirs. */
+/**
+ * Seated stones need `seatWall` of metal all round; neighbouring seats may share theirs. One
+ * diagnostic per node, naming how many of its stones are short and where the worst one is.
+ */
 function seatWalls(scene: Scene, profile: DfmProfile): Diagnostic[] {
   const seated = scene.stones.filter((s) => SEATED.has(s.instance.setting))
   if (seated.length === 0 || scene.detail !== 'production') return []
-  const out: Diagnostic[] = []
+  const short = new Map<string, { count: number; worst: SceneStone; open: number }>()
   for (const stone of seated) {
     const neighbourSeat = (p: readonly number[]) =>
       seated.some((other) => {
@@ -120,20 +123,27 @@ function seatWalls(scene: Scene, profile: DfmProfile): Diagnostic[] {
     if (probe.length === 0) continue
     const reach = boundsOfPositions(new Float32Array(probe.flat()))
     const metal = scene.parts.filter((part) => part.fused && boundsOverlap(part.part.bounds, reach))
-    const open = probe.filter(
-      (p) => !metal.some((part) => inside(part.fused!.manifold(scene.quality), p)),
-    )
-    if (open.length > probe.length / 8)
-      out.push({
-        level: 'warning',
-        code: 'seat.wall',
-        nodeId: stone.instance.nodeId,
-        message: `Stone ${stone.instance.id} has less than ${profile.seatWall} mm of metal beside its seat; move it in from the edge or use a smaller stone.`,
-        at: [...stone.stone.frame.origin] as [number, number, number],
-        limit: profile.seatWall,
-      })
+    const open =
+      probe.filter((p) => !metal.some((part) => inside(part.fused!.manifold(scene.quality), p)))
+        .length / probe.length
+    if (open <= 1 / 8) continue
+    const node = stone.instance.nodeId
+    const entry = short.get(node)
+    if (!entry) short.set(node, { count: 1, worst: stone, open })
+    else {
+      entry.count++
+      if (open > entry.open) Object.assign(entry, { worst: stone, open })
+    }
   }
-  return out
+  return [...short].map(([nodeId, { count, worst }]) => ({
+    level: 'warning' as const,
+    code: 'seat.wall',
+    nodeId,
+    message: `${count === 1 ? `Stone ${worst.instance.id} has` : `${count} stones (worst: ${worst.instance.id}) have`} less than ${profile.seatWall} mm of metal beside their seats; move them in from the edge or use smaller stones.`,
+    at: [...worst.stone.frame.origin] as [number, number, number],
+    value: count,
+    limit: profile.seatWall,
+  }))
 }
 
 export const cutChecks = (scene: Scene, profile: DfmProfile): Diagnostic[] =>

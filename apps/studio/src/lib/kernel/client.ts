@@ -7,7 +7,15 @@
  * that stops answering is replaced once; after a second failure the engine reports `crashed`
  * and waits for `restartKernel()` (offered as a command).
  */
-import { createKernelClient, type Detail, type KernelClient } from '@pave/kernel'
+import {
+  createKernelClient,
+  type Detail,
+  type ExportFormat,
+  type ExportOptions,
+  type ExportResult,
+  type KernelClient,
+} from '@pave/kernel'
+import type { Design } from '@pave/schema'
 import { useSyncExternalStore } from 'react'
 import { assetUrl } from '../assets'
 import { createScheduler, type EvaluationScheduler, type Evaluator } from './scheduler'
@@ -31,8 +39,11 @@ export async function resolveAsset(assetId: string): Promise<Uint8Array> {
   return new Uint8Array(await res.arrayBuffer())
 }
 
-/** A draft evaluation that has not answered in this long is treated as a hung worker. */
-const WATCHDOG_MS = { draft: 45_000, production: 180_000 }
+/**
+ * An evaluation that has not answered in this long is treated as a hung worker. Production
+ * detail cuts every seat, which takes minutes for a heavily iced piece.
+ */
+const WATCHDOG_MS = { draft: 45_000, production: 900_000 }
 const EXPORT_IDLE_MS = 60_000
 
 let info: KernelInfo = { status: 'booting', kinds: [], formats: [] }
@@ -113,12 +124,23 @@ function guarded(w: Slot, detail: Detail): Evaluator {
   }
 }
 
-const touchProduction = () => {
+/** Requests running on the production worker; it is only stopped once none is. */
+let productionBusy = 0
+
+/** Runs `work` on the production worker, which stops a minute after the last job ends. */
+async function onProduction<T>(work: () => Promise<T>): Promise<T> {
+  productionBusy++
   clearTimeout(idleTimer)
-  idleTimer = setTimeout(() => {
-    production.client?.terminate()
-    production.client = null
-  }, EXPORT_IDLE_MS)
+  try {
+    return await work()
+  } finally {
+    productionBusy--
+    if (!productionBusy)
+      idleTimer = setTimeout(() => {
+        production.client?.terminate()
+        production.client = null
+      }, EXPORT_IDLE_MS)
+  }
 }
 
 const productionEvaluator = guarded(production, 'production')
@@ -127,10 +149,8 @@ const schedulers: Record<Detail, EvaluationScheduler> = {
   draft: createScheduler(() => guarded(draft, 'draft'), { assets: resolveAsset }),
   production: createScheduler(
     () => ({
-      evaluate: (design, options) => {
-        touchProduction()
-        return productionEvaluator.evaluate(design, options)
-      },
+      evaluate: (design, options) =>
+        onProduction(() => productionEvaluator.evaluate(design, options)),
     }),
     { assets: resolveAsset },
   ),
@@ -141,10 +161,15 @@ export function evaluationScheduler(detail: Detail): EvaluationScheduler {
   return schedulers[detail]
 }
 
-/** The export worker (production detail), started on demand. */
-export function exportKernel(): KernelClient {
-  touchProduction()
-  return boot(production, false)
+/** Exports on the production worker (seats cut, metal fused), never blocking the viewport. */
+export function exportDesign(
+  design: Design,
+  format: ExportFormat,
+  options: Omit<ExportOptions, 'assets'> = {},
+): Promise<ExportResult> {
+  return onProduction(() =>
+    boot(production, false).export(design, format, { ...options, assets: resolveAsset }),
+  )
 }
 
 /** Starts the draft worker early (e.g. when a Design tab opens) so WASM loads while the page renders. */
@@ -171,5 +196,3 @@ export function useKernelInfo(): KernelInfo {
     () => info,
   )
 }
-
-export const kernelInfo = (): KernelInfo => info

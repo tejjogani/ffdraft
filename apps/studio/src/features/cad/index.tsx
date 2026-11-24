@@ -7,7 +7,15 @@
  */
 import type { Diagnostic, ExportFormat } from '@pave/kernel'
 import type { Vec3 } from '@pave/render'
-import { type Design, type NodeInput, type NodeKind, nodeTitle, type Piece, type PieceSpecInput } from '@pave/schema'
+import {
+  type Design,
+  isBodyKind,
+  type NodeInput,
+  type NodeKind,
+  nodeTitle,
+  type Piece,
+  type PieceSpecInput,
+} from '@pave/schema'
 import { AiMark, Button, cn, Dialog, IconButton, Sheet, Spinner } from '@pave/ui'
 import { useNavigate } from '@tanstack/react-router'
 import { PanelLeft, PanelRight, Plus } from 'lucide-react'
@@ -22,14 +30,15 @@ import { usePieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { activeOrg, useSession } from '../../lib/session'
+import { useViewportTools } from './capture-tool'
 import { useCadCommands } from './commands'
 import { captureCover } from './cover'
-import { useViewportTools } from './capture-tool'
 import { EmptyDesign } from './empty/EmptyDesign'
 import { exportFormats, runExport } from './export'
 import { ChangeChip } from './hud/ChangeChip'
 import { Hud } from './hud/Hud'
 import { useProductionCheck } from './hud/useProductionCheck'
+import { useNodeEdit } from './inspector/edit'
 import { Inspector } from './inspector/Inspector'
 import { addNode, addPrepared, dependentsOf, remove } from './ops'
 import { AddMenu } from './outliner/AddMenu'
@@ -37,9 +46,12 @@ import { Outliner } from './outliner/Outliner'
 import { nextSteps } from './outliner/suggestions'
 import { PiecePanel } from './PiecePanel'
 import { useWorkspace } from './state/workspace'
+import { Dimensions } from './viewport/Dimensions'
 import { FileToolbar, ViewToolbar } from './viewport/Toolbar'
 
 const NARROW = '(max-width: 899px)'
+/** Workspace actions read the latest UI state without subscribing to it. */
+const ws = useWorkspace.getState
 
 function useMedia(query: string): boolean {
   const [match, setMatch] = useState(() => matchMedia(query).matches)
@@ -72,7 +84,6 @@ function Workspace({ piece }: { piece: Piece }) {
   const readOnly = role === 'viewer' || role === 'guest'
   const navigate = useNavigate()
   const kernel = useKernelInfo()
-  const ws = useWorkspace.getState
   const selection = useWorkspace((s) => s.selection)
   const stone = useWorkspace((s) => s.stone)
   const hover = useWorkspace((s) => s.hover)
@@ -80,7 +91,7 @@ function Workspace({ piece }: { piece: Piece }) {
   const display = useWorkspace((s) => s.display)
   const xray = useWorkspace((s) => s.xray)
   const simplified = useWorkspace((s) => s.simplified)
-  useEffect(() => ws().open(pieceId), [pieceId, ws])
+  useEffect(() => ws().open(pieceId), [pieceId])
 
   const view = useSessionState(session, (s) => s.view) ?? piece.design
   const settled = useSessionState(session, (s) => s.settled) ?? piece.design
@@ -90,7 +101,11 @@ function Workspace({ piece }: { piece: Piece }) {
   const redoable = useSessionState(session, canRedo) ?? false
   const version = useSessionState(session, (s) => s.version) ?? piece.version
   const { evaluation, status } = usePieceEvaluation(pieceId)
-  const check = useProductionCheck(pieceId, settled, kernel.status === 'ready' && view.order.length > 0)
+  const check = useProductionCheck(
+    pieceId,
+    settled,
+    kernel.status === 'ready' && view.order.length > 0,
+  )
 
   const viewer = useRef<Viewer | null>(null)
   const [addOpen, setAddOpen] = useState(false)
@@ -126,17 +141,23 @@ function Workspace({ piece }: { piece: Piece }) {
   const requestDelete = useCallback(
     (ids: string[]) => {
       if (!ids.length) return
-      const dependents = [...new Set(ids.flatMap((id) => dependentsOf(view, id)))].filter((d) => !ids.includes(d))
+      const dependents = [...new Set(ids.flatMap((id) => dependentsOf(view, id)))].filter(
+        (d) => !ids.includes(d),
+      )
       if (dependents.length) setConfirm({ ids, dependents })
       else {
         session?.commit(remove(ids))
         ws().select([])
       }
     },
-    [view, session, ws],
+    [view, session],
   )
 
-  const add = (kind: NodeKind, target = selection[0]) => {
+  // Without a selection, a new feature attaches to the piece's main body (a stone to the band).
+  const defaultTarget = () =>
+    selection[0] ?? view.order.toReversed().find((id) => isBodyKind(view.nodes[id]!.kind))
+
+  const add = (kind: NodeKind, target = defaultTarget()) => {
     const { ops, id } = addNode(view, kind, { target })
     if (!ops.length || !session) return
     session.commit(ops)
@@ -149,7 +170,7 @@ function Workspace({ piece }: { piece: Piece }) {
   }
 
   const buildFromSpec = async (spec: PieceSpecInput) => {
-    await rpc.call('pieces.setSpec', { id: pieceId, spec: spec as never })
+    await rpc.call('pieces.setSpec', { id: pieceId, spec })
     await rpc.call('pieces.buildFromSpec', { id: pieceId })
     await session?.resync()
   }
@@ -180,7 +201,23 @@ function Workspace({ piece }: { piece: Piece }) {
   )
 
   const empty = view.order.length === 0
-  const steps = useMemo(() => (readOnly ? [] : nextSteps(view, kernel.kinds)), [view, kernel.kinds, readOnly])
+  // A pendant is framed without its chain, which would otherwise shrink it to a speck.
+  const frameNodeIds = useMemo(() => {
+    const ids = view.order.filter((id) => view.nodes[id]!.kind !== 'chain')
+    return ids.length && ids.length < view.order.length ? ids : undefined
+  }, [view])
+  const selectedEdit = useNodeEdit(
+    selection.length === 1 ? view.nodes[selection[0]!] : undefined,
+    view,
+    session,
+    readOnly,
+    run?.prior ?? null,
+  )
+  const [viewerHandle, setViewerHandle] = useState<Viewer | null>(null)
+  const steps = useMemo(
+    () => (readOnly ? [] : nextSteps(view, kernel.kinds)),
+    [view, kernel.kinds, readOnly],
+  )
   const selectedTitle = selection.length
     ? selection.map((id) => (view.nodes[id] ? nodeTitle(view.nodes[id]!) : id)).join(', ')
     : 'Nothing'
@@ -200,7 +237,7 @@ function Workspace({ piece }: { piece: Piece }) {
             <AddMenu
               design={view}
               kinds={kernel.kinds}
-              target={selection[0]}
+              target={defaultTarget()}
               onAdd={(k) => add(k)}
               open={addOpen}
               onOpenChange={setAddOpen}
@@ -218,14 +255,26 @@ function Workspace({ piece }: { piece: Piece }) {
       prior={run?.prior ?? null}
       readOnly={readOnly}
       onDelete={requestDelete}
-      empty={<PiecePanel piece={piece} design={view} evaluation={evaluation} session={session} readOnly={readOnly} />}
+      empty={
+        <PiecePanel
+          piece={piece}
+          design={view}
+          evaluation={evaluation}
+          session={session}
+          readOnly={readOnly}
+        />
+      }
     />
   )
 
   return (
     <div className="absolute inset-0 flex min-h-[520px]">
       {!narrow && (
-        <aside data-region="outliner" aria-label="Feature list" className="w-[248px] shrink-0 border-r border-line bg-bg">
+        <aside
+          data-region="outliner"
+          aria-label="Feature list"
+          className="w-[248px] shrink-0 border-r border-line bg-bg"
+        >
           {outliner}
         </aside>
       )}
@@ -233,27 +282,48 @@ function Workspace({ piece }: { piece: Piece }) {
         <Stage
           evaluation={evaluation}
           state={viewerState}
+          frameNodeIds={frameNodeIds}
           label="3D view of the piece. Drag to orbit, right-drag or Shift-drag to pan, scroll to zoom; arrow keys orbit, F fits, 1 to 4 pick a view."
           onViewer={(v, tier) => {
             viewer.current = v
+            setViewerHandle(v)
             if (tier === 'software') {
               ws().setSimplified(true)
               if (!ws().displayChosen) ws().setDisplay('clay', false)
             }
           }}
-          onBeforeDispose={(v) => captureCover(v, piece, session?.get().version !== mountedVersion.current, !readOnly)}
+          onBeforeDispose={(v) =>
+            captureCover(v, piece, session?.get().version !== mountedVersion.current, !readOnly)
+          }
           onPick={(p, { additive }) => ws().pick(p, additive)}
           onHover={(p) => ws().setHover(p)}
         >
           {sweep > 0 && <Sweep key={sweep} />}
+          {!empty && (
+            <Dimensions viewer={viewerHandle} evaluation={evaluation} edit={selectedEdit} />
+          )}
           <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-3 [&>*]:pointer-events-auto">
             <div className="flex items-center gap-2">
-              {narrow && <IconButton icon={PanelLeft} label="Features" onClick={() => setSheet('outliner')} className="glass size-9 rounded-lg" />}
+              {narrow && (
+                <IconButton
+                  icon={PanelLeft}
+                  label="Features"
+                  onClick={() => setSheet('outliner')}
+                  className="glass size-9 rounded-lg"
+                />
+              )}
               <ViewToolbar canUndo={undoable} canRedo={redoable} />
             </div>
             <div className="flex items-center gap-2">
               <FileToolbar save={save} formats={empty ? [] : formats} simplified={simplified} />
-              {narrow && <IconButton icon={PanelRight} label="Inspector" onClick={() => setSheet('inspector')} className="glass size-9 rounded-lg" />}
+              {narrow && (
+                <IconButton
+                  icon={PanelRight}
+                  label="Inspector"
+                  onClick={() => setSheet('inspector')}
+                  className="glass size-9 rounded-lg"
+                />
+              )}
             </div>
           </div>
           {run && (
@@ -262,7 +332,9 @@ function Workspace({ piece }: { piece: Piece }) {
                 run={run}
                 undoing={revertRun.isPending}
                 onUndo={() => revertRun.mutate({ pieceId, runId: run.runId })}
-                onReview={() => void navigate({ to: '/pieces/$id/history', params: { id: pieceId } })}
+                onReview={() =>
+                  void navigate({ to: '/pieces/$id/history', params: { id: pieceId } })
+                }
                 onDismiss={() => setDismissed(run.runId)}
               />
             </div>
@@ -276,11 +348,16 @@ function Workspace({ piece }: { piece: Piece }) {
               onImport={importNode}
             />
           ) : (
-            <StageStatus status={status} coverAssetId={piece.coverAssetId} error={kernel.error} hasEvaluation={!!evaluation} />
+            <StageStatus
+              status={status}
+              coverAssetId={piece.coverAssetId}
+              error={kernel.error}
+              hasEvaluation={!!evaluation}
+            />
           )}
           {!empty && (
             <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex items-end justify-between gap-3 [&>*]:pointer-events-auto">
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex min-w-0 flex-wrap gap-1.5">
                 {steps.map((s) => (
                   <Button
                     key={s.label}
@@ -311,17 +388,35 @@ function Workspace({ piece }: { piece: Piece }) {
         </p>
       </main>
       {!narrow && (
-        <aside data-region="inspector" aria-label="Inspector" className="w-[312px] shrink-0 border-l border-line bg-bg">
+        <aside
+          data-region="inspector"
+          aria-label="Inspector"
+          className="w-[328px] shrink-0 border-l border-line bg-bg"
+        >
           {inspector}
         </aside>
       )}
       {narrow && (
         <>
-          <Sheet open={sheet === 'outliner'} onOpenChange={(o) => setSheet(o ? 'outliner' : null)} title="Features" side="left">
-            <div data-region="outliner" className="h-full">{outliner}</div>
+          <Sheet
+            open={sheet === 'outliner'}
+            onOpenChange={(o) => setSheet(o ? 'outliner' : null)}
+            title="Features"
+            side="left"
+          >
+            <div data-region="outliner" className="h-full">
+              {outliner}
+            </div>
           </Sheet>
-          <Sheet open={sheet === 'inspector'} onOpenChange={(o) => setSheet(o ? 'inspector' : null)} title="Inspector" side="right">
-            <div data-region="inspector" className="h-full">{inspector}</div>
+          <Sheet
+            open={sheet === 'inspector'}
+            onOpenChange={(o) => setSheet(o ? 'inspector' : null)}
+            title="Inspector"
+            side="right"
+          >
+            <div data-region="inspector" className="h-full">
+              {inspector}
+            </div>
           </Sheet>
         </>
       )}
@@ -390,7 +485,11 @@ function StageStatus({
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
       {coverAssetId && (
-        <img src={assetUrl(coverAssetId, 480)} alt="" className="max-h-[40%] max-w-[40%] object-contain opacity-60" />
+        <img
+          src={assetUrl(coverAssetId, 480)}
+          alt=""
+          className="max-h-[40%] max-w-[40%] object-contain opacity-60"
+        />
       )}
       <p className={cn('flex items-center gap-2 text-sm text-fg-muted')}>
         <Spinner className="size-3.5" /> Preparing the workbench…

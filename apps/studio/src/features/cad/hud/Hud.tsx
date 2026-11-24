@@ -4,8 +4,8 @@
  * production check of the current version may say "Ready to cast".
  */
 import type { Diagnostic, Evaluation } from '@pave/kernel'
-import { METALS, type MetalId, nodeTitle } from '@pave/schema'
 import type { Design } from '@pave/schema'
+import { METALS, type MetalId, nodeTitle } from '@pave/schema'
 import { Button, cn, Popover, Spinner } from '@pave/ui'
 import { Check, Crosshair, TriangleAlert, Wrench } from 'lucide-react'
 import { carats, grams, plural } from '../../../lib/format'
@@ -29,12 +29,15 @@ interface Issue {
   count: number
 }
 
-/** Problems first, then warnings; identical findings on one feature count once. Information never counts. */
+/**
+ * Problems first, then warnings; the same finding on one feature (one per stone of a pavé
+ * field, say) counts once, showing the first instance. Information never counts.
+ */
 function toCheck(ds: readonly Diagnostic[]): Issue[] {
   const groups = new Map<string, Issue>()
   for (const d of ds) {
     if (d.level === 'info') continue
-    const key = `${d.level}|${d.code}|${d.nodeId ?? ''}|${d.message}`
+    const key = `${d.level}|${d.code}|${d.nodeId ?? ''}`
     const g = groups.get(key)
     if (g) g.count++
     else groups.set(key, { d, count: 1 })
@@ -53,10 +56,13 @@ export function Hud({ design, evaluation, check, evaluating, readOnly, onShow, o
     <div
       role="status"
       aria-live="polite"
-      className="glass shadow-md flex h-9 items-center gap-3 rounded-lg pr-1.5 pl-3.5 text-sm"
+      className="glass shadow-md flex h-9 shrink-0 items-center gap-3 rounded-lg pr-1.5 pl-3.5 text-sm whitespace-nowrap"
     >
       <span className="flex items-center gap-1.5 font-mono text-xs text-fg tabular">
-        <span className="text-fg-subtle" title="Approximate until a production check: seats are not cut yet">
+        <span
+          className="text-fg-subtle"
+          title="Approximate until a production check: seats are not cut yet"
+        >
           ≈
         </span>
         {grams(r.metalMassG)}
@@ -70,13 +76,21 @@ export function Hud({ design, evaluation, check, evaluating, readOnly, onShow, o
         </>
       )}
       <span aria-hidden className="h-3.5 w-px bg-line-strong" />
-      {evaluating && <Spinner className="size-3.5" label="Updating" />}
-      <Checks design={design} issues={issues} check={check} readOnly={readOnly} onShow={onShow} onFix={onFix} />
+      <Checks
+        evaluating={evaluating}
+        design={design}
+        issues={issues}
+        check={check}
+        readOnly={readOnly}
+        onShow={onShow}
+        onFix={onFix}
+      />
     </div>
   )
 }
 
 function Checks({
+  evaluating,
   design,
   issues,
   check,
@@ -84,6 +98,7 @@ function Checks({
   onShow,
   onFix,
 }: {
+  evaluating: boolean
   design: Design
   issues: Issue[]
   check: ProductionCheck
@@ -91,15 +106,26 @@ function Checks({
   onShow(d: Diagnostic): void
   onFix(d: Diagnostic): void
 }) {
+  if (issues.length === 0 && check.state === 'failed')
+    return (
+      <span className="flex h-7 items-center px-1.5 text-xs text-fg-subtle" title={check.error}>
+        Couldn’t run the casting check
+      </span>
+    )
+  if (evaluating || (issues.length === 0 && check.state !== 'done'))
+    return (
+      <span
+        className="flex h-7 items-center gap-1.5 px-1.5 text-xs text-fg-subtle"
+        title={evaluating ? undefined : 'A casting check runs a moment after you stop editing'}
+      >
+        <Spinner className="size-3" label={evaluating ? 'Updating' : 'Checking'} />
+        {evaluating ? 'Updating…' : 'Checking…'}
+      </span>
+    )
   if (issues.length === 0)
-    return check.state === 'done' ? (
+    return (
       <span className="flex h-7 items-center gap-1.5 px-1.5 text-xs font-medium text-ok">
         <Check className="size-3.5" aria-hidden /> Ready to cast
-      </span>
-    ) : (
-      <span className="flex h-7 items-center gap-1.5 px-1.5 text-xs text-fg-subtle">
-        {check.state === 'running' ? <Spinner className="size-3" label="Checking" /> : null}
-        {check.state === 'running' ? 'Checking for casting…' : 'Not checked yet'}
       </span>
     )
   const errors = issues.some((i) => i.d.level === 'error')
@@ -126,10 +152,16 @@ function Checks({
         {issues.map(({ d, count }, i) => {
           const node = d.nodeId ? design.nodes[d.nodeId] : undefined
           return (
-            <li key={`${d.code}-${d.nodeId}-${i}`} className="flex gap-2.5 rounded-md p-2 hover:bg-bg-hover">
+            <li
+              key={`${d.code}-${d.nodeId}-${i}`}
+              className="flex gap-2.5 rounded-md p-2 hover:bg-bg-hover"
+            >
               <span
                 aria-hidden
-                className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', d.level === 'error' ? 'bg-danger' : 'bg-warn')}
+                className={cn(
+                  'mt-1.5 size-1.5 shrink-0 rounded-full',
+                  d.level === 'error' ? 'bg-danger' : 'bg-warn',
+                )}
               />
               <div className="min-w-0 flex-1">
                 {node && (

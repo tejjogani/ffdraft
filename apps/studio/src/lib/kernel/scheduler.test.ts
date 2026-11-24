@@ -17,7 +17,9 @@ function fakeKernel(ms = 5) {
       maxActive = Math.max(maxActive, ++active)
       await new Promise((r) => setTimeout(r, ms))
       active--
-      const timings = Object.fromEntries(d.order.map((id) => [id, d.nodes[id]!.kind === 'halo' ? 120 : 20]))
+      const timings = Object.fromEntries(
+        d.order.map((id) => [id, d.nodes[id]!.kind === 'halo' ? 120 : 20]),
+      )
       return { ms: 200, timings } as unknown as Evaluation
     },
   }

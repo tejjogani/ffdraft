@@ -41,7 +41,11 @@ function sphereSoup(
 
 /** An unwelded soup of an outward cube of side 4 with its lowest corner at `min`. */
 function cubeSoup(min: [number, number, number]): number[][] {
-  const v = (i: number) => [min[0] + (i & 1) * 4, min[1] + ((i >> 1) & 1) * 4, min[2] + ((i >> 2) & 1) * 4]
+  const v = (i: number) => [
+    min[0] + (i & 1) * 4,
+    min[1] + ((i >> 1) & 1) * 4,
+    min[2] + ((i >> 2) & 1) * 4,
+  ]
   const quads = [
     [0, 2, 3, 1],
     [4, 5, 7, 6],

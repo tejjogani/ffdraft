@@ -9,7 +9,7 @@ import { persist } from 'zustand/middleware'
 
 export type DisplayMode = 'rendered' | 'clay' | 'technical'
 
-export interface Pick {
+export interface NodePick {
   nodeId: string
   /** A single stone of a pavé field / row (`${nodeId}:${index}`), when one was clicked. */
   stoneId?: string
@@ -20,7 +20,7 @@ interface WorkspaceState {
   selection: string[]
   /** The stone instance a second click picked, shown read-only in the inspector. */
   stone: string | null
-  hover: Pick | null
+  hover: NodePick | null
   /** Hidden in this view only: unlike "Exclude from piece", weight and exports are unchanged. */
   hidden: string[]
   renaming: string | null
@@ -36,8 +36,8 @@ interface WorkspaceState {
   open(pieceId: string): void
   select(ids: string[], stone?: string | null): void
   /** Click on the model: first click selects the feature, a second on the same stone picks it. */
-  pick(p: Pick | null, additive?: boolean): void
-  setHover(p: Pick | null): void
+  pick(p: NodePick | null, additive?: boolean): void
+  setHover(p: NodePick | null): void
   toggleHidden(id: string): void
   setRenaming(id: string | null): void
   setDisplay(mode: DisplayMode, chosen?: boolean): void
@@ -79,7 +79,9 @@ export const useWorkspace = create<WorkspaceState>()(
         if (!p) return s.select([])
         if (additive) {
           const has = s.selection.includes(p.nodeId)
-          return s.select(has ? s.selection.filter((x) => x !== p.nodeId) : [...s.selection, p.nodeId])
+          return s.select(
+            has ? s.selection.filter((x) => x !== p.nodeId) : [...s.selection, p.nodeId],
+          )
         }
         const already = s.selection.length === 1 && s.selection[0] === p.nodeId
         s.select([p.nodeId], already && p.stoneId ? p.stoneId : null)

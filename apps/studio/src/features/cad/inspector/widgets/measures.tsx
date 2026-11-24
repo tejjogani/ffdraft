@@ -13,7 +13,14 @@ import { useState } from 'react'
 import { mm as fmtMm } from '../../../../lib/format'
 import { useWorkspace } from '../../state/workspace'
 import { useFieldEdit } from '../edit'
-import { caratOf, inSystem, sizeOptions, snapWidth, type StoneSpec, widthForCarat } from '../measures'
+import {
+  caratOf,
+  inSystem,
+  type StoneSpec,
+  sizeOptions,
+  snapWidth,
+  widthForCarat,
+} from '../measures'
 import type { InspectorRow } from '../model'
 
 const round2 = (v: number) => Math.round(v * 100) / 100
@@ -49,7 +56,7 @@ export function StoneSizeWidget({ row }: { row: InspectorRow }) {
       />
       {melee ? (
         <p
-          className="flex h-7 items-center justify-end gap-1 pr-2.5 font-mono text-xs text-fg-muted tabular"
+          className="flex h-7 items-center justify-end gap-1 pr-1 font-mono text-xs whitespace-nowrap text-fg-muted tabular"
           title="Weight of one stone"
         >
           {carat < 0.1 ? carat.toFixed(3) : carat.toFixed(2)}
@@ -138,8 +145,8 @@ export function RingSizeWidget({ row }: { row: InspectorRow }) {
       <p className="text-xs text-fg-subtle tabular">
         {shown.approx ? (
           <>
-            Saved as {formatRingSize(size)} · {SYSTEM_LABEL[system]} {formatRingSize(shown.size).replace(/^\S+ /, '')}{' '}
-            is {shown.deltaMm >= 0 ? '+' : '−'}
+            Saved as {formatRingSize(size)} · {SYSTEM_LABEL[system]}{' '}
+            {formatRingSize(shown.size).replace(/^\S+ /, '')} is {shown.deltaMm >= 0 ? '+' : '−'}
             {Math.abs(shown.deltaMm).toFixed(2)} mm
           </>
         ) : (

@@ -1,4 +1,11 @@
-import { designFrom, type NodeInput } from '@pave/schema'
+import {
+  applyOps,
+  buildDesign,
+  designFrom,
+  GEM_CUT_IDS,
+  type NodeInput,
+  TEMPLATES,
+} from '@pave/schema'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createKernel, type LocalKernel } from '../kernel'
 import { manufacturabilityDiagnostics, profileWith } from './index'
@@ -45,6 +52,18 @@ describe('manufacturability checks', () => {
     expect(codes).toContain('chain.fine')
   })
 
+  it('keeps every check running whatever the cut of a stone in the piece', async () => {
+    for (const cut of GEM_CUT_IDS) {
+      const codes = await codesOf([
+        { id: 'gem', kind: 'gem', cut, width: 4, transform: at(0, 0, 20) },
+        plate,
+        { id: 'post', kind: 'finding', type: 'earringPost', host: 'plate', wire: 0.5 },
+      ])
+      expect(codes, cut).toContain('post.thin')
+      expect(codes, cut).not.toContain('dfm.unavailable')
+    }
+  })
+
   it('checks the bail against the chain passing through it', async () => {
     const pendant = (opening: number, width: number) => [
       plate,
@@ -86,6 +105,32 @@ describe('manufacturability checks', () => {
         { id: 'ring', kind: 'finding', type: 'jumpRing', host: 'plate', length: 4, wire: 0.8 },
       ]),
     ).not.toContain('metal.disconnected')
+  })
+
+  it('finds a head that floats off its shank, but not a butterfly back', async () => {
+    const solitaire = buildDesign(TEMPLATES.find((t) => t.id === 'solitaire')!.spec)
+    const lifted = applyOps(solitaire, [
+      { t: 'update', id: 'center', patch: { transform: at(0, 0, 6) } },
+    ]).design
+    const floating = await kernel.scene(lifted, { detail: 'production' })
+    const loose = manufacturabilityDiagnostics(floating).filter(
+      (d) => d.code === 'metal.disconnected',
+    )
+    expect(loose.map((d) => d.nodeId)).toEqual(['head'])
+    const seated = await kernel.scene(solitaire, { detail: 'production' })
+    expect(manufacturabilityDiagnostics(seated).map((d) => d.code)).not.toContain(
+      'metal.disconnected',
+    )
+    expect(
+      await codesOf([plate, { id: 'back', kind: 'finding', type: 'butterfly', host: 'plate' }]),
+    ).not.toContain('metal.disconnected')
+  })
+
+  it('reports short seat walls once per node', async () => {
+    const eternity = buildDesign(TEMPLATES.find((t) => t.id === 'eternity')!.spec)
+    const scene = await kernel.scene(eternity, { detail: 'production' })
+    const walls = manufacturabilityDiagnostics(scene).filter((d) => d.code === 'seat.wall')
+    expect(new Set(walls.map((d) => d.nodeId)).size).toBe(walls.length)
   })
 
   it('finds stones that collide or sit in metal without a seat', async () => {

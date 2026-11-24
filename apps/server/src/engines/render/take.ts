@@ -6,7 +6,7 @@
  */
 import { join } from 'node:path'
 import { applyAdjustments, assessRender, resolveScene, type SceneAdjustment } from '@pave/render'
-import { type BlenderRenderResult, renderWithBlender, type RuntimeOptions } from '@pave/render/node'
+import { type BlenderRenderResult, type RuntimeOptions, renderWithBlender } from '@pave/render/node'
 import { type RenderJob, type RenderScene, RenderSceneSchema } from '@pave/schema'
 import type { RenderSubject } from '../../services'
 
@@ -58,7 +58,9 @@ export function draftOf(scene: RenderScene): RenderScene {
   const { animation: _still, ...rest } = scene
   return {
     ...rest,
+    // Spread first, so the keys keep their order and an unchanged request compares equal.
     output: {
+      ...scene.output,
       quality: 'preview',
       width: Math.round(width * k),
       height: Math.round(height * k),
@@ -106,9 +108,7 @@ export async function renderTake(o: TakeOptions): Promise<TakeResult> {
     const draft = await blend(draftScene, 0, draftIsTake ? 0.95 : 0.35)
     const issues = assessRender(draft.metrics, draftScene)
     const fixes = autoFixes(issues)
-    const tuned = fixes.length
-      ? RenderSceneSchema.safeParse(applyAdjustments(scene, fixes))
-      : null
+    const tuned = fixes.length ? RenderSceneSchema.safeParse(applyAdjustments(scene, fixes)) : null
     if (!tuned?.success && draftIsTake) {
       const assetId = await o.store(draft.files.image!, 'take')
       passes.push({ adjustments: [], issues, draftAssetId: null })

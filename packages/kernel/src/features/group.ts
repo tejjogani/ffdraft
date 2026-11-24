@@ -1,28 +1,29 @@
 /**
- * Group: organisational. Without a transform it contributes nothing — its children evaluate and
- * show as themselves. With one, it moves them as a unit: it consumes its children and carries
- * their metal, stones, cuts and additions (the evaluator then applies the group's transform),
- * and re-publishes their frames as `<child>/<frame>`.
+ * Group: organisational. It always carries its children — their metal, stones, cuts and
+ * additions — as its own output (consuming them), and re-publishes their frames as
+ * `<child>/<frame>`; the evaluator then applies the group's transform, if it has one, to the
+ * whole lot. Because a group always holds what it contains, a group nested in a moved group
+ * moves with it, and patterning a group copies everything in it.
  *
- * Nodes that reference a grouped child directly (a setting holding a grouped gem) still see the
- * child where it was built, because references point at nodes, not at the group: group a
- * setting with its gem when moving them together.
+ * Nodes outside the group that reference a grouped child (a setting holding a grouped gem, a
+ * finding hosted on a grouped body) still see the child where it was built, because references
+ * point at nodes, not at the group: dfm/groups.ts reports them when the group moves.
  */
-import { defineFeature, type Frame, type NodeResult } from '../core'
-import { composeTransform, IDENTITY, isIdentity } from '../geometry/vec'
+import { defineFeature, type Frame, IDENTITY, type NodeResult } from '../core'
 import { type Copy, copyOutput, settingStyles } from './pattern'
 
 export const group = defineFeature('group', (node, ctx) => {
-  const t = node.transform
-  if (!t || isIdentity(composeTransform(t.position, t.rotation, t.scale))) return {}
-  // A child that could not be built has already reported why; the rest still move.
+  // A child that could not be built has already reported why; the rest still come along.
   const children = node.children
     .map((id) => ctx.tryInput(id))
     .filter((r): r is NodeResult => r !== null)
   const styles = settingStyles(children)
   const out: Copy = { bodies: [], stones: [], cuts: [], additions: [] }
   const frames: Record<string, Frame> = {}
-  for (const child of children) {
+  // Hidden children stay hidden, and a child another child consumed (a boolean's operand) is
+  // already in that child's output: both are consumed, neither is carried twice.
+  const inside = new Set(children.flatMap((c) => c.consumes))
+  for (const child of children.filter((c) => c.node.visible && !inside.has(c.id))) {
     // Cut and addition targets stay as they are: the evaluator follows `consumes` to the group.
     const copy = copyOutput(child, IDENTITY, (id) => id, styles)
     out.bodies.push(...copy.bodies)

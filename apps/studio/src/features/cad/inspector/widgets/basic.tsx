@@ -205,7 +205,9 @@ export function SummaryWidget({ row }: { row: InspectorRow }) {
   const v = row.value
   const text = Array.isArray(v)
     ? row.field.widget === 'refs'
-      ? v.map((id) => (edit.design.nodes[id] ? nodeTitle(edit.design.nodes[id]!) : id)).join(', ') || 'None'
+      ? v
+          .map((id) => (edit.design.nodes[id] ? nodeTitle(edit.design.nodes[id]!) : id))
+          .join(', ') || 'None'
       : `${v.length} ${v.length === 1 ? 'point' : 'points'}`
     : typeof v === 'string'
       ? row.field.widget === 'path'

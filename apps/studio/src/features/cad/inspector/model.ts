@@ -4,13 +4,7 @@
  * choice (a stone's placement) and for grouped objects (the transform). No node kind has code
  * of its own here or in the components that render this model.
  */
-import {
-  describeNode,
-  type FieldInfo,
-  type Node,
-  type NodeKind,
-  visibleFields,
-} from '@pave/schema'
+import { describeNode, type FieldInfo, type Node, type NodeKind, visibleFields } from '@pave/schema'
 
 export interface InspectorRow {
   field: FieldInfo

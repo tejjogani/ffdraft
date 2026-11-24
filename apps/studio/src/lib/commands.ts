@@ -78,7 +78,9 @@ export function useRegisterCommands(commands: Command[]): void {
         latest.current.map((c) => ({
           ...c,
           run: () => latest.current.find((x) => x.id === c.id)?.run(),
-          ...(c.when ? { when: () => latest.current.find((x) => x.id === c.id)?.when?.() ?? false } : {}),
+          ...(c.when
+            ? { when: () => latest.current.find((x) => x.id === c.id)?.when?.() ?? false }
+            : {}),
         })),
       ),
     [signature],

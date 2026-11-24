@@ -102,6 +102,11 @@ interface Service {
   /** What this implementation adds to `session.get` → `capabilities`. */
   readonly capabilities?: Partial<Capabilities>
   /**
+   * Settles once `capabilities` are accurate (e.g. a local binary has been probed); the server
+   * waits for it before it boots, so `session.get` never reports a transient absence.
+   */
+  ready?(): Promise<void>
+  /**
    * Stops workers and child processes when the server closes. Work cut off here stays live in
    * the database, so boot recovery takes it up again.
    */
@@ -148,6 +153,8 @@ export interface RenderSubject {
 export interface GeometryCall {
   pieceId?: string
   signal?: AbortSignal
+  /** Nobody is waiting on the answer (a facts refresh): an engine may run it after other work. */
+  background?: boolean
 }
 
 export interface GeometryService extends Service {
@@ -567,11 +574,20 @@ export class ServiceRegistry {
     return out
   }
 
+  /** Waits until every registered implementation reports accurate capabilities. */
+  async ready(): Promise<void> {
+    await this.#each('Starting', (impl) => impl.ready?.())
+  }
+
   /** Disposes every registered implementation once (one object may serve several names). */
   async dispose(): Promise<void> {
+    await this.#each('Stopping', (impl) => impl.dispose?.())
+  }
+
+  async #each(verb: string, fn: (impl: Service) => Promise<void> | undefined): Promise<void> {
     const impls = new Set<Service>([...this.#registered].map((name) => this.#impls[name]))
-    const results = await Promise.allSettled([...impls].map((impl) => impl.dispose?.()))
+    const results = await Promise.allSettled([...impls].map(fn))
     for (const r of results)
-      if (r.status === 'rejected') console.error('Stopping an engine failed:', r.reason)
+      if (r.status === 'rejected') console.error(`${verb} an engine failed:`, r.reason)
   }
 }

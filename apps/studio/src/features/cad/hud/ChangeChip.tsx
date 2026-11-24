@@ -22,7 +22,8 @@ export function ChangeChip({ run, onUndo, onReview, onDismiss, undoing }: Change
       role="status"
       className="ai-gradient flex max-w-[min(560px,calc(100%-32px))] rounded-lg p-px shadow-md"
     >
-      <div className="glass-pane flex min-w-0 items-center gap-2 rounded-[7px] py-1 pr-1 pl-3 text-sm [background:var(--glass-strong)]">
+      {/* Opaque inside: the shimmer stays in the 1 px border, never behind the text. */}
+      <div className="flex min-w-0 items-center gap-2 rounded-[7px] bg-bg py-1 pr-1 pl-3 text-sm">
         <AiMark className="size-3" />
         <span className="shrink-0 font-medium text-fg">Assistant</span>
         <span className="min-w-0 truncate text-fg-muted" title={summary}>

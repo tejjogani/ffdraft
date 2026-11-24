@@ -65,7 +65,7 @@ export function FieldControl({ row }: { row: InspectorRow }) {
   const { field } = row
   const prior = edit.prior(row.path)
   const label = (
-    <span className="flex min-w-0 items-center gap-1.5" title={field.description}>
+    <span className="flex min-w-0 items-center gap-1.5" title={field.description ?? field.title}>
       <span className="truncate">{field.title}</span>
       {prior.changed && (
         <span title={`The assistant changed this (was ${String(prior.value ?? 'unset')})`}>
@@ -75,14 +75,18 @@ export function FieldControl({ row }: { row: InspectorRow }) {
     </span>
   )
   const nested = row.children.length > 0 && (
-    <div className={cn('flex flex-col gap-1', field.widget === 'variant' && 'mt-1 border-l border-line pl-3')}>
+    <div
+      className={cn(
+        'flex flex-col gap-1',
+        field.widget === 'variant' && 'mt-1 border-l border-line pl-3',
+      )}
+    >
       {row.children.map((child) => (
         <FieldControl key={child.path.join('.')} row={child} />
       ))}
     </div>
   )
-  if (field.widget === 'group')
-    return <div className="flex flex-col gap-1">{nested}</div>
+  if (field.widget === 'group') return <div className="flex flex-col gap-1">{nested}</div>
   if (WIDE.has(field.widget) || field.widget === 'variant')
     return (
       <div className="flex flex-col gap-1.5 py-1">
@@ -92,7 +96,7 @@ export function FieldControl({ row }: { row: InspectorRow }) {
       </div>
     )
   return (
-    <div className="grid min-h-8 grid-cols-[minmax(0,40%)_minmax(0,1fr)] items-center gap-3">
+    <div className="grid min-h-8 grid-cols-[minmax(0,38%)_minmax(0,1fr)] items-center gap-3">
       <div className="text-sm text-fg-muted">{label}</div>
       <div className="min-w-0">{control(field.widget, row)}</div>
     </div>

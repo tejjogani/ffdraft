@@ -1,0 +1,116 @@
+/** Eternity and half-hoop exemplars: research 09 §1 "Rows, eternity", §5 Victorian. */
+import { exemplar, us } from './define'
+
+export const ETERNITIES = [
+  exemplar({
+    id: 'eternity-classic-2mm',
+    title: 'Full eternity, 2 mm',
+    kind: 'ring',
+    archetype: 'eternity',
+    styles: ['classic'],
+    variant: 'classic',
+    build: {
+      spec: {
+        kind: 'ring',
+        archetype: 'eternity',
+        title: 'Full eternity, 2 mm',
+        summary: 'Two-millimetre rounds all the way round a flat-court platinum band.',
+        style: ['classic'],
+        metal: { alloy: 'pt950' },
+        ring: { size: us(6), bandWidthMm: 2.8, profile: 'flatCourt' },
+        stones: [{ role: 'accent', cut: 'round', setting: 'pave' }],
+      },
+    },
+    why: [
+      '2.0 mm stones on a 2.8 mm band leave 0.4 mm of wall each side.',
+      '1.9 mm under the seats all round, palm side included.',
+      'Flat-court top keeps every stone upright.',
+    ],
+    antiTwin: {
+      ops: [{ t: 'update', id: 'band', patch: { thicknessBottom: 1.5 } }],
+      fault: 'Seats under the palm cut through',
+      ruleId: 'rows.eternityBase',
+    },
+    sizeKey: { W: 2 },
+  }),
+  exemplar({
+    id: 'eternity-victorian-half-hoop',
+    title: 'Graduated half hoop',
+    kind: 'ring',
+    archetype: 'eternity',
+    styles: ['victorian'],
+    variant: 'bold',
+    build: {
+      kind: 'ring',
+      nodes: [
+        {
+          id: 'band',
+          kind: 'ringShank',
+          name: 'Band',
+          material: 'au18k-yellow',
+          size: us(6.5),
+          profile: 'flatCourt',
+          widthTop: 4.0,
+          widthBottom: 3.0,
+          thicknessTop: 2.0,
+          thicknessBottom: 1.8,
+        },
+        {
+          id: 'row',
+          kind: 'gemRow',
+          name: 'Half hoop',
+          host: 'band',
+          cut: 'round',
+          stone: 'diamond',
+          setting: 'sharedProng',
+          stoneWidth: 3.5,
+          graduateTo: 2.5,
+          coverage: 120,
+          gap: 0.2,
+        },
+      ],
+    },
+    why: [
+      'Shared claws let 3.5 mm stones sit on a 4 mm band, graduating to 2.5 at the ends.',
+      'Warm 18k yellow, the Victorian metal.',
+      'A short arc across the top: the stones swell to the centre.',
+    ],
+    antiTwin: {
+      ops: [{ t: 'update', id: 'row', patch: { stoneWidth: 3.9 } }],
+      fault: 'Stones wider than the band can grip',
+      ruleId: 'rows.sharedProng',
+    },
+    sizeKey: { W: 3.5 },
+  }),
+  exemplar({
+    id: 'eternity-delicate-pave',
+    title: 'Fine pavé eternity',
+    kind: 'ring',
+    archetype: 'eternity',
+    styles: ['delicate'],
+    variant: 'delicate',
+    build: {
+      spec: {
+        kind: 'ring',
+        archetype: 'eternity',
+        title: 'Fine pavé eternity',
+        summary: 'A row of 1.4 mm stones round a slim white-gold band.',
+        style: ['delicate'],
+        metal: { alloy: 'au18k-white' },
+        ring: { size: us(5), bandWidthMm: 2.2, profile: 'flatCourt' },
+        stones: [{ role: 'accent', cut: 'round', setting: 'pave' }],
+      },
+    },
+    why: [
+      '1.4 mm stones on 2.2 mm: the delicate eternity, 0.4 mm of wall each side.',
+      'Gaps of 0.15 mm leave room for the beads.',
+      'Rhodium-plated white gold matches the stones.',
+    ],
+    antiTwin: {
+      ops: [{ t: 'update', id: 'row', patch: { gap: 0.5 } }],
+      fault: 'Gaps that show metal between the stones',
+      ruleId: 'rows.gap',
+    },
+    sizeKey: { W: 1.4 },
+  }),
+]

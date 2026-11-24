@@ -5,7 +5,21 @@ import { addMenu, nextSteps } from './suggestions'
 import { treeRows } from './tree'
 
 const design = (id: string) => buildDesign(TEMPLATES.find((t) => t.id === id)!.spec)
-const ALL = ['ringShank', 'gem', 'setting', 'halo', 'gemRow', 'pave', 'vectorBody', 'meshBody', 'relief', 'bail', 'chain', 'primitive', 'pattern']
+const ALL = [
+  'ringShank',
+  'gem',
+  'setting',
+  'halo',
+  'gemRow',
+  'pave',
+  'vectorBody',
+  'meshBody',
+  'relief',
+  'bail',
+  'chain',
+  'primitive',
+  'pattern',
+]
 
 describe('outliner tree', () => {
   it('nests each node under what it attaches to', () => {
@@ -36,13 +50,18 @@ describe('add menu and next steps', () => {
     expect(options.find((o) => o.kind === 'ringShank')!.title).toBe('Ring band')
   })
   it('suggests icing a body, then a bail, then a chain', () => {
-    let d = designFrom('pendant', [{ id: 'trophy', kind: 'meshBody', source: { type: 'builtin', name: 'trophy' } }])
+    let d = designFrom('pendant', [
+      { id: 'trophy', kind: 'meshBody', source: { type: 'builtin', name: 'trophy' } },
+    ])
     expect(nextSteps(d, ALL).map((s) => s.label)).toEqual(['Ice it out', 'Add a bail'])
     d = applyOps(d, [{ t: 'add', node: { id: 'b', kind: 'bail', host: 'trophy' } }]).design
     expect(nextSteps(d, ALL).map((s) => s.label)).toEqual(['Ice it out', 'Hang on a chain'])
   })
   it('suggests a stone for a bare band', () => {
-    expect(nextSteps(design('wedding-band'), ALL)[0]).toMatchObject({ label: 'Add a stone', kind: 'gem' })
+    expect(nextSteps(design('wedding-band'), ALL)[0]).toMatchObject({
+      label: 'Add a stone',
+      kind: 'gem',
+    })
   })
 })
 

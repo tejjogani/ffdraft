@@ -1,0 +1,118 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`canonFor > renders stable, compact prompt text 1`] = `
+"# Canon canon-02fc8073829cd5 · ring/halo/1fc5332f276b2a
+## Rules (typical [band]; warnings give the reason)
+- ring.solitaire.bandWidth (ringShank.widthTop) 1.86 [1.5–2.79]: The band frames the stone: under 1.8 mm reads fragile and bends, over 2.4 mm on a 1 ct swamps it. Delicate needs W ≤ 6.5.
+- ring.solitaire.narrowBandDepth (ringShank.thicknessTop) 1.85 [1.75–2.2]: A band under 2 mm wide must be nearly as deep as it is wide, or the head levers it out of round.
+- ring.solitaire.elevation (gem.placement.elevation) 2.35 [2.05–2.65]: Classic sits 0.2–0.8 mm above the band; low (0.8–1.2) only in a basket or bezel; above 4 mm it catches on everything.
+- ring.solitaire.tableHeight (tableHeight) 6.38 [4.53–8.04]: Height is what the hand feels: 6–7 mm for a classic 1 ct, 7 for everyday, 10.5 only for a cocktail ring.
+- ring.head.prongWire (setting.prongDiameter) 0.95 [0.85–1.19]: Claws scale with the stone: 0.85 mm on 5 mm, 1.0 on 6.5, 1.15 on 8. Fatter looks clumsy; thinner wears through.
+- ring.head.basketRails (setting.rails) 1 [1–2]: Claws longer than three wire-widths need a rail to brace them; two rails above about 5 mm of free claw.
+- ring.head.pointsCovered (setting.prongCount) 4 [3–4]: A point is where a stone chips: each needs its own V-claw, so never fewer claws than points.
+- halo.outline (haloOutline) 1.5 [1.4–1.6]: A single halo should take the face to 1.4–1.6× the centre; past 1.7× it reads as a tyre, not a frame.
+- halo.melee (halo.stoneWidth) 1.2 [1.05–1.35]: Halo melee grows slowly with the centre: 1.1 mm round 5 mm, 1.25 round 6.5, 1.4 round 8. Bigger melee competes with the centre.
+- halo.offset (halo.offset) 0.35 [0.35–0.6]: The halo must clear the claws (wire − 0.5, at least 0.3 mm) or bezel; wider than 0.6 mm it floats loose.
+- halo.drop (halo.drop) 0.4 [0.3–0.6]: Seat the halo 0.3–0.6 mm under the girdle so the centre stands proud; never above it.
+- halo.rows (halo.rows) 1 [1–2]: A second halo only round a centre of 6 mm or more; on smaller stones it buries them.
+- ring.solitaire.thicknessTop (ringShank.thicknessTop) 1.8 [1.7–1.9]: Band thickness under the head
+- stones.softInPave (softestInPave) 10 [8–10]: Flush, channel, bar and pavé stones take the knocks face-on: only Mohs 8 and harder survive them.
+- metals.colours (metalColours) 1 [1–2]: Unity: one or two metal colours. Three reads as three pieces fighting.
+- metals.finishes (finishCount) 1 [1–2]: Unity: at most two finishes, used to separate planes; more is noise.
+- ring.head.prongCoverage (prongCoverage) 0.2 [0.1–0.35]: Metal over the girdle
+- ring.head.taper (setting.taper) 0.25 [0.2–0.3]: Head taper
+- ring.scale.headToFinger (headToFinger) 0.55 [0.3–0.8]: Head to finger
+- ring.solitaire.thicknessBottom (ringShank.thicknessBottom) 1.6 [1.5–1.8]: Band thickness at the base
+- halo.clawWire (setting.prongDiameter) 0.8 [0.8–0.9]: Claws inside a halo
+- metals.tipFamily (tipFamilies) 1 [1–1]: One claw-tip family
+- ring.head.prongsForShape (setting.prongCount) 4 [4–4]: Claws for the shape
+- ring.base.euro (euroBase) 0 [0–1]: Euro base for big heads
+- stones.lw (gem.lw) 1.05 [1–1.25]: Length to width
+- stones.whiteHead (colourlessInYellowHead) 0 [0–0]: White head for colourless stones
+- ring.scale.stoneToFinger (stoneToFinger) 0.42 [0.3–0.65]: Stone to finger
+## Exemplars
+- halo-cushion-classic, Cushion halo with pavé shoulders (halo, classic; classic): metal au18k-white, cut cushion, head basket, W 6.1, haloD 1.2, haloOffset 0.35, bandW 2.2, e 2.3, wire 0.85
+  Why: Halo melee 1.2 mm on a 6.1 mm centre takes the face to 1.6×, a frame not a tyre. The shoulder pavé matches the halo size, so the two zones read as one. The halo clears the claws by the claw wire less 0.5 mm. Bad twin: Halo jammed into the claws.
+- halo-oval-delicate, Delicate oval halo (halo, delicate; delicate): metal au14k-rose, cut oval, head basket, W 5.54, haloD 1.2, haloOffset 0.3, bandW 1.65, e 2.2, wire 0.8
+  Why: A 1.65 mm band under a 5.5 mm oval: delicate, and the halo makes it read larger. Fine 0.8 mm claws inside the halo; the halo guards the girdle. Outline 1.6× the centre: below the 1.8× limit for small stones. Bad twin: Halo melee competing with the centre.
+- halo-double-maximalist, Double halo cocktail ring (halo, bold; maximalist): metal pt950, cut cushion, head basket, W 10, haloD 1.6, haloOffset 1, bandW 5, e 2.3, wire 1.5
+  Why: A 10 mm centre on a 5 mm band: scale held steady, every element enlarged together. Two rows of 1.6 mm melee stop at 1.9× the centre. Heavy 1.5 mm claws and a euro base keep it upright. Bad twin: A 2 mm band under a 10 mm stone.
+## Cannot build: say so, offer the stand-in
+- Hidden halo → A hidden halo cannot be built: tables face up, so a deep drop makes a skirt. Record it as a maker note.
+- Antique and fancy cuts → Old European, rose, polki, tapered baguette, trapezoid and half-moon are not cuts here: name the stand-in.
+- Alloys and finishes we cannot specify → 21k, enamel, per-region plating and hand engraving are not here: pick the nearest alloy and note the rest.
+## Watch for
+- A "tyre" halo wider than 1.7× the centre
+- A stone row running into the head
+- Fat claws that hide the stone
+- A "lollipop" head: a big head on a stick of a shank
+- Band and stone out of scale with each other
+## Ask (at most three)
+- Metal, and pavé on the band or plain?"
+`;
+
+exports[`canonFor > renders stable, compact prompt text 2`] = `
+"# Canon canon-02fc8073829cd5 · pendant/icedPendant/1e6d6ad406d80c
+## Rules (typical [band]; warnings give the reason)
+- iced.thickness (vectorBody.thickness) 3.26 [2.5–4.07]: Iced pieces need depth for seats and presence: about 1.5 + 0.055 × height, 3.2 mm at 30, 5.6 at 75.
+- iced.sizeMax (pave.sizeMax) 1 [0.8–1.3]: The largest stone is the bulk of the ice: 2 % of the height, 1.0–1.2 on a micro piece, 1.5–2.0 on XL. Big melee looks coarse.
+- bail.opening (bail.opening) 6 [5.5–7.5]: The bail must pass the chain and its clasp: link + 2 mm, or 1.3× on heavy chain; under +1.5 it will not thread.
+- bail.wire (bail.wire) 1.1 [1–2.5]: A bail takes the whole weight on one bend: never under 1.0 mm of wire, more on heavy pieces.
+- iced.metalUnder (metalUnderPave) 1.85 [1.45–3.25]: Under the recessed field keep 0.65 × stone + 0.8 mm of metal; thinner and the kernel quietly drops stones.
+- iced.edge (paveEdge) 0.9 [0.5–2.5]: Rim plus margin at least 0.5 mm, never under 0.4: the outer stones need metal to be set against.
+- iced.height (bodyHeight) 51 [25–102]: Micro 25–38 mm, small 38–64, mid 64–76, standard 76–102: an iced piece left at 22 mm is a charm.
+- stones.softInPave (softestInPave) 10 [8–10]: Flush, channel, bar and pavé stones take the knocks face-on: only Mohs 8 and harder survive them.
+- metals.colours (metalColours) 1 [1–2]: Unity: one or two metal colours. Three reads as three pieces fighting.
+- metals.finishes (finishCount) 1 [1–2]: Unity: at most two finishes, used to separate planes; more is noise.
+- chain.cubanToPendant (chain.linkWidth) 3.84 [2.56–5.12]: Cuban width for the pendant
+- bail.heightRatio (bailRatio) 0.18 [0.15–0.22]: Bail to pendant
+- chain.cuban.wire (chain.wire) 1.04 [0.88–1.2]: Cuban wire
+- iced.gap (pave.gap) 0.2 [0.2–0.25]: Gap between pavé stones
+- iced.coverage (pave.coverage) 1 [1–1]: Ice level
+- iced.spread (pave.sizeMin) 0.8 [0.8–0.8]: Size spread
+- iced.rim (vectorBody.border) 0.85 [0.7–1]: Polished rim
+- chain.mensLength (chain.length) 559 [508–762]: Men's chain length
+- metals.tipFamily (tipFamilies) 1 [1–1]: One claw-tip family
+- iced.margin (pave.margin) 0.25 [0.15–0.35]: Margin inside a rim
+- iced.envelope (bodyHeight) 51 [0–70]: Caster envelope
+## Style: Iced out
+Reads right: Scale first: 50 mm and up reads across a room; 25 mm is the floor. Fully flooded fields (ice level 1) inside a polished rim that draws the silhouette. Depth: 2–4 stacked levels 0.8–1.5 mm apart, each fully iced. A chain heavy enough to carry it: Cuban 8–16 % of the pendant height. Small, even melee: 1.0–1.5 mm reads as ice; 2 mm stones read as gravel.
+Do: Ask artwork, height, ice level, stone tier and chain before anything else. Flood every field; build accents and two-tone as separate nodes. Give script one or two clean rows of stones (2.0 / 3.3 mm stroke at 1.3 mm stones). Use rhodium-plated white gold for "all ice"; yellow gold with white stones is classic too.
+Don't: Leave a hip-hop piece at default scale (22 mm). Partial ice levels on a field. Union levels of different tones. Hang 50 mm+ iced pieces on a Figaro.
+- vectorBody.thickness 1.5 + (0.055·H) [0.75·(1.5 + (0.055·H))–1.25·(1.5 + (0.055·H))]
+- pave.sizeMax melee(clamp(0.02·H, 1, 2)) [1–2]
+- pave.coverage 1 [1–1]: accents are a separate pavé node
+- vectorBody.border clamp(0.85·paveMax, 0.6, 3) [0.6–3]
+- chain.linkWidth 0.12·H [0.08·H–0.16·H]: Cuban or curb
+## Exemplars
+- iced-micro-initial, Iced initial on a tennis chain (icedPendant, delicate; iced out, hip hop): metal au14k-white, H 32, T 3.25, paveMax 1, border 0.85, chainW 3.4, opening 5.4
+  Why: Micro tier: 1.0 mm melee reads as ice at 32 mm. A 0.85 mm polished rim draws the letter. Tube bail for the round tennis chain. Bad twin: Coarse stones on a small piece.
+- iced-logo-shield, Iced shield (icedPendant, classic; iced out, hip hop): metal au14k-yellow, H 50, T 4.25, paveMax 1, border 0.85, chainW 6, opening 8
+  Why: 50 mm deep enough for seats: 4.25 mm (1.5 + 0.055 × H). A 6 mm Cuban is 12 % of the height. Rim and margin 1.1 mm: the outer stones have metal to bite. Bad twin: No rim: the outer stones have nothing to bite.
+- iced-two-level, Two-level initial plate (icedPendant, classic; iced out, hip hop): metal au14k-yellow, H 56, T 4.6, paveMax 1, border 0, chainW 7, opening 9.1
+  Why: An iced initial stands 1.2 mm proud of a polished plate: depth without a step that looks glued. The raised plate is 2.2 mm thick, enough metal under its seats. Bad twin: Levels floating apart.
+## Cannot build: say so, offer the stand-in
+- Antique and fancy cuts → Old European, rose, polki, tapered baguette, trapezoid and half-moon are not cuts here: name the stand-in.
+- Alloys and finishes we cannot specify → 21k, enamel, per-region plating and hand engraving are not here: pick the nearest alloy and note the rest.
+- Scooped backs → An outline body cannot be scooped, so it is heavier than a listing: compare its mass with the solid figure.
+- Pavé on chain links → Links cannot carry pavé here: an iced Cuban is a maker note on a plain Cuban, or a tennis chain instead.
+- Chain styles we cannot model → Franco, herringbone, snake and paperclip are not here, nor bezel tennis: offer the nearest of the seven.
+- scooped back → quote the solid mass; note the maker may scoop
+## Watch for
+- Default scale: a hip-hop pendant left at 22 mm
+- Illegible iced text: strokes too thin for a clean row
+- An under-built bail on a heavy piece
+- Ragged pavé: bald patches and uneven row ends
+- A front-only design: the profile and back never considered
+## Ask (at most three)
+- Artwork and height?
+- Ice level and stone tier: natural, lab or moissanite?
+- Chain style, width and length?"
+`;
+
+exports[`canonFor > renders stable, compact prompt text 3`] = `
+"Canon canon-02fc8073829cd5 · ring/solitaire/06159126466276
+Rules: ring.solitaire.bandWidth, ring.solitaire.narrowBandDepth, ring.solitaire.elevation, ring.solitaire.tableHeight, ring.head.prongWire, ring.head.basketRails, ring.head.pointsCovered, ring.solitaire.thicknessTop, metals.colours, metals.finishes, ring.head.clawSymmetry, ring.head.prongCoverage, ring.head.taper, ring.scale.headToFinger, ring.solitaire.thicknessBottom, ring.head.prongCountRound, metals.tipFamily, ring.head.clawPosition, ring.base.euro, stones.whiteHead, ring.scale.stoneToFinger
+Styles: none
+Exemplars: sol-classic-round, sol-edwardian-six-claw, sol-minimal-bezel"
+`;

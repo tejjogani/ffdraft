@@ -2,44 +2,55 @@
  * Wire link styles. Each style is one or two parametric links (a centreline and a section in
  * link-local space: x along the chain, y across it, z out of the chain's face) and a repeating
  * sequence of orientations. Pitches are not tabulated: they are solved from the geometry
- * (contact.ts), so any width/wire pair the schema allows interlocks without intersecting.
+ * (contact.ts) against every link close enough to touch, laid straight and bent to the drape's
+ * tightest radius, so any width/wire pair the schema allows interlocks without intersecting.
  *
  * Proportions follow docs/research/06-freeform.md §6 where it gives them (Cuban: link length
- * ≈ 1.35·W, pitch ≈ L − 2·wire; figaro: 3 short + 1 long); the rest are typical stock chain.
+ * ≈ 1.35·W, pitch ≈ L − 2·wire, i.e. pulled taut; figaro: 3 short + 1 long; rope:
+ * helix-instanced links); the rest are typical stock chain.
  */
 
-import { circleLoop, type Loop, roundedRectLoop } from '../../geometry/loop'
+import { circleLoop } from '../../geometry/loop'
 import { IDENTITY, type Mat4, multiply, type Vec3 } from '../../geometry/vec'
-import { type Centreline, sampleCurve } from './centreline'
-import { clearance, InterlockError, linking, moveLoop, pitchRange, type WireLoop } from './contact'
+import { boxChain } from './box'
+import { sampleCurve } from './centreline'
+import {
+  atTightestBend,
+  densePitch,
+  GAP_RATIO,
+  InterlockError,
+  type LinkRun,
+  moveLoop,
+  runClears,
+  tautPitch,
+  type WireLoop,
+} from './contact'
+import type { Template } from './instances'
+import { type WireLink, wireTemplate } from './wireTemplate'
 
-export interface WireLink {
-  /** The centreline at `count` samples. */
-  centreline(count: number): Centreline
-  /** The wire's section, drawn as (side, up). */
-  profile: Loop
-  /** Radius of the circle around the section, for clearance tests. */
-  radius: number
-  /** Faces ground flat to |z| ≤ flat — the diamond cut of curb and Cuban chain. */
-  flat?: number
-}
-
-export interface WireChain {
-  links: WireLink[]
-  /** One repeat of the chain: which link, rotated how about its own centre. */
-  period: { link: number; orient: Mat4 }[]
+/** What a link style contributes to a chain, before layout. */
+export interface LinkSet {
+  templates: Template[]
+  /** One repeat of the chain: which template, rotated how about its own centre. */
+  period: { template: number; orient: Mat4 }[]
   /** Centre-to-centre distance from each period element to the next. */
   pitches: number[]
   /** Half-extents of the chain section: across the face (y) and through it (z). */
   half: { y: number; z: number }
   /** The wire actually used, when the requested one had to be thinned to interlock. */
   wire: number
+  /** Longest link along the chain. */
+  linkLength: number
+  /** Tightest radius the chain bends to (about its face normal) with every link still clear. */
+  minBend: number
 }
 
 /** Samples per centreline when solving contacts: plenty for a smooth loop, cheap to compare. */
 const CONTACT_SAMPLES = 48
-/** Air left between wires so links never touch, even on the drape's tightest bend. */
-const GAP_RATIO = 0.06
+/** Sweep stations around a link: enough for the twisted ovals to stay true to their centreline. */
+const LINK_STATIONS = 24
+/** Links checked beyond the ones a link threads: enough to reach past any link it can touch. */
+const NEIGHBOURS = 3
 
 /** Rotation about the chain axis (x). */
 export function roll(angle: number): Mat4 {
@@ -47,8 +58,6 @@ export function roll(angle: number): Mat4 {
   const s = Math.sin(angle)
   return [1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1]
 }
-
-const shifted = (m: Mat4, x: number): Mat4 => [...m.slice(0, 12), m[12]! + x, m[13]!, m[14]!, 1]
 
 /**
  * A rounded oval centreline: superellipse with semi-axes a (x) and b (y). `twist` rotates the
@@ -61,7 +70,6 @@ function ovalLink(
   squareness: number,
   radius: number,
   twist?: (x: number) => number,
-  flat?: number,
 ): WireLink {
   const e = 2 / squareness
   const base = (t: number): Vec3 => {
@@ -85,49 +93,63 @@ function ovalLink(
       ),
     profile: circleLoop(radius),
     radius,
-    ...(flat !== undefined && { flat }),
   }
 }
 
-const contactLoop = (link: WireLink, orient: Mat4, x = 0): WireLoop =>
-  moveLoop(
-    { points: link.centreline(CONTACT_SAMPLES).points, radius: link.radius },
-    shifted(orient, x),
-  )
+/** A link's centreline loop, rotated about its centre. */
+const contactLoop = (link: WireLink, orient: Mat4): WireLoop =>
+  moveLoop({ points: link.centreline(CONTACT_SAMPLES).points, radius: link.radius }, orient)
 
-/** Largest |z| a link's surface reaches. */
-function reach(link: WireLink): number {
+/** Largest |coordinate k| a link's surface reaches. */
+function reach(link: WireLink, k: 0 | 1 | 2): number {
   const { points } = link.centreline(CONTACT_SAMPLES)
-  let z = 0
-  for (let i = 2; i < points.length; i += 3) z = Math.max(z, Math.abs(points[i]!))
-  return z + link.radius
+  let v = 0
+  for (let i = k; i < points.length; i += 3) v = Math.max(v, Math.abs(points[i]!))
+  return v + link.radius
 }
+
+/** Links of one shape repeating with a uniform pitch. */
+const uniformRun = (period: readonly WireLoop[], pitch: number, count: number): LinkRun => ({
+  count,
+  loop: (k) => period[k % period.length]!,
+  centre: (k) => k * pitch,
+})
 
 /** Interlocking needs room for one wire inside the other link: inner width > wire + gap. */
 const maxWire = (width: number): number => width / (3 + 2 * GAP_RATIO)
 
-function cable(width: number, wire: number): WireChain {
-  const r = wire / 2
-  // Stock cable links are about 1.4× as long as they are wide.
-  const link = ovalLink((1.4 * width - wire) / 2, (width - wire) / 2, 2.4, r)
+/** A one-link-shape style pulled taut: each link threads the next, at the tightest bend that clears. */
+function tautChain(
+  link: WireLink,
+  orients: readonly Mat4[],
+  wire: number,
+  half: LinkSet['half'],
+): LinkSet {
+  const linkLength = 2 * reach(link, 0)
+  const loops = orients.map((o) => contactLoop(link, o))
   const gap = GAP_RATIO * wire
-  const turned = roll(Math.PI / 2)
-  const pitch = pitchRange(
-    (p) => [contactLoop(link, IDENTITY), contactLoop(link, turned, p)],
-    1.4 * width,
-    wire / 8,
-    gap,
-  ).max
+  const { solved: pitch, minBend } = atTightestBend(linkLength, (bend) =>
+    tautPitch(
+      (p) => runClears(uniformRun(loops, p, 2 + NEIGHBOURS), 1, gap, bend),
+      linkLength,
+      wire / 8,
+    ),
+  )
   return {
-    links: [link],
-    period: [
-      { link: 0, orient: IDENTITY },
-      { link: 0, orient: turned },
-    ],
-    pitches: [pitch, pitch],
-    half: { y: width / 2, z: width / 2 },
+    templates: [wireTemplate(link, LINK_STATIONS)],
+    period: orients.map((orient) => ({ template: 0, orient })),
+    pitches: orients.map(() => pitch),
+    half,
     wire,
+    linkLength,
+    minBend,
   }
+}
+
+function cable(width: number, wire: number): LinkSet {
+  // Stock cable links are about 1.4× as long as they are wide.
+  const link = ovalLink((1.4 * width - wire) / 2, (width - wire) / 2, 2.4, wire / 2)
+  return tautChain(link, [IDENTITY, roll(Math.PI / 2)], wire, { y: width / 2, z: width / 2 })
 }
 
 /**
@@ -147,187 +169,121 @@ function curbLink(
   const a = (length - wire) / 2
   const twist = (x: number) => tilt * Math.sin((Math.PI / 2) * Math.max(-1, Math.min(1, x / a)))
   const raw = ovalLink(a, (width - wire) / 2, 2.2, r, twist)
-  return cut > 0 ? { ...raw, flat: reach(raw) - cut * wire } : raw
-}
-
-/** Taut pitch, or for nested links the tightest pitch at which they still clear each other. */
-function curbPitch(a: WireLink, b: WireLink, wire: number, start: number, nested = false): number {
-  const range = pitchRange(
-    (p) => [contactLoop(a, IDENTITY), contactLoop(b, IDENTITY, p)],
-    start,
-    wire / 8,
-    GAP_RATIO * wire,
-  )
-  return nested ? range.min : range.max
+  return cut > 0 ? { ...raw, flat: reach(raw, 2) - cut * wire } : raw
 }
 
 interface CurbProportions {
   length: number
   tilt: number
   cut: number
-  /**
-   * Links pressed together until they nest, rather than pulled taut: the Cuban look. This packs
-   * tighter than the L − 2·wire rule of thumb in 06-freeform.md §6 (≈ 0.55·L instead of 0.6–0.7·L
-   * at the recipe's 0.26·W wire), because the rule leaves visible play between the links.
-   */
-  nested: boolean
 }
 
-/** Curb: open links, light facet. Cuban/Miami: heavy wire, long links nested tight, deep facet. */
-const CURB: CurbProportions = { length: 1.45, tilt: (38 * Math.PI) / 180, cut: 0.12, nested: false }
-const CUBAN: CurbProportions = { length: 1.35, tilt: (48 * Math.PI) / 180, cut: 0.3, nested: true }
+/**
+ * Curb: open links, light facet. Cuban/Miami: heavy wire, links twisted further so they nest
+ * into each other when pulled taut, deep facet (06-freeform.md §6).
+ */
+const CURB: CurbProportions = { length: 1.45, tilt: (38 * Math.PI) / 180, cut: 0.12 }
+const CUBAN: CurbProportions = { length: 1.35, tilt: (48 * Math.PI) / 180, cut: 0.3 }
 
-function curb(width: number, wire: number, p: CurbProportions): WireChain {
+function curb(width: number, wire: number, p: CurbProportions): LinkSet {
   const link = curbLink(p.length * width, width, wire, p.tilt, p.cut)
-  const pitch = curbPitch(link, link, wire, p.length * width, p.nested)
-  return {
-    links: [link],
-    period: [{ link: 0, orient: IDENTITY }],
-    pitches: [pitch],
-    half: { y: width / 2, z: link.flat ?? reach(link) },
-    wire,
-  }
+  return tautChain(link, [IDENTITY], wire, { y: width / 2, z: link.flat ?? reach(link, 2) })
 }
 
 /** Figaro: a flattened curb in a 3 short + 1 long rhythm (06-freeform.md §6). */
-function figaro(width: number, wire: number): WireChain {
+function figaro(width: number, wire: number): LinkSet {
   const short = curbLink(1.3 * width, width, wire, CURB.tilt, CURB.cut)
   const long = curbLink(2.6 * width, width, wire, CURB.tilt, CURB.cut)
-  const ss = curbPitch(short, short, wire, 1.3 * width)
-  const sl = curbPitch(short, long, wire, 1.95 * width)
-  const ls = curbPitch(long, short, wire, 1.95 * width)
+  const shapes = [short, short, short, long]
+  const loops = [contactLoop(short, IDENTITY), contactLoop(long, IDENTITY)]
+  const sequence = [0, 0, 0, 1]
+  const lengths = shapes.map((l) => 2 * reach(l, 0))
+  const gap = GAP_RATIO * wire
+  const { solved: pitches, minBend } = atTightestBend(2 * reach(short, 0), (bend) => {
+    // Each pair pulled taut on its own…
+    const pair = (a: number, b: number) =>
+      tautPitch(
+        (p) =>
+          runClears(
+            { count: 2, loop: (k) => loops[k === 0 ? a : b]!, centre: (k) => k * p },
+            1,
+            gap,
+            bend,
+          ),
+        (lengths[a]! + lengths[b]!) / 2,
+        wire / 8,
+      )
+    const ss = pair(0, 0)
+    const sl = pair(0, 1)
+    const ls = pair(1, 0)
+    const pitches = [ss, ss, sl, ls]
+    // …then every link checked against the next few as they actually fall.
+    for (let start = 0; start < sequence.length; start++) {
+      const run: LinkRun = {
+        count: 2 + NEIGHBOURS,
+        loop: (k) => loops[sequence[(start + k) % 4]!]!,
+        centre: (k) => {
+          let s = 0
+          for (let i = 0; i < k; i++) s += pitches[(start + i) % 4]!
+          return s
+        },
+      }
+      if (!runClears(run, 1, gap, bend)) throw new InterlockError()
+    }
+    return pitches
+  })
   return {
-    links: [short, long],
-    period: [0, 0, 0, 1].map((link) => ({ link, orient: IDENTITY })),
-    pitches: [ss, ss, sl, ls],
+    templates: [wireTemplate(short, LINK_STATIONS), wireTemplate(long, LINK_STATIONS)],
+    period: sequence.map((template) => ({ template, orient: IDENTITY })),
+    pitches,
     half: { y: width / 2, z: Math.max(short.flat ?? 0, long.flat ?? 0) },
     wire,
+    linkLength: Math.max(...lengths),
+    minBend,
   }
 }
 
 /**
- * Rope: round links on the chain axis, each tilted steeply and turned a third of a turn from
- * the last, so that every link threads the next two (contact.ts checks both) and their crossing
- * wires spiral like a laid rope. Found by searching tilt × turn for the densest packing that
- * stays clear; links need about 6 wire diameters across to make room for two wires inside.
+ * Rope: long oval links whose planes almost contain the chain axis (leaning back `ROPE_LEAN`),
+ * each turned a fifth of a turn from the last and threading the next four. Their outer wires
+ * then line up into the diagonal strands of a laid rope (helix-instanced, 06-freeform.md §6).
+ * Found by searching aspect × lean × turn × threads for the look, with the contact solver
+ * checking every candidate; four threads need about eight wire diameters across the link.
  */
-const ROPE_TILT = (70 * Math.PI) / 180
-const ROPE_TURN = (2 * Math.PI) / 3
-const ROPE_WIRE_RATIO = 6
+const ROPE_ASPECT = 1.6
+const ROPE_LEAN = (10 * Math.PI) / 180
+const ROPE_TURN = (2 * Math.PI) / 5
+const ROPE_THREADS = 4
+const ROPE_WIRE_RATIO = 8
 
-function rope(width: number, wire: number): WireChain {
+function rope(width: number, wire: number): LinkSet {
   const d = Math.min(wire, width / ROPE_WIRE_RATIO)
-  const R = (width - d) / 2
-  const link = ovalLink(R, R, 2, d / 2)
-  // Drawn in XY; stood up across the chain, then leaned back by the tilt about y.
-  const c = Math.cos(ROPE_TILT)
-  const s = Math.sin(ROPE_TILT)
-  const tilted: Mat4 = [s, 0, c, 0, 0, 1, 0, 0, -c, 0, s, 0, 0, 0, 0, 1]
-  const orientOf = (k: number): Mat4 => multiply(roll(k * ROPE_TURN), tilted)
-  const loopAt = (k: number, step: number) => contactLoop(link, orientOf(k), k * step)
-  const gap = GAP_RATIO * d
-  const clear = (step: number) => {
-    const first = loopAt(0, step)
-    for (let k = 1; k <= 8; k++) if (clearance(first, loopAt(k, step)) < gap) return false
-    return [1, 2].every((k) => Math.abs(Math.abs(linking(first, loopAt(k, step))) - 1) < 0.25)
-  }
-  let step = d / 4
-  while (step < 2 * width && !clear(step)) step += d / 8
-  if (step >= 2 * width) throw new InterlockError()
-  let lo = step - d / 8
-  let hi = step
-  for (let i = 0; i < 10; i++) {
-    const mid = (lo + hi) / 2
-    if (clear(mid)) hi = mid
-    else lo = mid
-  }
+  const link = ovalLink((ROPE_ASPECT * width - d) / 2, (width - d) / 2, 2, d / 2)
+  // Drawn in XY (the plane holding the axis), then leaned back about y.
+  const c = Math.cos(ROPE_LEAN)
+  const s = Math.sin(ROPE_LEAN)
+  const leaned: Mat4 = [c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1]
   // One full turn per repeat, so a closed rope joins up.
-  const period = Array.from({ length: 3 }, (_, k) => ({ link: 0, orient: orientOf(k) }))
+  const orients = Array.from({ length: 5 }, (_, k) => multiply(roll(k * ROPE_TURN), leaned))
+  const loops = orients.map((o) => contactLoop(link, o))
+  const linkLength = 2 * reach(link, 0)
+  const gap = GAP_RATIO * d
+  const { solved: pitch, minBend } = atTightestBend(linkLength, (bend) =>
+    densePitch(
+      (p) =>
+        runClears(uniformRun(loops, p, 1 + ROPE_THREADS + NEIGHBOURS), ROPE_THREADS, gap, bend),
+      d / 16,
+      linkLength,
+    ),
+  )
   return {
-    links: [link],
-    period,
-    pitches: period.map(() => hi),
+    templates: [wireTemplate(link, LINK_STATIONS)],
+    period: orients.map((orient) => ({ template: 0, orient })),
+    pitches: orients.map(() => pitch),
     half: { y: width / 2, z: width / 2 },
     wire: d,
-  }
-}
-
-/**
- * Box (Venetian): square links of flat strip, each folded into a shallow cup so that the next
- * link, turned a quarter, sits inside it. From the side the chain reads as a row of boxes.
- */
-/**
- * How far the cross bars are folded out of the link's plane, as a fraction of its half-width.
- * Deeper cups no longer thread through a quarter-turned neighbour of the same size (checked
- * with the contact solver), so the box look comes from the square links and flat strip.
- */
-const BOX_FOLD = 0.35
-
-function box(width: number, wire: number): WireChain {
-  const strip = Math.min(wire, width / 5.5)
-  const half = (width - strip) / 2
-  const corner = strip * 0.9
-  // Square loop in XY whose two cross bars (x = ±half) are folded up out of its plane.
-  const loop = (t: number): Vec3 => {
-    const u = t * 4
-    const side = Math.floor(u) % 4
-    const f = u - Math.floor(u)
-    // Walk the square with rounded corners: each side is a straight run then a quarter turn.
-    const run = 2 * (half - corner)
-    const arc = (Math.PI / 2) * corner
-    const s = f * (run + arc)
-    let x: number
-    let y: number
-    if (s < run) {
-      x = -half + corner + s
-      y = -half
-    } else {
-      const angle = (s - run) / corner - Math.PI / 2
-      x = half - corner + corner * Math.cos(angle)
-      y = -half + corner + corner * Math.sin(angle)
-    }
-    const rotations = [
-      [x, y],
-      [-y, x],
-      [-x, -y],
-      [y, -x],
-    ] as const
-    const [px, py] = rotations[side]!
-    // Fold: the cross bars rise, the long sides stay down; blend over the corner radius.
-    const fold = Math.min(1, Math.max(0, (Math.abs(px) - (half - corner)) / corner))
-    return [px, py, BOX_FOLD * half * (2 * fold * fold * (3 - 2 * fold) - 1)]
-  }
-  const link: WireLink = {
-    centreline: (count) =>
-      sampleCurve(
-        loop,
-        (t) => {
-          const [, y, z] = loop(t)
-          return [0, y, z]
-        },
-        count,
-        true,
-      ),
-    profile: roundedRectLoop(strip, strip, corner / 3),
-    // The rounded square is tested as its circumscribed circle: conservative, never touching.
-    radius: Math.hypot(strip / 2 - corner / 3, strip / 2 - corner / 3) + corner / 3,
-  }
-  const turned = roll(Math.PI / 2)
-  const pitch = pitchRange(
-    (p) => [contactLoop(link, IDENTITY), contactLoop(link, turned, p)],
-    width,
-    strip / 8,
-    GAP_RATIO * strip,
-  ).max
-  return {
-    links: [link],
-    period: [
-      { link: 0, orient: IDENTITY },
-      { link: 0, orient: turned },
-    ],
-    pitches: [pitch, pitch],
-    half: { y: width / 2, z: width / 2 },
-    wire: strip,
+    linkLength,
+    minBend,
   }
 }
 
@@ -337,7 +293,7 @@ export type WireStyle = 'cable' | 'curb' | 'cuban' | 'figaro' | 'rope' | 'box'
 const THINNING = 0.85
 const RETRIES = 5
 
-function build(style: WireStyle, width: number, wire: number): WireChain {
+function build(style: WireStyle, width: number, wire: number): LinkSet {
   switch (style) {
     case 'cable':
       return cable(width, wire)
@@ -350,7 +306,7 @@ function build(style: WireStyle, width: number, wire: number): WireChain {
     case 'rope':
       return rope(width, wire)
     case 'box':
-      return box(width, wire)
+      return boxChain(width, wire)
   }
 }
 
@@ -358,7 +314,7 @@ function build(style: WireStyle, width: number, wire: number): WireChain {
  * The link set and rhythm for a wire chain style. A wire too thick to thread through links this
  * wide is thinned until it does (the result reports the wire used).
  */
-export function wireChain(style: WireStyle, width: number, requestedWire: number): WireChain {
+export function wireChain(style: WireStyle, width: number, requestedWire: number): LinkSet {
   let wire = Math.min(requestedWire, maxWire(width))
   for (let attempt = 0; ; attempt++) {
     try {

@@ -158,10 +158,13 @@ export function createDesignSession(
           if (kind === 'retry') {
             offlineAttempts++
             update((s) => s)
-            retryTimer = setTimeout(() => {
-              retryTimer = undefined
-              pump()
-            }, backoff(offlineAttempts - 1))
+            retryTimer = setTimeout(
+              () => {
+                retryTimer = undefined
+                pump()
+              },
+              backoff(offlineAttempts - 1),
+            )
             return
           }
           offlineAttempts = 0

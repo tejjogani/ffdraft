@@ -3,7 +3,15 @@
  * stones it carries — and how to get going.
  */
 import type { Evaluation } from '@pave/kernel'
-import { type Design, GEM_CUTS, type GemCutId, METALS, type MetalId, PIECE_KINDS, type Piece } from '@pave/schema'
+import {
+  type Design,
+  GEM_CUTS,
+  type GemCutId,
+  METALS,
+  type MetalId,
+  PIECE_KINDS,
+  type Piece,
+} from '@pave/schema'
 import { ScrollArea, Select } from '@pave/ui'
 import { MousePointerClick } from 'lucide-react'
 import type { DesignSession } from '../../lib/design-session/store'
@@ -46,20 +54,29 @@ export function PiecePanel({
             />
           </div>
         </section>
-        {r && size && (
+        {r && size && r.metals.length + r.stoneCount > 0 && (
           <section className="border-b border-line px-4 py-3">
-            <h3 className="mb-2 text-2xs font-medium tracking-wide text-fg-subtle uppercase">Facts</h3>
+            <h3 className="mb-2 text-2xs font-medium tracking-wide text-fg-subtle uppercase">
+              Facts
+            </h3>
             <dl className="grid grid-cols-[minmax(0,40%)_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
               {r.metals.map((m) => (
-                <Fact key={m.material} label={m.material in METALS ? METALS[m.material as MetalId].label : m.material}>
+                <Fact
+                  key={m.material}
+                  label={m.material in METALS ? METALS[m.material as MetalId].label : m.material}
+                >
                   ≈ {grams(m.massG)}
                 </Fact>
               ))}
-              <Fact label="Size">
-                {size.map((v) => v.toFixed(1)).join(' × ')} mm
-              </Fact>
-              {r.ringInnerDiameter !== undefined && <Fact label="Finger">⌀ {mm(r.ringInnerDiameter)}</Fact>}
-              {r.stoneCount > 0 && <Fact label="Stones">{plural(r.stoneCount, 'stone')} · {carats(r.caratTotal)}</Fact>}
+              <Fact label="Size">{size.map((v) => v.toFixed(1)).join(' × ')} mm</Fact>
+              {r.ringInnerDiameter !== undefined && (
+                <Fact label="Finger">⌀ {mm(r.ringInnerDiameter)}</Fact>
+              )}
+              {r.stoneCount > 0 && (
+                <Fact label="Stones">
+                  {plural(r.stoneCount, 'stone')} · {carats(r.caratTotal)}
+                </Fact>
+              )}
             </dl>
             {r.lots.length > 0 && (
               <ul className="mt-3 flex flex-col gap-1">
@@ -78,8 +95,8 @@ export function PiecePanel({
         <div className="flex gap-2.5 px-4 py-4 text-xs text-fg-muted">
           <MousePointerClick className="mt-0.5 size-4 shrink-0 text-fg-subtle" aria-hidden />
           <p className="text-pretty">
-            Click a part of the model or a feature in the list to change it. Drag a value’s name to scrub
-            it; the model follows.
+            Click a part of the model or a feature in the list to change it. Drag a value’s name to
+            scrub it; the model follows.
           </p>
         </div>
       </ScrollArea>

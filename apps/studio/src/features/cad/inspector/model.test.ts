@@ -3,8 +3,8 @@ import {
   buildDesign,
   type Design,
   describeNode,
-  type Node,
   NODE_KINDS,
+  type Node,
   NodeSchema,
   TEMPLATES,
 } from '@pave/schema'
@@ -24,7 +24,11 @@ describe('inspector model', () => {
     const kinds = new Set(allNodes.map((n) => n.kind))
     expect(kinds.size).toBeGreaterThan(10)
     for (const node of allNodes) {
-      const keys = new Set(rowsOf(node, true).filter((r) => r.path.length === 1).map((r) => r.field.key))
+      const keys = new Set(
+        rowsOf(node, true)
+          .filter((r) => r.path.length === 1)
+          .map((r) => r.field.key),
+      )
       for (const f of describeNode(node.kind).fields) {
         const hidden = Object.entries(f.meta.when ?? {}).some(
           ([k, allowed]) => !allowed.includes((node as never)[k] as never),
@@ -39,7 +43,10 @@ describe('inspector model', () => {
       const fields = describeNode(kind).fields
       for (const f of fields)
         for (const k of Object.keys(f.meta.when ?? {}))
-          expect(fields.map((x) => x.key), `${kind}.${f.key}`).toContain(k)
+          expect(
+            fields.map((x) => x.key),
+            `${kind}.${f.key}`,
+          ).toContain(k)
     }
   })
 
@@ -47,8 +54,12 @@ describe('inspector model', () => {
     const setting = nodeOf(designs[0]!, 'setting')
     const basic = inspectorModel(setting)
     const fine = inspectorModel(setting, { advanced: true })
-    expect(flat(basic.sections.flatMap((s) => s.rows)).map((r) => r.field.key)).not.toContain('prongSpin')
-    expect(flat(fine.sections.flatMap((s) => s.rows)).map((r) => r.field.key)).toContain('prongSpin')
+    expect(flat(basic.sections.flatMap((s) => s.rows)).map((r) => r.field.key)).not.toContain(
+      'prongSpin',
+    )
+    expect(flat(fine.sections.flatMap((s) => s.rows)).map((r) => r.field.key)).toContain(
+      'prongSpin',
+    )
     expect(basic.advanced).toBe(fine.advanced)
     expect(basic.advanced).toBeGreaterThan(0)
   })
@@ -80,14 +91,33 @@ describe('inspector model', () => {
     expect(placement.children.map((r) => r.path.join('.'))).toEqual(
       expect.arrayContaining(['placement.shank', 'placement.angle']),
     )
-    const free = applyOps(designs[0]!, [{ t: 'update', id: gem.id, patch: { placement: { type: 'free', shank: null, angle: null, elevation: null, spin: null } } }]).design
-    expect(rowsOf(free.nodes[gem.id]!).find((r) => r.field.key === 'placement')!.children).toEqual([])
+    const free = applyOps(designs[0]!, [
+      {
+        t: 'update',
+        id: gem.id,
+        patch: {
+          placement: { type: 'free', shank: null, angle: null, elevation: null, spin: null },
+        },
+      },
+    ]).design
+    expect(rowsOf(free.nodes[gem.id]!).find((r) => r.field.key === 'placement')!.children).toEqual(
+      [],
+    )
   })
 
   it('uses the library widgets for metals and stones', () => {
-    const halo = nodeOf(designs.find((d) => Object.values(d.nodes).some((n) => n.kind === 'halo'))!, 'halo')
+    const halo = nodeOf(
+      designs.find((d) => Object.values(d.nodes).some((n) => n.kind === 'halo'))!,
+      'halo',
+    )
     const widgets = Object.fromEntries(rowsOf(halo).map((r) => [r.field.key, r.field.widget]))
-    expect(widgets).toMatchObject({ material: 'metal', finish: 'finish', cut: 'cut', stone: 'stone', stoneWidth: 'stoneSize' })
+    expect(widgets).toMatchObject({
+      material: 'metal',
+      finish: 'finish',
+      cut: 'cut',
+      stone: 'stone',
+      stoneWidth: 'stoneSize',
+    })
   })
 })
 

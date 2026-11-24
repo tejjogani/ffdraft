@@ -12,8 +12,6 @@ export function setLiveViewer(viewer: Viewer | null): void {
   live = viewer
 }
 
-export const hasLiveViewer = (): boolean => live !== null
-
 /** Paints the stage sweep (`--stage-a` → `--stage-b`) so captures match what the designer sees. */
 function stageBackground(ctx: CanvasRenderingContext2D, size: number): void {
   const css = getComputedStyle(document.documentElement)

@@ -5,7 +5,16 @@
  */
 import type { Diagnostic } from '@pave/kernel'
 import { type Design, nodeTitle } from '@pave/schema'
-import { AiMark, cn, ContextMenu, IconButton, Input, MenuItem, MenuSeparator, ScrollArea } from '@pave/ui'
+import {
+  AiMark,
+  ContextMenu,
+  cn,
+  IconButton,
+  Input,
+  MenuItem,
+  MenuSeparator,
+  ScrollArea,
+} from '@pave/ui'
 import { ChevronRight, Eye, EyeOff } from 'lucide-react'
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import type { DesignSession } from '../../../lib/design-session/store'
@@ -25,7 +34,15 @@ export interface OutlinerProps {
   header: React.ReactNode
 }
 
-export function Outliner({ design, diagnostics, session, aiTouched, readOnly, onDelete, header }: OutlinerProps) {
+export function Outliner({
+  design,
+  diagnostics,
+  session,
+  aiTouched,
+  readOnly,
+  onDelete,
+  header,
+}: OutlinerProps) {
   const selection = useWorkspace((s) => s.selection)
   const hidden = useWorkspace((s) => s.hidden)
   const hover = useWorkspace((s) => s.hover)
@@ -36,12 +53,16 @@ export function Outliner({ design, diagnostics, session, aiTouched, readOnly, on
   const rows = useMemo(() => treeRows(design, collapsed), [design, collapsed])
   const levels = useMemo(() => diagnosticLevels(diagnostics), [diagnostics])
   const list = useRef<HTMLDivElement>(null)
-  const active = focusId && rows.some((r) => r.id === focusId) ? focusId : (selection[0] ?? rows[0]?.id)
+  const active =
+    focusId && rows.some((r) => r.id === focusId) ? focusId : (selection[0] ?? rows[0]?.id)
 
   // Keep the selected row in view when the selection comes from the viewport.
   useEffect(() => {
     const id = selection.at(-1)
-    if (id) list.current?.querySelector(`[data-node="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' })
+    if (id)
+      list.current
+        ?.querySelector(`[data-node="${CSS.escape(id)}"]`)
+        ?.scrollIntoView({ block: 'nearest' })
   }, [selection])
 
   const focusRow = (id: string | undefined) => {
@@ -148,23 +169,41 @@ export function Outliner({ design, diagnostics, session, aiTouched, readOnly, on
                     e.stopPropagation()
                     toggle(row.id)
                   }}
-                  className={cn('flex size-4 shrink-0 items-center justify-center text-fg-subtle', !row.hasChildren && 'invisible')}
+                  className={cn(
+                    'flex size-4 shrink-0 items-center justify-center text-fg-subtle',
+                    !row.hasChildren && 'invisible',
+                  )}
                 >
-                  <ChevronRight className={cn('size-3 transition-transform duration-120', row.expanded && 'rotate-90')} />
+                  <ChevronRight
+                    className={cn(
+                      'size-3 transition-transform duration-120',
+                      row.expanded && 'rotate-90',
+                    )}
+                  />
                 </button>
-                <Icon className={cn('size-3.5 shrink-0', selected ? 'text-select' : 'text-fg-subtle')} aria-hidden />
+                <Icon
+                  className={cn('size-3.5 shrink-0', selected ? 'text-select' : 'text-fg-subtle')}
+                  aria-hidden
+                />
                 {renaming === row.id ? (
                   <RenameInput
                     initial={node.name ?? ''}
                     placeholder={nodeTitle({ kind: node.kind })}
                     onDone={(name) => {
                       ws().setRenaming(null)
-                      if (name !== null && name !== (node.name ?? '')) session?.commit([rename(row.id, name)])
+                      if (name !== null && name !== (node.name ?? ''))
+                        session?.commit([rename(row.id, name)])
                       focusRow(row.id)
                     }}
                   />
                 ) : (
-                  <span className={cn('min-w-0 flex-1 truncate', (isHidden || excluded) && 'opacity-45', excluded && 'line-through')}>
+                  <span
+                    className={cn(
+                      'min-w-0 flex-1 truncate',
+                      (isHidden || excluded) && 'opacity-45',
+                      excluded && 'line-through',
+                    )}
+                  >
                     {nodeTitle(node)}
                   </span>
                 )}
@@ -173,7 +212,10 @@ export function Outliner({ design, diagnostics, session, aiTouched, readOnly, on
                   <span
                     role="img"
                     aria-label={level === 'error' ? 'Has a problem' : 'Has a warning'}
-                    className={cn('size-1.5 shrink-0 rounded-full', level === 'error' ? 'bg-danger' : 'bg-warn')}
+                    className={cn(
+                      'size-1.5 shrink-0 rounded-full',
+                      level === 'error' ? 'bg-danger' : 'bg-warn',
+                    )}
                   />
                 )}
                 <IconButton
@@ -195,17 +237,27 @@ export function Outliner({ design, diagnostics, session, aiTouched, readOnly, on
                 key={row.id}
                 content={
                   <>
-                    <MenuItem disabled={readOnly} onClick={() => ws().setRenaming(row.id)} shortcut="f2">
+                    <MenuItem
+                      disabled={readOnly}
+                      onClick={() => ws().setRenaming(row.id)}
+                      shortcut="f2"
+                    >
                       Rename
                     </MenuItem>
                     <MenuItem onClick={() => ws().toggleHidden(row.id)}>
                       {isHidden ? 'Show in view' : 'Hide in view'}
                     </MenuItem>
-                    <MenuItem disabled={readOnly} onClick={() => session?.commit([setIncluded(row.id, excluded)])}>
+                    <MenuItem
+                      disabled={readOnly}
+                      onClick={() => session?.commit([setIncluded(row.id, excluded)])}
+                    >
                       {excluded ? 'Include in piece' : 'Exclude from piece'}
                     </MenuItem>
                     <MenuSeparator />
-                    <MenuItem disabled={readOnly || order <= 0} onClick={() => session?.commit([move(row.id, order - 1)])}>
+                    <MenuItem
+                      disabled={readOnly || order <= 0}
+                      onClick={() => session?.commit([move(row.id, order - 1)])}
+                    >
                       Move up
                     </MenuItem>
                     <MenuItem
@@ -215,7 +267,12 @@ export function Outliner({ design, diagnostics, session, aiTouched, readOnly, on
                       Move down
                     </MenuItem>
                     <MenuSeparator />
-                    <MenuItem danger disabled={readOnly} onClick={() => onDelete([row.id])} shortcut="delete">
+                    <MenuItem
+                      danger
+                      disabled={readOnly}
+                      onClick={() => onDelete([row.id])}
+                      shortcut="delete"
+                    >
                       Delete
                     </MenuItem>
                   </>

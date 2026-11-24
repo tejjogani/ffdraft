@@ -29,19 +29,21 @@ export function Palette() {
   const pieces = useRpc('pieces.list', { limit: 30 }, { enabled: open })
   const collections = useRpc('collections.list', {}, { enabled: open })
 
+  // Read each command's `when` while rendering, so availability is current whenever the palette opens.
+  const available = open ? commands.filter((c) => !c.hidden && isAvailable(c)) : []
+  const availableKey = available.map((c) => c.id).join('|')
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `availableKey` stands for `available`
   const items = useMemo<PaletteItem[]>(
     () => [
-      ...commands
-        .filter((c) => !c.hidden && isAvailable(c))
-        .map((c) => ({
-          id: c.id,
-          title: c.title,
-          group: c.group,
-          icon: c.icon,
-          shortcut: c.shortcut,
-          keywords: c.keywords,
-          onSelect: c.run,
-        })),
+      ...available.map((c) => ({
+        id: c.id,
+        title: c.title,
+        group: c.group,
+        icon: c.icon,
+        shortcut: c.shortcut,
+        keywords: c.keywords,
+        onSelect: c.run,
+      })),
       ...[...(pieces.data ?? [])]
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
         .slice(0, 8)
@@ -66,9 +68,7 @@ export function Palette() {
         onSelect: () => void navigate({ to: '/collections/$id', params: { id: c.id } }),
       })),
     ],
-    // `open` re-reads each command's `when` every time the palette opens.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: see above
-    [open, commands, pieces.data, collections.data, navigate],
+    [availableKey, pieces.data, collections.data, navigate],
   )
 
   return (

@@ -69,7 +69,12 @@ class FakeServer {
         if (fail === 'offline') throw new OfflineError('offline')
         if (fail === 'conflict') throw new ConflictError('conflict')
         try {
-          const change = this.commit(req.ops, { id: req.changeId, label: req.label, actor: { type: 'user', id: 'u_me' }, reverts: req.reverts })
+          const change = this.commit(req.ops, {
+            id: req.changeId,
+            label: req.label,
+            actor: { type: 'user', id: 'u_me' },
+            reverts: req.reverts,
+          })
           return { version: change.seq, change }
         } catch (e) {
           if (e instanceof OpError) throw new Error(`invalid: ${e.message}`)
@@ -87,14 +92,18 @@ const flush = async () => {
 }
 
 function sessionOn(server: FakeServer) {
-  return createDesignSession('p1', { design: server.design, version: server.version }, {
-    transport: server.transport(),
-    classify: (e) =>
-      e instanceof OfflineError ? 'retry' : e instanceof ConflictError ? 'conflict' : 'reject',
-    describe: (e) => (e as Error).message,
-    backoff: () => 5,
-    gapWait: 10,
-  })
+  return createDesignSession(
+    'p1',
+    { design: server.design, version: server.version },
+    {
+      transport: server.transport(),
+      classify: (e) =>
+        e instanceof OfflineError ? 'retry' : e instanceof ConflictError ? 'conflict' : 'reject',
+      describe: (e) => (e as Error).message,
+      backoff: () => 5,
+      gapWait: 10,
+    },
+  )
 }
 
 describe('design session core', () => {
@@ -146,7 +155,12 @@ describe('design session core', () => {
     let s = core.createSession('p1', server.design, 0)
     s = core.commit(s, [{ t: 'update', id: band, patch: { thicknessTop: 2.5 } }])
     s = core.preview(s, 'w', setWidth(s.settled, 3.3))
-    s = core.receive(s, server.commit([{ t: 'update', id: band, patch: { profile: 'flat' } }], { actor: { type: 'agent', runId: 'run_1' } }))
+    s = core.receive(
+      s,
+      server.commit([{ t: 'update', id: band, patch: { profile: 'flat' } }], {
+        actor: { type: 'agent', runId: 'run_1' },
+      }),
+    )
     const node = s.view.nodes[band] as Record<string, unknown>
     expect(node).toMatchObject({ profile: 'flat', thicknessTop: 2.5, widthTop: 3.3 })
     expect(s.runs[0]).toMatchObject({ runId: 'run_1', prior: { [band]: { profile: 'court' } } })
@@ -171,7 +185,10 @@ describe('design session core', () => {
     const mine = server.commit(s.pending[0]!.ops, { id: s.pending[0]!.id })
     s = core.receive(s, mine)
     // The assistant then changes the width again.
-    s = core.receive(s, server.commit(setWidth(s.confirmed, 3.6), { actor: { type: 'agent', runId: 'r' } }))
+    s = core.receive(
+      s,
+      server.commit(setWidth(s.confirmed, 3.6), { actor: { type: 'agent', runId: 'r' } }),
+    )
     s = core.undo(s)
     expect(s.pending[0]!.reverts).toEqual([mine.id])
     expect(s.pending[0]!.ops).toEqual([{ t: 'update', id: band, patch: { thicknessTop: 1.8 } }])
@@ -201,7 +218,12 @@ describe('design session core', () => {
     let s = core.commit(core.createSession('p1', d, 0), [{ t: 'add', node }])
     s = core.undo(s)
     expect(s.view.nodes.prim_1).toBeUndefined()
-    expect(core.guardedInverse({ ops: [{ t: 'add', node }], inverse: [{ t: 'remove', id: 'prim_1' }] }, d)).toEqual([])
+    expect(
+      core.guardedInverse(
+        { ops: [{ t: 'add', node }], inverse: [{ t: 'remove', id: 'prim_1' }] },
+        d,
+      ),
+    ).toEqual([])
   })
 })
 
@@ -238,7 +260,9 @@ describe('design session sync', () => {
     const session = sessionOn(server)
     const band = bandId(server.design)
     session.preview('w', setWidth(session.get().view, 2.9))
-    const remote = server.commit([{ t: 'update', id: band, patch: { profile: 'dShape' } }], { actor: { type: 'agent', runId: 'r1' } })
+    const remote = server.commit([{ t: 'update', id: band, patch: { profile: 'dShape' } }], {
+      actor: { type: 'agent', runId: 'r1' },
+    })
     session.receive(remote)
     expect(session.get().view.nodes[band]).toMatchObject({ profile: 'dShape', widthTop: 2.9 })
     session.commitGesture()
@@ -288,14 +312,19 @@ describe('design session sync', () => {
     const session = sessionOn(server)
     session.commit(setWidth(session.get().view, 3))
     // Someone deletes the band before our change lands.
-    server.design = applyOps(server.design, [{ t: 'remove', id: bandId(server.design), cascade: true }]).design
+    server.design = applyOps(server.design, [
+      { t: 'remove', id: bandId(server.design), cascade: true },
+    ]).design
     await session.idle()
     expect(session.takeNotices()[0]).toMatchObject({ type: 'dropped' })
   })
 
   it('converges under random interleavings of local edits, remote edits, lost events and failures', async () => {
     let seed = 7
-    const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+    const rand = () => {
+      seed = (seed * 16807) % 2147483647
+      return seed / 2147483647
+    }
     for (let round = 0; round < 12; round++) {
       const server = new FakeServer(solitaire())
       const session = sessionOn(server)
@@ -307,7 +336,9 @@ describe('design session sync', () => {
         const r = rand()
         if (r < 0.4) session.commit([{ t: 'update', id: band, patch: { [field]: value } }])
         else if (r < 0.7) {
-          const change = server.commit([{ t: 'update', id: band, patch: { [field]: value } }], { actor: { type: 'agent', runId: `run_${round}` } })
+          const change = server.commit([{ t: 'update', id: band, patch: { [field]: value } }], {
+            actor: { type: 'agent', runId: `run_${round}` },
+          })
           // Events are sometimes lost; history fills the gap.
           if (rand() < 0.8) session.receive(change)
         } else if (r < 0.8) session.undo()

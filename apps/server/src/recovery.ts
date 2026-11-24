@@ -203,7 +203,10 @@ async function resumeOne(ctx: Ctx, item: Unfinished): Promise<void> {
       const packager = services.optional('production')
       // Packages from before the request was stored cannot be rebuilt as asked.
       if (!packager?.resume || !row.request) return handle.update({ status: 'failed' })
-      const request = { ...row.request, piece: await toPiece(ctx, await getPiece(ctx, row.pieceId)) }
+      const request = {
+        ...row.request,
+        piece: await toPiece(ctx, await getPiece(ctx, row.pieceId)),
+      }
       return packager.resume(pkg, request, handle, sctx).catch((err: unknown) => {
         console.error(`Resuming production package ${item.id} failed:`, err)
         return handle.update({ status: 'failed' })

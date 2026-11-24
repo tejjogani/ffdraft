@@ -1,0 +1,142 @@
+/** Plain and men's band exemplars: research 09 §1 "Plain band", §4 "Men's band". */
+import { exemplar, us } from './define'
+
+export const BANDS = [
+  exemplar({
+    id: 'band-court-classic',
+    title: 'Classic court wedding band',
+    kind: 'ring',
+    archetype: 'band',
+    styles: ['classic'],
+    variant: 'classic',
+    build: {
+      spec: {
+        kind: 'ring',
+        archetype: 'band',
+        title: 'Classic court wedding band',
+        summary: 'A 2.5 mm comfort-fit band in yellow gold.',
+        style: ['classic'],
+        metal: { alloy: 'au18k-yellow' },
+        ring: { size: us(6) },
+      },
+    },
+    why: [
+      "2.5 mm wide and 1.6 deep: the classic women's wedding band.",
+      'Court profile, comfortable and easy to size.',
+    ],
+    antiTwin: {
+      ops: [{ t: 'update', id: 'band', patch: { widthTop: 7.5, widthBottom: 7.5 } }],
+      fault: 'A band wider than the finger can bend',
+      ruleId: 'band.plain.width',
+    },
+    sizeKey: {},
+  }),
+  exemplar({
+    id: 'band-mens-brushed',
+    title: "Men's brushed band",
+    kind: 'ring',
+    archetype: 'band',
+    styles: ["men's"],
+    variant: 'classic',
+    build: {
+      spec: {
+        kind: 'ring',
+        archetype: 'band',
+        title: "Men's brushed band",
+        summary: 'A 6 mm flat-court band in brushed white gold.',
+        style: ["men's"],
+        metal: { alloy: 'au14k-white', finish: 'brushed' },
+        ring: { size: us(10), profile: 'flatCourt' },
+      },
+    },
+    why: [
+      "Six millimetres is 0.30 of a US 10 finger: the classic men's width.",
+      'Depth 2.2 mm (1.6 + 0.1 × width) so it never looks flimsy.',
+    ],
+    antiTwin: {
+      ops: [{ t: 'update', id: 'band', patch: { thicknessTop: 1.5 } }],
+      fault: 'A wide band too thin for its width',
+      ruleId: 'band.mens.thickness',
+    },
+    sizeKey: {},
+  }),
+  exemplar({
+    id: 'band-stacking-delicate',
+    title: 'Stacking band',
+    kind: 'ring',
+    archetype: 'band',
+    styles: ['stacking'],
+    variant: 'delicate',
+    build: {
+      spec: {
+        kind: 'ring',
+        archetype: 'band',
+        title: 'Stacking band',
+        summary: 'A fine rose-gold band for stacking.',
+        style: ['stacking'],
+        metal: { alloy: 'au18k-rose' },
+        ring: { size: us(6) },
+      },
+    },
+    why: ['1.75 mm wide, 1.6 deep: fine enough to stack, deep enough to stay round.'],
+    antiTwin: {
+      ops: [{ t: 'update', id: 'band', patch: { thicknessTop: 1.2, thicknessBottom: 1.2 } }],
+      fault: 'Too thin even for a stacker',
+      ruleId: 'band.plain.thickness',
+    },
+    sizeKey: {},
+  }),
+  exemplar({
+    id: 'band-mens-gypsy',
+    title: "Men's band with a flush diamond",
+    kind: 'ring',
+    archetype: 'band',
+    styles: ["men's"],
+    variant: 'classic',
+    build: {
+      kind: 'ring',
+      nodes: [
+        {
+          id: 'band',
+          kind: 'ringShank',
+          name: 'Band',
+          material: 'au14k-yellow',
+          size: us(10),
+          profile: 'dShape',
+          widthTop: 6,
+          widthBottom: 6,
+          thicknessTop: 2.2,
+          thicknessBottom: 2.2,
+        },
+        {
+          id: 'center',
+          kind: 'gem',
+          name: 'Flush diamond',
+          cut: 'round',
+          stone: 'diamond',
+          width: 3.0,
+          placement: { type: 'ringTop', shank: 'band', angle: 0, elevation: 0.35, spin: 0 },
+        },
+        {
+          id: 'head',
+          kind: 'setting',
+          name: 'Flush seat',
+          material: 'au14k-yellow',
+          gem: 'center',
+          style: 'flush',
+        },
+      ],
+    },
+    why: [
+      'A flush stone sinks its whole depth: 3.0 mm in a 2.2 mm band, table level with the metal.',
+      'Diamond only: flush stones take knocks face-on.',
+      "6 mm × 2.2 mm, the classic men's section.",
+    ],
+    antiTwin: {
+      ops: [{ t: 'update', id: 'center', patch: { width: 3.6 } }],
+      fault: 'A flush stone deeper than the band',
+      ruleId: 'signet.flushStone',
+    },
+    sizeKey: { W: 3 },
+  }),
+]

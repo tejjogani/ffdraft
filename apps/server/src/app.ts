@@ -75,6 +75,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<PaveSer
         Services[ServiceName],
       ][])
         runtime.services.register(name, impl)
+    await runtime.services.ready()
     if (local && config.seed)
       await seedIfEmpty(runtime, await runtime.context({ ...local, actor: { type: 'system' } }))
     await runtime.recover()

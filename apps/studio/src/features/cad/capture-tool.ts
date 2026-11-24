@@ -29,7 +29,9 @@ export function useViewportTools(pieceId: string, session: DesignSession | null)
         focusNodeIds: input.focusNodeIds,
       })
       const assets = await Promise.all(
-        blobs.map((b, i) => uploadAsset(new File([b], `capture-v${version}-${i + 1}.png`, { type: 'image/png' }))),
+        blobs.map((b, i) =>
+          uploadAsset(new File([b], `capture-v${version}-${i + 1}.png`, { type: 'image/png' })),
+        ),
       )
       return {
         version,

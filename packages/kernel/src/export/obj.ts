@@ -3,7 +3,7 @@
  * per part and stone, welded triangles, no normals (those tools rebuild them), millimetres.
  */
 import { defineExporter } from '../core'
-import { type MeshObject, MM_NOTE, sceneObjects } from './meshes'
+import { type MeshObject, MM_NOTE, metalNotes, sceneObjects } from './meshes'
 
 /** OBJ names may not contain whitespace in every reader. */
 const objName = (name: string) => name.replace(/\s+/g, '_')
@@ -46,6 +46,7 @@ export const obj = defineExporter({
       notes: [
         MM_NOTE,
         'One object/group per metal part and per stone; materials are named in comments (no .mtl).',
+        ...metalNotes(scene, objects),
       ],
     }
   },

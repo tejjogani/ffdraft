@@ -50,21 +50,30 @@ export function qualityFor(tier: GpuTier): QualityPolicy {
       return {
         maxDpr: 1,
         rest: { hero: { bounces: 3, dispersion: false }, melee: { bounces: 1, dispersion: false } },
-        moving: { hero: { bounces: 1, dispersion: false }, melee: { bounces: 1, dispersion: false } },
+        moving: {
+          hero: { bounces: 1, dispersion: false },
+          melee: { bounces: 1, dispersion: false },
+        },
         meleeBudget: 0,
       }
     case 'low':
       return {
         maxDpr: 1.5,
         rest: { hero: { bounces: 5, dispersion: true }, melee: { bounces: 2, dispersion: false } },
-        moving: { hero: { bounces: 2, dispersion: true }, melee: { bounces: 1, dispersion: false } },
+        moving: {
+          hero: { bounces: 2, dispersion: true },
+          melee: { bounces: 1, dispersion: false },
+        },
         meleeBudget: 600,
       }
     case 'high':
       return {
         maxDpr: 2,
         rest: { hero: { bounces: 6, dispersion: true }, melee: { bounces: 3, dispersion: false } },
-        moving: { hero: { bounces: 2, dispersion: true }, melee: { bounces: 2, dispersion: false } },
+        moving: {
+          hero: { bounces: 2, dispersion: true },
+          melee: { bounces: 2, dispersion: false },
+        },
         meleeBudget: 3000,
       }
   }

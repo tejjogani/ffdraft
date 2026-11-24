@@ -4,6 +4,6 @@
   "include": [
     "src",
     "vite.config.ts",
-    "../../packages/kernel/src/runtime/opentype.d.ts"
+    "../../packages/kernel/src/**/*.d.ts"
   ]
 }

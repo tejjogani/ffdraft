@@ -3,6 +3,7 @@
  * them while building (settings report their own claws and bezels).
  */
 import type { Scene } from '../core'
+import type { ChainData } from '../features/chain'
 import type { Diagnostic } from '../types'
 import type { DfmProfile } from './profile'
 
@@ -29,20 +30,22 @@ export function sizeChecks(scene: Scene, profile: DfmProfile): Diagnostic[] {
         limit,
       })
     switch (node.kind) {
-      case 'chain':
+      case 'chain': {
+        // The wire as built: the chain thins a wire too heavy for its links.
+        const { wire } = result.data as ChainData
         if (node.style === 'tennis') {
           const prong = profile.accentProng(result.stones[0]?.dims.width ?? node.linkWidth)
-          if (node.wire < prong)
-            thin('warning', 'prong.small', 'The tennis prong wire', node.wire, prong)
-        } else if (node.wire < profile.chainWire)
+          if (wire < prong) thin('warning', 'prong.small', 'The tennis prong wire', wire, prong)
+        } else if (wire < profile.chainWire)
           thin(
             'info',
             'chain.fine',
             'The chain wire (fine chain is bought, not cast)',
-            node.wire,
+            wire,
             profile.chainWire,
           )
         break
+      }
       case 'finding':
         if (node.type === 'earringPost' && node.wire < profile.postWire.warn)
           thin(

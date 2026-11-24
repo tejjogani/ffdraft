@@ -14,8 +14,8 @@ import {
   Gem,
   PencilRuler,
   Plus,
-  RefreshCw,
   Redo2,
+  RefreshCw,
   ScanEye,
   SlidersHorizontal,
   Trash2,
@@ -56,7 +56,11 @@ export const DISPLAY_MODES: { id: DisplayMode; title: string; key: string; icon:
 ]
 
 /** The focusable regions F6 cycles through, in order. */
-const REGIONS = ['[data-region="outliner"]', '[data-region="viewport"]', '[data-region="inspector"]']
+const REGIONS = [
+  '[data-region="outliner"]',
+  '[data-region="viewport"]',
+  '[data-region="inspector"]',
+]
 
 function cycleRegion(backwards: boolean) {
   const els = REGIONS.map((s) => document.querySelector<HTMLElement>(s)).filter((e) => e !== null)

@@ -45,16 +45,43 @@ describe('finding', () => {
     expect(connectivityChecks(scene, DEFAULT_PROFILE)).toEqual([])
   })
 
-  it('butterfly sits on the notch of a stock post behind the host', async () => {
-    const scene = await kernel.scene(
+  it('butterfly: stock size, on the notch of the post it rides on', async () => {
+    for (const length of [6, 14]) {
+      const scene = await kernel.scene(
+        designFrom('earrings', [
+          disc,
+          { id: 'post', kind: 'finding', type: 'earringPost', host: 'disc', length },
+          // The schema's default length (10) gives a stock 5.5 mm back.
+          { id: 'back', kind: 'finding', type: 'butterfly', host: 'post' },
+        ]),
+        { detail: 'production' },
+      )
+      const box = scene.nodes.get('back')!.bodies[0]!.solid.bounds()
+      // The post's tip is `length` behind the disc's back (y = 0.75); its notch 2 mm short of it.
+      expect(box.min[1]).toBeCloseTo(0.75 + length - 2, 1)
+      expect(box.max[0] - box.min[0]).toBeCloseTo(5.5, 1)
+      // A butterfly is a separate part by nature, not loose metal.
+      expect(connectivityChecks(scene, DEFAULT_PROFILE)).toEqual([])
+    }
+    // On a piece with no post: where a stock 10 mm post's notch would be.
+    const alone = await kernel.scene(
       designFrom('earrings', [
         disc,
-        { id: 'back', kind: 'finding', type: 'butterfly', host: 'disc', length: 6 },
+        { id: 'back', kind: 'finding', type: 'butterfly', host: 'disc' },
       ]),
     )
-    const box = scene.nodes.get('back')!.bodies[0]!.solid.bounds()
-    expect(box.min[1]).toBeCloseTo(0.75 + 8, 1)
-    expect(box.max[0] - box.min[0]).toBeCloseTo(6, 1)
+    expect(alone.nodes.get('back')!.bodies[0]!.solid.bounds().min[1]).toBeCloseTo(0.75 + 8, 1)
+  })
+
+  it('a clasp too short for its wire thins the wire and says so', async () => {
+    const e = await kernel.evaluate(
+      designFrom('pendant', [
+        { id: 'clasp', kind: 'finding', type: 'lobsterClasp', length: 2, wire: 2 },
+      ]),
+      { detail: 'production' },
+    )
+    expect(e.parts).toHaveLength(1)
+    expect(e.diagnostics.map((d) => d.code)).toContain('finding.wireThinned')
   })
 
   it('jump ring and lobster clasp stand on top of the host and publish their openings', async () => {

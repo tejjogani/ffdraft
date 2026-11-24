@@ -90,7 +90,10 @@ export function createProduction(pool: KernelPool, options: { concurrency?: numb
         },
         {
           ...poolOptions(sctx, { pieceId: piece.id, signal }),
-          onProgress: (value) => void handle.update({ progress: 0.15 + value * 0.7 }),
+          onProgress: (value) =>
+            handle
+              .update({ progress: 0.15 + value * 0.7 })
+              .catch((err: unknown) => console.error(`Package ${pkg.id} progress:`, err)),
         },
       )
       const asset = await sctx.putAsset({
@@ -116,8 +119,11 @@ export function createProduction(pool: KernelPool, options: { concurrency?: numb
       .catch(async (err: unknown) => {
         // A build cut off by shutdown stays live, so boot recovery builds it again.
         if (closing) return
-        if (!(err instanceof AppError)) console.error(`Production package ${pkg.id} failed:`, err)
-        await handle.update({ status: 'failed' })
+        console.error(`Production package ${pkg.id} failed:`, err)
+        // The row has no error field yet; the manifest carries the reason until it does.
+        const message =
+          err instanceof AppError ? err.message : 'The package could not be built; try again.'
+        await handle.update({ status: 'failed', manifest: { error: { message } } })
       })
       .catch((err: unknown) => console.error(`Recording package ${pkg.id} failed:`, err))
       .finally(() => builds.delete(pkg.id))
