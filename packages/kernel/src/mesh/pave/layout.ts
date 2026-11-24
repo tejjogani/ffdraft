@@ -68,6 +68,8 @@ const CENTRE_REACH = 0.35
 const CENTRE_STEPS = 7
 /** More rows in a band must pack this much more stone area per length to be chosen. */
 const MORE_ROWS = 1.08
+/** Share of the seed's half-width a band's rows are planned for. */
+const BAND_TAPER = 0.94
 /** Row spacing of a honeycomb per unit of pitch. */
 const ROW_SPACING = Math.sqrt(3) / 2
 const EPS = 1e-9
@@ -330,7 +332,9 @@ class Packer {
    * setters pave letters. Every stone of the front then has that size, in rows along the band.
    */
   private bandPlan(seed: number): FrontPlan {
-    const across = 2 * (this.surface.edge[seed]! - this.o.margin)
+    // Planned for a band a little narrower than at the seed: strokes and faces vary along
+    // their length, and a uniform row that does not fit somewhere breaks there.
+    const across = 2 * (BAND_TAPER * this.surface.edge[seed]! - this.o.margin)
     const cap = this.sizeAt(seed)
     let best: FrontPlan = this.openField()
     let bestScore = 0
@@ -351,6 +355,7 @@ class Packer {
     const n0 = this.surface.normal(seed)
     const { rows, banded } = this.rowsAt(seed, n0)
     this.front = banded ? this.bandPlan(seed) : this.openField()
+    if (process.env.TRACE) console.log('seed', seed, banded, JSON.stringify(this.front), this.surface.edge[seed], this.surface.depth[seed], this.stones.length)
     try {
       this.growFront(seed, first, rows, banded)
     } finally {
@@ -416,9 +421,10 @@ class Packer {
         queue.push([i, k, j], [k, j, i])
         grew = true
       }
-      if (grew) continue
-      // Nothing fits beside the pair: the region is one stone wide here (a strip, a thin
-      // stroke), so continue the row in line with the pair, following the surface.
+      // Nothing fits beside the pair. In a one-row band, continue the row in line with the pair;
+      // an open field's front stops where the region narrows, and the narrow part gets a front
+      // of its own, planned for its width.
+      if (grew || this.front.rows !== 1) continue
       for (const [from, to] of [
         [i, j],
         [j, i],

@@ -9,6 +9,7 @@ import {
   Color,
   type ColorRepresentation,
   DoubleSide,
+  LineBasicMaterial,
   type Material,
   MeshBasicMaterial,
   MeshStandardMaterial,
@@ -106,6 +107,8 @@ export interface ModeMaterials {
   selected: OutlineMaterial
   hovered: OutlineMaterial
   tint: MeshBasicMaterial
+  /** Crease edges in technical mode. */
+  edges: LineBasicMaterial
   dispose(): void
 }
 
@@ -146,7 +149,8 @@ export function createModeMaterials(p: ViewportPalette): ModeMaterials {
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
   })
-  const all: Material[] = []
+  const edges = new LineBasicMaterial({ color: p.ink })
+  const all: Material[] = [edges]
   const silhouette = new OutlineMaterial(p.ink, 0.9)
   const selected = new OutlineMaterial(p.select, 1.6)
   const hovered = new OutlineMaterial(p.select, 1.2, 0.45)
@@ -161,6 +165,7 @@ export function createModeMaterials(p: ViewportPalette): ModeMaterials {
     selected,
     hovered,
     tint,
+    edges,
     dispose: () => {
       for (const m of all) m.dispose()
     },
