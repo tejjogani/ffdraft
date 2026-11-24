@@ -13,7 +13,7 @@ import { z } from 'zod'
 import { GEM_CUT_IDS, GEM_MATERIAL_IDS } from '../domain/gems'
 import { FINISH_IDS, METAL_IDS, PLATING_IDS } from '../domain/metals'
 import { RING_SIZE_SYSTEMS } from '../domain/sizes'
-import { choice, deg, int, mm, ratio, ref, text, toggle, vec3 } from './fields'
+import { choice, deg, follows, int, mm, ratio, ref, text, toggle, vec3 } from './fields'
 
 /** Kinds that produce a solid another feature can attach to, cut into or cover with stones. */
 export const BODY_KINDS = [
@@ -61,8 +61,18 @@ export const StoneSourcing = z.object({
   sku: z.string(),
   url: z.string().url().optional(),
   priceUsd: z.number().nonnegative().optional(),
-  /** Measured dimensions of the actual stone; when present the seat is cut to these. */
-  measured: z.object({ length: z.number(), width: z.number(), depth: z.number() }).optional(),
+  /**
+   * Measured dimensions of the actual stone; when present the seat is cut to these. Bounded
+   * like a stone's width: a zero or negative size from a marketplace record would otherwise
+   * reach the geometry (the kernel also falls back to the nominal size if one gets through).
+   */
+  measured: z
+    .object({
+      length: z.number().min(0.3).max(40),
+      width: z.number().min(0.3).max(40),
+      depth: z.number().min(0.1).max(40),
+    })
+    .optional(),
   certificate: z.string().optional(),
 })
 export type StoneSourcing = z.infer<typeof StoneSourcing>
@@ -115,10 +125,14 @@ export const RingShank = z
       description:
         'cathedral = arches rising to the head; split = band divides in two near the head.',
     }),
-    shoulderHeight: mm('Cathedral rise', 0.5, 8, 3, {
-      group: 'Shoulders',
-      when: { shoulder: ['cathedral'] },
-    }),
+    shoulderHeight: follows(
+      mm('Cathedral rise', 0.5, 8, 3, {
+        group: 'Shoulders',
+        when: { shoulder: ['cathedral'] },
+        description: 'Auto: the arches rise to just under the girdle of the stone on the band.',
+      }),
+      'head',
+    ),
     splitGap: mm('Split gap', 0.5, 6, 2, { group: 'Shoulders', when: { shoulder: ['split'] } }),
     baseShape: choice('Base', ['round', 'euro'], 'round', {
       group: 'Band',
@@ -134,9 +148,22 @@ const GemPlacement = z
     z.object({
       type: z.literal('ringTop'),
       shank: ref('Band', ['ringShank']),
-      angle: deg('Angle around band', -180, 180, 0, {
-        description: '0 = top of the ring; positive toward +X.',
-      }),
+      angle: follows(
+        deg('Angle around band', -180, 180, 0, {
+          description:
+            '0 = top of the ring; positive toward +X. Auto: 0, or packed beside the stones at the top for a side stone.',
+        }),
+        'head',
+      ),
+      side: z
+        .enum(['left', 'right'])
+        .optional()
+        .meta({
+          title: 'Side stone',
+          labels: { left: 'Left', right: 'Right' },
+          description:
+            'A side stone sits 0.5 mm from the girdle of the stone beside it, and moves when that stone changes size.',
+        }),
       elevation: mm('Culet clearance', 0, 8, 1.2, {
         description: 'Gap between the finger and the lowest point of the stone.',
       }),
@@ -167,10 +194,14 @@ export const Gem = z
       widget: 'stoneSize',
       description: 'Girdle width (diameter for rounds). 6.5 mm round ≈ 1 ct diamond.',
     }),
-    lw: ratio('Length : width', 0.8, 5, 1, {
-      group: 'Stone',
-      description: 'Ignored for round; clamped to what the cut allows.',
-    }).optional(),
+    lw: follows(
+      ratio('Length : width', 0.8, 5, 1, {
+        group: 'Stone',
+        description:
+          'Ignored for round; clamped to what the cut allows. Auto: the cut’s own ratio.',
+      }),
+      'stone',
+    ),
     placement: GemPlacement,
   })
   .meta({ title: 'Stone', description: 'A single gemstone.' })
@@ -186,21 +217,36 @@ export const Setting = z
       description:
         'prong = claws only; basket = claws joined by gallery rails; bezel = full metal rim; halfBezel = two arcs; flush = stone sunk into the host.',
     }),
-    prongCount: int('Prongs', 3, 8, 4, { group: 'Prongs', when: { style: ['prong', 'basket'] } }),
-    prongDiameter: mm('Prong wire', 0.5, 2.5, 1, {
-      group: 'Prongs',
-      when: { style: ['prong', 'basket'] },
-    }),
+    prongCount: follows(
+      int('Prongs', 3, 8, 4, {
+        group: 'Prongs',
+        when: { style: ['prong', 'basket'] },
+        description: 'Auto: the usual count for the stone’s shape and size.',
+      }),
+      'stone',
+    ),
+    prongDiameter: follows(
+      mm('Prong wire', 0.5, 2.5, 1, {
+        group: 'Prongs',
+        when: { style: ['prong', 'basket'] },
+        description: 'Auto: sized to the stone.',
+      }),
+      'stone',
+    ),
     prongTip: choice('Tip', ['round', 'claw', 'tab', 'double'], 'round', {
       group: 'Prongs',
       when: { style: ['prong', 'basket'] },
     }),
-    prongSpin: deg('Prong rotation', -90, 90, 45, {
-      group: 'Prongs',
-      advanced: true,
-      when: { style: ['prong', 'basket'] },
-      description: '45 puts four prongs on the corners; 0 on the compass points.',
-    }),
+    prongSpin: follows(
+      deg('Prong rotation', -90, 90, 45, {
+        group: 'Prongs',
+        advanced: true,
+        when: { style: ['prong', 'basket'] },
+        description:
+          '0 = a claw along the band. Auto: symmetric about the band for the claw count (four at 45, six at 0, three at 30). Shapes with points or corners put claws on them instead.',
+      }),
+      'stone',
+    ),
     taper: ratio('Taper', 0, 0.8, 0.35, {
       group: 'Prongs',
       advanced: true,
@@ -208,6 +254,13 @@ export const Setting = z
       description: 'How strongly the head narrows toward its base.',
     }),
     rails: int('Gallery rails', 0, 2, 1, { group: 'Prongs', when: { style: ['basket'] } }),
+    arcs: choice('Half-bezel arcs', ['auto', 'ends', 'sides'], 'auto', {
+      group: 'Bezel',
+      when: { style: ['halfBezel'] },
+      labels: { auto: 'Auto', ends: 'On the ends', sides: 'On the sides' },
+      description:
+        'Which part of the stone the two arcs hold. ends = the two ends of its length; sides = across it. Auto: on the points of a pointed stone, on the ends of a long one, across a round or square one.',
+    }),
     wall: mm('Bezel wall', 0.3, 2, 0.55, {
       group: 'Bezel',
       when: { style: ['bezel', 'halfBezel'] },
@@ -222,6 +275,12 @@ export const Halo = z
     ...metal,
     ...stone,
     around: ref('Around', ['gem']),
+    head: ref('Head', ['setting'], {
+      advanced: true,
+      follows: 'head',
+      description:
+        'The head holding the centre stone: the halo leaves room for its claws or bezel. Auto: the head on the same stone.',
+    }).optional(),
     stoneWidth: mm('Stone size', 0.8, 3.5, 1.3, { group: 'Stone', ...meleeSize }),
     rows: int('Rows', 1, 3, 1),
     offset: mm('Gap to centre stone', 0.05, 1.5, 0.25),
@@ -246,18 +305,26 @@ export const GemRow = z
       labels: { pave: 'Pavé', sharedProng: 'Shared prong' },
     }),
     stoneWidth: mm('Stone size', 0.8, 6, 1.5, { group: 'Stone', ...meleeSize }),
-    graduateTo: mm('Graduate to', 0.8, 6, 1.5, {
-      group: 'Stone',
-      ...meleeSize,
-      description: 'Stone size at the ends of the row; equal to Stone size for no graduation.',
-    }).optional(),
+    graduateTo: follows(
+      mm('Graduate to', 0.8, 6, 1.5, {
+        group: 'Stone',
+        ...meleeSize,
+        description:
+          'Stone size at the ends of the row. Auto: equal to Stone size (no graduation).',
+      }),
+      'stone',
+    ),
     coverage: deg('Coverage', 10, 360, 150, {
       description: 'Arc of the band that carries stones. 180 = half eternity, 360 = full eternity.',
     }),
     center: deg('Centred at', -180, 180, 0),
-    skipCenter: deg('Skip at centre', 0, 180, 0, {
-      description: 'Arc left clear around the centre (for a head).',
-    }),
+    skipCenter: follows(
+      deg('Skip at centre', 0, 180, 0, {
+        description:
+          'Arc left clear around the centre (for a head). Auto: clears the heads, claws and halo on the band by 0.4 mm.',
+      }),
+      'head',
+    ),
     rows: int('Rows', 1, 5, 1),
     gap: mm('Gap between stones', 0.05, 1, 0.15, { advanced: true }),
   })
@@ -439,7 +506,15 @@ export const Primitive = z
     kind: z.literal('primitive'),
     ...metal,
     shape: choice('Shape', ['box', 'cylinder', 'sphere', 'torus', 'cone'], 'box'),
-    size: vec3('Size', [5, 5, 5], { description: 'Bounding size in mm.' }),
+    // Positive sizes only: a zero or negative size used to become 0.01 mm without a word.
+    size: z
+      .tuple([
+        z.number().min(0.05).max(500),
+        z.number().min(0.05).max(500),
+        z.number().min(0.05).max(500),
+      ])
+      .default([5, 5, 5])
+      .meta({ title: 'Size', widget: 'vec3', description: 'Bounding size in mm.' }),
     tube: mm('Tube', 0.2, 20, 1, { when: { shape: ['torus'] } }),
     fillet: mm('Edge radius', 0, 5, 0),
   })
@@ -486,6 +561,17 @@ export const Chain = z
     kind: z.literal('chain'),
     ...metal,
     ...stone,
+    // Only a tennis chain carries stones; on the other styles these did nothing.
+    cut: choice('Cut', GEM_CUT_IDS, 'round', {
+      group: 'Stone',
+      widget: 'cut',
+      when: { style: ['tennis'] },
+    }),
+    stone: choice('Stone', GEM_MATERIAL_IDS, 'diamond', {
+      group: 'Stone',
+      widget: 'stone',
+      when: { style: ['tennis'] },
+    }),
     style: choice('Style', ['cable', 'curb', 'cuban', 'figaro', 'rope', 'box', 'tennis'], 'cable'),
     length: mm('Length', 100, 900, 457, { step: 1 }),
     linkWidth: mm('Link width', 0.8, 25, 3),
@@ -626,7 +712,7 @@ export function nodeRefs(n: Node): string[] {
     case 'setting':
       return [n.gem]
     case 'halo':
-      return [n.around]
+      return n.head ? [n.around, n.head] : [n.around]
     case 'gemRow':
     case 'pave':
     case 'engraving':

@@ -40,6 +40,11 @@ export interface GemCut {
    * Multiple entries are interpolated by length:width ratio.
    */
   caratFactor: ReadonlyArray<readonly [lw: number, factor: number]>
+  /**
+   * Claws for a claw head on this shape: fewest, typical and most (research 09 §1 "Prongs by
+   * shape"). The canon's lint table and the mount rules both read this column.
+   */
+  prongs: { min: number; typical: number; max: number }
 }
 
 const cut = (c: GemCut): GemCut => c
@@ -59,6 +64,7 @@ export const GEM_CUTS = {
     pavilionPct: 0.432,
     girdlePct: 0.035,
     caratFactor: [[1, 0.0061]],
+    prongs: { min: 4, typical: 4, max: 6 },
   }),
   oval: cut({
     label: 'Oval',
@@ -72,6 +78,7 @@ export const GEM_CUTS = {
     pavilionPct: 0.43,
     girdlePct: 0.04,
     caratFactor: [[1.4, 0.0062]],
+    prongs: { min: 4, typical: 4, max: 6 },
   }),
   princess: cut({
     label: 'Princess',
@@ -85,6 +92,7 @@ export const GEM_CUTS = {
     pavilionPct: 0.57,
     girdlePct: 0.04,
     caratFactor: [[1, 0.0083]],
+    prongs: { min: 4, typical: 4, max: 4 },
   }),
   emerald: cut({
     label: 'Emerald',
@@ -103,6 +111,7 @@ export const GEM_CUTS = {
       [2, 0.01],
       [2.5, 0.0106],
     ],
+    prongs: { min: 4, typical: 4, max: 4 },
   }),
   asscher: cut({
     label: 'Asscher',
@@ -116,6 +125,7 @@ export const GEM_CUTS = {
     pavilionPct: 0.48,
     girdlePct: 0.04,
     caratFactor: [[1, 0.008]],
+    prongs: { min: 4, typical: 4, max: 4 },
   }),
   cushion: cut({
     label: 'Cushion',
@@ -129,6 +139,7 @@ export const GEM_CUTS = {
     pavilionPct: 0.47,
     girdlePct: 0.04,
     caratFactor: [[1, 0.00815]],
+    prongs: { min: 4, typical: 4, max: 4 },
   }),
   radiant: cut({
     label: 'Radiant',
@@ -142,6 +153,7 @@ export const GEM_CUTS = {
     pavilionPct: 0.49,
     girdlePct: 0.04,
     caratFactor: [[1.25, 0.0081]],
+    prongs: { min: 4, typical: 4, max: 4 },
   }),
   marquise: cut({
     label: 'Marquise',
@@ -160,6 +172,7 @@ export const GEM_CUTS = {
       [2.5, 0.00585],
       [3, 0.00595],
     ],
+    prongs: { min: 6, typical: 6, max: 6 },
   }),
   pear: cut({
     label: 'Pear',
@@ -178,6 +191,7 @@ export const GEM_CUTS = {
       [1.66, 0.0059],
       [2, 0.00575],
     ],
+    prongs: { min: 5, typical: 5, max: 6 },
   }),
   heart: cut({
     label: 'Heart',
@@ -191,6 +205,7 @@ export const GEM_CUTS = {
     pavilionPct: 0.42,
     girdlePct: 0.04,
     caratFactor: [[1, 0.0059]],
+    prongs: { min: 3, typical: 5, max: 5 },
   }),
   baguette: cut({
     label: 'Baguette',
@@ -204,6 +219,7 @@ export const GEM_CUTS = {
     pavilionPct: 0.41,
     girdlePct: 0.03,
     caratFactor: [[2.5, 0.00915]],
+    prongs: { min: 4, typical: 4, max: 4 },
   }),
   trillion: cut({
     label: 'Trillion',
@@ -217,6 +233,7 @@ export const GEM_CUTS = {
     pavilionPct: 0.3,
     girdlePct: 0.03,
     caratFactor: [[1, 0.0057]],
+    prongs: { min: 3, typical: 3, max: 3 },
   }),
   cabochon: cut({
     label: 'Cabochon',
@@ -230,6 +247,7 @@ export const GEM_CUTS = {
     pavilionPct: 0,
     girdlePct: 0.05,
     caratFactor: [[1.3, 0.0105]],
+    prongs: { min: 4, typical: 4, max: 6 },
   }),
 } as const satisfies Record<string, GemCut>
 
@@ -322,6 +340,16 @@ export function gemDims(cutId: GemCutId, width: number, lw?: number): GemDims {
   return { length: width * ratio, width, depth: width * c.depthPct }
 }
 
+/**
+ * Depth of the culet below the girdle plane (the middle of the girdle band): the pavilion plus
+ * half the girdle. The kernel's facet meshes are built from the same percentages, so its
+ * measured culet depth equals this (a kernel test holds the two together).
+ */
+export function culetDepth(cutId: GemCutId, dims: GemDims): number {
+  const c: GemCut = GEM_CUTS[cutId]
+  return (dims.depth * (c.pavilionPct + c.girdlePct / 2)) / c.depthPct
+}
+
 /** Estimated carat weight for a cut of the given dimensions and material. */
 export function gemCarat(
   cutId: GemCutId,
@@ -352,7 +380,7 @@ export function gemDimsFromCarat(
  */
 export const MELEE_SIZES_MM = [
   0.8, 0.9, 1.0, 1.1, 1.2, 1.25, 1.3, 1.4, 1.5, 1.6, 1.7, 1.75, 1.8, 1.9, 2.0, 2.1, 2.2, 2.25, 2.3,
-  2.4, 2.5, 2.6, 2.7, 2.75, 2.8, 2.9, 3.0, 3.25, 3.5, 3.75, 4.0,
+  2.4, 2.5, 2.6, 2.7, 2.75, 2.8, 2.9, 3.0, 3.1, 3.2, 3.25, 3.3, 3.4, 3.5, 3.75, 4.0,
 ] as const
 
 export function snapToMelee(diameter: number): number {

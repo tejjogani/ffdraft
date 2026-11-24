@@ -159,8 +159,9 @@ describe('gem unit meshes', () => {
     expect(gemUnit('oval', 1.4)).toBe(gemUnit('oval', 1.401))
     expect(gemUnit('oval', 1.5).key).toBe('oval@1.5')
     expect(gemUnit('oval', 9).length).toBe(GEM_CUTS.oval.lw.max)
-    // The schema's "no ratio" value of 1 means the cut's own default for elongated cuts.
-    expect(gemUnit('oval', 1).length).toBe(GEM_CUTS.oval.lw.default)
+    // No ratio means the cut's own; a ratio of 1 is a real request, clamped like any other.
+    expect(gemUnit('oval').length).toBe(GEM_CUTS.oval.lw.default)
+    expect(gemUnit('oval', 1).length).toBe(GEM_CUTS.oval.lw.min)
   })
 })
 

@@ -14,6 +14,7 @@ import {
   type Node,
   type NodeOf,
   type PieceSpecInput,
+  resolveDesign,
   ringInnerDiameter,
 } from '@pave/schema'
 import { ALLOY_CLASS, CHAIN_MASS_K, LW_BY_CUT, POINTS_BY_CUT, PRONGS_BY_CUT } from './tables'
@@ -392,16 +393,19 @@ function sideClear(d: Design, hero: Gem | undefined, band: Facts): number {
     const f = stoneFacts(g)
     const claw = s?.style === 'prong' || s?.style === 'basket'
     const taper = claw ? s.taper : 0
-    const wire = claw ? s.prongDiameter : (s?.wall ?? 0)
+    const wire = claw ? (s.prongDiameter ?? 0) : (s?.wall ?? 0)
     const half = (1 - taper) * ((f.along ?? g.width) / 2 + 0.35) + wire / 2 + 0.3
-    const reach = Math.abs(g.placement.angle) + (Math.asin(Math.min(1, half / r)) * 180) / Math.PI
+    const reach =
+      Math.abs(g.placement.angle ?? 0) + (Math.asin(Math.min(1, half / r)) * 180) / Math.PI
     most = Math.max(most, reach)
   }
   return most
 }
 
 /** Facts about the whole piece: band, hero stone and its head, halo, first row, body, chain. */
-export function pieceFacts(d: Design, o: FactsOptions = {}): Facts {
+export function pieceFacts(input: Design, o: FactsOptions = {}): Facts {
+  // Follow fields (claws, wire, side-stone angles) as the kernel builds them: from the stone.
+  const d = resolveDesign(input)
   const band = bandFacts(nodesOf(d, 'ringShank')[0])
   const hero = heroGem(d)
   const heroFacts = hero ? stoneFacts(hero) : {}
@@ -441,7 +445,8 @@ export function pieceFacts(d: Design, o: FactsOptions = {}): Facts {
 }
 
 /** Facts for one node: the piece facts with the node's own context laid over them. */
-export function nodeFacts(d: Design, nodeId: string, piece: Facts = pieceFacts(d)): Facts {
+export function nodeFacts(input: Design, nodeId: string, piece: Facts = pieceFacts(input)): Facts {
+  const d = resolveDesign(input)
   const n = d.nodes[nodeId]
   if (!n) return piece
   const hero = heroGem(d)

@@ -1,5 +1,5 @@
 /** The in-process kernel: the evaluator plus the exporter registry, behind the public contract. */
-import type { Design } from '@pave/schema'
+import { type Design, resolveDesign } from '@pave/schema'
 import type { Scene } from './core'
 import { Evaluator } from './evaluate/evaluate'
 import { EXPORTERS } from './export/index'
@@ -42,7 +42,10 @@ export function createKernel(): LocalKernel {
 
   const scene = async (design: Design, options?: EvaluateOptions): Promise<Scene> => {
     await loadRuntime()
-    return evaluator.scene(design, options)
+    // Follow fields left absent (claws, wire, side-stone angles, shoulders, row gap) are filled
+    // from the stone first, so every feature builds from explicit numbers and the node hashes
+    // change exactly when a filled value does.
+    return evaluator.scene(resolveDesign(design), options)
   }
 
   return {

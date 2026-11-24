@@ -135,6 +135,7 @@ describe('stones and settings', () => {
     const scene = await evaluator.scene(variant('setting', { prongCount: 4 }))
     const stone = scene.stones[0]!.stone
     const head = scene.nodes.get('node')!
+    // Four claws; on this band they lean in to root in it, so no base rail is needed.
     expect(head.bodies).toHaveLength(4)
     for (const { solid } of head.bodies) {
       const b = solid.bounds()
@@ -190,7 +191,8 @@ describe('stones and settings', () => {
     })
 
     const fine = await evaluate(evaluator, variant('setting', { prongDiameter: 0.5 }))
-    expect(fine.diagnostics.find((d) => d.code === 'prong.small')?.fix?.label).toMatch(/0\.85 mm/)
+    // The fix is the mount rule's wire for the 6.5 mm stone (0.1·W + 0.35).
+    expect(fine.diagnostics.find((d) => d.code === 'prong.small')?.fix?.label).toMatch(/1 mm/)
 
     const low = variant('gem', {})
     low.nodes.stone = {

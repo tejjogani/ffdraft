@@ -114,6 +114,7 @@ const META_KEYS = [
   'advanced',
   'snap',
   'labels',
+  'follows',
 ] as const satisfies readonly (keyof FieldMeta)[]
 
 function metaOf(js: Json): FieldMeta {

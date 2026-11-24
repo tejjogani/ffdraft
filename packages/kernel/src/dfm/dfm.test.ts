@@ -208,7 +208,12 @@ describe('manufacturability checks', () => {
     expect(codes).not.toContain('metal.disconnected')
     expect(codes).toContain('metal.separateCasting')
     const total = (e: typeof one) => e.parts.reduce((sum, p) => sum + p.volumeMm3, 0)
-    expect(total(two)).toBeCloseTo(total(one), 0)
+    // A head of its own alloy gets a base rail so it casts in one piece; the rest is the same
+    // metal, weighed once.
+    const head = (await kernel.scene(twoTone, { detail: 'production' })).nodes.get('head')!
+    const rail = head.bodies[head.bodies.length - 1]!.solid.volume()
+    expect(total(two) - total(one)).toBeGreaterThan(0)
+    expect(total(two) - total(one)).toBeLessThan(rail + 0.5)
     const moved = applyOps(twoTone, [
       { t: 'update', id: 'head', patch: { transform: at(0, 0, 3) } },
     ])

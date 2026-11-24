@@ -9,6 +9,7 @@ import {
   GEM_CUTS,
   type Node,
   type NodeOf,
+  resolveDesign,
 } from '@pave/schema'
 import { bandFor, whenHolds } from './engine'
 import { type Facts, heroGem, nodeFacts, pieceFacts } from './facts'
@@ -118,10 +119,12 @@ const ratio = (value: number | undefined) =>
 
 /** Reads a design from its document: exact ratios, categoricals, what it is made of. */
 export function readDesign(
-  d: Design,
+  input: Design,
   summary?: EvaluationSummary,
   o: ReadOptions = {},
 ): DesignRead {
+  // Read what is built: follow fields left to the stone are filled from it.
+  const d = resolveDesign(input)
   const f = pieceFacts(d, { styles: o.styles })
   const archetype = o.archetype ?? inferArchetype(d)
   const hero = heroGem(d)
@@ -153,7 +156,7 @@ export function readDesign(
     set('sideToCenter', second && second.width / f.cW)
     set(
       'prongToStone',
-      head && (head.style === 'prong' || head.style === 'basket')
+      head && (head.style === 'prong' || head.style === 'basket') && head.prongDiameter
         ? head.prongDiameter / f.cW
         : undefined,
     )

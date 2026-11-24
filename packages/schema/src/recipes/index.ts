@@ -6,6 +6,7 @@
  */
 import { z } from 'zod'
 import { type Design, designFrom, type PieceKind } from '../design/design'
+import { unpinAtRule } from '../design/mount'
 import { NODE_SCHEMAS, type NodeInput } from '../design/nodes'
 import {
   type Archetype,
@@ -14,7 +15,7 @@ import {
   PieceSpecSchema,
   type StoneSpec,
 } from '../design/spec'
-import { GEM_CUTS, type GemCutId, gemDimsFromCarat } from '../domain/gems'
+import { gemDimsFromCarat } from '../domain/gems'
 import { ringInnerDiameter } from '../domain/sizes'
 
 const FACE_FRONT: [number, number, number] = [90, 0, 0]
@@ -27,11 +28,14 @@ const widthOf = (s: StoneSpec | undefined, fallback: number): number =>
       : (s.widthMm ?? fallback)
 
 /**
- * The length : width a stone is built with: the spec's, or the cut's own. Always written on
- * the gem, so the stone is the one its carat was sized for (an absent ratio would otherwise
- * be read as square by a cut that allows square, and a 1 ct radiant would weigh 0.8 ct).
+ * The length : width the spec pins, if any. Absent, the stone follows its cut's own ratio
+ * (design/mount.ts), which is also the ratio its carat was sized with.
  */
-const lwOf = (s: StoneSpec | undefined, cut: GemCutId): number => s?.lw ?? GEM_CUTS[cut].lw.default
+const lwOf = (s: StoneSpec | undefined): { lw?: number } => (s?.lw ? { lw: s.lw } : {})
+
+/** The claw count the spec pins, if any; absent, the head follows the stone (design/mount.ts). */
+const prongsOf = (s: StoneSpec | undefined): { prongCount?: number } =>
+  s?.prongs ? { prongCount: s.prongs } : {}
 
 const byRole = (spec: PieceSpec, role: StoneSpec['role']) =>
   spec.stones.find((s) => s.role === role)
@@ -102,8 +106,8 @@ function ring(spec: PieceSpec): NodeInput[] {
         cut: center?.cut ?? 'round',
         stone: center?.stone ?? 'diamond',
         width: w,
-        lw: lwOf(center, center?.cut ?? 'round'),
-        placement: { type: 'ringTop', shank: 'band', angle: 0, elevation: 1.2, spin: 0 },
+        ...lwOf(center),
+        placement: { type: 'ringTop', shank: 'band', elevation: 1.2, spin: 0 },
       },
       {
         id: 'head',
@@ -112,8 +116,8 @@ function ring(spec: PieceSpec): NodeInput[] {
         ...metal,
         gem: 'center',
         style: headStyle(center),
-        prongCount: center?.prongs ?? (center?.cut === 'round' && w >= 7.4 ? 6 : 4),
-        prongDiameter: Number(Math.min(1.4, Math.max(0.8, w * 0.15)).toFixed(2)),
+        // Claw count, wire and rotation follow the stone (design/mount.ts) unless the spec pins them.
+        ...prongsOf(center),
       },
     )
 
@@ -134,10 +138,9 @@ function ring(spec: PieceSpec): NodeInput[] {
     if (a === 'threeStone') {
       const side = byRole(spec, 'side')
       const sw = widthOf(side, Number((w * 0.62).toFixed(2)))
-      const angle = Number(
-        (((w / 2 + sw / 2 + 0.5) / (radius + thickness + 2)) * (180 / Math.PI)).toFixed(1),
-      )
-      for (const [i, sign] of [-1, 1].entries()) {
+      // Side stones are packed 0.5 mm from the centre girdle by the mount rules, and move
+      // with the centre stone; their size stays (they are bought as a matched pair).
+      for (const i of [0, 1]) {
         nodes.push(
           {
             id: `side${i + 1}`,
@@ -146,11 +149,11 @@ function ring(spec: PieceSpec): NodeInput[] {
             cut: side?.cut ?? 'round',
             stone: side?.stone ?? 'diamond',
             width: sw,
-            lw: lwOf(side, side?.cut ?? 'round'),
+            ...lwOf(side),
             placement: {
               type: 'ringTop',
               shank: 'band',
-              angle: sign * angle,
+              side: i ? 'right' : 'left',
               elevation: 0.9,
               spin: 0,
             },
@@ -162,8 +165,7 @@ function ring(spec: PieceSpec): NodeInput[] {
             ...metal,
             gem: `side${i + 1}`,
             style: headStyle(side),
-            prongCount: 4,
-            prongDiameter: 0.8,
+            ...prongsOf(side),
           },
         )
       }
@@ -171,7 +173,6 @@ function ring(spec: PieceSpec): NodeInput[] {
   }
 
   if (accent || a === 'eternity') {
-    const hasHead = nodes.some((n) => n.kind === 'setting')
     nodes.push({
       id: 'row',
       kind: 'gemRow',
@@ -182,7 +183,7 @@ function ring(spec: PieceSpec): NodeInput[] {
       setting: accent?.setting === 'channel' ? 'channel' : 'pave',
       stoneWidth: widthOf(accent, Math.max(1, Number((width * 0.7).toFixed(1)))),
       coverage: a === 'eternity' ? 360 : 150,
-      skipCenter: hasHead ? 44 : 0,
+      // The arc left clear for the head follows the head (design/mount.ts).
     })
   }
 
@@ -222,7 +223,7 @@ function pendant(spec: PieceSpec, notes: string[]): NodeInput[] {
         cut: center?.cut ?? 'round',
         stone: center?.stone ?? 'diamond',
         width: widthOf(center, 5),
-        lw: lwOf(center, center?.cut ?? 'round'),
+        ...lwOf(center),
         transform: { position: [0, 0, 0], rotation: FACE_FRONT, scale: 1 },
       },
       {
@@ -232,7 +233,7 @@ function pendant(spec: PieceSpec, notes: string[]): NodeInput[] {
         ...metal,
         gem: 'center',
         style: headStyle(center) === 'prong' ? 'basket' : headStyle(center),
-        prongCount: center?.prongs ?? 4,
+        ...prongsOf(center),
       },
     )
     if (a === 'halo') {
@@ -487,7 +488,7 @@ function studs(spec: PieceSpec): NodeInput[] {
       cut,
       stone: center?.stone ?? 'diamond',
       width: widthOf(center, 5),
-      lw: lwOf(center, cut),
+      ...lwOf(center),
       transform: { position: [-7, 0, 0], rotation: FACE_FRONT, scale: 1 },
     },
     {
@@ -497,8 +498,7 @@ function studs(spec: PieceSpec): NodeInput[] {
       ...metal,
       gem: 'stone',
       style: style === 'prong' ? 'basket' : style === 'flush' ? 'bezel' : style,
-      prongCount: center?.prongs ?? 4,
-      prongDiameter: 0.8,
+      ...prongsOf(center),
     },
     { id: 'post', kind: 'finding', name: 'Post', ...metal, type: 'earringPost', host: 'head' },
     {
@@ -628,7 +628,9 @@ export function planDesign(input: PieceSpecInput): RecipeResult {
   else if (a === 'tennis' || a === 'cuban' || kind === 'chain' || kind === 'bracelet')
     nodes = [chainNode(spec, notes)]
   else nodes = pendant(spec, notes)
-  return { design: designFrom(kind, fitNodes(nodes, notes)), notes }
+  // A value the spec pinned that equals what the mount rules give is left to follow them, so
+  // a later change of stone moves it too (design/mount.ts).
+  return { design: unpinAtRule(designFrom(kind, fitNodes(nodes, notes))), notes }
 }
 
 /** Builds the first editable design for a spec. */

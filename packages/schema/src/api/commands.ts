@@ -10,6 +10,7 @@
  */
 import { z } from 'zod'
 import { ChangeSchema, DesignSchema, OpSchema, PIECE_KINDS } from '../design/design'
+import { StoneChangeSchema, StoneTargetSchema } from '../design/intents'
 import { PieceSpecSchema } from '../design/spec'
 import {
   AssetSchema,
@@ -158,6 +159,16 @@ export const EvaluationSummarySchema = z.object({
   ),
 })
 export type EvaluationSummary = z.infer<typeof EvaluationSummarySchema>
+
+/** A warning from a targeted edit, with a ready fix where there is one. */
+export const IntentWarningSchema = z.object({
+  code: z.string(),
+  message: z.string(),
+  nodeId: z.string().optional(),
+  suggestion: z.object({ label: z.string(), ops: z.array(OpSchema) }).optional(),
+})
+
+const SummaryDiagnostic = EvaluationSummarySchema.shape.diagnostics.element
 
 export const commands = {
   // ── Session & organisation ────────────────────────────────────────────────────────────────
@@ -385,6 +396,42 @@ export const commands = {
         message: 'Give exactly one of seq or runId',
       }),
     output: z.object({ version: z.number().int(), change: StoredChangeSchema }),
+  }),
+  'design.replaceStone': def({
+    description:
+      'Replace or resize a stone (or every stone of a row, halo or pavé field) and let the mount follow: claws, wire, side stones, shoulders and the shoulder row adjust to the new stone; ring size, metal, setting style and anything set by hand stay. Use this, never hand-written ops, for any change of cut, size, carat, colour or quality. Target one stone by node id (scope `alike` for both side stones or both studs). Give the size as `widthMm` or `carat`; a new cut with no size keeps a single stone’s carat and a field’s millimetres. `dryRun` first when the designer asked what it would cost or weigh; the reply’s `notes`, `warnings` and `delta` say what changed.',
+    kind: 'mutation',
+    tool: true,
+    input: z.object({
+      pieceId: id,
+      target: StoneTargetSchema,
+      change: StoneChangeSchema,
+      /** Preview only: the ops and the before/after facts, nothing written. */
+      dryRun: z.boolean().default(false),
+      baseVersion: z.number().int().optional(),
+      /** Client-generated id so retries are idempotent (an assistant call defaults to its tool call). */
+      changeId: z.string().optional(),
+    }),
+    output: z.object({
+      applied: z.boolean(),
+      /** The version written, or for a preview the version looked at. */
+      version: z.number().int(),
+      change: StoredChangeSchema.optional(),
+      ops: z.array(OpSchema),
+      label: z.string(),
+      notes: z.array(z.string()),
+      warnings: z.array(IntentWarningSchema),
+      /** Draft facts before and after; null without a geometry engine. */
+      before: EvaluationSummarySchema.nullable(),
+      after: EvaluationSummarySchema.nullable(),
+      delta: z
+        .object({ metalMassG: z.number(), caratTotal: z.number(), stoneCount: z.number() })
+        .nullable(),
+      diagnostics: z.object({
+        added: z.array(SummaryDiagnostic),
+        resolved: z.array(SummaryDiagnostic),
+      }),
+    }),
   }),
   'design.evaluate': def({
     description:

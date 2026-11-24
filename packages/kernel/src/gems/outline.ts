@@ -142,7 +142,14 @@ function cushion(length: number): Outline {
     centre: [0, 0],
     radius: (phi) => (Math.abs(Math.cos(phi) / a) ** 4 + Math.abs(Math.sin(phi) / b) ** 4) ** -0.25,
     corners: [],
-    prongs: [],
+    // Claws go on the rounded corners (the diagonals of the bounding box), whatever the ratio,
+    // as a setter would place them; they are not points, so they take ordinary claws.
+    prongs: [
+      [a, b],
+      [-a, b],
+      [-a, -b],
+      [a, -b],
+    ].map(([x, y]) => ({ phi: angleTo([0, 0], [x!, y!]), point: false })),
     // Mains on the corners (the diagonals of the bounding box) and the middles of the sides.
     ...mainsAt(
       [0, 0],

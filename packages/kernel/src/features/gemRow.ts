@@ -48,26 +48,23 @@ const SINK: Record<RowNode['setting'], number> = {
   bar: 0.1,
 }
 
-/**
- * Stone size at the ends of the row. The schema fills in 1.5 mm when no value was given (an
- * optional field with a default), so that exact value is read as "not graduated".
- */
-const endWidth = (node: RowNode): number =>
-  node.graduateTo === undefined || node.graduateTo === 1.5 ? node.stoneWidth : node.graduateTo
+/** Stone size at the ends of the row: absent means no graduation. */
+const endWidth = (node: RowNode): number => node.graduateTo ?? node.stoneWidth
 
 /**
  * Angles of the stones of one row, working outward from the row's centre so the row is always
- * symmetric. `radius` is where the girdles sit; sizes graduate linearly toward the ends.
+ * symmetric. `radius` is where the girdles sit. Sizes step linearly from the stone size at the
+ * centre to `graduateTo` at the ends, so the end stones are the size asked for.
  */
 function rowAngles(node: RowNode, radius: number): { theta: number; width: number }[] {
   const end = (node.coverage / 2) * DEG
-  const skip = (node.skipCenter / 2) * DEG
+  const skipCenter = node.skipCenter ?? 0
+  const skip = (skipCenter / 2) * DEG
+  const first = node.stoneWidth
   const last = endWidth(node)
-  const widthAt = (t: number) =>
-    lerp(node.stoneWidth, last, end > skip ? (Math.abs(t) - skip) / (end - skip) : 0)
   const centre = node.center * DEG
 
-  if (node.coverage >= 360 && node.skipCenter === 0) {
+  if (node.coverage >= 360 && skipCenter === 0) {
     // Full eternity: stretch the gap so the row closes exactly.
     const count = Math.max(1, Math.floor((2 * Math.PI * radius) / (node.stoneWidth + node.gap)))
     return Array.from({ length: count }, (_, i) => ({
@@ -75,19 +72,31 @@ function rowAngles(node: RowNode, radius: number): { theta: number; width: numbe
       width: node.stoneWidth,
     }))
   }
-  const out: { theta: number; width: number }[] = []
-  // Offsets from the centre for one side; mirrored for the other.
-  const side: { t: number; width: number }[] = []
-  let width = widthAt(skip)
-  let t = skip === 0 ? 0 : skip + width / 2 / radius
-  while (t + width / 2 / radius <= end + 1e-9) {
-    side.push({ t, width })
-    // Next centre: half of this stone, the gap, half of the next (whose size depends on where it lands).
-    let next = t + (width + node.gap) / radius
-    for (let i = 0; i < 3; i++) next = t + (width / 2 + node.gap + widthAt(next) / 2) / radius
-    t = next
-    width = widthAt(t)
+  // One side of `n` stones: centres from the middle outward, half of each stone, the gap and
+  // half of the next apart.
+  const layout = (n: number): { t: number; width: number }[] => {
+    const side: { t: number; width: number }[] = []
+    let t = 0
+    for (let i = 0; i < n; i++) {
+      const width = n === 1 ? first : lerp(first, last, i / (n - 1))
+      if (i === 0) t = skip === 0 ? 0 : skip + width / 2 / radius
+      else t += (side[i - 1]!.width / 2 + node.gap + width / 2) / radius
+      side.push({ t, width })
+    }
+    return side
   }
+  const fits = (side: { t: number; width: number }[]) => {
+    const tip = side[side.length - 1]!
+    return tip.t + tip.width / 2 / radius <= end + 1e-9
+  }
+  // More stones always need more arc (their widths average the same), so grow until one fails.
+  let side: { t: number; width: number }[] = []
+  for (let n = 1; n <= 4000; n++) {
+    const next = layout(n)
+    if (!fits(next)) break
+    side = next
+  }
+  const out: { theta: number; width: number }[] = []
   for (const s of side) {
     out.push({ theta: centre + s.t, width: s.width })
     if (s.t !== 0) out.push({ theta: centre - s.t, width: s.width })
@@ -112,7 +121,8 @@ function wallAlong(
   to: number,
   a: number,
   width: number,
-  height: number,
+  /** Above the band's surface; a function of θ where the wall must meet girdles it falls away from. */
+  height: number | ((theta: number) => number),
   closed: boolean,
 ): Solid {
   const steps = Math.max(2, Math.ceil(Math.abs(to - from) / (4 * DEG)))
@@ -121,7 +131,7 @@ function wallAlong(
     const theta = from + ((to - from) * i) / steps
     // Open walls ramp down to the band at both ends.
     const ramp = closed ? 1 : Math.min(1, Math.min(i, steps - i) / 1.5 + 0.15)
-    const h = height * ramp
+    const h = (typeof height === 'number' ? height : height(theta)) * ramp
     const base = shank.outer(theta, a).radius - 0.2
     return placeLoop(
       ringSectionFrame(theta),
@@ -222,7 +232,7 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
   const add = (solid: Solid) =>
     additions.push({ solid: solid.transformed(host.matrix), target: node.host })
   const cuts: Cut[] = []
-  const full = node.coverage >= 360 && node.skipCenter === 0
+  const full = node.coverage >= 360 && (node.skipCenter ?? 0) === 0
   const span = (list: readonly Slot[]) => {
     const first = list[0]!
     const last = list[list.length - 1]!
@@ -272,27 +282,34 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
   if (node.setting === 'channel') {
     // A wall either side of the stones, lapping 0.1 mm over their girdles.
     const wall = Math.max(RULES.channelWall, 0.5)
-    const height = sink(widest) + 0.25 * crown(widest)
     const offset = (node.rows * rowPitch - node.gap) / 2 - 0.1 + wall / 2
+    // The wall's top stands as high over the stones as on a flat band, measured from the band's
+    // surface at the wall itself: on a domed band that surface falls away from the crest, and a
+    // wall raised from it would end below the girdles.
+    const height = (a: number) => (theta: number) =>
+      shank.outer(theta, 0).radius -
+      shank.outer(theta, a).radius +
+      sink(widest) +
+      0.25 * crown(widest)
     const byRun = full
       ? [[0, 2 * Math.PI] as const]
       : runs.filter((r) => r[0]!.a === slots[0]!.a).map(span)
     for (const [from, to] of byRun)
-      for (const side of [-1, 1]) add(wallAlong(shank, from, to, side * offset, wall, height, full))
+      for (const side of [-1, 1])
+        add(wallAlong(shank, from, to, side * offset, wall, height(side * offset), full))
   } else if (node.setting === 'sharedProng') {
-    // Two small claws in every gap, each holding both neighbours just above the girdle.
+    // Two small claws in every gap, each lapping both neighbours' girdles by the prong overlap
+    // (the placement pavé beads use), standing 30 % of the crown above the girdle.
     between((theta, a, width) => {
       const d = RULES.accentProng(width)
-      for (const side of [-1, 1]) {
-        const { point, normal } = surfaceAt(theta, a + side * (width / 2 - 0.05))
-        add(
-          pinSolid(
-            addScaled(point, normal, -0.3),
-            normal,
-            d / 2,
-            0.3 - sink(width) + 0.3 * crown(width),
-          ),
-        )
+      const reach = width / 2 + d / 2 - RULES.prongOverlap(d)
+      const lateral = Math.sqrt(Math.max(0, reach ** 2 - ((width + node.gap) / 2) ** 2))
+      const girdle = shank.outer(theta, a).radius - sink(width)
+      for (const side of lateral > 0 ? [-1, 1] : [0]) {
+        const at = a + side * lateral
+        const { point, normal } = surfaceAt(theta, at)
+        const height = girdle + 0.3 * crown(width) - shank.outer(theta, at).radius + 0.3
+        add(pinSolid(addScaled(point, normal, -0.3), normal, d / 2, height))
       }
     }, true)
   } else if (node.setting === 'bar') {
@@ -331,7 +348,7 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
     })
     if (node.setting === 'pave') {
       // Beads: one either side of the row in every gap, catching both girdles.
-      between((theta, a, width) => {
+      const beadPair = (theta: number, a: number, width: number) => {
         const bead = RULES.beadDiameter(width)
         const lateral = Math.sqrt(
           Math.max(0.01, (width / 2 + bead / 2 - 0.05) ** 2 - ((width + node.gap) / 2) ** 2),
@@ -340,7 +357,17 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
           const { point, normal } = surfaceAt(theta, a + side * lateral)
           add(pinSolid(addScaled(point, normal, -0.1), normal, bead / 2, 0.1 + bead * 0.2))
         }
-      }, false)
+      }
+      between(beadPair, false)
+      // And a pair beyond each end stone, where the next gap's beads would be, so the end
+      // stones are held by four beads like the rest.
+      if (!full)
+        for (const run of runs) {
+          const first = run[0]!
+          const last = run[run.length - 1]!
+          beadPair(first.theta - (first.width + node.gap) / 2 / radius, first.a, first.width)
+          beadPair(last.theta + (last.width + node.gap) / 2 / radius, last.a, last.width)
+        }
     }
   }
   return { stones, cuts, additions }

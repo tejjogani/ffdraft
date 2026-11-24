@@ -10,9 +10,10 @@ import { roundedRectLoop, translateLoop } from '../geometry/loop'
 import { pathFrames, pathLength, resamplePath } from '../geometry/path'
 import { pinSolid } from '../geometry/pin'
 import { placeLoop, sweepSolid } from '../geometry/sweep'
-import { add, addScaled, cross, distance, normalize, scale, sub } from '../geometry/vec'
+import { add, addScaled, cross, distance, normalize, scale, sub, type Vec3 } from '../geometry/vec'
 import { RULES } from '../rules'
 import { culetDepth } from './gem'
+import type { HeadData } from './setting'
 
 /** Metal left beyond the outermost stones and under the culets, mm. */
 const BORDER = 0.25
@@ -30,6 +31,44 @@ function symmetricCount(shape: StoneShape, fit: number): number {
   return Math.floor(fit / step) * step
 }
 
+/**
+ * Stone centres along a closed path that keep clear of the head's claws: each claw takes a
+ * window of the path (its width plus a gap either side of a stone), and the stones are spread
+ * evenly through the spans between windows. Claws are symmetric, so the halo stays symmetric.
+ */
+function centresBetween(
+  path: readonly Vec3[],
+  windows: readonly { s: number; half: number }[],
+  pitch: number,
+): Vec3[] {
+  const lengths = [0]
+  for (let i = 0; i < path.length; i++)
+    lengths.push(lengths[i]! + distance(path[i]!, path[(i + 1) % path.length]!))
+  const total = lengths[path.length]!
+  const at = (s: number): Vec3 => {
+    const t = ((s % total) + total) % total
+    let i = 0
+    while (i + 1 < path.length && lengths[i + 1]! < t) i++
+    const a = path[i]!
+    const b = path[(i + 1) % path.length]!
+    const l = lengths[i + 1]! - lengths[i]!
+    return addScaled(a, sub(b, a), l > 0 ? (t - lengths[i]!) / l : 0)
+  }
+  const sorted = windows.toSorted((a, b) => a.s - b.s)
+  const out: Vec3[] = []
+  sorted.forEach((w, k) => {
+    const next = sorted[(k + 1) % sorted.length]!
+    const start = w.s + w.half
+    const end = next.s - next.half + (k + 1 === sorted.length ? total : 0)
+    const span = end - start
+    if (span < -1e-9) return
+    const count = Math.floor(span / pitch + 1e-9) + 1
+    for (let i = 0; i < count; i++)
+      out.push(at(count === 1 ? (start + end) / 2 : start + (span * i) / (count - 1)))
+  })
+  return out
+}
+
 export const halo = defineFeature('halo', (node, ctx) => {
   const centre = ctx.input(node.around).stones[0]
   if (!centre) throw new Error('the stone it surrounds was not built')
@@ -43,26 +82,64 @@ export const halo = defineFeature('halo', (node, ctx) => {
   // Metal surface a quarter of the crown above the small stones' girdles.
   const surfaceZ = girdleZ + 0.25 * crown
 
+  // The head on the same stone: its claws or bezel reach past the girdle, so the inner row
+  // keeps clear of them instead of running through them.
+  const headData = node.head ? (ctx.tryInput(node.head)?.data as HeadData | undefined) : undefined
+  const head = headData?.kind === 'head' ? headData : undefined
+  // A bezel wall is a continuous rim: the halo starts beyond it.
+  const inner = Math.max(node.offset, head?.wall ? head.wall + 0.05 : 0)
+
   const stones: Stone[] = []
   const cuts: Cut[] = []
   const additions: Addition[] = []
   const bead = RULES.beadDiameter(size)
   for (let row = 0; row < node.rows; row++) {
-    const offset = node.offset + size / 2 + row * pitch
-    const path = shape.offsetPath(offset).map(([x, y]) => shape.toWorld([x, y, girdleZ]))
+    const offset = inner + size / 2 + row * pitch
+    const flat = shape.offsetPath(offset)
+    const path = flat.map(([x, y]) => shape.toWorld([x, y, girdleZ]))
+    // Claws that reach into this row's stones each take a window of the path.
+    const claws = (head?.claws ?? []).filter((c) => c.reach > offset - size / 2 - 0.02)
+    let count: number
+    let centres: Vec3[]
+    if (claws.length) {
+      const lengths = [0]
+      for (let i = 0; i < flat.length; i++) {
+        const [ax, ay] = flat[i]!
+        const [bx, by] = flat[(i + 1) % flat.length]!
+        lengths.push(lengths[i]! + Math.hypot(bx - ax, by - ay))
+      }
+      const windows = claws.map((c) => {
+        const g = shape.point(c.phi)
+        let best = 0
+        flat.forEach(([x, y], i) => {
+          const [bx, by] = flat[best]!
+          if (Math.hypot(x - g[0], y - g[1]) < Math.hypot(bx - g[0], by - g[1])) best = i
+        })
+        return { s: lengths[best]!, half: c.halfWidth + node.gap + size / 2 }
+      })
+      centres = centresBetween(path, windows, pitch)
+      count = centres.length
+    } else {
+      count = symmetricCount(shape, pathLength(path, true) / pitch)
+      centres = resamplePath(path, true, count)
+    }
     // Spacing is measured along the path; where the path turns inward (a heart's cleft) stones
     // end up closer than that, so take stones out until none touch.
-    let count = symmetricCount(shape, pathLength(path, true) / pitch)
-    let centres = resamplePath(path, true, count)
     const crowded = () =>
       centres.some((c, i) =>
         [1, 2, 3].some(
           (k) => count > 2 * k && distance(c, centres[(i + k) % count]!) < size + 0.02,
         ),
       )
-    while (count >= 3 && crowded()) {
+    while (count >= 3 && crowded() && !claws.length) {
       count = symmetricCount(shape, count - 1)
       centres = resamplePath(path, true, count)
+    }
+    // Between claws, drop the stone nearest each crowded pair (the cleft) until none touch.
+    while (claws.length && count >= 3 && crowded()) {
+      const i = centres.findIndex((c, k) => distance(c, centres[(k + 1) % count]!) < size + 0.02)
+      centres = centres.filter((_, k) => k !== (i + 1) % count)
+      count = centres.length
     }
     if (count < 3)
       throw new Error('the stones are too large to form a ring around the centre stone')
@@ -79,10 +156,11 @@ export const halo = defineFeature('halo', (node, ctx) => {
       }
       stones.push(stone)
       if (ctx.detail !== 'production') return
-      // Seats are cut into the halo's own ring only: the centre stone's claws pass through the
-      // halo and must not be notched by its stones.
-      cuts.push({ solid: seatCutter(stone, { open: crown + 0.3 }), targets: [node.id] })
-      cuts.push({ solid: seatHole(stone, size * RULES.seatHole, FLOOR + 0.3), targets: [node.id] })
+      // Seats cut every metal they meet: the halo's ring, and the band where a low halo dips
+      // into it. The centre's claws stand in windows between the stones, so they are not
+      // notched.
+      cuts.push({ solid: seatCutter(stone, { open: crown + 0.3 }), targets: 'all' })
+      cuts.push({ solid: seatHole(stone, size * RULES.seatHole, FLOOR + 0.3), targets: 'all' })
       // Two beads in each gap, one either side of the row, each catching both girdles.
       const mid = scale(add(origin, next), 0.5)
       const along = normalize(sub(next, origin))
@@ -99,7 +177,7 @@ export const halo = defineFeature('halo', (node, ctx) => {
 
   // One ring of metal under all rows, following the centre stone's outline.
   const width = node.rows * pitch - node.gap + 2 * BORDER
-  const middle = node.offset + (node.rows * pitch - node.gap) / 2
+  const middle = inner + (node.rows * pitch - node.gap) / 2
   const depth = culetDepth(node.cut, dims) + FLOOR
   const poly = shape.offsetPath(middle).map(([x, y]) => shape.toWorld([x, y, 0]))
   const frames = pathFrames(poly, { closed: true, up })

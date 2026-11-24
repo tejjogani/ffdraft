@@ -72,7 +72,7 @@ function planGap(a: NodeOf<'gem'>, b: NodeOf<'gem'>, innerRadius: number): numbe
   if (a.placement.type !== 'ringTop' || b.placement.type !== 'ringTop') return undefined
   const cut = GEM_CUTS[b.cut]
   const r = innerRadius + b.placement.elevation + (cut.pavilionPct + cut.girdlePct / 2) * b.width
-  const theta = (Math.abs(b.placement.angle - a.placement.angle) * Math.PI) / 180
+  const theta = (Math.abs((b.placement.angle ?? 0) - (a.placement.angle ?? 0)) * Math.PI) / 180
   return r * Math.sin(theta) - alongBand(b) * Math.cos(theta) - alongBand(a)
 }
 
@@ -131,7 +131,8 @@ export const MEASURES: Record<string, Measure> = {
   },
 
   clawOffset: ({ node }) => {
-    if (node?.kind !== 'setting') return undefined
+    if (node?.kind !== 'setting' || node.prongCount === undefined || node.prongSpin === undefined)
+      return undefined
     const step = 180 / node.prongCount
     const base = node.prongCount % 2 === 0 ? 0 : 90 % step
     const off = (((node.prongSpin - base) % step) + step) % step

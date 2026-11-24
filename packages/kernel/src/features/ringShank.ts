@@ -5,12 +5,12 @@
  * shoulders and a euro base are modulations of the thickness; a split shank is two strands
  * that share the lower half of the ring and part toward the head.
  */
-import { type NodeOf, ringInnerDiameter } from '@pave/schema'
+import { cathedralPeak, MOUNT, type NodeOf, ringInnerDiameter } from '@pave/schema'
 import { type Body, defineFeature, metalOf, type NodeResult } from '../core'
 import { type BandProfile, bandLoop, bandOuterAt } from '../geometry/bandProfile'
 import { ringSectionFrame, wrapAngle } from '../geometry/ring'
 import { placeLoop, sweepSolid } from '../geometry/sweep'
-import { clamp, DEG, lerp, smootherstep } from '../geometry/vec'
+import { DEG, lerp, smootherstep } from '../geometry/vec'
 import { RULES } from '../rules'
 
 type ShankNode = NodeOf<'ringShank'>
@@ -49,10 +49,9 @@ const SPLIT_BURIED = 66 * DEG
  * either side of the head and dips between the peaks to cradle the stone's pavilion.
  */
 function cathedral(rise: number, outerRadius: number): (theta: number) => number {
-  // A stone whose girdle sits `rise` above the band is about (rise + 0.6) / 0.43 wide; the
-  // peaks stand just outside its girdle.
-  const reach = (rise + 0.6) / 0.86 + 0.3
-  const peak = Math.asin(clamp(reach / (outerRadius + rise), 0.1, 0.75))
+  // Where the peaks stand is the mount rules' (design/mount.ts), which also pick the rise that
+  // brings them just under the stone's girdle.
+  const { peak } = cathedralPeak(rise, outerRadius)
   // A straight line tangent to the band reaches the peak's height after this angle.
   const start = Math.min(peak + Math.acos(outerRadius / (outerRadius + rise)) * 1.15, 110 * DEG)
   return (theta) => {
@@ -94,7 +93,7 @@ function shankShape(node: ShankNode) {
   const baseThickness = (theta: number) => lerp(node.thicknessBottom, node.thicknessTop, top(theta))
   const shoulder =
     node.shoulder === 'cathedral'
-      ? cathedral(node.shoulderHeight, innerRadius + node.thicknessTop)
+      ? cathedral(node.shoulderHeight ?? MOUNT.shoulderRise.none, innerRadius + node.thicknessTop)
       : () => 0
   const base = node.baseShape === 'euro' ? euro(innerRadius + node.thicknessBottom) : () => 0
   const thickness = (theta: number) => {
@@ -173,6 +172,17 @@ export const ringShank = defineFeature('ringShank', (node, ctx) => {
     ...metalOf(node),
   }))
 
+  // Ring charts run from about 12 mm (child sizes) to 25 mm; outside 10–30 mm the value is a
+  // mistake (a size of 0 in mm, US 80), not a finger.
+  const diameter = 2 * innerRadius
+  if (diameter < 10 || diameter > 30)
+    ctx.report({
+      level: 'error',
+      code: 'ring.size',
+      message: `The ring size gives a ${diameter.toFixed(2)} mm inner diameter, outside the 10–30 mm of any finger; check the size and its system.`,
+      value: diameter,
+      limit: diameter < 10 ? 10 : 30,
+    })
   const thinnest = Math.min(node.thicknessTop, node.thicknessBottom)
   if (thinnest < RULES.shankThickness.warn)
     ctx.report({

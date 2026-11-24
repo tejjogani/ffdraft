@@ -69,7 +69,8 @@ export function ringSizeFromDiameter(d: number, system: RingSizeSystem): RingSiz
     case 'jp':
       return { system, value: round((d - 13) * 3 + 1, 1) }
     case 'mm':
-      return { system, value: round(d, 0.01) }
+      // toFixed, not a multiple of 0.01, so 16.49 is stored as 16.49 and not 16.490000000000002.
+      return { system, value: Number(d.toFixed(2)) }
   }
 }
 
@@ -78,8 +79,10 @@ export function formatRingSize(size: RingSize): string {
     case 'us':
       return `US ${size.value}`
     case 'uk': {
-      const letter = String.fromCharCode(65 + Math.floor(size.value))
-      return `UK ${letter}${size.value % 1 ? '½' : ''}`
+      // A to Z, then Z+1, Z+2… as the trade writes them; nothing below A.
+      const index = Math.max(0, Math.floor(size.value))
+      const half = size.value >= 0 && size.value % 1 ? '½' : ''
+      return `UK ${index <= 25 ? String.fromCharCode(65 + index) : `Z+${index - 25}`}${half}`
     }
     case 'eu':
       return `EU ${size.value}`

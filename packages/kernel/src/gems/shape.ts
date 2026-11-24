@@ -157,8 +157,11 @@ export function stoneShape(stone: Stone): StoneShape {
                 ])
               }
             else {
+              // A concave corner: the offsets of the two sides meet on the bisector, further
+              // out than `distance` by 1 / cos(half the turn).
               const n = normal(phi)
-              path.push([p[0] + n[0] * distance, p[1] + n[1] * distance])
+              const reach = distance / Math.max(0.2, Math.cos(turn / 2))
+              path.push([p[0] + n[0] * reach, p[1] + n[1] * reach])
             }
           } else {
             const n = normal(phi)
@@ -166,16 +169,40 @@ export function stoneShape(stone: Stone): StoneShape {
           }
         }
       })
-      return path
+      // Beside a concave corner the offsets of neighbouring points cross over each other and
+      // come closer to the stone than `distance`: drop those (the bisector point stays).
+      const girdle = this.polygon(8).points
+      const clearance = (q: Vec2) =>
+        Math.min(
+          ...girdle.map((g, i) => {
+            const h = girdle[(i + 1) % girdle.length]!
+            const dx = h[0] - g[0]
+            const dy = h[1] - g[1]
+            const t = Math.max(
+              0,
+              Math.min(1, ((q[0] - g[0]) * dx + (q[1] - g[1]) * dy) / (dx * dx + dy * dy || 1)),
+            )
+            return Math.hypot(q[0] - g[0] - t * dx, q[1] - g[1] - t * dy)
+          }),
+        )
+      const kept = path.filter((q) => clearance(q) > distance * 0.98)
+      return kept.length >= 3 ? kept : path
     },
     toWorld: (p) => fromFrame(stone.frame, p),
   }
 }
 
+/** Reflection across the stone's length axis (x → −x): left and right of the head as worn. */
+const mirrorPhi = (phi: number): number => (((Math.PI - phi) % TAU) + TAU) % TAU
+const samePhi = (a: number, b: number): boolean =>
+  Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) < 1e-3
+
 /**
  * Directions for `count` claws: first on the outline's own claw positions (points and cut
- * corners), the rest spread evenly by girth through the gaps. Shapes without such positions get
- * evenly spaced directions starting at `spin`.
+ * corners), the rest spread by girth through the gaps between them. Extra claws are handed out
+ * in mirrored pairs (the gap on the left and its twin on the right), and a lone extra claw goes
+ * to a gap that is its own mirror image, so the head is symmetric left to right whenever the
+ * count allows. Shapes without such positions get evenly spaced directions starting at `spin`.
  */
 export function prongDirections(
   shape: StoneShape,
@@ -189,7 +216,7 @@ export function prongDirections(
       point: false,
     }))
   if (count <= fixed.length) {
-    // Fewer claws than points: keep them as far apart as possible.
+    // Fewer claws than points: keep them as far apart as possible (`prong.count` warns).
     return Array.from({ length: count }, (_, i) => fixed[Math.floor((i * fixed.length) / count)]!)
   }
   // Arc length along the outline as a function of direction.
@@ -227,18 +254,76 @@ export function prongDirections(
       from: stop.s,
       length: (((next.s - stop.s) % girth) + girth) % girth || girth,
       extra: 0,
+      ends: [stop.phi, next.phi] as const,
+      twin: -1,
     }
   })
-  // Hand out the remaining claws one at a time to the gap whose spacing is currently widest.
-  for (let k = fixed.length; k < count; k++) {
+  // A gap's mirror image runs from the mirror of its end to the mirror of its start.
+  gaps.forEach((g) => {
+    g.twin = gaps.findIndex(
+      (h) => samePhi(h.ends[0], mirrorPhi(g.ends[1])) && samePhi(h.ends[1], mirrorPhi(g.ends[0])),
+    )
+  })
+  const spacing = (g: (typeof gaps)[number]) => g.length / (g.extra + 1)
+  for (let left = count - fixed.length; left > 0; ) {
     let widest = gaps[0]!
-    for (const g of gaps)
-      if (g.length / (g.extra + 1) > widest.length / (widest.extra + 1)) widest = g
-    widest.extra++
+    for (const g of gaps) if (spacing(g) > spacing(widest) + 1e-9) widest = g
+    const twin = widest.twin >= 0 ? gaps[widest.twin]! : widest
+    if (twin === widest) {
+      widest.extra++
+      left--
+    } else if (left >= 2) {
+      widest.extra++
+      twin.extra++
+      left -= 2
+    } else {
+      // One claw left and the widest gap has a twin: a self-mirrored gap keeps the symmetry.
+      const selfTwins = gaps.filter((g) => gaps[g.twin] === g)
+      const target = selfTwins.reduce<(typeof gaps)[number] | null>(
+        (best, g) => (best === null || spacing(g) > spacing(best) ? g : best),
+        null,
+      )
+      ;(target ?? widest).extra++
+      left--
+    }
   }
   const out = stops.map(({ phi, point }) => ({ phi, point }))
   for (const g of gaps)
     for (let k = 1; k <= g.extra; k++)
       out.push({ phi: phiAt(g.from + (g.length * k) / (g.extra + 1)), point: false })
   return out
+}
+
+/** What is wrong with a set of claw directions on this stone, for the `prong.count` check. */
+export function clawLayoutIssues(
+  shape: StoneShape,
+  directions: readonly { phi: number; point: boolean }[],
+): string[] {
+  const outline = shape.unit.outline
+  const near = (a: number, b: number) =>
+    Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) < 0.03
+  const issues: string[] = []
+  const bare = outline.prongs.filter((p) => p.point && !directions.some((d) => near(d.phi, p.phi)))
+  if (bare.length)
+    issues.push(
+      `${bare.length === 1 ? 'a point is' : `${bare.length} points are`} left without a claw`,
+    )
+  if (!directions.every((a) => directions.some((b) => near(mirrorPhi(a.phi), b.phi))))
+    issues.push('the claws are not symmetric left to right')
+  // Concave corners (a heart's cleft): a claw there holds nothing and catches.
+  const concave = (phi: number) => {
+    const h = 1e-3
+    const [a, b, c] = [phi - h, phi, phi + h].map((x) => shape.point(x)) as [Vec2, Vec2, Vec2]
+    return (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]) < 0
+  }
+  if (outline.corners.some((c) => concave(c) && directions.some((d) => near(d.phi, c))))
+    issues.push('a claw sits in the cleft')
+  // A triangle is held at its three points; a claw in the middle of a side holds little.
+  if (
+    outline.prongs.length === 3 &&
+    outline.prongs.every((p) => p.point) &&
+    directions.some((d) => !d.point)
+  )
+    issues.push('a claw sits in the middle of a side')
+  return issues
 }

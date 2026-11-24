@@ -5,7 +5,7 @@
  * from this data, so a caster can see what was and was not verified.
  */
 import type { Diagnostic, Part, StoneInstance } from '@pave/kernel/types'
-import { METALS, type MetalFamily, metalMassG } from '@pave/schema'
+import { METALS, type MetalFamily, metalMassG, resolveDesign } from '@pave/schema'
 import { type PackageContext, stampLocation } from '../context'
 import { TriangleBVH } from '../geometry/bvh'
 import type { Topology } from '../geometry/mesh'
@@ -73,7 +73,9 @@ const SHELL_EPS = 1e-3
 
 export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmReport {
   const { profile: P, input } = ctx
-  const { design, evaluation } = input
+  const { evaluation } = input
+  // Follow fields (claw wire, …) read as the kernel built them: filled from the stone.
+  const design = resolveDesign(input.design)
   const checks: Check[] = []
   const add = (
     code: string,
@@ -335,7 +337,7 @@ export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmRepor
     for (const n of nodes) {
       if (n.kind !== 'setting' || (n.style !== 'prong' && n.style !== 'basket')) continue
       evaluated = true
-      const d = n.prongDiameter
+      const d = n.prongDiameter ?? 0
       const gem = design.nodes[n.gem]
       const stone = evaluation.stones.find((s) => s.nodeId === n.gem)
       const clearance =

@@ -207,7 +207,8 @@ describe('variantPatch', () => {
     const g = d.nodes.g!
     const { patch } = variantPatch(g, 'placement', 'surface', { design: d })
     expect(patch).toEqual({
-      placement: { type: 'surface', host: 'band', shank: null, angle: null, elevation: null },
+      // The angle around the band follows (absent), so there is nothing of it to null.
+      placement: { type: 'surface', host: 'band', shank: null, elevation: null },
     })
     const next = applyOps(d, [{ t: 'update', id: 'g', patch: patch! }]).design.nodes.g!
     expect(next).toMatchObject({ placement: { type: 'surface', host: 'band', spin: 30 } })

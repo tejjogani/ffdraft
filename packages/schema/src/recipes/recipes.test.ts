@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { emptyDesign } from '../design/design'
+import { resolveDesign } from '../design/mount'
 import type { NodeOf } from '../design/nodes'
 import type { PieceSpecInput } from '../design/spec'
 import { GEM_CUT_IDS, GEM_CUTS, gemCarat, gemDims } from '../domain/gems'
@@ -35,7 +37,12 @@ describe('recipes', () => {
             stones: [{ role: 'center', cut, carat: 1 }],
           }).nodes.stone,
       ]) {
-        const gem = build() as NodeOf<'gem'>
+        // The ratio follows the cut (absent on the node) and resolves to the cut's own, which is
+        // the ratio the carat was sized with.
+        const stored = build() as NodeOf<'gem'>
+        expect(stored.lw).toBeUndefined()
+        const alone = { ...emptyDesign(), nodes: { [stored.id]: stored }, order: [stored.id] }
+        const gem = resolveDesign(alone).nodes[stored.id] as NodeOf<'gem'>
         expect(gem.lw).toBe(GEM_CUTS[cut].lw.default)
         const carat = gemCarat(cut, gemDims(cut, gem.width, gem.lw))
         expect(carat).toBeGreaterThan(0.99)

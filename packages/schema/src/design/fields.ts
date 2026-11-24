@@ -44,6 +44,12 @@ export interface FieldMeta {
   snap?: 'melee'
   /** Human labels for enum values whose ids do not read well ("dShape" → "D-shape"). */
   labels?: Record<string, string>
+  /**
+   * A follow field: absent means "follow the rule" (`design/mount.ts` fills it from the stone
+   * it depends on before evaluation); a stored value is the designer's pin. `stone` follows the
+   * node's own or held stone, `head` the heads and stones on the same band.
+   */
+  follows?: 'stone' | 'head'
 }
 
 type Opts = Omit<FieldMeta, 'title' | 'unit'>
@@ -107,3 +113,16 @@ export const vec3 = (title: string, def: [number, number, number], opts: Opts = 
     .tuple([z.number(), z.number(), z.number()])
     .default(def)
     .meta({ title, widget: 'vec3', ...opts })
+
+/**
+ * Makes a field a follow field: the default is removed and the field made optional, so "not
+ * set" is expressible and means "follow the stone" rather than a value the kernel has to guess
+ * from (a sentinel equal to the old default could never be chosen on purpose). The declared
+ * default only documents the field's usual value; the rule in `design/mount.ts` decides.
+ * Writing `null` in a merge patch removes the pin ("Reset to auto").
+ */
+export const follows = <T extends z.ZodType>(field: z.ZodDefault<T>, source: 'stone' | 'head') =>
+  field
+    .unwrap()
+    .optional()
+    .meta({ ...(field.meta() as FieldMeta), follows: source })

@@ -8,6 +8,7 @@ import {
   type FieldInfo,
   type NodeKind,
   type Op,
+  resolveDesign,
   snapToMelee,
 } from '@pave/schema'
 import type { FitParam } from './types'
@@ -53,9 +54,11 @@ export function paramsFor(
     ties?: Record<string, string[]>
   } = {},
 ): FitParam[] {
+  // Start from what is built: follow fields left to the stone have no stored value.
+  const built = resolveDesign(d)
   return keys.map((key) => {
     const { nodeId, path } = parseKey(key)
-    const node = d.nodes[nodeId] as AnyNode | undefined
+    const node = built.nodes[nodeId] as AnyNode | undefined
     if (!node) throw new Error(`paramsFor: "${key}": no node "${nodeId}"`)
     const { field, value } = fieldAt(node, path, key)
     if (field.type !== 'number' && field.type !== 'integer')

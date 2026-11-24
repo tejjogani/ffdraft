@@ -1,9 +1,18 @@
-import { applyOps, type Design, type Op, OpError } from '@pave/schema'
+import {
+  applyOps,
+  type Design,
+  type EvaluationSummary,
+  IntentError,
+  type IntentResult,
+  type Op,
+  OpError,
+  replaceStone,
+} from '@pave/schema'
 import { and, desc, eq, lt, sql } from 'drizzle-orm'
 import { putAsset } from '../assets/assets'
 import * as t from '../db/schema'
 import { commitChange, FACTS_DETAIL, storeFacts, toStoredChange } from '../design'
-import { conflict, notFound } from '../errors'
+import { AppError, badRequest, conflict, notFound } from '../errors'
 import { getPiece } from '../lookups'
 import { serviceContext } from '../service-context'
 import { assertAttested } from './pieces'
@@ -101,6 +110,40 @@ function assertUntouched(design: Design, targets: readonly ChangeRow[]): void {
   }
 }
 
+type Diagnostic = EvaluationSummary['diagnostics'][number]
+const diagnosticKey = (d: Diagnostic) => `${d.level}|${d.code}|${d.nodeId ?? ''}`
+
+/** What a targeted edit changed in the facts: deltas and the diagnostics it added or cleared. */
+function compareFacts(before: EvaluationSummary | null, after: EvaluationSummary | null) {
+  if (!before || !after)
+    return { before, after, delta: null, diagnostics: { added: [], resolved: [] } }
+  const had = new Set(before.diagnostics.map(diagnosticKey))
+  const has = new Set(after.diagnostics.map(diagnosticKey))
+  return {
+    before,
+    after,
+    delta: {
+      metalMassG: after.metalMassG - before.metalMassG,
+      caratTotal: after.caratTotal - before.caratTotal,
+      stoneCount: after.stoneCount - before.stoneCount,
+    },
+    diagnostics: {
+      added: after.diagnostics.filter((d) => !had.has(diagnosticKey(d))),
+      resolved: before.diagnostics.filter((d) => !has.has(diagnosticKey(d))),
+    },
+  }
+}
+
+/** The stone intent on a design, with its errors as a bad request. */
+function planStone(design: Design, input: Parameters<typeof replaceStone>): IntentResult {
+  try {
+    return replaceStone(design, input[1], input[2])
+  } catch (err) {
+    if (err instanceof IntentError) throw badRequest(err.message)
+    throw err
+  }
+}
+
 export const design: HandlerGroup<'design'> = {
   'design.apply': async (ctx, input) =>
     commitChange(ctx, {
@@ -177,6 +220,62 @@ export const design: HandlerGroup<'design'> = {
         }
       },
     })
+  },
+
+  // A targeted edit: the pure intent turns "make the centre a 2 ct oval" into ops. A preview
+  // evaluates the design before and after and writes nothing; an apply recomputes the intent on
+  // the design as it is inside the commit (it is deterministic, so there is no stale plan to
+  // replay) and commits it as one attributed change.
+  'design.replaceStone': async (ctx, input) => {
+    const piece = await getPiece(ctx, input.pieceId)
+    const args: Parameters<typeof replaceStone> = [piece.design, input.target, input.change]
+    const geometry = ctx.services.isConfigured('geometry') ? ctx.services.get('geometry') : null
+    const evaluate = (design: Design) =>
+      geometry
+        ? geometry.evaluate(design, { detail: 'draft', pieceId: piece.id }, serviceContext(ctx))
+        : Promise.resolve(null)
+    const preview = planStone(piece.design, args)
+    const outcome = (intent: IntentResult) => ({
+      ops: intent.ops,
+      label: intent.label,
+      notes: intent.notes,
+      warnings: intent.warnings,
+    })
+    if (input.dryRun || preview.ops.length === 0) {
+      let next: Design
+      try {
+        next = applyOps(piece.design, preview.ops).design
+      } catch (err) {
+        if (!(err instanceof OpError)) throw err
+        throw new AppError('bad_request', err.message, { op: err.op })
+      }
+      const before = await evaluate(piece.design)
+      const after = preview.ops.length ? await evaluate(next) : before
+      return {
+        applied: false,
+        version: piece.version,
+        ...outcome(preview),
+        ...compareFacts(before, after),
+      }
+    }
+    let committed: IntentResult = preview
+    let base: Design = piece.design
+    const actor = ctx.actor
+    const { version, change } = await commitChange(ctx, {
+      pieceId: input.pieceId,
+      baseVersion: input.baseVersion,
+      changeId:
+        input.changeId ??
+        (actor.type === 'agent' && actor.toolCallId ? `chg_${actor.toolCallId}` : undefined),
+      plan: async (_tx, current) => {
+        base = current
+        committed = planStone(current, [current, input.target, input.change])
+        return { ops: committed.ops, label: committed.label }
+      },
+    })
+    const before = await evaluate(base)
+    const after = await evaluate(applyOps(base, committed.ops).design)
+    return { applied: true, version, change, ...outcome(committed), ...compareFacts(before, after) }
   },
 
   'design.evaluate': async (ctx, input) => {

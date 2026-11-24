@@ -10,6 +10,7 @@ import {
   type EvaluationSummary,
   type Node,
   type PieceSpecInput,
+  resolveDesign,
 } from '@pave/schema'
 import {
   bandFor,
@@ -71,10 +72,12 @@ export function lintDesign(
 }
 
 function lintOnce(
-  design: Design,
+  input: Design,
   summary: EvaluationSummary | undefined,
   o: LintOptions,
 ): CanonFinding[] {
+  // Lint what is built: follow fields left to the stone are filled the way the kernel fills them.
+  const design = resolveDesign(input)
   // A parsed spec always carries `style: []`, so the spec's words and the intent's tags merge.
   const words = o.styles ?? [
     ...new Set([...(o.spec?.style ?? []), ...(o.intent?.synthesis?.styleTags ?? [])]),

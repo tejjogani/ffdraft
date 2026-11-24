@@ -88,7 +88,9 @@ export function patchFor(
       (v, f) => (v && typeof v === 'object' ? (v as Record<string, unknown>)[f] : undefined),
       node,
     )
-    out = typeof current === 'number' && current < 0 ? -value : value
+    // A side stone that follows (no angle stored yet) takes the sign of its side.
+    const side = (node as { placement?: { side?: string } }).placement?.side
+    out = (typeof current === 'number' ? current < 0 : side === 'left') ? -value : value
   }
   for (const f of [...p.fields].reverse()) out = { [f]: out }
   return out as Record<string, unknown>

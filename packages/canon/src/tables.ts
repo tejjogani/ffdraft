@@ -2,26 +2,28 @@
  * Per-catalogue tables the rules read through facts. Keyed by @pave/schema ids so a new cut,
  * stone or alloy fails the type check here until the canon has an opinion about it.
  */
-import type { GemCutId, GemMaterialId, MetalId, NodeOf } from '@pave/schema'
+import {
+  GEM_CUT_IDS,
+  GEM_CUTS,
+  type GemCutId,
+  type GemMaterialId,
+  type MetalId,
+  type NodeOf,
+} from '@pave/schema'
 
 type ChainStyle = NodeOf<'chain'>['style']
 
-/** Prong counts by shape: [min, typical, max] for a claw head (research 09 §1 "Prongs by shape"). */
-export const PRONGS_BY_CUT: Record<GemCutId, readonly [number, number, number]> = {
-  round: [4, 4, 6],
-  oval: [4, 4, 6],
-  princess: [4, 4, 4],
-  emerald: [4, 4, 4],
-  asscher: [4, 4, 4],
-  cushion: [4, 4, 4],
-  radiant: [4, 4, 4],
-  marquise: [6, 6, 6],
-  pear: [5, 5, 6],
-  heart: [3, 5, 5],
-  baguette: [4, 4, 4],
-  trillion: [3, 3, 3],
-  cabochon: [4, 4, 6],
-}
+/**
+ * Prong counts by shape: [min, typical, max] for a claw head (research 09 §1 "Prongs by shape").
+ * The numbers live in @pave/schema's `GEM_CUTS[cut].prongs`, where the mount rules that pick a
+ * head's claw count read them too, so the lint and the default never disagree.
+ */
+export const PRONGS_BY_CUT = Object.fromEntries(
+  GEM_CUT_IDS.map((cut) => {
+    const p = GEM_CUTS[cut].prongs
+    return [cut, [p.min, p.typical, p.max] as const]
+  }),
+) as Record<GemCutId, readonly [number, number, number]>
 
 /** Sharp points on the outline; each needs a V-claw (research 09 §1 "Tip"). */
 export const POINTS_BY_CUT: Record<GemCutId, number> = {

@@ -6,6 +6,7 @@
  * undo/redo, a replayable history and a per-edit trace of who (person or agent run) did what.
  */
 import { z } from 'zod'
+import { DESIGN_VERSION, migrateDesign } from './mount'
 import { isBodyKind, type Node, type NodeInput, NodeSchema, nodeRefs } from './nodes'
 
 export const PIECE_KINDS = [
@@ -21,7 +22,11 @@ export const PIECE_KINDS = [
 export type PieceKind = (typeof PIECE_KINDS)[number]
 
 export const DesignSchema = z.object({
-  schemaVersion: z.literal(1).default(1),
+  /**
+   * 2: follow fields (absent = follow the stone, see design/mount.ts). A version 1 document is
+   * migrated on the way in (`migrateDesign`), keeping what its stored values meant.
+   */
+  schemaVersion: z.union([z.literal(1), z.literal(2)]).default(2),
   kind: z.enum(PIECE_KINDS).default('ring'),
   nodes: z.record(z.string(), NodeSchema).default({}),
   /** Outliner order. Every node id appears exactly once. */
@@ -30,7 +35,7 @@ export const DesignSchema = z.object({
 export type Design = z.infer<typeof DesignSchema>
 
 export const emptyDesign = (kind: PieceKind = 'ring'): Design => ({
-  schemaVersion: 1,
+  schemaVersion: DESIGN_VERSION,
   kind,
   nodes: {},
   order: [],
@@ -159,7 +164,10 @@ function dependents(design: Design, id: string): string[] {
  * Applies ops in order and returns the new design plus the ops that undo them.
  * Pure: the input is not mutated. Throws {@link OpError}; nothing is applied on failure.
  */
-export function applyOps(design: Design, ops: readonly Op[]): { design: Design; inverse: Op[] } {
+export function applyOps(input: Design, ops: readonly Op[]): { design: Design; inverse: Op[] } {
+  // An old document is read with the meaning its values had before it is edited, so an edit
+  // never changes what the untouched parts of a version 1 piece look like.
+  const design = migrateDesign(input)
   // Own-property lookups only: ids such as "constructor" or "__proto__" are ordinary ids.
   const nodes: Record<string, Node> = Object.assign(Object.create(null), design.nodes)
   const has = (id: string) => Object.hasOwn(nodes, id)
@@ -227,7 +235,7 @@ export function applyOps(design: Design, ops: readonly Op[]): { design: Design; 
     }
   }
 
-  const next: Design = { schemaVersion: 1, kind, nodes: { ...nodes }, order }
+  const next: Design = { schemaVersion: DESIGN_VERSION, kind, nodes: { ...nodes }, order }
   const issues = validateDesign(next).filter((i) => i.level === 'error')
   if (issues.length) throw new OpError(issues.map((i) => i.message).join('; '), ops[0]!)
   return { design: next, inverse }

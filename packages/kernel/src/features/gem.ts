@@ -1,5 +1,13 @@
 /** A single stone: nominal or measured dimensions, placed on a band, on a surface, or freely. */
-import { GEM_CUTS, type GemCut, type GemDims, gemDims, type NodeOf } from '@pave/schema'
+import {
+  flatBacked,
+  GEM_CUTS,
+  type GemCut,
+  type GemDims,
+  measuredUsable,
+  type NodeOf,
+  stoneDims as schemaStoneDims,
+} from '@pave/schema'
 import { type BuildContext, defineFeature, type NodeResult, type Stone } from '../core'
 import { seatCutter } from '../gems/cutter'
 import { gemRatio, gemUnit } from '../gems/index'
@@ -26,19 +34,12 @@ import { type ShankData, shankData } from './ringShank'
 
 type GemNode = NodeOf<'gem'>
 
-/** The stone's real size: the measured stone when one has been sourced, else the cut's nominal. */
-export function stoneDims(node: Pick<GemNode, 'cut' | 'width' | 'lw' | 'sourcing'>): GemDims {
-  const measured = node.sourcing?.measured
-  if (measured) {
-    // Length ≥ width by convention, whichever way round the lab reported them.
-    return {
-      length: Math.max(measured.length, measured.width),
-      width: Math.min(measured.length, measured.width),
-      depth: measured.depth,
-    }
-  }
-  return gemDims(node.cut, node.width, gemRatio(node.cut, node.lw))
-}
+/**
+ * The stone's real size: the measured stone when one has been sourced, else the cut's nominal.
+ * One definition, in @pave/schema, which the mount rules size heads and side stones from too.
+ */
+export const stoneDims = (node: Pick<GemNode, 'cut' | 'width' | 'lw' | 'sourcing'>): GemDims =>
+  schemaStoneDims(node)
 
 /** Distance from the girdle plane down to the culet for a stone of these dimensions. */
 export function culetDepth(cut: GemNode['cut'], dims: GemDims): number {
@@ -63,6 +64,10 @@ export interface StoneHost {
 export interface GemData {
   kind: 'gem'
   host: StoneHost | null
+  /** How the stone is placed: on a band, sunk into a surface, or free in space. */
+  placement: GemNode['placement']['type']
+  /** The alloy of the band under a ring-top stone (a head of another alloy needs its own base). */
+  hostMaterial?: string
 }
 
 export function gemData(result: NodeResult): GemData {
@@ -114,7 +119,8 @@ function ringHost(shank: ShankData, local: Frame): StoneHost {
       const half = Math.max(0, shank.width(c.theta) / 2 - margin)
       const gap = shank.gap(c.theta) / 2
       let a = clamp(c.a, -half, half)
-      if (Math.abs(a) < gap + margin) a = (a < 0 ? -1 : 1) * Math.min(half, gap + margin)
+      // Off the open gap of a split shank (a solid band has none to keep off).
+      if (gap > 0 && Math.abs(a) < gap + margin) a = (a < 0 ? -1 : 1) * Math.min(half, gap + margin)
       const moved = toFrame(local, [c.r * Math.sin(c.theta), a, c.r * Math.cos(c.theta)])
       return [moved[0], moved[1]]
     },
@@ -125,34 +131,43 @@ function ringTopFrame(
   node: GemNode,
   dims: GemDims,
   ctx: BuildContext,
-): { frame: Frame; host: StoneHost } {
+): { frame: Frame; host: StoneHost; material: string | undefined } {
   const placement = node.placement as Extract<GemNode['placement'], { type: 'ringTop' }>
   const host = ctx.input(placement.shank)
   const shank = shankData(host)
-  const theta = placement.angle * DEG
-  const girdle = shank.innerRadius + placement.elevation + culetDepth(node.cut, dims)
+  const theta = (placement.angle ?? 0) * DEG
+  const culet = culetDepth(node.cut, dims)
+  // A flat back (a cabochon) has no culet to keep off the finger: it rests on the band's
+  // surface instead of hanging at the clearance above the finger, inside the metal.
+  const girdle = Math.max(
+    shank.innerRadius + placement.elevation + culet,
+    flatBacked(node.cut) ? shank.outer(theta).radius + culet : -Infinity,
+  )
   const local = spinFrame(ringSurfaceFrame(theta, 0, girdle), placement.spin * DEG)
   const frame = transformFrame(host.matrix, local)
 
+  // What actually lies between the stone's lowest point and the finger (a cabochon resting on
+  // the band has more than its elevation asks for).
+  const clearance = girdle - culet - shank.innerRadius
   const bandWidth = shank.width(theta)
-  if (dims.length > bandWidth * 4 && placement.elevation < 0.3)
+  if (dims.length > bandWidth * 4 && clearance < 0.3)
     ctx.report({
       level: 'info',
       code: 'stone.overhang',
       message: `The stone is ${dims.length.toFixed(1)} mm long on a ${bandWidth.toFixed(1)} mm band and sits almost on the finger.`,
       at: [...frame.origin],
     })
-  if (placement.elevation < RULES.culetClearance)
+  if (clearance < RULES.culetClearance)
     ctx.report({
-      level: placement.elevation <= 0 ? 'error' : 'warning',
+      level: clearance <= 0 ? 'error' : 'warning',
       code: 'culet.low',
       message:
-        placement.elevation <= 0
+        clearance <= 0
           ? 'The culet touches the finger.'
-          : `Only ${placement.elevation.toFixed(2)} mm between the culet and the finger; leave at least ${RULES.culetClearance} mm.`,
-      value: placement.elevation,
+          : `Only ${clearance.toFixed(2)} mm between the culet and the finger; leave at least ${RULES.culetClearance} mm.`,
+      value: clearance,
       limit: RULES.culetClearance,
-      at: [...addScaled(frame.origin, frame.z, -culetDepth(node.cut, dims))],
+      at: [...addScaled(frame.origin, frame.z, -culet)],
       fix: {
         label: `Raise the stone to ${RULES.culetClearance} mm above the finger`,
         ops: [
@@ -160,7 +175,7 @@ function ringTopFrame(
         ],
       },
     })
-  return { frame, host: ringHost(shank, local) }
+  return { frame, host: ringHost(shank, local), material: host.bodies[0]?.material }
 }
 
 function surfaceFrame(node: GemNode, ctx: BuildContext): Frame {
@@ -191,11 +206,17 @@ export const gem = defineFeature('gem', (node, ctx) => {
     role: 'center',
     setting: node.placement.type === 'surface' ? 'flush' : 'loose',
   }
+  const measured = node.sourcing?.measured
+  if (measured && !measuredUsable(measured))
+    ctx.report({
+      level: 'warning',
+      code: 'stone.measured',
+      message: `The measured size of the sourced stone (${measured.length} × ${measured.width} × ${measured.depth} mm) is not usable; the nominal ${cut.label.toLowerCase()} size is used.`,
+    })
   if (
     node.lw !== undefined &&
-    node.lw !== 1 &&
     Math.abs(node.lw - gemRatio(node.cut, node.lw)) > 1e-6 &&
-    !node.sourcing?.measured
+    !measuredUsable(measured)
   )
     ctx.report({
       level: 'info',
@@ -205,7 +226,12 @@ export const gem = defineFeature('gem', (node, ctx) => {
   return {
     stones: [stone],
     frames: { stone: frame },
-    data: { kind: 'gem', host: onRing?.host ?? null } satisfies GemData,
+    data: {
+      kind: 'gem',
+      host: onRing?.host ?? null,
+      placement: node.placement.type,
+      ...(onRing?.material ? { hostMaterial: onRing.material } : {}),
+    } satisfies GemData,
     // A stone sunk into a surface needs the opening above its girdle cleared; a stone in a head
     // only needs its own shape removed, which leaves claws and bezel lips over the crown.
     cuts:

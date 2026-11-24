@@ -25,6 +25,7 @@ import {
   gemDims,
   type MetalId,
   metalMassG,
+  resolveDesign,
   TEMPLATES,
 } from '@pave/schema'
 import { analyzeTopology, mergeTris } from '../geometry/mesh'
@@ -236,7 +237,7 @@ export function solitaireRing(h = 0.06): { design: Design; evaluation: Evaluatio
   const design = templateDesign('solitaire')
   const band = design.nodes.band!
   const gemNode = design.nodes.center!
-  const head = design.nodes.head!
+  const head = resolveDesign(design).nodes.head!
   if (band.kind !== 'ringShank' || gemNode.kind !== 'gem' || head.kind !== 'setting')
     throw new Error('template changed')
   const R = (11.63 + 0.8128 * band.size.value) / 2
@@ -244,7 +245,7 @@ export function solitaireRing(h = 0.06): { design: Design; evaluation: Evaluatio
   const crown = 0.15 * W
   const pav = 0.43 * W
   const zg = R + band.thicknessTop + 0.45 + pav
-  const pr = head.prongDiameter / 2
+  const pr = (head.prongDiameter ?? 1) / 2
   const prongs: [[number, number, number], [number, number, number], [number, number, number]][] =
     []
   for (let k = 0; k < 4; k++) {

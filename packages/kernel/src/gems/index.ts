@@ -43,13 +43,11 @@ const cache = new Map<string, GemUnit>()
 
 /**
  * The length:width ratio a cut actually uses for a requested ratio: clamped to what the cut
- * allows. The schema fills in 1 when no ratio was given, which no elongated cut allows — that
- * case gets the cut's own default (an oval is 1.4, not its 1.2 minimum).
+ * allows; with none given (the stone follows its cut), the cut's own default.
  */
 export function gemRatio(cut: GemCutId, lw: number | undefined): number {
   const c: GemCut = GEM_CUTS[cut]
-  const requested = lw === undefined || (lw === 1 && c.lw.min > 1) ? c.lw.default : lw
-  return Math.min(c.lw.max, Math.max(c.lw.min, requested))
+  return Math.min(c.lw.max, Math.max(c.lw.min, lw ?? c.lw.default))
 }
 
 export function gemUnit(cutId: GemCutId, lw?: number): GemUnit {
