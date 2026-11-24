@@ -50,7 +50,7 @@ Everything else is installed for you. Works on macOS, Windows and Linux.
 **1. Get the code**
 
 ```bash
-git clone https://github.com/tejjogani/ffdraft.git pave
+git clone -b claude/busy-bardeen-o482lo https://github.com/tejjogani/ffdraft.git pave
 ```
 
 ```bash

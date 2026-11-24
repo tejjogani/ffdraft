@@ -1,6 +1,6 @@
 # How Pavé was built with agents, and how to carry on
 
-Most of Pavé was built by Claude Code orchestrating many sub-agents through **workflow scripts**: small JavaScript programs that spawn agents, pass work between them and collect their reports. Every script used is copied here in `workflows/`, so a new session can read exactly what each agent was told and run the work again.
+Most of Pavé was built by Claude Code orchestrating many sub-agents through **workflow scripts**: small JavaScript programs that spawn agents, pass work between them and collect their reports. The scripts that were saved are copied here in `workflows/`, so a new session can read exactly what each agent was told and run the work again. Earlier work (research 01–09, the wave-2 plan briefs, the first package builds, the ERP research) used scripts or agents that were not kept; their outputs are in `docs/`.
 
 ## The patterns
 
@@ -30,13 +30,13 @@ Conventions in every prompt: a shared context block with the product, the rules 
 | `engine-test-pass.js`, `engine-test-pass-continue.js` | the engine test pass, stone replacement and the right-click menus | kernel, schema, server and studio fixes; `docs/agents/engine-pass-status.md` |
 | `assistant-build.js` | the AI assistant: key in app, tiers, AI jobs, stages, directions, photo to CAD, render job, plans, MCP | branch `ai/assistant` |
 | `diaex-contract.js` | the Pavé–Diaex contract and the Diaex agent brief | `docs/integrations` |
-| `freeform-cad-plan.js` | the plan for Rhino-class modeling | `docs/plans/freeform-cad.md`, `docs/research/12-rhino-parity.md` |
+| `freeform-cad-plan.js` | the plan for Rhino-class modeling | `docs/plans/freeform-cad.md`, `docs/research/12-rhino-parity.md` (not yet written at handover) |
 
 The scripts contain absolute paths from the original container (`/home/user/ffdraft`, `/home/user/ffdraft-ai`, scratch folders under `/tmp/claude-0/...`). Change them to the new session's paths before running.
 
 ## Carrying on in a new session
 
-1. A workflow can be **resumed from its cache only in the session that ran it.** In a new session, open the script, delete or skip the steps whose work is already committed (check `git log` for each step's commit), point the paths at the new checkout, and run it with the Workflow tool.
-2. To continue the assistant build after a lost container: if `ai/assistant` was pushed, check it out in a worktree and remove the finished steps from `assistant-build.js`; if not, rebuild from `docs/plans/assistant.md` with the founder's additions in `docs/HANDOVER.md` section 1.
+1. A workflow can be **resumed from its cache only in the session that ran it.** In a new session, open the script, delete or skip the steps whose work is already committed (check `git log` for each step's commit), point the path constants at the top (`WT`, `SCRATCH`, `SHOTS`, `OUT`) at the new checkout, replace the attribution lines with the new session's, and remove steps that read the old scratch folders (round-one findings, probe scripts): those files did not survive. Then run it with the Workflow tool. Scripts that read the Diaex repository must keep it read-only and must never open or print `.env` or other secret files.
+2. To continue the assistant build after a lost container: check out `claude/assistant-build` in a worktree, see which steps committed, and remove those steps from `assistant-build.js`. The founder's additions in `docs/HANDOVER.md` section 1 override `docs/plans/assistant.md`.
 3. Regenerate the engine pass snapshot from a workflow journal with `docs/agents/engine_status.py` (arguments: journal path, round-one findings folder, output file, date).
 4. Subagents ran on Claude Opus 5.5 at high effort while the Fable usage limit applied (until 28 November, 07:00 UTC).

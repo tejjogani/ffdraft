@@ -22,15 +22,16 @@ L += ["## Later results, newest last", ""]
 for name, v in res:
     L.append(f"### {name}")
     if isinstance(v, str):
-        L += ["", v.strip()[:3000], ""]; continue
+        L += ["", v.strip(), ""]; continue
     if isinstance(v, dict):
-        if isinstance(v.get('summary'), str): L += ["", v['summary'].strip()[:1500], ""]
+        if isinstance(v.get('summary'), str): L += ["", v['summary'].strip(), ""]
         fs = v.get('findings') or []
         if fs:
-            L += ["| Id | Severity | Summary |", "|---|---|---|"]
+            L += ["| Severity | Owner | Where | Problem |", "|---|---|---|---|"]
             for x in fs:
-                s = (x.get('summary') or x.get('title') or '').replace('|', '\\|').replace('\n', ' ')
-                L.append(f"| {x.get('id','')} | {x.get('severity','')} | {s[:300]} |")
+                cell = lambda k: str(x.get(k) or '').replace('|', '\\|').replace('\n', ' ')
+                prob = cell('problem') or cell('summary') or cell('title')
+                L.append(f"| {cell('severity')} | {cell('owner') or cell('id')} | {cell('area') or cell('file')} | {prob} |")
             L.append("")
 open(out, 'w').write('\n'.join(L) + '\n')
 print(len(res), 'results;', out)

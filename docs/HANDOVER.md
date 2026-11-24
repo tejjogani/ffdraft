@@ -11,22 +11,25 @@ Pavé is an AI-native jewelry design suite. **One AI assistant carries a piece t
 - **CAD to Render** (an AI job): the AI proposes shots and a look, renders with Blender, critiques each take with its own vision, re-renders what falls short, and hands over a set.
 - **Monitoring**: a job panel shows the plan, live progress, cost and time; Pause, Resume, Stop and Take over (a manual edit pauses the job; Resume replans). Outputs wait for review: accept, change by hand or by chat, or re-run a step.
 
-**Pricing** (decided 24 Nov): the free plan includes the CAD software in full, including the AI jobs with the user's own Claude key. Blender renders and Rhino (.3dm) and STEP exports are paid, with 5 of each free per calendar month (numbers in one config file). STL, 3MF, OBJ and GLB exports are always free. No checkout yet; `PAVE_PLAN=pro` in `apps/server/.env` switches plans for testing.
+**Pricing** (decided 24 Nov; not built yet, it is step 7 of the assistant build): the free plan includes the CAD software in full, including the AI jobs with the user's own Claude key. Blender renders and Rhino (.3dm) and STEP exports are paid, with 5 of each free per calendar month (planned: numbers in one config file). STL, 3MF, OBJ and GLB exports are always free. Planned: no checkout at first, and `PAVE_PLAN=pro` in `apps/server/.env` to switch plans for testing.
 
 **AI models** (decided 24 Nov): three tiers the user picks per conversation, each pointable at any allow-listed model in Settings: **Power** = Claude Fable 5.2, **Standard** (default) = Claude Opus 5.5, **Light** = Claude Sonnet 5.5 (or Haiku 5.5). The user pastes the API key in Settings, AI (stored on the server only, never sent back to the browser); `ANTHROPIC_API_KEY` in `apps/server/.env` also works and wins.
 
 **The founder will not test until the whole journey works** (design, then CAD, then Blender render, as monitored AI jobs). Until then, the only thing to test by hand is the CAD workspace at commit `e5d18f2`.
 
+**Two meanings of "Design":** today the CAD workspace lives in the studio's "Design" tab. The Design *stage* above (directions) is new; assistant build step 3 adds a Design, CAD, Render stepper and relabels the CAD tab.
+
 ## 2. Where everything is
 
 | What | Where |
 |---|---|
-| Repository | `github.com/tejjogani/ffdraft`, branch **`claude/busy-bardeen-o482lo`** (the only branch agents may push to) |
-| Last fully verified commit (typecheck clean, every test green, fresh-clone install checked) | **`e5d18f2`**. Commits after it include "Checkpoint:" commits of unfinished, unverified work |
-| Assistant build (in progress) | Local branch **`ai/assistant`** in the git worktree `/home/user/ffdraft-ai`, based on `e5d18f2`. **Not pushed** unless a remote branch for it has been agreed; if the container is gone and it was never pushed, that work is lost and must be rebuilt from the plan |
-| Product and architecture | `README.md` (install, run, scripts), `docs/ARCHITECTURE.md` (packages and file map) |
+| Repository | `github.com/tejjogani/ffdraft`. **Its default branch `main` holds an unrelated document; Pavé is only on the `claude/...` branches.** Clone with `git clone -b claude/busy-bardeen-o482lo https://github.com/tejjogani/ffdraft.git pave` |
+| Main working branch | **`claude/busy-bardeen-o482lo`**: everything merged so far. Push here, unless the founder has named another branch for the session; a new session that was assigned a different branch asks the founder before its first push |
+| Commit to test by hand | **`e5d18f2`**: typecheck clean, tests green and a fresh-clone install checked. Its round-one engine fixes were not yet re-verified, and the verify rounds found open majors (`docs/agents/engine-pass-status.md`). Commits after it include "Checkpoint:" commits of unfinished, unverified work |
+| Assistant build (in progress) | Remote branch **`claude/assistant-build`** (the founder agreed on 24 Nov), pushed from the local branch `ai/assistant` in the worktree `/home/user/ffdraft-ai` after every committed step; based on `e5d18f2`. Work a step had not yet committed when the container stopped is lost and is redone by rerunning that step |
+| Product and architecture | `README.md` (install, run, scripts), `docs/ARCHITECTURE.md` (packages and principles; partly out of date: it predates the three-stage product, and lists packages not built yet) |
 | Build briefs (plans) | `docs/plans/*.md`: `assistant.md`, `cad-workspace.md`, `design-intelligence.md`, `ideate-and-freeform.md`, `publishing.md`, `reference-match.md`, `render-and-models.md`, `targeted-edits.md`, and (when written) `freeform-cad.md` |
-| Research | `docs/research/01`–`12`, plus `docs/research/reports/Jewelry and diamond ERP vertical.md` and its notes in `docs/research/research_notes/` |
+| Research | `docs/research/01`–`11` (`12-rhino-parity.md` when written), plus `docs/research/reports/Jewelry and diamond ERP vertical.md` and its notes in `docs/research/research_notes/` |
 | Strategy | `docs/strategy/product-strategy.md`, `docs/strategy/catalog-import-and-store.md` |
 | Diaex integration | `docs/integrations/diaex-partner-api.md`, `diaex-partner-api.openapi.yaml`, `diaex-agent-brief.md` (the prompt the founder pastes into the Diaex agent) |
 | Agent workflows used to build all this | `docs/agents/README.md` and `docs/agents/workflows/*.js` |
@@ -45,18 +48,18 @@ Pavé is an AI-native jewelry design suite. **One AI assistant carries a piece t
 | Photo matching core (render-and-compare fitting to masks) | Core works; not yet tested on real photos; no segmentation model | `packages/match` |
 | Stone replacement keeping the mount | Built in the engine pass (follow fields, `resolveDesign`, `design.replaceStone`); under verification | `packages/schema/src/design/{mount,intents}.ts` |
 | AI assistant (key in app, tiers, AI jobs, stages, directions, photo to CAD, render job, plans, MCP for Claude Code) | Being built on `ai/assistant` | `docs/plans/assistant.md` plus the founder's additions in section 1 |
-| Rhino-class modeling from scratch (curves, surfaces, solids, gumball, Notion-style slash palette, glass chrome) | Being planned | `docs/plans/freeform-cad.md` (when written), `docs/research/12-rhino-parity.md` |
+| Rhino-class modeling from scratch (curves, surfaces, solids, gumball, Notion-style slash palette, glass chrome) | Being planned | `docs/plans/freeform-cad.md` and `docs/research/12-rhino-parity.md` (both when written) |
 | Ideas boards, brand models, on-model imagery, sourcing screen, publishing, desktop app, cost monitoring screens | Not built | their plans in `docs/plans` |
 | ERP and catalogue import | Researched only; deliberately after the core product | the ERP report; `docs/strategy/catalog-import-and-store.md` |
-| Diaex partner API | Contract and brief written and checked; Diaex side not started | `docs/integrations` |
+| Diaex partner API | Contract, OpenAPI file and Diaex agent brief written, checked against the Diaex code and fixed; Diaex side not started | `docs/integrations` |
 
 ## 4. In flight when this was written
 
-Four agent workflows were running in the original session. A new session cannot attach to them; check their output in git instead.
+Agent workflows were running in the original session. A new session cannot attach to them; check their output in git instead. **They may still be running**: before changing code, a new session asks the founder whether the original session is still working. A workflow is likely dead if its branch has had no new commit for several hours and the founder confirms the original session has stopped.
 
 1. **Engine test pass** (rounds 2 and 3, then the studio's "Replace stone…" and "Ask AI" right-click menus). Edits land in the main checkout and are saved as "Checkpoint:" commits on the branch. Done when a commit titled like "Engine test pass, round two…" or "…complete" appears without "Checkpoint". Latest open findings: `docs/agents/engine-pass-status.md`.
-2. **Assistant build** on `ai/assistant`: eight build steps (1 core and adapter; 2 loop, approvals, key in app; 3 dock, AI jobs and the stage stepper; 4 view capture and photo to CAD; 5 directions and the design-to-CAD job; 6 Render tab and the render job; 7 plans and allowances; 8 MCP, `pnpm agent:smoke` and README), then three adversarial reviews (Claude API correctness; security, privacy and cost; the founder's first hour in a browser) and up to two fix rounds. Steps 1 and 2 were committed (`9416abf`, `797956b`). When it ends: merge `ai/assistant` into the branch, connect the engine pass's "Ask AI" menu items to `openAssistant(...)` from the dock's store, add `design.replaceStone` to the assistant's chip labels (`describe.ts`), run typecheck and tests, push, and give the founder one commit plus what to try.
-3. **Diaex contract**: the three files in `docs/integrations` after two independent checks and a fix pass.
+2. **Assistant build** on `ai/assistant`: eight build steps (1 core and adapter; 2 loop, approvals, key in app; 3 dock, AI jobs and the stage stepper; 4 view capture and photo to CAD; 5 directions and the design-to-CAD job; 6 Render tab and the render job; 7 plans and allowances; 8 MCP, `pnpm agent:smoke` and README), then three adversarial reviews (Claude API correctness; security, privacy and cost; the founder's first hour in a browser) and up to two fix rounds. Steps 1 and 2 were committed (`9416abf`, `797956b`, on `claude/assistant-build`); step 3 was running. The founder's additions (tiers, key in the app, AI jobs and stages, directions, the render job, plans) are in section 1 and in `docs/agents/workflows/assistant-build.js`; they override `docs/plans/assistant.md` where they differ. When it ends: merge `claude/assistant-build` into the main branch, connect the engine pass's "Ask AI" menu items to `openAssistant(...)` (in the dock's store on the assistant branch), add `design.replaceStone` to the assistant's chip labels (`packages/agent/src/describe.ts` on the assistant branch), run typecheck and tests, push, and give the founder one commit plus what to try.
+3. **Diaex contract**: finished in the original session. The three files in `docs/integrations` passed two independent checks (one against the Diaex code and rules, one for contract quality and security) and a fix pass; they are committed under a commit titled for the Diaex contract.
 4. **Rhino-class modeling plan**: `docs/plans/freeform-cad.md` and `docs/research/12-rhino-parity.md`, after kernel feasibility spikes and a jeweler-CAD review. Build only after the assistant is merged (both change the CAD workspace).
 
 If a workflow died part-way, rerun its script from `docs/agents/workflows` with the finished steps removed (see `docs/agents/README.md`). A workflow can only be resumed from its cache inside the session that ran it.
@@ -85,7 +88,7 @@ If a workflow died part-way, rerun its script from `docs/agents/workflows` with 
 
 - **`/home/user/diaex-backend` is read-only from Pavé's sessions**: never modify it, never run anything that writes there, never print secrets from it. Changes to Diaex go through the Diaex agent with `docs/integrations/diaex-agent-brief.md`, under Diaex's own AGENTS.md process.
 - **Secrets** never in files, commits, PRs or chat. Production is never touched. The user's email and personal details are private.
-- **Push only to `claude/busy-bardeen-o482lo`.** No pull request unless the founder asks. Commit messages end with the attribution lines the session's system reminder gives. No model identifiers in commit messages or code comments.
+- **Push only to `claude/busy-bardeen-o482lo` (merged work) and `claude/assistant-build` (the assistant build).** A session assigned another branch asks the founder before its first push. Never push to `main`. No pull request unless the founder asks. Commit messages end with the attribution lines the session's system reminder gives. No model identifiers in commit messages or code comments.
 - **The founder's father's files** (3DM, STL, photos, sheets) stay out of the repo.
 - **Engine first**: geometry correctness is tested before anything is built on top.
 - **Verify before claiming**: say what was run and what passed; label unverified work; outside facts that could not be opened at source are marked as search extracts.
@@ -94,7 +97,7 @@ If a workflow died part-way, rerun its script from `docs/agents/workflows` with 
 ## 8. How to check the repo is healthy
 
 ```bash
-pnpm install --frozen-lockfile && pnpm -s typecheck
+pnpm install --frozen-lockfile && pnpm -s typecheck && pnpm -s build
 ```
 
 ```bash
@@ -106,8 +109,14 @@ pnpm vitest run packages/schema packages/production packages/render packages/mat
 ```
 
 ```bash
+pnpm vitest run packages/canon packages/sourcing apps/studio
+```
+
+```bash
 node scripts/install.mjs --check
 ```
+
+Run one block at a time on a small machine. The kernel suite takes several minutes; for a quick health check run only `packages/kernel/src/features/features.test.ts` and the schema tests. `install.mjs --check` reports the studio as not built until `pnpm build` or the installer has run.
 
 ## 9. Open questions for the founder
 
