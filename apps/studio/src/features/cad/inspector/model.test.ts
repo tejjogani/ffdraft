@@ -149,4 +149,14 @@ describe('linked measures', () => {
     expect(sizeOptions('us')).toContainEqual(us6)
     expect(sizeOptions('uk')).toContainEqual(uk.size)
   })
+
+  it('keeps the essentials first when fine-tuning adds advanced-only sections', () => {
+    for (const node of allNodes) {
+      const sections = inspectorModel(node, { advanced: true }).sections
+      const advancedOnly = sections.map((sec) => sec.rows.every((r) => r.field.meta.advanced))
+      // Once an advanced-only section appears, every later one is advanced-only too.
+      const first = advancedOnly.indexOf(true)
+      if (first >= 0) expect(advancedOnly.slice(first).every(Boolean), node.kind).toBe(true)
+    }
+  })
 })

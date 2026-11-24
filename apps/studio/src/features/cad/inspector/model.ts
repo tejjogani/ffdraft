@@ -76,11 +76,15 @@ export function inspectorModel(node: Node, opts: { advanced?: boolean } = {}): I
   const advanced = opts.advanced
     ? countRows(rows) - countRows(rowsFor(d.fields, value, [], false))
     : countRows(rowsFor(d.fields, value, [], true)) - countRows(rows)
+  // Fine-tuning adds to the form without pushing the essentials down: sections made only of
+  // advanced fields (the transform) follow the ones a feature is usually set up with.
+  const onlyAdvanced = (s: InspectorSection) => s.rows.every((r) => r.field.meta.advanced)
+  const filled = sections.filter((s) => s.rows.length > 0)
   return {
     kind: node.kind,
     title: d.title,
     ...(d.description ? { description: d.description } : {}),
-    sections: sections.filter((s) => s.rows.length > 0),
+    sections: [...filled.filter((s) => !onlyAdvanced(s)), ...filled.filter(onlyAdvanced)],
     advanced,
   }
 }

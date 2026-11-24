@@ -66,11 +66,13 @@ export const HALO_RULES = [
   rule({
     id: 'halo.clawWire',
     title: 'Claws inside a halo',
-    applies: { nodeKind: 'setting', when: and(v('halo'), v('claw'), lt(W, 7.01)) },
+    applies: { kinds: ['ring'], nodeKind: 'setting', when: and(v('halo'), v('claw')) },
     paths: ['setting.prongDiameter'],
-    band: band(0.8, 0.8, 0.9),
+    // 0.8 to 7 mm, then slowly up to 1.1: thicker claws push the halo past its 0.6 mm gap.
+    band: band(clamp(add(0.8, mul(0.07, sub(W, 7))), 0.8, 1.1), 0.8, 1.1),
+    refines: 'ring.head.prongWire',
     rationale:
-      'Inside a halo the claws only hold, the halo guards: 0.8 mm claws for centres up to 7 mm keep the face clean.',
+      'Inside a halo the claws only hold, the halo guards: 0.8 mm to 7 mm centres, at most 1.1, so the halo stays within 0.6 mm.',
     source: src('K', '§1 Halo: gap to centre'),
     confidence: 'medium',
     severity: 'default',

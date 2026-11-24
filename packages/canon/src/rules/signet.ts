@@ -160,16 +160,4 @@ export const SIGNET_RULES = [
     severity: 'warning',
     fix: 'clampToBand',
   }),
-  rule({
-    id: 'signet.championship',
-    title: 'Championship face',
-    applies: { kinds: ['ring'], styles: ['championship'], nodeKind: 'relief' },
-    paths: ['relief.width'],
-    band: band(mul(1.15, ID), mul(1.0, ID), mul(1.35, ID)),
-    rationale:
-      'A championship face is 20–28 mm, wider than the finger, on a 7–9 mm base: 40–75 g of statement.',
-    source: src('S', '§4 Championship ring'),
-    confidence: 'medium',
-    severity: 'default',
-  }),
 ]

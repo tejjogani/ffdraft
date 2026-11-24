@@ -22,6 +22,7 @@ import {
   widthForCarat,
 } from '../measures'
 import type { InspectorRow } from '../model'
+import type { WidgetProps } from './basic'
 
 const round2 = (v: number) => Math.round(v * 100) / 100
 
@@ -30,7 +31,7 @@ const round2 = (v: number) => Math.round(v * 100) / 100
  * (carats are never stored); melee sizes snap to stock diameters when released and show the
  * weight of one stone, read-only.
  */
-export function StoneSizeWidget({ row }: { row: InspectorRow }) {
+export function StoneSizeWidget({ row, label }: WidgetProps) {
   const edit = useFieldEdit()
   const node = edit.node as unknown as { cut?: GemCutId; stone?: GemMaterialId; lw?: number }
   const spec: StoneSpec = { cut: node.cut ?? 'round', stone: node.stone ?? 'diamond', lw: node.lw }
@@ -40,42 +41,45 @@ export function StoneSizeWidget({ row }: { row: InspectorRow }) {
   const max = field.max ?? 40
   const melee = field.meta.snap === 'melee'
   const carat = caratOf(spec, width)
+  // The label scrubs the millimetres; the carats follow.
+  const weight = melee ? (
+    <p
+      className="flex h-7 items-center justify-end gap-1 pr-1 font-mono text-xs whitespace-nowrap text-fg-muted tabular"
+      title="Weight of one stone"
+    >
+      {carat < 0.1 ? carat.toFixed(3) : carat.toFixed(2)}
+      <span className="text-2xs text-fg-subtle">ct ea.</span>
+    </p>
+  ) : (
+    <NumberField
+      size="sm"
+      value={round2(carat)}
+      min={0.01}
+      step={0.01}
+      unit="ct"
+      disabled={edit.readOnly}
+      aria-label={`${field.title} in carats`}
+      onChange={(ct) => ct && edit.preview(row.path, widthForCarat(spec, ct, min, max))}
+      onCommit={(ct) => ct && edit.commit(row.path, widthForCarat(spec, ct, min, max))}
+      className="flex-1"
+    />
+  )
   return (
-    <div className="grid grid-cols-2 gap-1">
-      <NumberField
-        size="sm"
-        value={width}
-        min={min}
-        max={max}
-        step={melee ? 0.05 : 0.01}
-        unit="mm"
-        disabled={edit.readOnly}
-        aria-label={`${field.title} in millimetres`}
-        onChange={(v) => v !== null && edit.preview(row.path, v)}
-        onCommit={(v) => v !== null && edit.commit(row.path, snapWidth(v, field.meta.snap))}
-      />
-      {melee ? (
-        <p
-          className="flex h-7 items-center justify-end gap-1 pr-1 font-mono text-xs whitespace-nowrap text-fg-muted tabular"
-          title="Weight of one stone"
-        >
-          {carat < 0.1 ? carat.toFixed(3) : carat.toFixed(2)}
-          <span className="text-2xs text-fg-subtle">ct ea.</span>
-        </p>
-      ) : (
-        <NumberField
-          size="sm"
-          value={round2(carat)}
-          min={0.01}
-          step={0.01}
-          unit="ct"
-          disabled={edit.readOnly}
-          aria-label={`${field.title} in carats`}
-          onChange={(ct) => ct && edit.preview(row.path, widthForCarat(spec, ct, min, max))}
-          onCommit={(ct) => ct && edit.commit(row.path, widthForCarat(spec, ct, min, max))}
-        />
-      )}
-    </div>
+    <NumberField
+      size="sm"
+      rowLabel={label}
+      trailing={weight}
+      className="gap-1"
+      value={width}
+      min={min}
+      max={max}
+      step={melee ? 0.05 : 0.01}
+      unit="mm"
+      disabled={edit.readOnly}
+      aria-label={`${field.title} in millimetres`}
+      onChange={(v) => v !== null && edit.preview(row.path, v)}
+      onCommit={(v) => v !== null && edit.commit(row.path, snapWidth(v, field.meta.snap))}
+    />
   )
 }
 

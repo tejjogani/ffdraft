@@ -70,6 +70,10 @@ export interface MenuItemProps {
   /** Leading visual other than an icon, e.g. an avatar or swatch. */
   leading?: ReactNode
   shortcut?: string
+  /** A second line under the label, e.g. what an export is for. The row grows to fit it. */
+  description?: string
+  /** A short tag at the end of the row, e.g. a file format. */
+  tag?: string
   onClick?: () => void
   disabled?: boolean
   danger?: boolean
@@ -82,6 +86,8 @@ export function MenuItem({
   icon: Icon,
   leading,
   shortcut,
+  description,
+  tag,
   onClick,
   disabled,
   danger,
@@ -92,10 +98,22 @@ export function MenuItem({
       onClick={onClick}
       disabled={disabled}
       render={render}
-      className={cn(floatingItem, danger && 'text-danger [&_svg]:text-danger')}
+      className={cn(
+        floatingItem,
+        description && 'h-auto min-h-7 items-start py-1.5 [&>svg]:mt-0.5',
+        danger && 'text-danger [&_svg]:text-danger',
+      )}
     >
       {Icon ? <Icon aria-hidden /> : leading}
-      <span className="min-w-0 flex-1 truncate">{children}</span>
+      {description ? (
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="truncate">{children}</span>
+          <span className="text-xs text-fg-subtle">{description}</span>
+        </span>
+      ) : (
+        <span className="min-w-0 flex-1 truncate">{children}</span>
+      )}
+      {tag && <span className="shrink-0 pt-0.5 font-mono text-2xs text-fg-subtle">{tag}</span>}
       {shortcut && <Kbd shortcut={shortcut} />}
     </Base.Item>
   )

@@ -58,8 +58,8 @@ export const SOLITAIRES = [
       'North-south oval at 1.4 L:W lengthens the finger.',
     ],
     antiTwin: {
-      ops: [{ t: 'update', id: 'band', patch: { widthTop: 1.2 } }],
-      fault: 'A band too thin to hold its shape',
+      ops: [{ t: 'update', id: 'band', patch: { widthTop: 3.2 } }],
+      fault: 'A heavy band that swamps a small oval',
       ruleId: 'ring.solitaire.bandWidth',
     },
     sizeKey: { W: 5.1 },

@@ -1,6 +1,8 @@
 /**
  * Dimension chips on the model: the selected feature's key measure — a band's ring size, a
- * stone's mm · ct, a body's height — pinned to the geometry it measures. A chip opens the very
+ * stone's mm · ct, a body's height — beside the geometry it measures. A chip sits just outside
+ * the feature's outline on screen (so it never covers what it measures), stays inside the view
+ * and clear of the toolbars, and hides when what it measures is off-screen. It opens the very
  * same field control the inspector shows, so there is one way to edit each value.
  */
 import type { Evaluation } from '@pave/kernel'
@@ -20,7 +22,7 @@ interface Chip {
   text: string
   /** Where on the model (Z-up mm) the chip is pinned. */
   at: Vec3
-  /** Which side of that point it sits on, so it never covers what it measures. */
+  /** Which side of the feature it prefers; it flips when there is no room there. */
   side: 'above' | 'below'
 }
 
@@ -61,6 +63,11 @@ function chipFor(edit: FieldEdit, evaluation: Evaluation): Chip | null {
   return null
 }
 
+/** Room left for the floating toolbars and the facts strip, and the gap to the view's edge. */
+const HUD_BAND_PX = 56
+const EDGE_PX = 12
+const GAP_PX = 8
+
 export function Dimensions({
   viewer,
   evaluation,
@@ -75,22 +82,41 @@ export function Dimensions({
   const [visible, setVisible] = useState(false)
   const at = chip?.at.join(',')
   const side = chip?.side
+  const nodeId = edit?.node.id
 
   useEffect(() => {
-    if (!viewer || !at) return
+    if (!viewer || !at || !nodeId) return
     const point = at.split(',').map(Number) as Vec3
     const place = () => {
-      const p = viewer.project(point)
       const node = el.current
-      if (!node) return
+      const parent = node?.parentElement
+      if (!node || !parent) return
+      const p = viewer.project(point)
+      const box = viewer.screenBounds([nodeId])
       setVisible(p.visible)
-      const offset =
-        side === 'above' ? 'translate(-50%, calc(-100% - 10px))' : 'translate(-50%, 8px)'
-      node.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px) ${offset}`
+      if (!p.visible) return
+      const w = node.offsetWidth
+      const h = node.offsetHeight
+      const { clientWidth: vw, clientHeight: vh } = parent
+      const top = (box?.y0 ?? p.y) - GAP_PX - h
+      const bottom = (box?.y1 ?? p.y) + GAP_PX
+      const roomAbove = top >= HUD_BAND_PX
+      const roomBelow = bottom + h <= vh - HUD_BAND_PX
+      const y =
+        side === 'above'
+          ? roomAbove || !roomBelow
+            ? top
+            : bottom
+          : roomBelow || !roomAbove
+            ? bottom
+            : top
+      const x = Math.min(vw - EDGE_PX - w, Math.max(EDGE_PX, p.x - w / 2))
+      const clampedY = Math.min(vh - HUD_BAND_PX - h, Math.max(HUD_BAND_PX, y))
+      node.style.transform = `translate(${Math.round(x)}px, ${Math.round(clampedY)}px)`
     }
     place()
     return viewer.onRender(place)
-  }, [viewer, at, side])
+  }, [viewer, at, side, nodeId])
 
   if (!chip || !edit) return null
   return (

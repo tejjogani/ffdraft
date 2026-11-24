@@ -18,6 +18,8 @@ export const OPS = [
   'snapMelee',
   'asin',
   'cos',
+  'floor',
+  'pow',
   'gt',
   'lt',
   'eq',
@@ -91,6 +93,11 @@ export function evalExpr(expr: Expr, facts: Facts): number | undefined {
       return Math.asin(Math.min(1, Math.max(-1, x))) / DEG
     case 'cos':
       return Math.cos(x * DEG)
+    case 'pow':
+      return x ** y
+    case 'floor':
+      // A hair of tolerance so 2.9999 rows (float noise) is 3.
+      return Math.floor(x + 1e-9)
     case 'gt':
       return x > y ? 1 : 0
     case 'lt':
@@ -144,6 +151,8 @@ export const min = op('min')
 export const max = op('max')
 export const asin = op('asin')
 export const cos = op('cos')
+export const floor = op('floor')
+export const pow = op('pow')
 export const gt = op('gt')
 export const lt = op('lt')
 export const eq = op('eq')

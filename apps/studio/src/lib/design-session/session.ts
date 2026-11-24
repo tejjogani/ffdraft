@@ -39,6 +39,8 @@ export interface SessionDeps {
 
 export type SaveState =
   | { status: 'saved' }
+  /** A live gesture (a scrub, typing) that is not a change yet. */
+  | { status: 'unsaved' }
   | { status: 'saving'; count: number }
   | { status: 'offline'; count: number }
 
@@ -83,6 +85,7 @@ export function createDesignSession(
   let offlineAttempts = 0
   let retryTimer: ReturnType<typeof setTimeout> | undefined
   let gapTimer: ReturnType<typeof setTimeout> | undefined
+  let gapAttempts = 0
   let syncing: Promise<void> | null = null
   const idleWaiters = new Set<() => void>()
   /** Changes that already met a conflict once. */
@@ -90,7 +93,7 @@ export function createDesignSession(
 
   const saveState = (s: core.SessionState): SaveState => {
     const count = s.pending.length
-    if (count === 0) return { status: 'saved' }
+    if (count === 0) return s.gesture ? { status: 'unsaved' } : { status: 'saved' }
     return offlineAttempts > 0 ? { status: 'offline', count } : { status: 'saving', count }
   }
 
@@ -103,12 +106,12 @@ export function createDesignSession(
   }
   const update = (f: (s: core.SessionState) => core.SessionState) => set(f(store.getState()))
 
-  function scheduleGapCheck() {
-    if (gapTimer) return
+  function scheduleGapCheck(delay = gapWait) {
+    if (gapTimer || disposed) return
     gapTimer = setTimeout(() => {
       gapTimer = undefined
       if (core.hasGap(store.getState())) void resync()
-    }, gapWait)
+    }, delay)
   }
 
   async function resync(): Promise<void> {
@@ -122,8 +125,11 @@ export function createDesignSession(
           const snap = await deps.transport.snapshot(pieceId)
           update((s) => core.rebase(s, snap.design, snap.version))
         } else update((s) => core.catchUp(s, changes))
+        gapAttempts = 0
       } catch {
-        // Unreachable: the next event, reconnect or retry will try again.
+        // Unreachable. A gap blocks the outbox (its ack may be waiting behind it), so keep
+        // trying with backoff rather than waiting for an event that may never come.
+        if (core.hasGap(store.getState())) scheduleGapCheck(backoff(gapAttempts++))
       }
     })().finally(() => {
       syncing = null
@@ -157,7 +163,8 @@ export function createDesignSession(
           const kind = deps.classify(error)
           if (kind === 'retry') {
             offlineAttempts++
-            update((s) => s)
+            // The timer must exist before `update` re-enters `pump`, or that would resend now.
+            clearTimeout(retryTimer)
             retryTimer = setTimeout(
               () => {
                 retryTimer = undefined
@@ -165,6 +172,7 @@ export function createDesignSession(
               },
               backoff(offlineAttempts - 1),
             )
+            update((s) => s)
             return
           }
           offlineAttempts = 0
@@ -180,6 +188,8 @@ export function createDesignSession(
       )
   }
   const act = (f: (s: core.SessionState) => core.SessionState) => () => update(f)
+  // The starting snapshot may be older than the server (a cached copy): catch up once.
+  void resync()
 
   return {
     store,

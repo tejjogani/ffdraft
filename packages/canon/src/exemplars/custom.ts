@@ -91,7 +91,7 @@ export const CUSTOM_RINGS = [
     title: 'Vine ring with an opal',
     kind: 'ring',
     archetype: 'custom',
-    styles: ['art nouveau', 'nature'],
+    styles: ['art nouveau', 'botanical'],
     variant: 'classic',
     build: {
       kind: 'ring',

@@ -1,6 +1,6 @@
 /** Research 09 §5 "Victorian". */
 
-import { mul, v } from '../expr'
+import { gt, mul, v } from '../expr'
 import { band, src } from '../rules/rule'
 import { guide } from './guide'
 
@@ -30,18 +30,18 @@ export const VICTORIAN = guide({
       path: 'gemRow.stoneWidth',
       band: band(3.5, 3.0, 3.5),
       note: 'half hoop graduating 3.5 → 2.5',
-      applies: { archetypes: ['band', 'eternity', 'custom'] },
+      applies: { archetypes: ['band', 'eternity', 'custom'], when: gt(v('rowD'), 0) },
     },
     {
       path: 'gemRow.graduateTo',
       band: band(2.5, 2.3, 2.7),
-      applies: { archetypes: ['band', 'eternity', 'custom'] },
+      applies: { archetypes: ['band', 'eternity', 'custom'], when: gt(v('rowD'), 0) },
     },
     {
       path: 'ringShank.widthTop',
       band: band(4.0, 3.9, 4.1),
       note: 'half-hoop band',
-      applies: { archetypes: ['band', 'eternity', 'custom'] },
+      applies: { archetypes: ['band', 'eternity', 'custom'], when: gt(v('rowD'), 0) },
     },
   ],
   do: [

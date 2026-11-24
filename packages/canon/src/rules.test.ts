@@ -69,7 +69,7 @@ describe('rules', () => {
 
   it('are exercised by the corpus', () => {
     const seen = new Set(evals.map((e) => e.rule.id))
-    const live = RULES.filter((r) => r.expressible !== false)
+    const live = RULES
     expect(seen.size / live.length).toBeGreaterThan(0.75)
   })
 

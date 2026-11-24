@@ -63,6 +63,18 @@ describe('evaluation scheduler', () => {
     expect(fake.seen).toContain(other)
   })
 
+  it('gives every caller waiting for the same design its result', async () => {
+    const fake = fakeKernel()
+    const s = createScheduler(() => fake.kernel)
+    const busy = s.request('other', variant(2))
+    const d = variant(2.4)
+    // Two screens showing one piece ask while the kernel is busy.
+    const [a, b] = await Promise.all([s.request('p1', d), s.request('p1', d), busy])
+    expect(a).not.toBeNull()
+    expect(b).toBe(a)
+    expect(fake.seen.filter((x) => x === d)).toHaveLength(1)
+  })
+
   it('learns per-node cost including dependents', async () => {
     const fake = fakeKernel(1)
     const s = createScheduler(() => fake.kernel)

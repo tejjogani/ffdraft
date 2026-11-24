@@ -12,6 +12,8 @@ const fill = snap(clamp(mul(0.02, H), 1.0, 2.0))
 const fillCap = min(4, iff(lt(H, 60), min(2.0, max(1.3, mul(0.03, H))), max(1.3, mul(0.03, H))))
 const underMin = add(mul(0.65, d), 0.8)
 const gapTyp = clamp(mul(0.15, d), 0.15, 0.25)
+/** Wall under pavé seats in a shell: 0.65 × stone + 0.8, never under 1.2 (06-freeform). */
+const shellMin = max(1.2, add(mul(0.65, max(d, 0)), 0.8))
 
 export const ICED_RULES = [
   rule({
@@ -80,7 +82,8 @@ export const ICED_RULES = [
       max(0.8, min(1.2, mul(d, 1 / 1.8))),
       max(0.8, min(1.2, mul(d, 1 / 1.3))),
     ),
-    lintAt: { below: mul(d, 0.5) },
+    // Capped at the band's top: with fill stones over 2.4 mm the floor would pass the stock range.
+    lintAt: { below: min(mul(d, 0.5), max(0.8, min(1.2, mul(d, 1 / 1.3)))) },
     rationale:
       'Fill corners with stones 1.3–1.8× smaller than the bulk; a wider spread reads as gravel.',
     source: src('K', '§2 Spread'),
@@ -121,10 +124,12 @@ export const ICED_RULES = [
     title: 'Margin inside a rim',
     applies: { nodeKind: 'pave', when: gt(v('border'), 0.59) },
     paths: ['pave.margin'],
-    band: band(0.25, 0.15, 0.35),
+    // Research 09 §2 gives 0.15–0.35; at 0.25 the kernel's seat.wall check fails on rimmed
+    // outlines, so the kernel's 0.4 wins.
+    band: band(0.4, 0.4, 0.5),
     rationale:
-      'With a polished rim of 0.6 mm or more, keep the stones 0.15–0.35 mm off it so the rim reads as a line.',
-    source: src('R', '§2 Edge'),
+      'With a polished rim of 0.6 mm or more, keep the stones 0.4–0.5 mm off it: the seats keep their wall and the rim reads as a line.',
+    source: src('K', '§2 Edge (0.15–0.35 corrected on the kernel seat check)'),
     confidence: 'medium',
     severity: 'default',
   }),
@@ -187,12 +192,54 @@ export const ICED_RULES = [
     title: 'Flat back on a sculpt',
     applies: { nodeKind: 'meshBody' },
     paths: ['meshBody.flatBack'],
-    band: band(0.35, 0.25, 0.5),
+    // Research 09 §2 says 0.35. Measured on the kernel, 0.35 leaves the built-in trophy 17 mm
+    // deep at 45 mm and the crown 47 mm: half or more must go for the 0.3·H depth (iced.depth).
+    band: band(0.5, 0.35, 0.85),
     rationale:
-      'Slice about a third off the back of a sculpt so it lies flat on the chest and saves metal.',
-    source: src('K', '§2 Size limits'),
+      'Slice the back of a sculpt until it stands at most 0.3 of its height off the chest: half for most sculpts, more for round ones.',
+    source: src('K', '§2 Size limits (0.35 corrected on kernel depths)'),
     confidence: 'medium',
     severity: 'default',
+  }),
+  rule({
+    id: 'iced.hollow',
+    title: 'Hollow sculpts',
+    applies: { nodeKind: 'meshBody', when: gt(H, 14.99) },
+    paths: ['meshBody.hollow'],
+    band: band(max(1.5, shellMin), shellMin, max(2.5, shellMin)),
+    rationale:
+      'Shell any sculpt thicker than 3 mm: a 1.5 mm wall (0.65 × stone + 0.8 under pavé) halves the metal; a solid sculpt weighs several times market.',
+    source: src('R', '06-freeform: hollow above 3 mm; §2 Metal under stones'),
+    confidence: 'medium',
+    severity: 'default',
+  }),
+  rule({
+    id: 'iced.depth',
+    title: 'Depth off the chest',
+    applies: { kinds: ['pendant', 'necklace'], when: gt(H, 14.99) },
+    paths: ['meshBody.flatBack', 'vectorBody.thickness'],
+    measure: 'pendantDepth',
+    band: band(mul(0.2, H), mul(0.08, H), mul(0.3, H)),
+    lintAt: { above: mul(0.35, H) },
+    rationale:
+      'A pendant stands at most 0.3 of its height off the chest; deeper and it swings, flips and reads as a lump in profile.',
+    source: src('EJ', '§2 Depth, Mass'),
+    confidence: 'medium',
+    severity: 'warning',
+  }),
+  rule({
+    id: 'iced.mass',
+    title: 'Sculpt weight',
+    applies: { kinds: ['pendant', 'necklace'], when: and(v('sculpt'), gt(H, 14.99)) },
+    paths: ['meshBody.hollow', 'meshBody.flatBack'],
+    measure: 'solidEquivalent',
+    band: band(2.5, 1.5, 3.5),
+    lintAt: { above: 5 },
+    rationale:
+      'Metal = silhouette × 1.5–3.5 mm solid-equivalent × density; past 5 mm a sculpt is a solid lump: hollow it.',
+    source: src('D', '§2 Mass'),
+    confidence: 'medium',
+    severity: 'warning',
   }),
   rule({
     id: 'iced.levels',

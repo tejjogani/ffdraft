@@ -34,10 +34,10 @@ import {
   Box3,
   BufferAttribute,
   BufferGeometry,
-  Clock,
   EdgesGeometry,
   type Group,
   InstancedMesh,
+  type LineBasicMaterial,
   LineSegments,
   type Material,
   Matrix4,
@@ -50,12 +50,14 @@ import {
   Scene,
   Sphere,
   Spherical,
+  Timer,
   Vector2,
   Vector3,
   Vector4,
   WebGLRenderer,
 } from 'three'
 import { acceleratedRaycast, computeBoundsTree } from 'three-mesh-bvh'
+import { viewportScene } from './environment'
 import {
   contactShadowTexture,
   createModeMaterials,
@@ -98,7 +100,12 @@ export interface CaptureOptions {
   focusNodeIds?: readonly string[]
   /** CSS background behind the piece (the stage gradient), drawn under the render. */
   background?: (ctx: CanvasRenderingContext2D, size: number) => void
+  /** Labels drawn next to these nodes (node id → text), e.g. their names. */
+  labels?: Readonly<Record<string, string>>
 }
+
+/** CSS pixels the floating toolbars and the facts strip cover at the top and bottom of the view. */
+const HUD_BAND_PX = 56
 
 const FOCAL_MM = 70
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -111,6 +118,13 @@ interface Built {
   originals: Map<Mesh, Material>
   /** Instance matrices as evaluated, to restore after hiding. */
   matrices: Map<InstancedMesh, Float32Array>
+}
+
+/** Metal geometry kept across evaluations by `Part.rev`, with its picking BVH and GPU buffers. */
+interface CachedGeometry {
+  geometry: BufferGeometry
+  /** The evaluation that last used it; entries no evaluation uses any more are disposed. */
+  used: number
 }
 
 const stoneNode = (stoneId: string) => stoneId.slice(0, stoneId.lastIndexOf(':'))
@@ -131,6 +145,8 @@ export class Viewer {
   private environment: PaveEnvironment | null = null
   private envRadius = 0
   private lastGood = new Map<string, Part[]>()
+  private readonly geometries = new Map<string, CachedGeometry>()
+  private generation = 0
   private state: ViewerState = {
     display: 'rendered',
     selection: [],
@@ -139,7 +155,7 @@ export class Viewer {
     hidden: [],
     xray: false,
   }
-  private readonly clock = new Clock()
+  private readonly timer = new Timer()
   private frame = 0
   private moving = false
   private restTimer: ReturnType<typeof setTimeout> | undefined
@@ -174,7 +190,11 @@ export class Viewer {
     this.controls.draggingSmoothTime = 0.06
     this.controls.minDistance = 1
     this.controls.maxDistance = 2000
+    // camera-controls only moves the camera inside `update()`, which runs in `tick`: every
+    // input that starts a move must schedule a frame, or nothing is drawn until something else
+    // happens to redraw.
     this.controls.addEventListener('update', this.invalidate)
+    this.controls.addEventListener('control', this.invalidate)
     this.controls.addEventListener('controlstart', this.startMoving)
     this.controls.addEventListener('transitionstart', this.startMoving)
     this.controls.addEventListener('rest', this.stopMoving)
@@ -202,7 +222,8 @@ export class Viewer {
 
   private readonly tick = (): void => {
     this.frame = 0
-    const moving = this.controls.update(this.clock.getDelta())
+    this.timer.update()
+    const moving = this.controls.update(this.timer.getDelta())
     this.draw()
     if (moving) this.invalidate()
   }
@@ -231,6 +252,23 @@ export class Viewer {
     }
   }
 
+  /** The screen rectangle (CSS pixels) the nodes' bounds cover, or null when none is in front. */
+  screenBounds(
+    nodeIds: readonly string[],
+  ): { x0: number; y0: number; x1: number; y1: number } | null {
+    if (!this.evaluation) return null
+    const pts = this.nodePoints(nodeIds)
+      .map((p) => this.project(p))
+      .filter((p) => p.visible)
+    if (!pts.length) return null
+    return {
+      x0: Math.min(...pts.map((p) => p.x)),
+      y0: Math.min(...pts.map((p) => p.y)),
+      x1: Math.max(...pts.map((p) => p.x)),
+      y1: Math.max(...pts.map((p) => p.y)),
+    }
+  }
+
   /** Which nodes the default views and "fit" frame; the rest may extend outside (a long chain). */
   setFrameFocus(nodeIds: readonly string[]): void {
     this.frameFocus = nodeIds
@@ -238,6 +276,7 @@ export class Viewer {
 
   private readonly startMoving = (): void => {
     clearTimeout(this.restTimer)
+    this.invalidate()
     if (this.moving) return
     this.moving = true
     this.applyGemQuality()
@@ -273,6 +312,7 @@ export class Viewer {
     this.renderer.setSize(this.width, this.height, false)
     this.camera.aspect = this.width / this.height
     this.updateFov(this.camera.aspect)
+    this.updateSafeFraction()
     for (const m of [this.materials.silhouette, this.materials.selected, this.materials.hovered])
       m.setResolution(this.width, this.height)
     this.invalidate()
@@ -299,18 +339,21 @@ export class Viewer {
     const failed = new Set(
       evaluation.diagnostics.filter((d) => d.code === 'feature.failed').map((d) => d.nodeId),
     )
-    // Remember each node's last geometry that built, to ghost it while the node is failing.
-    for (const part of evaluation.parts)
-      if (!failed.has(part.nodeId)) this.lastGood.delete(part.nodeId)
+    // Remember each node's last geometry that built, to ghost it while the node is failing;
+    // forget nodes that are gone (deleted) so their geometry is not kept alive.
     const byNode = new Map<string, Part[]>()
     for (const part of evaluation.parts)
       byNode.set(part.nodeId, [...(byNode.get(part.nodeId) ?? []), part])
+    for (const nodeId of this.lastGood.keys())
+      if (!failed.has(nodeId) && !byNode.has(nodeId)) this.lastGood.delete(nodeId)
     for (const [nodeId, parts] of byNode) this.lastGood.set(nodeId, parts)
 
     this.evaluation = evaluation
-    const resolved = resolveScene(
-      RenderSceneSchema.parse({ look: 'studio-soft', output: { width: 1024, height: 1024 } }),
-      evaluation,
+    const resolved = viewportScene(
+      resolveScene(
+        RenderSceneSchema.parse({ look: 'studio-soft', output: { width: 1024, height: 1024 } }),
+        evaluation,
+      ),
     )
     configureRenderer(this.renderer, resolved)
     this.renderer.shadowMap.enabled = false
@@ -335,6 +378,8 @@ export class Viewer {
     const gems: InstancedMesh[] = []
     const originals = new Map<Mesh, Material>()
     const matrices = new Map<InstancedMesh, Float32Array>()
+    const revs = new Map(evaluation.parts.map((p) => [p.id, p.rev]))
+    const generation = ++this.generation
     model.object.traverse((o) => {
       if (o instanceof InstancedMesh) {
         gems.push(o)
@@ -343,11 +388,17 @@ export class Viewer {
       } else if (o instanceof Mesh) {
         metals.push(o)
         originals.set(o, o.material as Material)
+        this.reuseGeometry(o, revs.get(o.name), generation)
       }
     })
     this.built = { model, metals, gems, originals, matrices }
     this.scene.add(model.object)
-    previous?.model.dispose()
+    if (previous) this.release(previous)
+    for (const [rev, entry] of this.geometries)
+      if (entry.used !== generation) {
+        entry.geometry.dispose()
+        this.geometries.delete(rev)
+      }
 
     this.placeShadow(evaluation.report.bounds, evaluation.report.ringInnerDiameter !== undefined)
     this.applyGemQuality()
@@ -356,6 +407,38 @@ export class Viewer {
       this.framedOnce = true
       this.view(this.defaultView(), false)
     }
+  }
+
+  /**
+   * Swaps a freshly built part geometry for the one already on the GPU when the part's `rev`
+   * is unchanged, so a scrub re-uploads (and re-indexes for picking) only what it changed. The
+   * new geometry has not been drawn yet, so dropping it costs nothing.
+   */
+  private reuseGeometry(mesh: Mesh, rev: string | undefined, generation: number): void {
+    if (!rev) return
+    const cached = this.geometries.get(rev)
+    if (cached) {
+      mesh.geometry.dispose()
+      mesh.geometry = cached.geometry
+      cached.used = generation
+    } else this.geometries.set(rev, { geometry: mesh.geometry, used: generation })
+  }
+
+  /**
+   * Disposes a replaced model's materials and the geometries the cache no longer holds.
+   * (`PaveModel.dispose` would also dispose the geometries the new model reuses.)
+   */
+  private release(b: Built): void {
+    b.model.object.removeFromParent()
+    const kept = new Set([...this.geometries.values()].map((e) => e.geometry))
+    const done = new Set<object>()
+    b.model.object.traverse((o) => {
+      if (!(o instanceof Mesh)) return
+      if (!kept.has(o.geometry) && !done.has(o.geometry)) o.geometry.dispose()
+      const material = b.originals.get(o) ?? (o.material as Material)
+      if (!done.has(material)) material.dispose()
+      done.add(o.geometry).add(material)
+    })
   }
 
   /** A ring stands on the stage, so it gets a contact shadow; pendants and earrings hang. */
@@ -416,6 +499,7 @@ export class Viewer {
     }
     this.shadow.visible = this.shadowAllowed && display !== 'technical' && !xray
     if (display === 'technical') this.addTechnical(b)
+    else if (xray) this.addEdges(m.xrayEdges)
     this.addGhosts()
 
     const selected = new Set(selection)
@@ -428,8 +512,10 @@ export class Viewer {
   private clearOverlay(): void {
     for (const child of [...this.overlay.children]) {
       child.removeFromParent()
-      // Overlays share the model's geometry and the mode materials; only built lines and ghosts own theirs.
+      // Overlays share the model's geometry and the mode materials; only built lines and ghosts
+      // own theirs. Instanced overlays own their instance-matrix buffer.
       if (child.userData.ownsGeometry) (child as Mesh).geometry.dispose()
+      if (child instanceof InstancedMesh) child.dispose()
     }
   }
 
@@ -484,23 +570,28 @@ export class Viewer {
       outline.instanceMatrix.copy(gems.instanceMatrix)
       this.overlay.add(outline)
     }
-    const chunks = this.evaluation!.parts.filter((p) => !hidden.has(p.nodeId)).map((p) => p.edges)
     const stones = b.gems.reduce((n, g) => n + g.count, 0)
-    if (stones <= MAX_EDGED_STONES) for (const gems of b.gems) chunks.push(...stoneEdges(gems))
+    this.addEdges(m.edges, stones <= MAX_EDGED_STONES ? b.gems.flatMap(stoneEdges) : [])
+  }
+
+  /** The visible parts' feature edges (and `extra` segments) as one line overlay. */
+  private addEdges(material: LineBasicMaterial, extra: Float32Array[] = []): void {
+    const hidden = new Set(this.state.hidden)
+    const chunks = this.evaluation!.parts.filter((p) => !hidden.has(p.nodeId)).map((p) => p.edges)
+    chunks.push(...extra)
     const total = chunks.reduce((n, c) => n + c.length, 0)
-    if (total) {
-      const positions = new Float32Array(total)
-      let offset = 0
-      for (const c of chunks) {
-        positions.set(c, offset)
-        offset += c.length
-      }
-      const g = new BufferGeometry()
-      g.setAttribute('position', new BufferAttribute(positions, 3))
-      const lines = new LineSegments(g, m.edges)
-      lines.userData.ownsGeometry = true
-      this.overlay.add(lines)
+    if (!total) return
+    const positions = new Float32Array(total)
+    let offset = 0
+    for (const c of chunks) {
+      positions.set(c, offset)
+      offset += c.length
     }
+    const g = new BufferGeometry()
+    g.setAttribute('position', new BufferAttribute(positions, 3))
+    const lines = new LineSegments(g, material)
+    lines.userData.ownsGeometry = true
+    this.overlay.add(lines)
   }
 
   private addGhosts(): void {
@@ -567,7 +658,7 @@ export class Viewer {
       elevation,
       FOCAL_MM,
       this.camera.aspect,
-      fill,
+      fill * this.safeFraction,
     )
     const { back } = cameraBasis(azimuth, elevation)
     const pos = toThreePoint([
@@ -580,6 +671,18 @@ export class Viewer {
     this.camera.far = distance * 50
     this.camera.updateProjectionMatrix()
     void this.controls.setLookAt(pos.x, pos.y, pos.z, t.x, t.y, t.z, animate && !reducedMotion())
+    this.invalidate()
+  }
+
+  /**
+   * The share of the view's height the piece may fill: the floating toolbars and the facts
+   * strip cover a band at the top and bottom, and nothing should be framed underneath them.
+   * Captures have no HUD and use the whole picture.
+   */
+  private safeFraction = 1
+
+  private updateSafeFraction(): void {
+    this.safeFraction = Math.max(0.5, (this.height - 2 * HUD_BAND_PX) / this.height)
   }
 
   private defaultView(): CameraPreset {
@@ -595,16 +698,18 @@ export class Viewer {
     this.look(azimuth, elevation, pts, nodeIds?.length ? 0.5 : 0.66, animate)
   }
 
-  /** Frames a point (a diagnostic's location) closely. */
-  frameAt(at: Vec3, radius = 2): void {
+  /**
+   * Frames a point (a diagnostic's location) with enough of its surroundings to recognise
+   * where it is: at least `radius` mm around it, or the whole of `nodeId` when that is larger.
+   */
+  frameAt(at: Vec3, nodeId?: string, radius = 6): void {
     const { azimuth, elevation } = this.orbitAngles()
-    this.look(
-      azimuth,
-      elevation,
-      corners({ min: at.map((v) => v - radius) as Vec3, max: at.map((v) => v + radius) as Vec3 }),
-      0.4,
-      true,
-    )
+    const around = corners({
+      min: at.map((v) => v - radius) as Vec3,
+      max: at.map((v) => v + radius) as Vec3,
+    })
+    const node = nodeId ? this.nodePoints([nodeId]) : []
+    this.look(azimuth, elevation, [...around, ...node], 0.6, true)
   }
 
   view(preset: CameraPreset, animate = true): void {
@@ -630,10 +735,12 @@ export class Viewer {
   orbit(dAzimuthDeg: number, dElevationDeg: number): void {
     const k = Math.PI / 180
     void this.controls.rotate(dAzimuthDeg * k, dElevationDeg * k, !reducedMotion())
+    this.invalidate()
   }
 
   zoom(factor: number): void {
     void this.controls.zoom(factor, !reducedMotion())
+    this.invalidate()
   }
 
   // ── Picking ──────────────────────────────────────────────────────────────────────────────
@@ -674,15 +781,18 @@ export class Viewer {
    * and materials match the viewport) and within one task, then restores the viewport.
    */
   async capture(opts: CaptureOptions): Promise<Blob[]> {
-    if (opts.evaluation) this.setEvaluation(opts.evaluation)
     const saved = {
+      evaluation: this.evaluation,
       state: this.state,
       position: this.controls.getPosition(new Vector3()),
       target: this.controls.getTarget(new Vector3()),
+      near: this.camera.near,
+      far: this.camera.far,
       width: this.width,
       height: this.height,
       dpr: this.renderer.getPixelRatio(),
     }
+    if (opts.evaluation) this.setEvaluation(opts.evaluation)
     const canvases: HTMLCanvasElement[] = []
     try {
       this.renderer.setPixelRatio(1)
@@ -691,12 +801,15 @@ export class Viewer {
       this.updateFov(1)
       for (const m of [this.materials.silhouette, this.materials.selected, this.materials.hovered])
         m.setResolution(opts.size, opts.size)
+      this.safeFraction = 1
+      // A picture of the piece shows all of it: hiding in the view is a working aid only.
       this.state = {
         ...this.state,
         display: opts.mode,
         selection: opts.focusNodeIds ?? [],
         stone: null,
         hover: null,
+        hidden: [],
         xray: false,
       }
       this.applyLook()
@@ -713,10 +826,16 @@ export class Viewer {
         const ctx = out.getContext('2d')!
         opts.background?.(ctx, opts.size)
         ctx.drawImage(this.canvas, 0, 0, opts.size, opts.size)
+        if (opts.labels) this.drawLabels(ctx, opts.labels, opts.size)
         canvases.push(out)
       }
     } finally {
+      // Back to what the viewport showed, including a newer evaluation that reached it meanwhile.
+      if (saved.evaluation && saved.evaluation !== this.evaluation)
+        this.setEvaluation(saved.evaluation)
       this.state = saved.state
+      this.camera.near = saved.near
+      this.camera.far = saved.far
       this.renderer.setPixelRatio(saved.dpr)
       this.setSize(saved.width, saved.height)
       void this.controls.setLookAt(
@@ -738,6 +857,40 @@ export class Viewer {
           ),
       ),
     )
+  }
+
+  /** Names written beside each node's centre on a captured picture, in pills that stay inside it. */
+  private drawLabels(
+    ctx: CanvasRenderingContext2D,
+    labels: Readonly<Record<string, string>>,
+    size: number,
+  ): void {
+    const scale = size / 768
+    ctx.font = `${Math.round(13 * scale)}px Inter, system-ui, sans-serif`
+    ctx.textBaseline = 'middle'
+    const pad = 6 * scale
+    const h = 22 * scale
+    for (const [nodeId, text] of Object.entries(labels)) {
+      const pts = this.nodePoints([nodeId])
+      if (!pts.length) continue
+      const c = pts.reduce<Vec3>(
+        (a, p) => [a[0] + p[0] / pts.length, a[1] + p[1] / pts.length, a[2] + p[2] / pts.length],
+        [0, 0, 0],
+      )
+      const p = toThreePoint(c).project(this.camera)
+      if (p.z < -1 || p.z > 1) continue
+      const w = ctx.measureText(text).width + pad * 2
+      const x = Math.min(size - w - 4, Math.max(4, ((p.x + 1) / 2) * size - w / 2))
+      const y = Math.min(size - h - 4, Math.max(4, ((1 - p.y) / 2) * size - h / 2))
+      ctx.fillStyle = 'rgba(255,255,255,0.92)'
+      ctx.strokeStyle = 'rgba(0,0,0,0.18)'
+      ctx.beginPath()
+      ctx.roundRect(x, y, w, h, 6 * scale)
+      ctx.fill()
+      ctx.stroke()
+      ctx.fillStyle = '#1c1b1a'
+      ctx.fillText(text, x + pad, y + h / 2)
+    }
   }
 
   /** Mean milliseconds per frame over `n` synchronous renders, waiting for the GPU (benchmarks). */
@@ -764,6 +917,9 @@ export class Viewer {
     const evaluation = this.evaluation
     this.evaluation = null
     this.environment = null
+    // GPU buffers did not survive the loss: nothing cached may be reused.
+    for (const { geometry } of this.geometries.values()) geometry.dispose()
+    this.geometries.clear()
     if (evaluation) this.setEvaluation(evaluation)
   }
 
@@ -772,13 +928,24 @@ export class Viewer {
     cancelAnimationFrame(this.frame)
     clearTimeout(this.restTimer)
     this.clearOverlay()
-    this.built?.model.dispose()
+    if (this.built) this.release(this.built)
+    for (const { geometry } of this.geometries.values()) geometry.dispose()
+    this.geometries.clear()
+    this.lastGood.clear()
     this.environment?.dispose()
     this.materials.dispose()
+    this.shadow.geometry.dispose()
+    const shadowMaterial = this.shadow.material as MeshBasicMaterial
+    shadowMaterial.map?.dispose()
+    shadowMaterial.dispose()
     this.controls.dispose()
+    this.timer.dispose()
     this.canvas.removeEventListener('webglcontextlost', this.onContextLost)
     this.canvas.removeEventListener('webglcontextrestored', this.onContextRestored)
     this.renderer.dispose()
+    // Browsers cap live WebGL contexts (~16): free this one now rather than at GC, unless the
+    // canvas stays on the page for the next viewer (StrictMode's remount reuses it).
+    if (!this.canvas.isConnected) this.renderer.forceContextLoss()
   }
 }
 
@@ -790,7 +957,9 @@ const unitEdges = new WeakMap<BufferGeometry, Float32Array>()
 function stoneEdges(gems: InstancedMesh): Float32Array[] {
   let unit = unitEdges.get(gems.geometry)
   if (!unit) {
-    const edges = new EdgesGeometry(gems.geometry, 20)
+    // Low enough to catch the table, girdle and crown mains of a brilliant (crown facets meet
+    // the table at ~15°), so a technical drawing shows the cut, not a partial outline.
+    const edges = new EdgesGeometry(gems.geometry, 8)
     unit = edges.getAttribute('position').array as Float32Array
     edges.dispose()
     unitEdges.set(gems.geometry, unit)

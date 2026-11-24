@@ -1,9 +1,10 @@
 /**
  * What the Design tab shows and how, as opposed to what the design is: selection, hover,
- * view-only hiding, display mode, x-ray, fine-tuning and the ring-size system a designer
- * prefers to read. Preferences persist; the rest resets when another piece opens.
+ * view-only hiding, display mode, x-ray, fine-tuning, the ring-size system a designer
+ * prefers to read and what their scroll wheel is. Preferences persist; the rest resets when another piece opens.
  */
 import type { RingSizeSystem } from '@pave/schema'
+import type { WheelDevice } from '../../../components/stage/wheel'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
@@ -33,6 +34,8 @@ interface WorkspaceState {
   ringSystem: RingSizeSystem | null
   /** Set when the GPU cannot run the full material shaders. */
   simplified: boolean
+  /** How wheel input is read; `auto` tells a mouse from a trackpad per gesture. */
+  wheel: WheelDevice
   open(pieceId: string): void
   select(ids: string[], stone?: string | null): void
   /** Click on the model: first click selects the feature, a second on the same stone picks it. */
@@ -45,6 +48,7 @@ interface WorkspaceState {
   setFineTune(on: boolean): void
   setRingSystem(system: RingSizeSystem | null): void
   setSimplified(on: boolean): void
+  setWheel(device: WheelDevice): void
 }
 
 const same = (a: readonly string[], b: readonly string[]) =>
@@ -65,6 +69,7 @@ export const useWorkspace = create<WorkspaceState>()(
       fineTune: false,
       ringSystem: null,
       simplified: false,
+      wheel: 'auto',
       open: (pieceId) => {
         if (get().pieceId !== pieceId)
           set({ pieceId, selection: [], stone: null, hover: null, hidden: [], renaming: null })
@@ -102,6 +107,7 @@ export const useWorkspace = create<WorkspaceState>()(
       setFineTune: (fineTune) => set({ fineTune }),
       setRingSystem: (ringSystem) => set({ ringSystem }),
       setSimplified: (simplified) => set({ simplified }),
+      setWheel: (wheel) => set({ wheel }),
     }),
     {
       name: 'pave:cad',
@@ -110,6 +116,7 @@ export const useWorkspace = create<WorkspaceState>()(
         displayChosen: s.displayChosen,
         fineTune: s.fineTune,
         ringSystem: s.ringSystem,
+        wheel: s.wheel,
       }),
     },
   ),

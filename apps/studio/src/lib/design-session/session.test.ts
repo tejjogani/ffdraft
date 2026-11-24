@@ -31,7 +31,10 @@ class OfflineError extends Error {}
 class FakeServer {
   log: StoredChange[] = []
   design: Design
-  failNext: ('offline' | 'conflict' | 'invalid')[] = []
+  /** `lost`: the change is committed but the response never arrives. */
+  failNext: ('offline' | 'conflict' | 'invalid' | 'lost')[] = []
+  failHistory = 0
+  applyCalls = 0
   /** Changes committed by others, delivered to the session only when `flush` is called. */
   constructor(design: Design) {
     this.design = design
@@ -64,6 +67,7 @@ class FakeServer {
   transport(): SessionTransport {
     return {
       apply: async (req) => {
+        this.applyCalls++
         await Promise.resolve()
         const fail = this.failNext.shift()
         if (fail === 'offline') throw new OfflineError('offline')
@@ -75,13 +79,20 @@ class FakeServer {
             actor: { type: 'user', id: 'u_me' },
             reverts: req.reverts,
           })
+          if (fail === 'lost') throw new OfflineError('response lost')
           return { version: change.seq, change }
         } catch (e) {
           if (e instanceof OpError) throw new Error(`invalid: ${e.message}`)
           throw e
         }
       },
-      history: async (_id, limit) => this.log.toReversed().slice(0, limit),
+      history: async (_id, limit) => {
+        if (this.failHistory > 0) {
+          this.failHistory--
+          throw new OfflineError('offline')
+        }
+        return this.log.toReversed().slice(0, limit)
+      },
       snapshot: async () => ({ design: this.design, version: this.version }),
     }
   }
@@ -91,19 +102,22 @@ const flush = async () => {
   for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0))
 }
 
-function sessionOn(server: FakeServer) {
-  return createDesignSession(
-    'p1',
-    { design: server.design, version: server.version },
-    {
-      transport: server.transport(),
-      classify: (e) =>
-        e instanceof OfflineError ? 'retry' : e instanceof ConflictError ? 'conflict' : 'reject',
-      describe: (e) => (e as Error).message,
-      backoff: () => 5,
-      gapWait: 10,
-    },
-  )
+function sessionOn(
+  server: FakeServer,
+  initial: { design: Design; version: number } = {
+    design: server.design,
+    version: server.version,
+  },
+  backoff = 5,
+) {
+  return createDesignSession('p1', initial, {
+    transport: server.transport(),
+    classify: (e) =>
+      e instanceof OfflineError ? 'retry' : e instanceof ConflictError ? 'conflict' : 'reject',
+    describe: (e) => (e as Error).message,
+    backoff: () => backoff,
+    gapWait: 10,
+  })
 }
 
 describe('design session core', () => {
@@ -212,6 +226,32 @@ describe('design session core', () => {
     expect(core.canRedo(s)).toBe(false)
   })
 
+  it('names undo and redo after the original edit however often they flip', () => {
+    const d = solitaire()
+    let s = core.commit(core.createSession('p1', d, 0), setWidth(d, 3))
+    s = core.redo(core.undo(s))
+    s = core.redo(core.undo(s))
+    expect(s.pending.map((p) => p.label)).toEqual([
+      'Width at top 2.2 → 3 mm',
+      'Undo Width at top 2.2 → 3 mm',
+      'Redo Width at top 2.2 → 3 mm',
+      'Undo Width at top 2.2 → 3 mm',
+      'Redo Width at top 2.2 → 3 mm',
+    ])
+  })
+
+  it('says “nothing to redo” (not undo) when a redo finds nothing left to change', () => {
+    const d = solitaire()
+    let s = core.commit(core.createSession('p1', d, 0), setWidth(d, 3))
+    s = core.undo(s)
+    const undone = s.redo.at(-1)!
+    // The width goes back to 3 another way before the redo (a new edit, which would normally
+    // clear redo; keep it to reach the guard).
+    s = { ...core.commit(s, setWidth(s.view, 3)), redo: [undone] }
+    s = core.redo(s)
+    expect(s.notices.at(-1)).toMatchObject({ type: 'nothing-to-redo' })
+  })
+
   it('undo of an added node removes it, unless it is already gone', () => {
     const d = solitaire()
     const node = { id: 'prim_1', kind: 'primitive' as const }
@@ -317,6 +357,72 @@ describe('design session sync', () => {
     ]).design
     await session.idle()
     expect(session.takeNotices()[0]).toMatchObject({ type: 'dropped' })
+  })
+
+  it('converges when opened from a stale cached copy, without waiting for an event', async () => {
+    const server = new FakeServer(solitaire())
+    const stale = { design: server.design, version: 0 }
+    server.commit(setWidth(server.design, 4), { actor: { type: 'agent', runId: 'r' } })
+    const session = sessionOn(server, stale)
+    await flush()
+    expect(session.get().version).toBe(1)
+    expect(width(session.get().view)).toBe(4)
+  })
+
+  it('acknowledges a change committed before a snapshot rebase instead of resending it forever', async () => {
+    const server = new FakeServer(solitaire())
+    const session = sessionOn(server)
+    await flush()
+    // Our change is committed but its response is lost; the retry waits for the backoff.
+    server.failNext = ['lost']
+    session.commit(setWidth(session.get().view, 3))
+    await flush()
+    // Meanwhile more than a history page of changes lands elsewhere, the last setting 5.
+    for (let i = 0; i < 205; i++)
+      server.commit([
+        { t: 'update', id: bandId(server.design), patch: { thicknessTop: 1.5 + (i % 5) / 10 } },
+      ])
+    server.commit(setWidth(server.design, 5))
+    await session.resync()
+    await session.idle()
+    expect(session.get().pending).toHaveLength(0)
+    expect(session.get().version).toBe(server.version)
+    expect(width(session.get().view)).toBe(5)
+    expect(server.applyCalls).toBeLessThan(5)
+  })
+
+  it('waits for the backoff before each retry (one request per attempt)', async () => {
+    const server = new FakeServer(solitaire())
+    const session = sessionOn(server, undefined, 20)
+    await flush()
+    server.failNext = Array(50).fill('offline')
+    session.commit(setWidth(session.get().view, 3))
+    await new Promise((r) => setTimeout(r, 50))
+    // At 0, 20 and 40 ms; never an immediate resend on top of the timer.
+    expect(server.applyCalls).toBeLessThanOrEqual(3)
+    session.dispose()
+  })
+
+  it('keeps filling a gap when fetching history fails', async () => {
+    const server = new FakeServer(solitaire())
+    const session = sessionOn(server)
+    await flush()
+    server.commit(setWidth(server.design, 3))
+    const second = server.commit(setWidth(server.design, 3.5))
+    server.failHistory = 1
+    session.receive(second)
+    await new Promise((r) => setTimeout(r, 60))
+    expect(session.get().version).toBe(2)
+    expect(session.get().inbox).toEqual({})
+  })
+
+  it('counts a live gesture as unsaved', () => {
+    const server = new FakeServer(solitaire())
+    const session = sessionOn(server)
+    session.preview('k', setWidth(session.get().view, 3))
+    expect(session.get().save).toEqual({ status: 'unsaved' })
+    session.commitGesture()
+    expect(session.get().save).toEqual({ status: 'saving', count: 1 })
   })
 
   it('converges under random interleavings of local edits, remote edits, lost events and failures', async () => {

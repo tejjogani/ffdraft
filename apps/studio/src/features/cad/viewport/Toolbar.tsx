@@ -75,14 +75,17 @@ export function ViewToolbar({ canUndo, canRedo }: { canUndo: boolean; canRedo: b
   )
 }
 
+/** Saving and export. `compact` (a narrow view) keeps their icons and drops their words. */
 export function FileToolbar({
   save,
   formats,
   simplified,
+  compact,
 }: {
   save: SaveState | null
   formats: readonly ExportFormat[]
   simplified: boolean
+  compact: boolean
 }) {
   return (
     <div className="flex items-center gap-2">
@@ -98,27 +101,33 @@ export function FileToolbar({
         </Tooltip>
       )}
       <Cluster className="pr-1 pl-0.5">
-        {save && <SavePill save={save} />}
+        {save && <SavePill save={save} compact={compact} />}
         {formats.length > 0 && (
           <Menu
             align="end"
             className="w-72"
             trigger={
-              <Button variant="ghost" size="sm" icon={Download} className="text-fg">
-                Export
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={Download}
+                aria-label={compact ? 'Export' : undefined}
+                className="shrink-0 text-fg"
+              >
+                {!compact && 'Export'}
                 <ChevronDown className="size-3.5! text-fg-subtle" aria-hidden />
               </Button>
             }
           >
             <MenuGroup label="Download">
               {formats.map((f) => (
-                <MenuItem key={f} onClick={() => runCommand(`design.export.${f}`)}>
-                  <span className="flex flex-col py-0.5">
-                    <span>
-                      {EXPORT_PURPOSE[f].label} — {f.toUpperCase()}
-                    </span>
-                    <span className="text-xs text-fg-subtle">{EXPORT_PURPOSE[f].hint}</span>
-                  </span>
+                <MenuItem
+                  key={f}
+                  description={EXPORT_PURPOSE[f].hint}
+                  tag={f.toUpperCase()}
+                  onClick={() => runCommand(`design.export.${f}`)}
+                >
+                  {EXPORT_PURPOSE[f].label}
                 </MenuItem>
               ))}
             </MenuGroup>

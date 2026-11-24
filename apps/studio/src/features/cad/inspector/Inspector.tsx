@@ -5,11 +5,11 @@
 import type { Evaluation } from '@pave/kernel'
 import { type Design, nodeTitle } from '@pave/schema'
 import { Button, Chip, cn, ScrollArea, Switch } from '@pave/ui'
-import { Eye, EyeOff, SlidersHorizontal, Trash2 } from 'lucide-react'
-import { useMemo } from 'react'
+import { Scale, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { useEffect, useMemo } from 'react'
 import type { DesignSession } from '../../../lib/design-session/store'
 import { carats, mm } from '../../../lib/format'
-import { setIncluded } from '../ops'
+import { runCommand } from '../../../lib/commands'
 import { useWorkspace } from '../state/workspace'
 import { FieldEditContext, useNodeEdit } from './edit'
 import { FieldControl } from './FieldControl'
@@ -46,6 +46,10 @@ export function Inspector({
   )
 
   const edit = useNodeEdit(node, design, session, readOnly, prior)
+  // A gesture belongs to the feature it was started on: leaving that feature (or the
+  // inspector) ends it as a change rather than leaving it live and unsaved.
+  const nodeId = node?.id
+  useEffect(() => () => session?.commitGesture(), [nodeId, session])
 
   if (!node || !model || !edit) return <>{empty}</>
 
@@ -57,7 +61,7 @@ export function Inspector({
         <header className="flex items-start gap-2 border-b border-line px-4 pt-3.5 pb-3">
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-sm font-medium text-fg">{nodeTitle(node)}</h2>
-            <p className="mt-0.5 truncate text-xs text-fg-subtle" title={model.description}>
+            <p className="mt-0.5 line-clamp-2 text-xs text-fg-subtle" title={model.description}>
               {nodeTitle(node) === model.title ? (model.description ?? model.title) : model.title}
             </p>
           </div>
@@ -73,7 +77,8 @@ export function Inspector({
             </span>
           </div>
         )}
-        <ScrollArea className="flex-1">
+        {/* Keyed by feature: another feature's form opens at its top, not where this one was scrolled. */}
+        <ScrollArea key={node.id} className="flex-1">
           <div className="flex flex-col pb-6">
             {model.sections.map((section) => (
               <section key={section.id} className="border-b border-line px-4 py-3 last:border-b-0">
@@ -104,24 +109,20 @@ export function Inspector({
               )}
               <div className="flex items-center justify-between gap-3 py-1 text-sm text-fg-muted">
                 <span className="flex items-center gap-2">
-                  {included ? (
-                    <Eye className="size-4" aria-hidden />
-                  ) : (
-                    <EyeOff className="size-4" aria-hidden />
-                  )}
-                  Part of the piece
+                  <Scale className="size-4 text-fg-subtle" aria-hidden />
+                  Count in weight and export
                 </span>
                 <Switch
                   checked={included}
                   disabled={edit.readOnly}
-                  aria-label="Part of the piece"
-                  onChange={(on) => session?.commit([setIncluded(node.id, on)])}
+                  aria-label="Count in weight and export"
+                  onChange={() => runCommand('design.excludeSelected')}
                 />
               </div>
               {!included && (
                 <p className="-mt-1 text-xs text-fg-subtle">
-                  Excluded: not weighed, not exported. Hiding it with the eye in the list only hides
-                  it from view.
+                  Left out: not weighed, not exported. The eye in the list only hides a feature from
+                  view.
                 </p>
               )}
               {!edit.readOnly && (

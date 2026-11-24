@@ -16,7 +16,7 @@ import {
   type PieceSpecInput,
   ringInnerDiameter,
 } from '@pave/schema'
-import { ALLOY_CLASS, LW_BY_CUT, POINTS_BY_CUT, PRONGS_BY_CUT } from './tables'
+import { ALLOY_CLASS, CHAIN_MASS_K, LW_BY_CUT, POINTS_BY_CUT, PRONGS_BY_CUT } from './tables'
 import { FLAG_PHRASES, hasAny } from './words'
 
 /** Every fact a rule may use, with the meaning printed in the prompt's index. */
@@ -93,11 +93,19 @@ export const FACTS = {
   tennis: 'tennis chain (1/0)',
   roundChain: 'rope, box or tennis chain (1/0)',
   figaro: 'Figaro chain (1/0)',
+  box: 'box chain (1/0)',
+  flatLink: 'flat links: Cuban, curb or Figaro (1/0)',
+  chainK: 'chain mass coefficient: mass ≈ chainK·w²·L·density/1000',
   tennisStone: 'tennis stone size: link − 0.4 (mm)',
   pendant: 'something hangs on the chain (1/0)',
   opening: 'bail opening (mm)',
   bailWire: 'bail wire (mm)',
   icedBail: 'the bail carries pavé (1/0)',
+  loopBail: 'loop or hidden bail, not a ring or tube (1/0)',
+  hasBody: 'the bail hangs from a body with a height (1/0)',
+  sculpt: 'the main body is a sculpted mesh (1/0)',
+  hollow: 'sculpt hollowed to this wall (mm, 0 solid)',
+  flatBack: 'fraction sliced off the back of a sculpt',
   reliefW: 'relief width, across the finger on a signet (mm)',
   reliefH: 'relief height, along the finger on a signet (mm)',
   reliefDepth: 'relief depth (mm)',
@@ -112,6 +120,9 @@ export const FACTS = {
   mens: "men's brief (1/0)",
   eastWest: 'east-west brief (1/0)',
   champion: 'championship-ring brief (1/0)',
+  flushFit: 'a straight wedding band must sit flush beside it (1/0)',
+  pairW: 'width of the engagement shank this band pairs with (mm)',
+  pairT: 'thickness of the engagement shank this band pairs with (mm)',
   flush: 'flush-set head (1/0)',
   graduated: 'row graduates toward its ends (1/0)',
   main: 'the body is the tallest in the piece (1/0)',
@@ -258,7 +269,7 @@ function bodyFacts(n: Node | undefined): Facts {
         border: n.border,
       }
     case 'meshBody':
-      return { H: n.height }
+      return { H: n.height, sculpt: 1, hollow: n.hollow, flatBack: n.flatBack }
     case 'relief':
       return {
         H: n.height,
@@ -291,6 +302,9 @@ function chainFacts(c: NodeOf<'chain'> | undefined): Facts {
     tennis: flag(c.style === 'tennis'),
     roundChain: flag(c.style === 'rope' || c.style === 'box' || c.style === 'tennis'),
     figaro: flag(c.style === 'figaro'),
+    chainK: CHAIN_MASS_K[c.style],
+    box: flag(c.style === 'box'),
+    flatLink: flag(c.style === 'cuban' || c.style === 'curb' || c.style === 'figaro'),
     tennisStone: c.linkWidth - 0.4,
     pendant: flag(c.through !== undefined),
   }
@@ -302,6 +316,7 @@ function bailFacts(d: Design, b: NodeOf<'bail'> | undefined): Facts {
     opening: b.opening,
     bailWire: b.wire,
     icedBail: flag(nodesOf(d, 'pave').some((p) => p.host === b.id)),
+    loopBail: flag(b.style === 'loop' || b.style === 'hidden'),
   }
 }
 
@@ -345,11 +360,19 @@ export function styleFacts(styles: readonly string[] = []): Facts {
     mens: flag(hasAny(styles, FLAG_PHRASES.mens)),
     eastWest: flag(hasAny(styles, FLAG_PHRASES.eastWest)),
     champion: flag(hasAny(styles, FLAG_PHRASES.champion)),
+    flushFit: flag(hasAny(styles, FLAG_PHRASES.flushFit)),
   }
+}
+
+/** The engagement shank a wedding band is made to sit beside (09 §1 "Fit, pair"). */
+export interface PairWith {
+  widthMm: number
+  thicknessMm: number
 }
 
 export interface FactsOptions {
   styles?: readonly string[]
+  pairWith?: PairWith
 }
 
 /** Facts about the whole piece: band, hero stone and its head, halo, first row, body, chain. */
@@ -387,6 +410,7 @@ export function pieceFacts(d: Design, o: FactsOptions = {}): Facts {
     earrings: flag(d.kind === 'earrings'),
     ...(material ? { alloy: ALLOY_CLASS[material], density: METALS[material].density } : {}),
     ...styleFacts(o.styles),
+    ...(o.pairWith ? { pairW: o.pairWith.widthMm, pairT: o.pairWith.thicknessMm } : {}),
   }
 }
 
@@ -451,7 +475,8 @@ export function nodeFacts(d: Design, nodeId: string, piece: Facts = pieceFacts(d
       return {
         ...piece,
         ...bodyFacts(n),
-        ...(pave ? paveFacts(pave) : {}),
+        // A bare body has no stones to seat: 0, not the first pavé elsewhere in the piece.
+        ...(pave ? paveFacts(pave) : { paveMax: 0 }),
         main: flag(mainBody(d)?.id === n.id),
         ...alloy,
       }
@@ -459,7 +484,15 @@ export function nodeFacts(d: Design, nodeId: string, piece: Facts = pieceFacts(d
     case 'bail': {
       const chain = nodesOf(d, 'chain').find((c) => c.through === n.id)
       const host = n.host ? d.nodes[n.host] : undefined
-      return { ...piece, ...bodyFacts(host), ...chainFacts(chain), ...bailFacts(d, n), ...alloy }
+      const body = bodyFacts(host)
+      return {
+        ...piece,
+        ...body,
+        hasBody: flag(body.H !== undefined),
+        ...chainFacts(chain),
+        ...bailFacts(d, n),
+        ...alloy,
+      }
     }
     case 'chain': {
       const bail = n.through ? d.nodes[n.through] : undefined

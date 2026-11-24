@@ -8,6 +8,7 @@ const GLYPHS: Record<string, [mac: string, other: string]> = {
   ctrl: ['⌃', 'Ctrl'],
   enter: ['↵', 'Enter'],
   backspace: ['⌫', 'Backspace'],
+  delete: ['⌦', 'Del'],
   escape: ['Esc', 'Esc'],
   arrowup: ['↑', '↑'],
   arrowdown: ['↓', '↓'],
@@ -20,7 +21,8 @@ export function shortcutKeys(shortcut: string): string[] {
   return shortcut.split('+').map((k) => {
     const g = GLYPHS[k.toLowerCase()]
     if (g) return isMac ? g[0] : g[1]
-    return k.length === 1 ? k.toUpperCase() : k
+    // Letters and function keys read as printed on the key: "A", "F2".
+    return k.length === 1 || /^f\d{1,2}$/i.test(k) ? k.toUpperCase() : k
   })
 }
 

@@ -2,7 +2,9 @@
  * Per-catalogue tables the rules read through facts. Keyed by @pave/schema ids so a new cut,
  * stone or alloy fails the type check here until the canon has an opinion about it.
  */
-import type { GemCutId, GemMaterialId, MetalId } from '@pave/schema'
+import type { GemCutId, GemMaterialId, MetalId, NodeOf } from '@pave/schema'
+
+type ChainStyle = NodeOf<'chain'>['style']
 
 /** Prong counts by shape: [min, typical, max] for a claw head (research 09 §1 "Prongs by shape"). */
 export const PRONGS_BY_CUT: Record<GemCutId, readonly [number, number, number]> = {
@@ -128,4 +130,19 @@ export const METAL_COLOUR: Record<MetalId, 'yellow' | 'white' | 'rose'> = {
   'ag999-fine': 'white',
   'ti-grade5': 'white',
   brass: 'yellow',
+}
+
+/**
+ * Chain mass ≈ k·w²·L·ρ (g, with w and L in mm and ρ in g/cm³ /1000), measured on the kernel's
+ * links at the recipe's wire (0.26·w), 2026-11-24. Research 09 §2 gives 0.23 for a trade Cuban
+ * and 0.29 for the kernel's; the kernel has since been recalibrated to 0.197. Tennis carries
+ * stones and is not estimated. Replace with per-node masses once the summary carries them.
+ */
+export const CHAIN_MASS_K: Partial<Record<ChainStyle, number>> = {
+  cable: 0.195,
+  rope: 0.177,
+  box: 0.55,
+  figaro: 0.13,
+  curb: 0.2,
+  cuban: 0.197,
 }

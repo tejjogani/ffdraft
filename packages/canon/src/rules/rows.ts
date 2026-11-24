@@ -1,5 +1,5 @@
 /** Rows and eternity rules: research 09 §1 "Rows, eternity, plain bands". */
-import { add, and, asin, div, eq, gt, iff, lt, max, min, mul, snap, sub, v } from '../expr'
+import { add, and, asin, clamp, div, eq, floor, gt, iff, lt, max, min, mul, snap, sub, v } from '../expr'
 import { band, HEADED, rule, src } from './rule'
 
 const bandW = v('bandW')
@@ -9,7 +9,11 @@ const d = v('rowD')
 const walled = lt(v('shared'), 0.5)
 /** Largest stone that leaves `metal` either side across `rows` rows. */
 const fitting = (metal: number) => div(sub(bandW, metal, mul(sub(rows, 1), gap)), rows)
-const walledMax = max(0.8, fitting(0.8))
+/**
+ * Research 09 allows widthTop − 0.8 and prefers − 1.0; the kernel's seat.wall check passes only
+ * − 1.0 (2.0 mm stones: clean on a 3.0 band, not on 2.8), and the kernel outranks the canon.
+ */
+const walledMax = max(0.8, fitting(1.0))
 const walledTyp = min(walledMax, max(0.8, snap(fitting(1.0))))
 const sharedMax = max(0.8, fitting(0.4))
 const sharedTyp = min(sharedMax, max(0.8, snap(fitting(0.6))))
@@ -33,11 +37,11 @@ export const ROW_RULES = [
     title: 'Walled pavé and channel stone size',
     applies: { nodeKind: 'gemRow', when: walled },
     paths: ['gemRow.stoneWidth'],
-    band: band(walledTyp, max(0.8, sub(walledMax, 0.6)), walledMax),
+    band: band(walledTyp, max(0.8, sub(walledMax, 0.4)), walledMax),
     lintAt: { above: walledMax },
     rationale:
-      'Walled pavé and channel need 0.4 mm of metal each side: a 2.0 band takes 1.0–1.2 stones, a 2.4 band 1.4–1.6.',
-    source: src('R', '§1 Rows: walled pavé (GIA 0.5, Stuller 0.4)'),
+      'Walled pavé and channel need 0.5 mm of metal each side: a 2.0 band takes 1.0 stones, a 3.0 band 2.0. Larger: shared prong.',
+    source: src('K', '§1 Rows: walled pavé (− 1.0, the kernel seat check; research allowed − 0.8)'),
     confidence: 'high',
     severity: 'warning',
     fix: 'clampToBand',
@@ -49,13 +53,32 @@ export const ROW_RULES = [
     paths: ['ringShank.widthTop'],
     band: band(
       add(mul(rows, d), mul(sub(rows, 1), gap), 1.0),
-      add(mul(rows, d), mul(sub(rows, 1), gap), 0.8),
+      add(mul(rows, d), mul(sub(rows, 1), gap), 1.0),
       14,
     ),
+    refines: 'ring.solitaire.bandWidth',
     rationale:
-      'When the stones are chosen first, widen the band to them: stones plus 0.4 mm of wall each side.',
+      'When the stones are chosen first, widen the band to them: stones plus 0.5 mm of wall each side.',
     source: src('R', '§1 Rows: walled pavé'),
     confidence: 'high',
+    severity: 'default',
+  }),
+  rule({
+    id: 'rows.bandForHalo',
+    title: 'Band wide enough to match the halo',
+    applies: {
+      kinds: ['ring'],
+      archetypes: ['halo'],
+      nodeKind: 'ringShank',
+      when: and(v('halo'), gt(d, 0), walled),
+    },
+    paths: ['ringShank.widthTop'],
+    band: band(add(v('haloD'), 1.0), add(v('haloD'), 1.0), add(v('haloD'), 1.5)),
+    refines: 'ring.solitaire.bandWidth',
+    rationale:
+      'Shoulder pavé matches the halo melee, so the band is the halo size plus 1.0 mm of wall: the halo is sized by the centre, not by the band.',
+    source: src('S', '§1 Halo: melee zones (GIA); walled pavé'),
+    confidence: 'medium',
     severity: 'default',
   }),
   rule({
@@ -77,9 +100,11 @@ export const ROW_RULES = [
     title: 'Rows across the band',
     applies: { nodeKind: 'gemRow' },
     paths: ['gemRow.rows'],
-    band: band(iff(lt(bandW, 3), 1, iff(lt(bandW, 4.05), 2, 3)), 1, 3),
+    // One row unless asked: rows follow the stones and the band together, and never force a
+    // chosen stone out of range (a 3.0 band carries one row of 2.0, 09 §1 walled pavé).
+    band: band(1, 1, clamp(floor(div(add(sub(bandW, 1.0), gap), add(d, gap))), 1, 3)),
     rationale:
-      'One row below 3 mm of band, two at 3–4 mm, three from 4.1: more rows of smaller stones read as a sheet.',
+      'One row by default; a second only when the band holds rows × stone + gaps + 1.0 mm: more rows of smaller stones read as a sheet.',
     source: src('K', '§1 Rows: rows'),
     confidence: 'medium',
     severity: 'default',
@@ -93,7 +118,7 @@ export const ROW_RULES = [
     band: band(-0.2, -1, 0),
     lintAt: { above: 0 },
     rationale:
-      'Rows × stone + gaps + 0.8 mm of wall must fit the band width, or the outer rows hang over the edge.',
+      'Rows × stone + gaps + 1.0 mm of wall must fit the band width, or the outer rows hang over the edge.',
     source: src('K', '§1 Rows: rows'),
     confidence: 'high',
     severity: 'warning',
@@ -223,13 +248,13 @@ export const ROW_RULES = [
     applies: {
       kinds: ['ring'],
       nodeKind: 'ringShank',
-      when: and(gt(v('rowCov'), 239), lt(v('shared'), 0.5)),
+      when: and(gt(v('rowD'), 0), lt(v('shared'), 0.5)),
     },
     paths: ['ringShank.profile'],
     measure: 'flatProfile',
     band: band(1, 1, 1),
     rationale:
-      'Walled rows sit on a flat or flat-court top: a domed court profile tilts the outer stones.',
+      'Walled rows, shoulder pavé included, sit on a flat or flat-court top: a domed court profile tilts the outer stones.',
     source: src('EJ', '§1 Solitaire: profile, base'),
     confidence: 'medium',
     severity: 'default',

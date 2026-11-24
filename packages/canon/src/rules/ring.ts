@@ -1,5 +1,5 @@
 /** Solitaire and head rules: research 09 §1 "Solitaire" and the alloy modifier. */
-import { add, and, clamp, eq, gt, iff, lt, max, min, mul, or, sub, v } from '../expr'
+import { add, and, clamp, div, eq, gt, iff, lt, max, min, mul, or, sub, v } from '../expr'
 import { band, HEADED, rule, src } from './rule'
 
 const W = v('W')
@@ -21,6 +21,25 @@ const rawWire = add(sub(mul(add(mul(0.1, W), 0.35), SIX), HALO_LESS), ALLOY_ADD)
 const heavyWire = add(max(mul(0.18, W), 1.0), ALLOY_ADD, mul(0.5, v('doubleTip')))
 /** Past 0.45 of the stone (2.6 mm at least) a band outweighs its stone (09 §1 band width lint). */
 const heavyBand = max(mul(0.45, W), 2.6)
+/** Heads of 8 mm and more lever the shank: thicker base and top (09 §1 "≥ 2.0 for W ≥ 8"). */
+const bigHead = gt(v('cW'), 7.99)
+/** Base width from the top: equal under 1.85, top − 0.2 classic, half a wide (styled) top. */
+const wideTop = gt(v('bandW'), 3)
+const baseTyp = iff(
+  wideTop,
+  max(2.5, mul(0.5, v('bandW'))),
+  iff(lt(v('bandW'), 1.85), v('bandW'), sub(v('bandW'), 0.2)),
+)
+const baseMin = iff(
+  wideTop,
+  max(2.5, mul(0.4, v('bandW'))),
+  max(1.5, iff(lt(v('bandW'), 1.85), sub(v('bandW'), 0.1), sub(v('bandW'), 0.4))),
+)
+/** Claw rotation on the finger axis: 45 for four, 90/n for odd counts, 0 for other even ones. */
+const odd = or(eq(prongs, 3), eq(prongs, 5), eq(prongs, 7))
+const clawSpin = iff(eq(prongs, 4), 45, iff(odd, div(90, prongs), 0))
+/** The lowest a head may sit: low class in a basket or bezel, classic otherwise (09 §1). */
+const lowFloor = iff(v('bezel'), 0.5, iff(v('basket'), 0.8, add(bandT, 0.2)))
 /** Room for a cathedral arch under the girdle: e + 0.44·W − bandT (09 §1 "Cathedral"). */
 const archRoom = sub(add(v('ce'), mul(0.44, v('cW'))), bandT)
 
@@ -54,11 +73,31 @@ export const RING_RULES = [
     title: 'Band thickness at the base',
     applies: { kinds: ['ring'], archetypes: [...HEADED], nodeKind: 'ringShank' },
     paths: ['ringShank.thicknessBottom'],
-    band: band(1.6, 1.5, 1.8),
-    rationale: 'The base takes the knocks and the resizing: 1.5–1.8 mm keeps it round for decades.',
-    source: src('R', '§1 Solitaire: band thickness'),
+    band: band(iff(bigHead, 1.8, 1.6), iff(bigHead, 1.7, 1.5), iff(bigHead, 2.0, 1.8)),
+    rationale:
+      'The base takes the knocks and the resizing: 1.5–1.8 mm keeps it round for decades; 1.8 under an 8 mm head.',
+    source: src('R', '§1 Solitaire: band thickness; EJ for big heads'),
     confidence: 'high',
     severity: 'default',
+  }),
+  rule({
+    id: 'ring.solitaire.widthBottom',
+    title: 'Band width at the base',
+    applies: {
+      kinds: ['ring'],
+      archetypes: [...HEADED],
+      nodeKind: 'ringShank',
+      when: lt(v('split'), 0.5),
+    },
+    paths: ['ringShank.widthBottom'],
+    band: band(baseTyp, baseMin, v('bandW')),
+    lintAt: { below: max(1.5, iff(wideTop, mul(0.35, v('bandW')), sub(v('bandW'), 0.8))), above: add(v('bandW'), 0.2) },
+    rationale:
+      'The base follows the top: equal on a fine band, 0–0.4 mm less on a classic one, half a wide top (2.5 mm at least). Never wider than the head.',
+    source: src('EJ', '§1 Solitaire: band width (taper)'),
+    confidence: 'medium',
+    severity: 'info',
+    fix: 'clampToBand',
   }),
   rule({
     id: 'ring.solitaire.thicknessTop',
@@ -98,9 +137,10 @@ export const RING_RULES = [
     title: 'Head height class',
     applies: { kinds: ['ring'], archetypes: [...HEADED], nodeKind: 'gem', when: v('hero') },
     paths: ['gem.placement.elevation'],
-    band: band(add(bandT, 0.5), add(bandT, 0.2), add(bandT, 0.8)),
+    // Low (0.8–1.2, 0.5 in a bezel) is a class of its own, allowed only in a basket or bezel.
+    band: band(add(bandT, 0.5), lowFloor, add(bandT, 0.8)),
     lintAt: {
-      below: iff(v('bezel'), 0.5, iff(v('basket'), 0.8, add(bandT, 0.2))),
+      below: lowFloor,
       above: iff(gt(W, 8.99), 8, 4),
     },
     rationale:
@@ -108,6 +148,26 @@ export const RING_RULES = [
     source: src('K', '§1 Solitaire: elevation class'),
     confidence: 'medium',
     severity: 'warning',
+    fix: 'clampToBand',
+  }),
+  rule({
+    id: 'ring.flushFit',
+    title: 'Room for a flush-fit band',
+    applies: {
+      kinds: ['ring'],
+      archetypes: [...HEADED],
+      nodeKind: 'gem',
+      when: and(v('hero'), v('flushFit')),
+    },
+    paths: ['gem.placement.elevation'],
+    band: band(add(bandT, 0.5), add(bandT, 0.3), add(bandT, 0.8)),
+    lintAt: { below: add(bandT, 0.3) },
+    refines: 'ring.solitaire.elevation',
+    rationale:
+      'A straight wedding band slides under the head only if the culet clears the band by 0.3 mm; set lower, offer a contoured band instead.',
+    source: src('EJ', '§1 Fit, pair; §6 Briefing (flush-fit band)'),
+    confidence: 'medium',
+    severity: 'info',
     fix: 'clampToBand',
   }),
   rule({
@@ -224,9 +284,9 @@ export const RING_RULES = [
     title: 'Claw rotation',
     applies: { nodeKind: 'setting', when: and(v('claw'), v('round')) },
     paths: ['setting.prongSpin'],
-    band: band(iff(eq(prongs, 4), 45, 30), 0, 90),
+    band: band(clawSpin, 0, 90),
     rationale:
-      'Four claws at 45° (or 0°), six at 30° (or 0°), three at 30° or 90°: square to the finger.',
+      'Claws square to the finger: four at 45° (or 0°), six at 0° (or 30°), three at 30°, five at 18°.',
     source: src('K', '§1 Solitaire: claw positions'),
     confidence: 'high',
     severity: 'default',
@@ -320,6 +380,7 @@ export const RING_RULES = [
     paths: ['gem.placement.elevation'],
     band: band(add(bandT, 1.2), add(bandT, 1.0), add(bandT, 2.2)),
     lintAt: { below: add(bandT, 1.0) },
+    refines: 'ring.solitaire.elevation',
     rationale:
       'Cathedral shoulders need the stone at least 1 mm above the band, or the arches have nowhere to rise.',
     source: src('K', '§1 Solitaire: cathedral'),

@@ -79,6 +79,7 @@ export interface ViewportPalette {
   select: string
   clayMetal: string
   clayStone: string
+  /** Technical mode's fill: the page itself, so the piece reads as a drawing in either theme. */
   paper: string
   danger: string
 }
@@ -93,7 +94,7 @@ export function readPalette(el: Element): ViewportPalette {
     danger: v('--danger', '#cf4436'),
     clayMetal: dark ? '#b9b4ab' : '#d9d4cb',
     clayStone: dark ? '#c9d0db' : '#dfe5ee',
-    paper: dark ? '#2a2a28' : '#fbfaf8',
+    paper: v('--bg', dark ? '#1b1b1a' : '#fbfaf8'),
   }
 }
 
@@ -101,7 +102,8 @@ export interface ModeMaterials {
   clayMetal: MeshStandardMaterial
   clayStone: MeshStandardMaterial
   paper: MeshBasicMaterial
-  xray: MeshBasicMaterial
+  xray: MeshStandardMaterial
+  xrayEdges: LineBasicMaterial
   ghost: MeshBasicMaterial
   silhouette: OutlineMaterial
   selected: OutlineMaterial
@@ -127,13 +129,18 @@ export function createModeMaterials(p: ViewportPalette): ModeMaterials {
     polygonOffsetFactor: 1,
     polygonOffsetUnits: 1,
   })
-  const xray = new MeshBasicMaterial({
-    color: p.ink,
+  // Still shaded, so the form reads; faint and without depth, so stones and inner parts show.
+  const xray = new MeshStandardMaterial({
+    color: p.clayMetal,
+    roughness: 0.6,
+    metalness: 0,
     transparent: true,
-    opacity: 0.08,
+    opacity: 0.25,
     depthWrite: false,
     side: DoubleSide,
   })
+  // Ink at the weight of `--line-strong` (a translucent token three cannot read as a colour).
+  const xrayEdges = new LineBasicMaterial({ color: p.ink, transparent: true, opacity: 0.35 })
   const ghost = new MeshBasicMaterial({
     color: p.danger,
     transparent: true,
@@ -154,12 +161,13 @@ export function createModeMaterials(p: ViewportPalette): ModeMaterials {
   const silhouette = new OutlineMaterial(p.ink, 0.9)
   const selected = new OutlineMaterial(p.select, 1.6)
   const hovered = new OutlineMaterial(p.select, 1.2, 0.45)
-  all.push(clayMetal, clayStone, paper, xray, ghost, tint, silhouette, selected, hovered)
+  all.push(clayMetal, clayStone, paper, xray, xrayEdges, ghost, tint, silhouette, selected, hovered)
   return {
     clayMetal,
     clayStone,
     paper,
     xray,
+    xrayEdges,
     ghost,
     silhouette,
     selected,

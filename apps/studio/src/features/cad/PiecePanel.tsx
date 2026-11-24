@@ -95,8 +95,9 @@ export function PiecePanel({
         <div className="flex gap-2.5 px-4 py-4 text-xs text-fg-muted">
           <MousePointerClick className="mt-0.5 size-4 shrink-0 text-fg-subtle" aria-hidden />
           <p className="text-pretty">
-            Click a part of the model or a feature in the list to change it. Drag a value’s name to
-            scrub it; the model follows.
+            {design.order.length
+              ? 'Click a part of the model or a feature in the list to change it. Drag a value’s name to scrub it; the model follows.'
+              : 'Pick a way to start on the left; settings appear here.'}
           </p>
         </div>
       </ScrollArea>

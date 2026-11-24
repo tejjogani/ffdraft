@@ -13,10 +13,10 @@ import {
   ruleApplies,
   whenHolds,
 } from './engine'
-import { nodeFacts, pieceFacts } from './facts'
+import { nodeFacts, type PairWith, pieceFacts } from './facts'
 import { MEASURES } from './measures'
 import type { CanonFinding, DesignRead } from './model'
-import { patchFor, readPath, roundFor } from './paths'
+import { fieldInfo, patchFor, readPath, roundFor } from './paths'
 import { inferArchetype } from './read'
 
 export interface LintOptions {
@@ -28,6 +28,8 @@ export interface LintOptions {
   }
   archetype?: Archetype
   styles?: readonly string[]
+  /** The engagement shank a wedding band is made for (band.pair.*). */
+  pairWith?: PairWith
   waived?: readonly string[]
 }
 
@@ -38,16 +40,43 @@ export function lintDesign(
   summary?: EvaluationSummary,
   o: LintOptions = {},
 ): CanonFinding[] {
-  const words = o.styles ?? o.spec?.style ?? o.intent?.synthesis?.styleTags ?? []
+  // A parsed spec always carries `style: []`, so the spec's words and the intent's tags merge.
+  const words =
+    o.styles ?? [...new Set([...(o.spec?.style ?? []), ...(o.intent?.synthesis?.styleTags ?? [])])]
   const archetype =
     o.archetype ?? o.spec?.archetype ?? o.intent?.synthesis?.archetype ?? inferArchetype(design)
   const waived = new Set([...(o.waived ?? []), ...(o.intent?.waivers ?? []).map((w) => w.ruleId)])
   const ctx = { kind: design.kind, archetype, words }
-  const piece = pieceFacts(design, { styles: words })
+  const piece = pieceFacts(design, { styles: words, ...(o.pairWith ? { pairWith: o.pairWith } : {}) })
   const out: CanonFinding[] = []
 
-  for (const rule of effectiveRules(matchStyles(words))) {
-    if (rule.severity === 'default' || rule.expressible === false || waived.has(rule.id)) continue
+  const rules = effectiveRules(matchStyles(words))
+  /**
+   * Where a fix may land: inside the rule's own hull and every other applicable lint range on
+   * the same path, so applying it cannot raise another finding. Undefined when they disagree.
+   */
+  const fixRange = (node: Node, path: string, own: { min: number; max: number }) => {
+    const facts = nodeFacts(design, node.id, piece)
+    let lo = own.min
+    let hi = own.max
+    for (const r of rules) {
+      if (r.severity === 'default' || r.measure || !r.paths.includes(path)) continue
+      if (r.applies.nodeKind && r.applies.nodeKind !== node.kind) continue
+      if (!ruleApplies(r, ctx) || !whenHolds(r, facts)) continue
+      const range = lintRange(r, facts)
+      if (range) {
+        lo = Math.max(lo, range.lo)
+        hi = Math.min(hi, range.hi)
+      }
+    }
+    const info = fieldInfo(path)
+    lo = Math.max(lo, info?.minimum ?? -Infinity)
+    hi = Math.min(hi, info?.maximum ?? Infinity)
+    return lo <= hi + 1e-9 ? { lo, hi } : undefined
+  }
+
+  for (const rule of rules) {
+    if (rule.severity === 'default' || waived.has(rule.id)) continue
     if (!ruleApplies(rule, ctx)) continue
     const subjects: (Node | undefined)[] = rule.applies.nodeKind
       ? design.order
@@ -70,16 +99,16 @@ export function lintDesign(
       const limit = below ? range.lo : range.hi
       const nodeId =
         measured && 'nodeId' in measured && measured.nodeId ? measured.nodeId : node?.id
-      const target =
+      const where =
         rule.fix && !rule.measure && node && rule.paths.length === 1
-          ? rule.fix === 'setTypical'
-            ? bandFor(rule, facts)?.typical
-            : Math.min(hull.max, Math.max(hull.min, value))
+          ? fixRange(node, path, hull)
           : undefined
+      const wanted =
+        where && (rule.fix === 'setTypical' ? (bandFor(rule, facts)?.typical ?? value) : value)
       const fixed =
-        target === undefined
-          ? undefined
-          : roundFor(path, target, Math.max(hull.min, range.lo), Math.min(hull.max, range.hi))
+        where && wanted !== undefined
+          ? roundFor(path, Math.min(where.hi, Math.max(where.lo, wanted)), where.lo, where.hi)
+          : undefined
       out.push({
         level: rule.severity,
         code: `style.${rule.id}`,

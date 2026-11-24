@@ -15,11 +15,21 @@ import {
   MenuSeparator,
   ScrollArea,
 } from '@pave/ui'
-import { ChevronRight, Eye, EyeOff } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  PencilLine,
+  Scale,
+  Trash2,
+} from 'lucide-react'
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { runCommand } from '../../../lib/commands'
 import type { DesignSession } from '../../../lib/design-session/store'
 import { KIND_ICON } from '../kindIcon'
-import { move, rename, setIncluded } from '../ops'
+import { rename } from '../ops'
 import { useWorkspace } from '../state/workspace'
 import { diagnosticLevels, treeRows } from './tree'
 
@@ -136,6 +146,11 @@ export function Outliner({
             const excluded = node.visible === false
             const level = levels.get(row.id)
             const order = design.order.indexOf(row.id)
+            // The menu acts on the row it was opened on, through the same commands as the palette.
+            const onRow = (command: string) => () => {
+              ws().select([row.id])
+              runCommand(command)
+            }
             const item = (
               <div
                 data-node={row.id}
@@ -238,36 +253,45 @@ export function Outliner({
                 content={
                   <>
                     <MenuItem
+                      icon={PencilLine}
                       disabled={readOnly}
-                      onClick={() => ws().setRenaming(row.id)}
+                      onClick={onRow('design.rename')}
                       shortcut="f2"
                     >
                       Rename
                     </MenuItem>
-                    <MenuItem onClick={() => ws().toggleHidden(row.id)}>
+                    <MenuItem
+                      icon={isHidden ? Eye : EyeOff}
+                      onClick={onRow('design.hideSelected')}
+                      shortcut="h"
+                    >
                       {isHidden ? 'Show in view' : 'Hide in view'}
                     </MenuItem>
                     <MenuItem
+                      icon={Scale}
                       disabled={readOnly}
-                      onClick={() => session?.commit([setIncluded(row.id, excluded)])}
+                      onClick={onRow('design.excludeSelected')}
                     >
-                      {excluded ? 'Include in piece' : 'Exclude from piece'}
+                      {excluded ? 'Count in weight and export' : 'Leave out of weight and export'}
                     </MenuItem>
                     <MenuSeparator />
                     <MenuItem
+                      icon={ArrowUp}
                       disabled={readOnly || order <= 0}
-                      onClick={() => session?.commit([move(row.id, order - 1)])}
+                      onClick={onRow('design.moveUp')}
                     >
                       Move up
                     </MenuItem>
                     <MenuItem
+                      icon={ArrowDown}
                       disabled={readOnly || order >= design.order.length - 1}
-                      onClick={() => session?.commit([move(row.id, order + 1)])}
+                      onClick={onRow('design.moveDown')}
                     >
                       Move down
                     </MenuItem>
                     <MenuSeparator />
                     <MenuItem
+                      icon={Trash2}
                       danger
                       disabled={readOnly}
                       onClick={() => onDelete([row.id])}

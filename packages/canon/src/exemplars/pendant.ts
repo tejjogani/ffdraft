@@ -205,13 +205,13 @@ export const PENDANTS = [
         style: ['temple-inspired'],
         metal: { alloy: 'au22k-yellow', finish: 'matte' },
         body: { heightMm: 30 },
-        chain: { style: 'rope', lengthMm: 508, widthMm: 2.5 },
+        chain: { style: 'rope', lengthMm: 508, widthMm: 3 },
       },
       ops: [{ t: 'update', id: 'body', patch: { depth: 1.0, rim: 1.0, baseThickness: 1.6 } }],
     },
     why: [
       'Relief 1.0 mm deep in 22k: deep enough to read, soft enough to wear.',
-      'A 1 mm rim frames the artwork.',
+      'A 1 mm rim frames the artwork; about 24 g of 22k hangs on a 3 mm rope.',
       'The relief is the client’s height map; this exemplar fixes proportion only.',
     ],
     antiTwin: {
@@ -233,17 +233,17 @@ export const PENDANTS = [
         kind: 'pendant',
         archetype: 'medallion',
         title: '24k zodiac medallion',
-        summary: 'A 24 mm pure-gold relief medallion for a zodiac motif, on a cable chain.',
+        summary: 'A 24 mm pure-gold relief medallion for a zodiac motif, on a 3 mm rope chain.',
         style: ['east asian-inspired', 'zodiac'],
         metal: { alloy: 'au24k-yellow' },
         body: { heightMm: 24 },
-        chain: { style: 'cable', lengthMm: 457, widthMm: 1.5 },
+        chain: { style: 'rope', lengthMm: 457, widthMm: 3 },
       },
       ops: [{ t: 'update', id: 'body', patch: { depth: 0.8, baseThickness: 1.6 } }],
     },
     why: [
       'Soft 24k needs a 1.6 mm plate under 0.8 mm of relief.',
-      'Weight is part of the value: solid and simple.',
+      'Weight is part of the value: about 16 g of solid 24k, so a 3 mm rope, never a fine cable.',
     ],
     antiTwin: {
       ops: [

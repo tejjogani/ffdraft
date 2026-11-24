@@ -56,6 +56,7 @@ export const BEZEL_RULES = [
     applies: { kinds: ['ring'], nodeKind: 'ringShank', when: v('eastWest') },
     paths: ['ringShank.widthTop'],
     band: band(2.0, 1.8, 2.5),
+    refines: 'ring.solitaire.bandWidth',
     rationale: 'Keep the band slim, 1.8–2.5 mm: the stone already supplies the width.',
     source: src('EJ', '§1 East-west'),
     confidence: 'medium',
@@ -67,6 +68,7 @@ export const BEZEL_RULES = [
     applies: { kinds: ['ring'], nodeKind: 'gem', when: eastWest },
     paths: ['gem.placement.elevation'],
     band: band(iff(v('bezel'), 0.6, 1.0), iff(v('bezel'), 0.5, 0.8), 1.2),
+    refines: 'ring.solitaire.elevation',
     rationale:
       'An east-west stone is set low, 0.8–1.2 mm off the finger (0.5 in a bezel): a tall one tips over.',
     source: src('EJ', '§1 East-west'),

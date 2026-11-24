@@ -54,7 +54,7 @@ export function evaluations(): Evaluation[] {
     const ctx = { kind: item.design.kind, archetype: item.archetype, words: item.styles }
     const piece = pieceFacts(item.design, { styles: item.styles })
     for (const rule of effectiveRules(matchStyles(item.styles))) {
-      if (rule.expressible === false || !ruleApplies(rule, ctx)) continue
+      if (!ruleApplies(rule, ctx)) continue
       const nodes = rule.applies.nodeKind
         ? item.design.order
             .map((id) => item.design.nodes[id]!)

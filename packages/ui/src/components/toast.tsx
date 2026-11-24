@@ -35,7 +35,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <Base.Provider toastManager={manager} limit={4}>
       {children}
       <Base.Portal>
-        <Base.Viewport className="fixed right-4 bottom-4 z-[60] flex w-[min(360px,calc(100vw-32px))] flex-col-reverse gap-2 outline-none">
+        <Base.Viewport className="fixed right-4 bottom-[calc(1rem+var(--toast-offset,0px))] z-[60] flex w-[min(360px,calc(100vw-32px))] flex-col-reverse gap-2 outline-none">
           <ToastList />
         </Base.Viewport>
       </Base.Portal>

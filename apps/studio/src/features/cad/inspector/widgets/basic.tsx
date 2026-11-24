@@ -1,4 +1,8 @@
-/** The generic widgets: numbers, choices, toggles, text, vectors, references and summaries. */
+/**
+ * The generic widgets: numbers, choices, toggles, text, vectors, references, files and
+ * summaries. A widget that takes the row's `label` renders it as well (a number's label is its
+ * scrub handle), as two siblings for the row's grid.
+ */
 import {
   type FieldInfo,
   GEM_MATERIALS,
@@ -8,6 +12,8 @@ import {
   nodeTitle,
 } from '@pave/schema'
 import {
+  Button,
+  IconButton,
   Input,
   NumberField,
   Segmented,
@@ -16,38 +22,33 @@ import {
   Slider,
   Swatch,
   Switch,
+  toast,
 } from '@pave/ui'
-import { useEffect, useState } from 'react'
+import { FileUp, X } from 'lucide-react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { uploadAsset } from '../../../../lib/assets'
+import { classifyImport, IMPORT_ACCEPT } from '../../empty/importers'
 import { dependentsOf } from '../../ops'
 import { useFieldEdit } from '../edit'
 import type { InspectorRow } from '../model'
 
+export interface WidgetProps {
+  row: InspectorRow
+  /** The row's label, for widgets that place it themselves. */
+  label?: ReactNode
+}
+
 const UNIT: Record<string, string> = { mm: 'mm', deg: '°', ct: 'ct', '%': '%', s: 's', px: 'px' }
 export const unitOf = (f: FieldInfo) => (f.meta.unit ? UNIT[f.meta.unit] : undefined)
 
-export function NumberWidget({ row }: { row: InspectorRow }) {
+/** A number; dragging its label scrubs it live and the release is one change. */
+export function NumberWidget({ row, label }: WidgetProps) {
   const edit = useFieldEdit()
   const { field } = row
   const value = typeof row.value === 'number' ? row.value : null
   const step = field.meta.step ?? (field.type === 'integer' ? 1 : 0.05)
-  const number = (
-    <NumberField
-      size="sm"
-      value={value}
-      min={field.min}
-      max={field.max}
-      step={step}
-      unit={unitOf(field)}
-      disabled={edit.readOnly}
-      aria-label={field.title}
-      onChange={(v) => v !== null && edit.preview(row.path, v)}
-      onCommit={(v) => v !== null && edit.commit(row.path, v)}
-      className={field.widget === 'slider' ? 'w-20 shrink-0' : undefined}
-    />
-  )
-  if (field.widget !== 'slider') return number
-  return (
-    <div className="flex items-center gap-2.5">
+  const slider = field.widget === 'slider' && (
+    <div className="min-w-0 flex-[1.6]">
       <Slider
         value={value ?? field.min ?? 0}
         min={field.min}
@@ -58,8 +59,23 @@ export function NumberWidget({ row }: { row: InspectorRow }) {
         onChange={(v) => edit.preview(row.path, v)}
         onCommit={(v) => edit.commit(row.path, v)}
       />
-      {number}
     </div>
+  )
+  return (
+    <NumberField
+      size="sm"
+      rowLabel={label}
+      leading={slider}
+      value={value}
+      min={field.min}
+      max={field.max}
+      step={step}
+      unit={unitOf(field)}
+      disabled={edit.readOnly}
+      aria-label={field.title}
+      onChange={(v) => v !== null && edit.preview(row.path, v)}
+      onCommit={(v) => v !== null && edit.commit(row.path, v)}
+    />
   )
 }
 
@@ -72,7 +88,7 @@ function libraryIcon(field: FieldInfo, value: string) {
   return undefined
 }
 
-export function ChoiceWidget({ row }: { row: InspectorRow }) {
+export function ChoiceWidget({ row }: WidgetProps) {
   const edit = useFieldEdit()
   const { field } = row
   const options = field.options ?? []
@@ -84,6 +100,7 @@ export function ChoiceWidget({ row }: { row: InspectorRow }) {
       <Segmented
         value={value}
         options={options}
+        disabled={edit.readOnly}
         aria-label={field.title}
         onChange={(v) => edit.commit(row.path, v)}
         className="w-full [&>*]:flex-1"
@@ -106,7 +123,7 @@ export function ChoiceWidget({ row }: { row: InspectorRow }) {
   )
 }
 
-export function ToggleWidget({ row }: { row: InspectorRow }) {
+export function ToggleWidget({ row }: WidgetProps) {
   const edit = useFieldEdit()
   return (
     <Switch
@@ -118,12 +135,22 @@ export function ToggleWidget({ row }: { row: InspectorRow }) {
   )
 }
 
-export function TextWidget({ row }: { row: InspectorRow }) {
+/**
+ * Text previews as it is typed (the model follows) and becomes one change on blur or Enter;
+ * Escape drops what was typed. `row.value` already includes the preview, so the commit is
+ * unconditional: the session records nothing when the text is back where it started.
+ */
+export function TextWidget({ row }: WidgetProps) {
   const edit = useFieldEdit()
   const [draft, setDraft] = useState(String(row.value ?? ''))
-  useEffect(() => setDraft(String(row.value ?? '')), [row.value])
+  const typing = useRef(false)
+  useEffect(() => {
+    if (!typing.current) setDraft(String(row.value ?? ''))
+  }, [row.value])
   const commit = () => {
-    if (draft !== row.value) edit.commit(row.path, draft)
+    if (!typing.current) return
+    typing.current = false
+    edit.commit(row.path, draft)
   }
   return (
     <Input
@@ -131,20 +158,24 @@ export function TextWidget({ row }: { row: InspectorRow }) {
       disabled={edit.readOnly}
       aria-label={row.field.title}
       onChange={(e) => {
+        typing.current = true
         setDraft(e.target.value)
         edit.preview(row.path, e.target.value)
       }}
       onBlur={commit}
       onKeyDown={(e) => {
         if (e.key === 'Enter') e.currentTarget.blur()
-        if (e.key === 'Escape') setDraft(String(row.value ?? ''))
+        if (e.key === 'Escape' && typing.current) {
+          typing.current = false
+          edit.cancel(row.path)
+        }
       }}
       className="h-7"
     />
   )
 }
 
-export function Vec3Widget({ row }: { row: InspectorRow }) {
+export function Vec3Widget({ row }: WidgetProps) {
   const edit = useFieldEdit()
   const v = Array.isArray(row.value) ? (row.value as number[]) : [0, 0, 0]
   const unit = unitOf(row.field)
@@ -183,7 +214,7 @@ function candidates(row: InspectorRow, edit: ReturnType<typeof useFieldEdit>): S
     .map((n) => ({ value: n.id, label: nodeTitle(n) }))
 }
 
-export function RefWidget({ row }: { row: InspectorRow }) {
+export function RefWidget({ row }: WidgetProps) {
   const edit = useFieldEdit()
   const options = candidates(row, edit)
   return (
@@ -199,22 +230,116 @@ export function RefWidget({ row }: { row: InspectorRow }) {
   )
 }
 
-/** Lists, paths and assets: shown, edited elsewhere (sketching and re-import are not inline). */
-export function SummaryWidget({ row }: { row: InspectorRow }) {
+/**
+ * Several references (a group's children, a combine's tools): the chosen features as removable
+ * rows and a menu of the rest, from the same candidates a single reference offers.
+ */
+export function RefsWidget({ row }: WidgetProps) {
   const edit = useFieldEdit()
+  const chosen = Array.isArray(row.value) ? (row.value as string[]) : []
+  const options = candidates(row, edit)
+  const rest = options.filter((o) => !chosen.includes(o.value))
+  const title = (id: string) => (edit.design.nodes[id] ? nodeTitle(edit.design.nodes[id]!) : id)
+  const min = row.field.min ?? 0
+  return (
+    <div className="flex flex-col gap-1">
+      {chosen.map((id) => (
+        <div
+          key={id}
+          className="flex h-7 items-center justify-between gap-2 rounded-sm bg-bg-muted pr-0.5 pl-2 text-sm text-fg"
+        >
+          <span className="truncate">{title(id)}</span>
+          {!edit.readOnly && chosen.length > min && (
+            <IconButton
+              icon={X}
+              size="sm"
+              label={`Remove ${title(id)}`}
+              tooltip={false}
+              onClick={() =>
+                edit.commit(
+                  row.path,
+                  chosen.filter((x) => x !== id),
+                )
+              }
+            />
+          )}
+        </div>
+      ))}
+      <Select
+        value={null}
+        options={rest}
+        placeholder={
+          rest.length ? 'Add…' : chosen.length ? 'Nothing else to add' : 'Nothing to pick'
+        }
+        disabled={edit.readOnly || rest.length === 0}
+        aria-label={`Add to ${row.field.title}`}
+        onChange={(v) => edit.commit(row.path, [...chosen, v])}
+        className="h-7 w-full"
+      />
+    </div>
+  )
+}
+
+/**
+ * A file the feature is made from (an imported mesh, a height map): the current one, and a
+ * button to upload a replacement. The kernel says when a file does not suit the feature.
+ */
+export function AssetWidget({ row }: WidgetProps) {
+  const edit = useFieldEdit()
+  const input = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const has = typeof row.value === 'string' && row.value.length > 0
+  const upload = async (file: File) => {
+    if (!classifyImport(file.name)) {
+      toast.error('That file type can’t be used', `Use one of ${IMPORT_ACCEPT}.`)
+      return
+    }
+    setBusy(true)
+    try {
+      const asset = await uploadAsset(file)
+      edit.commit(row.path, asset.id)
+    } catch (e) {
+      toast.error('Upload failed', e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <span className="min-w-0 flex-1 truncate text-sm text-fg-muted">
+        {has ? 'Uploaded file' : 'None yet'}
+      </span>
+      <Button
+        size="sm"
+        variant="secondary"
+        icon={FileUp}
+        disabled={edit.readOnly || busy}
+        onClick={() => input.current?.click()}
+      >
+        {busy ? 'Uploading…' : has ? 'Replace' : 'Choose file'}
+      </Button>
+      <input
+        ref={input}
+        type="file"
+        accept={IMPORT_ACCEPT}
+        hidden
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          e.target.value = ''
+          if (file) void upload(file)
+        }}
+      />
+    </div>
+  )
+}
+
+/** Outlines and point lists: shown, edited elsewhere (sketching is not inline). */
+export function SummaryWidget({ row }: WidgetProps) {
   const v = row.value
   const text = Array.isArray(v)
-    ? row.field.widget === 'refs'
-      ? v
-          .map((id) => (edit.design.nodes[id] ? nodeTitle(edit.design.nodes[id]!) : id))
-          .join(', ') || 'None'
-      : `${v.length} ${v.length === 1 ? 'point' : 'points'}`
-    : typeof v === 'string'
-      ? row.field.widget === 'path'
-        ? `Outline · ${v.length.toLocaleString()} characters`
-        : row.field.widget === 'asset'
-          ? 'Uploaded file'
-          : v
+    ? `${v.length} ${v.length === 1 ? 'point' : 'points'}`
+    : typeof v === 'string' && row.field.widget === 'path'
+      ? `Outline · ${v.length.toLocaleString()} characters`
       : '—'
   return <p className="truncate py-1 text-sm text-fg-muted">{text}</p>
 }

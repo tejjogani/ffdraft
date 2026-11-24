@@ -110,5 +110,7 @@ export function roundFor(path: string, value: number, lo = -Infinity, hi = Infin
   let r = fix(Math.round(value / step) * step)
   if (r < lo - 1e-9) r = fix(Math.ceil(lo / step - 1e-9) * step)
   if (r > hi + 1e-9) r = fix(Math.floor(hi / step + 1e-9) * step)
+  // No grid point inside [lo, hi]: the exact bound beats a tidy number outside the range.
+  if (r < lo - 1e-9 || r > hi + 1e-9) r = fix(Math.min(hi, Math.max(lo, value)))
   return clampSchema(r)
 }

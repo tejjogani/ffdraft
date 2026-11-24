@@ -3,6 +3,7 @@
  * Design tab is open. A capture waits until the window's edits are saved and the evaluation of
  * exactly that version is on screen, so the images, the summary and `version` agree.
  */
+import { nodeTitle } from '@pave/schema'
 import { useEffect } from 'react'
 import { captureViewport } from '../../components/stage/capture'
 import { uploadAsset } from '../../lib/assets'
@@ -21,12 +22,20 @@ export function useViewportTools(pieceId: string, session: DesignSession | null)
       const { view, version } = session.get()
       const evaluation = await evaluationScheduler('draft').request(`${pieceId}:capture`, view)
       if (!evaluation) throw new Error('The design changed during the capture; try again')
+      // `annotate` names the focused features (or every feature) on the pictures.
+      const labelled = input.focusNodeIds?.length ? input.focusNodeIds : view.order
+      const labels = input.annotate
+        ? Object.fromEntries(
+            labelled.filter((id) => view.nodes[id]).map((id) => [id, nodeTitle(view.nodes[id]!)]),
+          )
+        : undefined
       const blobs = await captureViewport({
         evaluation,
         views: input.views,
         mode: input.mode,
         size: input.size,
         focusNodeIds: input.focusNodeIds,
+        labels,
       })
       const assets = await Promise.all(
         blobs.map((b, i) =>

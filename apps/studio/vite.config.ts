@@ -24,8 +24,24 @@ export default defineConfig({
     rolldownOptions: {
       // As for the Worker above: `@pave/kernel`'s entry also reaches rhino3dm's Node-only `ws`.
       external: ['ws'],
-      // Dependencies change less often than app code; a separate chunk keeps them cached.
-      output: { advancedChunks: { groups: [{ name: 'vendor', test: /node_modules/ }] } },
+      output: {
+        advancedChunks: {
+          // A group holds only what it matches; the app's own modules it imports (the schema)
+          // stay where the app needs them.
+          includeDependenciesRecursively: false,
+          groups: [
+            // The 3D stack loads with the screens that draw (Design, Render), not with every
+            // route: it is most of the dependency weight.
+            {
+              name: 'three',
+              test: /node_modules[\\/](three|three-mesh-bvh|camera-controls)[\\/]|packages[\\/]render[\\/]src[\\/]three[\\/]/,
+              priority: 2,
+            },
+            // Dependencies change less often than app code; a separate chunk keeps them cached.
+            { name: 'vendor', test: /node_modules/, priority: 1 },
+          ],
+        },
+      },
     },
   },
   server: {

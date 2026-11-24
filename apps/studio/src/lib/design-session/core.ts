@@ -39,6 +39,11 @@ export interface PendingChange {
   reverts?: string[]
   /** Whether the outbox has sent it (it may be retried under the same id). */
   sent: boolean
+  /**
+   * Sent before a rebase: the snapshot may or may not contain it, so it is not re-applied (it
+   * could show a stale value over later edits) until the retry's answer says where it stands.
+   */
+  unconfirmed?: boolean
 }
 
 export interface Gesture {
@@ -53,6 +58,8 @@ interface OwnChange {
   /** The server's inverse once acknowledged; until then the local one. */
   inverse: Op[]
   label: string
+  /** What the original edit was called, for "Undo …" / "Redo …" however often it flips. */
+  base: string
 }
 
 /** An assistant run's edits as this window saw them arrive, for the change chip and spark dots. */
@@ -70,6 +77,7 @@ export interface RunEdits {
 export type Notice =
   | { type: 'dropped'; label: string; reason: string }
   | { type: 'nothing-to-undo'; label: string }
+  | { type: 'nothing-to-redo'; label: string }
 
 export interface SessionState {
   pieceId: string
@@ -123,6 +131,10 @@ function derive(s: SessionState): SessionState {
   const own = { ...s.own }
   let undo = s.undo
   for (const p of s.pending) {
+    if (p.unconfirmed) {
+      pending.push(p)
+      continue
+    }
     try {
       settled = applyOps(settled, p.ops).design
       pending.push(p)
@@ -178,6 +190,7 @@ function record(
   ops: Op[],
   opts: CommitOptions,
   kind: 'edit' | 'undo' | 'redo',
+  base?: string,
 ): SessionState {
   if (ops.length === 0) return s
   const label = opts.label ?? labelForOps(ops, s.settled)
@@ -194,7 +207,7 @@ function record(
   const next: SessionState = {
     ...s,
     pending: [...s.pending, change],
-    own: { ...s.own, [id]: { ops, inverse, label } },
+    own: { ...s.own, [id]: { ops, inverse, label, base: base ?? label } },
     undo: kind === 'undo' ? s.undo : [...s.undo, id].slice(-MAX_UNDO),
     redo: kind === 'edit' ? [] : kind === 'undo' ? [...s.redo, id] : s.redo,
   }
@@ -299,12 +312,17 @@ function revertOwn(s: SessionState, id: string, kind: 'undo' | 'redo'): SessionS
   const change = s.own[id]
   if (!change) return s
   const ops = guardedInverse(change, s.settled)
-  const label =
-    kind === 'undo' ? `Undo ${change.label}` : `Redo ${change.label.replace(/^Undo /, '')}`
+  const label = `${kind === 'undo' ? 'Undo' : 'Redo'} ${change.base}`
   if (ops.length === 0)
-    return { ...s, notices: [...s.notices, { type: 'nothing-to-undo', label: change.label }] }
+    return {
+      ...s,
+      notices: [
+        ...s.notices,
+        { type: kind === 'undo' ? 'nothing-to-undo' : 'nothing-to-redo', label: change.base },
+      ],
+    }
   try {
-    return record(s, ops, { label: label.slice(0, 200), reverts: [id] }, kind)
+    return record(s, ops, { label: label.slice(0, 200), reverts: [id] }, kind, change.base)
   } catch (err) {
     if (!(err instanceof OpError)) throw err
     return { ...s, notices: [...s.notices, { type: 'dropped', label, reason: err.message }] }
@@ -368,7 +386,10 @@ function trackRun(runs: RunEdits[], change: StoredChange, before: Design): RunEd
  * In-order changes advance `confirmed`; later ones wait in the inbox for the gap to fill.
  */
 export function receive(s: SessionState, change: StoredChange): SessionState {
-  if (change.seq <= s.version || s.inbox[change.seq]) return s
+  // Already applied (or before our snapshot) — but it may be the late answer to a change of ours
+  // that is still pending: acknowledge it, or the outbox would resend it forever.
+  if (change.seq <= s.version) return s.pending.some((p) => p.id === change.id) ? ack(s, change) : s
+  if (s.inbox[change.seq]) return s
   if (change.seq > s.version + 1) return { ...s, inbox: { ...s.inbox, [change.seq]: change } }
   let next = s
   let c: StoredChange | undefined = change
@@ -393,6 +414,16 @@ export function receive(s: SessionState, change: StoredChange): SessionState {
   return derive(next)
 }
 
+/** Settles a pending change of ours that `confirmed` already contains. */
+function ack(s: SessionState, change: StoredChange): SessionState {
+  const own = s.own[change.id]
+  return derive({
+    ...s,
+    pending: s.pending.filter((p) => p.id !== change.id),
+    own: own ? { ...s.own, [change.id]: { ...own, inverse: change.inverse as Op[] } } : s.own,
+  })
+}
+
 /** Whether changes are missing between `version` and what is waiting in the inbox. */
 export const hasGap = (s: SessionState): boolean => Object.keys(s.inbox).length > 0
 
@@ -403,12 +434,14 @@ export function catchUp(s: SessionState, changes: readonly StoredChange[]): Sess
 
 /**
  * Starts over from a fresh snapshot of the piece (the history could not bridge the gap).
- * Pending changes are kept and re-applied; a sent one the server already has is acknowledged
- * when it is retried under the same id.
+ * Unsent changes are re-applied on top. A sent one may already be in the snapshot, so it is
+ * held back until it is retried under the same id: the server then either replays it (already
+ * committed, `receive` acknowledges it) or commits it now.
  */
 export function rebase(s: SessionState, design: Design, version: number): SessionState {
   const inbox = Object.fromEntries(Object.entries(s.inbox).filter(([seq]) => Number(seq) > version))
-  return derive({ ...s, confirmed: design, version, inbox })
+  const pending = s.pending.map((p) => (p.sent ? { ...p, unconfirmed: true } : p))
+  return derive({ ...s, confirmed: design, version, inbox, pending })
 }
 
 /** The server refused a change for good (invalid, or conflicting with later edits). */

@@ -5,7 +5,9 @@
  *   const view = useSessionState(pieceId, (s) => s.view)
  *   session?.commit(ops)                                // one undoable change
  *
- * A session starts from the `pieces.get` cache, applies `design.changed` events itself, writes
+ * A session starts from the `pieces.get` cache (and catches up with the server at once, since
+ * events are not applied while no session is open), applies `design.changed` events itself,
+ * writes
  * every confirmed state back into that cache (so other screens read the same design), and keeps
  * a `beforeunload` guard while edits are unsaved. It is disposed shortly after the last user
  * unmounts, so switching tabs does not drop it.
@@ -61,7 +63,11 @@ function open(piece: Piece): Entry {
   const unsubscribe = session.store.subscribe((s) => {
     for (const n of session.takeNotices())
       if (n.type === 'dropped') toast.error(`“${n.label}” was not applied`, n.reason)
-      else toast({ title: 'Nothing to undo', description: `“${n.label}” was changed since.` })
+      else
+        toast({
+          title: n.type === 'nothing-to-undo' ? 'Nothing to undo' : 'Nothing to redo',
+          description: `“${n.label}” was changed since.`,
+        })
     if (s.version !== written) {
       written = s.version
       queryClient.setQueryData<Piece>(key, (p) =>
@@ -72,7 +78,8 @@ function open(piece: Piece): Entry {
   const offEvent = onServerEvent('design.changed', (e) => session.receive(e.change))
   const offReconnect = onReconnect(() => void session.resync())
   const beforeUnload = (e: BeforeUnloadEvent) => {
-    if (session.get().pending.length) e.preventDefault()
+    const s = session.get()
+    if (s.pending.length || s.gesture) e.preventDefault()
   }
   window.addEventListener('beforeunload', beforeUnload)
   markLive(piece.id, true)
@@ -110,6 +117,8 @@ function acquire(piece: Piece): () => void {
     // Unsaved edits keep the session (and its outbox) alive until they are saved.
     const close = () => {
       if (e.refs > 0) return
+      // Nobody is editing any more: a gesture left open (a field that never blurred) is kept.
+      e.session.commitGesture()
       if (e.session.get().pending.length) {
         e.release = setTimeout(close, KEEP_ALIVE_MS)
         return
@@ -152,6 +161,14 @@ export function useDesignSession(piece: Piece | undefined): DesignSession | null
     rerender((n) => n + 1)
     return release
   }, [id, !!piece])
+  // A refetch that knows a newer version than the session (e.g. an edit made while no session
+  // was open, delivered after this one opened) means the session missed changes.
+  const version = piece?.version
+  useEffect(() => {
+    if (!id || version === undefined) return
+    const session = getDesignSession(id)
+    if (session && version > session.get().version) void session.resync()
+  }, [id, version])
   return id ? getDesignSession(id) : null
 }
 

@@ -51,8 +51,14 @@ export function markLive(pieceId: string, live: boolean): void {
   else livePieces.delete(pieceId)
 }
 
-/** This window's id on the event stream, so the server can address client-tool requests to it. */
-export const clientId = `w${crypto.randomUUID().replaceAll('-', '').slice(0, 20)}`
+/**
+ * This window's id on the event stream, so the server can address client-tool requests to it.
+ * `getRandomValues`, unlike `randomUUID`, also exists outside secure contexts (a self-hosted
+ * studio opened over plain http on a LAN address).
+ */
+export const clientId = `w${[...crypto.getRandomValues(new Uint8Array(10))]
+  .map((b) => b.toString(16).padStart(2, '0'))
+  .join('')}`
 
 const invalidate = (names: QueryName[]) => {
   for (const name of names) void queryClient.invalidateQueries({ queryKey: rpcKey(name) })

@@ -17,7 +17,7 @@ export const HALOS = [
         summary: 'A 1.2 ct cushion in a single halo on a pavé band.',
         style: ['classic'],
         metal: { alloy: 'au18k-white' },
-        ring: { size: us(6), bandWidthMm: 2.2 },
+        ring: { size: us(6) },
         stones: [
           { role: 'center', cut: 'cushion', carat: 1.2 },
           { role: 'halo', cut: 'round' },
@@ -52,7 +52,7 @@ export const HALOS = [
         summary: 'A 1 ct round in a fine halo on a pavé cathedral band.',
         style: ['vintage'],
         metal: { alloy: 'pt950' },
-        ring: { size: us(6), bandWidthMm: 2.0, shoulder: 'cathedral' },
+        ring: { size: us(6), shoulder: 'cathedral' },
         stones: [
           { role: 'center', cut: 'round', carat: 1 },
           { role: 'halo', cut: 'round' },
@@ -135,7 +135,7 @@ export const HALOS = [
       'Heavy 1.5 mm claws and a euro base keep it upright.',
     ],
     antiTwin: {
-      ops: [{ t: 'update', id: 'band', patch: { widthTop: 2.0 } }],
+      ops: [{ t: 'update', id: 'band', patch: { widthTop: 2.0, widthBottom: 2.0 } }],
       fault: 'A 2 mm band under a 10 mm stone',
       ruleId: 'ring.solitaire.bandWidth',
     },

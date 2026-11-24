@@ -356,4 +356,6 @@ export interface CanonSlice {
   caveats: { feature: string; fallback: string }[]
   failureModes: string[]
   questions: string[]
+  /** Set when even the smallest slice is over the token budget. */
+  overBudget?: true
 }

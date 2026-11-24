@@ -8,8 +8,10 @@
 import type { Diagnostic, ExportFormat } from '@pave/kernel'
 import type { Vec3 } from '@pave/render'
 import {
+  applyOps,
   type Design,
   isBodyKind,
+  labelForOps,
   type NodeInput,
   type NodeKind,
   nodeTitle,
@@ -19,7 +21,7 @@ import {
 import { AiMark, Button, cn, Dialog, IconButton, Sheet, Spinner } from '@pave/ui'
 import { useNavigate } from '@tanstack/react-router'
 import { PanelLeft, PanelRight, Plus } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Stage } from '../../components/stage/Stage'
 import type { Viewer, ViewerState } from '../../components/stage/viewer'
 import { assetUrl } from '../../lib/assets'
@@ -27,7 +29,9 @@ import { canRedo, canUndo } from '../../lib/design-session/core'
 import { useDesignSession, useSessionState } from '../../lib/design-session/store'
 import { useKernelInfo } from '../../lib/kernel/client'
 import { usePieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
+import { evaluationScheduler } from '../../lib/kernel/client'
 import { useRpc, useRpcMutation } from '../../lib/query'
+import { runCommand } from '../../lib/commands'
 import { rpc } from '../../lib/rpc'
 import { activeOrg, useSession } from '../../lib/session'
 import { useViewportTools } from './capture-tool'
@@ -37,31 +41,56 @@ import { EmptyDesign } from './empty/EmptyDesign'
 import { exportFormats, runExport } from './export'
 import { ChangeChip } from './hud/ChangeChip'
 import { Hud } from './hud/Hud'
+import { toIssues } from './hud/issues'
 import { useProductionCheck } from './hud/useProductionCheck'
 import { useNodeEdit } from './inspector/edit'
 import { Inspector } from './inspector/Inspector'
 import { addNode, addPrepared, dependentsOf, remove } from './ops'
 import { AddMenu } from './outliner/AddMenu'
 import { Outliner } from './outliner/Outliner'
-import { nextSteps } from './outliner/suggestions'
+import { type NextStep, nextSteps } from './outliner/suggestions'
 import { PiecePanel } from './PiecePanel'
 import { useWorkspace } from './state/workspace'
 import { Dimensions } from './viewport/Dimensions'
+import { Marker, type MarkerSpot } from './viewport/Marker'
 import { FileToolbar, ViewToolbar } from './viewport/Toolbar'
 
-const NARROW = '(max-width: 899px)'
 /** Workspace actions read the latest UI state without subscribing to it. */
 const ws = useWorkspace.getState
 
-function useMedia(query: string): boolean {
-  const [match, setMatch] = useState(() => matchMedia(query).matches)
+const OUTLINER_PX = 248
+const INSPECTOR_PX = 328
+/**
+ * Panels dock while the viewport keeps a usable width beside them, measured on the workspace
+ * itself (the app's sidebar may be open or not): the feature list folds into a sheet first,
+ * then the inspector.
+ */
+const DOCK_OUTLINER_PX = 1100
+const DOCK_INSPECTOR_PX = 760
+/** Below this viewport width the floating rows go icon-only and the next-step chips step aside. */
+const COMPACT_VIEW_PX = 560
+
+function useWidth(ref: RefObject<HTMLElement | null>): number {
+  const [width, setWidth] = useState(() => ref.current?.clientWidth ?? 1440)
   useEffect(() => {
-    const m = matchMedia(query)
-    const on = () => setMatch(m.matches)
-    m.addEventListener('change', on)
-    return () => m.removeEventListener('change', on)
-  }, [query])
-  return match
+    const el = ref.current
+    if (!el) return
+    const observer = new ResizeObserver(([entry]) => setWidth(entry!.contentRect.width))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [ref])
+  return width
+}
+
+/** Toasts rise above the facts strip at the bottom of the view while the Design tab is open. */
+function useToastOffset(px: number) {
+  useEffect(() => {
+    const root = document.documentElement.style
+    root.setProperty('--toast-offset', `${px}px`)
+    return () => {
+      root.removeProperty('--toast-offset')
+    }
+  }, [px])
 }
 
 export function PieceDesign({ pieceId }: { pieceId: string }) {
@@ -91,7 +120,9 @@ function Workspace({ piece }: { piece: Piece }) {
   const display = useWorkspace((s) => s.display)
   const xray = useWorkspace((s) => s.xray)
   const simplified = useWorkspace((s) => s.simplified)
+  const wheel = useWorkspace((s) => s.wheel)
   useEffect(() => ws().open(pieceId), [pieceId])
+  useToastOffset(48)
 
   const view = useSessionState(session, (s) => s.view) ?? piece.design
   const settled = useSessionState(session, (s) => s.settled) ?? piece.design
@@ -110,8 +141,15 @@ function Workspace({ piece }: { piece: Piece }) {
   const viewer = useRef<Viewer | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [confirm, setConfirm] = useState<{ ids: string[]; dependents: string[] } | null>(null)
-  const narrow = useMedia(NARROW)
+  const root = useRef<HTMLDivElement>(null)
+  const width = useWidth(root)
+  const dockOutliner = width >= DOCK_OUTLINER_PX
+  const dockInspector = width >= DOCK_INSPECTOR_PX
+  const compact =
+    width - (dockOutliner ? OUTLINER_PX : 0) - (dockInspector ? INSPECTOR_PX : 0) < COMPACT_VIEW_PX
   const [sheet, setSheet] = useState<'outliner' | 'inspector' | null>(null)
+  const [marker, setMarker] = useState<MarkerSpot | null>(null)
+  const [stepping, setStepping] = useState<string | null>(null)
   const formats = exportFormats(kernel.formats)
   const mountedVersion = useRef(version)
 
@@ -177,22 +215,79 @@ function Workspace({ piece }: { piece: Piece }) {
 
   const show = (d: Diagnostic) => {
     if (d.nodeId) ws().select([d.nodeId])
-    if (d.at) viewer.current?.frameAt(d.at as Vec3)
-    else if (d.nodeId) viewer.current?.frameAll(true, [d.nodeId])
+    if (d.at) {
+      viewer.current?.frameAt(d.at as Vec3, d.nodeId)
+      setMarker({ at: d.at, level: d.level, key: Date.now() })
+    } else if (d.nodeId) viewer.current?.frameAll(true, [d.nodeId])
   }
   const fix = (d: Diagnostic) => d.fix && session?.commit(d.fix.ops, { label: d.fix.label })
+
+  /**
+   * A next step is a guided path for someone new to CAD, so it must not end in red: the
+   * addition is evaluated first, and a one-click repair the kernel offers for it (a bail too
+   * small for its new chain, say) goes into the same change.
+   */
+  const addStep = async (step: NextStep) => {
+    if (!session || stepping) return
+    const { ops, id } = addNode(view, step.kind, {
+      target: step.target,
+      values: step.name ? { name: step.name } : {},
+    })
+    if (!id) return
+    setStepping(step.label)
+    let repairs: Diagnostic[] = []
+    try {
+      const candidate = applyOps(view, ops).design
+      const evaluation = await evaluationScheduler('draft').request(`${pieceId}:step`, candidate)
+      repairs = (evaluation?.diagnostics ?? []).filter(
+        (d) => d.level === 'error' && d.fix && (d.nodeId === id || d.nodeId === step.target),
+      )
+    } catch {
+      // No kernel: add it as it is; the checks will say what is wrong.
+    } finally {
+      setStepping(null)
+    }
+    const label = labelForOps(ops, view)
+    try {
+      session.commit([...ops, ...repairs.flatMap((d) => d.fix!.ops)], { label })
+    } catch {
+      session.commit(ops, { label })
+    }
+    ws().select([id])
+  }
+
+  const issues = useMemo(
+    () => toIssues(check.state === 'done' ? check.diagnostics : (evaluation?.diagnostics ?? [])),
+    [check, evaluation],
+  )
+  const steps = useMemo(
+    () => (readOnly ? [] : nextSteps(view, kernel.kinds)),
+    [view, kernel.kinds, readOnly],
+  )
 
   useCadCommands({
     session,
     viewer,
+    design: view,
     readOnly,
     canUndo: undoable,
     canRedo: redoable,
     crashed: kernel.status === 'crashed',
     formats,
+    issues,
+    steps,
+    hasRun: !!run,
     openAddMenu: () => setAddOpen(true),
     requestDelete,
-    exportAs: (f: ExportFormat) => void runExport(piece, view, f),
+    exportAs: (f: ExportFormat) =>
+      void runExport(piece, view, f, {
+        problems: issues.filter((i) => i.d.level === 'error').length,
+        review: () => runCommand('design.showNextIssue'),
+      }),
+    show,
+    fix,
+    addStep: (s) => void addStep(s),
+    undoRun: () => run && revertRun.mutate({ pieceId, runId: run.runId }),
   })
 
   const viewerState = useMemo<ViewerState>(
@@ -214,10 +309,6 @@ function Workspace({ piece }: { piece: Piece }) {
     run?.prior ?? null,
   )
   const [viewerHandle, setViewerHandle] = useState<Viewer | null>(null)
-  const steps = useMemo(
-    () => (readOnly ? [] : nextSteps(view, kernel.kinds)),
-    [view, kernel.kinds, readOnly],
-  )
   const selectedTitle = selection.length
     ? selection.map((id) => (view.nodes[id] ? nodeTitle(view.nodes[id]!) : id)).join(', ')
     : 'Nothing'
@@ -268,8 +359,8 @@ function Workspace({ piece }: { piece: Piece }) {
   )
 
   return (
-    <div className="absolute inset-0 flex min-h-[520px]">
-      {!narrow && (
+    <div ref={root} className="absolute inset-0 flex min-h-[520px]">
+      {dockOutliner && (
         <aside
           data-region="outliner"
           aria-label="Feature list"
@@ -278,11 +369,16 @@ function Workspace({ piece }: { piece: Piece }) {
           {outliner}
         </aside>
       )}
-      <main data-region="viewport" aria-label="Viewport" className="relative min-w-0 flex-1">
+      <main
+        data-region="viewport"
+        aria-label="Viewport"
+        className="relative min-w-0 flex-1 overflow-clip"
+      >
         <Stage
           evaluation={evaluation}
           state={viewerState}
           frameNodeIds={frameNodeIds}
+          wheel={wheel}
           label="3D view of the piece. Drag to orbit, right-drag or Shift-drag to pan, scroll to zoom; arrow keys orbit, F fits, 1 to 4 pick a view."
           onViewer={(v, tier) => {
             viewer.current = v
@@ -302,26 +398,39 @@ function Workspace({ piece }: { piece: Piece }) {
           {!empty && (
             <Dimensions viewer={viewerHandle} evaluation={evaluation} edit={selectedEdit} />
           )}
-          <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-3 [&>*]:pointer-events-auto">
-            <div className="flex items-center gap-2">
-              {narrow && (
+          {marker && (
+            <Marker
+              key={marker.key}
+              viewer={viewerHandle}
+              spot={marker}
+              onDone={() => setMarker(null)}
+            />
+          )}
+          <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-2 [&>*]:pointer-events-auto">
+            <div className="flex min-w-0 items-center gap-2">
+              {!dockOutliner && (
                 <IconButton
                   icon={PanelLeft}
                   label="Features"
                   onClick={() => setSheet('outliner')}
-                  className="glass size-9 rounded-lg"
+                  className="glass size-9 shrink-0 rounded-lg shadow-sm"
                 />
               )}
               <ViewToolbar canUndo={undoable} canRedo={redoable} />
             </div>
-            <div className="flex items-center gap-2">
-              <FileToolbar save={save} formats={empty ? [] : formats} simplified={simplified} />
-              {narrow && (
+            <div className="flex shrink-0 items-center gap-2">
+              <FileToolbar
+                save={save}
+                formats={empty ? [] : formats}
+                simplified={simplified}
+                compact={compact}
+              />
+              {!dockInspector && (
                 <IconButton
                   icon={PanelRight}
                   label="Inspector"
                   onClick={() => setSheet('inspector')}
-                  className="glass size-9 rounded-lg"
+                  className="glass size-9 shrink-0 rounded-lg shadow-sm"
                 />
               )}
             </div>
@@ -331,7 +440,7 @@ function Workspace({ piece }: { piece: Piece }) {
               <ChangeChip
                 run={run}
                 undoing={revertRun.isPending}
-                onUndo={() => revertRun.mutate({ pieceId, runId: run.runId })}
+                onUndo={() => runCommand('assistant.undoRun')}
                 onReview={() =>
                   void navigate({ to: '/pieces/$id/history', params: { id: pieceId } })
                 }
@@ -358,22 +467,26 @@ function Workspace({ piece }: { piece: Piece }) {
           {!empty && (
             <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex items-end justify-between gap-3 [&>*]:pointer-events-auto">
               <div className="flex min-w-0 flex-wrap gap-1.5">
-                {steps.map((s) => (
-                  <Button
-                    key={s.label}
-                    size="sm"
-                    variant="secondary"
-                    icon={Plus}
-                    className="glass shadow-sm"
-                    onClick={() => add(s.kind, s.target)}
-                  >
-                    {s.label}
-                  </Button>
-                ))}
+                {!compact &&
+                  steps.map((s, i) => (
+                    <Button
+                      key={s.label}
+                      size="sm"
+                      variant="secondary"
+                      icon={stepping === s.label ? undefined : Plus}
+                      disabled={!!stepping}
+                      className="glass shadow-sm"
+                      onClick={() => runCommand(`design.next.${i}`)}
+                    >
+                      {stepping === s.label && <Spinner className="size-3" />}
+                      {s.label}
+                    </Button>
+                  ))}
               </div>
               <Hud
                 design={view}
                 evaluation={evaluation}
+                issues={issues}
                 check={check}
                 evaluating={status === 'evaluating'}
                 readOnly={readOnly}
@@ -387,7 +500,7 @@ function Workspace({ piece }: { piece: Piece }) {
           Selected: {selectedTitle}
         </p>
       </main>
-      {!narrow && (
+      {dockInspector && (
         <aside
           data-region="inspector"
           aria-label="Inspector"
@@ -396,29 +509,29 @@ function Workspace({ piece }: { piece: Piece }) {
           {inspector}
         </aside>
       )}
-      {narrow && (
-        <>
-          <Sheet
-            open={sheet === 'outliner'}
-            onOpenChange={(o) => setSheet(o ? 'outliner' : null)}
-            title="Features"
-            side="left"
-          >
-            <div data-region="outliner" className="h-full">
-              {outliner}
-            </div>
-          </Sheet>
-          <Sheet
-            open={sheet === 'inspector'}
-            onOpenChange={(o) => setSheet(o ? 'inspector' : null)}
-            title="Inspector"
-            side="right"
-          >
-            <div data-region="inspector" className="h-full">
-              {inspector}
-            </div>
-          </Sheet>
-        </>
+      {!dockOutliner && (
+        <Sheet
+          open={sheet === 'outliner'}
+          onOpenChange={(o) => setSheet(o ? 'outliner' : null)}
+          title="Features"
+          side="left"
+        >
+          <div data-region="outliner" className="h-full">
+            {outliner}
+          </div>
+        </Sheet>
+      )}
+      {!dockInspector && (
+        <Sheet
+          open={sheet === 'inspector'}
+          onOpenChange={(o) => setSheet(o ? 'inspector' : null)}
+          title="Inspector"
+          side="right"
+        >
+          <div data-region="inspector" className="h-full">
+            {inspector}
+          </div>
+        </Sheet>
       )}
       <Dialog
         open={!!confirm}
@@ -455,7 +568,10 @@ function Sweep() {
   return (
     <div aria-hidden className="pointer-events-none absolute inset-0 z-10 overflow-hidden">
       <div className="cad-sweep ai-gradient absolute inset-y-0 -left-1/3 w-1/3 opacity-25 blur-2xl motion-reduce:hidden" />
-      <AiMark className="absolute top-4 left-1/2 hidden size-4 -translate-x-1/2 motion-reduce:block" />
+      {/* AiMark sets its own display, so the reduced-motion switch lives on a wrapper. */}
+      <span className="absolute top-4 left-1/2 hidden -translate-x-1/2 motion-reduce:block">
+        <AiMark className="size-4" />
+      </span>
     </div>
   )
 }

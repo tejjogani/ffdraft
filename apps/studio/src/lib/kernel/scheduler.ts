@@ -3,8 +3,9 @@
  * its client aborts whatever is running when a new request arrives, so every caller goes
  * through here:
  *
- *  - one evaluation in flight; per key (a piece) only the latest request waits behind it, and
- *    the requests it replaces resolve to null ("superseded");
+ *  - one evaluation in flight; per key (a piece) only the latest design waits behind it, and
+ *    requests for an older design resolve to null ("superseded"); several callers asking for
+ *    the same design (two screens showing one piece) all get its result;
  *  - an in-flight evaluation is allowed to finish, so a continuous scrub still shows a steady
  *    stream of results at the kernel's pace instead of aborting each one;
  *  - results are cached per design object, so several screens showing one piece share them;
@@ -18,10 +19,14 @@ export interface Evaluator {
   evaluate(design: Design, options?: EvaluateOptions): Promise<Evaluation>
 }
 
-interface Waiting {
-  design: Design
+interface Waiter {
   resolve: (e: Evaluation | null) => void
   reject: (e: unknown) => void
+}
+
+interface Waiting {
+  design: Design
+  waiters: Waiter[]
 }
 
 const ALPHA = 0.3
@@ -64,16 +69,16 @@ export function createScheduler(
         waiting.delete(key)
         const hit = cache.get(job.design)
         if (hit) {
-          job.resolve(hit)
+          for (const w of job.waiters) w.resolve(hit)
           continue
         }
         try {
           const evaluation = await getKernel().evaluate(job.design, options)
           cache.set(job.design, evaluation)
           learn(evaluation)
-          job.resolve(evaluation)
+          for (const w of job.waiters) w.resolve(evaluation)
         } catch (err) {
-          job.reject(err)
+          for (const w of job.waiters) w.reject(err)
         }
       }
     } finally {
@@ -86,10 +91,15 @@ export function createScheduler(
       const hit = cache.get(design)
       if (hit) return Promise.resolve(hit)
       return new Promise((resolve, reject) => {
-        waiting.get(key)?.resolve(null)
+        const queued = waiting.get(key)
+        if (queued?.design === design) {
+          queued.waiters.push({ resolve, reject })
+          return
+        }
+        for (const w of queued?.waiters ?? []) w.resolve(null)
         // Re-inserting moves the key to the back, so busy keys cannot starve quiet ones.
         waiting.delete(key)
-        waiting.set(key, { design, resolve, reject })
+        waiting.set(key, { design, waiters: [{ resolve, reject }] })
         void run()
       })
     },

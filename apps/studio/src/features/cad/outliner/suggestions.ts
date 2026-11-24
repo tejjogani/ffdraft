@@ -74,6 +74,8 @@ export interface NextStep {
   kind: NodeKind
   /** The node the new one attaches to. */
   target?: string
+  /** What the new feature is called, after what the step was for ("Band pavé"). */
+  name?: string
 }
 
 const BODY_FOR_ICE: ReadonlySet<NodeKind> = new Set(['vectorBody', 'meshBody', 'relief'])
@@ -93,14 +95,14 @@ export function nextSteps(design: Design, kinds: readonly string[]): NextStep[] 
   if (unset) out.push({ label: 'Set the stone', kind: 'setting', target: unset.id })
   const body = nodes.find((n) => BODY_FOR_ICE.has(n.kind))
   if (body && !referencing(body.id, 'pave'))
-    out.push({ label: 'Ice it out', kind: 'pave', target: body.id })
+    out.push({ label: 'Ice it out', kind: 'pave', target: body.id, name: 'Ice' })
   const bail = nodes.find((n) => n.kind === 'bail')
   if (body && !bail && design.kind === 'pendant')
     out.push({ label: 'Add a bail', kind: 'bail', target: body.id })
   if (bail && !nodes.some((n) => n.kind === 'chain'))
     out.push({ label: 'Hang on a chain', kind: 'chain', target: bail.id })
   if (band && nodes.some((n) => n.kind === 'gem') && !nodes.some((n) => n.kind === 'gemRow'))
-    out.push({ label: 'Pavé the band', kind: 'gemRow', target: band.id })
+    out.push({ label: 'Pavé the band', kind: 'gemRow', target: band.id, name: 'Band pavé' })
   return out
     .filter(
       (s) =>

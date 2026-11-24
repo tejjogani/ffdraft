@@ -108,6 +108,9 @@ function guarded(w: Slot, detail: Detail): Evaluator {
     async evaluate(design, options) {
       if (primary && info.status === 'crashed') throw new Error('The geometry engine stopped')
       const client = boot(w, primary)
+      // The watchdog times evaluations, not the first download of the engine (tens of MB of
+      // WASM on a slow connection): it starts once the worker is ready.
+      await client.ready()
       let timer: ReturnType<typeof setTimeout> | undefined
       const hung = new Promise<never>((_, reject) => {
         timer = setTimeout(() => {

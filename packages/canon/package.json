@@ -11,8 +11,10 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@pave/kernel": "workspace:*",
     "@pave/schema": "workspace:*",
     "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@pave/kernel": "workspace:*"
   }
 }

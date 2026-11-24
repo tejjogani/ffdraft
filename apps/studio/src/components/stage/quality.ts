@@ -16,14 +16,23 @@ export function rendererName(gl: WebGLRenderingContext | WebGL2RenderingContext)
   return String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER) ?? '')
 }
 
-/** True when the browser itself says WebGL would run with a major performance caveat. */
+let caveat: boolean | undefined
+
+/**
+ * True when the browser itself says WebGL would run with a major performance caveat. Probed
+ * once per page: each probe costs a WebGL context, and browsers cap how many may be alive.
+ */
 function hasPerformanceCaveat(): boolean {
+  if (caveat !== undefined) return caveat
   try {
     const probe = document.createElement('canvas')
-    return probe.getContext('webgl2', { failIfMajorPerformanceCaveat: true }) === null
+    const gl = probe.getContext('webgl2', { failIfMajorPerformanceCaveat: true })
+    caveat = gl === null
+    gl?.getExtension('WEBGL_lose_context')?.loseContext()
   } catch {
-    return false
+    caveat = false
   }
+  return caveat
 }
 
 export function gpuTier(gl: WebGLRenderingContext | WebGL2RenderingContext): GpuTier {

@@ -85,6 +85,36 @@ const faceArea = (g: NodeOf<'gem'>) => {
 const recess = (border: number, thickness: number) =>
   Math.min(Math.max(0.8 * border, 0.3), 0.6, thickness / 3)
 
+/** The chain's mass from the kernel-calibrated coefficient of its style (tables.ts). */
+function chainMass(f: Facts): number | undefined {
+  const g = need(f, 'chainW', 'chainL', 'density', 'chainK')
+  return g && (g.chainK * g.chainW * g.chainW * g.chainL * g.density) / 1000
+}
+
+/** Grams per mm of solid-equivalent thickness for a silhouette of about half H² (09 §2 Mass). */
+const silhouetteMass = (H: number, density: number) => (0.5 * H * H * density) / 1000
+
+/**
+ * What hangs on the chain: the evaluated metal less the chain, or, before evaluation, an
+ * estimate from the body (a relief's plate and half its relief; an outline at half H²).
+ */
+function pendantMass({ design, facts, summary }: MeasureContext): number | undefined {
+  if (summary) {
+    const chain = chainMass(facts) ?? 0
+    const m = summary.metalMassG - chain
+    return m > 0 ? m : undefined
+  }
+  const body = ofKind(design, 'relief')[0] ?? ofKind(design, 'vectorBody')[0]
+  if (!body) return undefined
+  const density = METALS[body.material].density
+  if (body.kind === 'relief')
+    return (
+      ((Math.PI / 4) * body.width * body.height * (body.baseThickness + 0.5 * body.depth) * density) /
+      1000
+    )
+  return silhouetteMass(body.height, density) * body.thickness * 0.9
+}
+
 export const MEASURES: Record<string, Measure> = {
   tableHeight: ({ facts }) => {
     const f = need(facts, 'e', 'depthPct', 'W')
@@ -187,7 +217,7 @@ export const MEASURES: Record<string, Measure> = {
 
   rowExcess: ({ facts }) => {
     const f = need(facts, 'rowRows', 'rowD', 'rowGap', 'bandW')
-    return f && { value: f.rowRows * f.rowD + (f.rowRows - 1) * f.rowGap + 0.8 - f.bandW }
+    return f && { value: f.rowRows * f.rowD + (f.rowRows - 1) * f.rowGap + 1.0 - f.bandW }
   },
 
   flatProfile: ({ node }) =>
@@ -243,7 +273,16 @@ export const MEASURES: Record<string, Measure> = {
     ),
 
   secondStone: ({ design }) => {
-    const gems = ofKind(design, 'gem').sort((a, b) => b.width - a.width)
+    // Cluster petals (a polar pattern's sources, 09 §5 Victorian and Celestial) are one motif
+    // round the hero, not rivals to it.
+    const petals = new Set(
+      ofKind(design, 'pattern')
+        .filter((p) => p.type === 'polar')
+        .flatMap((p) => p.sources),
+    )
+    const gems = ofKind(design, 'gem')
+      .filter((g) => !petals.has(g.id))
+      .sort((a, b) => b.width - a.width)
     const second = gems[1]
     return second ? { value: second.width, nodeId: second.id } : undefined
   },
@@ -359,18 +398,32 @@ export const MEASURES: Record<string, Measure> = {
     return node?.kind === 'bail' && f ? { value: (node.opening + 2 * node.wire) / f.cW } : undefined
   },
 
-  loopOnRoundChain: ({ node }) =>
+  loopOnChain: ({ node }) =>
     node?.kind === 'bail'
       ? { value: node.style === 'loop' || node.style === 'hidden' ? 1 : 0 }
       : undefined,
 
   chainToPendantMass: ({ facts, summary }) => {
-    const f = need(facts, 'chainW', 'chainL', 'density')
-    if (!summary || !f) return undefined
-    // The kernel's Cuban link weighs about 0.29·w²·L·ρ until it is calibrated (09 §2 Chains).
-    const chain = (0.29 * f.chainW * f.chainW * f.chainL * f.density) / 1000
+    const chain = chainMass(facts)
+    if (!summary || chain === undefined) return undefined
     const pendant = summary.metalMassG - chain
     return pendant > 0 ? { value: chain / pendant } : undefined
+  },
+
+  pendantMass: (c) => {
+    const m = pendantMass(c)
+    return m === undefined ? undefined : { value: m }
+  },
+
+  pendantDepth: ({ summary, facts }) =>
+    // Pendants face −Y and the chain drapes in XZ, so the summary's Y extent is the body depth.
+    summary && facts.H !== undefined ? { value: summary.boundsMm.y } : undefined,
+
+  solidEquivalent: (c) => {
+    const m = pendantMass(c)
+    const f = need(c.facts, 'H', 'density')
+    if (m === undefined || !f || !c.summary) return undefined
+    return { value: m / silhouetteMass(f.H, f.density) }
   },
 
   pendantHeight: ({ facts }) => (facts.H === undefined ? undefined : { value: facts.H }),

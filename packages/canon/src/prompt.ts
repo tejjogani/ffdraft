@@ -75,8 +75,8 @@ export function renderCanonForPrompt(
   for (const g of slice.styles) {
     out.push(`## Style: ${g.label}`)
     out.push(`Reads right: ${g.reads.join(' ')}`)
-    out.push(`Do: ${g.do.join(' ')}`)
-    out.push(`Don't: ${g.dont.join(' ')}`)
+    if (g.do.length) out.push(`Do: ${g.do.join(' ')}`)
+    if (g.dont.length) out.push(`Don't: ${g.dont.join(' ')}`)
     for (const r of g.recipes)
       out.push(
         `- ${r.path} ${printExpr(r.band.typical)} [${printExpr(r.band.min)}–${printExpr(r.band.max)}]${r.note ? `: ${r.note}` : ''}`,

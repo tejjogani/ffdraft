@@ -1,5 +1,5 @@
 /** Plain and men's bands: research 09 §1 "Rows, eternity, plain bands" and §4 "Men's band". */
-import { add, div, lt, max, mul, sub, v } from '../expr'
+import { add, div, gt, lt, max, mul, sub, v } from '../expr'
 import { band, rule, src } from './rule'
 
 const ID = v('ID')
@@ -112,6 +112,34 @@ export const BAND_RULES = [
     source: src('S', '§1 Fit, pair'),
     confidence: 'medium',
     severity: 'default',
+  }),
+  rule({
+    id: 'band.pair.width',
+    title: 'Wedding band against its engagement ring',
+    applies: { kinds: ['ring'], archetypes: ['band', 'eternity'], nodeKind: 'ringShank', when: gt(v('pairW'), 0) },
+    paths: ['ringShank.widthTop'],
+    band: band(v('pairW'), sub(v('pairW'), 0.3), add(v('pairW'), 0.3)),
+    refines: 'band.plain.width',
+    rationale:
+      'A wedding band sits within 0.3 mm of its engagement shank’s width: any wider or narrower and the pair reads as two rings.',
+    source: src('EJ', '§1 Fit, pair'),
+    confidence: 'medium',
+    severity: 'info',
+    fix: 'clampToBand',
+  }),
+  rule({
+    id: 'band.pair.thickness',
+    title: 'Wedding band depth against its engagement ring',
+    applies: { kinds: ['ring'], archetypes: ['band', 'eternity'], nodeKind: 'ringShank', when: gt(v('pairT'), 0) },
+    paths: ['ringShank.thicknessTop'],
+    band: band(v('pairT'), max(1.5, sub(v('pairT'), 0.2)), add(v('pairT'), 0.2)),
+    refines: 'band.plain.thickness',
+    rationale:
+      'Match the engagement shank’s depth within 0.2 mm, so the two stand level on the finger.',
+    source: src('EJ', '§1 Fit, pair'),
+    confidence: 'medium',
+    severity: 'info',
+    fix: 'clampToBand',
   }),
   rule({
     id: 'band.mens.mass',

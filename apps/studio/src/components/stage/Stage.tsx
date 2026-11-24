@@ -1,8 +1,11 @@
 /**
  * <Stage/>: the 3D viewport on the photographic sweep. Mounts a {@link Viewer}, forwards
- * evaluation and view state to it, and turns pointer input into picks: a click (not a drag)
- * picks, hovering highlights (throttled to frames, paused while the camera moves), wheel input
- * is read as mouse zoom or trackpad orbit, Shift-drag pans.
+ * evaluation and view state to it, and turns pointer input on the canvas into picks: a click
+ * (not a drag) picks, hovering highlights (throttled to frames, paused while the camera moves),
+ * wheel input is read as mouse zoom or trackpad orbit, Shift-drag pans. Overlays passed as
+ * children (toolbars, chips) sit above the canvas and never pick through it.
+ *
+ * The canvas is focusable (`role="application"`): the arrow keys orbit while it has focus.
  */
 import type { Evaluation } from '@pave/kernel'
 import { cn } from '@pave/ui'
@@ -11,7 +14,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { setLiveViewer } from './capture'
 import type { GpuTier } from './quality'
 import { Viewer, type ViewerPick, type ViewerState } from './viewer'
-import { classifyWheel, type WheelDevice } from './wheel'
+import { createWheelClassifier, type WheelDevice } from './wheel'
 
 export interface StageProps {
   evaluation: Evaluation | null
@@ -31,6 +34,9 @@ export interface StageProps {
 }
 
 const CLICK_SLOP_PX = 4
+
+/** Chromium and WebKit still send the legacy per-notch deltas the wheel classifier reads. */
+type WheelLegacy = { wheelDeltaX?: number; wheelDeltaY?: number }
 
 export function Stage({
   evaluation,
@@ -54,9 +60,10 @@ export function Stage({
 
   useEffect(() => {
     const el = host.current!
+    const cv = canvas.current!
     let v: Viewer
     try {
-      v = new Viewer(canvas.current!, el)
+      v = new Viewer(cv, el)
     } catch {
       setFailed(true)
       callbacks.current.onViewer?.(null, null)
@@ -77,13 +84,16 @@ export function Stage({
     theme.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
 
     const local = (e: { clientX: number; clientY: number }) => {
-      const r = el.getBoundingClientRect()
+      const r = cv.getBoundingClientRect()
       return [e.clientX - r.left, e.clientY - r.top] as const
     }
     let down: { x: number; y: number } | null = null
     let hoverFrame = 0
+    const wheels = createWheelClassifier()
     const onPointerDown = (e: PointerEvent) => {
       down = { x: e.clientX, y: e.clientY }
+      // Clicking the view gives it the keyboard (arrow keys orbit), as a click on a field would.
+      cv.focus({ preventScroll: true })
       v.controls.mouseButtons.left = e.shiftKey
         ? CameraControls.ACTION.TRUCK
         : CameraControls.ACTION.ROTATE
@@ -107,7 +117,8 @@ export function Stage({
     }
     const onPointerLeave = () => callbacks.current.onHover?.(null)
     const onWheel = (e: WheelEvent) => {
-      const intent = classifyWheel(e, callbacks.current.wheel)
+      if (e.target !== cv) return
+      const intent = wheels.classify(e as WheelEvent & WheelLegacy, callbacks.current.wheel)
       if (intent.type !== 'orbit') return
       // A trackpad swipe orbits; camera-controls would otherwise read it as zoom.
       e.preventDefault()
@@ -118,22 +129,25 @@ export function Stage({
     const onAuxClick = (e: MouseEvent) => {
       if (e.button === 1) e.preventDefault()
     }
-    el.addEventListener('pointerdown', onPointerDown)
-    el.addEventListener('pointerup', onPointerUp)
-    el.addEventListener('pointermove', onPointerMove)
-    el.addEventListener('pointerleave', onPointerLeave)
+    // Picking listens on the canvas only: a click on a toolbar above it is not a click on the
+    // model behind the button.
+    cv.addEventListener('pointerdown', onPointerDown)
+    cv.addEventListener('pointerup', onPointerUp)
+    cv.addEventListener('pointermove', onPointerMove)
+    cv.addEventListener('pointerleave', onPointerLeave)
+    // Capture on the host so this runs before camera-controls' own wheel listener on the canvas.
     el.addEventListener('wheel', onWheel, { capture: true, passive: false })
-    el.addEventListener('auxclick', onAuxClick)
+    cv.addEventListener('auxclick', onAuxClick)
     return () => {
       cancelAnimationFrame(hoverFrame)
       resize.disconnect()
       theme.disconnect()
-      el.removeEventListener('pointerdown', onPointerDown)
-      el.removeEventListener('pointerup', onPointerUp)
-      el.removeEventListener('pointermove', onPointerMove)
-      el.removeEventListener('pointerleave', onPointerLeave)
+      cv.removeEventListener('pointerdown', onPointerDown)
+      cv.removeEventListener('pointerup', onPointerUp)
+      cv.removeEventListener('pointermove', onPointerMove)
+      cv.removeEventListener('pointerleave', onPointerLeave)
       el.removeEventListener('wheel', onWheel, { capture: true })
-      el.removeEventListener('auxclick', onAuxClick)
+      cv.removeEventListener('auxclick', onAuxClick)
       callbacks.current.onBeforeDispose?.(v)
       setLiveViewer(null)
       viewer.current = null
@@ -161,10 +175,17 @@ export function Stage({
       ref={host}
       className={cn('stage relative isolate h-full w-full overflow-hidden', className)}
     >
+      {/* biome-ignore lint/a11y/noInteractiveElementToNoninteractiveRole: the 3D view is an application region with its own keys (arrows orbit) */}
       <canvas
         ref={canvas}
+        role="application"
+        tabIndex={0}
         aria-label={label}
-        className={cn('absolute inset-0 size-full touch-none outline-none', failed && 'hidden')}
+        className={cn(
+          'absolute inset-0 size-full touch-none outline-none',
+          'focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-select',
+          failed && 'hidden',
+        )}
       />
       {children}
     </div>

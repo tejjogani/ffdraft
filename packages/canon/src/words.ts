@@ -38,4 +38,5 @@ export const FLAG_PHRASES = {
   toi: ['toi et moi', 'toi moi', 'you and me', 'two stone'],
   eastWest: ['east west'],
   champion: ['championship', 'champion ring'],
+  flushFit: ['flush fit', 'sits flush', 'wedding set', 'bridal set'],
 } as const

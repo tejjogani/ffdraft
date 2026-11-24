@@ -6,7 +6,8 @@
 export { matchStyles } from './engine'
 export { buildExemplar, EXEMPLAR_SOURCES, getExemplars } from './exemplars/index'
 export { type Expr, ExprSchema, evalExpr, printExpr } from './expr'
-export { FACTS, type FactKey, type Facts, factsOf, heroGem } from './facts'
+export { CAVEATS } from './caveats'
+export { FACTS, type FactKey, type Facts, factsOf, heroGem, type PairWith } from './facts'
 export { type LintOptions, lintDesign } from './lint'
 export { MEASURES } from './measures'
 export * from './model'
@@ -21,6 +22,7 @@ export {
   RECIPE_PARAMS,
   type RecipeDefaults,
   type RecipeParam,
+  type SuggestOptions,
   type Suggestion,
   suggestDesign,
   suggestParameters,

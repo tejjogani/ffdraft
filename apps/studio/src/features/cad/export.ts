@@ -8,24 +8,39 @@ import type { ExportFormat } from '@pave/kernel'
 import { type Design, originNeedsAttestation, type Piece } from '@pave/schema'
 import { toast } from '@pave/ui'
 import { assetUrl } from '../../lib/assets'
+import { plural } from '../../lib/format'
 import { exportDesign } from '../../lib/kernel/client'
 import { rpc } from '../../lib/rpc'
 import { safeFileName, saveFile } from '../../lib/save-file'
 
-export const EXPORT_PURPOSE: Record<ExportFormat, { label: string; hint: string }> = {
-  stl: { label: 'For casting', hint: 'STL · watertight metal, per alloy' },
-  step: { label: 'For another CAD', hint: 'STEP · exact surfaces for Rhino, MatrixGold' },
-  '3dm': { label: 'For Rhino', hint: '3DM · layered meshes and curves' },
-  '3mf': { label: 'For 3D printing', hint: '3MF · mesh with units' },
-  glb: { label: 'For the web and AR', hint: 'GLB · with stones and materials' },
-  obj: { label: 'As a plain mesh', hint: 'OBJ · for any 3D tool' },
+export const EXPORT_PURPOSE: Record<
+  ExportFormat,
+  { label: string; hint: string /** Made to be cast or printed: checks matter. */; makes?: true }
+> = {
+  stl: { label: 'For casting', hint: 'Watertight metal, per alloy', makes: true },
+  step: { label: 'For another CAD', hint: 'Exact surfaces for Rhino, MatrixGold' },
+  '3dm': { label: 'For Rhino', hint: 'Layered meshes and curves' },
+  '3mf': { label: 'For 3D printing', hint: 'Mesh with units', makes: true },
+  glb: { label: 'For the web and AR', hint: 'With stones and materials' },
+  obj: { label: 'As a plain mesh', hint: 'For any 3D tool' },
+}
+
+export interface ExportContext {
+  /** Problems the checks found, said once more when exporting something to be made. */
+  problems: number
+  review(): void
 }
 
 /** Formats in menu order, limited to what this kernel build writes. */
 export const exportFormats = (available: readonly string[]): ExportFormat[] =>
   (Object.keys(EXPORT_PURPOSE) as ExportFormat[]).filter((f) => available.includes(f))
 
-export async function runExport(piece: Piece, design: Design, format: ExportFormat): Promise<void> {
+export async function runExport(
+  piece: Piece,
+  design: Design,
+  format: ExportFormat,
+  context: ExportContext,
+): Promise<void> {
   if (originNeedsAttestation(piece.origin)) {
     toast({
       title: 'Confirm you may use the artwork first',
@@ -56,8 +71,16 @@ export async function runExport(piece: Piece, design: Design, format: ExportForm
       notes = serverNotes
     }
     toast.dismiss(pending)
-    const saved = await saveFile(blob, safeFileName(name, extension), EXPORT_PURPOSE[format].hint)
-    if (saved)
+    const purpose = EXPORT_PURPOSE[format]
+    const saved = await saveFile(blob, safeFileName(name, extension), purpose.hint)
+    if (!saved) return
+    if (purpose.makes && context.problems > 0)
+      toast({
+        title: `Exported ${format.toUpperCase()}`,
+        description: `${plural(context.problems, 'problem')} to fix before ${format === 'stl' ? 'casting' : 'printing'}.`,
+        action: { label: 'Review', onClick: context.review },
+      })
+    else
       toast({
         title: `Exported ${format.toUpperCase()}`,
         // The first note is the one that matters (what the format can't carry); the rest is detail.
