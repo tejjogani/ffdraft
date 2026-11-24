@@ -156,7 +156,15 @@ function shankShape(node: ShankNode) {
     // the two merge.
     const end = arms.start + 2 * DEG
     const steps = Math.max(16, Math.ceil((2 * end) / (2 * DEG)))
-    const armThickness = (t: number) => Math.min(baseThickness(t), thickness(t) - 0.03)
+    // Under the stone the strip comes down onto the band as a solid saddle: a large stone's
+    // pavilion sinks into it, and a thin bridge there would be cut in two by its seat. Toward
+    // the peaks it thins to the band's thickness, leaving the arch open below.
+    const open = (t: number) =>
+      Math.abs(t) >= arms.peak ? 1 : smootherstep(Math.abs(t) / arms.peak)
+    const armThickness = (t: number) => {
+      const top = thickness(t) - 0.03
+      return top - (top - Math.min(baseThickness(t), top)) * open(t)
+    }
     strands.push({
       angles: Array.from({ length: steps + 1 }, (_, i) => -end + (2 * end * i) / steps),
       closed: false,

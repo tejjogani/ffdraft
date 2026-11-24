@@ -2,16 +2,16 @@
  * Halo: rows of small stones on offsets of the centre stone's outline, seated in a metal ring.
  * Beads are raised between neighbouring stones at production detail.
  *
- * The centre's claws stand inside the halo: the inner row starts beyond their outside, so every
- * stone keeps the halo's spacing all the way round and no claw crosses a stone. (Pieces from
- * before this keep their old layout through `clearClaws: false`.) On a band the ring is lifted
+ * The centre's claws stand inside the halo: the inner row starts just beyond their outside, so
+ * every stone keeps the halo's spacing all the way round and no claw crosses a stone. (Pieces
+ * from before this keep their old layout through `clearClaws: false`.) On a band the ring is lifted
  * off it where it would sink in, and stands on posts where it hangs above it, so it casts as
  * one piece with the band whatever alloy the head is.
  */
 import { gemDims } from '@pave/schema'
 import { type Addition, type Cut, defineFeature, metalOf, type Solid, type Stone } from '../core'
 import { seatCutter, seatHole } from '../gems/cutter'
-import { type StoneShape, stoneShape } from '../gems/shape'
+import { concaveCorners, type StoneShape, stoneShape } from '../gems/shape'
 import { roundedRectLoop, translateLoop } from '../geometry/loop'
 import { pathFrames, pathLength, resamplePath } from '../geometry/path'
 import { pinSolid } from '../geometry/pin'
@@ -94,15 +94,6 @@ function axisCrossing(shape: StoneShape, flat: readonly Vec2[], side: 1 | -1): n
     length += l
   }
   return found
-}
-
-/** Concave corners of the outline (a heart's cleft), as directions from the centre. */
-function concaveCorners(shape: StoneShape): number[] {
-  return shape.unit.outline.corners.filter((phi) => {
-    const h = 1e-3
-    const [a, b, c] = [phi - h, phi, phi + h].map((x) => shape.point(x)) as [Vec2, Vec2, Vec2]
-    return (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]) < 0
-  })
 }
 
 /**
@@ -211,20 +202,18 @@ export const halo = defineFeature('halo', (node, ctx) => {
   const headData = node.head ? (ctx.tryInput(node.head)?.data as HeadData | undefined) : undefined
   const head = headData?.kind === 'head' ? headData : undefined
   const clawReach = Math.max(0, ...(head?.claws ?? []).map((c) => c.reach))
+  // The halo starts beyond a bezel's rim or the outside of the claws, with the same 0.05 mm of
+  // air (the canon's halo-inside-the-claws: its gap to the centre stone clears them).
   const inner = legacy
     ? node.offset
-    : Math.max(
-        node.offset,
-        head?.wall ? head.wall + 0.05 : 0,
-        clawReach > 0 ? clawReach + node.gap : 0,
-      )
+    : Math.max(node.offset, (head?.wall ?? 0) + 0.05, clawReach > 0 ? clawReach + 0.05 : 0)
 
   if (legacy && clawReach > node.offset + 0.02)
     ctx.report({
       level: 'warning',
       code: 'halo.claws',
       message:
-        'The centre stone’s claws cross the inner halo stones (the layout of halos made before claw clearance). Starting the halo outside the claws keeps every stone clear; it recounts the stones.',
+        'The centre stone’s claws cross the inner halo stones (the layout of halos made before claw clearance). Starting the halo just outside the claws keeps every stone clear; it recounts the stones.',
       fix: {
         label: 'Start the halo outside the claws',
         ops: [{ t: 'update', id: node.id, patch: { clearClaws: true } }],
@@ -343,13 +332,11 @@ export const halo = defineFeature('halo', (node, ctx) => {
       for (const sx of [-1, 1]) {
         const side = sites.filter((p) => Math.sign(p.x - shape.centre[0]) === sx)
         if (!side.length) continue
-        const extremes = [
-          side.reduce((a, b) => (b.y > a.y ? b : a)),
-          side.reduce((a, b) => (b.y < a.y ? b : a)),
-        ]
-        const apart = Math.abs(extremes[0].y - extremes[1].y) > 4 * POST_RADIUS + 0.4
+        const far = side.reduce((a, b) => (b.y > a.y ? b : a))
+        const near = side.reduce((a, b) => (b.y < a.y ? b : a))
+        const apart = Math.abs(far.y - near.y) > 4 * POST_RADIUS + 0.4
         const posts = apart
-          ? extremes
+          ? [far, near]
           : [side.reduce((a, b) => (Math.abs(b.y) < Math.abs(a.y) ? b : a))]
         for (const p of posts) {
           // From inside the band up to the middle of the ring's thickness.

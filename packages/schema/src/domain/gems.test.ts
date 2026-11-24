@@ -16,9 +16,7 @@ describe('round melee weights', () => {
   ]
   it('agree with the trade table within 10 %, so iced pieces are not under-quoted', () => {
     for (const [w, ct] of TRADE)
-      expect(Math.abs(gemCarat('round', gemDims('round', w)) / ct - 1), `${w} mm`).toBeLessThan(
-        0.1,
-      )
+      expect(Math.abs(gemCarat('round', gemDims('round', w)) / ct - 1), `${w} mm`).toBeLessThan(0.1)
   })
   it('round-trip from carat back to the same diameter', () => {
     for (const [w] of TRADE) {

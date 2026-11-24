@@ -154,14 +154,23 @@ function brilliantHalf(
     // planes' meeting point outside the stone; those kites are folded along their diagonal
     // instead of planar.
     const fallback = aimAt(height(crown ? 0.6 : 0.78))
-    // Usable only if it lies inside the girdle, in the sector between the two mains.
+    // Usable only if it lies inside the girdle, in the sector between the two mains: ahead of
+    // both slope directions, and angularly between the two girdle points (seen from the
+    // centre). Near a marquise's or pear's point the planes can meet ahead of both slopes but
+    // on the far side of the tip's main, which folds the star over the kite.
     let ok = false
     if (met) {
       const dx = met[0] - o.centre[0]
       const dy = met[1] - o.centre[1]
+      const g0 = girdle[k]!
+      const g1 = girdle[(k + 1) % K]!
+      const side = (g: Vec2, x: number, y: number) =>
+        (g[0] - o.centre[0]) * y - (g[1] - o.centre[1]) * x
       const between =
         dx * a.direction[0] + dy * a.direction[1] > 0 &&
-        dx * b.direction[0] + dy * b.direction[1] > 0
+        dx * b.direction[0] + dy * b.direction[1] > 0 &&
+        side(g0, dx, dy) > 0 &&
+        -side(g1, dx, dy) > 0
       ok = between && Math.hypot(dx, dy) < 0.98 * o.radius(Math.atan2(dy, dx))
     }
     mid.push(ok && met ? met : fallback)
@@ -247,16 +256,61 @@ export function brilliantFacets(o: Outline, cut: GemCut, options: BrilliantOptio
     const j = (i + 1) % crown.ring.length
     return { kind: 'girdle', points: [top, pavilion.ring[i]!, pavilion.ring[j]!, crown.ring[j]!] }
   })
-  return {
-    facets: [...crown.facets, ...girdle, ...pavilion.facets],
-    stack: [
-      { z: levels.culet, scale: 0 },
-      { z: levels.girdleBottom, scale: 1 },
-      { z: levels.girdleTop, scale: 1 },
-      { z: levels.table, scale: cut.tablePct },
-    ],
-    keel: 0,
+  const facets = [...crown.facets, ...girdle, ...pavilion.facets]
+  return { facets, stack: silhouetteOf(o, facets, levels), keel: 0 }
+}
+
+/**
+ * The silhouette levels of a brilliant, from its facets: the girdle band at scale 1 and, above
+ * and below it, the upper envelope of every facet corner's scale (its distance from the centre
+ * over the girdle's in that direction). The star and lower-girdle points stand outside a
+ * straight taper from girdle to table or culet (a radiant's or a marquise's by up to an eighth
+ * of the width), and seats, claws and bezels are measured from this silhouette, so it must
+ * contain them.
+ */
+function silhouetteOf(o: Outline, facets: readonly Facet[], levels: Levels): StackLevel[] {
+  const scaleOf = ([x, y]: Vec3) => {
+    const dx = x - o.centre[0]
+    const dy = y - o.centre[1]
+    const r = Math.hypot(dx, dy)
+    return r < 1e-12 ? 0 : r / o.radius(Math.atan2(dy, dx))
   }
+  const corners = facets.flatMap((f) => f.points)
+  // Upper hull of (z, scale) points sorted by z, so straight runs between levels stay above all.
+  const envelope = (points: StackLevel[]): StackLevel[] => {
+    const sorted = points.toSorted((a, b) => a.z - b.z)
+    const hull: StackLevel[] = []
+    for (const p of sorted) {
+      while (hull.length >= 2) {
+        const a = hull[hull.length - 2]!
+        const b = hull[hull.length - 1]!
+        // Drop b when it lies on or under the line from a to p.
+        if ((b.scale - a.scale) * (p.z - a.z) <= (p.scale - a.scale) * (b.z - a.z) + 1e-12)
+          hull.pop()
+        else break
+      }
+      hull.push(p)
+    }
+    return hull
+  }
+  const pavilion = envelope([
+    { z: levels.culet, scale: 0 },
+    ...corners
+      .filter((p) => p[2] > levels.culet + 1e-9 && p[2] < levels.girdleBottom - 1e-9)
+      .map((p) => ({ z: p[2], scale: scaleOf(p) })),
+    { z: levels.girdleBottom, scale: 1 },
+  ])
+  const crown = envelope([
+    { z: levels.girdleTop, scale: 1 },
+    ...corners
+      .filter((p) => p[2] > levels.girdleTop + 1e-9 && p[2] < levels.table - 1e-9)
+      .map((p) => ({ z: p[2], scale: scaleOf(p) })),
+    {
+      z: levels.table,
+      scale: Math.max(...corners.filter((p) => p[2] >= levels.table - 1e-9).map(scaleOf)),
+    },
+  ])
+  return [...pavilion, ...crown]
 }
 
 /**

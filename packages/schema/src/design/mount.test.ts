@@ -24,8 +24,10 @@ const node = <K extends 'setting'>(d: Design, id: string) => resolveDesign(d).no
 describe('mount rules', () => {
   it('give each cut its usual claws, symmetric about the band', () => {
     for (const cut of GEM_CUT_IDS) {
-      const count = prongCountFor(cut, gemDims(cut, 6))
-      expect(count).toBe(GEM_CUTS[cut].prongs.typical)
+      const dims = gemDims(cut, 6)
+      // A long baguette or emerald adds a claw each side (tested below).
+      const long = (cut === 'baguette' || cut === 'emerald') && dims.length >= MOUNT.longStepClaws
+      expect(prongCountFor(cut, dims)).toBe(GEM_CUTS[cut].prongs.typical + (long ? 2 : 0))
     }
     expect(prongCountFor('round', gemDims('round', 7.4))).toBe(6)
     expect(prongCountFor('trillion', gemDims('trillion', 8))).toBe(3)
@@ -109,7 +111,9 @@ describe('resolveDesign', () => {
       const { peak } = cathedralPeak(band.shoulderHeight!, outer)
       const under = girdleRadius(g, band) - (outer + band.shoulderHeight!) * Math.cos(peak)
       expect(under).toBeGreaterThan(0.2)
-      expect(under).toBeLessThan(0.45)
+      // Arms rise no higher than the rule's cap; above it the head's legs carry the stone.
+      if (band.shoulderHeight! < MOUNT.shoulderAutoMax) expect(under).toBeLessThan(0.45)
+      else expect(width).toBe(9)
       // The row's clear arc grows with the stone.
       const row = r.nodes.row as NodeOf<'gemRow'>
       const half = ((row.skipCenter! / 2) * Math.PI) / 180
@@ -166,5 +170,26 @@ describe('version 1 documents keep their meaning', () => {
       expect(unpinAtRule(d)).toEqual(d)
       expect(pinsOffRule(d)).toEqual([])
     }
+  })
+
+  it('migration unpins only values exactly at their rule, and marks halos to keep their layout', () => {
+    const v1: Design = {
+      ...buildDesign(TEMPLATES.find((t) => t.id === 'halo')!.spec),
+      schemaVersion: 1,
+    }
+    const near = applyOps(v1, []).design
+    expect((near.nodes.halo as NodeOf<'halo'>).clearClaws).toBe(false)
+    // A stored 0.99 mm wire beside a rule of 1.0 stays pinned (it would move with a later stone).
+    const pinned: Design = {
+      ...v1,
+      nodes: { ...v1.nodes, head: { ...v1.nodes.head!, prongDiameter: 0.99 } as NodeOf<'setting'> },
+    }
+    expect((migrateDesign(pinned).nodes.head as NodeOf<'setting'>).prongDiameter).toBe(0.99)
+  })
+
+  it('a baguette or emerald 12 mm long takes a claw on each long side', () => {
+    expect(prongCountFor('baguette', gemDims('baguette', 3, 2))).toBe(4)
+    expect(prongCountFor('baguette', gemDims('baguette', 6.5, 2.5))).toBe(6)
+    expect(prongCountFor('emerald', gemDims('emerald', 8.6, 1.4))).toBe(6)
   })
 })

@@ -15,7 +15,9 @@ import {
   TEMPLATES,
 } from '@pave/schema'
 import { afterAll, describe, expect, it } from 'vitest'
+import { unitContains } from '../gems/index'
 import { clawLayoutIssues, prongDirections, stoneShape } from '../gems/shape'
+import { toFrame } from '../geometry/vec'
 import { createKernel } from '../kernel'
 import { culetDepth } from './gem'
 import type { HeadData } from './setting'
@@ -199,6 +201,29 @@ describe('stones', () => {
     ).toBeGreaterThanOrEqual(outer - 0.01)
   })
 
+  it('a large cabochon centre’s claws stay out of the side stones of a three-stone', async () => {
+    const base = template('three-stone')
+    const r = replaceStone(base, { nodeId: 'center' }, { cut: 'cabochon', carat: 5 })
+    const scene = await kernel.scene(applyOps(base, r.ops).design)
+    for (const id of ['side1', 'side2']) {
+      const side = scene.nodes.get(id)!.stones[0]!
+      const shape = stoneShape(side)
+      let inside = 0
+      for (const { solid } of scene.nodes.get('head')!.bodies) {
+        const t = solid.triangles()
+        for (let i = 0; i < t.positions.length; i += 3) {
+          const [x, y, z] = toFrame(side.frame, [
+            t.positions[i]!,
+            t.positions[i + 1]!,
+            t.positions[i + 2]!,
+          ])
+          if (unitContains(shape.unit, [x / shape.sx, y / shape.sy, z / shape.sz])) inside++
+        }
+      }
+      expect(inside, id).toBe(0)
+    }
+  })
+
   it('an unusable measured size falls back to the nominal stone with a warning', async () => {
     // Bypass the schema's bounds, as a raw stored record would.
     const base = template('solitaire')
@@ -248,7 +273,8 @@ describe('halo and rows', () => {
     expect(Math.min(...gaps)).toBeGreaterThan(0.1)
     expect(Math.max(...gaps)).toBeLessThan(0.4)
     const bad = e.diagnostics.filter(
-      (x) => x.nodeId === 'halo' && ['stone.inMetal', 'seat.wall', 'stone.overlap'].includes(x.code),
+      (x) =>
+        x.nodeId === 'halo' && ['stone.inMetal', 'seat.wall', 'stone.overlap'].includes(x.code),
     )
     expect(bad).toEqual([])
     expect(e.parts).toHaveLength(1)
@@ -291,7 +317,9 @@ describe('halo and rows', () => {
       const x = local.reduce((a, v, k) => a + v * centre.frame.x[k]!, 0)
       const y = local.reduce((a, v, k) => a + v * centre.frame.y[k]!, 0)
       // On the path 0.25 mm + half a stone off the girdle.
-      const d = Math.min(...shape.offsetPath(0.25 + 0.65).map(([px, py]) => Math.hypot(px - x, py - y)))
+      const d = Math.min(
+        ...shape.offsetPath(0.25 + 0.65).map(([px, py]) => Math.hypot(px - x, py - y)),
+      )
       expect(d).toBeLessThan(0.2)
     }
   })
@@ -327,6 +355,27 @@ describe('halo and rows', () => {
         .map((o) => Math.hypot(o[0] - c[0]!, o[1] - c[1]!) - 0.75 - r)
         .sort((x, y) => x - y)
       expect(near[0]!).toBeLessThan(0.02)
+    }
+    // On the domed court band every claw, the end ones included, reaches over the girdle of
+    // the stone nearest it: some point of it is inside the girdle, above the girdle plane.
+    for (const add of shared.nodes.get('row')!.additions) {
+      const t = add.solid.triangles()
+      const pts = Array.from(
+        { length: t.positions.length / 3 },
+        (_, i) => [t.positions[3 * i]!, t.positions[3 * i + 1]!, t.positions[3 * i + 2]!] as const,
+      )
+      const c = pts[0]!
+      const nearest = shared.stones.reduce((a, s) =>
+        Math.hypot(...s.stone.frame.origin.map((v, k) => v - c[k]!)) <
+        Math.hypot(...a.stone.frame.origin.map((v, k) => v - c[k]!))
+          ? s
+          : a,
+      )
+      const laps = pts.some((p) => {
+        const [x, y, z] = toFrame(nearest.stone.frame, [p[0], p[1], p[2]])
+        return Math.hypot(x, y) < nearest.stone.dims.width / 2 - 0.02 && z > 0
+      })
+      expect(laps).toBe(true)
     }
   })
 })

@@ -268,9 +268,13 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
           Math.min(list[i]!.width, list[i + 1]!.width),
         )
       if (ends && !full) {
-        const [from, to] = span(run)
-        visit(from + 0.1 / radius, run[0]!.a, run[0]!.width)
-        visit(to - 0.1 / radius, run[0]!.a, run[run.length - 1]!.width)
+        // Beyond each end stone, where the next gap would be: the claws there sit the same
+        // distance from the end stone as the claws between stones do from theirs, so they lap
+        // its girdle (half a pad further out, they missed it on a domed band).
+        const first = run[0]!
+        const last = run[run.length - 1]!
+        visit(first.theta - (first.width + node.gap) / 2 / radius, first.a, first.width)
+        visit(last.theta + (last.width + node.gap) / 2 / radius, last.a, last.width)
       }
     }
   }

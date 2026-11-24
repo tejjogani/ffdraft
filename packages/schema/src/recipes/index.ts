@@ -48,7 +48,7 @@ const headStyle = (s: StoneSpec | undefined) =>
     ? s.setting
     : 'prong'
 
-function ring(spec: PieceSpec): NodeInput[] {
+function ring(spec: PieceSpec, notes: string[]): NodeInput[] {
   const metal = {
     material: spec.metal.alloy,
     finish: spec.metal.finish,
@@ -188,16 +188,33 @@ function ring(spec: PieceSpec): NodeInput[] {
   }
 
   if (spec.engraving) {
+    // Text wrapped inside the band may take 97 % of its round (the kernel's engraving.tooLong);
+    // letters advance about 0.7 of their height each, so a long text is set smaller, down to
+    // the least letter that engraves cleanly.
+    const room = 0.97 * 2 * Math.PI * radius
+    const fit =
+      Math.floor((room / (ENGRAVING_ADVANCE * Array.from(spec.engraving).length)) * 10) / 10
+    const size = Math.max(ENGRAVING_MIN, Math.min(ENGRAVING_SIZE, fit))
+    if (fit < ENGRAVING_MIN)
+      notes.push(
+        `The engraving is too long for the inside of this band even in ${ENGRAVING_MIN} mm letters; shorten it.`,
+      )
     nodes.push({
       id: 'engraving',
       kind: 'engraving',
       name: 'Engraving',
       host: 'band',
       text: spec.engraving,
+      ...(size < ENGRAVING_SIZE && { size }),
     })
   }
   return nodes
 }
+
+/** Default letter height of an engraving, the least that engraves cleanly, and advance per letter per mm of height. */
+const ENGRAVING_SIZE = 1.4
+const ENGRAVING_MIN = 0.6
+const ENGRAVING_ADVANCE = 0.7
 
 function pendant(spec: PieceSpec, notes: string[]): NodeInput[] {
   const metal = {
@@ -667,7 +684,7 @@ export function planDesign(input: PieceSpecInput): RecipeResult {
     )
     nodes = []
   } else if (a === 'custom') nodes = []
-  else if (kind === 'ring') nodes = ring(spec)
+  else if (kind === 'ring') nodes = ring(spec, notes)
   else if (a === 'studs' || kind === 'earrings') nodes = studs(spec)
   else if (a === 'tennis' || a === 'cuban' || kind === 'chain' || kind === 'bracelet')
     nodes = [chainNode(spec, notes)]

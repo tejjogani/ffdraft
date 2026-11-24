@@ -520,8 +520,7 @@ function qualityPatch(
     Object.entries(change).filter(
       ([k, v]) =>
         v !== undefined &&
-        JSON.stringify((current as Record<string, unknown> | undefined)?.[k]) !==
-          JSON.stringify(v),
+        JSON.stringify((current as Record<string, unknown> | undefined)?.[k]) !== JSON.stringify(v),
     ),
   )
   return Object.keys(changed).length ? changed : undefined

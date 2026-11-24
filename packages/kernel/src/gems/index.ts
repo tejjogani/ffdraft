@@ -228,13 +228,19 @@ function facetedMesh(facets: readonly Facet[]): MeshData {
 function cabochonStack(cut: GemCut): Faceted {
   const levels = levelsOf(cut)
   const dome = levels.table - levels.girdleTop
-  const rings = [0, 30, 55, 75].map((deg) => {
-    const a = (deg * Math.PI) / 180
-    return { z: levels.girdleTop + dome * Math.sin(a), scale: Math.cos(a) }
+  // The dome (scale cos a at height sin a) is circumscribed, not inscribed: each level is where
+  // the tangents at two neighbouring angles meet, so the straight runs between levels stay
+  // outside the curved stone and seats and claws measured from them never cut into it.
+  const angles = [0, 22.5, 45, 67.5, 90].map((deg) => (deg * Math.PI) / 180)
+  const rings = angles.slice(1).map((b, i) => {
+    const a = angles[i]!
+    const m = (a + b) / 2
+    const r = 1 / Math.cos((b - a) / 2)
+    return { z: levels.girdleTop + dome * Math.sin(m) * r, scale: Math.cos(m) * r }
   })
   return {
     facets: [],
-    stack: [{ z: levels.girdleBottom, scale: 1 }, ...rings, { z: levels.table, scale: 0.08 }],
+    stack: [{ z: levels.girdleBottom, scale: 1 }, { z: levels.girdleTop, scale: 1 }, ...rings],
     keel: 0,
   }
 }

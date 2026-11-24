@@ -5,7 +5,7 @@ import { edgeTopology } from '../topology'
 import { OutlineDistance } from './distance'
 import { edgeProfile, membraneDome, profiledSlab } from './profile'
 import { SHAPES } from './shapes'
-import { thickenStrokes } from './stroke'
+import { joinIslands, thickenStrokes, underline } from './stroke'
 import { parseSvgPath } from './svgPath'
 
 beforeAll(() => loadRuntime())
@@ -111,5 +111,65 @@ describe('outline geometry', () => {
     expect(dome.height(0, 0, 0)).toBeLessThanOrEqual(3 + 1e-9)
     expect(dome.height(0, 0, -9.9)).toBeLessThan(dome.height(0, 0, 0))
     outline.delete()
+  })
+})
+
+describe('joining loose parts of lettering', () => {
+  const rect = (x: number, y: number, w: number, h: number): [number, number][] => [
+    [x, y],
+    [x + w, y],
+    [x + w, y + h],
+    [x, y + h],
+  ]
+
+  it('ties block letters side to side, never over the cap line or under the baseline', () => {
+    const { manifold: mf } = runtime()
+    // Two bars 10 tall with a gap of 1: the nearest points are the corners, where a tie would
+    // stick out above and below the letters.
+    const letters = new mf.CrossSection([rect(0, 0, 2, 10), rect(3, 0, 2, 10)])
+    const joined = joinIslands(letters, 0.5, 32)!
+    expect(joined.ties).toBe(1)
+    expect(joined.section.decompose()).toHaveLength(1)
+    const box = joined.section.bounds()
+    expect(box.min[1]).toBeCloseTo(0, 6)
+    expect(box.max[1]).toBeCloseTo(10, 6)
+  })
+
+  it('sets the dot of an i down onto its stem instead of growing the stem with a tie', () => {
+    const { manifold: mf } = runtime()
+    // An l and an i joined at the baseline, as script letters are, and the i's dot 0.6 above
+    // its stem: the l's side is nearer to the dot than the stem is, and must not take it.
+    const letters = mf.CrossSection.union([
+      new mf.CrossSection([rect(-0.9, 0, 0.6, 9)]),
+      new mf.CrossSection([rect(-0.9, 0, 1.5, 0.6)]),
+      new mf.CrossSection([rect(0, 0, 0.6, 5)]),
+    ])
+    const text = mf.CrossSection.union([letters, new mf.CrossSection([rect(0, 5.6, 0.6, 0.6)])])
+    const joined = joinIslands(text, 0.5, 32)!
+    expect(joined.section.decompose()).toHaveLength(1)
+    // Nothing tied on (the dot only moved, overlapping the stem a little), nothing between the
+    // dot and the l…
+    expect(joined.section.area()).toBeLessThanOrEqual(text.area())
+    expect(joined.section.area()).toBeGreaterThan(text.area() - 0.36 / 2)
+    const gap = mf.CrossSection.intersection(
+      joined.section,
+      new mf.CrossSection([rect(-0.29, 4, 0.28, 3)]),
+    )
+    expect(gap.area()).toBeCloseTo(0, 9)
+    // …and the i is no taller than its stem and dot: the dot came down onto the stem.
+    const i = mf.CrossSection.intersection(
+      joined.section,
+      new mf.CrossSection([rect(0, 0, 0.6, 9)]),
+    )
+    expect(i.bounds().max[1]).toBeLessThan(5.6)
+  })
+
+  it('stands the letters on a bar under their full width', () => {
+    const { manifold: mf } = runtime()
+    const letters = new mf.CrossSection([rect(0, 0, 2, 10), rect(4, 0, 2, 10)])
+    const barred = underline(letters, 1)
+    expect(barred.decompose()).toHaveLength(1)
+    expect(barred.bounds().min[1]).toBeCloseTo(-0.5, 6)
+    expect(barred.bounds().max[0]).toBeCloseTo(6, 6)
   })
 })

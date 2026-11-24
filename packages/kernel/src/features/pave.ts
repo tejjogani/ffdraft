@@ -336,11 +336,21 @@ export const pave = defineFeature('pave', (node, ctx) => {
     (withHoles ? holes * TRIANGLES_PER_HOLE : 0)
   const drill = estimate(true) <= TRIANGLE_BUDGET
   if (estimate(false) > TRIANGLE_BUDGET) {
+    // The stock size whose packing of the same area stays within the budget, so the designer
+    // knows how far to go rather than guess.
+    const most = TRIANGLE_BUDGET / (TRIANGLES_PER_SEAT + beadsEach * TRIANGLES_PER_BEAD)
+    const area = layout.stones.reduce(
+      (sum, s) => sum + Math.PI * ((s.diameter + node.gap) / 2) ** 2,
+      0,
+    )
+    const needed = 2 * Math.sqrt(area / (Math.PI * most)) - node.gap
+    const fits = MELEE_SIZES_MM.find((size) => size >= needed - 1e-9)
     ctx.report({
       level: 'error',
       code: 'pave.tooLarge',
-      message: `${stones.length.toLocaleString('en')} stones are more than one piece can have its seats cut in here (about ${(estimate(false) / 1e6).toFixed(1)} million triangles against ${TRIANGLE_BUDGET / 1e6} million). The stones are listed, but no seats or beads are cut: use larger stones or a lower ice level.`,
+      message: `${stones.length.toLocaleString('en')} stones are more than one piece can have its seats cut in here (about ${(estimate(false) / 1e6).toFixed(1)} million triangles against ${TRIANGLE_BUDGET / 1e6} million). The stones are listed, but no seats or beads are cut: ${fits ? `use stones of ${fits} mm or more` : 'use larger stones'}, or a lower ice level.`,
       value: stones.length,
+      ...(fits && { limit: fits }),
     })
     return { stones }
   }

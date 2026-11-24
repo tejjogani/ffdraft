@@ -10,6 +10,7 @@ import type { Manifold } from 'manifold-3d'
 import { runtime } from '../runtime/index'
 import type { IndexedTriangles } from '../solid/meshing'
 import { trianglesFromManifold } from '../solid/solid'
+import { type ClosestHit, TriangleBvh } from './bvh'
 import { keepPieces, SPECK_VOLUME } from './pieces'
 import { type DistanceGrid, distanceGrid, levelSetOf, sampleDistance } from './sdf'
 
@@ -42,6 +43,10 @@ const OPEN_RADIUS = 0.5
 /** …and at least this many grid cells, below which a slit is a cell or two wide and survives. */
 const OPEN_CELLS = 1.5
 
+/** Loose pieces left by hollowing below this many cubic walls, and share of the body, are debris. */
+const CRUMB_WALLS = 2
+const CRUMB_SHARE = 0.01
+
 /** Metal a hollow wall asked for comes out with, at least (its faces) and typically (its vertices). */
 export const hollowWallMetal = (wall: number): number => wall * (1 + CAVITY_TOLERANCE)
 
@@ -70,8 +75,9 @@ export function hollowBody(body: Manifold, envelope: Manifold, wall: number): Ho
   const spacing = Math.max(wall * SPACING_PER_WALL, MIN_SPACING, extent / MAX_CELLS)
   const level = hollowWallMetal(wall)
   const open = Math.max(OPEN_RADIUS, OPEN_CELLS * spacing)
+  const outside = trianglesFromManifold(envelope)
   // The band must reach the eroded level, below which the opening starts.
-  const grid = distanceGrid(trianglesFromManifold(envelope), {
+  const grid = distanceGrid(outside, {
     spacing,
     band: level + open + 3 * spacing,
     votes: 1,
@@ -80,8 +86,10 @@ export function hollowBody(body: Manifold, envelope: Manifold, wall: number): Ho
   if (!opened) return null
   // Thinned before anything is decided from it: thinning later could close a cavity's opening
   // through the flat back, leaving a sealed void that was meant to be a scoop.
-  const inset = opened.simplify(wall * CAVITY_TOLERANCE)
+  const thinned = opened.simplify(wall * CAVITY_TOLERANCE)
   opened.delete()
+  const inset = keepDepth(thinned, outside, level)
+  thinned.delete()
   const pieces = inset.decompose()
   inset.delete()
   const owned: Manifold[] = [...pieces]
@@ -89,13 +97,15 @@ export function hollowBody(body: Manifold, envelope: Manifold, wall: number): Ho
     const back = body.boundingBox().max[1]
     const tools: Manifold[] = []
     let drains = 0
+    let outer: TriangleBvh | undefined
     for (const piece of pieces) {
       if (piece.volume() < MIN_CAVITY) continue
       if (piece.boundingBox().max[1] > back + 1e-6) {
         tools.push(piece)
         continue
       }
-      const holes = drainHoles(piece, back)
+      outer ??= new TriangleBvh(trianglesFromManifold(body))
+      const holes = drainHoles(piece, back, outer)
       owned.push(...holes)
       if (holes.length === 0) continue
       tools.push(piece, ...holes)
@@ -144,6 +154,26 @@ function openedInset(grid: DistanceGrid, level: number, radius: number): Manifol
   return levelSetOf({ ...grid, values: opened }, 0)
 }
 
+/**
+ * `cavity` with every vertex at least `level` inside the surface `outside`. Interpolating a
+ * sampled distance overestimates it near the body's inner corners (the notches of a crown, the
+ * root of a handle), where the cavity would otherwise come a tenth of a millimetre or more too
+ * close; each such vertex is moved straight away from its nearest point of the surface.
+ */
+function keepDepth(cavity: Manifold, outside: IndexedTriangles, level: number): Manifold {
+  const bvh = new TriangleBvh(outside)
+  const hit: ClosestHit = { d2: 0, x: 0, y: 0, z: 0, triangle: -1 }
+  return cavity.warp((v) => {
+    if (!bvh.closest(v[0], v[1], v[2], hit, level)) return
+    const d = Math.sqrt(hit.d2)
+    if (d < 1e-9) return
+    const push = (level - d) / d
+    v[0] += (v[0] - hit.x) * push
+    v[1] += (v[1] - hit.y) * push
+    v[2] += (v[2] - hit.z) * push
+  })
+}
+
 /** "Infinitely" far, squared, in grid cells: no grid is this large. */
 const FAR = 1e12
 
@@ -188,7 +218,8 @@ function squaredDistanceTransform(d2: Float32Array, size: readonly [number, numb
     }
   }
   const rows = function* (outer: number, inner: number, outerStride: number, innerStride: number) {
-    for (let a = 0; a < outer; a++) for (let b = 0; b < inner; b++) yield a * outerStride + b * innerStride
+    for (let a = 0; a < outer; a++)
+      for (let b = 0; b < inner; b++) yield a * outerStride + b * innerStride
   }
   pass(nx, 1, rows(nz, ny, nx * ny, nx))
   pass(ny, nx, rows(nz, nx, nx * ny, 1))
@@ -197,13 +228,16 @@ function squaredDistanceTransform(d2: Float32Array, size: readonly [number, numb
 
 /**
  * The hollowed body without what cutting it left behind: specks, sealed voids (filled — a void
- * cannot be cast, and its metal is cheaper than a casting that fails), and crumbs — pieces left
- * standing inside the cavity, which touch the outside nowhere (every point deeper than half a
- * wall). Consumes `m`.
+ * cannot be cast, and its metal is cheaper than a casting that fails), and crumbs — slivers of
+ * a few cubic walls, and pieces left standing inside the cavity, which touch the outside
+ * nowhere (every point deeper than half a wall). Consumes `m`.
  */
 function withoutDebris(m: Manifold, grid: DistanceGrid, wall: number): Manifold {
-  return keepPieces(m, (volume, _largest, piece) => {
+  return keepPieces(m, (volume, largest, piece) => {
     if (volume < SPECK_VOLUME) return false
+    // Slivers an escape hole shaves off a thin spike, a few cubic walls at most. A source mesh
+    // brings no loose bits that small (repair removes them), so none of them is design.
+    if (volume < CRUMB_WALLS * wall ** 3 && volume < CRUMB_SHARE * largest) return false
     const { positions: p } = trianglesFromManifold(piece)
     for (let v = 0; v < p.length; v += 3)
       if (sampleDistance(grid, p[v]!, p[v + 1]!, p[v + 2]!) < wall / 2) return true
@@ -211,8 +245,12 @@ function withoutDebris(m: Manifold, grid: DistanceGrid, wall: number): Manifold 
   })
 }
 
-/** Escape holes along +Y from the highest and lowest back-facing points of one cavity. */
-function drainHoles(cavity: Manifold, back: number): Manifold[] {
+/**
+ * Escape holes along +Y from the highest and lowest back-facing points of one cavity, each out
+ * through the first skin of `outer` (the body) it meets: on a crown or a ring, the far side of
+ * the piece also lies toward the back, and a hole run on to the back plane would pierce it too.
+ */
+function drainHoles(cavity: Manifold, back: number, outer: TriangleBvh): Manifold[] {
   const { manifold: mf } = runtime()
   const { positions: p, indices } = trianglesFromManifold(cavity)
   let top: [number, number, number] | null = null
@@ -249,9 +287,16 @@ function drainHoles(cavity: Manifold, back: number): Manifold[] {
           [bottom[0], bottom[1], bottom[2] + DRAIN_RADIUS],
         ]
       : [[top[0], top[1], (top[2] + bottom[2]) / 2]]
+  const bvh = new TriangleBvh({ positions: p, indices })
   return spots.map(([x, y, z]) => {
-    const start = y - 2 * DRAIN_RADIUS
-    const cylinder = mf.Manifold.cylinder(back + 1 - start, DRAIN_RADIUS, DRAIN_RADIUS, 24)
+    // The hole starts inside the cavity, but no deeper than half way across it: where the
+    // cavity is a thin sheet, a hole starting a full diameter in digs into the front wall
+    // from inside and leaves it a tenth of a millimetre thick.
+    const across = bvh.raycast(x, y + 1e-3, z, 0, -1, 0, 2e-3)
+    const start = y - Math.min(2 * DRAIN_RADIUS, across / 2)
+    const exit = outer.raycast(x, y, z, 0, 1, 0)
+    const end = Number.isFinite(exit) ? Math.min(back, y + exit) + 1 : back + 1
+    const cylinder = mf.Manifold.cylinder(end - start, DRAIN_RADIUS, DRAIN_RADIUS, 24)
     // Cylinder axis +Z → +Y, from inside the cavity out through the back.
     const turned = cylinder.rotate([-90, 0, 0])
     try {

@@ -154,7 +154,10 @@ export function layoutBeads(
       if (apart >= IN_LINE) {
         closed.push(a, b)
         // The bisectors of the two neighbour directions, on either side of the row.
-        const mid = Math.atan2(Math.sin(a) + Math.sin(b + Math.PI), Math.cos(a) + Math.cos(b + Math.PI))
+        const mid = Math.atan2(
+          Math.sin(a) + Math.sin(b + Math.PI),
+          Math.cos(a) + Math.cos(b + Math.PI),
+        )
         tryAt(mid + Math.PI / 2)
         tryAt(mid - Math.PI / 2)
       }

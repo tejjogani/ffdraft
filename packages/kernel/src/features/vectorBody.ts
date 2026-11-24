@@ -12,7 +12,13 @@ import { type BuildContext, defineFeature, metalOf, runtime, solidFromManifold }
 import { OutlineDistance } from '../mesh/outline/distance'
 import { edgeProfile, flatProfile, membraneDome, profiledSlab } from '../mesh/outline/profile'
 import { SHAPES } from '../mesh/outline/shapes'
-import { joinIslands, MIN_STROKE, TIE_WIDTH, thickenStrokes } from '../mesh/outline/stroke'
+import {
+  joinIslands,
+  MIN_STROKE,
+  TIE_WIDTH,
+  thickenStrokes,
+  underline,
+} from '../mesh/outline/stroke'
 import { type Contour, parseSvgPath } from '../mesh/outline/svgPath'
 import type { PaveField } from '../mesh/pave/region'
 import { type FontId, loadFont, textOutline } from '../text'
@@ -30,6 +36,9 @@ const SHAPE_CORNER = 0.015
  * traced at thousands of points per millimetre would otherwise cost minutes in every offset.
  */
 const OUTLINE_TOLERANCE = 0.005
+/** The bar a name stands on (join: underline): this share of the height, and at least this deep, mm. */
+const UNDERLINE_SHARE = 0.08
+const UNDERLINE_MIN = 0.8
 /** Widest outline accepted (mm): a belt buckle or a large plaque, not an SVG drawn at the wrong scale. */
 const MAX_WIDTH = 250
 /** A domed field stays flatter than this radius, so ~2 mm melee still fit it (R/3 rule). */
@@ -116,8 +125,8 @@ const BASE_LETTER: Record<string, string> = { Ł: 'L', ł: 'l', Đ: 'D', đ: 'd'
 
 /**
  * The text as the font can draw it. A character the font lacks would come out as its "missing
- * glyph" box — engraved into gold — so an accented letter is set as its base letter (Ż as Z),
- * with a warning, and anything else is left out, as an error: the name has changed. Throws
+ * glyph" box — engraved into gold — so an accented letter is set as its base letter (Ż as Z)
+ * and anything else is left out; either is an error, since the name has changed. Throws
  * when nothing is left.
  */
 async function drawableText(text: string, font: FontId, ctx: BuildContext): Promise<string> {
@@ -145,11 +154,13 @@ async function drawableText(text: string, font: FontId, ctx: BuildContext): Prom
         ? `The ${font} font has no letters for ${list}; choose another font or other characters`
         : 'The text is empty',
     )
+  // An error, not a warning: Ł set as L spells another name, which no customer accepts. None
+  // of the bundled fonts has these letters, so there is no font to offer as the fix.
   if (replaced.size > 0)
     ctx.report({
-      level: 'warning',
+      level: 'error',
       code: 'text.accentDropped',
-      message: `The ${font} font has no ${[...replaced.keys()].map(quote).join(' ')}, so ${[...replaced].map(([c, b]) => `${quote(c)} was set as ${quote(b)}`).join(', ')}; check the name reads right without the accent.`,
+      message: `The ${font} font has no ${[...replaced.keys()].map(quote).join(' ')}, so ${[...replaced].map(([c, b]) => `${quote(c)} was set as ${quote(b)}`).join(', ')}, and the name is no longer spelled as written; no bundled font has ${replaced.size > 1 ? 'these letters' : 'this letter'}, so use an outline (SVG) of the lettering for it.`,
     })
   if (missing.size > 0)
     ctx.report({
@@ -223,16 +234,19 @@ export const vectorBody = defineFeature('vectorBody', async (node, ctx) => {
       limit: MIN_STROKE,
     })
   }
-  if (node.source.type === 'text') {
-    // Lettering must cast as one piece: dots, accents and script capitals that do not reach
-    // the next letter are tied to it.
+  if (node.source.type === 'text' && node.join !== 'off') {
+    // Lettering must cast as one piece: on a bar under it, if the designer asked for one, and
+    // then dots, accents and letters that still stand apart are tied on. Joining changes how
+    // the name reads, so it is reported, with the way to turn it off.
+    if (node.join === 'underline')
+      outline = own(underline(outline, Math.max(UNDERLINE_MIN, UNDERLINE_SHARE * node.height)))
     const joined = joinIslands(outline, TIE_WIDTH, SEGMENTS)
     if (joined) {
       outline = own(joined.section)
       ctx.report({
         level: 'info',
         code: 'outline.joined',
-        message: `${joined.ties} loose part${joined.ties > 1 ? 's' : ''} of the lettering (dots, accents, letters that do not touch) ${joined.ties > 1 ? 'were' : 'was'} tied to the rest with ${TIE_WIDTH} mm links so it casts as one piece.`,
+        message: `${joined.ties} loose part${joined.ties > 1 ? 's' : ''} of the lettering (dots, accents, letters that do not touch) ${joined.ties > 1 ? 'were' : 'was'} tied to the rest with ${TIE_WIDTH} mm links so it casts as one piece; set Join letters to off to leave ${joined.ties > 1 ? 'them' : 'it'} loose, or to underline to stand the letters on a bar.`,
         value: joined.ties,
       })
     }

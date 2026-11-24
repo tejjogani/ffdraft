@@ -232,7 +232,9 @@ class FieldTest {
  * cavity is farther, or when there is none). Seats and drill holes keep their metal to it: a
  * hole that grazes a cavity corner leaves a tunnel the investment cannot fill.
  */
-export function cavityDistance(placed: PlacedHidden | null): ((p: Vec3, cap: number) => number) | null {
+export function cavityDistance(
+  placed: PlacedHidden | null,
+): ((p: Vec3, cap: number) => number) | null {
   if (!placed?.hidden.cavity || placed.hidden.cavity.indices.length === 0) return null
   const toLocal = invertSimilarity(placed.matrix)
   const scale = uniformScaleOf(placed.matrix)

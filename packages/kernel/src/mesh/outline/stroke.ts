@@ -43,11 +43,31 @@ export function thickenStrokes(
 /** Width of the ties that join loose parts of lettering, mm: well above the casting minimum. */
 export const TIE_WIDTH = 0.5
 
+/** A loose part below this share of the largest is a mark — the dot of an i, an accent. */
+const MARK_SHARE = 0.15
+/** A mark is set down onto its letter until it overlaps it by this share of the tie width. */
+const MARK_OVERLAP = 0.3
 /**
- * Joins the loose parts of an outline into one piece: each part, nearest first, gets a tie
- * `width` wide along the shortest line to what is already joined — the dot of an i drops onto
- * its stem, a script capital reaches the next letter. Returns the joined outline and how many
- * ties were added, or null when it is already one piece. The caller owns the result.
+ * …moving down onto metal under it: within its own width, give or take this share of it (an
+ * italic stem slants under its dot). The nearest metal is sometimes the side of the next
+ * letter's ascender, which would take the dot instead.
+ */
+const MARK_REACH = 0.25
+
+type Ring = readonly (readonly [number, number])[]
+type Link = { a: [number, number]; b: [number, number]; d: number }
+
+/**
+ * Joins the loose parts of an outline into one piece, the way a jeweler would solder a name,
+ * nearest part first:
+ *  - Letters get a tie `width` wide, side to side where both stand at full height: kept within
+ *    the band both letters share (half a tie in from its top and bottom), a tie never sticks
+ *    out over the cap line or under the baseline. The shortest link when no such one exists.
+ *  - A mark (the dot of an i, an accent) is set down onto its letter, closing the gap: a tie
+ *    across the gap reads as more stem and the i as an l, and one sideways to the next letter
+ *    crosses an l or a t and reads as a bar.
+ * Returns the joined outline and how many parts were joined, or null when it is already one
+ * piece. The caller owns the result.
  */
 export function joinIslands(
   outline: CrossSection,
@@ -59,31 +79,89 @@ export function joinIslands(
   try {
     if (pieces.length <= 1) return null
     pieces.sort((a, b) => b.area() - a.area())
-    const rings = pieces.map((p) => p.toPolygons())
-    const joined: [number, number][][] = [...rings[0]!]
+    const largest = pieces[0]!.area()
+    const rings = pieces.map((p) => p.toPolygons() as Ring[])
+    const boxes = pieces.map((p) => p.bounds())
+    const spans = boxes.map(({ min, max }) => [min[1], max[1]] as const)
+    const r = width / 2
+    const joined = new Set([0])
     const left = new Set(rings.keys())
     left.delete(0)
-    const ties: CrossSection[] = []
+    const parts: CrossSection[] = [pieces[0]!]
+    const made: CrossSection[] = []
     try {
       while (left.size > 0) {
-        // The loose part nearest to the joined body goes next, along its shortest link.
-        let best: { piece: number; a: [number, number]; b: [number, number]; d: number } | null =
-          null
-        for (const k of left) {
-          const link = nearestLink(rings[k]!, joined, best?.d ?? Infinity)
-          if (link && (!best || link.d < best.d)) best = { piece: k, ...link }
+        let best = null as (Link & { piece: number }) | null
+        // Constrained links first (letters within their shared band, marks straight down), over
+        // every loose part; the shortest link only when no loose part has a constrained one.
+        for (const constrained of [true, false]) {
+          for (const k of left) {
+            const mark = pieces[k]!.area() < MARK_SHARE * largest
+            for (const j of joined) {
+              const lo = Math.max(spans[k]![0], spans[j]![0]) + r
+              const hi = Math.min(spans[k]![1], spans[j]![1]) - r
+              if (constrained && !mark && lo > hi) continue
+              const accept = !constrained
+                ? undefined
+                : mark
+                  ? (a: [number, number], b: [number, number]) => {
+                      const { min, max } = boxes[k]!
+                      const slack = MARK_REACH * (max[0] - min[0])
+                      return b[1] < a[1] && b[0] >= min[0] - slack && b[0] <= max[0] + slack
+                    }
+                  : (a: [number, number], b: [number, number]) =>
+                      a[1] >= lo && a[1] <= hi && b[1] >= lo && b[1] <= hi
+              const link = nearestLink(rings[k]!, rings[j]!, best?.d ?? Infinity, accept)
+              if (link && (!best || link.d < best.d)) best = { piece: k, ...link }
+            }
+          }
+          if (best) break
         }
         if (!best) break
-        left.delete(best.piece)
-        joined.push(...rings[best.piece]!)
-        ties.push(tie(best.a, best.b, width / 2, segments))
+        const k = best.piece
+        left.delete(k)
+        joined.add(k)
+        if (pieces[k]!.area() < MARK_SHARE * largest) {
+          // a lies on the mark, b on its letter: move the mark along a→b past b.
+          const shift = (best.d + MARK_OVERLAP * width) / Math.max(best.d, 1e-9)
+          const dx = (best.b[0] - best.a[0]) * shift
+          const dy = (best.b[1] - best.a[1]) * shift
+          const moved = pieces[k]!.translate([dx, dy])
+          made.push(moved)
+          parts.push(moved)
+          rings[k] = rings[k]!.map((ring) => ring.map(([x, y]) => [x + dx, y + dy] as const))
+        } else {
+          const t = tie(best.a, best.b, r, segments)
+          made.push(t)
+          parts.push(pieces[k]!, t)
+        }
       }
-      return { section: mf.CrossSection.union([outline, ...ties]), ties: ties.length }
+      // Parts never joined (none reachable) stay as they are.
+      for (const k of left) parts.push(pieces[k]!)
+      return { section: mf.CrossSection.union(parts), ties: joined.size - 1 }
     } finally {
-      for (const t of ties) t.delete()
+      for (const m of made) m.delete()
     }
   } finally {
     for (const p of pieces) p.delete()
+  }
+}
+
+/**
+ * The outline standing on a bar under its full width: `height` mm deep, overlapping the
+ * bottom of the outline by half of that. The caller owns the result.
+ */
+export function underline(outline: CrossSection, height: number): CrossSection {
+  const { manifold: mf } = runtime()
+  const { min, max } = outline.bounds()
+  const bar = mf.CrossSection.square([max[0] - min[0], height]).translate([
+    min[0],
+    min[1] - height / 2,
+  ])
+  try {
+    return mf.CrossSection.union([outline, bar])
+  } finally {
+    bar.delete()
   }
 }
 
@@ -107,20 +185,38 @@ function tie(a: [number, number], b: [number, number], r: number, segments: numb
   return mf.CrossSection.hull([[points]])
 }
 
-/** The shortest segment from a vertex of `from` to an edge of `to` or back, shorter than `limit`. */
+/** Step along edges for constrained links, mm. */
+const LINK_STEP = 0.2
+
+/** The ring's vertices with points added along every edge, at most `step` apart. */
+function densified(ring: Ring, step: number): Ring {
+  const out: (readonly [number, number])[] = []
+  for (let i = 0; i < ring.length; i++) {
+    const p = ring[i]!
+    const q = ring[(i + 1) % ring.length]!
+    const n = Math.max(1, Math.ceil(Math.hypot(q[0] - p[0], q[1] - p[1]) / step))
+    for (let k = 0; k < n; k++)
+      out.push([p[0] + ((q[0] - p[0]) * k) / n, p[1] + ((q[1] - p[1]) * k) / n])
+  }
+  return out
+}
+
+/**
+ * The shortest segment from a vertex of `from` to an edge of `to` or back, shorter than `limit`
+ * (and one `accept` takes, when given).
+ */
 function nearestLink(
-  from: readonly (readonly [number, number])[][],
-  to: readonly (readonly [number, number])[][],
+  from: readonly Ring[],
+  to: readonly Ring[],
   limit: number,
-): { a: [number, number]; b: [number, number]; d: number } | null {
-  let best: { a: [number, number]; b: [number, number]; d: number } | null = null
+  accept?: (a: [number, number], b: [number, number]) => boolean,
+): Link | null {
+  let best: Link | null = null
   let bound = limit
-  const scan = (
-    points: readonly (readonly [number, number])[][],
-    edges: readonly (readonly [number, number])[][],
-    swap: boolean,
-  ) => {
-    for (const ring of points)
+  const scan = (points: readonly Ring[], edges: readonly Ring[], swap: boolean) => {
+    // A constrained link may have to start part way along an edge (two upright strokes facing
+    // each other meet only at their corners otherwise): walk the edges in short steps.
+    for (const ring of accept ? points.map((r) => densified(r, LINK_STEP)) : points)
       for (const p of ring)
         for (const loop of edges)
           for (let i = 0; i < loop.length; i++) {
@@ -144,8 +240,10 @@ function nearestLink(
             const q: [number, number] = [q0[0] + t * dx, q0[1] + t * dy]
             const d = Math.hypot(p[0] - q[0], p[1] - q[1])
             if (d < bound) {
+              const link: Link = swap ? { a: q, b: [p[0], p[1]], d } : { a: [p[0], p[1]], b: q, d }
+              if (accept && !accept(link.a, link.b)) continue
               bound = d
-              best = swap ? { a: q, b: [p[0], p[1]], d } : { a: [p[0], p[1]], b: q, d }
+              best = link
             }
           }
   }

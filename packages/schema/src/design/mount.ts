@@ -39,6 +39,8 @@ export const MOUNT = {
   rowClearance: 0.4,
   /** A round this wide and wider takes six claws (canon `ring.head.prongCountRound`). */
   sixClawRound: 7.4,
+  /** A baguette or emerald this long and longer takes a claw on each long side as well. */
+  longStepClaws: 12,
   /** Least claw wire (canon `ring.head.prongWire`; kernel `RULES.prongDiameter.warn`). */
   prongMin: 0.8,
   /** Metal beyond the outermost halo stones (kernel halo BORDER), mm. */
@@ -81,9 +83,15 @@ export const flatBacked = (cut: GemCutId): boolean => GEM_CUTS[cut].pavilionPct 
 
 // ── Heads ────────────────────────────────────────────────────────────────────────────────────
 
-/** Claws for a stone: the shape's usual count; a round of 7.4 mm and more takes six. */
+/**
+ * Claws for a stone: the shape's usual count; a round of 7.4 mm and more takes six; a baguette
+ * or emerald cut 12 mm long and more takes a pair more, one on each long side, since four
+ * corner claws leave its long girdle unheld (kernel `stone.unheld`).
+ */
 export function prongCountFor(cut: GemCutId, dims: GemDims): number {
   if (cut === 'round' && dims.width >= MOUNT.sixClawRound - 1e-9) return 6
+  if ((cut === 'baguette' || cut === 'emerald') && dims.length >= MOUNT.longStepClaws - 1e-9)
+    return GEM_CUTS[cut].prongs.typical + 2
   return GEM_CUTS[cut].prongs.typical
 }
 
@@ -148,7 +156,7 @@ export function girdleRadius(g: Gem, b: Band): number {
  * shape), within the field's range and no higher than `MOUNT.shoulderAutoMax`.
  */
 export function shoulderHeightFor(girdle: number, outerRadius: number): number {
-  const { min } = MOUNT.shoulderRise
+  const min: number = MOUNT.shoulderRise.min
   const max: number = MOUNT.shoulderAutoMax
   const target = girdle - MOUNT.shoulderUnder
   const peakZ = (rise: number) => {
@@ -217,8 +225,12 @@ function topAngles(view: BandView, order: readonly string[]): Map<string, number
     let inner = centres.reduce<{ angle: number; half: number; gem: Gem | null }>(
       (best, t) => {
         const angle = angles.get(t.gem.id)!
+        // A flat-backed stone rests low on the band, so its head's claws stand beside the side
+        // stone's girdle, not above it: pack against the claws too.
+        const half =
+          halfAlongBand(t.gem, stoneDims(t.gem)) + (flatBacked(t.gem.cut) ? headReach(t) : 0)
         return sign * angle > sign * best.angle || best.gem === null
-          ? { angle, half: halfAlongBand(t.gem, stoneDims(t.gem)), gem: t.gem }
+          ? { angle, half, gem: t.gem }
           : best
       },
       { angle: 0, half: 0, gem: null },
@@ -248,17 +260,21 @@ function topAngles(view: BandView, order: readonly string[]): Map<string, number
 function headReach(top: BandView['tops'][number]): number {
   const head = top.head
   let reach = 0
-  if (head?.style === 'prong' || head?.style === 'basket') reach = clawReach(head.prongDiameter!)
-  else if (head?.style === 'bezel' || head?.style === 'halfBezel') reach = head.wall
+  if (head?.style === 'prong' || head?.style === 'basket') {
+    // Before heads are resolved (side stones are packed first) the wire follows its rule.
+    const dims = stoneDims(top.gem)
+    const count = head.prongCount ?? prongCountFor(top.gem.cut, dims)
+    reach = clawReach(
+      head.prongDiameter ?? prongDiameterFor(dims.width, count, top.halos.length > 0),
+    )
+  } else if (head?.style === 'bezel' || head?.style === 'halfBezel') reach = head.wall
   const metal = reach
   for (const h of top.halos) {
     const melee = gemDims(h.cut, h.stoneWidth)
     const size = Math.max(melee.width, melee.length)
-    // The kernel starts a halo beyond the head's claws or bezel (unless it keeps the layout
-    // of an old piece).
-    const claws = head?.style === 'prong' || head?.style === 'basket'
-    const clear = metal > 0 ? metal + (claws ? h.gap : 0.05) : 0
-    const inner = h.clearClaws === false ? h.offset : Math.max(h.offset, clear)
+    // The kernel starts a halo just beyond the head's claws or bezel (unless it keeps the
+    // layout of an old piece).
+    const inner = h.clearClaws === false ? h.offset : Math.max(h.offset, metal + 0.05)
     reach = Math.max(reach, inner + h.rows * (size + h.gap) - h.gap + MOUNT.haloBorder)
   }
   return reach

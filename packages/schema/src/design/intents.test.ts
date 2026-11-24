@@ -219,7 +219,13 @@ describe('replaceStone: round-2 regressions', () => {
     const after = applyOps(lab, r.ops).design.nodes.center as NodeOf<'gem'>
     expect(after.quality).toEqual({ origin: 'lab', colors: ['E', 'F'], certified: true })
     // The same grade again changes nothing.
-    expect(replaceStone(applyOps(lab, r.ops).design, { nodeId: 'center' }, { quality: { colors: ['E', 'F'] } }).ops).toEqual([])
+    expect(
+      replaceStone(
+        applyOps(lab, r.ops).design,
+        { nodeId: 'center' },
+        { quality: { colors: ['E', 'F'] } },
+      ).ops,
+    ).toEqual([])
   })
 
   it('fitting a measured stone does not call its own ratio a hand pin, now or on a repeat', () => {

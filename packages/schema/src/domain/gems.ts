@@ -111,7 +111,7 @@ export const GEM_CUTS = {
       [2, 0.01],
       [2.5, 0.0106],
     ],
-    prongs: { min: 4, typical: 4, max: 4 },
+    prongs: { min: 4, typical: 4, max: 6 },
   }),
   asscher: cut({
     label: 'Asscher',
@@ -219,7 +219,7 @@ export const GEM_CUTS = {
     pavilionPct: 0.41,
     girdlePct: 0.03,
     caratFactor: [[2.5, 0.00915]],
-    prongs: { min: 4, typical: 4, max: 4 },
+    prongs: { min: 4, typical: 4, max: 6 },
   }),
   trillion: cut({
     label: 'Trillion',

@@ -6,6 +6,7 @@ import { buildDesign, designFrom, type NodeInput, TEMPLATES } from '@pave/schema
 import type { Manifold } from 'manifold-3d'
 import { afterAll, describe, expect, it } from 'vitest'
 import { createKernel, type LocalKernel } from '../kernel'
+import { TriangleBvh } from '../mesh/bvh'
 import { QUALITY } from '../solid/solid'
 
 const kernel: LocalKernel = createKernel()
@@ -125,5 +126,130 @@ describe('pavé beads at the edge of the field', () => {
     }
     expect(side).toBeGreaterThanOrEqual(2 * (stones.length - 2))
     expect(square).toBe(side)
+  }, 60_000)
+})
+
+describe('hollow bodies', () => {
+  const sculpt = (name: string, height: number, hollow: number): NodeInput => ({
+    id: 'm',
+    kind: 'meshBody',
+    source: { type: 'builtin', name: name as 'trophy' },
+    height,
+    hollow,
+  })
+
+  // Walls once came out 20 % thicker than asked, and every hollow piece weighed more for it.
+  it('makes walls within a few per cent of the thickness asked for', async () => {
+    for (const hollow of [0.7, 1.5]) {
+      const solid = await kernel.scene(designFrom('pendant', [sculpt('dice', 30, 0)]))
+      const skin = solid.nodes.get('m')!.bodies[0]!.solid.triangles(QUALITY.draft)
+      const outside = new TriangleBvh({
+        positions: skin.positions.slice(),
+        indices: skin.indices.slice(),
+      })
+      const scene = await kernel.scene(designFrom('pendant', [sculpt('dice', 30, hollow)]))
+      const tris = scene.nodes.get('m')!.bodies[0]!.solid.triangles(QUALITY.draft)
+      const hit = { d2: 0, x: 0, y: 0, z: 0, triangle: -1 }
+      const walls: number[] = []
+      for (let v = 0; v < tris.positions.length; v += 3) {
+        outside.closest(tris.positions[v]!, tris.positions[v + 1]!, tris.positions[v + 2]!, hit)
+        const d = Math.sqrt(hit.d2)
+        // Vertices on the outside are not wall; those on the escape holes run through it.
+        if (d > 0.02 && d > 0.8 * hollow) walls.push(d)
+      }
+      walls.sort((a, b) => a - b)
+      const median = walls[walls.length >> 1]!
+      expect(median, `hollow ${hollow}`).toBeGreaterThanOrEqual(hollow - 0.01)
+      expect(median, `hollow ${hollow}`).toBeLessThanOrEqual(hollow * 1.06)
+    }
+  }, 60_000)
+
+  // The crown's points and band are only a little thicker than two walls: the cavity there was
+  // a slit, pierced by over a hundred pillars, with sealed specks and loose crumbs.
+  it('hollows the crown without a perforated cavity, sealed voids or loose pieces', async () => {
+    for (const [height, hollow] of [
+      [40, 1.5],
+      [60, 1.5],
+      [20, 0.3],
+    ]) {
+      const scene = await kernel.scene(designFrom('pendant', [sculpt('crown', height!, hollow!)]))
+      const body = scene.nodes.get('m')!.bodies[0]!.solid.manifold()
+      const label = `crown ${height} mm, hollow ${hollow}`
+      // Every escape hole is a handle of its own; beyond those, a few at most.
+      const drains = Number(
+        scene.evaluation.diagnostics
+          .find((d) => d.code === 'mesh.drains')
+          ?.message.match(/\d+/)?.[0] ?? 0,
+      )
+      expect(body.genus(), label).toBeLessThanOrEqual(1 + drains + 3)
+      const volumes = body.decompose().map((piece) => {
+        const v = piece.volume()
+        piece.delete()
+        return v
+      })
+      expect(volumes, label).toHaveLength(1)
+      expect(volumes[0], label).toBeGreaterThan(0)
+    }
+  }, 60_000)
+})
+
+describe('pavé on a hollow trophy at production', () => {
+  // Seats and drill holes beside a cavity's corner once broke into it (tunnels in the casting),
+  // and stones went under the cup and the handles, where no setter's tool can reach.
+  it('adds no handles to the casting and sets no stone under overhanging metal', async () => {
+    const design = designFrom('pendant', [
+      {
+        id: 'b',
+        kind: 'meshBody',
+        source: { type: 'builtin', name: 'trophy' },
+        height: 50,
+        hollow: 1.1,
+      },
+      { id: 'ice', kind: 'pave', host: 'b', region: { type: 'all' }, sizeMax: 1.8, sizeMin: 1 },
+    ])
+    const draft = await kernel.scene(design)
+    const host = draft.nodes.get('b')!.bodies[0]!.solid.triangles(QUALITY.draft)
+    const bvh = new TriangleBvh({
+      positions: host.positions.slice(),
+      indices: host.indices.slice(),
+    })
+    const stones = draft.evaluation.stones.filter((s) => s.nodeId === 'ice')
+    expect(stones.length).toBeGreaterThan(500)
+    for (const s of stones) {
+      const m = s.matrix
+      const n = [m[8]!, m[9]!, m[10]!]
+      const len = Math.hypot(n[0]!, n[1]!, n[2]!)
+      const u = n.map((x) => x / len)
+      // From just above the table (0.2 d over the girdle), 3 mm up the axis.
+      const lift = 0.2 * s.dims.width
+      const o = [0, 1, 2].map((k) => m[12 + k]! + u[k]! * lift)
+      expect(bvh.raycast(o[0]!, o[1]!, o[2]!, u[0]!, u[1]!, u[2]!, 0, 3), s.id).toBe(Infinity)
+    }
+    const scene = await kernel.scene(design, { detail: 'production' })
+    const hostGenus = genus(scene.nodes.get('b')!.bodies[0]!.solid.manifold(QUALITY.production))
+    expect(scene.parts).toHaveLength(1)
+    expect(genus(scene.parts[0]!.fused!.manifold())).toBe(hostGenus)
+  }, 120_000)
+})
+
+describe('pavé too large to cut', () => {
+  it('says which stone size would fit the budget, without measuring every stone', async () => {
+    const design = designFrom('pendant', [
+      {
+        id: 'b',
+        kind: 'vectorBody',
+        source: { type: 'shape', shape: 'circle' },
+        bevel: 'flat',
+        bevelSize: 0,
+        height: 94,
+        thickness: 2,
+      },
+      { id: 'ice', kind: 'pave', host: 'b', sizeMax: 0.8, sizeMin: 0.8 },
+    ])
+    const e = await kernel.evaluate(design, { detail: 'production' })
+    const tooLarge = e.diagnostics.find((d) => d.code === 'pave.tooLarge')
+    expect(tooLarge?.message).toMatch(/use stones of \d+(\.\d+)? mm or more/)
+    expect(tooLarge!.limit!).toBeGreaterThan(0.8)
+    expect(e.diagnostics.map((d) => d.code)).not.toContain('stone.inMetal')
   }, 60_000)
 })

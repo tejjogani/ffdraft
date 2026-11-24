@@ -126,6 +126,14 @@ const BAND_ANISOTROPY = 1.5
 /** A single row is re-centred within ±CENTRE_REACH of a stone across its band, in this many steps a side. */
 const CENTRE_REACH = 0.35
 const CENTRE_STEPS = 7
+/**
+ * A single row zigzags between the two sides of its band (see layOutlineRows) when the room
+ * it has across, beyond one stone, is at least this share of a stone and gap: nested that far
+ * apart, stones pack about 6 % closer along the band than in a straight row.
+ */
+const ZIGZAG = 0.35
+/** A size used by this many stones or fewer is a stray (see mergeStraySizes). */
+const STRAY = 2
 /** More rows in a band must pack this much more stone area per length to be chosen. */
 const MORE_ROWS = 1.08
 /** A band's width is read along its ridge within this many stones of the seed, at this percentile. */
@@ -256,6 +264,7 @@ class Packer {
       first = false
     }
     for (const size of this.sizes) this.fillVoids(size)
+    this.mergeStraySizes()
     this.trimHoles()
     const full = this.stones.reduce(
       (sum, s) => sum + Math.PI * (s.diameter / 2 + this.o.gap / 2) ** 2,
@@ -602,6 +611,32 @@ class Packer {
   }
 
   /**
+   * A ladder size that ended up with a stone or two is a parcel bought for nothing and a stray
+   * on the bench: each such stone becomes the nearest smaller size in use, on the same spot. A
+   * smaller stone fits wherever a larger one did — its seat is shallower and narrower, so every
+   * gap, margin and wall the larger one kept still holds. A larger one would need every check
+   * again, so a stray smaller than every size in use stays.
+   */
+  private mergeStraySizes(): void {
+    const count = new Map<number, number>()
+    for (const s of this.stones) count.set(s.diameter, (count.get(s.diameter) ?? 0) + 1)
+    const used = [...count].filter(([, n]) => n > STRAY).map(([d]) => d)
+    for (const [i, s] of this.stones.entries()) {
+      if (count.get(s.diameter)! > STRAY) continue
+      const d = used.filter((size) => size < s.diameter).sort((a, b) => b - a)[0]
+      if (d === undefined) continue
+      const surface = add(s.position, scale(s.normal, this.o.sink * s.diameter))
+      this.stones[i] = {
+        position: this.girdle(surface, s.normal, d),
+        normal: s.normal,
+        diameter: d,
+        // The smaller seat ends higher, so the same hole stops as far from the far wall.
+        hole: Math.min(s.hole, MAX_HOLE_PER_MM * d),
+      }
+    }
+  }
+
+  /**
    * Drill holes are sized after placement (each from the metal under its own seat), so a hole
    * that would reach a seat cut from another face is dropped: the stone keeps its seat, and the
    * piece gains no tunnel.
@@ -834,8 +869,13 @@ class Packer {
     const members: number[][] = Array.from({ length: faces.count }, () => [])
     for (let i = 0; i < this.surface.count; i++)
       if (faces.id[i]! >= 0) members[faces.id[i]!]!.push(i)
+    // Necks too narrow for any stone (the ties that join a name's letters, a pinch in an
+    // outline) take none, so they do not plan the face's rows either.
+    const takesStone = (i: number) => this.surface.edge[i]! >= this.o.margin + this.smallest / 2
     for (let f = 0; f < faces.count; f++) {
-      const half = this.ridgeHalfWidth((visit) => members[f]!.forEach(visit), FACE_PERCENTILE)
+      const half = this.ridgeHalfWidth((visit) => {
+        for (const i of members[f]!) if (takesStone(i)) visit(i)
+      }, FACE_PERCENTILE)
       const fit =
         half < OPEN_FIELD * this.largest
           ? this.rowsFor(2 * (half - this.o.margin), this.largest)
@@ -845,10 +885,13 @@ class Packer {
       // skipped wherever that does not fit, and the edge goes ragged.
       const d = fit?.d ?? this.rowSize(members[f]!)
       const hug = this.o.margin + d / 2 + SLACK
-      // A single row runs down the middle of its band. At the margin it would have a level set
-      // on each side of the ridge, and the walk would lay stones on one, then the other: a
-      // zigzag off-centre row with no metal left for beads on the near side.
-      const levels = fit?.rows === 1 ? [Math.max(hug, half - RIDGE_INSET * d)] : [hug]
+      // A single row has a level set on each side of the band's ridge at the margin, and the
+      // walk lays stones on both: a zigzag. Where the band has room to spare across, that packs
+      // more stones than a straight row (they nest between each other); where it has little,
+      // it is only an off-centre row with no metal left for beads on its near side, and the
+      // row runs down the middle instead.
+      const centred = fit?.rows === 1 && 2 * (half - this.o.margin) - d < ZIGZAG * (d + this.o.gap)
+      const levels = centred ? [Math.max(hug, half - RIDGE_INSET * d)] : [hug]
       if (fit && fit.rows % 2 === 1 && fit.rows > 1) levels.push(half - RIDGE_INSET * d)
       for (const level of levels)
         walkLevelSets({
@@ -856,13 +899,14 @@ class Packer {
           edgeDistance: this.o.edgeDistance,
           level,
           step: ROW_STEP * d,
-          starts: fit?.rows === 1 ? this.endsFirst(members[f]!) : members[f]!,
+          starts: centred ? this.endsFirst(members[f]!) : members[f]!,
           visit: (p0, n0, sample0) => {
             this.tick()
             // The level is read from samples, which seldom lie on the ridge itself: slide a
             // single row's stone across to the middle of the band.
-            const { p, n, sample } =
-              fit?.rows === 1 ? this.centredOnRidge({ p: p0, n: n0, sample: sample0 }, d) : { p: p0, n: n0, sample: sample0 }
+            const { p, n, sample } = centred
+              ? this.centredOnRidge({ p: p0, n: n0, sample: sample0 }, d)
+              : { p: p0, n: n0, sample: sample0 }
             if (!this.fits(p, n, d) || this.sizeFor(sample, p) < d - EPS) return 0
             this.place(p, n, d, sample)
             return ROW_STRIDE * d
@@ -1148,22 +1192,27 @@ class Packer {
     )
     if (near.length < 2) return null
     near.sort((a, b) => a[1] - b[1] || a[0] - b[0])
-    const [i, j] = [near[0]![0], near[1]![0]]
+    // Tangent to the two nearest stones, or to another pair of the nearest three: the spot a
+    // void just takes is often beside the second and third nearest, and missing it leaves a
+    // bald patch a stone would have filled.
+    const pairs: [number, number][] = [[0, 1]]
+    if (near.length > 2) pairs.push([0, 2], [1, 2])
     let best: ReturnType<PaveSurface['snap']> = null
     let bestD = 0.6 * size
-    for (const side of [1, -1]) {
-      const hit = this.tangentPoint(i, j, size / 2, side)
-      if (!hit) continue
-      const d = Math.hypot(hit.p[0] - p[0], hit.p[1] - p[1], hit.p[2] - p[2])
-      if (
-        d < bestD &&
-        this.sizeFor(hit.sample, hit.p) >= size - EPS &&
-        this.fits(hit.p, hit.n, size)
-      ) {
-        best = hit
-        bestD = d
+    for (const [a, b] of pairs)
+      for (const side of [1, -1]) {
+        const hit = this.tangentPoint(near[a]![0], near[b]![0], size / 2, side)
+        if (!hit) continue
+        const d = Math.hypot(hit.p[0] - p[0], hit.p[1] - p[1], hit.p[2] - p[2])
+        if (
+          d < bestD &&
+          this.sizeFor(hit.sample, hit.p) >= size - EPS &&
+          this.fits(hit.p, hit.n, size)
+        ) {
+          best = hit
+          bestD = d
+        }
       }
-    }
     return best
   }
 

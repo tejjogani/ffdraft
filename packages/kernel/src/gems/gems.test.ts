@@ -155,6 +155,78 @@ describe('gem unit meshes', () => {
     }
   })
 
+  it('every cut at its shortest, usual and longest ratio is closed and consistently wound, with no triangle facing in', () => {
+    for (const id of GEM_CUT_IDS) {
+      const { lw } = GEM_CUTS[id]
+      for (const ratio of new Set([lw.min, lw.default, lw.max])) {
+        const unit = gemUnit(id, ratio)
+        const snapped = unit.mesh.positions.map((v) => Math.round(v * 1e5) / 1e5)
+        const { positions: p, indices: ix } = weld(snapped, unit.mesh.indices)
+        const label = `${id}@${ratio}`
+        expect(openEdges(unit.mesh.positions, unit.mesh.indices), label).toBe(0)
+        // Each edge is walked once each way by its two triangles.
+        const walked = new Set<string>()
+        let twice = 0
+        let inward = 0
+        const [cx, cy] = unit.outline.centre
+        const mid = [cx, cy, (unit.top + unit.bottom) / 2]
+        for (let t = 0; t < ix.length; t += 3) {
+          const v = [0, 1, 2].map((k) => [
+            p[ix[t + k]! * 3]!,
+            p[ix[t + k]! * 3 + 1]!,
+            p[ix[t + k]! * 3 + 2]!,
+          ])
+          for (let e = 0; e < 3; e++) {
+            const key = `${ix[t + e]}>${ix[t + ((e + 1) % 3)]}`
+            if (walked.has(key)) twice++
+            walked.add(key)
+          }
+          const [a, b, c] = v as [number[], number[], number[]]
+          const u = [b[0]! - a[0]!, b[1]! - a[1]!, b[2]! - a[2]!]
+          const w = [c[0]! - a[0]!, c[1]! - a[1]!, c[2]! - a[2]!]
+          const n = [
+            u[1]! * w[2]! - u[2]! * w[1]!,
+            u[2]! * w[0]! - u[0]! * w[2]!,
+            u[0]! * w[1]! - u[1]! * w[0]!,
+          ]
+          if (
+            n[0]! * (a[0]! - mid[0]!) + n[1]! * (a[1]! - mid[1]!) + n[2]! * (a[2]! - mid[2]!) <
+            -1e-12
+          )
+            inward++
+        }
+        expect(twice, `${label}: edges walked the same way twice`).toBe(0)
+        expect(inward, `${label}: triangles facing in`).toBe(0)
+      }
+    }
+  })
+
+  it('the silhouette seats and claws are measured from contains every vertex of the stone', () => {
+    for (const id of GEM_CUT_IDS) {
+      const { lw } = GEM_CUTS[id]
+      for (const ratio of new Set([lw.min, lw.default, lw.max])) {
+        const unit = gemUnit(id, ratio)
+        const { stack, outline: o, keel } = unit
+        const p = unit.mesh.positions
+        let worst = 0
+        for (let i = 0; i < p.length; i += 3) {
+          const [x, y, z] = [p[i]!, p[i + 1]!, p[i + 2]!]
+          if (z <= stack[0]!.z + 1e-6 || z >= stack[stack.length - 1]!.z - 1e-6) continue
+          let k = 0
+          while (stack[k + 1]!.z < z) k++
+          const a = stack[k]!
+          const b = stack[k + 1]!
+          const scale = a.scale + ((b.scale - a.scale) * (z - a.z)) / (b.z - a.z)
+          const anchor = o.centre[1] + Math.min(keel, Math.max(-keel, y - o.centre[1]))
+          const gx = (x - o.centre[0]) / Math.max(scale, 1e-9)
+          const gy = anchor - o.centre[1] + (y - anchor) / Math.max(scale, 1e-9)
+          worst = Math.max(worst, (Math.hypot(gx, gy) - o.radius(Math.atan2(gy, gx))) * scale)
+        }
+        expect(worst, `${id}@${ratio}`).toBeLessThan(2e-3)
+      }
+    }
+  })
+
   it('meshes are shared per cut and ratio', () => {
     expect(gemUnit('oval', 1.4)).toBe(gemUnit('oval', 1.401))
     expect(gemUnit('oval', 1.5).key).toBe('oval@1.5')

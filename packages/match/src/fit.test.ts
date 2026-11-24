@@ -13,6 +13,15 @@ import type { Camera, Evaluation, TargetView } from './types'
 
 const k = draftKernel()
 
+/**
+ * The solitaire with the claw wire the pose and fit thresholds were tuned on (0.97 mm, the
+ * recipe's value before claws followed the stone's rule of 1.0 mm). The searches are sensitive
+ * to the claws' silhouette; re-tune the thresholds before dropping the pin.
+ */
+const solitaire = () =>
+  applyOps(template('solitaire'), [{ t: 'update', id: 'head', patch: { prongDiameter: 0.97 } }])
+    .design
+
 function viewFrom(
   e: Evaluation,
   c: Camera,
@@ -45,7 +54,7 @@ const angleErr = (a: number, b: number) => Math.abs(((((a - b) % 360) + 540) % 3
 
 describe('pose and fit on a real kernel (draft solitaire)', () => {
   it('finds the camera of one view from scratch', async () => {
-    const e = await k.evaluate(template('solitaire'))
+    const e = await k.evaluate(solitaire())
     const { diag, target } = bounds(e)
     const truth: Camera = {
       azimuth: 38,
@@ -75,7 +84,7 @@ describe('pose and fit on a real kernel (draft solitaire)', () => {
   })
 
   it('recovers band width and stone size with a known camera, as ordinary ops', async () => {
-    const start = template('solitaire')
+    const start = solitaire()
     const params = paramsFor(start, ['band.widthTop', 'center.width'], {
       bands: { 'band.widthTop': [1.5, 4.5], 'center.width': [5, 9] },
       ties: { 'band.widthTop': ['band.widthBottom'] },
@@ -126,7 +135,7 @@ describe('pose and fit on a real kernel (draft solitaire)', () => {
   })
 
   it('never returns an invalid start as converged, and stops on abort', async () => {
-    const start = template('solitaire')
+    const start = solitaire()
     const e = await k.evaluate(start)
     const { diag, target } = bounds(e)
     const cam: Camera = {
@@ -172,7 +181,7 @@ describe('pose and fit on a real kernel (draft solitaire)', () => {
   })
 
   it('decides the prong count by building both, with a margin', async () => {
-    const start = template('solitaire')
+    const start = solitaire()
     const truth = applyOps(start, [{ t: 'update', id: 'head', patch: { prongCount: 6 } }]).design
     const e = await k.evaluate(truth)
     const { diag, target } = bounds(e)
@@ -212,7 +221,7 @@ describe('pose and fit on a real kernel (draft solitaire)', () => {
   })
 
   it('marks a number no fitted view can see as assumed, and suggests the view that would see it', async () => {
-    const start = template('solitaire')
+    const start = solitaire()
     const e = await k.evaluate(start)
     const { diag, target } = bounds(e)
     const cam: Camera = {
@@ -257,7 +266,7 @@ describe('pose and fit on a real kernel (draft solitaire)', () => {
   })
 
   it('marks head height weak from a top view: the camera absorbs it, so it is not observable', async () => {
-    const start = template('solitaire')
+    const start = solitaire()
     const params = paramsFor(start, ['band.widthTop', 'center.placement.elevation'], {
       bands: { 'band.widthTop': [1.6, 4], 'center.placement.elevation': [0.5, 3] },
       ties: { 'band.widthTop': ['band.widthBottom'] },
@@ -292,7 +301,7 @@ describe('pose and fit on a real kernel (draft solitaire)', () => {
 
   it('hops out of the thickness and head-height valley a coordinate search stalls in', async () => {
     // Regression: without restarts this case stopped at loss 0.026 (head height 1.95 against 2.4).
-    const start = template('solitaire')
+    const start = solitaire()
     const params = paramsFor(
       start,
       ['band.widthTop', 'center.placement.elevation', 'band.thicknessTop'],
@@ -342,7 +351,7 @@ describe('pose and fit on a real kernel (draft solitaire)', () => {
       shift: [0, 0],
       target,
     }
-    const start = template('solitaire')
+    const start = solitaire()
     const r = await fitDesign({
       design: start,
       params: paramsFor(start, ['center.width'], { bands: { 'center.width': [5, 9] } }),

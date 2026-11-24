@@ -14,6 +14,7 @@ import {
   GEM_CUT_IDS,
   type GemCutId,
   gemDimsFromCarat,
+  MOUNT,
   type NodeOf,
   prongCountFor,
   replaceStone,
@@ -76,8 +77,10 @@ async function expectMounted(design: Design, gemId: string, label: string, haloW
     if (band.shoulder === 'cathedral') {
       const { peak } = cathedralPeak(band.shoulderHeight!, outer)
       const under = girdle - (outer + band.shoulderHeight!) * Math.cos(peak)
-      // Arches peak just under the girdle (a cabochon sits too low for the least rise).
-      expect(under, `${label}: arches`).toBeLessThanOrEqual(0.5)
+      // Arches peak just under the girdle (a cabochon sits too low for the least rise), up to
+      // the rule's cap on the rise: above it the head's legs carry a large stone the rest.
+      if (band.shoulderHeight! < MOUNT.shoulderAutoMax - 1e-9)
+        expect(under, `${label}: arches`).toBeLessThanOrEqual(0.5)
       expect(under, `${label}: arches`).toBeGreaterThanOrEqual(flatBacked(g.cut) ? -0.2 : 0)
     }
   }

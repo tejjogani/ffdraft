@@ -783,7 +783,7 @@ describe('outline bodies: what the engine pass found', () => {
     }
   })
 
-  it('sets an accented letter the font lacks as its base letter, and flags a dropped one', async () => {
+  it('sets an accented letter the font lacks as its base letter, and flags both as errors', async () => {
     const scene = await kernel.scene(
       pendant({
         id: 'v',
@@ -792,7 +792,10 @@ describe('outline bodies: what the engine pass found', () => {
       }),
     )
     const d = scene.evaluation.diagnostics
-    expect(d.find((x) => x.code === 'text.accentDropped')?.message).toMatch(/“Ż” was set as “Z”/)
+    const accent = d.find((x) => x.code === 'text.accentDropped')
+    expect(accent?.message).toMatch(/“Ż” was set as “Z”/)
+    // The name is spelled differently: an error the designer cannot miss.
+    expect(accent?.level).toBe('error')
     expect(d.find((x) => x.code === 'text.missingGlyph')?.level).toBe('error')
   })
 })
@@ -809,7 +812,15 @@ describe('engraving around a band', () => {
         engraving: text,
       })
     const long = 'forever and always '.repeat(4).slice(0, 60)
-    const e = await kernel.evaluate(band(4, long))
+    // The recipe sets a long text small enough for the band it builds…
+    expect((await kernel.evaluate(band(4, long))).diagnostics.map((x) => x.code)).not.toContain(
+      'engraving.tooLong',
+    )
+    // …and letters made larger again lap over themselves, with a size that fits as the fix.
+    const large = applyOps(band(4, long), [
+      { t: 'update', id: 'engraving', patch: { size: 1.4 } },
+    ]).design
+    const e = await kernel.evaluate(large)
     const d = e.diagnostics.find((x) => x.code === 'engraving.tooLong')
     expect(d?.message).toMatch(/lap over itself/)
     const op = d?.fix?.ops[0]
@@ -817,9 +828,7 @@ describe('engraving around a band', () => {
     expect(size).toBeGreaterThan(0.5)
     // The suggested letters fit; a bigger ring takes the same text as it is.
     expect(
-      (await kernel.evaluate(applyOps(band(4, long), d!.fix!.ops).design)).diagnostics.map(
-        (x) => x.code,
-      ),
+      (await kernel.evaluate(applyOps(large, d!.fix!.ops).design)).diagnostics.map((x) => x.code),
     ).not.toContain('engraving.tooLong')
     expect((await kernel.evaluate(band(9, long))).diagnostics.map((x) => x.code)).not.toContain(
       'engraving.tooLong',

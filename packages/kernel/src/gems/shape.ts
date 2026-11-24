@@ -320,12 +320,7 @@ export function clawLayoutIssues(
   if (!directions.every((a) => directions.some((b) => near(mirrorPhi(a.phi), b.phi))))
     issues.push('the claws are not symmetric left to right')
   // Concave corners (a heart's cleft): a claw there holds nothing and catches.
-  const concave = (phi: number) => {
-    const h = 1e-3
-    const [a, b, c] = [phi - h, phi, phi + h].map((x) => shape.point(x)) as [Vec2, Vec2, Vec2]
-    return (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]) < 0
-  }
-  if (outline.corners.some((c) => concave(c) && directions.some((d) => near(d.phi, c))))
+  if (concaveCorners(shape).some((c) => directions.some((d) => near(d.phi, c))))
     issues.push('a claw sits in the cleft')
   // A triangle is held at its three points; a claw in the middle of a side holds little.
   if (
@@ -335,4 +330,13 @@ export function clawLayoutIssues(
   )
     issues.push('a claw sits in the middle of a side')
   return issues
+}
+
+/** Directions of the outline's concave corners (a heart's cleft); none on a convex stone. */
+export function concaveCorners(shape: StoneShape): number[] {
+  return shape.unit.outline.corners.filter((phi) => {
+    const h = 1e-3
+    const [a, b, c] = [phi - h, phi, phi + h].map((x) => shape.point(x)) as [Vec2, Vec2, Vec2]
+    return (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]) < 0
+  })
 }

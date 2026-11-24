@@ -376,3 +376,25 @@ describe('recipes', () => {
     for (const t of TEMPLATES) expect(planDesign(t.spec).notes, t.id).toEqual([])
   })
 })
+
+describe('engraving in the band recipe', () => {
+  // A 60-letter engraving (the spec's longest) once went through at 1.4 mm letters, so a
+  // US 4 band started life with engraving.tooLong.
+  it('sets a long engraving small enough to fit inside the band, and leaves short ones alone', () => {
+    const band = (value: number, engraving: string) =>
+      buildDesign({
+        kind: 'ring',
+        archetype: 'band',
+        title: 't',
+        summary: 's',
+        ring: { size: { system: 'us', value } },
+        engraving,
+      }).nodes.engraving as NodeOf<'engraving'>
+    const long = 'forever and always '.repeat(4).slice(0, 60)
+    // 97 % of the inside of a US 4 (14.9 mm) at the kernel's measured 0.66 mm per letter per mm.
+    expect(band(4, long).size).toBeLessThanOrEqual(1.1)
+    expect(band(4, long).size).toBeGreaterThanOrEqual(0.6)
+    expect(band(13, long).size).toBeGreaterThan(band(4, long).size)
+    expect(band(4, 'forever').size).toBe(1.4)
+  })
+})

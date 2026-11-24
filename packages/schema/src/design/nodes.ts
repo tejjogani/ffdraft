@@ -406,6 +406,11 @@ export const VectorBody = z
     border: mm('Raised border', 0, 3, 0, {
       description: 'Adds a polished rim around the edge — the frame for a pavé field.',
     }),
+    join: choice('Join letters', ['auto', 'off', 'underline'], 'auto', {
+      advanced: true,
+      description:
+        'Text: tie loose letters and dots on so it casts as one piece, leave them loose, or stand the letters on a bar.',
+    }),
   })
   .meta({
     title: 'Outline body',

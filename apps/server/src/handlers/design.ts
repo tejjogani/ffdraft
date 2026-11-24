@@ -287,18 +287,25 @@ export const design: HandlerGroup<'design'> = {
         ...compareFacts(before, after),
       }
     }
-    let committed: IntentResult | null = null
-    let base: Design = piece.design
+    // Set by the plan inside the commit (a holder object, as TypeScript does not follow
+    // assignments made in a callback).
+    const planned: { intent: IntentResult | null; base: Design } = {
+      intent: null,
+      base: piece.design,
+    }
     const { version, change } = await commitChange(ctx, {
       pieceId: input.pieceId,
       baseVersion: input.baseVersion,
       changeId,
       plan: async (_tx, current) => {
-        base = current
-        committed = planStone(current, [current, input.target, input.change])
-        return { ops: committed.ops, label: committed.label }
+        const intent = planStone(current, [current, input.target, input.change])
+        planned.intent = intent
+        planned.base = current
+        return { ops: intent.ops, label: intent.label }
       },
     })
+    const committed = planned.intent
+    const base = planned.base
     // The same change id was committed between the lookup above and this commit (two retries
     // racing): the commit replayed it without planning.
     if (!committed) return replayed(change)
