@@ -19,8 +19,8 @@ import type { Runtime } from './runtime'
 import { LIVE_STATUSES, serviceContext } from './service-context'
 import { finishRun, toRun } from './traces'
 
-/** A job or run that was live when the server stopped, with whose it is. */
-export type Unfinished =
+/** A job or run that was live when the server stopped, with whose it is and when it began. */
+export type Unfinished = { createdAt: Date } & (
   | { kind: 'render'; id: string; orgId: string; userId: string | null; actor: Actor }
   | {
       kind: 'mesh3d'
@@ -33,6 +33,7 @@ export type Unfinished =
   | { kind: 'shot'; id: string; orgId: string; userId: string | null; actor: Actor | null }
   | { kind: 'production'; id: string; orgId: string; userId: string; actor: null }
   | { kind: 'run'; id: string; orgId: string; userId: string; status: Run['status'] }
+)
 
 const INTERRUPTED = 'Interrupted by a server restart; run it again.'
 const LIVE_RUNS: Run['status'][] = ['running', 'awaiting-approval']
@@ -48,55 +49,66 @@ export async function unfinished(db: Db): Promise<Unfinished[]> {
       .select({
         id: t.renderJob.id,
         orgId: t.renderJob.orgId,
+        createdAt: t.renderJob.createdAt,
         userId: t.renderJob.createdBy,
         actor: t.renderJob.actor,
       })
       .from(t.renderJob)
-      .where(and(inArray(t.renderJob.status, LIVE_STATUSES), eq(t.renderJob.engine, 'blender'))),
+      .where(and(inArray(t.renderJob.status, LIVE_STATUSES), eq(t.renderJob.engine, 'blender')))
+      .orderBy(t.renderJob.createdAt),
     db
       .select({
         id: t.meshJob.id,
         orgId: t.meshJob.orgId,
+        createdAt: t.meshJob.createdAt,
         userId: t.meshJob.createdBy,
         actor: t.meshJob.actor,
         providerJobId: t.meshJob.providerJobId,
       })
       .from(t.meshJob)
-      .where(inArray(t.meshJob.status, LIVE_STATUSES)),
+      .where(inArray(t.meshJob.status, LIVE_STATUSES))
+      .orderBy(t.meshJob.createdAt),
     db
       .select({
         id: t.modelShot.id,
         orgId: t.modelShot.orgId,
+        createdAt: t.modelShot.createdAt,
         userId: t.modelShot.createdBy,
         actor: t.modelShot.actor,
       })
       .from(t.modelShot)
-      .where(inArray(t.modelShot.status, LIVE_STATUSES)),
+      .where(inArray(t.modelShot.status, LIVE_STATUSES))
+      .orderBy(t.modelShot.createdAt),
     db
       .select({
         id: t.productionPackage.id,
         orgId: t.productionPackage.orgId,
+        createdAt: t.productionPackage.createdAt,
         userId: t.productionPackage.createdBy,
       })
       .from(t.productionPackage)
-      .where(inArray(t.productionPackage.status, LIVE_STATUSES)),
+      .where(inArray(t.productionPackage.status, LIVE_STATUSES))
+      .orderBy(t.productionPackage.createdAt),
     db
       .select({
         id: t.agentRun.id,
         orgId: t.agentRun.orgId,
+        createdAt: t.agentRun.startedAt,
         userId: t.agentRun.userId,
         status: t.agentRun.status,
       })
       .from(t.agentRun)
-      .where(inArray(t.agentRun.status, LIVE_RUNS)),
+      .where(inArray(t.agentRun.status, LIVE_RUNS))
+      .orderBy(t.agentRun.startedAt),
   ])
+  // Oldest first, so queues fill again in the order the work was asked for.
   return [
     ...renders.map((r) => ({ kind: 'render' as const, ...r })),
     ...meshJobs.map((r) => ({ kind: 'mesh3d' as const, ...r })),
     ...shots.map((r) => ({ kind: 'shot' as const, ...r })),
     ...packages.map((r) => ({ kind: 'production' as const, actor: null, ...r })),
     ...runs.map((r) => ({ kind: 'run' as const, ...r })),
-  ]
+  ].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
 }
 
 /** Fails a job or run without a user context (its user is unknown or no longer a member). */
@@ -209,7 +221,7 @@ async function resumeOne(ctx: Ctx, item: Unfinished): Promise<void> {
       }
       return packager.resume(pkg, request, handle, sctx).catch((err: unknown) => {
         console.error(`Resuming production package ${item.id} failed:`, err)
-        return handle.update({ status: 'failed' })
+        return handle.update({ status: 'failed', manifest: { error: { message: engineError(err) } } })
       })
     }
     case 'run': {

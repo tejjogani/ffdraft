@@ -1,6 +1,8 @@
-import type { ProductionPackage } from '@pave/schema'
+import type { Design, ProductionPackage } from '@pave/schema'
 import { desc, eq, max } from 'drizzle-orm'
+import type { Ctx } from '../context'
 import * as t from '../db/schema'
+import { conflict } from '../errors'
 import { createId } from '../ids'
 import { packageHandle } from '../jobs'
 import { getPiece } from '../lookups'
@@ -20,6 +22,20 @@ export const toPackage = (r: typeof t.productionPackage.$inferSelect): Productio
   createdAt: r.createdAt.toISOString(),
 })
 
+/**
+ * Refuses (409) a piece with nothing to make while the caller is still waiting, rather than
+ * queuing a package that can only fail in the background. Draft detail: fast, and enough to see
+ * whether there is any metal or stone at all.
+ */
+async function assertProducible(ctx: Ctx, piece: { id: string; design: Design }): Promise<void> {
+  if (!ctx.services.isConfigured('geometry')) return
+  const draft = await ctx.services
+    .get('geometry')
+    .evaluate(piece.design, { detail: 'draft', pieceId: piece.id }, serviceContext(ctx))
+  if (draft.metalMassG === 0 && draft.stoneCount === 0)
+    throw conflict('Nothing to produce: the piece has no metal or stones.')
+}
+
 export const production: HandlerGroup<'production'> = {
   'production.list': async (ctx, { pieceId }) => {
     await getPiece(ctx, pieceId)
@@ -34,6 +50,7 @@ export const production: HandlerGroup<'production'> = {
     const packager = ctx.services.require('production')
     const piece = await getPiece(ctx, pieceId)
     assertAttested(piece)
+    await assertProducible(ctx, piece)
     const [last] = await ctx.repo.packages.select(
       { revision: max(t.productionPackage.revision) },
       eq(t.productionPackage.pieceId, pieceId),
