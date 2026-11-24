@@ -72,9 +72,23 @@ const ring = (id: number, w: number): [number, number, number][] =>
  * pairs, engraving, sterling, an iced bail, martini studs and a bangle.
  */
 const FIXTURES: readonly CorpusItem[] = [
-  fixture('east-west', solitaire({ style: ['east-west'], stones: [{ role: 'center', cut: 'oval', carat: 1 }] })),
+  fixture(
+    'east-west',
+    solitaire({ style: ['east-west'], stones: [{ role: 'center', cut: 'oval', carat: 1 }] }),
+  ),
   fixture('flush-fit', solitaire({ style: ['wedding set'] })),
   fixture('split', solitaire({ ring: { ...us(6), shoulder: 'split' } })),
+  fixture('princess', solitaire({ stones: [{ role: 'center', cut: 'princess', carat: 1 }] })),
+  fixture(
+    'xl-iced',
+    spec({
+      kind: 'pendant',
+      archetype: 'icedPendant',
+      body: { heightMm: 100, text: 'K' },
+      stones: [{ role: 'pave', widthMm: 2.0 }],
+      chain: { style: 'cuban', lengthMm: 610, widthMm: 12 },
+    }),
+  ),
   fixture('double-tip', solitaire(), [{ t: 'update', id: 'head', patch: { prongTip: 'double' } }]),
   fixture('bare-claws', solitaire(), [{ t: 'update', id: 'head', patch: { style: 'prong' } }]),
   fixture(
@@ -126,7 +140,11 @@ const FIXTURES: readonly CorpusItem[] = [
   ),
   fixture(
     'martini-studs',
-    spec({ kind: 'earrings', archetype: 'studs', stones: [{ role: 'center', widthMm: 5.2, prongs: 3 }] }),
+    spec({
+      kind: 'earrings',
+      archetype: 'studs',
+      stones: [{ role: 'center', widthMm: 5.2, prongs: 3 }],
+    }),
   ),
   {
     id: 'fixture:bangle',

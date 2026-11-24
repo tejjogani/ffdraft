@@ -62,7 +62,7 @@ export const STONE_RULES = [
     title: 'One hero',
     applies: {
       kinds: ['ring', 'pendant', 'necklace', 'brooch'],
-      when: and(lt(v('toi'), 0.5), lt(v('earrings'), 0.5)),
+      when: and(gt(v('cW'), 0), lt(v('toi'), 0.5), lt(v('earrings'), 0.5)),
     },
     paths: ['gem.width'],
     measure: 'secondStone',

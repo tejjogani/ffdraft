@@ -27,7 +27,12 @@ export const EDWARDIAN = guide({
       note: 'six claws',
       applies: { kinds: ['ring'] },
     },
-    { path: 'ringShank.widthTop', band: band(2.0, 1.8, 2.2), note: 'knife edge', applies: { archetypes: [...HEADED] } },
+    {
+      path: 'ringShank.widthTop',
+      band: band(2.0, 1.8, 2.2),
+      note: 'knife edge',
+      applies: { archetypes: [...HEADED] },
+    },
     { path: 'pipe.width', band: band(0.7, 0.7, 0.8), note: 'lace wire, ≥ 1.0 deep, spans ≤ 8' },
     {
       path: 'chain.linkWidth',

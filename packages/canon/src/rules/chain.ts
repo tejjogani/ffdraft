@@ -45,7 +45,7 @@ export const CHAIN_RULES = [
     measure: 'massG',
     band: band(cubanMass, mul(0.85, cubanMass), mul(1.35, cubanMass)),
     rationale:
-      'A Cuban weighs about 0.23 × width² × length × density: 10 mm × 22 in in 14k is about 170 g. Quote from the report.',
+      'A trade Cuban weighs about 0.23 × width² × length × density; the kernel’s links are lighter (0.197): quote from the report.',
     source: src('D', '§2 Chains'),
     confidence: 'medium',
     severity: 'default',

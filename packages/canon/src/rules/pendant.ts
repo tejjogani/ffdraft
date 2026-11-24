@@ -41,7 +41,11 @@ const hiddenOpen = iff(
 )
 const minOpen = iff(v('loopBail'), loopOpen, iff(v('hiddenBail'), hiddenOpen, ringOpen))
 /** Bail outer height 15 % of a body's height at least (§2), so the opening grows with H. */
-const forHeight = iff(and(v('hasBody'), lt(v('hiddenBail'), 0.5)), sub(mul(0.15, H), mul(2, wire)), 0)
+const forHeight = iff(
+  and(v('hasBody'), lt(v('hiddenBail'), 0.5)),
+  sub(mul(0.15, H), mul(2, wire)),
+  0,
+)
 const opening = max(add(minOpen, 0.3), forHeight)
 const smallWire = add(max(0.8, add(mul(0.08, W), 0.3)), ALLOY_ADD)
 /** Wire grows with the piece: an under-built bail is a named failure mode (09 §6). */

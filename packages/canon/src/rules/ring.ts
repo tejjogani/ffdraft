@@ -91,7 +91,10 @@ export const RING_RULES = [
     },
     paths: ['ringShank.widthBottom'],
     band: band(baseTyp, baseMin, v('bandW')),
-    lintAt: { below: max(1.5, iff(wideTop, mul(0.35, v('bandW')), sub(v('bandW'), 0.8))), above: add(v('bandW'), 0.2) },
+    lintAt: {
+      below: max(1.5, iff(wideTop, mul(0.35, v('bandW')), sub(v('bandW'), 0.8))),
+      above: add(v('bandW'), 0.2),
+    },
     rationale:
       'The base follows the top: equal on a fine band, 0–0.4 mm less on a classic one, half a wide top (2.5 mm at least). Never wider than the head.',
     source: src('EJ', '§1 Solitaire: band width (taper)'),

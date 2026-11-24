@@ -133,10 +133,32 @@ export const ICED = [
           border: 1.0,
         },
         {
+          // The plate is pierced where the initial stands, so its pavé stops at the letter
+          // instead of running underneath it (a pavé field knows nothing of what sits on it).
+          id: 'cutter',
+          kind: 'vectorBody',
+          name: 'Initial cut-out',
+          material: 'au14k-yellow',
+          source: { type: 'text', text: 'R', font: 'block' },
+          height: 39,
+          thickness: 8,
+          bevel: 'flat',
+          bevelSize: 0,
+          transform: { position: [0, 2, 2], rotation: [0, 0, 0], scale: 0.98 },
+        },
+        {
+          id: 'field',
+          kind: 'boolean',
+          name: 'Pierced plate',
+          op: 'subtract',
+          target: 'base',
+          tools: ['cutter'],
+        },
+        {
           id: 'iceBase',
           kind: 'pave',
           name: 'Pavé, plate',
-          host: 'base',
+          host: 'field',
           stone: 'diamond',
           sizeMax: 1.1,
           sizeMin: 0.8,
@@ -151,11 +173,11 @@ export const ICED = [
           material: 'au14k-yellow',
           source: { type: 'text', text: 'R', font: 'block' },
           height: 39,
-          thickness: 2.2,
+          thickness: 4.7,
           bevel: 'flat',
           bevelSize: 0,
           border: 0.6,
-          transform: { position: [0, -2.5, 2], rotation: [0, 0, 0], scale: 1 },
+          transform: { position: [0, 0, 2], rotation: [0, 0, 0], scale: 1 },
         },
         {
           id: 'ice',
@@ -174,7 +196,7 @@ export const ICED = [
           kind: 'bail',
           name: 'Bail',
           material: 'au14k-yellow',
-          host: 'base',
+          host: 'field',
           style: 'hidden',
           opening: 10.4,
           width: 5.2,
@@ -185,15 +207,15 @@ export const ICED = [
     },
     why: [
       'Each level fully iced: the shield inside a 1.0 mm rim, the initial inside its own.',
-      'The initial is 0.7 of the plate and stands 1.2 mm proud: depth, not a step that looks glued.',
-      'A 3.5 mm plate keeps metal under its seats without the weight of a solid slab.',
+      'The initial is 0.7 of the plate and stands 1.2 mm proud through it: depth, not a glued step.',
+      'A 3.5 mm plate: about 83 g of 14k with 900-odd stones, near the 85 g of a 70 mm custom.',
     ],
     antiTwin: {
       ops: [
         {
           t: 'update',
           id: 'plate',
-          patch: { transform: { position: [0, -5.2, 2], rotation: [0, 0, 0], scale: 1 } },
+          patch: { transform: { position: [0, -3.4, 2], rotation: [0, 0, 0], scale: 1 } },
         },
       ],
       fault: 'Levels floating apart',
@@ -201,9 +223,12 @@ export const ICED = [
     },
     sizeKey: { H: 56 },
   }),
+  // A sculpt, not an outline. The built-in crown is not used: hollowing it breaks it into its
+  // points, and solid at a 0.8 flat back its spikes leave over a hundred pavé seats without
+  // wall (kernel, production detail). The trophy carries the same lesson cleanly.
   exemplar({
-    id: 'iced-sculpted-crown',
-    title: 'Flooded crown sculpt',
+    id: 'iced-sculpted-trophy',
+    title: 'Flooded trophy sculpt',
     kind: 'pendant',
     archetype: 'icedPendant',
     styles: ['iced out', 'hip hop'],
@@ -212,26 +237,18 @@ export const ICED = [
       spec: {
         kind: 'pendant',
         archetype: 'icedPendant',
-        title: 'Flooded crown sculpt',
-        summary: 'A sculpted crown, fully flooded, flat-backed, on a 6 mm Cuban.',
+        title: 'Flooded trophy sculpt',
+        summary: 'A sculpted trophy, fully flooded, hollowed and flat-backed, on a 6 mm Cuban.',
         style: ['iced out', 'hip hop'],
         metal: { alloy: 'au14k-yellow' },
-        body: { heightMm: 45, shape: 'Crown', iceLevel: 1 },
+        body: { heightMm: 45, shape: 'Trophy', iceLevel: 1 },
         stones: [{ role: 'pave', stone: 'diamond' }],
         chain: { style: 'cuban', lengthMm: 559, widthMm: 6 },
       },
-      ops: [
-        {
-          t: 'update',
-          id: 'body',
-          // Solid: hollowing the crown breaks it into its points (kernel metal.disconnected).
-          patch: { source: { type: 'builtin', name: 'crown' }, flatBack: 0.8, hollow: 0 },
-        },
-      ],
     },
     why: [
-      'A round sculpt sliced 80 % flat at the back: under 15 mm off the chest, not 47.',
-      'Every face flooded with 1.0 mm stones.',
+      'Hollowed to a 1.5 mm wall and sliced half flat: about 50 g of body, not a 136 g solid lump.',
+      'Every face flooded with 1.0 mm stones kept 0.6 mm in from each edge.',
       'A 6 mm Cuban carries 45 mm on a hidden bail behind the ice.',
     ],
     antiTwin: {

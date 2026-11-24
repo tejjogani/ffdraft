@@ -1,5 +1,5 @@
 /** Signet, seal and championship rules: research 09 §4. Engraving minimums from §4 and 02-production. */
-import { add, clamp, div, lt, min, mul, sub, v } from '../expr'
+import { add, clamp, div, gt, lt, min, mul, sub, v } from '../expr'
 import { band, rule, src } from './rule'
 
 const ID = v('ID')
@@ -40,7 +40,7 @@ export const SIGNET_RULES = [
   rule({
     id: 'signet.shankTop',
     title: 'Shank under the face',
-    applies: { archetypes: ['signet'], nodeKind: 'ringShank' },
+    applies: { archetypes: ['signet'], nodeKind: 'ringShank', when: gt(faceH, 0) },
     paths: ['ringShank.widthTop'],
     band: band(min(14, mul(0.9, faceH)), min(14, mul(0.7, faceH)), min(14, faceH)),
     rationale:

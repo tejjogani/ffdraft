@@ -5,11 +5,11 @@
  */
 import {
   ARCHETYPES,
+  type EvaluationSummary,
   FINISH_IDS,
   GEM_CUT_IDS,
   METAL_IDS,
   NODE_KINDS,
-  type EvaluationSummary,
   type NodeInput,
   NodeSchema,
   type Op,

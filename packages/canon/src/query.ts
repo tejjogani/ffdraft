@@ -180,7 +180,9 @@ function sanitise(q: CanonQuery): Sane & { q: CanonQuery } {
     q: {
       ...q,
       ...(q.heightMm !== undefined ? { heightMm: clampTo(q.heightMm, heightPath, 5) } : {}),
-      ...(q.centre ? { centre: { ...q.centre, widthMm: clampTo(q.centre.widthMm, 'gem.width') } } : {}),
+      ...(q.centre
+        ? { centre: { ...q.centre, widthMm: clampTo(q.centre.widthMm, 'gem.width') } }
+        : {}),
     },
   }
 }
@@ -193,15 +195,25 @@ function referenceSpec(q: CanonQuery, { kind, archetype, words }: Sane): PieceSp
       ? {
           style: q.chain.style,
           lengthMm: q.chain.lengthMm ?? 508,
-          widthMm: q.chain.widthMm ?? (q.chain.style === 'cuban' ? Math.max(3, Math.round(0.12 * (H ?? 50))) : 1.5),
+          widthMm:
+            q.chain.widthMm ??
+            (q.chain.style === 'cuban' ? Math.max(3, Math.round(0.12 * (H ?? 50))) : 1.5),
         }
       : pendant
         ? // Pendants are judged on a chain: a Cuban at 12 % of an iced piece, fine cable otherwise.
           archetype === 'icedPendant'
-          ? { style: 'cuban' as const, lengthMm: 559, widthMm: Math.max(3, Math.round(0.12 * (H ?? 50))) }
+          ? {
+              style: 'cuban' as const,
+              lengthMm: 559,
+              widthMm: Math.max(3, Math.round(0.12 * (H ?? 50))),
+            }
           : { style: 'cable' as const, lengthMm: 457, widthMm: 1.2 }
         : q.chain
-          ? { style: q.chain.style, lengthMm: q.chain.lengthMm ?? 457, widthMm: q.chain.widthMm ?? 3 }
+          ? {
+              style: q.chain.style,
+              lengthMm: q.chain.lengthMm ?? 457,
+              widthMm: q.chain.widthMm ?? 3,
+            }
           : undefined
   return {
     kind,
@@ -299,14 +311,19 @@ function similarity(a: Exemplar, b: Exemplar): number {
 
 /**
  * Exemplars by relevance: the same archetype first (the same kind only for custom pieces or when
- * the archetype has too few), scored on cut family, relative size, variant and shared brief
+ * the archetype has fewer than two), scored on cut family, relative size, variant and shared brief
  * words, then MMR for diversity. Returns fewer than `count` when fewer are relevant.
  */
 function pickExemplars(q: CanonQuery, sane: Sane, count: number): Exemplar[] {
   const { kind, archetype, words } = sane
   const all = getExemplars()
-  let pool = all.filter((e) => e.archetype === archetype)
-  if (archetype === 'custom' || pool.length < count)
+  // Custom work is matched by kind (a custom pendant learns from pendants, not custom rings);
+  // otherwise other pieces of the kind join only when the archetype has fewer than two.
+  let pool =
+    archetype === 'custom'
+      ? all.filter((e) => e.kind === kind)
+      : all.filter((e) => e.archetype === archetype)
+  if (archetype !== 'custom' && pool.length < 2)
     pool = [...pool, ...all.filter((e) => e.archetype !== archetype && e.kind === kind)]
   const want = new Set(matchStyles(words).map((g) => g.id))
   const cutFamily = q.centre && GEM_CUTS[q.centre.cut]
@@ -458,7 +475,15 @@ export function canonFor(query: CanonQuery): CanonSlice {
     .slice(0, 3)
 
   const make = (): CanonSlice => {
-    const body = { version: CANON_VERSION, rules, styles, exemplars: cards, caveats, failureModes, questions }
+    const body = {
+      version: CANON_VERSION,
+      rules,
+      styles,
+      exemplars: cards,
+      caveats,
+      failureModes,
+      questions,
+    }
     // The key is the content: any change to what the model would read changes it.
     const key = `${kind}/${archetype}/${hash(renderCanonForPrompt({ ...body, key: '' }))}`
     return { ...body, key }

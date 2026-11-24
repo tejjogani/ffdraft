@@ -81,6 +81,7 @@ export const FACTS = {
   shared: 'shared-prong row (1/0)',
   bar: 'bar-set row (1/0)',
   head: 'the ring has a head (1/0)',
+  sideClear: 'angle round the band past the outermost side head, from the top (deg, 0 if none)',
   H: 'body height (mm)',
   T: 'body thickness (mm)',
   border: 'raised border (mm)',
@@ -377,6 +378,28 @@ export interface FactsOptions {
   pairWith?: PairWith
 }
 
+/**
+ * How far round the band the side heads reach: each side stone's angle plus the angle its head
+ * base and wire subtend, the same clearance the hero's head gets (rows.skipCenter).
+ */
+function sideClear(d: Design, hero: Gem | undefined, band: Facts): number {
+  if (band.ID === undefined || band.bandT === undefined) return 0
+  const r = band.ID / 2 + band.bandT
+  let most = 0
+  for (const g of nodesOf(d, 'gem')) {
+    if (g.id === hero?.id || g.placement.type !== 'ringTop') continue
+    const s = settingOf(d, g.id)
+    const f = stoneFacts(g)
+    const claw = s?.style === 'prong' || s?.style === 'basket'
+    const taper = claw ? s.taper : 0
+    const wire = claw ? s.prongDiameter : (s?.wall ?? 0)
+    const half = (1 - taper) * ((f.along ?? g.width) / 2 + 0.35) + wire / 2 + 0.3
+    const reach = Math.abs(g.placement.angle) + (Math.asin(Math.min(1, half / r)) * 180) / Math.PI
+    most = Math.max(most, reach)
+  }
+  return most
+}
+
 /** Facts about the whole piece: band, hero stone and its head, halo, first row, body, chain. */
 export function pieceFacts(d: Design, o: FactsOptions = {}): Facts {
   const band = bandFacts(nodesOf(d, 'ringShank')[0])
@@ -408,6 +431,7 @@ export function pieceFacts(d: Design, o: FactsOptions = {}): Facts {
     ...bailFacts(d, nodesOf(d, 'bail')[0]),
     ...pipeFacts(nodesOf(d, 'pipe')[0]),
     head: flag(nodesOf(d, 'setting').length > 0 && d.kind === 'ring'),
+    sideClear: sideClear(d, hero, band),
     bracelet: flag(d.kind === 'bracelet'),
     earrings: flag(d.kind === 'earrings'),
     ...(material ? { alloy: ALLOY_CLASS[material], density: METALS[material].density } : {}),

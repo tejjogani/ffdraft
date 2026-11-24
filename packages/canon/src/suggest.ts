@@ -6,11 +6,11 @@
 import {
   buildDesign,
   type Design,
+  MELEE_SIZES_MM,
   mergePatch,
   type Node,
   NodeSchema,
   type PieceSpec,
-  MELEE_SIZES_MM,
   type PieceSpecInput,
   PieceSpecSchema,
   validateDesign,
@@ -515,7 +515,9 @@ function settleMeleeZones(
   const clash = MEASURES.meleeStep?.({ design: d, facts: {} })?.value === 1
   if (!clash || halo?.kind !== 'halo' || row?.kind !== 'gemRow' || pinned.has('row.stoneWidth'))
     return d
-  const rowRule = RULES_BY_ID.get(row.setting === 'sharedProng' ? 'rows.sharedProng' : 'rows.walledPave')!
+  const rowRule = RULES_BY_ID.get(
+    row.setting === 'sharedProng' ? 'rows.sharedProng' : 'rows.walledPave',
+  )!
   const rowMax = lintRange(rowRule, nodeFacts(d, 'row'))?.hi ?? 0
   const haloRange = lintRange(RULES_BY_ID.get('halo.melee')!, nodeFacts(d, 'halo'))
   const why = RULES_BY_ID.get('halo.meleeZones')!.rationale

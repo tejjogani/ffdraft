@@ -116,7 +116,12 @@ export const BAND_RULES = [
   rule({
     id: 'band.pair.width',
     title: 'Wedding band against its engagement ring',
-    applies: { kinds: ['ring'], archetypes: ['band', 'eternity'], nodeKind: 'ringShank', when: gt(v('pairW'), 0) },
+    applies: {
+      kinds: ['ring'],
+      archetypes: ['band', 'eternity'],
+      nodeKind: 'ringShank',
+      when: gt(v('pairW'), 0),
+    },
     paths: ['ringShank.widthTop'],
     band: band(v('pairW'), sub(v('pairW'), 0.3), add(v('pairW'), 0.3)),
     refines: 'band.plain.width',
@@ -130,7 +135,12 @@ export const BAND_RULES = [
   rule({
     id: 'band.pair.thickness',
     title: 'Wedding band depth against its engagement ring',
-    applies: { kinds: ['ring'], archetypes: ['band', 'eternity'], nodeKind: 'ringShank', when: gt(v('pairT'), 0) },
+    applies: {
+      kinds: ['ring'],
+      archetypes: ['band', 'eternity'],
+      nodeKind: 'ringShank',
+      when: gt(v('pairT'), 0),
+    },
     paths: ['ringShank.thicknessTop'],
     band: band(v('pairT'), max(1.5, sub(v('pairT'), 0.2)), add(v('pairT'), 0.2)),
     refines: 'band.plain.thickness',

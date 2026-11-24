@@ -30,7 +30,11 @@ export const MAXIMALIST = guide({
       note: 'plain; 2.5–4 when split',
       applies: { archetypes: [...HEADED], when: BIG_CENTRE },
     },
-    { path: 'setting.prongDiameter', band: band(1.5, 1.3, 1.8), applies: { archetypes: [...HEADED], when: BIG_CENTRE } },
+    {
+      path: 'setting.prongDiameter',
+      band: band(1.5, 1.3, 1.8),
+      applies: { archetypes: [...HEADED], when: BIG_CENTRE },
+    },
   ],
   overrides: [
     { ruleId: 'ring.solitaire.bandWidth', band: band(5, 2.5, 8), when: BIG_CENTRE },

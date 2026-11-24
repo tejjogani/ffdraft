@@ -109,7 +109,11 @@ function pendantMass({ design, facts, summary }: MeasureContext): number | undef
   const density = METALS[body.material].density
   if (body.kind === 'relief')
     return (
-      ((Math.PI / 4) * body.width * body.height * (body.baseThickness + 0.5 * body.depth) * density) /
+      ((Math.PI / 4) *
+        body.width *
+        body.height *
+        (body.baseThickness + 0.5 * body.depth) *
+        density) /
       1000
     )
   return silhouetteMass(body.height, density) * body.thickness * 0.9
@@ -399,9 +403,7 @@ export const MEASURES: Record<string, Measure> = {
   },
 
   loopOnChain: ({ node }) =>
-    node?.kind === 'bail'
-      ? { value: node.style === 'loop' ? 1 : 0 }
-      : undefined,
+    node?.kind === 'bail' ? { value: node.style === 'loop' ? 1 : 0 } : undefined,
 
   chainToPendantMass: ({ facts, summary }) => {
     const chain = chainMass(facts)
@@ -415,9 +417,14 @@ export const MEASURES: Record<string, Measure> = {
     return m === undefined ? undefined : { value: m }
   },
 
-  pendantDepth: ({ summary, facts }) =>
-    // Pendants face −Y and the chain drapes in XZ, so the summary's Y extent is the body depth.
-    summary && facts.H !== undefined ? { value: summary.boundsMm.y } : undefined,
+  pendantDepth: ({ summary, facts, design }) => {
+    // Pendants face −Y and the chain drapes in XZ, so the summary's Y extent is the body depth,
+    // plus a hidden bail standing off the back (kernel bail: 0.45 × opening, 1.2 at least, + wire).
+    if (!summary || facts.H === undefined) return undefined
+    const hidden = ofKind(design, 'bail').find((b) => b.style === 'hidden' && b.visible)
+    const off = hidden ? Math.max(0.45 * hidden.opening, 1.2) + hidden.wire : 0
+    return { value: summary.boundsMm.y - off }
+  },
 
   solidEquivalent: (c) => {
     const m = pendantMass(c)
@@ -444,7 +451,13 @@ export const MEASURES: Record<string, Measure> = {
   bodyHeight: ({ facts }) => (facts.H === undefined ? undefined : { value: facts.H }),
 
   levelStep: ({ design }) => {
-    const bodies = ofKind(design, 'vectorBody').filter((b) => b.visible)
+    // A cutter (a subtract's tool) is not a level: it leaves a hole, not metal.
+    const tools = new Set(
+      ofKind(design, 'boolean')
+        .filter((b) => b.op === 'subtract')
+        .flatMap((b) => b.tools),
+    )
+    const bodies = ofKind(design, 'vectorBody').filter((b) => b.visible && !tools.has(b.id))
     if (bodies.length < 2) return undefined
     // Outline bodies face −Y with their back on y = 0: the front lies at y − thickness.
     const fronts = [

@@ -1,5 +1,22 @@
 /** Rows and eternity rules: research 09 §1 "Rows, eternity, plain bands". */
-import { add, and, asin, clamp, div, eq, floor, gt, iff, lt, max, min, mul, snap, sub, v } from '../expr'
+import {
+  add,
+  and,
+  asin,
+  clamp,
+  div,
+  eq,
+  floor,
+  gt,
+  iff,
+  lt,
+  max,
+  min,
+  mul,
+  snap,
+  sub,
+  v,
+} from '../expr'
 import { band, HEADED, rule, src } from './rule'
 
 const bandW = v('bandW')
@@ -22,13 +39,20 @@ const underFloor = iff(
   max(1.5, add(mul(0.35, d), 0.6)),
   max(1.5, add(mul(0.6, d), 0.6)),
 )
-/** Half-width the row must clear: the halo outline, or the head's base plus its wire. */
+/**
+ * Half-width along the band the row must clear round the hero: its halo outline, or its head's
+ * base plus the wire, on the stone's extent along the band (its length when east-west).
+ */
 const clearHalf = iff(
   v('halo'),
-  add(mul(0.5, v('cW')), v('haloOffset'), mul(v('haloRows'), v('haloD')), 0.55),
-  add(mul(sub(1, v('headTaper')), add(mul(0.5, v('cW')), 0.35)), mul(0.5, v('headWire')), 0.3),
+  add(mul(0.5, v('cAlong')), v('haloOffset'), mul(v('haloRows'), v('haloD')), 0.55),
+  add(mul(sub(1, v('headTaper')), add(mul(0.5, v('cAlong')), 0.35)), mul(0.5, v('headWire')), 0.3),
 )
-const skipMin = mul(2, asin(div(clearHalf, add(div(v('ID'), 2), v('bandT')))))
+/** The row starts past the outermost head: the hero's, or a side stone's (09 §1 skipCenter). */
+const skipMin = max(
+  mul(2, asin(div(clearHalf, add(div(v('ID'), 2), v('bandT'))))),
+  mul(2, v('sideClear')),
+)
 const graduate = snap(sub(d, 0.4))
 
 export const ROW_RULES = [

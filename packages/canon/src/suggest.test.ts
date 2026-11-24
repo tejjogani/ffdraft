@@ -227,7 +227,10 @@ describe('style recipes stay inside the archetype', () => {
 
 describe('rule precedence', () => {
   it('sets an east-west stone low, in a basket', () => {
-    const spec = { ...ring([{ role: 'center', cut: 'oval' as const, carat: 1 }]), style: ['east-west'] }
+    const spec = {
+      ...ring([{ role: 'center', cut: 'oval' as const, carat: 1 }]),
+      style: ['east-west'],
+    }
     const { values, notes } = suggestParameters(spec)
     expect(values['head.style']).toBe('basket')
     expect(values['center.elevation'] as number).toBeLessThanOrEqual(1.2)
@@ -325,7 +328,10 @@ describe('halo with pavé shoulders', () => {
     })
 
   it('steps the row down when the band is pinned', () => {
-    const spec = { ...haloSpec(6.5), ring: { size: { system: 'us' as const, value: 6 }, bandWidthMm: 1.9 } }
+    const spec = {
+      ...haloSpec(6.5),
+      ring: { size: { system: 'us' as const, value: 6 }, bandWidthMm: 1.9 },
+    }
     const { values, design } = suggestDesign(spec)
     const step = (values['halo.stoneWidth'] as number) - (values['row.stoneWidth'] as number)
     expect(step <= 0.1 || step >= 0.4 - 1e-9).toBe(true)
@@ -335,10 +341,123 @@ describe('halo with pavé shoulders', () => {
 
 describe('pinned values', () => {
   it('move to the nearest value the canon allows, not its typical', () => {
-    const spec = ring([{ role: 'center', carat: 1 }], { size: { system: 'us', value: 6 }, bandWidthMm: 4 })
+    const spec = ring([{ role: 'center', carat: 1 }], {
+      size: { system: 'us', value: 6 },
+      bandWidthMm: 4,
+    })
     const { values, notes } = suggestParameters(spec)
     const note = notes.find((n) => n.param === 'band.widthTop')!
     expect(note.asked).toBe(4)
     expect(values['band.widthTop']).toBeCloseTo(2.9, 1)
+  })
+})
+
+const iced = (o: Partial<PieceSpecInput> = {}): PieceSpecInput => ({
+  kind: 'pendant',
+  archetype: 'icedPendant',
+  title: 'test',
+  summary: '',
+  body: { heightMm: 60 },
+  chain: { style: 'cuban', lengthMm: 559, widthMm: 8 },
+  ...o,
+})
+/** A summary with only what the mass and depth lints read. */
+const summary = (metalMassG: number, depth: number) => ({
+  metalMassG,
+  metals: [],
+  stoneCount: 0,
+  caratTotal: 0,
+  lots: [],
+  boundsMm: { x: 60, y: depth, z: 300 },
+  diagnostics: [],
+})
+
+describe('iced sculpts and bails', () => {
+  it('hollows a sculpt, slices its back, hangs it behind the ice and builds the bail for its weight', () => {
+    const { values, design } = suggestDesign(iced())
+    expect(values['body.hollow']).toBeGreaterThanOrEqual(1.2)
+    expect(values['body.flatBack']).toBeGreaterThanOrEqual(0.5)
+    expect(values['bail.style']).toBe('hidden')
+    // 1 + 0.012 × 60.
+    expect(values['bail.wire']).toBeCloseTo(1.7, 1)
+    expect(lintDesign(design, undefined, { spec: iced() })).toEqual([])
+  })
+
+  it('flags a solid lump and a pendant that stands off the chest', () => {
+    const { design } = suggestDesign(iced())
+    // A 60 mm sculpt at 322 g with the 8 mm Cuban (about 92 g) left on: about 230 g of body.
+    const ids = lintDesign(design, summary(322, 30), { spec: iced() }).map((f) => f.ruleId)
+    expect(ids).toEqual(expect.arrayContaining(['iced.mass', 'iced.depth']))
+    expect(lintDesign(design, summary(150, 15), { spec: iced() })).toEqual([])
+  })
+
+  it('weighs the chain at the kernel’s coefficient and flags a chain under 0.3 of the pendant', () => {
+    const { design } = suggestDesign(iced())
+    // 8 mm × 559 mm 18k Cuban: 0.197·64·559·15.5/1000 ≈ 109 g; at 520 g the pendant is ≈ 411 g.
+    const chain = (0.197 * 64 * 559 * 15.5) / 1000
+    const f = lintDesign(design, summary(520, 15), { spec: iced(), waived: ['iced.mass'] }).find(
+      (x) => x.ruleId === 'chain.massToPendant',
+    )
+    expect(f?.value).toBeCloseTo(chain / (520 - chain), 3)
+  })
+
+  it('carries a heavy medallion on a chain that can take it', () => {
+    const spec: PieceSpecInput = {
+      kind: 'pendant',
+      archetype: 'medallion',
+      title: 'test',
+      summary: '',
+      metal: { alloy: 'au24k-yellow' },
+      body: { heightMm: 24 },
+      chain: { style: 'cable', lengthMm: 457, widthMm: 1.5 },
+    }
+    const { design } = suggestDesign(spec)
+    const thick = applyOps(design, [
+      { t: 'update', id: 'body', patch: { baseThickness: 2, depth: 1 } },
+    ]).design
+    expect(lintDesign(thick, undefined, { spec }).map((f) => f.ruleId)).toContain(
+      'chain.carriesPendant',
+    )
+  })
+})
+
+describe('bridal pairs', () => {
+  it('sizes a wedding band to its engagement shank', () => {
+    const { values } = suggestParameters(band([]), { pairWith: { widthMm: 2.0, thicknessMm: 1.7 } })
+    expect(values['band.widthTop']).toBe(2)
+    expect(values['band.thicknessTop']).toBe(1.7)
+  })
+
+  it('leaves room under the head for a flush-fit band', () => {
+    const spec = { ...ring([{ role: 'center', carat: 1 }]), style: ['minimal', 'wedding set'] }
+    const { values } = suggestParameters(spec)
+    expect(values['center.elevation'] as number).toBeGreaterThanOrEqual(
+      (values['band.thicknessTop'] as number) + 0.3 - 1e-9,
+    )
+  })
+})
+
+describe('clusters', () => {
+  it('do not count polar-pattern petals as rivals to the hero', () => {
+    const spec = ring([{ role: 'center', widthMm: 4 }])
+    const { design } = suggestDesign(spec)
+    const daisy = applyOps(design, [
+      {
+        t: 'add',
+        node: {
+          id: 'petal',
+          kind: 'gem',
+          width: 3.6,
+          placement: { type: 'ringTop', shank: 'band', angle: 8, elevation: 2, spin: 0 },
+        },
+      },
+      {
+        t: 'add',
+        node: { id: 'petals', kind: 'pattern', sources: ['petal'], type: 'polar', count: 6 },
+      },
+    ]).design
+    expect(lintDesign(daisy, undefined, { spec }).map((f) => f.ruleId)).not.toContain(
+      'stones.oneHero',
+    )
   })
 })

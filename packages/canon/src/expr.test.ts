@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { add, clamp, evalExpr, iff, mul, printExpr, snap, v } from './expr'
+import { add, and, clamp, evalExpr, iff, mul, or, printExpr, snap, v } from './expr'
 
 describe('expr', () => {
   it('evaluates formulas over facts and is undefined when a fact is missing', () => {
@@ -9,6 +9,14 @@ describe('expr', () => {
     expect(evalExpr(e, {})).toBeUndefined()
     expect(evalExpr(snap(add(mul(0.1, v('W')), 0.6)), { W: 6.5 })).toBe(1.25)
     expect(evalExpr(iff(v('halo'), 1, 2), { halo: 0 })).toBe(2)
+  })
+
+  it('evaluates if, and and or lazily, so an untaken branch may use unknown facts', () => {
+    expect(evalExpr(iff(v('halo'), v('haloD'), 2), { halo: 0 })).toBe(2)
+    expect(evalExpr(iff(v('halo'), v('haloD'), 2), { halo: 1 })).toBeUndefined()
+    expect(evalExpr(and(v('halo'), v('haloD')), { halo: 0 })).toBe(0)
+    expect(evalExpr(or(v('halo'), v('haloD')), { halo: 1 })).toBe(1)
+    expect(evalExpr(and(v('halo'), v('haloD')), { halo: 1 })).toBeUndefined()
   })
 
   it('prints readably', () => {

@@ -3,7 +3,14 @@
  * (`style.<ruleId>`). Warnings and notes only: the kernel owns errors. A finding carries a fix
  * only where one clamp of one parameter resolves it.
  */
-import type { Archetype, Design, EvaluationSummary, Node, PieceSpecInput } from '@pave/schema'
+import {
+  type Archetype,
+  applyOps,
+  type Design,
+  type EvaluationSummary,
+  type Node,
+  type PieceSpecInput,
+} from '@pave/schema'
 import {
   bandFor,
   effectiveRules,
@@ -40,14 +47,46 @@ export function lintDesign(
   summary?: EvaluationSummary,
   o: LintOptions = {},
 ): CanonFinding[] {
+  const found = lintOnce(design, summary, o)
+  // A fix is offered only where it resolves its finding and raises no new warning anywhere,
+  // judged by applying it and linting again.
+  const before = new Set(found.map((f) => `${f.code}@${f.nodeId ?? ''}`))
+  return found.map((f) => {
+    if (!f.fix) return f
+    let ok = false
+    try {
+      const after = lintOnce(applyOps(design, f.fix.ops).design, summary, o)
+      ok = after.every(
+        (a) =>
+          !(a.ruleId === f.ruleId && a.nodeId === f.nodeId) &&
+          (a.level !== 'warning' || before.has(`${a.code}@${a.nodeId ?? ''}`)),
+      )
+    } catch {
+      ok = false
+    }
+    if (ok) return f
+    const { fix: _dropped, ...rest } = f
+    return rest
+  })
+}
+
+function lintOnce(
+  design: Design,
+  summary: EvaluationSummary | undefined,
+  o: LintOptions,
+): CanonFinding[] {
   // A parsed spec always carries `style: []`, so the spec's words and the intent's tags merge.
-  const words =
-    o.styles ?? [...new Set([...(o.spec?.style ?? []), ...(o.intent?.synthesis?.styleTags ?? [])])]
+  const words = o.styles ?? [
+    ...new Set([...(o.spec?.style ?? []), ...(o.intent?.synthesis?.styleTags ?? [])]),
+  ]
   const archetype =
     o.archetype ?? o.spec?.archetype ?? o.intent?.synthesis?.archetype ?? inferArchetype(design)
   const waived = new Set([...(o.waived ?? []), ...(o.intent?.waivers ?? []).map((w) => w.ruleId)])
   const ctx = { kind: design.kind, archetype, words }
-  const piece = pieceFacts(design, { styles: words, ...(o.pairWith ? { pairWith: o.pairWith } : {}) })
+  const piece = pieceFacts(design, {
+    styles: words,
+    ...(o.pairWith ? { pairWith: o.pairWith } : {}),
+  })
   const out: CanonFinding[] = []
 
   const rules = effectiveRules(matchStyles(words))

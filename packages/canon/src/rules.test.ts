@@ -1,9 +1,9 @@
-import { describe, expect, it } from 'vitest'
 import { applyOps } from '@pave/schema'
+import { describe, expect, it } from 'vitest'
+import { CAVEATS } from './caveats'
 import { contexts, evaluations } from './corpus.testkit'
 import { lintDesign } from './lint'
 import { MEASURES } from './measures'
-import { CAVEATS } from './caveats'
 import { CaveatSchema, RuleSchema, StyleGuideSchema } from './model'
 import { fieldInfo, patchFor, readPath } from './paths'
 import { RULE_FAMILIES, RULES } from './rules/index'
@@ -99,7 +99,7 @@ describe('rules', () => {
  * fix and expect the finding gone and no new warning on the design.
  */
 describe('each lintable rule trips and its fix clears it', () => {
-  const firsts = new Map<string, (typeof evals)[number]>()
+  const byRule = new Map<string, (typeof evals)[number][]>()
   for (const e of evals)
     if (
       e.node &&
@@ -107,44 +107,59 @@ describe('each lintable rule trips and its fix clears it', () => {
       e.rule.severity !== 'default' &&
       e.rule.paths.length === 1 &&
       e.lint &&
-      readPath(e.node, e.rule.paths[0]!) !== undefined &&
-      !firsts.has(e.rule.id)
+      readPath(e.node, e.rule.paths[0]!) !== undefined
     )
-      firsts.set(e.rule.id, e)
-  it('covers the lintable rules', () => expect(firsts.size).toBeGreaterThan(50))
-  for (const [id, e] of firsts)
+      byRule.set(e.rule.id, [...(byRule.get(e.rule.id) ?? []), e])
+  it('covers the lintable rules', () => expect(byRule.size).toBeGreaterThan(50))
+  /** Tries one context; returns how many thresholds it could cross. */
+  const attempt = (id: string, e: (typeof evals)[number]): number => {
+    const path = e.rule.paths[0]!
+    const info = fieldInfo(path)!
+    const o = {
+      archetype: e.item.archetype,
+      styles: e.item.styles,
+      ...(e.item.pairWith ? { pairWith: e.item.pairWith } : {}),
+    }
+    const step = info.type === 'integer' ? 1 : Math.max(0.05, info.step ?? 0.01)
+    let tried = 0
+    for (const past of [e.lint!.hi + step, e.lint!.lo - step]) {
+      if (!Number.isFinite(past)) continue
+      if (past < (info.minimum ?? -Infinity) || past > (info.maximum ?? Infinity)) continue
+      const value = info.type === 'integer' ? Math.round(past) : Number(past.toFixed(4))
+      const bad = applyOps(e.item.design, [
+        { t: 'update', id: e.node!.id, patch: patchFor(e.node!, path, value) },
+      ]).design
+      const found = lintDesign(bad, undefined, o).find(
+        (f) => f.ruleId === id && f.nodeId === e.node!.id,
+      )
+      // Moving one parameter can change the facts its own threshold reads (a band that sets
+      // its own wall); a threshold that moves with the value cannot be crossed this way.
+      if (!found) continue
+      tried++
+      if (!found.fix) continue
+      const before = new Set(lintDesign(bad, undefined, o).map((f) => f.code))
+      const fixed = applyOps(bad, found.fix.ops).design
+      const after = lintDesign(fixed, undefined, o)
+      expect(
+        after.map((f) => f.ruleId),
+        `${id} fix ${found.fix.label}`,
+      ).not.toContain(id)
+      const added = after.filter((f) => f.level === 'warning' && !before.has(f.code))
+      expect(
+        added.map((f) => f.message),
+        `${id} fix ${found.fix.label}`,
+      ).toEqual([])
+    }
+    return tried
+  }
+  for (const [id, list] of byRule)
     it(id, () => {
-      const path = e.rule.paths[0]!
-      const info = fieldInfo(path)!
-      const o = {
-        archetype: e.item.archetype,
-        styles: e.item.styles,
-        ...(e.item.pairWith ? { pairWith: e.item.pairWith } : {}),
-      }
-      const step = info.type === 'integer' ? 1 : Math.max(0.05, info.step ?? 0.01)
-      const before = new Set(lintDesign(e.item.design, undefined, o).map((f) => f.code))
+      // The first context where the schema range reaches past a threshold.
       let tried = 0
-      for (const past of [e.lint!.hi + step, e.lint!.lo - step]) {
-        if (!Number.isFinite(past)) continue
-        if (past < (info.minimum ?? -Infinity) || past > (info.maximum ?? Infinity)) continue
-        const value = info.type === 'integer' ? Math.round(past) : Number(past.toFixed(4))
-        const bad = applyOps(e.item.design, [
-          { t: 'update', id: e.node!.id, patch: patchFor(e.node!, path, value) },
-        ]).design
-        const found = lintDesign(bad, undefined, o).find(
-          (f) => f.ruleId === id && f.nodeId === e.node!.id,
-        )
-        // Moving one parameter can change the facts its own threshold reads (a band that sets
-        // its own wall); a threshold that moves with the value cannot be crossed this way.
-        if (!found) continue
-        tried++
-        if (!found.fix) continue
-        const fixed = applyOps(bad, found.fix.ops).design
-        const after = lintDesign(fixed, undefined, o)
-        expect(after.map((f) => f.ruleId), `${id} fix ${found.fix.label}`).not.toContain(id)
-        const added = after.filter((f) => f.level === 'warning' && !before.has(f.code))
-        expect(added.map((f) => f.message), `${id} fix ${found.fix.label}`).toEqual([])
+      for (const e of list) {
+        tried += attempt(id, e)
+        if (tried) break
       }
-      expect(tried, `${id} on ${e.item.id}: no threshold could be crossed`).toBeGreaterThan(0)
+      expect(tried, `${id}: no threshold could be crossed`).toBeGreaterThan(0)
     })
 })

@@ -47,7 +47,8 @@ export const ICED_RULES = [
   rule({
     id: 'iced.metalUnder',
     title: 'Metal under the pavé',
-    applies: { nodeKind: 'pave' },
+    // Outline hosts; a sculpt's metal under its stones is its shell wall (iced.hollow).
+    applies: { nodeKind: 'pave', when: gt(T, 0) },
     paths: ['vectorBody.thickness', 'pave.sizeMax'],
     measure: 'metalUnderPave',
     band: band(add(underMin, 0.4), underMin, max(T, add(underMin, 0.4))),

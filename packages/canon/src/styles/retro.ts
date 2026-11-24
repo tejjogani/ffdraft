@@ -23,10 +23,22 @@ export const RETRO = guide({
     settings: ['heavy claws 1.3–2.0', 'low bezel above 12 mm'],
   },
   recipes: [
-    { path: 'ringShank.widthTop', band: band(7, 6, 10), applies: { archetypes: [...HEADED], when: BIG_CENTRE } },
-    { path: 'ringShank.thicknessTop', band: band(2.5, 2.3, 2.8), applies: { archetypes: [...HEADED], when: BIG_CENTRE } },
+    {
+      path: 'ringShank.widthTop',
+      band: band(7, 6, 10),
+      applies: { archetypes: [...HEADED], when: BIG_CENTRE },
+    },
+    {
+      path: 'ringShank.thicknessTop',
+      band: band(2.5, 2.3, 2.8),
+      applies: { archetypes: [...HEADED], when: BIG_CENTRE },
+    },
     { path: 'gem.width', band: band(11, 10, 14), note: 'emerald-cut aquamarine or citrine' },
-    { path: 'setting.prongDiameter', band: band(1.5, 1.3, 2.0), applies: { archetypes: [...HEADED], when: BIG_CENTRE } },
+    {
+      path: 'setting.prongDiameter',
+      band: band(1.5, 1.3, 2.0),
+      applies: { archetypes: [...HEADED], when: BIG_CENTRE },
+    },
   ],
   overrides: [
     { ruleId: 'ring.solitaire.bandWidth', band: band(7, 6, 10), when: BIG_CENTRE },
