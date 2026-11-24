@@ -101,4 +101,8 @@ ALTER TABLE "render_job" ADD CONSTRAINT "render_job_scene_id_render_scene_id_fk"
 ALTER TABLE "thread" ADD CONSTRAINT "thread_scene_id_render_scene_id_fk" FOREIGN KEY ("scene_id") REFERENCES "public"."render_scene"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "agent_message_seq_idx" ON "agent_message" USING btree ("thread_id","seq");--> statement-breakpoint
 CREATE UNIQUE INDEX "agent_message_client_idx" ON "agent_message" USING btree ("org_id","client_message_id");--> statement-breakpoint
+-- Steps used to accept any tool call id; keep the first step per (run, tool call) as that call.
+UPDATE "agent_step" AS s SET "tool_call_id" = NULL FROM (
+	SELECT "id", row_number() OVER (PARTITION BY "run_id", "tool_call_id" ORDER BY "idx") AS "n" FROM "agent_step" WHERE "tool_call_id" IS NOT NULL
+) AS d WHERE s."id" = d."id" AND d."n" > 1;--> statement-breakpoint
 CREATE UNIQUE INDEX "agent_step_tool_call_idx" ON "agent_step" USING btree ("run_id","tool_call_id");

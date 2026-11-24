@@ -41,6 +41,6 @@ export const ringSurfaceFrame = (theta: number, a: number, r: number): Frame => 
 
 /** Wraps an angle to (−π, π]. */
 export const wrapAngle = (theta: number): number => {
-  const t = ((theta + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI
+  const t = ((((theta + Math.PI) % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) - Math.PI
   return t === -Math.PI ? Math.PI : t
 }

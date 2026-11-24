@@ -1,17 +1,16 @@
 /** A single stone: nominal or measured dimensions, placed on a band, on a surface, or freely. */
-import { GEM_CUTS, type GemCut, type GemDims, type NodeOf, gemDims } from '@pave/schema'
-import { type BuildContext, type NodeResult, type Stone, defineFeature } from '../core'
+import { GEM_CUTS, type GemCut, type GemDims, gemDims, type NodeOf } from '@pave/schema'
+import { type BuildContext, defineFeature, type NodeResult, type Stone } from '../core'
 import { seatCutter } from '../gems/cutter'
 import { gemRatio, gemUnit } from '../gems/index'
 import { ringSurfaceFrame } from '../geometry/ring'
 import {
-  DEG,
-  type Frame,
-  WORLD,
   addScaled,
   clamp,
   cross,
+  DEG,
   dot,
+  type Frame,
   frameFromZ,
   fromFrame,
   normalize,
@@ -20,6 +19,7 @@ import {
   sub,
   toFrame,
   transformFrame,
+  WORLD,
 } from '../geometry/vec'
 import { RULES } from '../rules'
 import { type ShankData, shankData } from './ringShank'
@@ -121,7 +121,11 @@ function ringHost(shank: ShankData, local: Frame): StoneHost {
   }
 }
 
-function ringTopFrame(node: GemNode, dims: GemDims, ctx: BuildContext): { frame: Frame; host: StoneHost } {
+function ringTopFrame(
+  node: GemNode,
+  dims: GemDims,
+  ctx: BuildContext,
+): { frame: Frame; host: StoneHost } {
   const placement = node.placement as Extract<GemNode['placement'], { type: 'ringTop' }>
   const host = ctx.input(placement.shank)
   const shank = shankData(host)
@@ -151,7 +155,9 @@ function ringTopFrame(node: GemNode, dims: GemDims, ctx: BuildContext): { frame:
       at: [...addScaled(frame.origin, frame.z, -culetDepth(node.cut, dims))],
       fix: {
         label: `Raise the stone to ${RULES.culetClearance} mm above the finger`,
-        ops: [{ t: 'update', id: node.id, patch: { placement: { elevation: RULES.culetClearance } } }],
+        ops: [
+          { t: 'update', id: node.id, patch: { placement: { elevation: RULES.culetClearance } } },
+        ],
       },
     })
   return { frame, host: ringHost(shank, local) }
@@ -174,7 +180,9 @@ export const gem = defineFeature('gem', (node, ctx) => {
   const onRing = node.placement.type === 'ringTop' ? ringTopFrame(node, dims, ctx) : null
   const frame =
     onRing?.frame ??
-    (node.placement.type === 'surface' ? surfaceFrame(node, ctx) : frameFromZ(WORLD.origin, WORLD.z, WORLD.x))
+    (node.placement.type === 'surface'
+      ? surfaceFrame(node, ctx)
+      : frameFromZ(WORLD.origin, WORLD.z, WORLD.x))
   const stone: Stone = {
     cut: node.cut,
     stone: node.stone,
@@ -183,7 +191,12 @@ export const gem = defineFeature('gem', (node, ctx) => {
     role: 'center',
     setting: node.placement.type === 'surface' ? 'flush' : 'loose',
   }
-  if (node.lw !== undefined && node.lw !== 1 && Math.abs(node.lw - gemRatio(node.cut, node.lw)) > 1e-6 && !node.sourcing?.measured)
+  if (
+    node.lw !== undefined &&
+    node.lw !== 1 &&
+    Math.abs(node.lw - gemRatio(node.cut, node.lw)) > 1e-6 &&
+    !node.sourcing?.measured
+  )
     ctx.report({
       level: 'info',
       code: 'stone.ratio',
@@ -197,7 +210,15 @@ export const gem = defineFeature('gem', (node, ctx) => {
     // only needs its own shape removed, which leaves claws and bezel lips over the crown.
     cuts:
       ctx.detail === 'production'
-        ? [{ solid: seatCutter(stone, node.placement.type === 'surface' ? { open: dims.depth } : {}), targets: 'all' }]
+        ? [
+            {
+              solid: seatCutter(
+                stone,
+                node.placement.type === 'surface' ? { open: dims.depth } : {},
+              ),
+              targets: 'all',
+            },
+          ]
         : [],
   }
 })

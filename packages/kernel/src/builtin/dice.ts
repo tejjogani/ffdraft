@@ -15,11 +15,36 @@ const PIP_DEPTH = 0.45
 /** Pip positions on a face, in face units −1…1. */
 const PIPS: Record<number, [number, number][]> = {
   1: [[0, 0]],
-  2: [[-1, -1], [1, 1]],
-  3: [[-1, -1], [0, 0], [1, 1]],
-  4: [[-1, -1], [1, -1], [-1, 1], [1, 1]],
-  5: [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]],
-  6: [[-1, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [1, 1]],
+  2: [
+    [-1, -1],
+    [1, 1],
+  ],
+  3: [
+    [-1, -1],
+    [0, 0],
+    [1, 1],
+  ],
+  4: [
+    [-1, -1],
+    [1, -1],
+    [-1, 1],
+    [1, 1],
+  ],
+  5: [
+    [-1, -1],
+    [1, -1],
+    [0, 0],
+    [-1, 1],
+    [1, 1],
+  ],
+  6: [
+    [-1, -1],
+    [1, -1],
+    [-1, 0],
+    [1, 0],
+    [-1, 1],
+    [1, 1],
+  ],
 }
 
 /** Faces: outward normal and the two in-face axes. */
@@ -39,7 +64,10 @@ export function dice(): Manifold {
   // Rounded cube: the hull of eight corner spheres.
   const corner = mf.Manifold.sphere(r, 48)
   const corners: Manifold[] = []
-  for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) corners.push(corner.translate([x * (h - r), y * (h - r), z * (h - r)]))
+  for (const x of [-1, 1])
+    for (const y of [-1, 1])
+      for (const z of [-1, 1])
+        corners.push(corner.translate([x * (h - r), y * (h - r), z * (h - r)]))
   const cube = mf.Manifold.hull(corners)
   const pipRadius = SIZE * PIP
   const pip = mf.Manifold.sphere(pipRadius, 32)
@@ -47,7 +75,12 @@ export function dice(): Manifold {
   const spread = SIZE * 0.26
   for (const face of FACES)
     for (const [a, b] of PIPS[face.value]!) {
-      const centre: Vec3 = [0, 1, 2].map((k) => face.n[k]! * (h + pipRadius * (1 - 2 * PIP_DEPTH)) + face.u[k]! * a * spread + face.v[k]! * b * spread) as unknown as Vec3
+      const centre: Vec3 = [0, 1, 2].map(
+        (k) =>
+          face.n[k]! * (h + pipRadius * (1 - 2 * PIP_DEPTH)) +
+          face.u[k]! * a * spread +
+          face.v[k]! * b * spread,
+      ) as unknown as Vec3
       pips.push(pip.translate([centre[0], centre[1], centre[2]]))
     }
   const tool = mf.Manifold.union(pips)

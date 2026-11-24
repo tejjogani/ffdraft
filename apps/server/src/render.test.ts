@@ -321,6 +321,20 @@ describe('brand models and on-model images', () => {
     expect((await api.call('models.update', { id: model.id, status: 'approved' })).version).toBe(2)
   })
 
+  it('changes only the card fields a partial edit gives', async () => {
+    const full = {
+      ...card,
+      monkTone: 7,
+      undertone: 'warm' as const,
+      eyes: 'brown',
+      marks: 'freckles',
+      handLengthMm: 180,
+    }
+    const model = await api.call('models.create', { name: 'Ada', card: full, attestedSynthetic: true })
+    const edited = await api.call('models.update', { id: model.id, card: { hair: 'braids' } })
+    expect(edited.card).toEqual({ ...full, hair: 'braids' })
+  })
+
   it('makes on-model images from an approved model, and exports only checked ones', async () => {
     const piece = await api.call('pieces.create', { templateId: 'solitaire' })
     const draft = await api.call('models.create', { name: 'Draft', card, attestedSynthetic: true })

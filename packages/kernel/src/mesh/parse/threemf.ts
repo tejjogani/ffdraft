@@ -31,8 +31,26 @@ function attributes(text: string): Record<string, string> {
 function parseTransform(value: string | undefined): Mat4 {
   if (!value) return IDENTITY
   const m = value.trim().split(/\s+/).map(Number)
-  if (m.length !== 12 || m.some((v) => !Number.isFinite(v))) throw new Error('The 3MF file has a malformed transform')
-  return [m[0]!, m[1]!, m[2]!, 0, m[3]!, m[4]!, m[5]!, 0, m[6]!, m[7]!, m[8]!, 0, m[9]!, m[10]!, m[11]!, 1]
+  if (m.length !== 12 || m.some((v) => !Number.isFinite(v)))
+    throw new Error('The 3MF file has a malformed transform')
+  return [
+    m[0]!,
+    m[1]!,
+    m[2]!,
+    0,
+    m[3]!,
+    m[4]!,
+    m[5]!,
+    0,
+    m[6]!,
+    m[7]!,
+    m[8]!,
+    0,
+    m[9]!,
+    m[10]!,
+    m[11]!,
+    1,
+  ]
 }
 
 export function parse3mf(bytes: Uint8Array): IndexedTriangles {
@@ -62,11 +80,14 @@ export function parse3mf(bytes: Uint8Array): IndexedTriangles {
     if (name === 'object') {
       current = { vertices: [], triangles: [], components: [] }
       objects.set(a.id ?? '', current)
-    } else if (name === 'vertex' && current) current.vertices.push(Number(a.x), Number(a.y), Number(a.z))
-    else if (name === 'triangle' && current) current.triangles.push(Number(a.v1), Number(a.v2), Number(a.v3))
+    } else if (name === 'vertex' && current)
+      current.vertices.push(Number(a.x), Number(a.y), Number(a.z))
+    else if (name === 'triangle' && current)
+      current.triangles.push(Number(a.v1), Number(a.v2), Number(a.v3))
     else if (name === 'component' && current)
       current.components.push({ id: a.objectid ?? '', transform: parseTransform(a.transform) })
-    else if (name === 'item') items.push({ id: a.objectid ?? '', transform: parseTransform(a.transform) })
+    else if (name === 'item')
+      items.push({ id: a.objectid ?? '', transform: parseTransform(a.transform) })
   }
   TAG.lastIndex = 0
 
@@ -91,11 +112,14 @@ export function parse3mf(bytes: Uint8Array): IndexedTriangles {
         throw new Error('The 3MF file has a triangle that refers to a missing vertex')
       indices.push(base + a, base + (flip ? c : b), base + (flip ? b : c))
     }
-    for (const component of object.components) emit(component.id, multiply(matrix, component.transform), depth + 1)
+    for (const component of object.components)
+      emit(component.id, multiply(matrix, component.transform), depth + 1)
   }
-  const build = items.length > 0 ? items : [...objects.keys()].map((id) => ({ id, transform: IDENTITY }))
+  const build =
+    items.length > 0 ? items : [...objects.keys()].map((id) => ({ id, transform: IDENTITY }))
   for (const item of build) emit(item.id, item.transform, 0)
   if (indices.length === 0) throw new Error('The 3MF file contains no triangle meshes')
-  if (positions.some((x) => !Number.isFinite(x))) throw new Error('The 3MF file has non-numeric vertex coordinates')
+  if (positions.some((x) => !Number.isFinite(x)))
+    throw new Error('The 3MF file has non-numeric vertex coordinates')
   return { positions: Float32Array.from(positions), indices: Uint32Array.from(indices) }
 }

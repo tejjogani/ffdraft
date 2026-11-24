@@ -1,4 +1,4 @@
-import { TEMPLATES, applyOps, buildDesign } from '@pave/schema'
+import { applyOps, buildDesign, TEMPLATES } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
 import { createKernelClient } from './client'
 import { Evaluator } from './evaluate/evaluate'
@@ -9,9 +9,16 @@ import { CORE_FEATURES } from './testing/core'
 import { serveKernel } from './workerHost'
 
 /** Two ends of an in-memory channel that clones messages like a real Worker boundary. */
-function channel(): { client: Port<Request, Response>; worker: Port<Response, Request>; sent: Response[] } {
+function channel(): {
+  client: Port<Request, Response>
+  worker: Port<Response, Request>
+  sent: Response[]
+} {
   const sent: Response[] = []
-  const client: Port<Request, Response> = { onmessage: null, postMessage: (m) => queueMicrotask(() => worker.onmessage?.({ data: structuredClone(m) })) }
+  const client: Port<Request, Response> = {
+    onmessage: null,
+    postMessage: (m) => queueMicrotask(() => worker.onmessage?.({ data: structuredClone(m) })),
+  }
   const worker: Port<Response, Request> = {
     onmessage: null,
     postMessage: (m, transfer) => {
@@ -63,22 +70,42 @@ describe('worker protocol', () => {
     expect((await local.evaluate(solitaire)).parts[0]!.mesh.positions.length).toBeGreaterThan(0)
 
     // Edit the head: the band's buffers are not sent again, and the client reuses its copy.
-    const edited = applyOps(solitaire, [{ t: 'update', id: 'head', patch: { prongCount: 6 } }]).design
+    const edited = applyOps(solitaire, [
+      { t: 'update', id: 'head', patch: { prongCount: 6 } },
+    ]).design
     const second = await client.evaluate(edited)
     const last = sent[sent.length - 1] as Extract<Response, { type: 'evaluated' }>
     const wire = Object.fromEntries(last.evaluation.parts.map((p) => [p.id, p]))
     expect(wire.band!.mesh).toBeUndefined()
     expect(wire.head!.mesh).toBeDefined()
     expect(last.evaluation.gemMeshes).toEqual({})
-    expect(second.parts.find((p) => p.id === 'band')!.mesh).toBe(first.parts.find((p) => p.id === 'band')!.mesh)
+    expect(second.parts.find((p) => p.id === 'band')!.mesh).toBe(
+      first.parts.find((p) => p.id === 'band')!.mesh,
+    )
     expect(second.gemMeshes).toEqual(first.gemMeshes)
-    expect(second.parts.find((p) => p.id === 'head')!.rev).not.toBe(first.parts.find((p) => p.id === 'head')!.rev)
+    expect(second.parts.find((p) => p.id === 'head')!.rev).not.toBe(
+      first.parts.find((p) => p.id === 'head')!.rev,
+    )
 
     // Production parts (fused per alloy) cross the boundary too, with nothing but plain data.
     const production = await client.evaluate(edited, { detail: 'production' })
     expect(production.parts).toHaveLength(1)
     expect(Object.keys(production.parts[0]!).sort()).toEqual(
-      ['areaMm2', 'bounds', 'edges', 'exact', 'finish', 'id', 'material', 'mesh', 'name', 'nodeId', 'plating', 'rev', 'volumeMm3'].sort(),
+      [
+        'areaMm2',
+        'bounds',
+        'edges',
+        'exact',
+        'finish',
+        'id',
+        'material',
+        'mesh',
+        'name',
+        'nodeId',
+        'plating',
+        'rev',
+        'volumeMm3',
+      ].sort(),
     )
     local.dispose()
   })

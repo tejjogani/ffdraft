@@ -7,7 +7,7 @@
 import type { Manifold } from 'manifold-3d'
 import type { Quality, Stone } from '../../core'
 import { seatCutter, seatHole } from '../../gems/cutter'
-import { WORLD, frameMatrix } from '../../geometry/vec'
+import { frameMatrix, WORLD } from '../../geometry/vec'
 import { RULES } from '../../rules'
 import { runtime } from '../../runtime/index'
 import type { Bead } from './beads'
@@ -30,7 +30,9 @@ export function seatCutters(stones: readonly Stone[], spec: SeatSpec, quality: Q
         unit = unitSeat({ ...stone, frame: WORLD }, spec, quality)
         units.set(key, unit)
       }
-      placed.push(unit.transform(frameMatrix(stone.frame) as unknown as Parameters<Manifold['transform']>[0]))
+      placed.push(
+        unit.transform(frameMatrix(stone.frame) as unknown as Parameters<Manifold['transform']>[0]),
+      )
     }
     return mf.Manifold.union(placed)
   } finally {
@@ -67,12 +69,21 @@ export function beadSolids(beads: readonly Bead[], quality: Quality): Manifold {
       const key = Math.round(b.diameter * 1000)
       let unit = units.get(key)
       if (!unit) {
-        const segments = Math.max(12, Math.min(32, Math.ceil(Math.PI / Math.acos(Math.max(0, 1 - quality.chord / r)))))
+        const segments = Math.max(
+          12,
+          Math.min(32, Math.ceil(Math.PI / Math.acos(Math.max(0, 1 - quality.chord / r)))),
+        )
         unit = mf.Manifold.sphere(r, segments)
         units.set(key, unit)
       }
       const lift = 0.2 * b.diameter
-      placed.push(unit.translate([b.position[0] + b.normal[0] * lift, b.position[1] + b.normal[1] * lift, b.position[2] + b.normal[2] * lift]))
+      placed.push(
+        unit.translate([
+          b.position[0] + b.normal[0] * lift,
+          b.position[1] + b.normal[1] * lift,
+          b.position[2] + b.normal[2] * lift,
+        ]),
+      )
     }
     return mf.Manifold.union(placed)
   } finally {

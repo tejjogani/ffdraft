@@ -58,7 +58,9 @@ export function orientOutward(mesh: IndexedTriangles): { mesh: IndexedTriangles;
   for (let t = 0; t < triangles; t++) members[id[t]!]!.push(t)
   for (const list of members) {
     const sub = new Uint32Array(list.length * 3)
-    list.forEach((t, i) => sub.set(indices.subarray(t * 3, t * 3 + 3), i * 3))
+    list.forEach((t, i) => {
+      sub.set(indices.subarray(t * 3, t * 3 + 3), i * 3)
+    })
     if (meshVolume({ positions: mesh.positions, indices: sub }) < 0)
       for (const t of list) {
         flip(indices, t)

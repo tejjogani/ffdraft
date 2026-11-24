@@ -4,7 +4,15 @@ import { describe, expect, it } from 'vitest'
 import { blur, decodeImage, luminanceHeights } from './raster'
 
 /** Minimal PNG writer: one IDAT, the given filter on every row. */
-function png(width: number, height: number, type: number, depth: number, rows: Uint8Array[], extra: [string, Uint8Array][] = [], filter = 0): Uint8Array {
+function png(
+  width: number,
+  height: number,
+  type: number,
+  depth: number,
+  rows: Uint8Array[],
+  extra: [string, Uint8Array][] = [],
+  filter = 0,
+): Uint8Array {
   const chunk = (name: string, body: Uint8Array) => {
     const out = new Uint8Array(12 + body.length)
     const view = new DataView(out.buffer)
@@ -25,7 +33,13 @@ function png(width: number, height: number, type: number, depth: number, rows: U
     raw.set(r, at)
     at += r.length
   }
-  const parts = [Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), ...extra.map(([n, b]) => chunk(n, b)), chunk('IDAT', zlibSync(raw)), chunk('IEND', new Uint8Array())]
+  const parts = [
+    Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    chunk('IHDR', ihdr),
+    ...extra.map(([n, b]) => chunk(n, b)),
+    chunk('IDAT', zlibSync(raw)),
+    chunk('IEND', new Uint8Array()),
+  ]
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0))
   at = 0
   for (const p of parts) {
@@ -46,8 +60,20 @@ describe('height-map images', () => {
     const deep = decodeImage(png(1, 1, 0, 16, [Uint8Array.from([0x80, 0x00])]))
     expect(deep.rgba[0]).toBeCloseTo(0x8000 / 65535, 6)
     const bits = decodeImage(png(4, 1, 0, 2, [Uint8Array.from([0b00011011])]))
-    ;[0, 1 / 3, 2 / 3, 1].forEach((v, i) => expect(bits.rgba[i * 4]).toBeCloseTo(v, 6))
-    const palette = decodeImage(png(2, 1, 3, 8, [Uint8Array.from([1, 0])], [['PLTE', Uint8Array.from([10, 20, 30, 255, 255, 255])], ['tRNS', Uint8Array.from([0])]]))
+    for (const [i, v] of [0, 1 / 3, 2 / 3, 1].entries()) expect(bits.rgba[i * 4]).toBeCloseTo(v, 6)
+    const palette = decodeImage(
+      png(
+        2,
+        1,
+        3,
+        8,
+        [Uint8Array.from([1, 0])],
+        [
+          ['PLTE', Uint8Array.from([10, 20, 30, 255, 255, 255])],
+          ['tRNS', Uint8Array.from([0])],
+        ],
+      ),
+    )
     expect(palette.rgba[0]).toBe(1)
     expect(palette.rgba[7]).toBe(0)
   })
@@ -55,7 +81,9 @@ describe('height-map images', () => {
   it('reverses every scanline filter', () => {
     // Paeth (4) and Up (2) on a 2×2 image; decoding must reproduce the raw values.
     for (const filter of [1, 2, 3, 4]) {
-      const image = decodeImage(png(2, 2, 0, 8, [Uint8Array.from([10, 20]), Uint8Array.from([30, 40])], [], filter))
+      const image = decodeImage(
+        png(2, 2, 0, 8, [Uint8Array.from([10, 20]), Uint8Array.from([30, 40])], [], filter),
+      )
       expect(image.rgba.length).toBe(16)
     }
     const up = decodeImage(png(1, 2, 0, 8, [Uint8Array.from([100]), Uint8Array.from([5])], [], 2))

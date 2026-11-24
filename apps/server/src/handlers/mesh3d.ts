@@ -5,21 +5,15 @@ import * as t from '../db/schema'
 import { badRequest, conflict, notFound } from '../errors'
 import { createId } from '../ids'
 import { getMeshJob, getPiece } from '../lookups'
-import {
-  isTerminal,
-  jobHandle,
-  LIVE_STATUSES,
-  publishJob,
-  serviceContext,
-} from '../service-context'
-import type { MeshJobPatch } from '../services'
-import { assertBudget, fromMicros, toMicros } from '../usage'
+import { meshHandle, stopJob, submitJob, updateMeshJob } from '../jobs'
+import { isTerminal, publishJob, serviceContext } from '../service-context'
+import { assertBudget, fromMicros } from '../usage'
 import { assertAttested } from './pieces'
 import type { HandlerGroup } from './types'
 
 type MeshRow = typeof t.meshJob.$inferSelect
 
-const toMeshJob = (r: MeshRow): MeshJob => ({
+export const toMeshJob = (r: MeshRow): MeshJob => ({
   id: r.id,
   pieceId: r.pieceId,
   status: r.status,
@@ -35,19 +29,6 @@ const toMeshJob = (r: MeshRow): MeshJob => ({
   createdAt: r.createdAt.toISOString(),
   finishedAt: r.finishedAt?.toISOString() ?? null,
 })
-
-/** Writes a job update unless the job has already settled; terminal states are sticky. */
-async function updateMeshJob(ctx: Ctx, id: string, { costUsd, ...patch }: MeshJobPatch) {
-  const [row] = await ctx.repo.meshJobs.update(
-    and(eq(t.meshJob.id, id), inArray(t.meshJob.status, LIVE_STATUSES))!,
-    {
-      ...patch,
-      ...(costUsd === undefined ? {} : { costMicros: costUsd === null ? null : toMicros(costUsd) }),
-      ...(isTerminal(patch.status) ? { finishedAt: new Date() } : {}),
-    },
-  )
-  return row
-}
 
 const announce = (ctx: Ctx, row: MeshRow) =>
   publishJob(ctx, { kind: 'mesh3d', id: row.id, pieceId: row.pieceId }, row)
@@ -90,13 +71,9 @@ export const mesh3d: HandlerGroup<'mesh3d'> = {
     })
     const job = toMeshJob(row)
     announce(ctx, row)
-    const handle = jobHandle<MeshJobPatch>(
-      ctx,
-      { kind: 'mesh3d', id: job.id, pieceId },
-      async (patch) => updateMeshJob(ctx, job.id, patch),
-    )
+    const handle = meshHandle(ctx, job)
     const images = await Promise.all(request.imageAssetIds.map((id) => sctx.readAsset(id)))
-    await service.submit(job, images, handle, sctx)
+    await submitJob(handle, () => service.submit(job, images, handle, sctx))
     return job
   },
 
@@ -115,7 +92,11 @@ export const mesh3d: HandlerGroup<'mesh3d'> = {
     const current = await getMeshJob(ctx, id)
     if (isTerminal(current.status)) throw conflict(`This job is already ${current.status}`)
     if (ctx.services.isConfigured('mesh3d'))
-      await ctx.services.get('mesh3d').cancel(id, serviceContext(ctx))
+      await stopJob(id, () =>
+        ctx.services
+          .get('mesh3d')
+          .cancel(id, serviceContext(ctx), { providerJobId: current.providerJobId }),
+      )
     const row = await updateMeshJob(ctx, id, { status: 'canceled' })
     if (!row) throw conflict('This job finished before it could be canceled')
     announce(ctx, row)

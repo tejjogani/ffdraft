@@ -36,13 +36,20 @@ export function createKernel(): LocalKernel {
     },
     scene,
     evaluate: async (design, options) => (await scene(design, options)).evaluation,
-    async export(design: Design, format: ExportFormat, options: ExportOptions = {}): Promise<ExportResult> {
+    async export(
+      design: Design,
+      format: ExportFormat,
+      options: ExportOptions = {},
+    ): Promise<ExportResult> {
       const exporter = exporters.get(format)
       if (!exporter)
         throw new Error(
           `Export to ${format} is not available in this build (available: ${[...exporters.keys()].join(', ') || 'none'})`,
         )
-      return exporter.run(await scene(design, { detail: exporter.detail, assets: options.assets }), options)
+      return exporter.run(
+        await scene(design, { detail: exporter.detail, assets: options.assets }),
+        options,
+      )
     },
     dispose: () => evaluator.dispose(),
   }

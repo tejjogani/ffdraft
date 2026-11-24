@@ -1,8 +1,10 @@
 /** Round pins with a domed head: pavé beads, small claws between stones, posts. */
-import type { Solid } from '../core'
+import { draw, type Shape3D } from 'replicad'
+import { lazySolid, type Solid } from '../core'
+import { transformShape } from '../solid/occt'
 import { circleLoop } from './loop'
-import { placeLoop, poleSection, sweepSolid } from './sweep'
-import { type Vec3, addScaled, frameFromZ } from './vec'
+import { placeLoop, poleSection, sweepRecipe } from './sweep'
+import { addScaled, frameFromZ, frameMatrix, type Vec3 } from './vec'
 
 /**
  * A round pin from `base` along `axis`: a straight shank of `length` mm topped by a hemisphere
@@ -18,5 +20,24 @@ export function pinSolid(base: Vec3, axis: Vec3, radius: number, length: number)
   }
   sections.push(poleSection(addScaled(base, frame.z, length + radius), 4))
   // The shank is straight: crease the sweep where the dome starts so it stays a true cylinder.
-  return sweepSolid({ closed: false, sections, kinks: [1] })
+  const sweep = sweepRecipe({ closed: false, sections, kinks: [1] })
+  return lazySolid({
+    ...sweep,
+    // A design can carry hundreds of pins. As a turned profile each is three analytic faces
+    // (disc, cylinder, sphere) — a fraction of the STEP size of a NURBS sweep.
+    brep: () => {
+      const d = Math.SQRT1_2 * radius
+      const profile = draw([0, 0])
+        .lineTo([radius, 0])
+        .lineTo([radius, length])
+        .threePointsArcTo([0, length + radius], [d, length + d])
+        .close()
+      const turned = profile.sketchOnPlane('XZ').revolve([0, 0, 1]) as Shape3D
+      try {
+        return transformShape(turned, frameMatrix(frame))
+      } finally {
+        turned.delete()
+      }
+    },
+  })
 }

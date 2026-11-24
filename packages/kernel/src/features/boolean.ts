@@ -1,10 +1,19 @@
 /** Combine bodies: union, subtract or intersect. The operands' own bodies are replaced by the result. */
-import { type BuildContext, type NodeResult, type Solid, defineFeature, intersect, subtract, union } from '../core'
+import {
+  type BuildContext,
+  defineFeature,
+  intersect,
+  type NodeResult,
+  type Solid,
+  subtract,
+  union,
+} from '../core'
 
 /** A node's metal as one solid. Stays exact when the node has a single exact body. */
 function solidOf(result: NodeResult, ctx: BuildContext): Solid {
   const solids = result.bodies.map((b) => b.solid)
-  if (solids.length === 0) throw new Error(`“${result.node.name ?? result.id}” has no solid to combine`)
+  if (solids.length === 0)
+    throw new Error(`“${result.node.name ?? result.id}” has no solid to combine`)
   return solids.length === 1 ? solids[0]! : union(solids, { prefer: 'mesh', quality: ctx.quality })
 }
 
@@ -15,7 +24,10 @@ export const booleanFeature = defineFeature('boolean', (node, ctx) => {
   if (!first) throw new Error('the target has no solid')
   // Interactive edits use meshes; production tries the exact B-rep first so the result can be
   // exported as NURBS, and falls back to meshes if the kernel cannot do it.
-  const options = { prefer: ctx.detail === 'draft' ? 'mesh' : 'exact', quality: ctx.quality } as const
+  const options = {
+    prefer: ctx.detail === 'draft' ? 'mesh' : 'exact',
+    quality: ctx.quality,
+  } as const
   const operands = tools.map((t) => solidOf(t, ctx))
   const base = solidOf(target, ctx)
   const solid =

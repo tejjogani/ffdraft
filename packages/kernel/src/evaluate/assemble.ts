@@ -12,20 +12,21 @@ import {
   type MetalSpec,
   type NodeResult,
   type Quality,
+  runtime,
   type ScenePart,
   type Solid,
-  runtime,
   solidFromManifold,
 } from '../core'
 import {
-  type IndexedTriangles,
   boundsOfPositions,
   boundsOverlap,
+  type IndexedTriangles,
   mergeTessellations,
   meshVolume,
+  separateTouching,
   unionBounds,
 } from '../solid/meshing'
-import { manifoldFromTriangles } from '../solid/solid'
+import { manifoldFromTriangles, trianglesFromManifold } from '../solid/solid'
 import type { Bounds, Part } from '../types'
 import { labelOf } from './build'
 import { hashString } from './hash'
@@ -41,7 +42,10 @@ interface Source {
 }
 
 /** Nodes whose output takes part in the piece: built, visible and not replaced by another node. */
-export function activeResults(design: Design, results: ReadonlyMap<string, NodeResult>): NodeResult[] {
+export function activeResults(
+  design: Design,
+  results: ReadonlyMap<string, NodeResult>,
+): NodeResult[] {
   const consumed = consumedBy(results)
   return [...results.values()].filter(
     (r) => r.status === 'ok' && r.node.visible && !consumed.has(r.id) && design.nodes[r.id],
@@ -50,7 +54,8 @@ export function activeResults(design: Design, results: ReadonlyMap<string, NodeR
 
 function consumedBy(results: ReadonlyMap<string, NodeResult>): Map<string, string> {
   const map = new Map<string, string>()
-  for (const r of results.values()) if (r.status === 'ok') for (const id of r.consumes) map.set(id, r.id)
+  for (const r of results.values())
+    if (r.status === 'ok') for (const id of r.consumes) map.set(id, r.id)
   return map
 }
 
@@ -66,7 +71,11 @@ function resolveTarget(
   return result?.status === 'ok' && result.node.visible && result.bodies.length > 0 ? result : null
 }
 
-const specOf = (b: MetalSpec): MetalSpec => ({ material: b.material, finish: b.finish, plating: b.plating })
+const specOf = (b: MetalSpec): MetalSpec => ({
+  material: b.material,
+  finish: b.finish,
+  plating: b.plating,
+})
 
 /**
  * Volume of overlapping solids fused together. The fuse runs on meshes; each exact solid's
@@ -129,7 +138,11 @@ export function assembleDraft(
     const sources: Source[] = result.bodies.map((body) => ({ nodeId: result.id, body }))
     for (const addition of result.additions) {
       const host = resolveTarget(addition.target, consumed, results)
-      if (host) sources.push({ nodeId: result.id, body: { solid: addition.solid, ...specOf(host.bodies[0]!) } })
+      if (host)
+        sources.push({
+          nodeId: result.id,
+          body: { solid: addition.solid, ...specOf(host.bodies[0]!) },
+        })
     }
     if (sources.length === 0) continue
     seen.add(result.id)
@@ -177,13 +190,22 @@ export function assembleDraft(
  * are far cheaper as a handful of multi-shell meshes. Shells in one mesh must not overlap, so
  * solids are batched greedily by bounding box.
  */
-function batch(solids: readonly Solid[], quality: Quality, own: (m: Manifold) => Manifold): Manifold[] {
+function batch(
+  solids: readonly Solid[],
+  quality: Quality,
+  own: (m: Manifold) => Manifold,
+): Manifold[] {
   if (solids.length <= 1) return solids.map((s) => s.manifold(quality))
   const out: Manifold[] = []
-  const batches: { members: { tris: IndexedTriangles; box: Bounds }[]; cells: Map<string, number[]> }[] = []
+  const batches: {
+    members: { tris: IndexedTriangles; box: Bounds }[]
+    cells: Map<string, number[]>
+  }[] = []
   const boxes = solids.map((solid) => boundsOfPositions(solid.triangles(quality).positions))
   // Hash grid sized to the typical solid, so overlap tests stay local with thousands of stones.
-  const sizes = boxes.map((b) => Math.max(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2])).sort((a, b) => a - b)
+  const sizes = boxes
+    .map((b) => Math.max(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]))
+    .sort((a, b) => a - b)
   const cell = Math.max(0.5, sizes[sizes.length >> 1]! * 1.5)
   solids.forEach((solid, n) => {
     const box = boxes[n]!
@@ -196,8 +218,11 @@ function batch(solids: readonly Solid[], quality: Quality, own: (m: Manifold) =>
     }
     const keys: string[] = []
     for (let x = lo[0]!; x <= hi[0]!; x++)
-      for (let y = lo[1]!; y <= hi[1]!; y++) for (let z = lo[2]!; z <= hi[2]!; z++) keys.push(`${x},${y},${z}`)
-    let home = batches.find((b) => !keys.some((k) => b.cells.get(k)?.some((i) => boundsOverlap(b.members[i]!.box, box))))
+      for (let y = lo[1]!; y <= hi[1]!; y++)
+        for (let z = lo[2]!; z <= hi[2]!; z++) keys.push(`${x},${y},${z}`)
+    let home = batches.find(
+      (b) => !keys.some((k) => b.cells.get(k)?.some((i) => boundsOverlap(b.members[i]!.box, box))),
+    )
     if (!home) {
       home = { members: [], cells: new Map() }
       batches.push(home)
@@ -240,6 +265,9 @@ interface MetalGroup {
 
 /** Shells smaller than this are numerical dust from booleans, not metal (mm³). */
 const DUST_MM3 = 1e-3
+const GENERAL_POSITION: [number, number, number] = [1.3e-4, 0.7e-4, 0.9e-4]
+/** Edges shorter than this are collapsed in the fused body (mm) — a tenth of the chord tolerance. */
+const SLIVER = 5e-4
 
 export function assembleProduction(
   design: Design,
@@ -256,7 +284,8 @@ export function assembleProduction(
     temporaries.push(m)
     return m
   }
-  const fuse = (list: readonly Manifold[]): Manifold => (list.length === 1 ? list[0]! : temp(mf.Manifold.union(list)))
+  const fuse = (list: readonly Manifold[]): Manifold =>
+    list.length === 1 ? list[0]! : temp(mf.Manifold.union(list))
 
   try {
     // Cutters: those aimed at specific nodes, and those that cut whatever metal they touch.
@@ -301,24 +330,62 @@ export function assembleProduction(
         group.sources.push({ nodeId: result.id, body: { solid: addition.solid, ...spec } })
       }
 
-    const seats = everywhere.length > 0 ? fuse(batch(everywhere, quality, temp)) : null
+    // Cutters and the metal they cut are built from the same outlines, so their edges often
+    // coincide exactly — which leaves bodies pinched along an edge. A tenth of a micron of
+    // offset puts the cutters in general position.
+    const seats =
+      everywhere.length > 0
+        ? temp(fuse(batch(everywhere, quality, temp)).translate(GENERAL_POSITION))
+        : null
     const parts: ScenePart[] = []
     for (const [material, group] of groups) {
       let fused = fuse([...batch(group.solids, quality, temp), ...group.precut])
       if (seats) fused = temp(fused.subtract(seats))
-      if (group.late.length > 0) fused = temp(mf.Manifold.union([fused, ...batch(group.late, quality, temp)]))
+      if (group.late.length > 0)
+        fused = temp(mf.Manifold.union([fused, ...batch(group.late, quality, temp)]))
       const shells = fused
         .decompose()
-        .map((shell) => ({ shell, volume: shell.volume() }))
+        .map((raw) => {
+          const shell = castable(raw)
+          return { shell, volume: shell.volume() }
+        })
         .sort((a, b) => b.volume - a.volume)
       const kept = shells.filter((s) => s.volume > DUST_MM3)
       for (const s of shells) if (s.volume <= DUST_MM3) s.shell.delete()
       const boxes = kept.map(({ shell }) => boundsOfManifold(shell))
-      // Each source body is attributed to the first shell it touches.
-      const owner = group.sources.map((source) => {
-        const box = source.body.solid.bounds()
-        const index = boxes.findIndex((b) => boundsOverlap(b, box))
-        return index < 0 ? 0 : index
+      // Each source body belongs to the shell whose box holds its centre (the nearest one when
+      // several do — chain links nest in each other's boxes).
+      const centre = (b: Bounds): [number, number, number] => [
+        (b.min[0] + b.max[0]) / 2,
+        (b.min[1] + b.max[1]) / 2,
+        (b.min[2] + b.max[2]) / 2,
+      ]
+      const centres = boxes.map(centre)
+      const sourceCentres = group.sources.map((source) => centre(source.body.solid.bounds()))
+      const nearest = (
+        p: readonly number[],
+        candidates: readonly (readonly number[])[],
+        allowed?: (i: number) => boolean,
+      ) => {
+        let best = -1
+        let bestDistance = Infinity
+        candidates.forEach((c, i) => {
+          if (allowed && !allowed(i)) return
+          const d = Math.hypot(c[0]! - p[0]!, c[1]! - p[1]!, c[2]! - p[2]!)
+          if (d < bestDistance) {
+            best = i
+            bestDistance = d
+          }
+        })
+        return best
+      }
+      const owner = sourceCentres.map((p) => {
+        const inside = (i: number) =>
+          [0, 1, 2].every(
+            (k) => p[k]! >= boxes[i]!.min[k]! - 1e-6 && p[k]! <= boxes[i]!.max[k]! + 1e-6,
+          )
+        const held = nearest(p, centres, inside)
+        return held >= 0 ? held : Math.max(0, nearest(p, centres))
       })
       kept.forEach(({ shell, volume }, i) => {
         const sources = group.sources.filter((_, k) => owner[k] === i)
@@ -328,7 +395,9 @@ export function assembleProduction(
           (sum, s) => sum + s.body.solid.volume() - meshVolume(s.body.solid.triangles(quality)),
           0,
         )
-        const first = sources[0] && results.get(sources[0].nodeId)
+        // A shell that no body's centre fell into is still named after the body nearest to it.
+        const named = sources[0] ?? group.sources[nearest(centres[i]!, sourceCentres)]
+        const first = named && results.get(named.nodeId)
         const part = partOf(
           `${material}:${i}`,
           first?.id ?? material,
@@ -343,9 +412,33 @@ export function assembleProduction(
         parts.push({ part, fused: solid, sources })
       })
     }
-    return { parts, dispose: () => parts.forEach((p) => p.fused?.dispose()) }
+    return {
+      parts,
+      dispose: () => {
+        for (const p of parts) p.fused?.dispose()
+      },
+    }
   } finally {
     for (const m of temporaries) m.delete()
+  }
+}
+
+/**
+ * Tidies a fused shell for casting: collapses the zero-area slivers booleans leave behind and
+ * parts surfaces that merely touch, so the mesh is manifold by position as well as by topology.
+ * Takes ownership of `shell`.
+ */
+function castable(shell: Manifold): Manifold {
+  const tidy = shell.simplify(SLIVER)
+  shell.delete()
+  const parted = separateTouching(trianglesFromManifold(tidy))
+  if (!parted) return tidy
+  try {
+    const result = manifoldFromTriangles(parted)
+    tidy.delete()
+    return result
+  } catch {
+    return tidy
   }
 }
 

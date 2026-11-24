@@ -6,21 +6,15 @@ import * as t from '../db/schema'
 import { badRequest, conflict, forbidden } from '../errors'
 import { createId } from '../ids'
 import { ensure, ensureAll, getPiece, getRender, getScene } from '../lookups'
-import {
-  isTerminal,
-  jobHandle,
-  LIVE_STATUSES,
-  publishJob,
-  serviceContext,
-} from '../service-context'
-import type { RenderJobPatch } from '../services'
+import { renderHandle, stopJob, submitJob, updateRender } from '../jobs'
+import { isTerminal, publishJob, serviceContext } from '../service-context'
 import { toPiece } from './pieces'
 import type { HandlerGroup } from './types'
 
 type RenderRow = typeof t.renderJob.$inferSelect
 type SceneRow = typeof t.renderScene.$inferSelect
 
-const toRenderJob = (r: RenderRow, pieceVersion: number): RenderJob => ({
+export const toRenderJob = (r: RenderRow, pieceVersion: number): RenderJob => ({
   id: r.id,
   pieceId: r.pieceId,
   title: r.title,
@@ -73,15 +67,6 @@ const toSavedScene = (r: SceneRow): SavedScene => ({
   position: r.position,
   updatedAt: r.updatedAt.toISOString(),
 })
-
-/** Writes a job update unless the job has already settled; terminal states are sticky. */
-async function updateRender(ctx: Ctx, id: string, patch: RenderJobPatch & { finishedAt?: Date }) {
-  const [row] = await ctx.repo.renders.update(
-    and(eq(t.renderJob.id, id), inArray(t.renderJob.status, LIVE_STATUSES))!,
-    { ...patch, ...(isTerminal(patch.status) ? { finishedAt: new Date() } : {}) },
-  )
-  return row
-}
 
 const announce = (ctx: Ctx, row: RenderRow) =>
   publishJob(ctx, { kind: 'render', id: row.id, pieceId: row.pieceId }, row)
@@ -200,14 +185,11 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     const job = await one(ctx, row)
     announce(ctx, row)
     if (engine === 'blender') {
-      const handle = jobHandle<RenderJobPatch>(
-        ctx,
-        { kind: 'render', id: job.id, pieceId: job.pieceId },
-        async (patch) => updateRender(ctx, job.id, patch),
+      const handle = renderHandle(ctx, job)
+      const subject = await toPiece(ctx, piece)
+      await submitJob(handle, () =>
+        ctx.services.get('renderQueue').submit(job, subject, handle, serviceContext(ctx)),
       )
-      await ctx.services
-        .get('renderQueue')
-        .submit(job, await toPiece(ctx, piece), handle, serviceContext(ctx))
     }
     return job
   },
@@ -247,7 +229,7 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     const current = await getRender(ctx, id)
     if (isTerminal(current.status)) throw conflict(`This render is already ${current.status}`)
     if (current.engine === 'blender' && ctx.services.isConfigured('renderQueue'))
-      await ctx.services.get('renderQueue').cancel(id, serviceContext(ctx))
+      await stopJob(id, () => ctx.services.get('renderQueue').cancel(id, serviceContext(ctx)))
     const row = await updateRender(ctx, id, { status: 'canceled' })
     if (!row) throw conflict('This render finished before it could be canceled')
     announce(ctx, row)

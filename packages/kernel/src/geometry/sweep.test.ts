@@ -21,7 +21,11 @@ const ringFrame = (R: number, a: number): Frame => ({
 describe('cubic spline interpolation', () => {
   it('matches OpenCascade for periodic and clamped curves', () => {
     const { oc } = runtime()
-    const pts = [0, 1, 2, 3, 4, 5, 6].map((i) => [Math.cos(i) * 3 + i, Math.sin(2 * i) * 2, i * i * 0.1])
+    const pts = [0, 1, 2, 3, 4, 5, 6].map((i) => [
+      Math.cos(i) * 3 + i,
+      Math.sin(2 * i) * 2,
+      i * i * 0.1,
+    ])
     for (const closed of [true, false]) {
       const flat = new Float64Array(pts.flat())
       const spline = cubicSpline(chordParameters(flat, 3, closed), closed)
@@ -46,7 +50,9 @@ describe('cubic spline interpolation', () => {
           for (let c = 0; c < 3; c++) mine[c]! += b.w[i]! * poles[pole * 3 + c]!
         }
         const theirs = curve.Value(u)
-        expect(Math.hypot(theirs.X() - mine[0]!, theirs.Y() - mine[1]!, theirs.Z() - mine[2]!)).toBeLessThan(1e-9)
+        expect(
+          Math.hypot(theirs.X() - mine[0]!, theirs.Y() - mine[1]!, theirs.Z() - mine[2]!),
+        ).toBeLessThan(1e-9)
       }
       // The curve interpolates the points at the knots.
       pts.forEach((p, i) => {
@@ -64,7 +70,9 @@ describe('sweep', () => {
     const n = 48
     const solid = sweepSolid({
       closed: true,
-      sections: Array.from({ length: n }, (_, i) => placeLoop(ringFrame(R, (i / n) * 2 * Math.PI), circleLoop(r))),
+      sections: Array.from({ length: n }, (_, i) =>
+        placeLoop(ringFrame(R, (i / n) * 2 * Math.PI), circleLoop(r)),
+      ),
     })
     const exact = 2 * Math.PI ** 2 * R * r * r
     // Bézier circles are 0.03 % fat in radius, hence the 1e-3 relative tolerance.
@@ -85,12 +93,23 @@ describe('sweep', () => {
 
   it('open sweep with a flat base, a taper and a domed pole', () => {
     const sections: Float64Array[] = []
-    for (const [z, s] of [[0, 1], [2, 0.9], [4, 0.8]] as const)
-      sections.push(placeLoop(frameFromZ([0, 0, z], [0, 0, 1], [1, 0, 0]), scaleLoop(circleLoop(0.5), s)))
+    for (const [z, s] of [
+      [0, 1],
+      [2, 0.9],
+      [4, 0.8],
+    ] as const)
+      sections.push(
+        placeLoop(frameFromZ([0, 0, z], [0, 0, 1], [1, 0, 0]), scaleLoop(circleLoop(0.5), s)),
+      )
     for (const a of [30, 60]) {
       const c = Math.cos((a * Math.PI) / 180)
       const sn = Math.sin((a * Math.PI) / 180)
-      sections.push(placeLoop(frameFromZ([0, 0, 4 + 0.4 * sn], [0, 0, 1], [1, 0, 0]), scaleLoop(circleLoop(0.4), c)))
+      sections.push(
+        placeLoop(
+          frameFromZ([0, 0, 4 + 0.4 * sn], [0, 0, 1], [1, 0, 0]),
+          scaleLoop(circleLoop(0.4), c),
+        ),
+      )
     }
     sections.push(poleSection([0, 0, 4.4], 4))
     const solid = sweepSolid({ closed: false, sections })
@@ -107,7 +126,12 @@ describe('sweep', () => {
   it('kinked closed sweep keeps sharp corners', () => {
     // A square frame: rounded-rect wire carried around the corners of a square.
     const half = 5
-    const corners: [number, number][] = [[half, half], [-half, half], [-half, -half], [half, -half]]
+    const corners: [number, number][] = [
+      [half, half],
+      [-half, half],
+      [-half, -half],
+      [half, -half],
+    ]
     const sections: Float64Array[] = []
     const kinks: number[] = []
     corners.forEach(([x, y], i) => {
@@ -117,19 +141,43 @@ describe('sweep', () => {
       const diag = Math.SQRT2
       const out: [number, number, number] = [Math.sign(x) / diag, Math.sign(y) / diag, 0]
       sections.push(
-        placeLoop({ origin: [x, y, 0], x: out, y: [0, 0, 1], z: [0, 0, 0] }, scaleLoop(roundedRectLoop(1, 1, 0.2), diag, 1)),
+        placeLoop(
+          { origin: [x, y, 0], x: out, y: [0, 0, 1], z: [0, 0, 0] },
+          scaleLoop(roundedRectLoop(1, 1, 0.2), diag, 1),
+        ),
       )
       const dir: [number, number, number] = [Math.sign(nx - x), Math.sign(ny - y), 0]
       const side: [number, number, number] = [dir[1], -dir[0], 0]
       sections.push(
-        placeLoop({ origin: [(x + nx) / 2, (y + ny) / 2, 0], x: side, y: [0, 0, 1], z: dir }, roundedRectLoop(1, 1, 0.2)),
+        placeLoop(
+          { origin: [(x + nx) / 2, (y + ny) / 2, 0], x: side, y: [0, 0, 1], z: dir },
+          roundedRectLoop(1, 1, 0.2),
+        ),
       )
     })
     const solid = sweepSolid({ closed: true, sections, kinks })
     const area = 1 - (4 - Math.PI) * 0.2 * 0.2
     expect(solid.volume() / (area * 40)).toBeCloseTo(1, 2)
     expect(solid.manifold(QUALITY.draft).genus()).toBe(1)
-    expect(Math.abs(shapeVolume(solid.brep()!) - solid.volume()) / solid.volume()).toBeLessThan(1e-6)
+    expect(Math.abs(shapeVolume(solid.brep()!) - solid.volume()) / solid.volume()).toBeLessThan(
+      1e-6,
+    )
     solid.dispose()
+  })
+})
+
+describe('pins', () => {
+  it('have an analytic B-rep that matches their mesh', async () => {
+    const { pinSolid } = await import('./pin')
+    const pin = pinSolid([1, 2, 3], [0, 1, 0], 0.4, 1.2)
+    const exact = Math.PI * 0.16 * 1.2 + (2 / 3) * Math.PI * 0.064
+    expect(shapeVolume(pin.brep()!)).toBeCloseTo(exact, 6)
+    expect(pin.brep()!.faces.length).toBe(3)
+    // The sweep's Bézier circles are 0.03 % fat; mesh and B-rep agree to that.
+    expect(pin.volume() / exact).toBeCloseTo(1, 2)
+    const b = pin.bounds()
+    expect([b.min[1], b.max[1]]).toEqual([expect.closeTo(2, 3), expect.closeTo(3.6, 3)])
+    expect(b.max[0] - b.min[0]).toBeCloseTo(0.8, 2)
+    pin.dispose()
   })
 })

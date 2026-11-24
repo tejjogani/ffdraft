@@ -10,7 +10,11 @@ import { runtime } from '../../runtime/index'
 export const MIN_STROKE = 0.35
 
 /** Returns the thickened outline (or null when nothing was thinner than `width`). The caller owns it. */
-export function thickenStrokes(outline: CrossSection, width: number, segments: number): CrossSection | null {
+export function thickenStrokes(
+  outline: CrossSection,
+  width: number,
+  segments: number,
+): CrossSection | null {
   const { manifold: mf } = runtime()
   const r = width / 2
   const owned: CrossSection[] = []
@@ -19,7 +23,9 @@ export function thickenStrokes(outline: CrossSection, width: number, segments: n
     return c
   }
   try {
-    const opened = own(own(outline.offset(-r, 'Round', 2, segments)).offset(r, 'Round', 2, segments))
+    const opened = own(
+      own(outline.offset(-r, 'Round', 2, segments)).offset(r, 'Round', 2, segments),
+    )
     const thin = own(mf.CrossSection.difference(outline, opened))
     // A corner loses ≈ 0.2 r² to the opening; a real hairline loses its whole length × width.
     const strokes = thin.decompose().filter((piece) => {

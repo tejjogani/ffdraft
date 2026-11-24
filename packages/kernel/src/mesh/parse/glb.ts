@@ -82,11 +82,12 @@ export function parseGlb(bytes: Uint8Array): IndexedTriangles {
     if (!accessor) throw new Error(`The GLB file refers to missing accessor ${index}`)
     const components = COMPONENTS[accessor.type] ?? 1
     const size = BYTES[accessor.componentType]
-    if (!size) throw new Error(`The GLB file uses unsupported component type ${accessor.componentType}`)
+    if (!size)
+      throw new Error(`The GLB file uses unsupported component type ${accessor.componentType}`)
     const out = new Float64Array(accessor.count * components)
     if (accessor.bufferView === undefined) return out // all zeros, per spec
     const bv = gltf.bufferViews?.[accessor.bufferView]
-    if (!bv || bv.buffer !== 0 || !buffer) throw new Error('The GLB file refers to an external buffer')
+    if (bv?.buffer !== 0 || !buffer) throw new Error('The GLB file refers to an external buffer')
     const stride = bv.byteStride ?? size * components
     const base = buffer.byteOffset + (bv.byteOffset ?? 0) + (accessor.byteOffset ?? 0)
     const dv = new DataView(buffer.buffer)
@@ -125,7 +126,10 @@ export function parseGlb(bytes: Uint8Array): IndexedTriangles {
           // glTF Y-up, front +Z  →  kernel Z-up, front −Y.
           positions.push(wx, -wz, wy)
         }
-        const list = primitive.indices !== undefined ? Array.from(read(primitive.indices)) : range(p.length / 3)
+        const list =
+          primitive.indices !== undefined
+            ? Array.from(read(primitive.indices))
+            : range(p.length / 3)
         const flip = isMirror(matrix)
         for (const [a, b, c] of triangles(list, mode))
           indices.push(base + a, base + (flip ? c : b), base + (flip ? b : c))
@@ -151,17 +155,29 @@ function readComponent(dv: DataView, at: number, type: number): number {
 }
 
 function normaliser(type: number): number {
-  return type === 5120 ? 1 / 127 : type === 5121 ? 1 / 255 : type === 5122 ? 1 / 32767 : type === 5123 ? 1 / 65535 : 1
+  return type === 5120
+    ? 1 / 127
+    : type === 5121
+      ? 1 / 255
+      : type === 5122
+        ? 1 / 32767
+        : type === 5123
+          ? 1 / 65535
+          : 1
 }
 
 const range = (n: number): number[] => Array.from({ length: n }, (_, i) => i)
 
 function* triangles(list: readonly number[], mode: number): Generator<[number, number, number]> {
-  if (mode === 4) for (let i = 0; i + 2 < list.length; i += 3) yield [list[i]!, list[i + 1]!, list[i + 2]!]
+  if (mode === 4)
+    for (let i = 0; i + 2 < list.length; i += 3) yield [list[i]!, list[i + 1]!, list[i + 2]!]
   else if (mode === 5)
     for (let i = 0; i + 2 < list.length; i++)
-      yield i % 2 === 0 ? [list[i]!, list[i + 1]!, list[i + 2]!] : [list[i + 1]!, list[i]!, list[i + 2]!]
-  else if (mode === 6) for (let i = 1; i + 1 < list.length; i++) yield [list[0]!, list[i]!, list[i + 1]!]
+      yield i % 2 === 0
+        ? [list[i]!, list[i + 1]!, list[i + 2]!]
+        : [list[i + 1]!, list[i]!, list[i + 2]!]
+  else if (mode === 6)
+    for (let i = 1; i + 1 < list.length; i++) yield [list[0]!, list[i]!, list[i + 1]!]
 }
 
 function localMatrix(node: GltfNode): Mat4 {

@@ -3,7 +3,7 @@
  * measure against. x/y span the girdle plane, z points out of the table.
  */
 import type { Stone } from '../core'
-import { type Vec2, type Vec3, fromFrame } from '../geometry/vec'
+import { fromFrame, type Vec2, type Vec3 } from '../geometry/vec'
 import { type GemUnit, gemUnit } from './index'
 import { outlineAnchors, outlinePoint } from './outline'
 
@@ -78,7 +78,9 @@ export function stoneShape(stone: Stone): StoneShape {
     return [(a[0] + b[0]) / l, (a[1] + b[1]) / l]
   }
   const levels = unit.stack.map((l) => ({ z: l.z * sz, scale: l.scale }))
-  const girdleIndex = levels.findIndex((l, i) => i > 0 && l.scale === 1 && levels[i - 1]!.scale === 1)
+  const girdleIndex = levels.findIndex(
+    (l, i) => i > 0 && l.scale === 1 && levels[i - 1]!.scale === 1,
+  )
   const scaleAt = (z: number): number => {
     if (z <= levels[0]!.z) return levels[0]!.scale
     for (let i = 0; i + 1 < levels.length; i++) {
@@ -140,13 +142,19 @@ export function stoneShape(stone: Stone): StoneShape {
             // corner — a heart's cleft — the two would cross, so use the bisector alone.)
             const from = sideNormal(phi, -1)
             const to = sideNormal(phi, 1)
-            const turn = Math.atan2(from[0] * to[1] - from[1] * to[0], from[0] * to[0] + from[1] * to[1])
+            const turn = Math.atan2(
+              from[0] * to[1] - from[1] * to[0],
+              from[0] * to[0] + from[1] * to[1],
+            )
             if (turn > 0)
               for (let k = 0; k <= 4; k++) {
                 const t = (turn * k) / 4
                 const c = Math.cos(t)
                 const sn = Math.sin(t)
-                path.push([p[0] + (from[0] * c - from[1] * sn) * distance, p[1] + (from[0] * sn + from[1] * c) * distance])
+                path.push([
+                  p[0] + (from[0] * c - from[1] * sn) * distance,
+                  p[1] + (from[0] * sn + from[1] * c) * distance,
+                ])
               }
             else {
               const n = normal(phi)
@@ -169,10 +177,17 @@ export function stoneShape(stone: Stone): StoneShape {
  * corners), the rest spread evenly by girth through the gaps. Shapes without such positions get
  * evenly spaced directions starting at `spin`.
  */
-export function prongDirections(shape: StoneShape, count: number, spin: number): { phi: number; point: boolean }[] {
+export function prongDirections(
+  shape: StoneShape,
+  count: number,
+  spin: number,
+): { phi: number; point: boolean }[] {
   const fixed = shape.unit.outline.prongs
   if (fixed.length === 0)
-    return Array.from({ length: count }, (_, i) => ({ phi: spin + (i * TAU) / count, point: false }))
+    return Array.from({ length: count }, (_, i) => ({
+      phi: spin + (i * TAU) / count,
+      point: false,
+    }))
   if (count <= fixed.length) {
     // Fewer claws than points: keep them as far apart as possible.
     return Array.from({ length: count }, (_, i) => fixed[Math.floor((i * fixed.length) / count)]!)
@@ -193,7 +208,10 @@ export function prongDirections(shape: StoneShape, count: number, spin: number):
     let i = 0
     while (i + 1 < n && poly.phis[i + 1]! - first <= rel) i++
     const span = (i + 1 < n ? poly.phis[i + 1]! : first + TAU) - poly.phis[i]!
-    return cumulative[i]! + ((rel - (poly.phis[i]! - first)) / span) * (cumulative[i + 1]! - cumulative[i]!)
+    return (
+      cumulative[i]! +
+      ((rel - (poly.phis[i]! - first)) / span) * (cumulative[i + 1]! - cumulative[i]!)
+    )
   }
   const phiAt = (s: number): number => {
     const t = ((s % girth) + girth) % girth
@@ -205,16 +223,22 @@ export function prongDirections(shape: StoneShape, count: number, spin: number):
   const stops = fixed.map((f) => ({ ...f, s: lengthAt(f.phi) })).sort((a, b) => a.s - b.s)
   const gaps = stops.map((stop, i) => {
     const next = stops[(i + 1) % stops.length]!
-    return { from: stop.s, length: (((next.s - stop.s) % girth) + girth) % girth || girth, extra: 0 }
+    return {
+      from: stop.s,
+      length: (((next.s - stop.s) % girth) + girth) % girth || girth,
+      extra: 0,
+    }
   })
   // Hand out the remaining claws one at a time to the gap whose spacing is currently widest.
   for (let k = fixed.length; k < count; k++) {
     let widest = gaps[0]!
-    for (const g of gaps) if (g.length / (g.extra + 1) > widest.length / (widest.extra + 1)) widest = g
+    for (const g of gaps)
+      if (g.length / (g.extra + 1) > widest.length / (widest.extra + 1)) widest = g
     widest.extra++
   }
   const out = stops.map(({ phi, point }) => ({ phi, point }))
   for (const g of gaps)
-    for (let k = 1; k <= g.extra; k++) out.push({ phi: phiAt(g.from + (g.length * k) / (g.extra + 1)), point: false })
+    for (let k = 1; k <= g.extra; k++)
+      out.push({ phi: phiAt(g.from + (g.length * k) / (g.extra + 1)), point: false })
   return out
 }

@@ -3,18 +3,11 @@ import { and, desc, eq, inArray } from 'drizzle-orm'
 import { getAssetRow, putAsset, toAsset } from '../assets/assets'
 import type { Ctx } from '../context'
 import * as t from '../db/schema'
-import { conflict, forbidden } from '../errors'
+import { AppError, conflict, forbidden } from '../errors'
 import { createId } from '../ids'
 import { getModel, getPiece, getShot } from '../lookups'
-import {
-  isTerminal,
-  jobHandle,
-  LIVE_STATUSES,
-  publishJob,
-  serviceContext,
-  stepProgress,
-} from '../service-context'
-import type { ModelShotPatch } from '../services'
+import { engineError, shotHandle, stopJob, updateShot } from '../jobs'
+import { isTerminal, publishJob, serviceContext, stepProgress } from '../service-context'
 import { assertBudget } from '../usage'
 import { toPiece } from './pieces'
 import type { HandlerGroup } from './types'
@@ -22,7 +15,7 @@ import type { HandlerGroup } from './types'
 type ModelRow = typeof t.brandModel.$inferSelect
 type ShotRow = typeof t.modelShot.$inferSelect
 
-const toBrandModel = (r: ModelRow): BrandModel => ({
+export const toBrandModel = (r: ModelRow): BrandModel => ({
   id: r.id,
   name: r.name,
   // Cards written before these fields existed lack them.
@@ -67,7 +60,7 @@ const toShot = (r: ShotRow, current: { piece: number; model: number }): ModelSho
 })
 
 /** Shots with `stale` computed against the current piece and model versions. */
-async function toShots(ctx: Ctx, rows: ShotRow[]): Promise<ModelShot[]> {
+export async function toShots(ctx: Ctx, rows: ShotRow[]): Promise<ModelShot[]> {
   if (rows.length === 0) return []
   const [pieces, models] = await Promise.all([
     ctx.repo.pieces.select(
@@ -97,15 +90,6 @@ async function updateModel(ctx: Ctx, id: string, patch: Partial<typeof t.brandMo
     updatedAt: new Date(),
   })
   return toBrandModel(row!)
-}
-
-/** Writes a shot update unless the shot has already settled; terminal states are sticky. */
-async function updateShot(ctx: Ctx, id: string, patch: ModelShotPatch) {
-  const [row] = await ctx.repo.shots.update(
-    and(eq(t.modelShot.id, id), inArray(t.modelShot.status, LIVE_STATUSES))!,
-    patch,
-  )
-  return row
 }
 
 const announce = (ctx: Ctx, row: ShotRow) =>
@@ -222,21 +206,22 @@ export const models: HandlerGroup<'models' | 'shots'> = {
         sourceVersion: piece.version,
         modelVersion: model.version,
         actor: ctx.actor,
+        createdBy: ctx.user.id,
       })),
     )
     const shots = await toShots(ctx, rows)
     const subject = { model: toBrandModel(model), piece: await toPiece(ctx, piece) }
+    for (const row of rows) announce(ctx, row)
     for (const [i, shot] of shots.entries()) {
-      announce(ctx, rows[i]!)
-      const handle = jobHandle<ModelShotPatch>(
-        ctx,
-        { kind: 'shot', id: shot.id, pieceId: shot.pieceId },
-        async (patch) => {
-          const row = await updateShot(ctx, shot.id, patch)
-          return row && { status: row.status, progress: stepProgress(row.status) }
-        },
-      )
-      await onModel.submitShot(shot, subject, handle, serviceContext(ctx))
+      try {
+        await onModel.submitShot(shot, subject, shotHandle(ctx, shot), serviceContext(ctx))
+      } catch (err) {
+        // This shot and the ones not yet handed over will never run: fail them, not leave them queued.
+        if (!(err instanceof AppError)) console.error(`Submitting shot ${shot.id} failed:`, err)
+        for (const rest of shots.slice(i))
+          await shotHandle(ctx, rest).update({ status: 'failed', error: engineError(err) })
+        throw err
+      }
     }
     return shots
   },
@@ -245,7 +230,7 @@ export const models: HandlerGroup<'models' | 'shots'> = {
     const shot = await getShot(ctx, id)
     if (isTerminal(shot.status)) throw conflict(`This image is already ${shot.status}`)
     if (ctx.services.isConfigured('onModel'))
-      await ctx.services.get('onModel').cancelShot(id, serviceContext(ctx))
+      await stopJob(id, () => ctx.services.get('onModel').cancelShot(id, serviceContext(ctx)))
     const row = await updateShot(ctx, id, { status: 'canceled' })
     if (!row) throw conflict('This image finished before it could be canceled')
     announce(ctx, row)

@@ -2,18 +2,18 @@
  * The evaluator: walks a design in dependency order, memoises every node on a content hash,
  * and assembles the cached results into a {@link Scene} (and from it the public Evaluation).
  */
-import { type Design, type Node, evaluationOrder, nodeRefs } from '@pave/schema'
+import { type Design, evaluationOrder, type Node, nodeRefs } from '@pave/schema'
 import { type AnyFeature, type NodeResult, QUALITY, type Scene } from '../core'
+import { manufacturabilityDiagnostics } from '../dfm/index'
 import type { Detail, Diagnostic, EvaluateOptions, Evaluation } from '../types'
 import {
   type Assembly,
-  type DraftCache,
   activeResults,
   assembleDraft,
   assembleProduction,
+  type DraftCache,
 } from './assemble'
 import { buildNode, disposeResult } from './build'
-import { manufacturabilityDiagnostics } from '../dfm/index'
 import { stoneDiagnostics } from './diagnostics'
 import { combineHashes, hashNode } from './hash'
 import { buildReport } from './report'
@@ -128,7 +128,15 @@ export class Evaluator {
       ms: 0,
       timings,
     }
-    const scene: Scene = { design, detail, quality, nodes: results, parts: assembly.parts, stones, evaluation }
+    const scene: Scene = {
+      design,
+      detail,
+      quality,
+      nodes: results,
+      parts: assembly.parts,
+      stones,
+      evaluation,
+    }
     if (detail === 'production') {
       // Whole-piece manufacturability checks need the fused bodies, so they run here only.
       const checkStarted = performance.now()

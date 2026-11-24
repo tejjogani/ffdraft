@@ -5,17 +5,38 @@
  */
 import type { Vec2 } from './vec'
 
-export type PathSegment = { type: 'line'; points: [Vec2, Vec2] } | { type: 'cubic'; points: [Vec2, Vec2, Vec2, Vec2] }
+export type PathSegment =
+  | { type: 'line'; points: [Vec2, Vec2] }
+  | { type: 'cubic'; points: [Vec2, Vec2, Vec2, Vec2] }
 
 export interface SubPath {
   segments: PathSegment[]
   closed: boolean
 }
 
-const ARGUMENTS: Record<string, number> = { M: 2, L: 2, H: 1, V: 1, C: 6, S: 4, Q: 4, T: 2, A: 7, Z: 0 }
+const ARGUMENTS: Record<string, number> = {
+  M: 2,
+  L: 2,
+  H: 1,
+  V: 1,
+  C: 6,
+  S: 4,
+  Q: 4,
+  T: 2,
+  A: 7,
+  Z: 0,
+}
 
 /** Endpoint-parameterised elliptical arc → cubic Béziers (SVG 1.1 implementation notes, F.6). */
-function arcToCubics(from: Vec2, rx: number, ry: number, rotation: number, large: boolean, sweep: boolean, to: Vec2): PathSegment[] {
+function arcToCubics(
+  from: Vec2,
+  rx: number,
+  ry: number,
+  rotation: number,
+  large: boolean,
+  sweep: boolean,
+  to: Vec2,
+): PathSegment[] {
   if (rx === 0 || ry === 0) return [{ type: 'line', points: [from, to] }]
   const phi = (rotation * Math.PI) / 180
   const c = Math.cos(phi)
@@ -32,7 +53,14 @@ function arcToCubics(from: Vec2, rx: number, ry: number, rotation: number, large
     b *= Math.sqrt(lambda)
   }
   const sign = large === sweep ? -1 : 1
-  const k = sign * Math.sqrt(Math.max(0, (a * a * b * b - a * a * y1 * y1 - b * b * x1 * x1) / (a * a * y1 * y1 + b * b * x1 * x1)))
+  const k =
+    sign *
+    Math.sqrt(
+      Math.max(
+        0,
+        (a * a * b * b - a * a * y1 * y1 - b * b * x1 * x1) / (a * a * y1 * y1 + b * b * x1 * x1),
+      ),
+    )
   const cx1 = (k * a * y1) / b
   const cy1 = (-k * b * x1) / a
   const cx = c * cx1 - s * cy1 + (from[0] + to[0]) / 2
@@ -42,8 +70,14 @@ function arcToCubics(from: Vec2, rx: number, ry: number, rotation: number, large
   if (sweep && delta < 0) delta += 2 * Math.PI
   if (!sweep && delta > 0) delta -= 2 * Math.PI
   const pieces = Math.max(1, Math.ceil(Math.abs(delta) / (Math.PI / 2) - 1e-9))
-  const point = (t: number): Vec2 => [cx + a * Math.cos(t) * c - b * Math.sin(t) * s, cy + a * Math.cos(t) * s + b * Math.sin(t) * c]
-  const tangent = (t: number): Vec2 => [-a * Math.sin(t) * c - b * Math.cos(t) * s, -a * Math.sin(t) * s + b * Math.cos(t) * c]
+  const point = (t: number): Vec2 => [
+    cx + a * Math.cos(t) * c - b * Math.sin(t) * s,
+    cy + a * Math.cos(t) * s + b * Math.sin(t) * c,
+  ]
+  const tangent = (t: number): Vec2 => [
+    -a * Math.sin(t) * c - b * Math.cos(t) * s,
+    -a * Math.sin(t) * s + b * Math.cos(t) * c,
+  ]
   const out: PathSegment[] = []
   for (let i = 0; i < pieces; i++) {
     const t0 = start + (delta * i) / pieces
@@ -53,7 +87,15 @@ function arcToCubics(from: Vec2, rx: number, ry: number, rotation: number, large
     const p3 = i === pieces - 1 ? to : point(t1)
     const d0 = tangent(t0)
     const d1 = tangent(t1)
-    out.push({ type: 'cubic', points: [p0, [p0[0] + d0[0] * h, p0[1] + d0[1] * h], [p3[0] - d1[0] * h, p3[1] - d1[1] * h], p3] })
+    out.push({
+      type: 'cubic',
+      points: [
+        p0,
+        [p0[0] + d0[0] * h, p0[1] + d0[1] * h],
+        [p3[0] - d1[0] * h, p3[1] - d1[1] * h],
+        p3,
+      ],
+    })
   }
   return out
 }
@@ -71,7 +113,8 @@ export function parsePathData(d: string): SubPath[] {
   let command = ''
   const number = (): number => {
     const v = Number(tokens[i++])
-    if (!Number.isFinite(v)) throw new Error(`the path is malformed near “${tokens[i - 1] ?? 'its end'}”`)
+    if (!Number.isFinite(v))
+      throw new Error(`the path is malformed near “${tokens[i - 1] ?? 'its end'}”`)
     return v
   }
   const push = (segment: PathSegment) => {
@@ -97,7 +140,9 @@ export function parsePathData(d: string): SubPath[] {
       return relative ? [at[0] + x, at[1] + y] : [x, y]
     }
     const reflected = (types: string): Vec2 =>
-      lastControl && types.includes(lastType) ? [2 * at[0] - lastControl[0], 2 * at[1] - lastControl[1]] : at
+      lastControl && types.includes(lastType)
+        ? [2 * at[0] - lastControl[0], 2 * at[1] - lastControl[1]]
+        : at
     let control: Vec2 | null = null
     switch (upper) {
       case 'M':
@@ -115,7 +160,8 @@ export function parsePathData(d: string): SubPath[] {
       case 'H':
       case 'V': {
         const v = number()
-        const to: Vec2 = upper === 'H' ? [relative ? at[0] + v : v, at[1]] : [at[0], relative ? at[1] + v : v]
+        const to: Vec2 =
+          upper === 'H' ? [relative ? at[0] + v : v, at[1]] : [at[0], relative ? at[1] + v : v]
         push({ type: 'line', points: [at, to] })
         at = to
         break
@@ -137,7 +183,12 @@ export function parsePathData(d: string): SubPath[] {
         // Degree elevation: the same curve as a cubic.
         push({
           type: 'cubic',
-          points: [at, [at[0] + (2 / 3) * (q[0] - at[0]), at[1] + (2 / 3) * (q[1] - at[1])], [to[0] + (2 / 3) * (q[0] - to[0]), to[1] + (2 / 3) * (q[1] - to[1])], to],
+          points: [
+            at,
+            [at[0] + (2 / 3) * (q[0] - at[0]), at[1] + (2 / 3) * (q[1] - at[1])],
+            [to[0] + (2 / 3) * (q[0] - to[0]), to[1] + (2 / 3) * (q[1] - to[1])],
+            to,
+          ],
         })
         control = q
         at = to

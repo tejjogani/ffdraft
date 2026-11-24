@@ -26,7 +26,7 @@ const FONT_FILES: Record<FontId, URL> = {
 // ES module build (named exports); accept either.
 type Opentype = { parse(buffer: ArrayBuffer): Font }
 const namespace = opentypeModule as unknown as Partial<Opentype> & Record<string, unknown>
-const opentype = (typeof namespace.parse === 'function' ? namespace : namespace['default']) as Opentype
+const opentype = (typeof namespace.parse === 'function' ? namespace : namespace.default) as Opentype
 
 const fonts = new Map<FontId, Promise<Font>>()
 
@@ -66,7 +66,8 @@ export interface TextOutline {
 
 /** Points along a Bézier, excluding its start, fine enough to stay within `tolerance`. */
 function flatten(points: readonly Vec2[], tolerance: number, out: Vec2[]): void {
-  const [p0, p1, p2, p3] = points.length === 3 ? [points[0]!, points[1]!, points[2]!, undefined] : points
+  const [p0, p1, p2, p3] =
+    points.length === 3 ? [points[0]!, points[1]!, points[2]!, undefined] : points
   // Distance of the control points from the chord bounds the curve's sagitta.
   const end = p3 ?? p2!
   const sag = Math.max(
@@ -100,7 +101,13 @@ function contoursOf(commands: readonly PathCommand[], tolerance: number): Vec2[]
   const close = () => {
     const first = current[0]
     const last = current[current.length - 1]
-    if (first && last && current.length > 1 && Math.hypot(first[0] - last[0], first[1] - last[1]) < 1e-9) current.pop()
+    if (
+      first &&
+      last &&
+      current.length > 1 &&
+      Math.hypot(first[0] - last[0], first[1] - last[1]) < 1e-9
+    )
+      current.pop()
     if (current.length >= 3) contours.push(current)
     current = []
   }
@@ -112,7 +119,8 @@ function contoursOf(commands: readonly PathCommand[], tolerance: number): Vec2[]
       current.push([c.x, -c.y])
     } else if (c.type === 'L') current.push([c.x, -c.y])
     else if (c.type === 'Q' && at) flatten([at, [c.x1, -c.y1], [c.x, -c.y]], tolerance, current)
-    else if (c.type === 'C' && at) flatten([at, [c.x1, -c.y1], [c.x2, -c.y2], [c.x, -c.y]], tolerance, current)
+    else if (c.type === 'C' && at)
+      flatten([at, [c.x1, -c.y1], [c.x2, -c.y2], [c.x, -c.y]], tolerance, current)
     else if (c.type === 'Z') close()
   }
   close()
@@ -149,6 +157,11 @@ export function layoutText(font: Font, text: string, size: number, tolerance = 0
 }
 
 /** Outlines of `text` in a bundled font; see {@link layoutText}. */
-export async function textOutline(text: string, font: FontId, size: number, tolerance = 0.01): Promise<TextOutline> {
+export async function textOutline(
+  text: string,
+  font: FontId,
+  size: number,
+  tolerance = 0.01,
+): Promise<TextOutline> {
   return layoutText(await loadFont(font), text, size, tolerance)
 }

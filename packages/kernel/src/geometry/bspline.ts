@@ -65,10 +65,13 @@ function cubicBasis(U: (j: number) => number, span: number, u: number, out: Basi
 function solveDense(a: Float64Array, b: Float64Array, n: number, cols: number): void {
   for (let i = 0; i < n; i++) {
     let pivot = i
-    for (let r = i + 1; r < n; r++) if (Math.abs(a[r * n + i]!) > Math.abs(a[pivot * n + i]!)) pivot = r
+    for (let r = i + 1; r < n; r++)
+      if (Math.abs(a[r * n + i]!) > Math.abs(a[pivot * n + i]!)) pivot = r
     if (pivot !== i) {
-      for (let c = 0; c < n; c++) [a[i * n + c], a[pivot * n + c]] = [a[pivot * n + c]!, a[i * n + c]!]
-      for (let c = 0; c < cols; c++) [b[i * cols + c], b[pivot * cols + c]] = [b[pivot * cols + c]!, b[i * cols + c]!]
+      for (let c = 0; c < n; c++)
+        [a[i * n + c], a[pivot * n + c]] = [a[pivot * n + c]!, a[i * n + c]!]
+      for (let c = 0; c < cols; c++)
+        [b[i * cols + c], b[pivot * cols + c]] = [b[pivot * cols + c]!, b[i * cols + c]!]
     }
     const d = a[i * n + i]!
     for (let r = i + 1; r < n; r++) {

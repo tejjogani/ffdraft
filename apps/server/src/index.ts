@@ -6,8 +6,8 @@ export { type CreateAppOptions, createApp, type PaveServer } from './app'
 export { type AssetKind, type NewAsset, putAsset, readAsset } from './assets/assets'
 export { type BlobStore, FsBlobStore } from './assets/blob-store'
 export { type AuthMode, type Config, configFromEnv } from './config'
-export type { Ctx, Invoke } from './context'
-export { publish } from './context'
+export type { Ctx, Execute, Invoke } from './context'
+export { invoke, publish } from './context'
 export { AppError, type ErrorCode, NotConfiguredError } from './errors'
 export { type EventAudience, EventBus, type JobKind, type ServerEvent } from './events'
 export type { Handler, Handlers } from './handlers/types'
@@ -22,6 +22,7 @@ export {
   createThread,
   decideStep,
   finishRun,
+  resumeRun,
   startRun,
   traces,
 } from './traces'

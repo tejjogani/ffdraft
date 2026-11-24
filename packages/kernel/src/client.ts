@@ -33,15 +33,17 @@ interface Pending {
   assets?: AssetResolver | undefined
 }
 
-const abortError = (): Error => new DOMException('The evaluation was superseded or aborted', 'AbortError')
+const abortError = (): Error =>
+  new DOMException('The evaluation was superseded or aborted', 'AbortError')
 
 export function createKernelClient(options: KernelClientOptions = {}): KernelClient {
   // A Worker is a wider version of the port this file needs.
   const port =
     options.port ??
-    (new Worker(new URL('./worker.ts', import.meta.url), { type: 'module', name: 'pave-kernel' }) as unknown as NonNullable<
-      KernelClientOptions['port']
-    >)
+    (new Worker(new URL('./worker.ts', import.meta.url), {
+      type: 'module',
+      name: 'pave-kernel',
+    }) as unknown as NonNullable<KernelClientOptions['port']>)
   const ledger = new PartLedger()
   const pending = new Map<number, Pending>()
   let nextId = 0
@@ -52,7 +54,10 @@ export function createKernelClient(options: KernelClientOptions = {}): KernelCli
   let latest: number | null = null
   let terminated = false
 
-  const call = <T>(build: (id: number) => Request, assets?: AssetResolver): { id: number; promise: Promise<T> } => {
+  const call = <T>(
+    build: (id: number) => Request,
+    assets?: AssetResolver,
+  ): { id: number; promise: Promise<T> } => {
     const id = nextId++
     const promise = new Promise<T>((resolve, reject) => {
       if (terminated) return reject(new Error('The kernel client was terminated'))
@@ -66,8 +71,10 @@ export function createKernelClient(options: KernelClientOptions = {}): KernelCli
     if (data.type === 'asset') {
       // Any pending request with a resolver can serve it; they all share the caller's resolver.
       const resolver = [...pending.values()].find((p) => p.assets)?.assets
-      const reply = (message: Omit<Extract<Request, { type: 'asset' }>, 'type' | 'request'>, transfer: Transferable[] = []) =>
-        port.postMessage({ type: 'asset', request: data.request, ...message }, transfer)
+      const reply = (
+        message: Omit<Extract<Request, { type: 'asset' }>, 'type' | 'request'>,
+        transfer: Transferable[] = [],
+      ) => port.postMessage({ type: 'asset', request: data.request, ...message }, transfer)
       if (!resolver) return reply({ error: 'No asset resolver was provided' })
       resolver(data.assetId).then(
         (bytes) => {
@@ -125,14 +132,22 @@ export function createKernelClient(options: KernelClientOptions = {}): KernelCli
         opts.signal?.removeEventListener('abort', onAbort)
       }
     },
-    async export(design: Design, format: ExportFormat, opts: ExportOptions = {}): Promise<ExportResult> {
+    async export(
+      design: Design,
+      format: ExportFormat,
+      opts: ExportOptions = {},
+    ): Promise<ExportResult> {
       const { assets, ...rest } = opts
-      return call<ExportResult>((id) => ({ type: 'export', id, design, format, options: rest, assets: !!assets }), assets).promise
+      return call<ExportResult>(
+        (id) => ({ type: 'export', id, design, format, options: rest, assets: !!assets }),
+        assets,
+      ).promise
     },
     terminate() {
       terminated = true
       port.terminate?.()
-      for (const entry of pending.values()) entry.reject(new Error('The kernel client was terminated'))
+      for (const entry of pending.values())
+        entry.reject(new Error('The kernel client was terminated'))
       pending.clear()
     },
   }

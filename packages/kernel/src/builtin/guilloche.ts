@@ -21,7 +21,10 @@ export function guilloche(u: number, v: number): number {
   const boss = r < BOSS ? 0.92 * Math.sqrt(1 - (r / BOSS) ** 2) ** 0.7 : 0
   // A ring of round beads just outside the boss.
   const ringAngle = Math.round((theta / (2 * Math.PI)) * BEADS) * ((2 * Math.PI) / BEADS)
-  const bead = Math.hypot(r * Math.cos(theta) - BEAD_RING * Math.cos(ringAngle), r * Math.sin(theta) - BEAD_RING * Math.sin(ringAngle))
+  const bead = Math.hypot(
+    r * Math.cos(theta) - BEAD_RING * Math.cos(ringAngle),
+    r * Math.sin(theta) - BEAD_RING * Math.sin(ringAngle),
+  )
   const beads = bead < 0.028 ? 0.45 * Math.sqrt(1 - (bead / 0.028) ** 2) : 0
   // Wavy rays between the bead ring and the plain outer band.
   const phase = RAYS * theta + SWING * RAYS * 0.1 * Math.sin(2 * Math.PI * WAVES * r)

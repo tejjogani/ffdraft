@@ -4,7 +4,7 @@
  * best-fit plane; anything ear clipping cannot handle gets a fan around the loop's centroid,
  * which is always topologically valid.
  */
-import { type Vec3, cross, dot, perpendicular } from '../geometry/vec'
+import { cross, dot, perpendicular, type Vec3 } from '../geometry/vec'
 import type { IndexedTriangles } from '../solid/meshing'
 import { boundaryLoops, edgeTopology } from './topology'
 
@@ -23,7 +23,8 @@ export function fillHoles(mesh: IndexedTriangles): { mesh: IndexedTriangles; hol
     else {
       const c = positions.length / 3
       const centroid = [0, 0, 0]
-      for (const v of loop) for (let k = 0; k < 3; k++) centroid[k]! += mesh.positions[v * 3 + k]! / loop.length
+      for (const v of loop)
+        for (let k = 0; k < 3; k++) centroid[k]! += mesh.positions[v * 3 + k]! / loop.length
       positions.push(...centroid)
       for (let i = 0; i < loop.length; i++) indices.push(c, loop[i]!, loop[(i + 1) % loop.length]!)
     }
@@ -59,7 +60,8 @@ function earClip(p: Float32Array, loop: readonly number[]): number[] | null {
     return [dot(q, u), dot(q, v)] as const
   })
   const area2 = (a: number, b: number, c: number) =>
-    (xy[b]![0] - xy[a]![0]) * (xy[c]![1] - xy[a]![1]) - (xy[b]![1] - xy[a]![1]) * (xy[c]![0] - xy[a]![0])
+    (xy[b]![0] - xy[a]![0]) * (xy[c]![1] - xy[a]![1]) -
+    (xy[b]![1] - xy[a]![1]) * (xy[c]![0] - xy[a]![0])
   const remaining = loop.map((_, i) => i)
   const out: number[] = []
   let guard = 0

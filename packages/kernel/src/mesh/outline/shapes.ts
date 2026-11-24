@@ -29,11 +29,14 @@ export const SHAPES: Record<ShapeName, string> = {
   // Classic five-point star, inner radius at the golden-ratio proportion of a pentagram.
   star: polygon(5, 1, 0.382),
   // Latin cross: the crossbar a third of the way down.
-  cross: 'M -0.17 1 L 0.17 1 L 0.17 0.5 L 0.6 0.5 L 0.6 0.16 L 0.17 0.16 L 0.17 -1 L -0.17 -1 L -0.17 0.16 L -0.6 0.16 L -0.6 0.5 L -0.17 0.5 Z',
+  cross:
+    'M -0.17 1 L 0.17 1 L 0.17 0.5 L 0.6 0.5 L 0.6 0.16 L 0.17 0.16 L 0.17 -1 L -0.17 -1 L -0.17 0.16 L -0.6 0.16 L -0.6 0.5 L -0.17 0.5 Z',
   // Heater shield.
-  shield: 'M -0.8 1 L 0.8 1 L 0.8 0.25 C 0.8 -0.42 0.36 -0.78 0 -1 C -0.36 -0.78 -0.8 -0.42 -0.8 0.25 Z',
+  shield:
+    'M -0.8 1 L 0.8 1 L 0.8 0.25 C 0.8 -0.42 0.36 -0.78 0 -1 C -0.36 -0.78 -0.8 -0.42 -0.8 0.25 Z',
   hexagon: polygon(6, 1),
-  teardrop: 'M 0 1 C 0.16 0.66 0.68 0.08 0.68 -0.32 A 0.68 0.68 0 1 0 -0.68 -0.32 C -0.68 0.08 -0.16 0.66 0 1 Z',
+  teardrop:
+    'M 0 1 C 0.16 0.66 0.68 0.08 0.68 -0.32 A 0.68 0.68 0 1 0 -0.68 -0.32 C -0.68 0.08 -0.16 0.66 0 1 Z',
   // Military-style tag: a tall rounded rectangle.
   tag:
     'M -0.42 1 L 0.42 1 A 0.2 0.2 0 0 0 0.62 0.8 L 0.62 -0.8 A 0.2 0.2 0 0 0 0.42 -1 ' +

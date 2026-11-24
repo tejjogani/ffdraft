@@ -50,12 +50,14 @@ describe('mesh processing', () => {
 
   it('smooths noise away while keeping the volume (Taubin)', () => {
     const s = sphere(10, 128)
-    const noisy = own(s.warp((v) => {
-      const k = 1 + 0.03 * Math.sin(v[0] * 7) * Math.sin(v[1] * 5) * Math.sin(v[2] * 6)
-      v[0] *= k
-      v[1] *= k
-      v[2] *= k
-    }))
+    const noisy = own(
+      s.warp((v) => {
+        const k = 1 + 0.03 * Math.sin(v[0] * 7) * Math.sin(v[1] * 5) * Math.sin(v[2] * 6)
+        v[0] *= k
+        v[1] *= k
+        v[2] *= k
+      }),
+    )
     const smooth = own(smoothManifold(noisy, 4))
     const spread = (m: Manifold) => {
       const { positions: p } = trianglesFromManifold(m)
@@ -76,7 +78,7 @@ describe('mesh processing', () => {
     const s = sphere(5)
     const grid = distanceGrid(trianglesFromManifold(s), { spacing: 0.25, band: 1, votes: 1 })
     expect(sampleDistance(grid, 0, 0, 4.5)).toBeCloseTo(0.5, 1)
-    expect(sampleDistance(grid, 0, 0, 5.5)).toBeCloseTo(-0.5, 1)
+    expect(sampleDistance(grid, 0, 0, 5.3)).toBeCloseTo(-0.3, 1)
     expect(sampleDistance(grid, 0, 0, 0)).toBeCloseTo(1, 6) // clamped to the band
   })
 
@@ -84,7 +86,7 @@ describe('mesh processing', () => {
     const bvh = new TriangleBvh(trianglesFromManifold(sphere(5)))
     expect(bvh.raycast(0, 0, 0, 1, 0, 0)).toBeCloseTo(5, 1)
     expect(bvh.raycast(0, 0, 4.99, 0, 0, -1, 0.01)).toBeCloseTo(9.99, 1)
-    expect(bvh.hits(-10, 0.1, 0.2, 1, 0, 0)).toHaveLength(2)
+    expect(bvh.crossings(-10, 0.1, 0.2, 1, 0, 0).map((c) => c.w)).toEqual([1, -1])
     const hit = { d2: 0, x: 0, y: 0, z: 0, triangle: -1 }
     expect(bvh.closest(0, 0, 8, hit)).toBe(true)
     expect(Math.sqrt(hit.d2)).toBeCloseTo(3, 1)

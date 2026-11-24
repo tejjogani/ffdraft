@@ -40,8 +40,11 @@ function parseBinary(bytes: Uint8Array): IndexedTriangles {
 function parseAscii(text: string): IndexedTriangles {
   const values: number[] = []
   const vertex = /vertex\s+(\S+)\s+(\S+)\s+(\S+)/g
-  for (let m = vertex.exec(text); m; m = vertex.exec(text)) values.push(Number(m[1]), Number(m[2]), Number(m[3]))
+  for (let m = vertex.exec(text); m; m = vertex.exec(text))
+    values.push(Number(m[1]), Number(m[2]), Number(m[3]))
   if (values.length % 9 !== 0 || values.some((v) => !Number.isFinite(v)))
-    throw new Error('The ASCII STL file is malformed (a facet does not have three numeric vertices)')
+    throw new Error(
+      'The ASCII STL file is malformed (a facet does not have three numeric vertices)',
+    )
   return sequential(Float32Array.from(values))
 }

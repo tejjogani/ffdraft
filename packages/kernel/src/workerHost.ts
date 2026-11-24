@@ -27,7 +27,13 @@ export function serveKernel(kernel: LocalKernel, port: Port<Response, Request>):
     switch (data.type) {
       case 'ready':
         kernel.ready().then(
-          () => port.postMessage({ type: 'ready', id: data.id, kinds: [...kernel.kinds], formats: [...kernel.formats] }),
+          () =>
+            port.postMessage({
+              type: 'ready',
+              id: data.id,
+              kinds: [...kernel.kinds],
+              formats: [...kernel.formats],
+            }),
           (error) => fail(data.id, error),
         )
         break
@@ -51,10 +57,18 @@ export function serveKernel(kernel: LocalKernel, port: Port<Response, Request>):
         break
       }
       case 'export':
-        kernel.export(data.design, data.format, { ...data.options, ...(data.assets ? { assets: resolveAsset } : {}) }).then(
-          (result) => port.postMessage({ type: 'exported', id: data.id, result }, [result.bytes.buffer as ArrayBuffer]),
-          (error) => fail(data.id, error),
-        )
+        kernel
+          .export(data.design, data.format, {
+            ...data.options,
+            ...(data.assets ? { assets: resolveAsset } : {}),
+          })
+          .then(
+            (result) =>
+              port.postMessage({ type: 'exported', id: data.id, result }, [
+                result.bytes.buffer as ArrayBuffer,
+              ]),
+            (error) => fail(data.id, error),
+          )
         break
       case 'abort':
         running.get(data.id)?.abort()

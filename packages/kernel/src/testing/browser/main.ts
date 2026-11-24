@@ -1,5 +1,5 @@
 /** Browser fixture for hosts.test.ts: evaluates through the Worker client and publishes facts. */
-import { TEMPLATES, applyOps, buildDesign } from '@pave/schema'
+import { applyOps, buildDesign, TEMPLATES } from '@pave/schema'
 import { createKernelClient } from '../../client'
 
 declare global {
@@ -20,12 +20,18 @@ async function run(): Promise<Record<string, unknown>> {
   return {
     kinds: kernel.kinds,
     parts: first.parts.map((p) => p.id),
-    typedArrays: first.parts.every((p) => p.mesh.positions instanceof Float32Array && p.mesh.positions.length > 0),
+    typedArrays: first.parts.every(
+      (p) => p.mesh.positions instanceof Float32Array && p.mesh.positions.length > 0,
+    ),
     stones: first.stones.length,
     carat: first.report.caratTotal,
-    bandReused: second.parts.find((p) => p.id === 'band')?.mesh === first.parts.find((p) => p.id === 'band')?.mesh,
+    bandReused:
+      second.parts.find((p) => p.id === 'band')?.mesh ===
+      first.parts.find((p) => p.id === 'band')?.mesh,
     productionParts: production.parts.length,
-    failed: [...first.diagnostics, ...production.diagnostics].filter((d) => d.code === 'feature.failed').length,
+    failed: [...first.diagnostics, ...production.diagnostics].filter(
+      (d) => d.code === 'feature.failed',
+    ).length,
   }
 }
 

@@ -10,7 +10,11 @@ import { parseSvgPath } from './svgPath'
 
 beforeAll(() => loadRuntime())
 
-const area = (c: [number, number][]) => c.reduce((s, p, i) => s + (p[0] * c[(i + 1) % c.length]![1] - c[(i + 1) % c.length]![0] * p[1]) / 2, 0)
+const area = (c: [number, number][]) =>
+  c.reduce(
+    (s, p, i) => s + (p[0] * c[(i + 1) % c.length]![1] - c[(i + 1) % c.length]![0] * p[1]) / 2,
+    0,
+  )
 
 describe('SVG path data', () => {
   it('handles absolute and relative lines, H/V, implicit repeats and compact numbers', () => {
@@ -26,7 +30,10 @@ describe('SVG path data', () => {
     expect(Math.abs(area(arc))).toBeCloseTo(Math.PI * 100, 1)
     for (const p of arc) expect(Math.hypot(p[0], p[1])).toBeCloseTo(10, 2)
     const k = 0.5523 * 10
-    const cubic = parseSvgPath(`M10 0C10 ${k} ${k} 10 0 10S-10 ${k}-10 0 ${-k} -10 0 -10 10 ${-k} 10 0z`, 0.001)[0]!
+    const cubic = parseSvgPath(
+      `M10 0C10 ${k} ${k} 10 0 10S-10 ${k}-10 0 ${-k} -10 0 -10 10 ${-k} 10 0z`,
+      0.001,
+    )[0]!
     expect(Math.abs(area(cubic))).toBeCloseTo(Math.PI * 100, 0)
     const quad = parseSvgPath('M0 0Q5 10 10 0T20 0z', 0.001)[0]!
     expect(Math.max(...quad.map((p) => p[1]))).toBeCloseTo(5, 2)
@@ -83,7 +90,13 @@ describe('outline geometry', () => {
     const outline = new mf.CrossSection(parseSvgPath(SHAPES.heart, 1e-3), 'NonZero').scale(10)
     const distance = new OutlineDistance(outline.toPolygons())
     for (const style of ['flat', 'chamfer', 'round', 'pillow'] as const) {
-      const slab = profiledSlab({ outline, distance, profile: edgeProfile(style, 0.8, 3, 7), segments: 64, resolution: 0.3 })
+      const slab = profiledSlab({
+        outline,
+        distance,
+        profile: edgeProfile(style, 0.8, 3, 7),
+        segments: 64,
+        resolution: 0.3,
+      })
       expect(edgeTopology(trianglesFromManifold(slab)).open).toBe(0)
       expect(slab.boundingBox().max[2]).toBeCloseTo(3, 2)
       expect(slab.boundingBox().min[2]).toBeCloseTo(0, 9)

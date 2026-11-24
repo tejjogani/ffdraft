@@ -31,14 +31,21 @@ const SHAPE_CORNER = 0.015
  */
 /** A domed field stays flatter than this radius, so ~2 mm melee still fit it (R/3 rule). */
 const FIELD_MIN_RADIUS = 6
-const recessFor = (border: number, thickness: number) => Math.min(Math.max(0.8 * border, 0.3), 0.6, thickness / 3)
+const recessFor = (border: number, thickness: number) =>
+  Math.min(Math.max(0.8 * border, 0.3), 0.6, thickness / 3)
 
 /** The source's filled area, y up, in source units (the caller owns it). */
-async function sourceSection(source: VectorBodyNode['source'], height: number): Promise<CrossSection> {
+async function sourceSection(
+  source: VectorBodyNode['source'],
+  height: number,
+): Promise<CrossSection> {
   const { manifold: mf } = runtime()
   switch (source.type) {
     case 'shape':
-      return new mf.CrossSection(parseSvgPath(SHAPES[source.shape], RELATIVE_TOLERANCE * 2), 'NonZero')
+      return new mf.CrossSection(
+        parseSvgPath(SHAPES[source.shape], RELATIVE_TOLERANCE * 2),
+        'NonZero',
+      )
     case 'svg': {
       // Flatten once coarsely to learn the artwork's size, then at the tolerance its scale needs.
       const rough = parseSvgPath(source.d, 1)
@@ -46,14 +53,27 @@ async function sourceSection(source: VectorBodyNode['source'], height: number): 
       const extent = Math.max(...ys) - Math.min(...ys) || 1
       const tolerance = Math.max(extent * RELATIVE_TOLERANCE, (0.002 * extent) / height)
       // SVG's y axis points down; the fill rule is SVG's default.
-      const contours = parseSvgPath(source.d, tolerance).map((c) => c.map(([x, y]): [number, number] => [x, -y]))
+      const contours = parseSvgPath(source.d, tolerance).map((c) =>
+        c.map(([x, y]): [number, number] => [x, -y]),
+      )
       return new mf.CrossSection(contours, 'NonZero')
     }
     case 'text': {
       if (source.text.trim() === '') throw new Error('The text is empty')
-      const layout = await textOutline(source.text, source.font, height, height * RELATIVE_TOLERANCE * 5)
+      const layout = await textOutline(
+        source.text,
+        source.font,
+        height,
+        height * RELATIVE_TOLERANCE * 5,
+      )
       // Each glyph fills even-odd on its own; overlapping glyphs (script joins) are unioned.
-      const glyphs = layout.glyphs.map((g) => new mf.CrossSection(g.contours.map((c) => c.map(([x, y]): [number, number] => [x, y])), 'EvenOdd'))
+      const glyphs = layout.glyphs.map(
+        (g) =>
+          new mf.CrossSection(
+            g.contours.map((c) => c.map(([x, y]): [number, number] => [x, y])),
+            'EvenOdd',
+          ),
+      )
       try {
         return mf.CrossSection.union(glyphs)
       } finally {
@@ -78,17 +98,27 @@ function innerReach(outline: CrossSection, distance: OutlineDistance): number {
 }
 
 export const vectorBody = defineFeature('vectorBody', async (node, ctx) => {
-  const { manifold: mf } = runtime()
   const own = <T extends CrossSection | Manifold>(x: T): T => ctx.track(x)
   let outline = own(await sourceSection(node.source, node.height))
   if (outline.isEmpty()) throw new Error('The outline encloses no area')
   const box = outline.bounds()
   const scale = node.height / (box.max[1] - box.min[1])
-  outline = own(own(outline.translate([-(box.min[0] + box.max[0]) / 2, -(box.min[1] + box.max[1]) / 2])).scale(scale))
+  outline = own(
+    own(outline.translate([-(box.min[0] + box.max[0]) / 2, -(box.min[1] + box.max[1]) / 2])).scale(
+      scale,
+    ),
+  )
   if (node.source.type === 'shape') {
     // Soften corners (convex, then concave) by a radius proportional to the shape.
     const r = node.height * SHAPE_CORNER
-    outline = own(own(own(outline.offset(-r, 'Round', 2, SEGMENTS)).offset(2 * r, 'Round', 2, SEGMENTS)).offset(-r, 'Round', 2, SEGMENTS))
+    outline = own(
+      own(own(outline.offset(-r, 'Round', 2, SEGMENTS)).offset(2 * r, 'Round', 2, SEGMENTS)).offset(
+        -r,
+        'Round',
+        2,
+        SEGMENTS,
+      ),
+    )
   }
   const thickened = thickenStrokes(outline, MIN_STROKE, SEGMENTS)
   if (thickened) {
@@ -112,7 +142,12 @@ export const vectorBody = defineFeature('vectorBody', async (node, ctx) => {
       : profiledSlab({
           outline,
           distance,
-          profile: edgeProfile(node.bevel, node.bevelSize, node.thickness, innerReach(outline, distance)),
+          profile: edgeProfile(
+            node.bevel,
+            node.bevelSize,
+            node.thickness,
+            innerReach(outline, distance),
+          ),
           segments: SEGMENTS,
           resolution,
         }),
@@ -126,7 +161,11 @@ export const vectorBody = defineFeature('vectorBody', async (node, ctx) => {
 })
 
 /** The field inside a raised border, or null (with a warning) when the border fills the outline. */
-function borderField(outline: CrossSection, node: VectorBodyNode, ctx: BuildContext): CrossSection | null {
+function borderField(
+  outline: CrossSection,
+  node: VectorBodyNode,
+  ctx: BuildContext,
+): CrossSection | null {
   const field = ctx.track(outline.offset(-node.border, 'Round', 2, SEGMENTS))
   if (!field.isEmpty()) return field
   ctx.report({
@@ -152,12 +191,24 @@ function borderedSlab(
 ): Manifold {
   const { manifold: mf } = runtime()
   const edge = node.bevel === 'pillow' ? 'round' : node.bevel
-  const rimProfile = edgeProfile(edge, Math.min(node.bevelSize, node.border * 0.75), node.thickness, node.border)
+  const rimProfile = edgeProfile(
+    edge,
+    Math.min(node.bevelSize, node.border * 0.75),
+    node.thickness,
+    node.border,
+  )
   const floor = node.thickness - recessFor(node.border, node.thickness)
   const fieldDistance = new OutlineDistance(field.toPolygons())
   const fieldProfile =
     node.bevel === 'pillow'
-      ? membraneDome(fieldDistance, field.bounds(), node.bevelSize, floor, FIELD_MIN_RADIUS, resolution / 2)
+      ? membraneDome(
+          fieldDistance,
+          field.bounds(),
+          node.bevelSize,
+          floor,
+          FIELD_MIN_RADIUS,
+          resolution / 2,
+        )
       : flatProfile(floor)
   const rim = profiledSlab({
     outline,
@@ -168,7 +219,13 @@ function borderedSlab(
     segments: SEGMENTS,
     resolution,
   })
-  const inner = profiledSlab({ outline: field, distance: fieldDistance, profile: fieldProfile, segments: SEGMENTS, resolution })
+  const inner = profiledSlab({
+    outline: field,
+    distance: fieldDistance,
+    profile: fieldProfile,
+    segments: SEGMENTS,
+    resolution,
+  })
   try {
     return mf.Manifold.union(rim, inner)
   } finally {

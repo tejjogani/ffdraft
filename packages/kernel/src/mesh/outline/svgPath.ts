@@ -37,7 +37,9 @@ class Scanner {
 
   number(): number {
     this.skipSeparators()
-    const match = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/.exec(this.s.slice(this.at, this.at + 64))
+    const match = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/.exec(
+      this.s.slice(this.at, this.at + 64),
+    )
     if (!match) throw new Error(`Path data: expected a number at position ${this.at}`)
     this.at += match[0].length
     return Number(match[0])
@@ -46,7 +48,8 @@ class Scanner {
   flag(): boolean {
     this.skipSeparators()
     const c = this.s[this.at]
-    if (c !== '0' && c !== '1') throw new Error(`Path data: expected an arc flag (0 or 1) at position ${this.at}`)
+    if (c !== '0' && c !== '1')
+      throw new Error(`Path data: expected an arc flag (0 or 1) at position ${this.at}`)
     this.at++
     return c === '1'
   }
@@ -79,9 +82,11 @@ export function parseSvgPath(d: string, tolerance: number): Contour[] {
 
   while (!scan.done()) {
     const explicit = scan.command()
-    if (!command && explicit !== 'M' && explicit !== 'm') throw new Error('Path data must start with a move command (M)')
+    if (!command && explicit !== 'M' && explicit !== 'm')
+      throw new Error('Path data must start with a move command (M)')
     if (explicit) command = explicit
-    else if (command === 'z' || command === 'Z') throw new Error(`Path data: expected a command at position ${scan.at}`)
+    else if (command === 'z' || command === 'Z')
+      throw new Error(`Path data: expected a command at position ${scan.at}`)
     const c: string = command!
     const lower = c.toLowerCase()
     const rel: boolean = c !== c.toUpperCase()
@@ -178,7 +183,14 @@ function dedupe(contour: Contour): Contour {
 
 // Uniform subdivision with the classic second-difference bound: the chord error of n equal
 // steps of a polynomial curve is at most max|B''| / (8 n²).
-function flattenCubic(p0: Point, p1: Point, p2: Point, p3: Point, tol: number, emit: (x: number, y: number) => void): void {
+function flattenCubic(
+  p0: Point,
+  p1: Point,
+  p2: Point,
+  p3: Point,
+  tol: number,
+  emit: (x: number, y: number) => void,
+): void {
   const m = Math.max(
     Math.hypot(p0[0] - 2 * p1[0] + p2[0], p0[1] - 2 * p1[1] + p2[1]),
     Math.hypot(p1[0] - 2 * p2[0] + p3[0], p1[1] - 2 * p2[1] + p3[1]),
@@ -191,17 +203,29 @@ function flattenCubic(p0: Point, p1: Point, p2: Point, p3: Point, tol: number, e
     const b = 3 * u * u * t
     const c = 3 * u * t * t
     const d = t * t * t
-    emit(a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0], a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1])
+    emit(
+      a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0],
+      a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1],
+    )
   }
 }
 
-function flattenQuadratic(p0: Point, p1: Point, p2: Point, tol: number, emit: (x: number, y: number) => void): void {
+function flattenQuadratic(
+  p0: Point,
+  p1: Point,
+  p2: Point,
+  tol: number,
+  emit: (x: number, y: number) => void,
+): void {
   const m = Math.hypot(p0[0] - 2 * p1[0] + p2[0], p0[1] - 2 * p1[1] + p2[1])
   const n = Math.min(512, Math.max(1, Math.ceil(Math.sqrt(m / (4 * tol)))))
   for (let i = 1; i <= n; i++) {
     const t = i / n
     const u = 1 - t
-    emit(u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0], u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1])
+    emit(
+      u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0],
+      u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1],
+    )
   }
 }
 
@@ -243,7 +267,8 @@ function flattenArc(
   const cy1 = (-k * ry * x1) / rx
   const cx = cos * cx1 - sin * cy1 + (p0[0] + p1[0]) / 2
   const cy = sin * cx1 + cos * cy1 + (p0[1] + p1[1]) / 2
-  const angle = (ux: number, uy: number, vx: number, vy: number) => Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy)
+  const angle = (ux: number, uy: number, vx: number, vy: number) =>
+    Math.atan2(ux * vy - uy * vx, ux * vx + uy * vy)
   const theta = angle(1, 0, (x1 - cx1) / rx, (y1 - cy1) / ry)
   let delta = angle((x1 - cx1) / rx, (y1 - cy1) / ry, (-x1 - cx1) / rx, (-y1 - cy1) / ry)
   if (!sweep && delta > 0) delta -= 2 * Math.PI

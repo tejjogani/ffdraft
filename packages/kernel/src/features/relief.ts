@@ -43,7 +43,10 @@ function outlineSection(node: ReliefNode): CrossSection {
         const t = (i / SEGMENTS) * 2 * Math.PI
         const c = Math.cos(t)
         const s = Math.sin(t)
-        return [(Math.sign(c) * Math.abs(c) ** 0.5 * w) / 2, (Math.sign(s) * Math.abs(s) ** 0.5 * h) / 2]
+        return [
+          (Math.sign(c) * Math.abs(c) ** 0.5 * w) / 2,
+          (Math.sign(s) * Math.abs(s) ** 0.5 * h) / 2,
+        ]
       })
       return new mf.CrossSection([points])
     }
@@ -69,7 +72,11 @@ function outlineSection(node: ReliefNode): CrossSection {
 }
 
 /** Heights 0–1 on a grid over the field's bounds, from the image or the built-in pattern. */
-async function heightGrid(node: ReliefNode, field: CrossSection, ctx: BuildContext): Promise<Omit<HeightGrid, 'z'> & { h: Float32Array }> {
+async function heightGrid(
+  node: ReliefNode,
+  field: CrossSection,
+  ctx: BuildContext,
+): Promise<Omit<HeightGrid, 'z'> & { h: Float32Array }> {
   const { min, max } = field.bounds()
   const spacing = Math.max(max[0] - min[0], max[1] - min[1]) / SAMPLES_ACROSS
   const nx = Math.ceil((max[0] - min[0]) / spacing) + 1
@@ -78,14 +85,15 @@ async function heightGrid(node: ReliefNode, field: CrossSection, ctx: BuildConte
   if (!node.assetId) {
     for (let j = 0; j < ny; j++)
       for (let i = 0; i < nx; i++) {
-        const u = ((i / (nx - 1)) * 2 - 1)
-        const v = ((j / (ny - 1)) * 2 - 1)
+        const u = (i / (nx - 1)) * 2 - 1
+        const v = (j / (ny - 1)) * 2 - 1
         const g = guilloche(u, v)
         h[j * nx + i] = node.invert ? 1 - g : g
       }
     return { x0: min[0], y0: min[1], spacing, nx, ny, h }
   }
-  if (!ctx.assets) throw new Error('No asset store is connected, so the height map cannot be loaded')
+  if (!ctx.assets)
+    throw new Error('No asset store is connected, so the height map cannot be loaded')
   const image = decodeImage(await ctx.assets(node.assetId))
   const heights = luminanceHeights(image, node.invert)
   // "Cover" fit: the image fills the field, cropped to its aspect ratio; image rows run down.
@@ -101,7 +109,17 @@ async function heightGrid(node: ReliefNode, field: CrossSection, ctx: BuildConte
     for (let px = Math.floor(left); px < Math.ceil(left + cropW); px++) {
       const i = Math.round(((px + 0.5 - left) / cropW) * (nx - 1))
       const j = Math.round((1 - (py + 0.5 - topRow) / cropH) * (ny - 1))
-      if (i < 0 || j < 0 || i >= nx || j >= ny || px < 0 || py < 0 || px >= image.width || py >= image.height) continue
+      if (
+        i < 0 ||
+        j < 0 ||
+        i >= nx ||
+        j >= ny ||
+        px < 0 ||
+        py < 0 ||
+        px >= image.width ||
+        py >= image.height
+      )
+        continue
       sums[j * nx + i]! += heights[py * image.width + px]!
       counts[j * nx + i]!++
     }
@@ -127,7 +145,8 @@ export const relief = defineFeature('relief', async (node, ctx) => {
   let field = outline
   if (node.rim > 0) {
     field = own(outline.offset(-node.rim, 'Round', 2, SEGMENTS))
-    if (field.isEmpty()) throw new Error(`A ${node.rim} mm rim leaves no room for the relief; make it narrower`)
+    if (field.isEmpty())
+      throw new Error(`A ${node.rim} mm rim leaves no room for the relief; make it narrower`)
   }
 
   const base = own(outline.extrude(node.baseThickness))
@@ -135,7 +154,9 @@ export const relief = defineFeature('relief', async (node, ctx) => {
   const z = new Float32Array(grid.h.length)
   for (let k = 0; k < z.length; k++) z[k] = node.baseThickness + node.depth * grid.h[k]!
   const slab = own(heightfieldSolid({ ...grid, z }, node.baseThickness - OVERLAP))
-  const prism = own(own(field.extrude(node.depth + 2 * OVERLAP)).translate([0, 0, node.baseThickness - OVERLAP]))
+  const prism = own(
+    own(field.extrude(node.depth + 2 * OVERLAP)).translate([0, 0, node.baseThickness - OVERLAP]),
+  )
   const parts: Manifold[] = [base, own(slab.intersect(prism))]
   if (node.rim > 0) {
     // The rim stands flush with the highest relief to protect it, its outer edge rounded.

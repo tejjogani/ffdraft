@@ -110,11 +110,11 @@ import type {
 
 export type { Frame, Mat4, Vec2, Vec3 } from './geometry/vec'
 export { IDENTITY } from './geometry/vec'
+export { runtime } from './runtime/index'
+export { intersect, subtract, union } from './solid/boolean'
 export type { IndexedTriangles, Tessellation } from './solid/meshing'
 export type { Deletable, Quality } from './solid/occt'
-export { intersect, subtract, union } from './solid/boolean'
-export { QUALITY, lazySolid, solidFromBrep, solidFromManifold } from './solid/solid'
-export { runtime } from './runtime/index'
+export { lazySolid, QUALITY, solidFromBrep, solidFromManifold } from './solid/solid'
 
 // ── Solids ───────────────────────────────────────────────────────────────────────────────────
 

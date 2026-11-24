@@ -42,13 +42,22 @@ const COLLAPSE = 1e-3
  * The front profile of a body `thickness` thick (back at z = 0): `size` is the chamfer or
  * radius of the edge, or the rise of a pillow dome reaching full height `reach` mm inside.
  */
-export function edgeProfile(style: EdgeStyle, size: number, thickness: number, reach: number): Profile {
+export function edgeProfile(
+  style: EdgeStyle,
+  size: number,
+  thickness: number,
+  reach: number,
+): Profile {
   const b = Math.min(size, thickness * 0.9)
   if (style === 'flat' || b <= 1e-3) return flatProfile(thickness)
-  if (style === 'chamfer') return { height: (d) => thickness - Math.max(0, b - d), steps: [0, b], curved: true }
+  if (style === 'chamfer')
+    return { height: (d) => thickness - Math.max(0, b - d), steps: [0, b], curved: true }
   if (style === 'round') {
     // Quarter circle of radius b; steps evenly spaced along the arc.
-    const steps = Array.from({ length: ROUND_STEPS + 1 }, (_, k) => b * (1 - Math.cos((Math.PI / 2) * (k / ROUND_STEPS))))
+    const steps = Array.from(
+      { length: ROUND_STEPS + 1 },
+      (_, k) => b * (1 - Math.cos((Math.PI / 2) * (k / ROUND_STEPS))),
+    )
     return {
       height: (d) => {
         const t = Math.min(d, b)
@@ -62,7 +71,10 @@ export function edgeProfile(style: EdgeStyle, size: number, thickness: number, r
   // rolls over vertically and the crest is flat; the slabs follow the arc evenly.
   const rise = Math.min(size, thickness - 0.3)
   const D = Math.max(reach, 1e-3)
-  const steps = Array.from({ length: PILLOW_STEPS + 1 }, (_, k) => D * 0.98 * (1 - Math.cos((Math.PI / 2) * (k / PILLOW_STEPS))))
+  const steps = Array.from(
+    { length: PILLOW_STEPS + 1 },
+    (_, k) => D * 0.98 * (1 - Math.cos((Math.PI / 2) * (k / PILLOW_STEPS))),
+  )
   return {
     height: (d) => {
       const t = Math.min(d / D, 1)
@@ -73,7 +85,11 @@ export function edgeProfile(style: EdgeStyle, size: number, thickness: number, r
   }
 }
 
-export const flatProfile = (height: number): Profile => ({ height: () => height, steps: [0], curved: false })
+export const flatProfile = (height: number): Profile => ({
+  height: () => height,
+  steps: [0],
+  curved: false,
+})
 
 /**
  * A membrane dome for a field inside a raised border: the solution of ∇²u = −1 that vanishes
@@ -96,7 +112,8 @@ export function membraneDome(
   const ny = Math.ceil((bounds.max[1] - y0) / spacing) + 2
   const inside = new Uint8Array(nx * ny)
   for (let j = 0; j < ny; j++)
-    for (let i = 0; i < nx; i++) inside[j * nx + i] = field.inside(x0 + i * spacing, y0 + j * spacing) ? 1 : 0
+    for (let i = 0; i < nx; i++)
+      inside[j * nx + i] = field.inside(x0 + i * spacing, y0 + j * spacing) ? 1 : 0
   // Successive over-relaxation with the optimal factor for an n-wide grid.
   const u = new Float64Array(nx * ny)
   const n = Math.max(nx, ny)
@@ -127,7 +144,10 @@ export function membraneDome(
     const tx = fx - i
     const ty = fy - j
     const k = j * nx + i
-    return (u[k]! * (1 - tx) + u[k + 1]! * tx) * (1 - ty) + (u[k + nx]! * (1 - tx) + u[k + nx + 1]! * tx) * ty
+    return (
+      (u[k]! * (1 - tx) + u[k + 1]! * tx) * (1 - ty) +
+      (u[k + nx]! * (1 - tx) + u[k + nx + 1]! * tx) * ty
+    )
   }
   return { height: (_d, x, y) => floor - s * peak + s * sample(x, y), steps: [0], curved: true }
 }

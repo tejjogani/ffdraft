@@ -3,8 +3,8 @@
  * so that a chain passes through along X.
  */
 import type { NodeOf } from '@pave/schema'
-import { QUALITY, type Solid, defineFeature, metalOf } from '../core'
-import { type Loop, circleLoop, roundedRectLoop } from '../geometry/loop'
+import { defineFeature, metalOf, QUALITY, type Solid } from '../core'
+import { circleLoop, type Loop, roundedRectLoop } from '../geometry/loop'
 import { pathFrames } from '../geometry/path'
 import { placeLoop, sweepSolid } from '../geometry/sweep'
 import type { Frame, Vec3 } from '../geometry/vec'
@@ -37,11 +37,17 @@ function build(node: BailNode, top: Vec3, back: number): { solid: Solid; opening
   switch (node.style) {
     case 'ring': {
       const centre: Vec3 = [x, y, z - SINK + (opening + wire) / 2 - wire / 2]
-      return { solid: band(circle(centre, (opening + wire) / 2, 32), true, () => circleLoop(wire / 2)), opening: centre }
+      return {
+        solid: band(circle(centre, (opening + wire) / 2, 32), true, () => circleLoop(wire / 2)),
+        opening: centre,
+      }
     }
     case 'tube': {
       const centre: Vec3 = [x, y, z - SINK + (opening + wire) / 2 - wire / 2]
-      return { solid: band(circle(centre, (opening + wire) / 2, 32), true, () => flat(width)), opening: centre }
+      return {
+        solid: band(circle(centre, (opening + wire) / 2, 32), true, () => flat(width)),
+        opening: centre,
+      }
     }
     case 'hidden': {
       // A flat loop standing off the back of the piece, just below its top edge.
@@ -49,17 +55,29 @@ function build(node: BailNode, top: Vec3, back: number): { solid: Solid; opening
       const height = opening + wire
       const zc = z - wire - height / 2
       const r = Math.min(depth, height) * 0.35
-      const corners: [number, number][] = [[-wire, -height / 2], [depth, -height / 2], [depth, height / 2], [-wire, height / 2]]
+      const corners: [number, number][] = [
+        [-wire, -height / 2],
+        [depth, -height / 2],
+        [depth, height / 2],
+        [-wire, height / 2],
+      ]
       // Open path: both ends are buried in the host's back.
       const path: Vec3[] = [[x, back + corners[0]![0], zc + corners[0]![1]]]
       for (const [k, [cy, cz]] of [corners[1]!, corners[2]!].entries()) {
         for (let i = 0; i <= 6; i++) {
           const a = (k === 0 ? -Math.PI / 2 : 0) + (i / 6) * (Math.PI / 2)
-          path.push([x, back + cy - r + r * Math.cos(a), zc + cz + (k === 0 ? r : -r) + r * Math.sin(a)])
+          path.push([
+            x,
+            back + cy - r + r * Math.cos(a),
+            zc + cz + (k === 0 ? r : -r) + r * Math.sin(a),
+          ])
         }
       }
       path.push([x, back + corners[3]![0], zc + corners[3]![1]])
-      return { solid: band(path, false, () => flat(width)), opening: [x, back + depth / 2 - wire / 2, zc] }
+      return {
+        solid: band(path, false, () => flat(width)),
+        opening: [x, back + depth / 2 - wire / 2, zc],
+      }
     }
     default: {
       // A teardrop: narrow where it joins the piece, opening out above. Both ends are sunk in.
@@ -69,7 +87,11 @@ function build(node: BailNode, top: Vec3, back: number): { solid: Solid; opening
       const path: Vec3[] = Array.from({ length: count + 1 }, (_, i) => {
         const t = (i / count) * 2 * Math.PI
         const spread = Math.sin(t / 2) ** 0.7
-        return [x, y + (w / 2) * Math.sin(t) * spread + 0.18 * wire * Math.cos(t / 2), z - SINK + (h / 2) * (1 - Math.cos(t))]
+        return [
+          x,
+          y + (w / 2) * Math.sin(t) * spread + 0.18 * wire * Math.cos(t / 2),
+          z - SINK + (h / 2) * (1 - Math.cos(t)),
+        ]
       })
       // The band is narrower at its foot and full width over the top.
       const section = (i: number) => flat(width * (0.55 + 0.45 * Math.sin((i / count) * Math.PI)))
@@ -103,13 +125,16 @@ export const bail = defineFeature('bail', (node, ctx) => {
   const host = node.host ? ctx.input(node.host) : null
   const solids = host?.bodies.map((b) => b.solid) ?? []
   const bounds = solids.length > 0 ? unionBounds(solids.map((s) => s.bounds())) : null
-  const top: Vec3 = bounds ? topCentre(solids, bounds, Math.max(node.wire, node.width / 2)) : [0, 0, 0]
+  const top: Vec3 = bounds
+    ? topCentre(solids, bounds, Math.max(node.wire, node.width / 2))
+    : [0, 0, 0]
   const { solid, opening } = build(node, top, bounds ? bounds.max[1] : 0)
   if (node.opening < node.wire * 1.2)
     ctx.report({
       level: 'info',
       code: 'bail.tight',
-      message: 'The bail opening is barely larger than its wire; check that the chain end passes through.',
+      message:
+        'The bail opening is barely larger than its wire; check that the chain end passes through.',
     })
   // A chain threads the opening along x.
   const frame: Frame = { origin: opening, x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] }

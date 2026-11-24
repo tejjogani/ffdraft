@@ -26,7 +26,10 @@ const UK_BASE_CIRCUMFERENCE = 37.5
 const UK_STEP_CIRCUMFERENCE = 1.25
 
 /** Inner circumference (mm) of Japanese sizes 1–30, as printed on ring-size charts. */
-const JP_CIRCUMFERENCE = Array.from({ length: 30 }, (_, i) => Math.round(Math.PI * (13 + i / 3) * 10) / 10)
+const JP_CIRCUMFERENCE = Array.from(
+  { length: 30 },
+  (_, i) => Math.round(Math.PI * (13 + i / 3) * 10) / 10,
+)
 
 function jpDiameter(size: number): number {
   const last = JP_CIRCUMFERENCE.length - 1
@@ -57,7 +60,10 @@ export function ringSizeFromDiameter(d: number, system: RingSizeSystem): RingSiz
     case 'us':
       return { system, value: round((d - US_BASE) / US_STEP, 0.25) }
     case 'uk':
-      return { system, value: round((d * Math.PI - UK_BASE_CIRCUMFERENCE) / UK_STEP_CIRCUMFERENCE, 0.5) }
+      return {
+        system,
+        value: round((d * Math.PI - UK_BASE_CIRCUMFERENCE) / UK_STEP_CIRCUMFERENCE, 0.5),
+      }
     case 'eu':
       return { system, value: round(d * Math.PI, 0.5) }
     case 'jp':

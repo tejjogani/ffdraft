@@ -6,11 +6,11 @@
  * that share the lower half of the ring and part toward the head.
  */
 import { type NodeOf, ringInnerDiameter } from '@pave/schema'
-import { type Body, type NodeResult, defineFeature, metalOf } from '../core'
+import { type Body, defineFeature, metalOf, type NodeResult } from '../core'
 import { type BandProfile, bandLoop, bandOuterAt } from '../geometry/bandProfile'
 import { ringSectionFrame, wrapAngle } from '../geometry/ring'
 import { placeLoop, sweepSolid } from '../geometry/sweep'
-import { DEG, clamp, lerp, smootherstep } from '../geometry/vec'
+import { clamp, DEG, lerp, smootherstep } from '../geometry/vec'
 import { RULES } from '../rules'
 
 type ShankNode = NodeOf<'ringShank'>
@@ -71,7 +71,9 @@ function euro(outerAtBase: number): (theta: number, outer: number) => number {
     const phi = Math.PI - Math.abs(theta)
     if (phi >= end) return 0
     const flat = outerAtBase / Math.cos(Math.min(phi, corner))
-    return Math.max(0, flat - outer) * (1 - smootherstep((phi - corner * 0.8) / (end - corner * 0.8)))
+    return (
+      Math.max(0, flat - outer) * (1 - smootherstep((phi - corner * 0.8) / (end - corner * 0.8)))
+    )
   }
 }
 
@@ -91,7 +93,9 @@ function shankShape(node: ShankNode) {
   const baseWidth = (theta: number) => lerp(node.widthBottom, node.widthTop, top(theta))
   const baseThickness = (theta: number) => lerp(node.thicknessBottom, node.thicknessTop, top(theta))
   const shoulder =
-    node.shoulder === 'cathedral' ? cathedral(node.shoulderHeight, innerRadius + node.thicknessTop) : () => 0
+    node.shoulder === 'cathedral'
+      ? cathedral(node.shoulderHeight, innerRadius + node.thicknessTop)
+      : () => 0
   const base = node.baseShape === 'euro' ? euro(innerRadius + node.thicknessBottom) : () => 0
   const thickness = (theta: number) => {
     const t = baseThickness(theta) + shoulder(theta)
@@ -104,8 +108,11 @@ function shankShape(node: ShankNode) {
   const strandTop = Math.max(0.6 * node.widthTop, 0.9)
   const parting = (theta: number) => smootherstep(1 - Math.abs(theta) / SPLIT_START)
   const outerEdge = (theta: number) =>
-    split ? lerp(baseWidth(theta) / 2, node.splitGap / 2 + strandTop, parting(theta)) : baseWidth(theta) / 2
-  const innerEdge = (theta: number) => lerp(-baseWidth(theta) / 2, node.splitGap / 2, parting(theta))
+    split
+      ? lerp(baseWidth(theta) / 2, node.splitGap / 2 + strandTop, parting(theta))
+      : baseWidth(theta) / 2
+  const innerEdge = (theta: number) =>
+    lerp(-baseWidth(theta) / 2, node.splitGap / 2, parting(theta))
 
   const ring = Array.from({ length: SECTIONS }, (_, i) => wrapAngle((i / SECTIONS) * 2 * Math.PI))
   const strands: Strand[] = [
@@ -120,7 +127,10 @@ function shankShape(node: ShankNode) {
   if (split) {
     const steps = Math.ceil((2 * SPLIT_BURIED) / ((2 * Math.PI) / SECTIONS))
     strands.push({
-      angles: Array.from({ length: steps + 1 }, (_, i) => -SPLIT_BURIED + (2 * SPLIT_BURIED * i) / steps),
+      angles: Array.from(
+        { length: steps + 1 },
+        (_, i) => -SPLIT_BURIED + (2 * SPLIT_BURIED * i) / steps,
+      ),
       closed: false,
       centre: (t) => -(outerEdge(t) + innerEdge(t)) / 2,
       width: (t) => outerEdge(t) - innerEdge(t),
@@ -128,7 +138,13 @@ function shankShape(node: ShankNode) {
       buried: (t) => 1 - smootherstep((SPLIT_START - Math.abs(t)) / (8 * DEG)),
     })
   }
-  return { innerRadius, thickness, strands, width: (t: number) => 2 * outerEdge(t), gap: (t: number) => (split ? 2 * Math.max(0, innerEdge(t)) : 0) }
+  return {
+    innerRadius,
+    thickness,
+    strands,
+    width: (t: number) => 2 * outerEdge(t),
+    gap: (t: number) => (split ? 2 * Math.max(0, innerEdge(t)) : 0),
+  }
 }
 
 export const ringShank = defineFeature('ringShank', (node, ctx) => {

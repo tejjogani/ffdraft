@@ -4,7 +4,7 @@
  * a honeycomb, each holding three stones. Stones on the edge of the field, which have fewer
  * neighbours, get extra beads on their open side until no gap around them exceeds 150°.
  */
-import { type Vec3, add, cross, dot, perpendicular, scale, sub } from '../../geometry/vec'
+import { add, cross, dot, perpendicular, scale, sub, type Vec3 } from '../../geometry/vec'
 import { RULES } from '../../rules'
 import { PointGrid } from '../grid'
 import type { PlacedStone } from './layout'
@@ -33,11 +33,18 @@ export function layoutBeads(
   for (const s of stones) grid.add(...(s.position as [number, number, number]))
   const neighbours = stones.map((s, i) => {
     const list: number[] = []
-    grid.near(s.position[0], s.position[1], s.position[2], largest + gap + largest * NEIGHBOUR_SLACK, (j, d2) => {
-      const o = stones[j]!
-      const reach = (s.diameter + o.diameter) / 2 + gap + Math.min(s.diameter, o.diameter) * NEIGHBOUR_SLACK
-      if (j !== i && d2 <= reach * reach) list.push(j)
-    })
+    grid.near(
+      s.position[0],
+      s.position[1],
+      s.position[2],
+      largest + gap + largest * NEIGHBOUR_SLACK,
+      (j, d2) => {
+        const o = stones[j]!
+        const reach =
+          (s.diameter + o.diameter) / 2 + gap + Math.min(s.diameter, o.diameter) * NEIGHBOUR_SLACK
+        if (j !== i && d2 <= reach * reach) list.push(j)
+      },
+    )
     return list.sort((a, b) => a - b)
   })
 
@@ -67,7 +74,7 @@ export function layoutBeads(
   }
 
   // Interstitial beads: one per triangle of mutually adjacent stones.
-  stones.forEach((s, i) => {
+  stones.forEach((_, i) => {
     const ns = neighbours[i]!
     for (const j of ns) {
       if (j < i) continue
@@ -84,7 +91,9 @@ export function layoutBeads(
         }
         p = scale(p, 1 / wsum)
         const mean = tri.reduce((sum, t) => sum + stones[t]!.diameter, 0) / 3
-        add3(p, RULES.beadDiameter(mean), tri, [...new Set([...ns, ...neighbours[j]!, ...neighbours[k]!, i])])
+        add3(p, RULES.beadDiameter(mean), tri, [
+          ...new Set([...ns, ...neighbours[j]!, ...neighbours[k]!, i]),
+        ])
       }
     }
   })
@@ -95,12 +104,10 @@ export function layoutBeads(
     const v = cross(s.normal, u)
     const diameter = RULES.beadDiameter(s.diameter)
     for (let pass = 0; pass < 4; pass++) {
-      const angles = owners[i]!
-        .map((b) => {
-          const d = sub(beads[b]!.position, s.position)
-          return Math.atan2(dot(d, v), dot(d, u))
-        })
-        .sort((a, b) => a - b)
+      const angles = owners[i]!.map((b) => {
+        const d = sub(beads[b]!.position, s.position)
+        return Math.atan2(dot(d, v), dot(d, u))
+      }).sort((a, b) => a - b)
       let widest = angles.length === 0 ? 2 * Math.PI : 0
       let from = 0
       angles.forEach((angle, a) => {
@@ -114,7 +121,12 @@ export function layoutBeads(
       const mid = from + widest / 2
       const dir = add(scale(u, Math.cos(mid)), scale(v, Math.sin(mid)))
       const before = owners[i]!.length
-      add3(add(s.position, scale(dir, s.diameter / 2 + diameter * 0.45)), diameter, [i], [...neighbours[i]!, i])
+      add3(
+        add(s.position, scale(dir, s.diameter / 2 + diameter * 0.45)),
+        diameter,
+        [i],
+        [...neighbours[i]!, i],
+      )
       if (owners[i]!.length === before) break
     }
   })

@@ -4,10 +4,18 @@
  * scales it to its real dimensions.
  */
 import { GEM_CUTS, type GemCut, type GemCutId } from '@pave/schema'
-import { type Vec3, cross, dot, sub } from '../geometry/vec'
-import type { MeshData } from '../types'
-import { type Facet, type FacetKind, type Faceted, type StackLevel, brilliantFacets, levelsOf, stepFacets } from './facets'
 import type { Loop } from '../geometry/loop'
+import { cross, dot, sub, type Vec3 } from '../geometry/vec'
+import type { MeshData } from '../types'
+import {
+  brilliantFacets,
+  type Facet,
+  type Faceted,
+  type FacetKind,
+  levelsOf,
+  type StackLevel,
+  stepFacets,
+} from './facets'
 import { type Outline, outlineFor, outlineLoop, outlinePoint } from './outline'
 
 export interface GemUnit {
@@ -160,7 +168,11 @@ function facetedMesh(facets: readonly Facet[]): MeshData {
     // Fan from the first vertex — except tables, which can be concave (a heart's cleft) but
     // are star-shaped about their centroid.
     if (facet.kind === 'table')
-      points.unshift([0, 1, 2].map((k) => points.reduce((sum, p) => sum + p[k]!, 0) / points.length) as unknown as Vec3)
+      points.unshift(
+        [0, 1, 2].map(
+          (k) => points.reduce((sum, p) => sum + p[k]!, 0) / points.length,
+        ) as unknown as Vec3,
+      )
     const planar = points.every((p) => Math.abs(dot(normal, sub(p, points[0]!))) < 1e-6)
     const fan = (apex: number): [Vec3, Vec3, Vec3][] => {
       const order = [...points.slice(apex), ...points.slice(0, apex)]
@@ -171,11 +183,13 @@ function facetedMesh(facets: readonly Facet[]): MeshData {
         const j = i + 1 < order.length ? i + 1 : 1
         // Skip slivers (collinear girdle points on straight sides).
         const area = cross(sub(order[i]!, order[0]!), sub(order[j]!, order[0]!))
-        if (Math.hypot(area[0], area[1], area[2]) > 1e-12) out.push([order[0]!, order[i]!, order[j]!])
+        if (Math.hypot(area[0], area[1], area[2]) > 1e-12)
+          out.push([order[0]!, order[i]!, order[j]!])
       }
       return out
     }
-    const flipped = (list: [Vec3, Vec3, Vec3][]) => list.some((t) => dot(polygonNormal(t), normal) < 0)
+    const flipped = (list: [Vec3, Vec3, Vec3][]) =>
+      list.some((t) => dot(polygonNormal(t), normal) < 0)
     let triangles = fan(0)
     // A concave kite (beside a heart's cleft) folds over when fanned from its inner corner;
     // the other diagonal splits it properly.
@@ -220,7 +234,11 @@ function cabochonStack(cut: GemCut): Faceted {
     const a = (deg * Math.PI) / 180
     return { z: levels.girdleTop + dome * Math.sin(a), scale: Math.cos(a) }
   })
-  return { facets: [], stack: [{ z: levels.girdleBottom, scale: 1 }, ...rings, { z: levels.table, scale: 0.08 }], keel: 0 }
+  return {
+    facets: [],
+    stack: [{ z: levels.girdleBottom, scale: 1 }, ...rings, { z: levels.table, scale: 0.08 }],
+    keel: 0,
+  }
 }
 
 /** A smooth ellipsoidal dome over a girdle band and a flat base. */
@@ -279,7 +297,14 @@ function cabochonMesh(o: Outline, cut: GemCut): MeshData {
   }
   for (let j = 0; j < around; j++) {
     const k = (j + 1) % around
-    indices.push(band + j * 2, band + j * 2 + 1, band + k * 2 + 1, band + j * 2, band + k * 2 + 1, band + k * 2)
+    indices.push(
+      band + j * 2,
+      band + j * 2 + 1,
+      band + k * 2 + 1,
+      band + j * 2,
+      band + k * 2 + 1,
+      band + k * 2,
+    )
     if (j > 0 && j + 1 < around) indices.push(base, base + j + 1, base + j)
   }
   return {

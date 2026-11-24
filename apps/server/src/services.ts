@@ -8,10 +8,28 @@
  *   createApp({ services: { geometry: myKernel } })   // or later:
  *   server.runtime.services.register('geometry', myKernel)
  *
- * What a registered implementation can do shows in `session.get` → `capabilities`.
+ * What a registered implementation can do shows in `session.get` → `capabilities`. Deployments
+ * build their services (and extra routes) in `src/compose.ts`.
+ *
+ * Shared engines, decided once so two teams do not build them twice:
+ *  - Image generation: ONE provider family (Gemini image, BFL, fake; research 04's
+ *    `ImageGenProvider` shape) lives in `packages/ideation`, owned by the ideate workstream.
+ *    `imageGen` and `onModel` are both built on it; there is no second client in the server.
+ *  - Vision: the render workstream's vision provider is registered as `vision` and implements
+ *    {@link VisionService.describe} for freeform. The on-model fidelity judge and the screening
+ *    of card and direction text for real names are internal to `onModel`, not part of `vision`.
+ *  - Attestation: the server refuses export, image-to-3D and production of a piece that needs
+ *    one; a client-side export must check `originNeedsAttestation(piece.origin)` itself first.
+ *  - Restart recovery: `Runtime.recover()` runs once at boot and hands every unfinished job and
+ *    run to its service's `resume` (render, image-to-3D, on-model, assistant). A job whose
+ *    service cannot resume it is failed as interrupted; browser renders are left to their window.
  */
 import type {
   Actor,
+  FinishId,
+  GemMaterialId,
+  MetalId,
+  PlatingId,
   Asset,
   BrandModel,
   Capabilities,
@@ -70,6 +88,8 @@ export interface ServiceContext {
    * has); rejects with the abort reason when `signal` aborts.
    */
   jobSettled(kind: JobKind, id: string, signal?: AbortSignal): Promise<TerminalStatus>
+  /** A finished (`done`) render of the caller's org with this cache key, newest first; else null. */
+  cachedRender(cacheKey: string): Promise<RenderJob | null>
 }
 
 /** Lets a long-running job report back. Each update is persisted and published as `job.updated`. */
@@ -86,16 +106,34 @@ interface Service {
 export type ExportFormat = CommandParsedInput<'design.export'>['format']
 export type PortraitView = BrandModel['portraits'][number]['view']
 
+type Vec3 = [number, number, number]
+type Box = { min: Vec3; max: Vec3 }
+
 /**
- * The subject summary `@pave/render` frames shots from (its `SceneSubject`: bounds, silhouette,
- * parts, stones). The server only passes it from the kernel to the render queue, so it states
- * just the part every subject has.
+ * The subject summary shots are framed from. Structurally identical to `@pave/render`'s
+ * `SceneSubject` (kernel `Part` / `StoneInstance` picks), so one is assignable to the other
+ * without the server depending on the render package.
  */
 export interface RenderSubject {
-  readonly bounds: {
-    readonly min: readonly [number, number, number]
-    readonly max: readonly [number, number, number]
-  }
+  bounds: Box
+  /** Support points of the geometry, so presets frame the real silhouette. */
+  silhouette?: Vec3[]
+  parts: {
+    id: string
+    nodeId: string
+    material: MetalId
+    finish: FinishId
+    plating: PlatingId
+    bounds: Box
+  }[]
+  stones: {
+    id: string
+    nodeId: string
+    stone: GemMaterialId
+    role: 'center' | 'side' | 'accent' | 'melee'
+    /** Column-major 4×4. */
+    matrix: number[]
+  }[]
 }
 
 export interface GeometryService extends Service {
@@ -133,15 +171,23 @@ export interface SearchService extends Service {
   ): Promise<SearchResult | null>
 }
 
+export type ImageGenRequest = Omit<
+  CommandParsedInput<'references.generate'>,
+  'boardId' | 'referenceIds'
+> & { references: Reference[] }
+
 export interface ImageGenService extends Service {
+  /**
+   * What `generate` would cost for this request (`references.estimate`); the same figure is
+   * checked against the org's budget before generating.
+   */
+  estimate(request: ImageGenRequest, sctx: ServiceContext): Promise<Estimate>
   /**
    * `references` are already filtered to items whose rights allow generative use; read their
    * pixels with `sctx.readAsset(reference.assetId)`. `roles` say what each one is for.
    */
   generate(
-    request: Omit<CommandParsedInput<'references.generate'>, 'boardId' | 'referenceIds'> & {
-      references: Reference[]
-    },
+    request: ImageGenRequest,
     sctx: ServiceContext,
   ): Promise<{ model: string; images: FileData[]; seed?: number | null }>
 }
@@ -177,6 +223,16 @@ export interface RenderQueue extends Service {
     handle: JobHandle<RenderJobPatch>,
     sctx: ServiceContext,
   ): Promise<void>
+  /**
+   * Called at boot for each Blender job still queued or running, in the context of the user who
+   * queued it; take it up again as `submit` would. Without it such jobs fail as interrupted.
+   */
+  resume?(
+    job: RenderJob,
+    piece: Piece,
+    handle: JobHandle<RenderJobPatch>,
+    sctx: ServiceContext,
+  ): Promise<void>
   cancel(jobId: string, sctx: ServiceContext): Promise<void>
 }
 
@@ -204,6 +260,12 @@ export interface OnModelService extends Service {
     recipe: NonNullable<BrandModel['recipe']>
     portraits: { view: PortraitView; file: FileData }[]
   }>
+  /** What `portraits` would cost (`models.estimatePortraits`); also checked against the budget. */
+  estimatePortraits(
+    model: BrandModel,
+    views: PortraitView[],
+    sctx: ServiceContext,
+  ): Promise<Estimate>
   estimate(
     request: CommandParsedInput<'shots.estimate'>,
     subject: { model: BrandModel; piece: Piece },
@@ -215,6 +277,13 @@ export interface OnModelService extends Service {
    * `sctx.jobSettled`. Fail closed: a shot that does not match the design is `failed`.
    */
   submitShot(
+    shot: ModelShot,
+    subject: { model: BrandModel; piece: Piece },
+    handle: JobHandle<ModelShotPatch>,
+    sctx: ServiceContext,
+  ): Promise<void>
+  /** Called at boot for each shot still queued or running; without it they fail as interrupted. */
+  resumeShot?(
     shot: ModelShot,
     subject: { model: BrandModel; piece: Piece },
     handle: JobHandle<ModelShotPatch>,
@@ -256,6 +325,12 @@ export interface AssistantService extends Service {
   cancel(runId: string, sctx: ServiceContext): Promise<Run>
   /** Completes a pending client-tool request; the first answer wins. */
   respond(input: CommandParsedInput<'client.respond'>, sctx: ServiceContext): Promise<void>
+  /**
+   * Called at boot for each run left `running` or `awaiting-approval`, as the run's user: fail
+   * the running ones as `interrupted` and keep waiting on approvals. Without it, running runs
+   * are failed as interrupted and waiting ones stay waiting.
+   */
+  resume?(run: Run, sctx: ServiceContext): Promise<void>
 }
 
 export type MeshJobPatch = Partial<
@@ -277,9 +352,20 @@ export interface Mesh3DService extends Service {
     handle: JobHandle<MeshJobPatch>,
     sctx: ServiceContext,
   ): Promise<void>
-  cancel(jobId: string, sctx: ServiceContext): Promise<void>
+  /**
+   * Called at boot for each job still queued or running, with the provider job id it stored
+   * (null if it never got one): resume polling. Without it such jobs fail as interrupted.
+   */
+  resume?(
+    job: MeshJob,
+    handle: JobHandle<MeshJobPatch>,
+    sctx: ServiceContext,
+    stored: { providerJobId: string | null },
+  ): Promise<void>
+  cancel(jobId: string, sctx: ServiceContext, stored: { providerJobId: string | null }): Promise<void>
 }
 
+/** Built by the render workstream's vision provider; see the note at the top of this file. */
 export interface VisionService extends Service {
   /** Tags for an image and what in it needs the person's attestation (logos, characters, faces). */
   describe(image: FileData, sctx: ServiceContext): Promise<{ tags: string[]; flags: OriginFlag[] }>
@@ -357,12 +443,13 @@ const DEFAULTS: Services = {
     renderInput: missing('geometry'),
   },
   search: { search: missing('search'), resolve: missing('search') },
-  imageGen: { generate: missing('imageGen') },
+  imageGen: { estimate: missing('imageGen'), generate: missing('imageGen') },
   capture: { capture: missing('capture') },
   renderQueue: { submit: missing('renderQueue'), cancel: missing('renderQueue') },
   renderEngine: { status: missing('renderEngine'), configure: missing('renderEngine') },
   onModel: {
     portraits: missing('onModel'),
+    estimatePortraits: missing('onModel'),
     estimate: missing('onModel'),
     submitShot: missing('onModel'),
     cancelShot: missing('onModel'),

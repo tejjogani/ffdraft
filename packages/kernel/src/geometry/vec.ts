@@ -107,7 +107,8 @@ export function spinFrame(f: Frame, angle: number): Frame {
 
 export const IDENTITY: Mat4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]
 
-export const isIdentity = (m: Mat4): boolean => m === IDENTITY || m.every((v, i) => v === IDENTITY[i])
+export const isIdentity = (m: Mat4): boolean =>
+  m === IDENTITY || m.every((v, i) => v === IDENTITY[i])
 
 export function multiply(a: Mat4, b: Mat4): Mat4 {
   const out = new Array<number>(16)
@@ -132,7 +133,24 @@ export const transformDirection = (m: Mat4, d: Vec3): Vec3 => [
   m[2]! * d[0] + m[6]! * d[1] + m[10]! * d[2],
 ]
 
-export const translation = (t: Vec3): Mat4 => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, t[0], t[1], t[2], 1]
+export const translation = (t: Vec3): Mat4 => [
+  1,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+  t[0],
+  t[1],
+  t[2],
+  1,
+]
 
 /** Matrix taking frame coordinates to world, with a per-axis scale applied first. */
 export function frameMatrix(f: Frame, s: Vec3 = [1, 1, 1]): Mat4 {

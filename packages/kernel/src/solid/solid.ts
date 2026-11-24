@@ -15,20 +15,20 @@ import { type Mat4, uniformScaleOf } from '../geometry/vec'
 import { runtime } from '../runtime/index'
 import type { Bounds } from '../types'
 import {
-  type IndexedTriangles,
-  type Tessellation,
   boundsOfPositions,
   featureEdges,
+  type IndexedTriangles,
   meshArea,
   meshVolume,
+  type Tessellation,
   tessellationOf,
   transformTessellation,
   transformTriangles,
   weld,
 } from './meshing'
 import {
-  type Quality,
   occtError,
+  type Quality,
   shapeArea,
   shapeBounds,
   shapeVolume,
@@ -220,7 +220,9 @@ class SolidImpl implements Solid {
       // A handed-in shape is moved eagerly (cheap: rigid moves share the underlying geometry);
       // a recipe's shape is rebuilt on demand so the copy never depends on this solid's heap.
       this.shape && !recipe?.brep ? transformShape(this.shape, matrix) : null,
-      this.native ? this.native.transform(matrix as number[] as Parameters<Manifold['transform']>[0]) : null,
+      this.native
+        ? this.native.transform(matrix as number[] as Parameters<Manifold['transform']>[0])
+        : null,
       recipe && {
         ...(recipe.brep && {
           brep: () => {

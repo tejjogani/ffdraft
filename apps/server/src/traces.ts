@@ -5,7 +5,7 @@
  * `clientMessageId`, tool steps by `toolCallId`).
  */
 import type { Feedback, Message, Run, Step, Thread, Tokens } from '@pave/schema'
-import { and, eq, max, sql } from 'drizzle-orm'
+import { and, eq, inArray, max, ne, sql } from 'drizzle-orm'
 import type { Ctx } from './context'
 import * as t from './db/schema'
 import { conflict, notFound } from './errors'
@@ -14,6 +14,9 @@ import { ensure, getBoard, getPiece, getRun, getScene, getThread } from './looku
 import { fromMicros, toMicros } from './usage'
 
 type RunStatus = Run['status']
+
+/** Runs that may still change; a run that ended keeps its status. */
+const LIVE_RUN: RunStatus[] = ['running', 'awaiting-approval']
 
 export const toThread = (r: typeof t.thread.$inferSelect): Thread => ({
   id: r.id,
@@ -226,15 +229,20 @@ export async function beginStep(
   return toStep(row)
 }
 
-/** Closes a tool step opened with {@link beginStep}. */
+/** Closes a tool step opened with {@link beginStep}; refused (409) while it awaits approval. */
 export async function completeStep(
   ctx: Ctx,
   runId: string,
   toolCallId: string,
   result: StepResult,
 ): Promise<Step> {
+  const call = and(eq(t.agentStep.runId, runId), eq(t.agentStep.toolCallId, toolCallId))!
+  const step = await ctx.repo.steps.first(call)
+  if (!step) throw notFound(`Tool call "${toolCallId}" of run`, runId)
+  if (step.status === 'awaiting-approval')
+    throw conflict('This tool call is waiting for approval; it cannot be completed yet')
   const [row] = await ctx.repo.steps.update(
-    and(eq(t.agentStep.runId, runId), eq(t.agentStep.toolCallId, toolCallId))!,
+    and(call, ne(t.agentStep.status, 'awaiting-approval'))!,
     {
       output: result.output,
       isError: result.isError ?? false,
@@ -245,13 +253,15 @@ export async function completeStep(
       ...(result.stopReason !== undefined ? { stopReason: result.stopReason } : {}),
     },
   )
-  if (!row) throw notFound(`Tool call "${toolCallId}" of run`, runId)
+  if (!row) throw conflict('This tool call is waiting for approval; it cannot be completed yet')
   return toStep(row)
 }
 
 /**
  * Records a person's answer to a step awaiting approval. The first answer wins; a second one,
- * or one for a step that is not waiting, is a conflict.
+ * or one for a step that is not waiting, is a conflict. Once no step of the run is waiting any
+ * more, the run is `running` again (see {@link resumeRun}): the loop goes on either way, with
+ * the tool's result or with the refusal.
  */
 export async function decideStep(
   ctx: Ctx,
@@ -279,7 +289,23 @@ export async function decideStep(
     },
   )
   if (!row) throw conflict('This tool call was answered already')
+  const waiting = await ctx.repo.steps.first(
+    and(eq(t.agentStep.runId, runId), eq(t.agentStep.status, 'awaiting-approval')),
+  )
+  if (!waiting) await resumeRun(ctx, runId)
   return toStep(row)
+}
+
+/**
+ * Puts a run that was waiting for approval back to `running`. Returns the run as it is; a run
+ * that is not waiting (already resumed, canceled or finished) is left unchanged.
+ */
+export async function resumeRun(ctx: Ctx, runId: string): Promise<Run> {
+  const [row] = await ctx.repo.runs.update(
+    and(eq(t.agentRun.id, runId), eq(t.agentRun.status, 'awaiting-approval'))!,
+    { status: 'running', endedAt: null },
+  )
+  return toRun(row ?? (await getRun(ctx, runId)))
 }
 
 /** Adds one model call's tokens and cost to the run's totals, atomically. */
@@ -302,7 +328,8 @@ export async function addUsage(
 
 /**
  * Appends a verbatim message (provider-native content blocks) to a thread as its next `seq`.
- * With `clientMessageId`, storing the same message again returns the first copy.
+ * With `clientMessageId`, storing the same message again returns the first copy; the id is
+ * unique per person (the thread's owner), so two people's studios cannot collide.
  */
 export async function addMessage(
   ctx: Ctx,
@@ -321,9 +348,13 @@ export async function addMessage(
       updatedAt: new Date(),
     })
     if (!thread) throw notFound('Thread', input.threadId)
+    // Message ids come from a person's studio, so they are unique per person.
     if (input.clientMessageId) {
       const existing = await tx.messages.first(
-        eq(t.agentMessage.clientMessageId, input.clientMessageId),
+        and(
+          eq(t.agentMessage.userId, thread.userId),
+          eq(t.agentMessage.clientMessageId, input.clientMessageId),
+        ),
       )
       if (existing) return toMessage(existing)
     }
@@ -334,6 +365,7 @@ export async function addMessage(
     const row = await tx.messages.insert({
       id: createId('msg'),
       threadId: input.threadId,
+      userId: thread.userId,
       runId: input.runId ?? null,
       seq: (last?.seq ?? 0) + 1,
       role: input.role,
@@ -344,6 +376,10 @@ export async function addMessage(
   })
 }
 
+/**
+ * Ends a run (or pauses it with `awaiting-approval`). Terminal states stick: finishing a run
+ * that already ended — a cancel racing the loop's own finish — returns it unchanged.
+ */
 export async function finishRun(
   ctx: Ctx,
   runId: string,
@@ -355,7 +391,9 @@ export async function finishRun(
     errorCode?: Run['errorCode']
   },
 ): Promise<Run> {
-  const [row] = await ctx.repo.runs.update(eq(t.agentRun.id, runId), {
+  const [row] = await ctx.repo.runs.update(
+    and(eq(t.agentRun.id, runId), inArray(t.agentRun.status, LIVE_RUN))!,
+    {
     status: input.status,
     error: input.error ?? null,
     errorCode: input.errorCode ?? null,
@@ -370,8 +408,7 @@ export async function finishRun(
       : {}),
     ...(input.costUsd !== undefined ? { costMicros: toMicros(input.costUsd) } : {}),
   })
-  if (!row) throw notFound('Run', runId)
-  return toRun(row)
+  return toRun(row ?? (await getRun(ctx, runId)))
 }
 
 export const traces = {
@@ -381,6 +418,7 @@ export const traces = {
   beginStep,
   completeStep,
   decideStep,
+  resumeRun,
   addUsage,
   addMessage,
   finishRun,

@@ -7,15 +7,33 @@
  * head's metal runs down into the band; a free-standing head gets a base ring instead.
  */
 import type { NodeOf } from '@pave/schema'
-import { type Body, type BuildContext, type Cut, type Solid, defineFeature, metalOf } from '../core'
+import { type Body, type BuildContext, type Cut, defineFeature, metalOf, type Solid } from '../core'
 import { seatCutter } from '../gems/cutter'
-import { type StoneShape, prongDirections, stoneShape } from '../gems/shape'
-import { type Loop, arcSegment, circleLoop, lineSegment, roundedRectLoop, scaleLoop } from '../geometry/loop'
+import { prongDirections, type StoneShape, stoneShape } from '../gems/shape'
+import {
+  arcSegment,
+  circleLoop,
+  type Loop,
+  lineSegment,
+  roundedRectLoop,
+  scaleLoop,
+} from '../geometry/loop'
 import { pathFrames } from '../geometry/path'
 import { placeLoop, poleSection, sweepSolid } from '../geometry/sweep'
-import { DEG, type Vec2, type Vec3, addScaled, clamp, lerp, lerp3, normalize, scale, sub } from '../geometry/vec'
+import {
+  addScaled,
+  clamp,
+  DEG,
+  lerp,
+  lerp3,
+  normalize,
+  scale,
+  sub,
+  type Vec2,
+  type Vec3,
+} from '../geometry/vec'
 import { RULES } from '../rules'
-import { type StoneHost, gemData } from './gem'
+import { gemData, type StoneHost } from './gem'
 
 type SettingNode = NodeOf<'setting'>
 
@@ -50,12 +68,16 @@ function legAt(head: Head, phi: number, standoff: number, margin: number): Leg {
     ;[bx, by] = host.over(bx, by, margin)
     const surface = host.surfaceBelow(bx, by)
     const floor = host.floorBelow(bx, by) - FINGER_CLEARANCE
-    depth = Math.max(surface === null ? floor : Math.min(surface + ROOT_SINK, floor), -shape.girdleBottom + 0.3)
+    depth = Math.max(
+      surface === null ? floor : Math.min(surface + ROOT_SINK, floor),
+      -shape.girdleBottom + 0.3,
+    )
   }
   return { top, base: [bx, by, -depth] }
 }
 
-const world = (shape: StoneShape, points: readonly Vec3[]): Vec3[] => points.map((p) => shape.toWorld(p))
+const world = (shape: StoneShape, points: readonly Vec3[]): Vec3[] =>
+  points.map((p) => shape.toWorld(p))
 
 // ── Claws ────────────────────────────────────────────────────────────────────────────────────
 
@@ -81,24 +103,58 @@ function prongStyle(node: SettingNode, onPoint: boolean): ProngStyle {
       loop: roundedRectLoop(d * 0.9, d * 1.7, d * 0.3),
       radius: d * 0.45,
       overlap: Math.max(overlap, d * 0.3),
-      crown: [[0.25, 1], [0.45, 0.92]],
+      crown: [
+        [0.25, 1],
+        [0.45, 0.92],
+      ],
       end: 'flat',
     }
   switch (node.prongTip) {
     case 'claw':
-      return { loop: circleLoop(d / 2), radius: d / 2, overlap, crown: [[0.3, 0.9], [0.6, 0.65], [0.82, 0.42]], end: 'point' }
+      return {
+        loop: circleLoop(d / 2),
+        radius: d / 2,
+        overlap,
+        crown: [
+          [0.3, 0.9],
+          [0.6, 0.65],
+          [0.82, 0.42],
+        ],
+        end: 'point',
+      }
     case 'tab':
       return {
         loop: roundedRectLoop(d * 0.65, d * 1.5, d * 0.2),
         radius: d * 0.325,
         overlap,
-        crown: [[0.25, 1], [0.5, 0.95]],
+        crown: [
+          [0.25, 1],
+          [0.5, 0.95],
+        ],
         end: 'flat',
       }
     case 'double':
-      return { loop: circleLoop(d * 0.31), radius: d * 0.31, overlap, crown: [[0.25, 1], [0.5, 1]], end: 'dome' }
+      return {
+        loop: circleLoop(d * 0.31),
+        radius: d * 0.31,
+        overlap,
+        crown: [
+          [0.25, 1],
+          [0.5, 1],
+        ],
+        end: 'dome',
+      }
     default:
-      return { loop: circleLoop(d / 2), radius: d / 2, overlap, crown: [[0.25, 1], [0.5, 1]], end: 'dome' }
+      return {
+        loop: circleLoop(d / 2),
+        radius: d / 2,
+        overlap,
+        crown: [
+          [0.25, 1],
+          [0.5, 1],
+        ],
+        end: 'dome',
+      }
   }
 }
 
@@ -108,7 +164,11 @@ function prong(head: Head, phi: number, style: ProngStyle, sideways: number): So
   const n = shape.normal(phi)
   const tangent: Vec2 = [-n[1], n[0]]
   const leg = legAt(head, phi, style.radius - style.overlap, style.radius + 0.1)
-  const shift = (p: Vec3): Vec3 => [p[0] + tangent[0] * sideways, p[1] + tangent[1] * sideways, p[2]]
+  const shift = (p: Vec3): Vec3 => [
+    p[0] + tangent[0] * sideways,
+    p[1] + tangent[1] * sideways,
+    p[2],
+  ]
 
   // Axis points and section scales, from the root upward. Roots are a little stouter.
   const axis: Vec3[] = []
@@ -139,9 +199,13 @@ function prong(head: Head, phi: number, style: ProngStyle, sideways: number): So
     // A hemisphere: rings shrinking along a quarter circle, closed by a pole.
     for (const a of [30, 60]) {
       const origin = addScaled(last.origin, last.z, style.radius * lastSize * Math.sin(a * DEG))
-      sections.push(placeLoop({ ...last, origin }, scaleLoop(style.loop, lastSize * Math.cos(a * DEG))))
+      sections.push(
+        placeLoop({ ...last, origin }, scaleLoop(style.loop, lastSize * Math.cos(a * DEG))),
+      )
     }
-    sections.push(poleSection(addScaled(last.origin, last.z, style.radius * lastSize), style.loop.length))
+    sections.push(
+      poleSection(addScaled(last.origin, last.z, style.radius * lastSize), style.loop.length),
+    )
   } else if (style.end === 'point') {
     // The tip comes to rest on the crown, just short of the table.
     const z = shape.girdleTop + 0.95 * crownHeight
@@ -194,7 +258,13 @@ const baseDepth = (head: Head, standoff: number): number =>
  * Bezel wall in (u, v): u outward from the girdle, v up the stone's axis. The lip leans over the
  * girdle edge; below the girdle a bearing ledge steps in for the stone to sit on.
  */
-function bezelLoop(wall: number, top: number, ledgeTop: number, bottom: number, ledge: number): Loop {
+function bezelLoop(
+  wall: number,
+  top: number,
+  ledgeTop: number,
+  bottom: number,
+  ledge: number,
+): Loop {
   const lip = 0.12
   // The cup narrows toward its base (about 8°), as a bezel turned from tapered tube does.
   const inset = Math.min(0.14 * (top - bottom), ledge + wall - 0.3)
@@ -222,7 +292,11 @@ function bezelDepth(head: Head): number {
   return Math.max(floor - FINGER_CLEARANCE, -shape.girdleBottom + 0.6)
 }
 
-function bezel(node: SettingNode, head: Head, arcs: readonly (readonly [number, number])[] | null): Solid[] {
+function bezel(
+  node: SettingNode,
+  head: Head,
+  arcs: readonly (readonly [number, number])[] | null,
+): Solid[] {
   const { shape } = head
   const crownHeight = shape.table - shape.girdleTop
   const top = shape.girdleTop + clamp(0.3 * crownHeight, 0.2, 0.6)
@@ -231,7 +305,10 @@ function bezel(node: SettingNode, head: Head, arcs: readonly (readonly [number, 
   const loop = bezelLoop(node.wall, top, shape.girdleBottom - 0.05, -depth, ledge)
   const up = normalize(sub(shape.toWorld([0, 0, 1]), shape.toWorld([0, 0, 0])))
   const wallAlong = (phis: readonly number[], kinks: readonly number[], closed: boolean): Solid => {
-    const path = world(shape, phis.map((phi) => [...shape.point(phi), 0] as unknown as Vec3))
+    const path = world(
+      shape,
+      phis.map((phi) => [...shape.point(phi), 0] as unknown as Vec3),
+    )
     const frames = pathFrames(path, { closed, up, kinks })
     return sweepSolid({ closed, kinks, sections: frames.map((frame) => placeLoop(frame, loop)) })
   }
@@ -249,7 +326,9 @@ function bezel(node: SettingNode, head: Head, arcs: readonly (readonly [number, 
         if (c + turn > from + 0.05 && c + turn < to - 0.05) phis.push(c + turn)
     phis.sort((a, b) => a - b)
     const kinks = phis.flatMap((phi, i) =>
-      corners.some((c) => Math.abs(Math.sin((phi - c) / 2)) < 1e-9) && i > 0 && i < phis.length - 1 ? [i] : [],
+      corners.some((c) => Math.abs(Math.sin((phi - c) / 2)) < 1e-9) && i > 0 && i < phis.length - 1
+        ? [i]
+        : [],
     )
     return wallAlong(phis, kinks, false)
   })
@@ -263,7 +342,10 @@ function bezel(node: SettingNode, head: Head, arcs: readonly (readonly [number, 
 function checkProngs(node: SettingNode, shape: StoneShape, ctx: BuildContext): void {
   const d = node.prongDiameter
   if (d >= RULES.prongDiameter.warn) return
-  const better = Math.ceil(Math.max(RULES.prongDiameter.warn, RULES.prongForStone(shape.stone.dims.width)) * 20) / 20
+  const better =
+    Math.ceil(
+      Math.max(RULES.prongDiameter.warn, RULES.prongForStone(shape.stone.dims.width)) * 20,
+    ) / 20
   ctx.report({
     level: d < RULES.prongDiameter.error ? 'error' : 'warning',
     code: 'prong.small',
@@ -271,7 +353,10 @@ function checkProngs(node: SettingNode, shape: StoneShape, ctx: BuildContext): v
     value: d,
     limit: RULES.prongDiameter.warn,
     at: [...shape.toWorld([0, 0, shape.girdleTop])],
-    fix: { label: `Use ${better} mm claws`, ops: [{ t: 'update', id: node.id, patch: { prongDiameter: better } }] },
+    fix: {
+      label: `Use ${better} mm claws`,
+      ops: [{ t: 'update', id: node.id, patch: { prongDiameter: better } }],
+    },
   })
 }
 
@@ -304,11 +389,25 @@ export const setting = defineFeature('setting', (node, ctx) => {
         message: `A ${node.wall.toFixed(2)} mm bezel wall will not cast or survive setting; use at least ${RULES.bezelWall.error} mm.`,
         value: node.wall,
         limit: RULES.bezelWall.error,
-        fix: { label: `Use a ${RULES.bezelWall.error} mm wall`, ops: [{ t: 'update', id: node.id, patch: { wall: RULES.bezelWall.error } }] },
+        fix: {
+          label: `Use a ${RULES.bezelWall.error} mm wall`,
+          ops: [{ t: 'update', id: node.id, patch: { wall: RULES.bezelWall.error } }],
+        },
       })
     // A half bezel grips the two ends of the stone that lie along the band.
     const half = 55 * DEG
-    solids.push(...bezel(node, head, node.style === 'bezel' ? null : [[-half, half], [Math.PI - half, Math.PI + half]]))
+    solids.push(
+      ...bezel(
+        node,
+        head,
+        node.style === 'bezel'
+          ? null
+          : [
+              [-half, half],
+              [Math.PI - half, Math.PI + half],
+            ],
+      ),
+    )
   } else if (ctx.detail === 'production') {
     // Flush: no metal of its own. Open the host above the girdle, a little narrower than the
     // stone so a rim is left to burnish over its edge.

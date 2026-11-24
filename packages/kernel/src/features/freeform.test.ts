@@ -5,20 +5,20 @@
  * and identical input gives identical output.
  */
 import {
+  buildDesign,
+  designFrom,
   MELEE_SIZES_MM,
   type NodeInput,
   type NodeInputOf,
   TEMPLATES,
-  buildDesign,
-  designFrom,
 } from '@pave/schema'
 import { afterAll, describe, expect, it } from 'vitest'
-import { type LocalKernel, createKernel } from '../kernel'
+import { invertSimilarity, transformPoint } from '../geometry/vec'
+import { createKernel, type LocalKernel } from '../kernel'
 import { OutlineDistance } from '../mesh/outline/distance'
 import type { PaveField } from '../mesh/pave/region'
 import { seededRandom } from '../mesh/random'
 import { edgeTopology } from '../mesh/topology'
-import { invertSimilarity, transformPoint } from '../geometry/vec'
 import { meshVolume } from '../solid/meshing'
 import { QUALITY } from '../solid/solid'
 import type { StoneInstance } from '../types'
@@ -51,7 +51,17 @@ type ReliefInput = NodeInputOf<'relief'>
 type MeshInput = NodeInputOf<'meshBody'>
 
 describe('vectorBody', () => {
-  const shapes = ['circle', 'oval', 'heart', 'star', 'cross', 'shield', 'hexagon', 'teardrop', 'tag'] as const
+  const shapes = [
+    'circle',
+    'oval',
+    'heart',
+    'star',
+    'cross',
+    'shield',
+    'hexagon',
+    'teardrop',
+    'tag',
+  ] as const
   const bevels = ['flat', 'chamfer', 'round', 'pillow'] as const
 
   it('builds every named shape with every edge treatment', async () => {
@@ -69,9 +79,34 @@ describe('vectorBody', () => {
   it('stays solid at the ends of its parameter ranges and under a seeded fuzz', async () => {
     const random = seededRandom(7)
     const cases: VectorInput[] = [
-      { id: 'v', kind: 'vectorBody', source: { type: 'shape', shape: 'heart' }, height: 3, thickness: 0.6, bevel: 'round', bevelSize: 0 },
-      { id: 'v', kind: 'vectorBody', source: { type: 'shape', shape: 'star' }, height: 150, thickness: 20, bevel: 'pillow', bevelSize: 5, border: 3 },
-      { id: 'v', kind: 'vectorBody', source: { type: 'shape', shape: 'cross' }, height: 3, thickness: 20, bevel: 'chamfer', bevelSize: 5 },
+      {
+        id: 'v',
+        kind: 'vectorBody',
+        source: { type: 'shape', shape: 'heart' },
+        height: 3,
+        thickness: 0.6,
+        bevel: 'round',
+        bevelSize: 0,
+      },
+      {
+        id: 'v',
+        kind: 'vectorBody',
+        source: { type: 'shape', shape: 'star' },
+        height: 150,
+        thickness: 20,
+        bevel: 'pillow',
+        bevelSize: 5,
+        border: 3,
+      },
+      {
+        id: 'v',
+        kind: 'vectorBody',
+        source: { type: 'shape', shape: 'cross' },
+        height: 3,
+        thickness: 20,
+        bevel: 'chamfer',
+        bevelSize: 5,
+      },
     ]
     for (let k = 0; k < 4; k++)
       cases.push({
@@ -89,9 +124,24 @@ describe('vectorBody', () => {
 
   it('reads full SVG path grammar, scaled to the requested height', async () => {
     // Arcs, relative commands, smooth curves, compact numbers and a hole.
-    const d = 'M10 0a10 10 0 1 1-.01 0zM10 5c3 0 5 2 5 5s-2 5-5 5-5-2-5-5 2-5 5-5z M20,8 h4 v4 h-4 Z'
-    await expectSolid({ id: 'v', kind: 'vectorBody', source: { type: 'svg', d }, height: 20, bevel: 'flat' })
-    const e = await kernel.evaluate(pendant({ id: 'v', kind: 'vectorBody', source: { type: 'svg', d }, height: 20, bevel: 'flat' }))
+    const d =
+      'M10 0a10 10 0 1 1-.01 0zM10 5c3 0 5 2 5 5s-2 5-5 5-5-2-5-5 2-5 5-5z M20,8 h4 v4 h-4 Z'
+    await expectSolid({
+      id: 'v',
+      kind: 'vectorBody',
+      source: { type: 'svg', d },
+      height: 20,
+      bevel: 'flat',
+    })
+    const e = await kernel.evaluate(
+      pendant({
+        id: 'v',
+        kind: 'vectorBody',
+        source: { type: 'svg', d },
+        height: 20,
+        bevel: 'flat',
+      }),
+    )
     const b = e.parts[0]!.bounds
     expect(b.max[2] - b.min[2]).toBeCloseTo(20, 2)
     expect(b.max[1]).toBeCloseTo(0, 6)
@@ -122,9 +172,32 @@ describe('relief', () => {
   it('builds every outline, with and without a rim, at the range ends', async () => {
     const outlines = ['round', 'oval', 'cushion', 'rect', 'shield'] as const
     for (const [i, outline] of outlines.entries())
-      await expectSolid({ id: 'r', kind: 'relief', outline, rim: i % 2 ? 0 : 0.8, invert: i === 2 } satisfies ReliefInput)
-    await expectSolid({ id: 'r', kind: 'relief', width: 4, height: 4, baseThickness: 0.5, depth: 0.1, rim: 0 })
-    await expectSolid({ id: 'r', kind: 'relief', outline: 'rect', width: 100, height: 60, baseThickness: 6, depth: 6, rim: 4 })
+      await expectSolid({
+        id: 'r',
+        kind: 'relief',
+        outline,
+        rim: i % 2 ? 0 : 0.8,
+        invert: i === 2,
+      } satisfies ReliefInput)
+    await expectSolid({
+      id: 'r',
+      kind: 'relief',
+      width: 4,
+      height: 4,
+      baseThickness: 0.5,
+      depth: 0.1,
+      rim: 0,
+    })
+    await expectSolid({
+      id: 'r',
+      kind: 'relief',
+      outline: 'rect',
+      width: 100,
+      height: 60,
+      baseThickness: 6,
+      depth: 6,
+      rim: 4,
+    })
   })
 })
 
@@ -132,16 +205,44 @@ describe('meshBody', () => {
   it('builds the built-in models, honouring height, flat back, hollow and smoothing', async () => {
     for (const name of ['trophy', 'crown', 'dice'] as const) {
       await expectSolid({ id: 'm', kind: 'meshBody', source: { type: 'builtin', name } })
-      const e = await kernel.evaluate(pendant({ id: 'm', kind: 'meshBody', source: { type: 'builtin', name }, height: 30 }))
+      const e = await kernel.evaluate(
+        pendant({ id: 'm', kind: 'meshBody', source: { type: 'builtin', name }, height: 30 }),
+      )
       const b = e.parts[0]!.bounds
       expect(b.max[2] - b.min[2]).toBeCloseTo(30, 3)
       expect(b.max[1]).toBeCloseTo(0, 6)
     }
-    const solid = await expectSolid({ id: 'm', kind: 'meshBody', source: { type: 'builtin', name: 'trophy' }, height: 40, flatBack: 0.35 })
-    const hollow = await expectSolid({ id: 'm', kind: 'meshBody', source: { type: 'builtin', name: 'trophy' }, height: 40, flatBack: 0.35, hollow: 1 })
+    const solid = await expectSolid({
+      id: 'm',
+      kind: 'meshBody',
+      source: { type: 'builtin', name: 'trophy' },
+      height: 40,
+      flatBack: 0.35,
+    })
+    const hollow = await expectSolid({
+      id: 'm',
+      kind: 'meshBody',
+      source: { type: 'builtin', name: 'trophy' },
+      height: 40,
+      flatBack: 0.35,
+      hollow: 1,
+    })
     expect(hollow).toBeLessThan(solid * 0.8)
-    await expectSolid({ id: 'm', kind: 'meshBody', source: { type: 'builtin', name: 'dice' }, height: 3, smooth: 8, detail: 0.02 })
-    await expectSolid({ id: 'm', kind: 'meshBody', source: { type: 'builtin', name: 'crown' }, height: 200, flatBack: 0.9 } satisfies MeshInput)
+    await expectSolid({
+      id: 'm',
+      kind: 'meshBody',
+      source: { type: 'builtin', name: 'dice' },
+      height: 3,
+      smooth: 8,
+      detail: 0.02,
+    })
+    await expectSolid({
+      id: 'm',
+      kind: 'meshBody',
+      source: { type: 'builtin', name: 'crown' },
+      height: 200,
+      flatBack: 0.9,
+    } satisfies MeshInput)
   })
 })
 
@@ -153,11 +254,22 @@ interface PaveCase {
 }
 
 function iced(body: NodeInput, pave: Partial<NodeInputOf<'pave'>> = {}): PaveCase {
-  const node: NodeInputOf<'pave'> = { id: 'ice', kind: 'pave', host: body.id, sizeMax: 1.6, sizeMin: 1, ...pave }
+  const node: NodeInputOf<'pave'> = {
+    id: 'ice',
+    kind: 'pave',
+    host: body.id,
+    sizeMax: 1.6,
+    sizeMin: 1,
+    ...pave,
+  }
   return { design: pendant(body, node), pave: node }
 }
 
-const centre = (s: StoneInstance): [number, number, number] => [s.matrix[12]!, s.matrix[13]!, s.matrix[14]!]
+const centre = (s: StoneInstance): [number, number, number] => [
+  s.matrix[12]!,
+  s.matrix[13]!,
+  s.matrix[14]!,
+]
 
 function expectSpacing(stones: readonly StoneInstance[], gap: number): void {
   for (let i = 0; i < stones.length; i++)
@@ -212,8 +324,18 @@ describe('pave', () => {
   })
 
   it('covers only the faces within the requested angle of the direction', async () => {
-    const trophy: NodeInput = { id: 'body', kind: 'meshBody', source: { type: 'builtin', name: 'trophy' }, height: 45, flatBack: 0.35 }
-    const c = iced(trophy, { sizeMax: 1.8, sizeMin: 1, region: { type: 'facing', direction: [0, -1, 0], maxAngle: 60 } })
+    const trophy: NodeInput = {
+      id: 'body',
+      kind: 'meshBody',
+      source: { type: 'builtin', name: 'trophy' },
+      height: 45,
+      flatBack: 0.35,
+    }
+    const c = iced(trophy, {
+      sizeMax: 1.8,
+      sizeMin: 1,
+      region: { type: 'facing', direction: [0, -1, 0], maxAngle: 60 },
+    })
     const scene = await kernel.scene(c.design)
     const stones = scene.evaluation.stones.filter((s) => s.nodeId === 'ice')
     expect(stones.length).toBeGreaterThan(100)
@@ -236,8 +358,21 @@ describe('pave', () => {
       counts.push(stones.length)
       if (coverage === 1) full = stones
       else {
-        const keys = new Set(full.map((s) => centre(s).map((v) => v.toFixed(5)).join()))
-        for (const s of stones) expect(keys.has(centre(s).map((v) => v.toFixed(5)).join())).toBe(true)
+        const keys = new Set(
+          full.map((s) =>
+            centre(s)
+              .map((v) => v.toFixed(5))
+              .join(),
+          ),
+        )
+        for (const s of stones)
+          expect(
+            keys.has(
+              centre(s)
+                .map((v) => v.toFixed(5))
+                .join(),
+            ),
+          ).toBe(true)
       }
     }
     expect(counts[1]!).toBeLessThan(counts[0]!)
@@ -250,7 +385,8 @@ describe('pave', () => {
     const b = await fresh.evaluate(iced(heart, { seed: 3 }).design)
     const c = await fresh.evaluate(iced(heart, { seed: 4 }).design)
     fresh.dispose()
-    const key = (stones: StoneInstance[]) => JSON.stringify(stones.map((s) => s.matrix.map((v) => v.toFixed(6))))
+    const key = (stones: StoneInstance[]) =>
+      JSON.stringify(stones.map((s) => s.matrix.map((v) => v.toFixed(6))))
     expect(key(b.stones)).toBe(key(a.stones))
     expect(key(c.stones)).not.toBe(key(a.stones))
   })
@@ -270,7 +406,13 @@ describe('pave', () => {
   })
 
   it('warns instead of failing when the stones cannot fit', async () => {
-    const tiny: NodeInput = { id: 'body', kind: 'vectorBody', source: { type: 'shape', shape: 'circle' }, height: 3, thickness: 1 }
+    const tiny: NodeInput = {
+      id: 'body',
+      kind: 'vectorBody',
+      source: { type: 'shape', shape: 'circle' },
+      height: 3,
+      thickness: 1,
+    }
     const e = await kernel.evaluate(iced(tiny, { sizeMin: 4, sizeMax: 4, margin: 2 }).design)
     expect(e.stones.filter((s) => s.nodeId === 'ice')).toHaveLength(0)
     expect(e.diagnostics.map((d) => d.code)).toContain('pave.empty')
@@ -287,8 +429,12 @@ describe('templates', () => {
         const scene = await kernel.scene(design, { detail })
         for (const r of scene.nodes.values())
           if (['vectorBody', 'meshBody', 'relief', 'pave'].includes(r.node.kind))
-            expect(r.status, `${r.node.kind}: ${r.diagnostics.map((d) => d.message).join('; ')}`).toBe('ok')
-        if (id !== 'name-pendant') expect(scene.evaluation.stones.some((s) => s.setting === 'pave')).toBe(true)
+            expect(
+              r.status,
+              `${r.node.kind}: ${r.diagnostics.map((d) => d.message).join('; ')}`,
+            ).toBe('ok')
+        if (id !== 'name-pendant')
+          expect(scene.evaluation.stones.some((s) => s.setting === 'pave')).toBe(true)
       }
     })
 })

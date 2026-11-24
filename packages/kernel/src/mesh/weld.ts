@@ -26,7 +26,10 @@ export function weldWithin(mesh: IndexedTriangles, tolerance: number): IndexedTr
       remap[i] = r
     }
   }
-  return cleanTriangles({ positions: unique.slice(0, grid.size * 3), indices: reindex(indices, remap) })
+  return cleanTriangles({
+    positions: unique.slice(0, grid.size * 3),
+    indices: reindex(indices, remap),
+  })
 }
 
 function reindex(indices: Uint32Array, remap: Uint32Array): Uint32Array {
@@ -78,7 +81,11 @@ function sameWinding(kept: number[], at: number, a: number, b: number, c: number
   const x = kept[at]!
   const y = kept[at + 1]!
   const z = kept[at + 2]!
-  return (x === a && y === b && z === c) || (y === a && z === b && x === c) || (z === a && x === b && y === c)
+  return (
+    (x === a && y === b && z === c) ||
+    (y === a && z === b && x === c) ||
+    (z === a && x === b && y === c)
+  )
 }
 
 /** Drops vertices no triangle references. */

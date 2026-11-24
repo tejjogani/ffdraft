@@ -68,8 +68,18 @@ export class TriangleBvh {
       const start = pending.pop()!
       const node = pending.pop()!
       const b = node * 6
-      let x0 = Infinity, y0 = Infinity, z0 = Infinity, x1 = -Infinity, y1 = -Infinity, z1 = -Infinity
-      let cx0 = Infinity, cy0 = Infinity, cz0 = Infinity, cx1 = -Infinity, cy1 = -Infinity, cz1 = -Infinity
+      let x0 = Infinity,
+        y0 = Infinity,
+        z0 = Infinity,
+        x1 = -Infinity,
+        y1 = -Infinity,
+        z1 = -Infinity
+      let cx0 = Infinity,
+        cy0 = Infinity,
+        cz0 = Infinity,
+        cx1 = -Infinity,
+        cy1 = -Infinity,
+        cz1 = -Infinity
       for (let i = start; i < end; i++) {
         const t = order[i]!
         const o = t * 6
@@ -187,19 +197,62 @@ export class TriangleBvh {
     skip = -1,
   ): number {
     let best = tMax
-    this.traverseRay(ox, oy, oz, dx, dy, dz, () => best, (t, triangle) => {
-      if (triangle !== skip && t > tMin && t < best) best = t
-    })
+    this.traverseRay(
+      ox,
+      oy,
+      oz,
+      dx,
+      dy,
+      dz,
+      () => best,
+      (t, triangle) => {
+        if (triangle !== skip && t > tMin && t < best) best = t
+      },
+    )
     return best < tMax ? best : Infinity
   }
 
-  /** Sorted ray parameters of every triangle the ray o + t·d crosses at t > 0 (parity tests). */
-  hits(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number): number[] {
-    const out: number[] = []
-    this.traverseRay(ox, oy, oz, dx, dy, dz, () => Infinity, (t) => {
-      if (t > 0) out.push(t)
-    })
-    return out.sort((a, b) => a - b)
+  /**
+   * Every crossing of the ray o + t·d (t > 0), sorted by t, with the winding change it causes:
+   * +1 entering through a front face, −1 leaving. Summed along a ray this is the winding
+   * number, which stays right where shells overlap (unlike parity).
+   */
+  crossings(
+    ox: number,
+    oy: number,
+    oz: number,
+    dx: number,
+    dy: number,
+    dz: number,
+  ): { t: number; w: number }[] {
+    const out: { t: number; w: number }[] = []
+    const p = this.mesh.positions
+    const idx = this.mesh.indices
+    this.traverseRay(
+      ox,
+      oy,
+      oz,
+      dx,
+      dy,
+      dz,
+      () => Infinity,
+      (t, tri) => {
+        if (t <= 0) return
+        const a = idx[tri * 3]! * 3
+        const b = idx[tri * 3 + 1]! * 3
+        const c = idx[tri * 3 + 2]! * 3
+        const ux = p[b]! - p[a]!
+        const uy = p[b + 1]! - p[a + 1]!
+        const uz = p[b + 2]! - p[a + 2]!
+        const vx = p[c]! - p[a]!
+        const vy = p[c + 1]! - p[a + 1]!
+        const vz = p[c + 2]! - p[a + 2]!
+        const facing =
+          dx * (uy * vz - uz * vy) + dy * (uz * vx - ux * vz) + dz * (ux * vy - uy * vx)
+        out.push({ t, w: facing < 0 ? 1 : -1 })
+      },
+    )
+    return out.sort((x, y) => x.t - y.t)
   }
 
   private traverseRay(
@@ -377,7 +430,14 @@ export class TriangleBvh {
 }
 
 /** Partially orders `order[lo..hi]` so the element at `nth` is in its sorted place (quickselect). */
-function selectNth(order: Uint32Array, keys: Float64Array, axis: number, lo: number, hi: number, nth: number): void {
+function selectNth(
+  order: Uint32Array,
+  keys: Float64Array,
+  axis: number,
+  lo: number,
+  hi: number,
+  nth: number,
+): void {
   while (hi > lo) {
     const pivot = keys[order[(lo + hi) >> 1]! * 3 + axis]!
     let i = lo

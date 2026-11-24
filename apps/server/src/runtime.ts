@@ -9,6 +9,7 @@ import { AppError, forbidden } from './errors'
 import type { EventBus } from './events'
 import { Repo } from './repo'
 import { AccountRepo } from './repo/account'
+import { recover, type Unfinished, unfinished } from './recovery'
 import { execute } from './rpc/execute'
 import type { ServiceRegistry } from './services'
 
@@ -33,6 +34,7 @@ type Membership = Awaited<ReturnType<AccountRepo['memberships']>>[number]
  *   const { change } = await runtime.invoke('design.apply', { pieceId, label, ops }, ctx)
  *
  * — so agent calls get the same validation, permissions, audit and trace attribution as people.
+ * A context carries no closure over itself: `{ ...ctx, actor }` acts as `actor` all the way down.
  */
 export class Runtime {
   readonly config: Config
@@ -64,8 +66,12 @@ export class Runtime {
 
   /** {@link invoke} for untyped input, e.g. a request body or a model's tool call. */
   execute(name: CommandName, input: unknown, ctx: Ctx): Promise<unknown> {
-    return execute(name, input, ctx, { validateOutputs: this.config.validateOutputs })
+    return this.#execute(name, input, ctx)
   }
+
+  // Bound once and shared by every context; it closes over the runtime, never over a context.
+  readonly #execute = (name: CommandName, input: unknown, ctx: Ctx): Promise<unknown> =>
+    execute(name, input, ctx, { validateOutputs: this.config.validateOutputs })
 
   /**
    * A context for `userId` acting in `orgId`, with their role there. Rejects with 403 if they are
@@ -73,6 +79,22 @@ export class Runtime {
    */
   context(opts: { userId: string; orgId: string; actor?: Actor }): Promise<Ctx> {
     return this.#build(opts.userId, (ms) => ms.find((m) => m.org.id === opts.orgId), opts.actor)
+  }
+
+  /**
+   * Jobs and assistant runs left live across all orgs — system scope, for boot recovery only.
+   * Each names the org and user it belongs to, so a context can be rebuilt for it.
+   */
+  unfinished(): Promise<Unfinished[]> {
+    return unfinished(this.#database.db)
+  }
+
+  /**
+   * Hands every unfinished job and run to its service's `resume`, as the user and actor it
+   * belongs to; what no service can resume is failed as interrupted. `createApp` calls it once.
+   */
+  recover(): Promise<void> {
+    return recover(this, this.#database.db)
   }
 
   /** The context for an HTTP request: the local identity, or the Better Auth session's user. */
@@ -107,7 +129,7 @@ export class Runtime {
       blobs: this.blobs,
       events: this.events,
       authMode: this.config.auth,
-      invoke: (name, input) => this.invoke(name, input, ctx),
+      execute: this.#execute,
     }
     return ctx
   }

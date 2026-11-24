@@ -7,7 +7,7 @@
  * body happens to be triangulated: an extruded letter's face is a few long slivers, an AI mesh a
  * million noisy triangles, and both are sampled at the same ~¼-stone spacing.
  */
-import { type Vec3, dot, scale, sub } from '../../geometry/vec'
+import { dot, scale, sub, type Vec3 } from '../../geometry/vec'
 import type { IndexedTriangles } from '../../solid/meshing'
 import { TriangleBvh } from '../bvh'
 import { StaticPointGrid } from '../grid'
@@ -120,7 +120,9 @@ export class PaveSurface {
       const [nx, ny, nz] = this.normal(i)
       const lift = this.spacing * 0.05
       this.bvh ??= new TriangleBvh(this.host)
-      t = this.bvh.raycast(x + nx * lift, y + ny * lift, z + nz * lift, -nx, -ny, -nz, lift * 4) - lift
+      t =
+        this.bvh.raycast(x + nx * lift, y + ny * lift, z + nz * lift, -nx, -ny, -nz, lift * 4) -
+        lift
       this.thicknessCache[i] = t
     }
     return t
@@ -133,7 +135,10 @@ export class PaveSurface {
       let y = 0
       let z = 0
       this.grid.near(this.p[i * 3]!, this.p[i * 3 + 1]!, this.p[i * 3 + 2]!, radius, (j, d2) => {
-        const agree = face[i * 3]! * face[j * 3]! + face[i * 3 + 1]! * face[j * 3 + 1]! + face[i * 3 + 2]! * face[j * 3 + 2]!
+        const agree =
+          face[i * 3]! * face[j * 3]! +
+          face[i * 3 + 1]! * face[j * 3 + 1]! +
+          face[i * 3 + 2]! * face[j * 3 + 2]!
         if (agree < SMOOTH_COS) return
         // A soft kernel so the average follows the footprint, not its rim.
         const w = 1 - d2 / (radius * radius)
@@ -160,7 +165,8 @@ export class PaveSurface {
       this.grid.near(p[i * 3]!, p[i * 3 + 1]!, p[i * 3 + 2]!, radius, (j, d2) => {
         if (d2 < minD2) return
         let k = 0
-        for (let c = 0; c < 3; c++) k += (n[j * 3 + c]! - n[i * 3 + c]!) * (p[j * 3 + c]! - p[i * 3 + c]!)
+        for (let c = 0; c < 3; c++)
+          k += (n[j * 3 + c]! - n[i * 3 + c]!) * (p[j * 3 + c]! - p[i * 3 + c]!)
         k /= d2
         if (k > convex) convex = k
         if (-k > concave) concave = -k

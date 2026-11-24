@@ -49,7 +49,8 @@ export function edgeTopology({ positions, indices }: IndexedTriangles): EdgeTopo
 }
 
 /** End vertex of half-edge h. */
-export const headOf = (indices: Uint32Array, h: number): number => indices[h - (h % 3) + ((h + 1) % 3)]!
+export const headOf = (indices: Uint32Array, h: number): number =>
+  indices[h - (h % 3) + ((h + 1) % 3)]!
 
 /**
  * Closed loops of open half-edges, each as the vertex sequence along the boundary. Boundaries
@@ -118,7 +119,10 @@ export function vertexRings({ positions, indices }: IndexedTriangles): VertexRin
 }
 
 /** Connected component id per triangle (through shared edges with a twin). */
-export function triangleComponents(triangles: number, twin: Int32Array): { id: Int32Array; count: number } {
+export function triangleComponents(
+  triangles: number,
+  twin: Int32Array,
+): { id: Int32Array; count: number } {
   const id = new Int32Array(triangles).fill(-1)
   let count = 0
   const stack: number[] = []

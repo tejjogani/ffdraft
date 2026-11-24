@@ -22,7 +22,8 @@ const MIN_HOLLOW_WALL = 0.7
 
 async function sourceManifold(node: MeshBodyNode, ctx: BuildContext): Promise<Manifold> {
   if (node.source.type === 'builtin') return BUILTINS[node.source.name]()
-  if (!ctx.assets) throw new Error('No asset store is connected, so the imported mesh cannot be loaded')
+  if (!ctx.assets)
+    throw new Error('No asset store is connected, so the imported mesh cannot be loaded')
   const bytes = await ctx.assets(node.source.assetId)
   ctx.signal?.throwIfAborted()
   const { mesh, format } = parseMesh(bytes)
@@ -33,6 +34,8 @@ async function sourceManifold(node: MeshBodyNode, ctx: BuildContext): Promise<Ma
     report.holes > 0 && `closed ${report.holes} hole${report.holes > 1 ? 's' : ''}`,
     report.flipped > 0 && `fixed the winding of ${report.flipped.toLocaleString('en')} triangles`,
     report.shells > 1 && `fused ${report.shells} overlapping shells`,
+    report.fragments > 0 &&
+      `removed ${report.fragments} loose fragment${report.fragments > 1 ? 's' : ''}`,
   ].filter(Boolean)
   if (report.resurfaced)
     ctx.report({
@@ -43,7 +46,11 @@ async function sourceManifold(node: MeshBodyNode, ctx: BuildContext): Promise<Ma
         'field. Very fine detail may be softened; re-export a watertight mesh to keep it.',
     })
   else if (fixes.length > 0)
-    ctx.report({ level: 'info', code: 'mesh.repaired', message: `Repaired the ${label} mesh: ${fixes.join(', ')}.` })
+    ctx.report({
+      level: 'info',
+      code: 'mesh.repaired',
+      message: `Repaired the ${label} mesh: ${fixes.join(', ')}.`,
+    })
   return manifold
 }
 

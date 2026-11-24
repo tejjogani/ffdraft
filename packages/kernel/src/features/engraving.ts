@@ -5,9 +5,15 @@
  */
 import type { NodeOf } from '@pave/schema'
 import type { Manifold } from 'manifold-3d'
-import { type BuildContext, type NodeResult, defineFeature, runtime, solidFromManifold } from '../core'
+import {
+  type BuildContext,
+  defineFeature,
+  type NodeResult,
+  runtime,
+  solidFromManifold,
+} from '../core'
 import { ringPoint } from '../geometry/ring'
-import { DEG, type Vec3, transformPoint } from '../geometry/vec'
+import { DEG, transformPoint, type Vec3 } from '../geometry/vec'
 import { RULES } from '../rules'
 import { unionBounds } from '../solid/meshing'
 import { type TextOutline, textOutline } from '../text'
@@ -27,7 +33,9 @@ function textSlab(outline: TextOutline, size: number, from: number, to: number):
   const { manifold: mf } = runtime()
   const lines = Math.max(...outline.glyphs.map((g) => g.line)) + 1
   const middle = (size - (lines - 1) * outline.lineHeight) / 2
-  const glyphs = outline.glyphs.map((g) => new mf.CrossSection(g.contours as [number, number][][], 'EvenOdd'))
+  const glyphs = outline.glyphs.map(
+    (g) => new mf.CrossSection(g.contours as [number, number][][], 'EvenOdd'),
+  )
   const all = mf.CrossSection.union(glyphs)
   const slab = all.extrude(to - from)
   // Fine enough to follow a band's curvature once wrapped.
@@ -85,7 +93,11 @@ export const engraving = defineFeature('engraving', async (node, ctx) => {
 
   const outline = await textOutline(node.text, node.font, node.size, ctx.quality.chord)
   if (outline.glyphs.length === 0) return {}
-  const slab = ctx.track(emboss ? textSlab(outline, node.size, -ROOT, node.depth) : textSlab(outline, node.size, -node.depth, MARGIN))
+  const slab = ctx.track(
+    emboss
+      ? textSlab(outline, node.size, -ROOT, node.depth)
+      : textSlab(outline, node.size, -node.depth, MARGIN),
+  )
   const wrapped = slab.warp((vertex) => {
     const p = place([vertex[0], vertex[1], vertex[2]])
     vertex[0] = p[0]
@@ -93,5 +105,7 @@ export const engraving = defineFeature('engraving', async (node, ctx) => {
     vertex[2] = p[2]
   })
   const solid = solidFromManifold(wrapped)
-  return emboss ? { additions: [{ solid, target: node.host }] } : { cuts: [{ solid, targets: [node.host] }] }
+  return emboss
+    ? { additions: [{ solid, target: node.host }] }
+    : { cuts: [{ solid, targets: [node.host] }] }
 })

@@ -1,10 +1,10 @@
 /** Box, cylinder, sphere, torus and cone primitives, centred on the origin, exact B-rep. */
 import {
-  type Shape3D,
-  type Sketch,
   makeBaseBox,
   makeEllipsoid,
   makeSphere,
+  type Shape3D,
+  type Sketch,
   sketchCircle,
   sketchEllipse,
 } from 'replicad'
@@ -14,7 +14,9 @@ import { wrapShape } from '../solid/occt'
 /** An ellipse (or circle) with the given X and Y diameters on the plane z = `z`. */
 function ellipseSketch(dx: number, dy: number, z: number): Sketch {
   const plane = { plane: 'XY' as const, origin: z }
-  return Math.abs(dx - dy) < 1e-9 ? sketchCircle(dx / 2, plane) : sketchEllipse(dx / 2, dy / 2, plane)
+  return Math.abs(dx - dy) < 1e-9
+    ? sketchCircle(dx / 2, plane)
+    : sketchEllipse(dx / 2, dy / 2, plane)
 }
 
 function torus(diameter: number, tube: number): Shape3D {
@@ -51,10 +53,20 @@ export const primitive = defineFeature('primitive', (node, ctx) => {
   let shape: Shape3D
   switch (node.shape) {
     case 'box':
-      shape = withFillet(makeBaseBox(x, y, z).translateZ(-z / 2), node.fillet, Math.min(x, y, z), ctx)
+      shape = withFillet(
+        makeBaseBox(x, y, z).translateZ(-z / 2),
+        node.fillet,
+        Math.min(x, y, z),
+        ctx,
+      )
       break
     case 'cylinder':
-      shape = withFillet(ellipseSketch(x, y, -z / 2).extrude(z), node.fillet, Math.min(x, y, z), ctx)
+      shape = withFillet(
+        ellipseSketch(x, y, -z / 2).extrude(z),
+        node.fillet,
+        Math.min(x, y, z),
+        ctx,
+      )
       break
     case 'cone':
       shape = ellipseSketch(x, y, -z / 2).loftWith([], { endPoint: [0, 0, z / 2], ruled: true })

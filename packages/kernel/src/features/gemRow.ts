@@ -2,14 +2,30 @@
  * Stones along a band: pavé shoulders, channel, shared-claw, bar and flush rows, half and full
  * eternity. The count follows from stone size, gap and the arc to cover.
  */
-import { type NodeOf, gemDims } from '@pave/schema'
-import { type Addition, type BuildContext, type Cut, type Solid, type Stone, defineFeature } from '../core'
+import { gemDims, type NodeOf } from '@pave/schema'
+import {
+  type Addition,
+  type BuildContext,
+  type Cut,
+  defineFeature,
+  type Solid,
+  type Stone,
+} from '../core'
 import { seatCutter, seatHole } from '../gems/cutter'
 import { roundedRectLoop, translateLoop } from '../geometry/loop'
 import { pinSolid } from '../geometry/pin'
 import { ringPoint, ringRadial, ringSectionFrame, ringTangent } from '../geometry/ring'
 import { placeLoop, sweepSolid } from '../geometry/sweep'
-import { DEG, type Frame, type Vec3, addScaled, cross, lerp, normalize, transformFrame } from '../geometry/vec'
+import {
+  addScaled,
+  cross,
+  DEG,
+  type Frame,
+  lerp,
+  normalize,
+  transformFrame,
+  type Vec3,
+} from '../geometry/vec'
 import { RULES } from '../rules'
 import { culetDepth } from './gem'
 import { type ShankData, shankData } from './ringShank'
@@ -47,13 +63,17 @@ function rowAngles(node: RowNode, radius: number): { theta: number; width: numbe
   const end = (node.coverage / 2) * DEG
   const skip = (node.skipCenter / 2) * DEG
   const last = endWidth(node)
-  const widthAt = (t: number) => lerp(node.stoneWidth, last, end > skip ? (Math.abs(t) - skip) / (end - skip) : 0)
+  const widthAt = (t: number) =>
+    lerp(node.stoneWidth, last, end > skip ? (Math.abs(t) - skip) / (end - skip) : 0)
   const centre = node.center * DEG
 
   if (node.coverage >= 360 && node.skipCenter === 0) {
     // Full eternity: stretch the gap so the row closes exactly.
     const count = Math.max(1, Math.floor((2 * Math.PI * radius) / (node.stoneWidth + node.gap)))
-    return Array.from({ length: count }, (_, i) => ({ theta: centre + (i * 2 * Math.PI) / count, width: node.stoneWidth }))
+    return Array.from({ length: count }, (_, i) => ({
+      theta: centre + (i * 2 * Math.PI) / count,
+      width: node.stoneWidth,
+    }))
   }
   const out: { theta: number; width: number }[] = []
   // Offsets from the centre for one side; mirrored for the other.
@@ -86,7 +106,15 @@ function seatFrame(shank: ShankData, theta: number, a: number, sink: number): Fr
 }
 
 /** A strip of metal along the band between two angles (a channel wall). */
-function wallAlong(shank: ShankData, from: number, to: number, a: number, width: number, height: number, closed: boolean): Solid {
+function wallAlong(
+  shank: ShankData,
+  from: number,
+  to: number,
+  a: number,
+  width: number,
+  height: number,
+  closed: boolean,
+): Solid {
   const steps = Math.max(2, Math.ceil(Math.abs(to - from) / (4 * DEG)))
   const count = closed ? steps : steps + 1
   const sections = Array.from({ length: count }, (_, i) => {
@@ -97,22 +125,34 @@ function wallAlong(shank: ShankData, from: number, to: number, a: number, width:
     const base = shank.outer(theta, a).radius - 0.2
     return placeLoop(
       ringSectionFrame(theta),
-      translateLoop(roundedRectLoop(width, h + 0.2, Math.min(0.1, width * 0.25)), a, base + (h + 0.2) / 2),
+      translateLoop(
+        roundedRectLoop(width, h + 0.2, Math.min(0.1, width * 0.25)),
+        a,
+        base + (h + 0.2) / 2,
+      ),
     )
   })
   return sweepSolid({ closed, sections })
 }
 
-function checks(node: RowNode, shank: ShankData, slots: readonly Slot[], depth: (w: number) => number, sink: (w: number) => number, ctx: BuildContext): void {
+function checks(
+  shank: ShankData,
+  slots: readonly Slot[],
+  depth: (w: number) => number,
+  sink: (w: number) => number,
+  ctx: BuildContext,
+): void {
   let widest: { over: number; slot: Slot; band: number } | null = null
   let lowest: { clearance: number; slot: Slot } | null = null
   for (const slot of slots) {
     const band = shank.width(slot.theta)
     const needed = 2 * Math.abs(slot.a) + slot.width + 2 * RULES.stoneBorder
-    if (needed > band + 1e-6 && (!widest || needed - band > widest.over)) widest = { over: needed - band, slot, band }
+    if (needed > band + 1e-6 && (!widest || needed - band > widest.over))
+      widest = { over: needed - band, slot, band }
     const culet = shank.outer(slot.theta, slot.a).radius - sink(slot.width) - depth(slot.width)
     const clearance = culet - shank.innerRadius
-    if (clearance < RULES.culetClearance && (!lowest || clearance < lowest.clearance)) lowest = { clearance, slot }
+    if (clearance < RULES.culetClearance && (!lowest || clearance < lowest.clearance))
+      lowest = { clearance, slot }
   }
   if (widest)
     ctx.report({
@@ -162,10 +202,11 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
   for (let row = 0; row < node.rows; row++) {
     const a = (row - (node.rows - 1) / 2) * rowPitch
     // Neighbouring rows are staggered by half a stone, like a honeycomb.
-    const stagger = row % 2 === 1 && angles.length > 1 ? (angles[1]!.theta - angles[0]!.theta) / 2 : 0
+    const stagger =
+      row % 2 === 1 && angles.length > 1 ? (angles[1]!.theta - angles[0]!.theta) / 2 : 0
     for (const { theta, width } of angles) slots.push({ theta: theta + stagger, a, width })
   }
-  checks(node, shank, slots, depth, sink, ctx)
+  checks(shank, slots, depth, sink, ctx)
 
   const place = (frame: Frame): Frame => transformFrame(host.matrix, frame)
   const stones: Stone[] = slots.map((slot) => ({
@@ -178,7 +219,8 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
   }))
 
   const additions: Addition[] = []
-  const add = (solid: Solid) => additions.push({ solid: solid.transformed(host.matrix), target: node.host })
+  const add = (solid: Solid) =>
+    additions.push({ solid: solid.transformed(host.matrix), target: node.host })
   const cuts: Cut[] = []
   const full = node.coverage >= 360 && node.skipCenter === 0
   const span = (list: readonly Slot[]) => {
@@ -194,7 +236,10 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
     let run: Slot[] = []
     inRow.forEach((slot, i) => {
       const prev = inRow[i - 1]
-      if (prev && (slot.theta - prev.theta) * radius > (slot.width + prev.width) / 2 + node.gap + 0.5) {
+      if (
+        prev &&
+        (slot.theta - prev.theta) * radius > (slot.width + prev.width) / 2 + node.gap + 0.5
+      ) {
         runs.push(run)
         run = []
       }
@@ -207,7 +252,11 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
     for (const run of runs) {
       const list = full ? [...run, { ...run[0]!, theta: run[0]!.theta + 2 * Math.PI }] : run
       for (let i = 0; i + 1 < list.length; i++)
-        visit((list[i]!.theta + list[i + 1]!.theta) / 2, list[i]!.a, Math.min(list[i]!.width, list[i + 1]!.width))
+        visit(
+          (list[i]!.theta + list[i + 1]!.theta) / 2,
+          list[i]!.a,
+          Math.min(list[i]!.width, list[i + 1]!.width),
+        )
       if (ends && !full) {
         const [from, to] = span(run)
         visit(from + 0.1 / radius, run[0]!.a, run[0]!.width)
@@ -225,7 +274,9 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
     const wall = Math.max(RULES.channelWall, 0.5)
     const height = sink(widest) + 0.25 * crown(widest)
     const offset = (node.rows * rowPitch - node.gap) / 2 - 0.1 + wall / 2
-    const byRun = full ? [[0, 2 * Math.PI] as const] : runs.filter((r) => r[0]!.a === slots[0]!.a).map(span)
+    const byRun = full
+      ? [[0, 2 * Math.PI] as const]
+      : runs.filter((r) => r[0]!.a === slots[0]!.a).map(span)
     for (const [from, to] of byRun)
       for (const side of [-1, 1]) add(wallAlong(shank, from, to, side * offset, wall, height, full))
   } else if (node.setting === 'sharedProng') {
@@ -234,7 +285,14 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
       const d = RULES.accentProng(width)
       for (const side of [-1, 1]) {
         const { point, normal } = surfaceAt(theta, a + side * (width / 2 - 0.05))
-        add(pinSolid(addScaled(point, normal, -0.3), normal, d / 2, 0.3 - sink(width) + 0.3 * crown(width)))
+        add(
+          pinSolid(
+            addScaled(point, normal, -0.3),
+            normal,
+            d / 2,
+            0.3 - sink(width) + 0.3 * crown(width),
+          ),
+        )
       }
     }, true)
   } else if (node.setting === 'bar') {
@@ -245,9 +303,19 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
       const height = 0.2 - sink(width) + 0.35 * crown(width)
       const { point, normal } = surfaceAt(theta, a)
       const tangent = ringTangent(theta)
-      const frame = (y: number): Frame => ({ origin: addScaled(point, [0, 1, 0], y), x: tangent, y: normal, z: [0, 1, 0] })
+      const frame = (y: number): Frame => ({
+        origin: addScaled(point, [0, 1, 0], y),
+        x: tangent,
+        y: normal,
+        z: [0, 1, 0],
+      })
       const loop = translateLoop(roundedRectLoop(bar, height + 0.2, 0.08), 0, height / 2 - 0.1)
-      add(sweepSolid({ closed: false, sections: [placeLoop(frame(-length / 2), loop), placeLoop(frame(length / 2), loop)] }))
+      add(
+        sweepSolid({
+          closed: false,
+          sections: [placeLoop(frame(-length / 2), loop), placeLoop(frame(length / 2), loop)],
+        }),
+      )
     }, true)
   }
 
@@ -265,7 +333,9 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
       // Beads: one either side of the row in every gap, catching both girdles.
       between((theta, a, width) => {
         const bead = RULES.beadDiameter(width)
-        const lateral = Math.sqrt(Math.max(0.01, (width / 2 + bead / 2 - 0.05) ** 2 - ((width + node.gap) / 2) ** 2))
+        const lateral = Math.sqrt(
+          Math.max(0.01, (width / 2 + bead / 2 - 0.05) ** 2 - ((width + node.gap) / 2) ** 2),
+        )
         for (const side of [-1, 1]) {
           const { point, normal } = surfaceAt(theta, a + side * lateral)
           add(pinSolid(addScaled(point, normal, -0.1), normal, bead / 2, 0.1 + bead * 0.2))

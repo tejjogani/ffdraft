@@ -11,6 +11,7 @@ const MAX_DEVIATION = 0.02
 
 export function simplifyToDetail(m: Manifold, detail: number, height: number): Manifold {
   if (detail >= 1) return m
-  const tolerance = Math.min(DEVIATION_PER_STEP * (1 / Math.max(detail, 1e-3) - 1), MAX_DEVIATION) * height
+  const tolerance =
+    Math.min(DEVIATION_PER_STEP * (1 / Math.max(detail, 1e-3) - 1), MAX_DEVIATION) * height
   return m.simplify(tolerance)
 }

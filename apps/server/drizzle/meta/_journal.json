@@ -15,6 +15,13 @@
       "when": 1795466935993,
       "tag": "0001_pale_lord_tyger",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795469993610,
+      "tag": "0002_regular_proudstar",
+      "breakpoints": true
     }
   ]
 }

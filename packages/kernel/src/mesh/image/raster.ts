@@ -12,14 +12,17 @@ export interface Raster {
   rgba: Float32Array
 }
 
-const isJpeg = (bytes: Uint8Array): boolean => bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+const isJpeg = (bytes: Uint8Array): boolean =>
+  bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
 
 function decodeJpeg(bytes: Uint8Array): Raster {
   let image: { width: number; height: number; data: Uint8Array }
   try {
     image = decodeJpegBytes(bytes, { useTArray: true, formatAsRGBA: true, maxMemoryUsageInMB: 512 })
   } catch (error) {
-    throw new Error(`The JPEG image could not be read (${error instanceof Error ? error.message : 'corrupt data'})`)
+    throw new Error(
+      `The JPEG image could not be read (${error instanceof Error ? error.message : 'corrupt data'})`,
+    )
   }
   const rgba = new Float32Array(image.width * image.height * 4)
   for (let i = 0; i < rgba.length; i++) rgba[i] = image.data[i]! / 255
@@ -51,7 +54,9 @@ export function luminanceHeights(image: Raster, invert: boolean): Float32Array {
 export function blur(values: Float32Array, w: number, h: number, sigma: number): Float32Array {
   if (sigma <= 0) return values
   const radius = Math.ceil(sigma * 3)
-  const kernel = Array.from({ length: 2 * radius + 1 }, (_, i) => Math.exp(-((i - radius) ** 2) / (2 * sigma * sigma)))
+  const kernel = Array.from({ length: 2 * radius + 1 }, (_, i) =>
+    Math.exp(-((i - radius) ** 2) / (2 * sigma * sigma)),
+  )
   const total = kernel.reduce((a, b) => a + b, 0)
   const pass = (src: Float32Array, horizontal: boolean): Float32Array => {
     const dst = new Float32Array(src.length)

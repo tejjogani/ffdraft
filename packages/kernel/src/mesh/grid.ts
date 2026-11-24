@@ -40,7 +40,13 @@ export class PointGrid {
   }
 
   /** Calls `visit(index, distanceSquared)` for every point within `radius` of (x, y, z). */
-  near(x: number, y: number, z: number, radius: number, visit: (index: number, d2: number) => void): void {
+  near(
+    x: number,
+    y: number,
+    z: number,
+    radius: number,
+    visit: (index: number, d2: number) => void,
+  ): void {
     const r2 = radius * radius
     const x0 = this.coord(x - radius)
     const x1 = this.coord(x + radius)
@@ -113,13 +119,21 @@ export class StaticPointGrid {
         lo[k] = Math.min(lo[k]!, xyz[i * 3 + k]!)
         hi[k] = Math.max(hi[k]!, xyz[i * 3 + k]!)
       }
-    if (count === 0) lo.fill(0), hi.fill(0)
+    if (count === 0) {
+      lo.fill(0)
+      hi.fill(0)
+    }
     let size = cell
-    const cellsFor = (s: number) => [0, 1, 2].reduce((n, k) => n * (Math.floor((hi[k]! - lo[k]!) / s) + 1), 1)
+    const cellsFor = (s: number) =>
+      [0, 1, 2].reduce((n, k) => n * (Math.floor((hi[k]! - lo[k]!) / s) + 1), 1)
     while (cellsFor(size) > MAX_DENSE_CELLS) size *= 1.5
     this.cell = size
     this.origin = lo
-    this.dims = [0, 1, 2].map((k) => Math.floor((hi[k]! - lo[k]!) / size) + 1) as [number, number, number]
+    this.dims = [0, 1, 2].map((k) => Math.floor((hi[k]! - lo[k]!) / size) + 1) as [
+      number,
+      number,
+      number,
+    ]
     const cells = this.dims[0] * this.dims[1] * this.dims[2]
     const of = new Uint32Array(count)
     this.start = new Uint32Array(cells + 1)
@@ -142,7 +156,13 @@ export class StaticPointGrid {
   }
 
   /** Calls `visit(index, distanceSquared)` for every point within `radius` of (x, y, z). */
-  near(x: number, y: number, z: number, radius: number, visit: (index: number, d2: number) => void): void {
+  near(
+    x: number,
+    y: number,
+    z: number,
+    radius: number,
+    visit: (index: number, d2: number) => void,
+  ): void {
     const r2 = radius * radius
     const [nx, ny] = this.dims
     const x0 = this.index(x - radius, 0)

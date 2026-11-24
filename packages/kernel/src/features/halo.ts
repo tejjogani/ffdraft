@@ -3,7 +3,7 @@
  * Beads are raised between neighbouring stones at production detail.
  */
 import { gemDims } from '@pave/schema'
-import { type Addition, type Cut, type Stone, defineFeature, metalOf } from '../core'
+import { type Addition, type Cut, defineFeature, metalOf, type Stone } from '../core'
 import { seatCutter, seatHole } from '../gems/cutter'
 import { type StoneShape, stoneShape } from '../gems/shape'
 import { roundedRectLoop, translateLoop } from '../geometry/loop'
@@ -55,12 +55,17 @@ export const halo = defineFeature('halo', (node, ctx) => {
     let count = symmetricCount(shape, pathLength(path, true) / pitch)
     let centres = resamplePath(path, true, count)
     const crowded = () =>
-      centres.some((c, i) => [1, 2, 3].some((k) => count > 2 * k && distance(c, centres[(i + k) % count]!) < size + 0.02))
+      centres.some((c, i) =>
+        [1, 2, 3].some(
+          (k) => count > 2 * k && distance(c, centres[(i + k) % count]!) < size + 0.02,
+        ),
+      )
     while (count >= 3 && crowded()) {
       count = symmetricCount(shape, count - 1)
       centres = resamplePath(path, true, count)
     }
-    if (count < 3) throw new Error('the stones are too large to form a ring around the centre stone')
+    if (count < 3)
+      throw new Error('the stones are too large to form a ring around the centre stone')
     centres.forEach((origin, i) => {
       const next = centres[(i + 1) % count]!
       const x = normalize(sub(next, centres[(i + count - 1) % count]!))
@@ -104,6 +109,9 @@ export const halo = defineFeature('halo', (node, ctx) => {
     0,
     (surfaceZ + girdleZ - depth) / 2,
   )
-  const ring = sweepSolid({ closed: true, sections: frames.map((frame) => placeLoop(frame, profile)) })
+  const ring = sweepSolid({
+    closed: true,
+    sections: frames.map((frame) => placeLoop(frame, profile)),
+  })
   return { bodies: [{ solid: ring, ...metalOf(node) }], stones, cuts, additions }
 })

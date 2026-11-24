@@ -13,35 +13,48 @@ const QUADS = [
   [0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4],
   [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7],
 ] // biome-ignore format: face table
-const TRIS = QUADS.flatMap(([a, b, c, d]) => [[a!, b!, c!], [a!, c!, d!]])
+const TRIS = QUADS.flatMap(([a, b, c, d]) => [
+  [a!, b!, c!],
+  [a!, c!, d!],
+])
 
 function binaryStl(): Uint8Array {
   const out = new Uint8Array(84 + 50 * TRIS.length)
   const view = new DataView(out.buffer)
   view.setUint32(80, TRIS.length, true)
-  TRIS.forEach((t, i) => t.forEach((v, k) => V[v]!.forEach((x, c) => view.setFloat32(84 + i * 50 + 12 + k * 12 + c * 4, x, true))))
+  for (const [i, t] of TRIS.entries())
+    for (const [k, v] of t.entries())
+      for (const [c, x] of V[v]!.entries())
+        view.setFloat32(84 + i * 50 + 12 + k * 12 + c * 4, x, true)
   return out
 }
 
 const asciiStl = () =>
-  strToU8(`solid cube\n${TRIS.map((t) => `facet normal 0 0 0\nouter loop\n${t.map((v) => `vertex ${V[v]!.join(' ')}`).join('\n')}\nendloop\nendfacet`).join('\n')}\nendsolid cube\n`)
+  strToU8(
+    `solid cube\n${TRIS.map((t) => `facet normal 0 0 0\nouter loop\n${t.map((v) => `vertex ${V[v]!.join(' ')}`).join('\n')}\nendloop\nendfacet`).join('\n')}\nendsolid cube\n`,
+  )
 
 // Quads, v/vt/vn tokens and negative (relative) indices.
 const obj = () =>
-  strToU8(`# cube\no cube\n${V.map((v) => `v ${v.join(' ')}`).join('\n')}\nvt 0 0\n${QUADS.map((q) => `f ${q.map((i) => `${i - 8}/1`).join(' ')}`).join('\n')}\n`)
+  strToU8(
+    `# cube\no cube\n${V.map((v) => `v ${v.join(' ')}`).join('\n')}\nvt 0 0\n${QUADS.map((q) => `f ${q.map((i) => `${i - 8}/1`).join(' ')}`).join('\n')}\n`,
+  )
 
 function ply(binary: boolean): Uint8Array {
   const header = `ply\nformat ${binary ? 'binary_little_endian' : 'ascii'} 1.0\ncomment test\nelement vertex 8\nproperty float x\nproperty float y\nproperty float z\nproperty uchar red\nelement face 6\nproperty list uchar int vertex_indices\nend_header\n`
-  if (!binary) return strToU8(`${header}${V.map((v) => `${v.join(' ')} 255`).join('\n')}\n${QUADS.map((q) => `4 ${q.join(' ')}`).join('\n')}\n`)
+  if (!binary)
+    return strToU8(
+      `${header}${V.map((v) => `${v.join(' ')} 255`).join('\n')}\n${QUADS.map((q) => `4 ${q.join(' ')}`).join('\n')}\n`,
+    )
   const body = new DataView(new ArrayBuffer(8 * 13 + 6 * 17))
-  V.forEach((v, i) => {
-    v.forEach((x, c) => body.setFloat32(i * 13 + c * 4, x, true))
+  for (const [i, v] of V.entries()) {
+    for (const [c, x] of v.entries()) body.setFloat32(i * 13 + c * 4, x, true)
     body.setUint8(i * 13 + 12, 255)
-  })
-  QUADS.forEach((q, i) => {
+  }
+  for (const [i, q] of QUADS.entries()) {
     body.setUint8(104 + i * 17, 4)
-    q.forEach((v, k) => body.setInt32(104 + i * 17 + 1 + k * 4, v, true))
-  })
+    for (const [k, v] of q.entries()) body.setInt32(104 + i * 17 + 1 + k * 4, v, true)
+  }
   const h = strToU8(header)
   const out = new Uint8Array(h.length + body.byteLength)
   out.set(h)

@@ -10,7 +10,7 @@
  * are where the half facets meet it, which gives the scalloped girdle of a real stone.
  */
 import type { GemCut } from '@pave/schema'
-import { type Vec2, type Vec3, cross, dot, normalize, sub } from '../geometry/vec'
+import { cross, dot, normalize, sub, type Vec2, type Vec3 } from '../geometry/vec'
 import { type Outline, outlinePoint } from './outline'
 
 export type FacetKind =
@@ -78,7 +78,8 @@ const planeThrough = (a: Vec3, b: Vec3, c: Vec3): Plane => {
   return { n, d: dot(n, a) }
 }
 
-const heightOn = (plane: Plane, p: Vec2): number => (plane.d - plane.n[0] * p[0] - plane.n[1] * p[1]) / plane.n[2]
+const heightOn = (plane: Plane, p: Vec2): number =>
+  (plane.d - plane.n[0] * p[0] - plane.n[1] * p[1]) / plane.n[2]
 
 /** The point at height z on the line where two planes meet, or null if they are parallel. */
 function meetAt(a: Plane, b: Plane, z: number): Vec3 | null {
@@ -93,7 +94,11 @@ function meetAt(a: Plane, b: Plane, z: number): Vec3 | null {
 function slopePlane(inner: Vec3, outer: Vec3): { plane: Plane; direction: Vec2 } {
   const run = Math.hypot(outer[0] - inner[0], outer[1] - inner[1])
   const direction: Vec2 = [(outer[0] - inner[0]) / run, (outer[1] - inner[1]) / run]
-  const n = normalize([direction[0] * (inner[2] - outer[2]), direction[1] * (inner[2] - outer[2]), run])
+  const n = normalize([
+    direction[0] * (inner[2] - outer[2]),
+    direction[1] * (inner[2] - outer[2]),
+    run,
+  ])
   return { plane: { n, d: dot(n, inner) }, direction }
 }
 
@@ -154,7 +159,9 @@ function brilliantHalf(
     if (met) {
       const dx = met[0] - o.centre[0]
       const dy = met[1] - o.centre[1]
-      const between = (dx * a.direction[0] + dy * a.direction[1] > 0) && (dx * b.direction[0] + dy * b.direction[1] > 0)
+      const between =
+        dx * a.direction[0] + dy * a.direction[1] > 0 &&
+        dx * b.direction[0] + dy * b.direction[1] > 0
       ok = between && Math.hypot(dx, dy) < 0.98 * o.radius(Math.atan2(dy, dx))
     }
     mid.push(ok && met ? met : fallback)
@@ -171,12 +178,18 @@ function brilliantHalf(
     const brk2 = outlinePoint(o, o.breaks[k]!)
     const gb: Vec3 = [brk2[0], brk2[1], girdleZ]
     if (apexScale > 0) facets.push({ kind: 'star', points: [apex[k]!, mid[k]!, apex[next]!] })
-    facets.push({ kind: crown ? 'kite' : 'pavilionMain', points: [apex[k]!, mid[prev]!, g0, mid[k]!] })
+    facets.push({
+      kind: crown ? 'kite' : 'pavilionMain',
+      points: [apex[k]!, mid[prev]!, g0, mid[k]!],
+    })
     // The two half facets of this span and the girdle points under them.
     const from = o.mains[k]!
     const brk = o.breaks[k]! + (o.breaks[k]! < from ? TAU : 0)
     const to = o.mains[next]! + (next === 0 ? TAU : 0)
-    for (const [phi0, phi1, a, b] of [[from, brk, g0, gb], [brk, to, gb, g1]] as const) {
+    for (const [phi0, phi1, a, b] of [
+      [from, brk, g0, gb],
+      [brk, to, gb, g1],
+    ] as const) {
       const plane = planeThrough(mid[k]!, a, b)
       // The first point is the shared corner itself (bit for bit, so facets weld exactly).
       const edge: Vec3[] = [a]
@@ -198,16 +211,35 @@ function brilliantHalf(
 /** Table, stars, kites, upper and lower girdle facets, pavilion mains and a faceted girdle. */
 export function brilliantFacets(o: Outline, cut: GemCut, options: BrilliantOptions): Faceted {
   const build = (levels: Levels, maxDip: number) => ({
-    crown: brilliantHalf(o, cut.tablePct, levels.girdleTop, levels.table, STAR_LENGTH, options.girdleSteps, maxDip),
+    crown: brilliantHalf(
+      o,
+      cut.tablePct,
+      levels.girdleTop,
+      levels.table,
+      STAR_LENGTH,
+      options.girdleSteps,
+      maxDip,
+    ),
     // `reach` is measured from the apex: lower halves that run 77 % up from the girdle stop
     // 23 % short of the culet.
-    pavilion: brilliantHalf(o, 0, levels.girdleBottom, levels.culet, 1 - LOWER_HALF_LENGTH, options.girdleSteps, maxDip),
+    pavilion: brilliantHalf(
+      o,
+      0,
+      levels.girdleBottom,
+      levels.culet,
+      1 - LOWER_HALF_LENGTH,
+      options.girdleSteps,
+      maxDip,
+    ),
   })
   // Where the outline curves strongly the half facets bite deeper into the girdle. Thicken the
   // girdle (to at most twice nominal) so 40 % of it remains at the thinnest place, and flatten
   // whatever would still bite deeper — only a heart's cleft does.
   const probe = build(levelsOf(cut), Infinity)
-  const thickness = Math.min(2 * cut.girdlePct, Math.max(cut.girdlePct, (probe.crown.dip + probe.pavilion.dip) / 0.6))
+  const thickness = Math.min(
+    2 * cut.girdlePct,
+    Math.max(cut.girdlePct, (probe.crown.dip + probe.pavilion.dip) / 0.6),
+  )
   const levels = levelsOf(cut, thickness)
   const halves = build(levels, 0.3 * thickness)
   const { crown, pavilion } = halves

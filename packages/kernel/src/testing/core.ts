@@ -16,15 +16,30 @@ import { setting } from '../features/setting'
 import { loadRuntime } from '../runtime/index'
 import type { Detail, Evaluation } from '../types'
 
-export const CORE_FEATURES = [ringShank, gem, setting, halo, gemRow, revolve, pipe, engraving, booleanFeature, bail, primitive]
+export const CORE_FEATURES = [
+  ringShank,
+  gem,
+  setting,
+  halo,
+  gemRow,
+  revolve,
+  pipe,
+  engraving,
+  booleanFeature,
+  bail,
+  primitive,
+]
 
 export async function coreEvaluator(): Promise<Evaluator> {
   await loadRuntime()
   return new Evaluator(CORE_FEATURES)
 }
 
-export const evaluate = async (evaluator: Evaluator, design: Design, detail: Detail = 'draft'): Promise<Evaluation> =>
-  (await evaluator.scene(design, { detail })).evaluation
+export const evaluate = async (
+  evaluator: Evaluator,
+  design: Design,
+  detail: Detail = 'draft',
+): Promise<Evaluation> => (await evaluator.scene(design, { detail })).evaluation
 
 const band: NodeInput = { id: 'band', kind: 'ringShank' }
 const stone: NodeInput = { id: 'stone', kind: 'gem', placement: { type: 'ringTop', shank: 'band' } }
@@ -35,17 +50,37 @@ export const BASES: Record<string, NodeInput[]> = {
   gem: [band, stone],
   setting: [band, stone, { id: 'node', kind: 'setting', gem: 'stone' }],
   halo: [band, stone, { id: 'node', kind: 'halo', around: 'stone' }],
-  gemRow: [{ ...band, widthTop: 3, widthBottom: 3 } as NodeInput, { id: 'node', kind: 'gemRow', host: 'band' }],
+  gemRow: [
+    { ...band, widthTop: 3, widthBottom: 3 } as NodeInput,
+    { id: 'node', kind: 'gemRow', host: 'band' },
+  ],
   revolve: [{ id: 'node', kind: 'revolve', profile: 'M0 0 L4 0 C6 2 2 5 3 8 L0 8 Z' }],
-  pipe: [{ id: 'node', kind: 'pipe', points: [[0, 0, 0], [5, 0, 4], [10, 2, 0], [14, 0, 5]] }],
+  pipe: [
+    {
+      id: 'node',
+      kind: 'pipe',
+      points: [
+        [0, 0, 0],
+        [5, 0, 4],
+        [10, 2, 0],
+        [14, 0, 5],
+      ],
+    },
+  ],
   primitive: [{ id: 'node', kind: 'primitive' }],
   boolean: [
     { id: 'a', kind: 'primitive', size: [6, 6, 3] },
     { id: 'b', kind: 'primitive', shape: 'cylinder', size: [3, 3, 8] },
     { id: 'node', kind: 'boolean', target: 'a', tools: ['b'] },
   ],
-  bail: [{ id: 'a', kind: 'primitive', size: [10, 2, 14] }, { id: 'node', kind: 'bail', host: 'a' }],
-  engraving: [{ ...band, widthTop: 4, widthBottom: 4 } as NodeInput, { id: 'node', kind: 'engraving', host: 'band' }],
+  bail: [
+    { id: 'a', kind: 'primitive', size: [10, 2, 14] },
+    { id: 'node', kind: 'bail', host: 'a' },
+  ],
+  engraving: [
+    { ...band, widthTop: 4, widthBottom: 4 } as NodeInput,
+    { id: 'node', kind: 'engraving', host: 'band' },
+  ],
 }
 
 /** The base design of a kind with a patch merged into the node under test. */

@@ -11,7 +11,12 @@ import { cleanTriangles, weldWithin } from './weld'
 beforeAll(() => loadRuntime())
 
 /** An unwelded triangle soup of a UV sphere: every triangle has its own three vertices. */
-function sphereSoup(radius: number, rings = 16, segments = 24, offset: [number, number, number] = [0, 0, 0]): number[][] {
+function sphereSoup(
+  radius: number,
+  rings = 16,
+  segments = 24,
+  offset: [number, number, number] = [0, 0, 0],
+): number[][] {
   const point = (i: number, j: number): number[] => {
     const theta = (Math.PI * i) / rings
     const phi = (2 * Math.PI * j) / segments
@@ -51,7 +56,18 @@ describe('mesh repair', () => {
 
   it('drops duplicate and degenerate faces, and internal face pairs', () => {
     const t = [0, 0, 0, 1, 0, 0, 0, 1, 0]
-    const cleaned = cleanTriangles(weldWithin(soup([t, t, flip([0, 0, 1, 1, 0, 1, 0, 1, 1]), [0, 0, 1, 1, 0, 1, 0, 1, 1], [0, 0, 0, 1, 0, 0, 2, 0, 0]]), 1e-9))
+    const cleaned = cleanTriangles(
+      weldWithin(
+        soup([
+          t,
+          t,
+          flip([0, 0, 1, 1, 0, 1, 0, 1, 1]),
+          [0, 0, 1, 1, 0, 1, 0, 1, 1],
+          [0, 0, 0, 1, 0, 0, 2, 0, 0],
+        ]),
+        1e-9,
+      ),
+    )
     expect(cleaned.indices.length).toBe(3)
   })
 
@@ -69,7 +85,9 @@ describe('mesh repair', () => {
   })
 
   it('repairs an inside-out, holed, cracked soup to a manifold of the right volume', () => {
-    const tris = sphereSoup(5, 24, 32).map(flip).filter((_, i) => i % 97 !== 5)
+    const tris = sphereSoup(5, 24, 32)
+      .map(flip)
+      .filter((_, i) => i % 97 !== 5)
     // Float noise along seams (cracks below the weld tolerance).
     const noisy = tris.map((t) => t.map((v, i) => v + (i % 2 ? 1e-5 : -1e-5)))
     const { manifold, report } = repairMesh(soup(noisy))
@@ -81,7 +99,9 @@ describe('mesh repair', () => {
   })
 
   it('fuses overlapping shells', () => {
-    const { manifold, report } = repairMesh(soup([...sphereSoup(5), ...sphereSoup(5, 16, 24, [4, 0, 0])]))
+    const { manifold, report } = repairMesh(
+      soup([...sphereSoup(5), ...sphereSoup(5, 16, 24, [4, 0, 0])]),
+    )
     expect(report.shells).toBe(2)
     expect(manifold.decompose().length).toBe(1)
     expect(manifold.volume()).toBeLessThan(2 * (4 / 3) * Math.PI * 125)
@@ -98,6 +118,12 @@ describe('mesh repair', () => {
     expect(edgeTopology(trianglesFromManifold(manifold)).open).toBe(0)
     expect(manifold.volume()).toBeGreaterThan(0.85 * (4 / 3) * Math.PI * 125)
     manifold.delete()
-    expect(() => repairMesh(soup([[0, 0, 0, 1, 0, 0, 0, 1, 0], [0, 0, 0, 0, 1, 0, 0, 0, 1], [0, 0, 0, 0, 0, 1, 1, 0, 0], [5, 5, 5, 6, 5, 5, 5, 6, 5]]))).toThrow(/enclose a volume/)
+    // A flat disc: capping its rim encloses nothing.
+    const disc = Array.from({ length: 16 }, (_, i) => {
+      const a = (i / 16) * 2 * Math.PI
+      const b = ((i + 1) / 16) * 2 * Math.PI
+      return [0, 0, 0, Math.cos(a), Math.sin(a), 0, Math.cos(b), Math.sin(b), 0]
+    })
+    expect(() => repairMesh(soup(disc))).toThrow(/enclose a volume/)
   })
 })

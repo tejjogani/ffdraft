@@ -2,7 +2,7 @@
 import type { SceneStone } from '../core'
 import { type GemUnit, gemUnit, unitContains } from '../gems/index'
 import { outlinePoint } from '../gems/outline'
-import { type Vec3, distance, fromFrame, toFrame } from '../geometry/vec'
+import { distance, fromFrame, toFrame, type Vec3 } from '../geometry/vec'
 import type { Diagnostic } from '../types'
 
 /** Stones may touch girdle to girdle; they collide when one enters the other by more than this (mm). */
@@ -27,7 +27,9 @@ function probe(stone: SceneStone): Probe {
   for (let i = 0; i < 16; i++) {
     const [x, y] = outlinePoint(unit.outline, (i / 16) * 2 * Math.PI)
     const [cx, cy] = unit.outline.centre
-    girdle.push(fromFrame(frame, [(cx + (x - cx) * inset) * dims.width, (cy + (y - cy) * inset) * sy, 0]))
+    girdle.push(
+      fromFrame(frame, [(cx + (x - cx) * inset) * dims.width, (cy + (y - cy) * inset) * sy, 0]),
+    )
   }
   return { stone, unit, reach: Math.hypot(dims.length / 2, dims.depth), girdle }
 }
@@ -81,6 +83,10 @@ export function stoneDiagnostics(stones: readonly SceneStone[]): Diagnostic[] {
           }
   })
   if (collisions > MAX_REPORTED)
-    out.push({ level: 'error', code: 'stone.overlap', message: `${collisions - MAX_REPORTED} more pairs of stones overlap.` })
+    out.push({
+      level: 'error',
+      code: 'stone.overlap',
+      message: `${collisions - MAX_REPORTED} more pairs of stones overlap.`,
+    })
   return out
 }

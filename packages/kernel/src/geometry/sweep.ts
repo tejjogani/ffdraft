@@ -13,8 +13,23 @@
  *    which is what interactive evaluation and STL use.
  * Both evaluate the same poles and knots, so they agree to the chord tolerance.
  */
-import { type Face, type Shape3D, type Shell, assembleWire, makeBezierCurve, makeFace, makeSolid } from 'replicad'
-import { type Quality, type Solid, type SurfaceMesh, lazySolid, runtime } from '../core'
+import {
+  assembleWire,
+  type Face,
+  makeBezierCurve,
+  makeFace,
+  makeSolid,
+  type Shape3D,
+  type Shell,
+} from 'replicad'
+import {
+  lazySolid,
+  type Quality,
+  runtime,
+  type Solid,
+  type SolidRecipe,
+  type SurfaceMesh,
+} from '../core'
 import { CREASE_ANGLE, meshVolume } from '../solid/meshing'
 import { scoped, shapeVolume, wrapShape } from '../solid/occt'
 import { type CubicSpline, chordParameters, cubicSpline } from './bspline'
@@ -50,7 +65,10 @@ export function placeLoop(frame: Frame, loop: Loop): Float64Array {
 }
 
 /** A pole section for `segments` profile segments: every control point at `point`. */
-export function poleSection(point: readonly [number, number, number], segments: number): Float64Array {
+export function poleSection(
+  point: readonly [number, number, number],
+  segments: number,
+): Float64Array {
   const out = new Float64Array(segments * 9)
   for (let i = 0; i < out.length; i += 3) out.set(point, i)
   return out
@@ -80,7 +98,8 @@ interface Net {
 }
 
 function isPole(section: Float64Array): boolean {
-  for (let i = 3; i < section.length; i++) if (Math.abs(section[i]! - section[i % 3]!) > 1e-9) return false
+  for (let i = 3; i < section.length; i++)
+    if (Math.abs(section[i]! - section[i % 3]!) > 1e-9) return false
   return true
 }
 
@@ -89,7 +108,8 @@ function buildNet(spec: SweepSpec): Net {
   const dim = sections[0]?.length ?? 0
   if (sections.length < (closed ? 3 : 2) || dim === 0 || dim % 9 !== 0)
     throw new Error('A sweep needs at least two sections of 3 × segments control points')
-  if (sections.some((s) => s.length !== dim)) throw new Error('Sweep sections differ in segment count')
+  if (sections.some((s) => s.length !== dim))
+    throw new Error('Sweep sections differ in segment count')
   const n = sections.length
   const kinks = [...new Set(spec.kinks ?? [])].filter((k) => k >= 0 && k < n).sort((a, b) => a - b)
 
@@ -109,7 +129,9 @@ function buildNet(spec: SweepSpec): Net {
   const pieces = runs.map((stations): Piece => {
     const periodic = closed && kinks.length === 0
     const points = new Float64Array(stations.length * dim)
-    stations.forEach((index, row) => points.set(sections[index]!, row * dim))
+    stations.forEach((index, row) => {
+      points.set(sections[index]!, row * dim)
+    })
     const spline = cubicSpline(chordParameters(points, dim, periodic), periodic)
     return { stations, spline, poles: spline.solve(points, dim) }
   })
@@ -125,7 +147,13 @@ function buildNet(spec: SweepSpec): Net {
 }
 
 /** Section control points and their derivative along the sweep at parameter `u` of a piece. */
-function evaluateRow(net: Net, piece: Piece, u: number, row: Float64Array, tangent: Float64Array): void {
+function evaluateRow(
+  net: Net,
+  piece: Piece,
+  u: number,
+  row: Float64Array,
+  tangent: Float64Array,
+): void {
   const basis = piece.spline.basisAt(u)
   const { dim } = net
   const count = piece.spline.poleCount
@@ -147,7 +175,13 @@ function evaluateRow(net: Net, piece: Piece, u: number, row: Float64Array, tange
 // ── Sampling density ─────────────────────────────────────────────────────────────────────────
 
 /** Subdivisions that keep a curve span with mid-chord deviation `sag` over chord `length` in tolerance. */
-function subdivisions(sag: number, length: number, quality: Quality, refine: number, max: number): number {
+function subdivisions(
+  sag: number,
+  length: number,
+  quality: Quality,
+  refine: number,
+  max: number,
+): number {
   if (sag < 1e-7) return refine
   const byChord = Math.sqrt(sag / quality.chord)
   // A circular arc with sagitta s over chord L turns through ≈ 8·s/L radians.
@@ -156,7 +190,11 @@ function subdivisions(sag: number, length: number, quality: Quality, refine: num
 }
 
 /** Largest 3D distance between corresponding control points of two rows, and its chord. */
-function rowDeviation(a: Float64Array, b: Float64Array, mid: Float64Array): { sag: number; length: number } {
+function rowDeviation(
+  a: Float64Array,
+  b: Float64Array,
+  mid: Float64Array,
+): { sag: number; length: number } {
   let sag = 0
   let length = 0
   for (let c = 0; c < a.length; c += 3) {
@@ -180,7 +218,10 @@ function segmentCounts(net: Net, quality: Quality, refine: number): number[] {
     for (let s = 0; s < net.segments; s++) {
       const p = (k: number, c: number) => section[((s * 3 + k) % (net.segments * 3)) * 3 + c]!
       let sag = 0
-      for (const [k, wa, wb] of [[1, 2 / 3, 1 / 3], [2, 1 / 3, 2 / 3]] as const)
+      for (const [k, wa, wb] of [
+        [1, 2 / 3, 1 / 3],
+        [2, 1 / 3, 2 / 3],
+      ] as const)
         sag = Math.max(
           sag,
           Math.hypot(
@@ -327,7 +368,9 @@ function tessellate(net: Net, quality: Quality, refine = 1): SurfaceMesh {
     displayPieces.push({ base, rows: samples.length + 1 })
     const knots = piece.spline.knots
     const endU = knots[knots.length - 1]!
-    samples.forEach((sample, k) => emitRow(r + k, piece, sample.u, true))
+    samples.forEach((sample, k) => {
+      emitRow(r + k, piece, sample.u, true)
+    })
     // The piece's closing row: welded only when it is the open sweep's final row.
     const closing = (r + samples.length) % (closed ? rowCount : rowCount + 1)
     const isFinal = !closed && pi === net.pieces.length - 1
@@ -338,7 +381,13 @@ function tessellate(net: Net, quality: Quality, refine = 1): SurfaceMesh {
       let b = 0
       for (let s = 0; s < segments; s++) {
         for (let m = 0; m < counts[s]!; m++) {
-          quad(vertex(r0, b + m), vertex(r0, b + m + 1), vertex(r1, b + m + 1), vertex(r1, b + m), indices)
+          quad(
+            vertex(r0, b + m),
+            vertex(r0, b + m + 1),
+            vertex(r1, b + m + 1),
+            vertex(r1, b + m),
+            indices,
+          )
           const d0 = base + k * displayAround + b + s + m
           const d1 = d0 + displayAround
           const degenerate0 = poleRow(r0)
@@ -383,7 +432,12 @@ function tessellate(net: Net, quality: Quality, refine = 1): SurfaceMesh {
       displayNormals[a * 3 + 2]! * displayNormals[b * 3 + 2]! <
     cosCrease
   const segmentTo = (a: number, b: number) => {
-    for (const v of [a, b]) edges.push(displayPositions[v * 3]!, displayPositions[v * 3 + 1]!, displayPositions[v * 3 + 2]!)
+    for (const v of [a, b])
+      edges.push(
+        displayPositions[v * 3]!,
+        displayPositions[v * 3 + 1]!,
+        displayPositions[v * 3 + 2]!,
+      )
   }
   // Offset of each profile segment's first display vertex within a row.
   const starts: number[] = []
@@ -402,7 +456,9 @@ function tessellate(net: Net, quality: Quality, refine = 1): SurfaceMesh {
       }
     }
     // The seam to the next piece (a kink): creased wherever the two pieces' normals differ.
-    const following = closed ? displayPieces[(pi + 1) % displayPieces.length] : displayPieces[pi + 1]
+    const following = closed
+      ? displayPieces[(pi + 1) % displayPieces.length]
+      : displayPieces[pi + 1]
     if (!following || (closed && net.pieces.length === 1)) return
     const mine = base + (rows - 1) * displayAround
     for (let seg = 0; seg < segments; seg++)
@@ -432,7 +488,8 @@ function tessellate(net: Net, quality: Quality, refine = 1): SurfaceMesh {
       const v1 = vertex(rowIndex, b + 1)
       if (outwardAlongSweep) indices.push(centre, v0, v1)
       else indices.push(centre, v1, v0)
-      for (const v of [v0, v1]) edges.push(positions[v * 3]!, positions[v * 3 + 1]!, positions[v * 3 + 2]!)
+      for (const v of [v0, v1])
+        edges.push(positions[v * 3]!, positions[v * 3 + 1]!, positions[v * 3 + 2]!)
     }
     // Display: the same triangles with one flat normal.
     const i0 = indices[first]! * 3
@@ -577,7 +634,9 @@ function buildBrep(net: Net): Shape3D {
           for (let i = 0; i < count; i++)
             for (let k = 0; k < 4; k++) {
               const at = i * dim + ((s * 3 + k) % ctrl) * 3
-              const point = own(new oc.gp_Pnt(piece.poles[at]!, piece.poles[at + 1]!, piece.poles[at + 2]!))
+              const point = own(
+                new oc.gp_Pnt(piece.poles[at]!, piece.poles[at + 1]!, piece.poles[at + 2]!),
+              )
               poles.SetValue(i + 1, k + 1, point)
             }
           const knots = piece.spline.knots
@@ -594,7 +653,17 @@ function buildBrep(net: Net): Shape3D {
           vMults.SetValue(1, 4)
           vMults.SetValue(2, 4)
           const surface = own(
-            new oc.Geom_BSplineSurface(poles, uKnots, vKnots, uMults, vMults, 3, 3, piece.spline.periodic, false),
+            new oc.Geom_BSplineSurface(
+              poles,
+              uKnots,
+              vKnots,
+              uMults,
+              vMults,
+              3,
+              3,
+              piece.spline.periodic,
+              false,
+            ),
           )
           // The face keeps its own handle to the surface; 1e-6 lets pole edges be degenerate.
           const maker = own(new oc.BRepBuilderAPI_MakeFace(surface, 1e-6))
@@ -646,12 +715,15 @@ function buildBrep(net: Net): Shape3D {
 
 // ── Public ───────────────────────────────────────────────────────────────────────────────────
 
-/** A swept solid: exact B-rep on demand, analytic mesh for everything interactive. */
-export function sweepSolid(spec: SweepSpec): Solid {
+/** The on-demand producers of a sweep, for callers that substitute one of them. */
+export function sweepRecipe(spec: SweepSpec): Required<SolidRecipe> {
   const net = buildNet(spec)
-  return lazySolid({
+  return {
     brep: () => buildBrep(net),
     mesh: (quality) => tessellate(net, quality),
     volume: () => exactVolume(net),
-  })
+  }
 }
+
+/** A swept solid: exact B-rep on demand, analytic mesh for everything interactive. */
+export const sweepSolid = (spec: SweepSpec): Solid => lazySolid(sweepRecipe(spec))

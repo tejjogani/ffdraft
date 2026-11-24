@@ -10,7 +10,9 @@ export const glb = defineExporter({
     const evaluation = only
       ? {
           ...scene.evaluation,
-          parts: scene.parts.filter((p) => p.sources.some((s) => only.has(s.nodeId))).map((p) => p.part),
+          parts: scene.parts
+            .filter((p) => p.sources.some((s) => only.has(s.nodeId)))
+            .map((p) => p.part),
           stones: scene.evaluation.stones.filter((s) => only.has(s.nodeId)),
         }
       : scene.evaluation

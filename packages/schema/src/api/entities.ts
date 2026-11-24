@@ -93,7 +93,9 @@ export type PieceOriginInput = z.input<typeof PieceOriginInputSchema>
 
 /**
  * A piece made from someone's artwork (uploaded sources or references) cannot be sent to a 3D
- * provider, packaged or exported until a person attests they may use it.
+ * provider, packaged or exported until a person attests they may use it. The server enforces it
+ * (409 `attestation_required`); a client that exports on its own (the studio's in-browser STL /
+ * GLB export) must check this first and offer `pieces.attest` instead.
  */
 export const originNeedsAttestation = (origin: PieceOrigin | null): boolean =>
   origin !== null &&
@@ -587,19 +589,19 @@ export const BrandModelSchema = z.object({
     ageRange: z.enum(ADULT_AGE_RANGES),
     skinTone: z.string(),
     /** Monk Skin Tone scale, 1 (lightest) – 10 (deepest). */
-    monkTone: z.number().int().min(1).max(10).nullable().default(null),
-    undertone: z.enum(UNDERTONES).nullable().default(null),
+    monkTone: z.number().int().min(1).max(10).nullable(),
+    undertone: z.enum(UNDERTONES).nullable(),
     hair: z.string(),
-    eyes: z.string().default(''),
+    eyes: z.string(),
     /** Freckles, moles, tattoos: details that keep the identity consistent across shots. */
-    marks: z.string().default(''),
+    marks: z.string(),
     build: z.string(),
     styling: z.string(),
     /** Scale anchors so jewelry sits at true size. */
     ringSizeUs: z.number().nullable(),
     wristMm: z.number().nullable(),
     neckMm: z.number().nullable(),
-    handLengthMm: z.number().positive().nullable().default(null),
+    handLengthMm: z.number().positive().nullable(),
   }),
   /** Canonical portrait set, frozen once approved: face, hands, neck/ears, full body. */
   portraits: z.array(

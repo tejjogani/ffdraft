@@ -1,3 +1,3 @@
+export { createKernelClient, type KernelClient, type KernelClientOptions } from './client'
+export { createKernel, type LocalKernel } from './kernel'
 export type * from './types'
-export { type KernelClient, type KernelClientOptions, createKernelClient } from './client'
-export { type LocalKernel, createKernel } from './kernel'

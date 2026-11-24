@@ -14,7 +14,16 @@ const TYPES: Record<string, Scalar> = {
   float: 'f32', float32: 'f32', double: 'f64', float64: 'f64',
 } // biome-ignore format: lookup table
 
-const SIZE: Record<Scalar, number> = { i8: 1, u8: 1, i16: 2, u16: 2, i32: 4, u32: 4, f32: 4, f64: 8 }
+const SIZE: Record<Scalar, number> = {
+  i8: 1,
+  u8: 1,
+  i16: 2,
+  u16: 2,
+  i32: 4,
+  u32: 4,
+  f32: 4,
+  f64: 8,
+}
 
 interface Property {
   name: string
@@ -45,12 +54,17 @@ export function parsePly(bytes: Uint8Array): IndexedTriangles {
   for (const line of header) {
     const parts = line.trim().split(/\s+/)
     if (parts[0] === 'format') format = parts[1] ?? ''
-    else if (parts[0] === 'element') elements.push({ name: parts[1]!, count: Number(parts[2]), properties: [] })
+    else if (parts[0] === 'element')
+      elements.push({ name: parts[1]!, count: Number(parts[2]), properties: [] })
     else if (parts[0] === 'property') {
       const element = elements.at(-1)
       if (!element) throw new Error('The PLY header declares a property outside an element')
       if (parts[1] === 'list')
-        element.properties.push({ name: parts[4]!, type: scalarType(parts[3]), countType: scalarType(parts[2]) })
+        element.properties.push({
+          name: parts[4]!,
+          type: scalarType(parts[3]),
+          countType: scalarType(parts[2]),
+        })
       else element.properties.push({ name: parts[2]!, type: scalarType(parts[1]) })
     }
   }
@@ -69,7 +83,9 @@ export function parsePly(bytes: Uint8Array): IndexedTriangles {
   for (const element of elements) {
     const props = element.properties
     const xyz = ['x', 'y', 'z'].map((n) => props.findIndex((p) => p.name === n))
-    const faceList = props.findIndex((p) => p.countType && (p.name === 'vertex_indices' || p.name === 'vertex_index'))
+    const faceList = props.findIndex(
+      (p) => p.countType && (p.name === 'vertex_indices' || p.name === 'vertex_index'),
+    )
     for (let e = 0; e < element.count; e++) {
       const values: number[] = []
       polygon.length = 0
@@ -89,7 +105,8 @@ export function parsePly(bytes: Uint8Array): IndexedTriangles {
     }
   }
   const vertexCount = positions.length / 3
-  if (indices.some((i) => i < 0 || i >= vertexCount)) throw new Error('The PLY faces refer to missing vertices')
+  if (indices.some((i) => i < 0 || i >= vertexCount))
+    throw new Error('The PLY faces refer to missing vertices')
   return { positions: Float32Array.from(positions), indices: Uint32Array.from(indices) }
 }
 

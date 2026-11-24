@@ -16,7 +16,15 @@ export const RULES = {
   prongForStone: (stoneWidth: number): number => 0.08 * stoneWidth + 0.3,
   /** Accent-stone prongs by stone size (JewelCraft presets, 01-cad §2). */
   accentProng: (stoneWidth: number): number =>
-    stoneWidth >= 2.5 ? 0.8 : stoneWidth >= 1.7 ? 0.7 : stoneWidth >= 1.5 ? 0.6 : stoneWidth >= 1.2 ? 0.5 : 0.45,
+    stoneWidth >= 2.5
+      ? 0.8
+      : stoneWidth >= 1.7
+        ? 0.7
+        : stoneWidth >= 1.5
+          ? 0.6
+          : stoneWidth >= 1.2
+            ? 0.5
+            : 0.45,
   /** Bezel wall: Stuller's minimum (02-production "DFM checks": below 0.45 mm is an error). */
   bezelWall: { error: 0.45 },
   /** Channel wall beside melee (Stuller ≥ 0.40 mm). */

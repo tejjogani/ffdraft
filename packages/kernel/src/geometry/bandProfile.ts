@@ -4,12 +4,12 @@
  * size whatever the profile.
  */
 import {
-  type Bezier2,
-  type Loop,
   arcSegment,
+  type Bezier2,
   blendSegment,
   bulgeSegments,
   domeSegments,
+  type Loop,
   lineSegment,
   segmentTangent,
 } from './loop'
@@ -26,7 +26,12 @@ const comfort = (thickness: number): number => Math.min(0.3, 0.18 * thickness)
 
 /** Height above r = inner at which a domed or ridged top starts (the top of the side wall). */
 function wallHeight(profile: BandProfile, width: number, thickness: number): number {
-  const base = profile === 'knifeEdge' ? 0.35 * thickness : profile === 'court' ? 0.3 * thickness : clamp(0.28 * thickness, 0.25, 0.6)
+  const base =
+    profile === 'knifeEdge'
+      ? 0.35 * thickness
+      : profile === 'court'
+        ? 0.3 * thickness
+        : clamp(0.28 * thickness, 0.25, 0.6)
   const ci = profile === 'court' ? comfort(thickness) : 0
   return Math.max(base, ci + edgeRadius(width, thickness) + 0.02)
 }
@@ -35,7 +40,13 @@ function wallHeight(profile: BandProfile, width: number, thickness: number): num
  * The profile as a closed counter-clockwise loop centred on a = `centre`. The number of
  * segments depends only on `profile`, so loops of one profile interpolate along a sweep.
  */
-export function bandLoop(profile: BandProfile, width: number, thickness: number, inner: number, centre = 0): Loop {
+export function bandLoop(
+  profile: BandProfile,
+  width: number,
+  thickness: number,
+  inner: number,
+  centre = 0,
+): Loop {
   const hw = width / 2
   const e = edgeRadius(width, thickness)
   const r0 = inner
@@ -51,10 +62,20 @@ export function bandLoop(profile: BandProfile, width: number, thickness: number,
     ? bulgeSegments([L + e, r0 + ci], [R - e, r0 + ci], ci, 2)
     : [lineSegment([L + e, r0], [R - e, r0])]
   const cornerRight = rounded
-    ? blendSegment([R - e, r0 + ci], segmentTangent(innerSegments[innerSegments.length - 1]!, true), [R, r0 + ci + e], [0, 1])
+    ? blendSegment(
+        [R - e, r0 + ci],
+        segmentTangent(innerSegments[innerSegments.length - 1]!, true),
+        [R, r0 + ci + e],
+        [0, 1],
+      )
     : arcSegment([R - e, r0 + e], e, -q, 0)
   const cornerLeft = rounded
-    ? blendSegment([L, r0 + ci + e], [0, -1], [L + e, r0 + ci], segmentTangent(innerSegments[0]!, false))
+    ? blendSegment(
+        [L, r0 + ci + e],
+        [0, -1],
+        [L + e, r0 + ci],
+        segmentTangent(innerSegments[0]!, false),
+      )
     : arcSegment([L + e, r0 + e], e, 2 * q, 3 * q)
   const wallStart = r0 + ci + e
 
@@ -78,7 +99,12 @@ export function bandLoop(profile: BandProfile, width: number, thickness: number,
       top = [
         lineSegment([R, wallStart], [R, wall]),
         lineSegment([R, wall], [centre - ux * d, r1 - uy * d]),
-        blendSegment([centre - ux * d, r1 - uy * d], [ux, uy], [centre + ux * d, r1 - uy * d], [ux, -uy]),
+        blendSegment(
+          [centre - ux * d, r1 - uy * d],
+          [ux, uy],
+          [centre + ux * d, r1 - uy * d],
+          [ux, -uy],
+        ),
         lineSegment([centre + ux * d, r1 - uy * d], [L, wall]),
         lineSegment([L, wall], [L, wallStart]),
       ]
@@ -108,7 +134,8 @@ export function bandOuterAt(
   if (profile === 'flat' || profile === 'flatCourt') return { height: thickness, slope: 0 }
   const wall = wallHeight(profile, width, thickness)
   const rise = thickness - wall
-  if (profile === 'knifeEdge') return { height: wall + rise * (1 - Math.abs(x)), slope: (-Math.sign(x) * rise) / hw }
+  if (profile === 'knifeEdge')
+    return { height: wall + rise * (1 - Math.abs(x)), slope: (-Math.sign(x) * rise) / hw }
   const root = Math.sqrt(1 - x * x)
   return { height: wall + rise * root, slope: (-rise * x) / (root * hw) }
 }

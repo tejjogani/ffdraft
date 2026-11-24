@@ -10,7 +10,19 @@
  *  - neither  the frame is transported without twist (rotation-minimising), for round wire.
  */
 import { chordParameters, cubicSpline } from './bspline'
-import { type Frame, type Vec3, add, addScaled, cross, dot, length, normalize, perpendicular, scale, sub } from './vec'
+import {
+  add,
+  addScaled,
+  cross,
+  dot,
+  type Frame,
+  length,
+  normalize,
+  perpendicular,
+  scale,
+  sub,
+  type Vec3,
+} from './vec'
 
 export interface PathOptions {
   closed: boolean
@@ -120,7 +132,13 @@ export function resamplePath(points: readonly Vec3[], closed: boolean, count: nu
     for (;;) {
       const l = length(sub(all[segment + 1]!, all[segment]!))
       if (walked + l >= target || segment + 2 >= all.length) {
-        out.push(addScaled(all[segment]!, sub(all[segment + 1]!, all[segment]!), l > 0 ? Math.min(1, (target - walked) / l) : 0))
+        out.push(
+          addScaled(
+            all[segment]!,
+            sub(all[segment + 1]!, all[segment]!),
+            l > 0 ? Math.min(1, (target - walked) / l) : 0,
+          ),
+        )
         break
       }
       walked += l
@@ -134,7 +152,11 @@ export function resamplePath(points: readonly Vec3[], closed: boolean, count: nu
  * A C² curve through `points`, sampled `perSpan` times between each pair: positions and exact
  * unit tangents. Closed curves do not repeat the first point.
  */
-export function smoothPath(points: readonly Vec3[], closed: boolean, perSpan: number): { points: Vec3[]; tangents: Vec3[] } {
+export function smoothPath(
+  points: readonly Vec3[],
+  closed: boolean,
+  perSpan: number,
+): { points: Vec3[]; tangents: Vec3[] } {
   const flat = new Float64Array(points.flat())
   const spline = cubicSpline(chordParameters(flat, 3, closed), closed)
   const poles = spline.solve(flat, 3)
@@ -155,7 +177,8 @@ export function smoothPath(points: readonly Vec3[], closed: boolean, perSpan: nu
   }
   const knots = spline.knots
   for (let j = 0; j + 1 < knots.length; j++)
-    for (let m = 0; m < perSpan; m++) sample(knots[j]! + ((knots[j + 1]! - knots[j]!) * m) / perSpan)
+    for (let m = 0; m < perSpan; m++)
+      sample(knots[j]! + ((knots[j + 1]! - knots[j]!) * m) / perSpan)
   if (!closed) sample(knots[knots.length - 1]!)
   return out
 }

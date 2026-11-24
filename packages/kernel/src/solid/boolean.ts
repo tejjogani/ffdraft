@@ -25,7 +25,11 @@ function disjoint(tools: readonly Solid[]): boolean {
 function exact(op: BooleanOp, target: Solid, tools: readonly Solid[]): Solid | null {
   let shape: Shape3D | null = null
   try {
-    shape = booleanShapes(op, target.brep()!, tools.map((t) => t.brep()!))
+    shape = booleanShapes(
+      op,
+      target.brep()!,
+      tools.map((t) => t.brep()!),
+    )
     const volume = shapeVolume(shape)
     const before = target.volume()
     const slack = 1e-6 * Math.max(1, before)
@@ -44,7 +48,12 @@ function exact(op: BooleanOp, target: Solid, tools: readonly Solid[]): Solid | n
   }
 }
 
-function mesh(op: BooleanOp, target: Solid, tools: readonly Solid[], options: BooleanOptions): Solid {
+function mesh(
+  op: BooleanOp,
+  target: Solid,
+  tools: readonly Solid[],
+  options: BooleanOptions,
+): Solid {
   const { manifold: mf } = runtime()
   const quality = options.quality ?? QUALITY.production
   const a = target.manifold(quality)
@@ -63,8 +72,14 @@ function mesh(op: BooleanOp, target: Solid, tools: readonly Solid[], options: Bo
   return solidFromManifold(result)
 }
 
-function run(op: BooleanOp, target: Solid, tools: readonly Solid[], options: BooleanOptions): Solid {
-  if (tools.length === 0) return target.transformed([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+function run(
+  op: BooleanOp,
+  target: Solid,
+  tools: readonly Solid[],
+  options: BooleanOptions,
+): Solid {
+  if (tools.length === 0)
+    return target.transformed([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
   const canBeExact =
     options.prefer !== 'mesh' &&
     target.exact &&
@@ -82,9 +97,15 @@ export const union = (solids: readonly Solid[], options: BooleanOptions = {}): S
 }
 
 /** Removes `tools` from `target`. */
-export const subtract = (target: Solid, tools: readonly Solid[], options: BooleanOptions = {}): Solid =>
-  run('subtract', target, tools, options)
+export const subtract = (
+  target: Solid,
+  tools: readonly Solid[],
+  options: BooleanOptions = {},
+): Solid => run('subtract', target, tools, options)
 
 /** Keeps only what `target` shares with every tool. */
-export const intersect = (target: Solid, tools: readonly Solid[], options: BooleanOptions = {}): Solid =>
-  run('intersect', target, tools, options)
+export const intersect = (
+  target: Solid,
+  tools: readonly Solid[],
+  options: BooleanOptions = {},
+): Solid => run('intersect', target, tools, options)

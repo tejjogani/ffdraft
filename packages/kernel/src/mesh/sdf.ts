@@ -4,7 +4,8 @@
  *
  * The distance is computed once on a regular grid and interpolated, because a level set calls
  * its SDF hundreds of thousands of times and a per-call BVH query from JS is far too slow
- * (docs/research/06-freeform.md §4). Inside/outside comes from ray parity along grid rows: one
+ * (docs/research/06-freeform.md §4). Inside/outside is the winding number along grid rows
+ * (summed signed crossings, so overlapping shells count as inside, where parity would not): one
  * ray serves a whole row, so the sign costs O(rows · log n). Damaged meshes take a majority vote
  * over rows along all three axes, which tolerates holes and stray faces.
  */
@@ -48,14 +49,18 @@ export function distanceGrid(mesh: IndexedTriangles, options: DistanceGridOption
       hi[k] = Math.max(hi[k]!, x)
     }
   const origin = lo.map((v) => v - pad) as [number, number, number]
-  const size = hi.map((v, k) => Math.ceil((v + pad - origin[k]!) / spacing) + 1) as [number, number, number]
+  const size = hi.map((v, k) => Math.ceil((v + pad - origin[k]!) / spacing) + 1) as [
+    number,
+    number,
+    number,
+  ]
   const [nx, ny, nz] = size
   const count = nx * ny * nz
   if (count > 40_000_000) throw new Error('The mesh is too large to re-surface at this resolution')
   const at = (i: number, j: number, k: number) => (k * ny + j) * nx + i
   const inside = new Uint8Array(count)
 
-  // Parity along rows of one axis: `axis` is the ray direction, (a, b) the other two.
+  // Winding number along rows of one axis: `axis` is the ray direction, (a, b) the other two.
   const castRows = (axis: 0 | 1 | 2) => {
     const a = ((axis + 1) % 3) as 0 | 1 | 2
     const b = ((axis + 2) % 3) as 0 | 1 | 2
@@ -67,15 +72,16 @@ export function distanceGrid(mesh: IndexedTriangles, options: DistanceGridOption
         o[axis] = origin[axis] - spacing
         o[a] = origin[a] + (ia + NUDGE) * spacing
         o[b] = origin[b] + (ib + NUDGE * 1.618) * spacing
-        const hits = bvh.hits(o[0]!, o[1]!, o[2]!, dir[0]!, dir[1]!, dir[2]!)
+        const hits = bvh.crossings(o[0]!, o[1]!, o[2]!, dir[0]!, dir[1]!, dir[2]!)
         let h = 0
+        let winding = 0
         const idx = [0, 0, 0]
         idx[a] = ia
         idx[b] = ib
         for (let i = 0; i < size[axis]; i++) {
           const t = (i + 1) * spacing
-          while (h < hits.length && hits[h]! < t) h++
-          if (h % 2 === 1) {
+          while (h < hits.length && hits[h]!.t < t) winding += hits[h++]!.w
+          if (winding > 0) {
             idx[axis] = i
             inside[at(idx[0]!, idx[1]!, idx[2]!)]!++
           }

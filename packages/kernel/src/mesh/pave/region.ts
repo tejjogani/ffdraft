@@ -7,7 +7,14 @@
  * the region (docs/research/06-freeform.md §5 step 1) — becomes a set of segments; the distance
  * to them is the margin every stone keeps.
  */
-import { DEG, type Mat4, type Vec3, invertSimilarity, transformPoint, uniformScaleOf } from '../../geometry/vec'
+import {
+  DEG,
+  invertSimilarity,
+  type Mat4,
+  transformPoint,
+  uniformScaleOf,
+  type Vec3,
+} from '../../geometry/vec'
 import type { IndexedTriangles } from '../../solid/meshing'
 import { PointGrid } from '../grid'
 import { OutlineDistance } from '../outline/distance'
@@ -152,7 +159,8 @@ export function selectRegion(
     normals,
     areas,
     area,
-    edgeDistance: (q) => Math.min(edges.distance(q), field ? field.edgeDistance(q, edgeCap) : edgeCap),
+    edgeDistance: (q) =>
+      Math.min(edges.distance(q), field ? field.edgeDistance(q, edgeCap) : edgeCap),
   }
 }
 
@@ -230,7 +238,11 @@ class SegmentDistance {
 
   private length(s: number): number {
     const o = s * 6
-    return Math.hypot(this.segs[o + 3]! - this.segs[o]!, this.segs[o + 4]! - this.segs[o + 1]!, this.segs[o + 5]! - this.segs[o + 2]!)
+    return Math.hypot(
+      this.segs[o + 3]! - this.segs[o]!,
+      this.segs[o + 4]! - this.segs[o + 1]!,
+      this.segs[o + 5]! - this.segs[o + 2]!,
+    )
   }
 
   /** Distance to the nearest segment, or the cap when none is nearer. */
@@ -258,7 +270,10 @@ class SegmentDistance {
     const dy = this.segs[o + 4]! - ay
     const dz = this.segs[o + 5]! - az
     const len2 = dx * dx + dy * dy + dz * dz
-    const t = len2 > 0 ? Math.max(0, Math.min(1, ((q[0] - ax) * dx + (q[1] - ay) * dy + (q[2] - az) * dz) / len2)) : 0
+    const t =
+      len2 > 0
+        ? Math.max(0, Math.min(1, ((q[0] - ax) * dx + (q[1] - ay) * dy + (q[2] - az) * dz) / len2))
+        : 0
     return Math.hypot(q[0] - ax - t * dx, q[1] - ay - t * dy, q[2] - az - t * dz)
   }
 }

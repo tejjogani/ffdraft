@@ -1,4 +1,4 @@
-import { GEM_CUTS, GEM_CUT_IDS, type GemCut } from '@pave/schema'
+import { GEM_CUT_IDS, GEM_CUTS, type GemCut } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
 import { weld } from '../solid/meshing'
 import { facetCounts, gemUnit, unitContains } from './index'
@@ -44,8 +44,14 @@ describe('gem unit meshes', () => {
       const [a, b, c] = [indices[t]! * 3, indices[t + 1]! * 3, indices[t + 2]! * 3]
       const u = [0, 1, 2].map((k) => positions[b + k]! - positions[a + k]!)
       const v = [0, 1, 2].map((k) => positions[c + k]! - positions[a + k]!)
-      const n = [u[1]! * v[2]! - u[2]! * v[1]!, u[2]! * v[0]! - u[0]! * v[2]!, u[0]! * v[1]! - u[1]! * v[0]!]
-      expect(n[0]! * normals[a]! + n[1]! * normals[a + 1]! + n[2]! * normals[a + 2]!).toBeGreaterThan(0)
+      const n = [
+        u[1]! * v[2]! - u[2]! * v[1]!,
+        u[2]! * v[0]! - u[0]! * v[2]!,
+        u[0]! * v[1]! - u[1]! * v[0]!,
+      ]
+      expect(
+        n[0]! * normals[a]! + n[1]! * normals[a + 1]! + n[2]! * normals[a + 2]!,
+      ).toBeGreaterThan(0)
       expect(Math.hypot(normals[a]!, normals[a + 1]!, normals[a + 2]!)).toBeCloseTo(1, 4)
       volume += (positions[a]! * n[0]! + positions[a + 1]! * n[1]! + positions[a + 2]! * n[2]!) / 6
     }
@@ -60,7 +66,14 @@ describe('gem unit meshes', () => {
 
   it('round brilliant has 57 facets plus a faceted girdle', () => {
     const counts = facetCounts(gemUnit('round'))
-    expect(counts).toMatchObject({ table: 1, star: 8, kite: 8, upperGirdle: 16, lowerGirdle: 16, pavilionMain: 8 })
+    expect(counts).toMatchObject({
+      table: 1,
+      star: 8,
+      kite: 8,
+      upperGirdle: 16,
+      lowerGirdle: 16,
+      pavilionMain: 8,
+    })
     const { girdle, ...crownAndPavilion } = counts
     expect(Object.values(crownAndPavilion).reduce((a, b) => a + b, 0)).toBe(57)
     expect(girdle).toBe(64)
@@ -68,20 +81,61 @@ describe('gem unit meshes', () => {
 
   it('fancy brilliants keep the brilliant facet arrangement on their own outline', () => {
     for (const id of ['oval', 'pear', 'marquise', 'heart', 'cushion', 'radiant'] as const)
-      expect(facetCounts(gemUnit(id)), id).toMatchObject({ table: 1, star: 8, kite: 8, upperGirdle: 16, lowerGirdle: 16, pavilionMain: 8 })
-    expect(facetCounts(gemUnit('princess'))).toMatchObject({ table: 1, star: 4, kite: 4, pavilionMain: 4 })
-    expect(facetCounts(gemUnit('trillion'))).toMatchObject({ table: 1, star: 6, kite: 6, pavilionMain: 6 })
+      expect(facetCounts(gemUnit(id)), id).toMatchObject({
+        table: 1,
+        star: 8,
+        kite: 8,
+        upperGirdle: 16,
+        lowerGirdle: 16,
+        pavilionMain: 8,
+      })
+    expect(facetCounts(gemUnit('princess'))).toMatchObject({
+      table: 1,
+      star: 4,
+      kite: 4,
+      pavilionMain: 4,
+    })
+    expect(facetCounts(gemUnit('trillion'))).toMatchObject({
+      table: 1,
+      star: 6,
+      kite: 6,
+      pavilionMain: 6,
+    })
   })
 
   it('step cuts have three tiers of steps above and below the girdle', () => {
-    expect(facetCounts(gemUnit('emerald'))).toEqual({ table: 1, crownStep: 24, girdle: 8, pavilionStep: 24 })
-    expect(facetCounts(gemUnit('asscher'))).toEqual({ table: 1, crownStep: 24, girdle: 8, pavilionStep: 24 })
-    expect(facetCounts(gemUnit('baguette'))).toEqual({ table: 1, crownStep: 12, girdle: 4, pavilionStep: 12 })
+    expect(facetCounts(gemUnit('emerald'))).toEqual({
+      table: 1,
+      crownStep: 24,
+      girdle: 8,
+      pavilionStep: 24,
+    })
+    expect(facetCounts(gemUnit('asscher'))).toEqual({
+      table: 1,
+      crownStep: 24,
+      girdle: 8,
+      pavilionStep: 24,
+    })
+    expect(facetCounts(gemUnit('baguette'))).toEqual({
+      table: 1,
+      crownStep: 12,
+      girdle: 4,
+      pavilionStep: 12,
+    })
   })
 
   it('cuts are convex: no vertex lies outside any facet plane', () => {
     // Pointed outlines (pear, marquise, heart, trillion) fold their tip facets and are excluded.
-    for (const id of ['round', 'emerald', 'asscher', 'baguette', 'oval', 'cushion', 'radiant', 'princess'] as const) {
+    for (const id of [
+      'round',
+      'emerald',
+      'asscher',
+      'baguette',
+      'oval',
+      'cushion',
+      'radiant',
+      'princess',
+    ] as const) {
       const { positions, normals, indices } = gemUnit(id).mesh
       let worst = 0
       for (let t = 0; t < indices.length; t += 3) {

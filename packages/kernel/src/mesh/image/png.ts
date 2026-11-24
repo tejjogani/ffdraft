@@ -52,7 +52,8 @@ export function decodePng(bytes: Uint8Array): Raster {
     at += 12 + length
   }
   const channels = CHANNELS[type]
-  if (!channels || width === 0 || height === 0) throw new Error('The PNG file has an unsupported or missing header')
+  if (!channels || width === 0 || height === 0)
+    throw new Error('The PNG file has an unsupported or missing header')
   if (width * height > 64e6) throw new Error('The PNG image is too large to use as a height map')
   const joined = new Uint8Array(data.reduce((n, d) => n + d.length, 0))
   let offset = 0
@@ -87,7 +88,10 @@ export function decodePng(bytes: Uint8Array): Raster {
       unfilter(filter ?? 0, line, previous, bytesPerPixel)
       for (let col = 0; col < pw; col++) {
         const sample = (c: number): number => {
-          if (depth === 16) return ((line[(col * channels + c) * 2]! << 8) | line[(col * channels + c) * 2 + 1]!) / 65535
+          if (depth === 16)
+            return (
+              ((line[(col * channels + c) * 2]! << 8) | line[(col * channels + c) * 2 + 1]!) / 65535
+            )
           if (depth === 8) return line[col * channels + c]! / 255
           const bit = (col * channels + c) * depth
           return ((line[bit >> 3]! >> (8 - depth - (bit & 7))) & max) / max
@@ -117,7 +121,8 @@ function writePixel(
   let a = 1
   if (type === 3) {
     const index = Math.round(sample(0) * max)
-    if (!palette || index * 3 + 2 >= palette.length) throw new Error('The PNG palette is missing an entry')
+    if (!palette || index * 3 + 2 >= palette.length)
+      throw new Error('The PNG palette is missing an entry')
     r = palette[index * 3]! / 255
     g = palette[index * 3 + 1]! / 255
     b = palette[index * 3 + 2]! / 255

@@ -283,6 +283,7 @@ export const renderJob = pgTable(
   (t) => [
     index('render_job_org_idx').on(t.orgId, t.createdAt),
     index('render_job_piece_idx').on(t.pieceId),
+    index('render_job_cache_idx').on(t.orgId, t.cacheKey),
   ],
 )
 
@@ -328,6 +329,8 @@ export const modelShot = pgTable(
     provenance: jsonb('provenance').$type<ModelShot['provenance']>(),
     /** Null on rows from before shots were attributed. */
     actor: jsonb('actor').$type<Actor>(),
+    /** The user who asked (for an agent actor, the user it acts for). Null on older rows. */
+    createdBy: text('created_by'),
     createdAt: at('created_at'),
   },
   (t) => [index('model_shot_org_idx').on(t.orgId, t.createdAt)],
@@ -470,6 +473,8 @@ export const agentMessage = pgTable(
       .notNull()
       .references(() => thread.id, { onDelete: 'cascade' }),
     runId: text('run_id'),
+    /** The thread's owner, so a studio's message ids are unique per person, not per org. */
+    userId: text('user_id').notNull(),
     /** 1, 2, … within the thread: the order the model saw. */
     seq: integer('seq').notNull(),
     role: text('role').$type<Message['role']>().notNull(),
@@ -481,7 +486,7 @@ export const agentMessage = pgTable(
   (t) => [
     index('agent_message_thread_idx').on(t.threadId, t.createdAt),
     uniqueIndex('agent_message_seq_idx').on(t.threadId, t.seq),
-    uniqueIndex('agent_message_client_idx').on(t.orgId, t.clientMessageId),
+    uniqueIndex('agent_message_client_idx').on(t.orgId, t.userId, t.clientMessageId),
   ],
 )
 

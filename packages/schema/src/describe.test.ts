@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 import {
   applyOps,
   buildDesign,
   type Design,
   defaultNode,
+  describeFields,
   describeNode,
   describeOps,
   designFrom,
@@ -11,8 +13,10 @@ import {
   type FieldInfo,
   labelForOps,
   NODE_KINDS,
+  NODE_SCHEMAS,
   NodeSchema,
   type Op,
+  RenderSceneSchema,
   squashOps,
   TEMPLATES,
   variantPatch,
@@ -349,5 +353,106 @@ describe('labels and history lines', () => {
     expect(describeOps([{ t: 'update', id: 'x', patch: { someKey: 1 } }], [])[0]!.text).toBe(
       'x · Some key: default → 1',
     )
+  })
+})
+
+describe('describeFields', () => {
+  it('yields a titled field for every titled leaf of the render scene', () => {
+    type Js = { title?: string; properties?: Record<string, Js>; anyOf?: Js[] }
+    const titled: string[] = []
+    const walk = (js: Js, path: string) => {
+      if (js.title && path) titled.push(path)
+      for (const [k, v] of Object.entries(js.properties ?? {})) walk(v, path ? `${path}.${k}` : k)
+      for (const v of js.anyOf ?? []) walk(v, path)
+    }
+    walk(z.toJSONSchema(RenderSceneSchema, { io: 'input' }) as Js, '')
+    const paths = (fields: readonly FieldInfo[], prefix = ''): string[] =>
+      fields.flatMap((f) => [`${prefix}${f.key}`, ...paths(f.fields ?? [], `${prefix}${f.key}.`)])
+    const fields = describeFields(RenderSceneSchema)
+    expect(paths(fields).toSorted()).toEqual(titled.toSorted())
+    const lens = fields.find((f) => f.key === 'camera')!.fields!.find((f) => f.key === 'focalLength')
+    expect(lens).toMatchObject({ title: 'Lens', meta: { unit: 'mm', widget: 'slider' } })
+  })
+
+  it('is what describeNode reads node kinds with', () => {
+    expect(describeNode('halo').fields).toEqual(
+      describeFields(NODE_SCHEMAS.halo, ['id', 'kind', 'name', 'visible']),
+    )
+  })
+})
+
+describe('edit descriptions, edge cases', () => {
+  const d = solitaire()
+  const band = d.order.find((id) => d.nodes[id]!.kind === 'ringShank')!
+  const center = d.order.find((id) => d.nodes[id]!.kind === 'gem')!
+  const widthTop = (d.nodes[band] as { widthTop: number }).widthTop
+
+  it('pairs each update of a node with its own before-values', () => {
+    const ops: Op[] = [
+      { t: 'update', id: band, patch: { widthTop: 2.6 } },
+      { t: 'update', id: band, patch: { widthTop: 3 } },
+    ]
+    const { design: after, inverse } = applyOps(d, ops)
+    expect(describeOps(ops, inverse, after).map((l) => l.text)).toEqual([
+      `Band · Width at top: ${widthTop} → 2.6 mm`,
+      'Band · Width at top: 2.6 → 3 mm',
+    ])
+  })
+
+  it('names a node added earlier in the same change', () => {
+    const ops: Op[] = [
+      { t: 'add', node: { id: 'h', kind: 'halo', around: center } },
+      { t: 'update', id: 'h', patch: { rows: 2 } },
+    ]
+    const { inverse } = applyOps(d, ops)
+    expect(describeOps(ops, inverse)[1]!.text).toMatch(/^Halo · Rows: /)
+    expect(labelForOps(ops, d)).toMatch(/^Added Halo; Rows 1 → 2$/)
+  })
+
+  it('reads a variant switch as one change of its field', () => {
+    const g = designFrom('pendant', [
+      { id: 'band', kind: 'ringShank' },
+      { id: 'g', kind: 'gem', placement: { type: 'ringTop', shank: 'band' } },
+    ])
+    const { patch } = variantPatch(g.nodes.g!, 'placement', 'free', { design: g })
+    expect(labelForOps([{ t: 'update', id: 'g', patch: patch! }], g)).toBe(
+      'Placement Ring top → Free',
+    )
+  })
+
+  it('labels a ring size as a size, and numbers as written', () => {
+    expect(labelForOps([{ t: 'update', id: band, patch: { size: { value: 7 } } }], d)).toMatch(
+      /^Ring size US [\d.]+ → US 7$/,
+    )
+    expect(
+      labelForOps([{ t: 'update', id: band, patch: { size: { system: 'eu', value: 54 } } }], d),
+    ).toMatch(/→ EU 54$/)
+    expect(labelForOps([{ t: 'update', id: band, patch: { widthTop: 2.25 } }], d)).toBe(
+      `Width at top ${widthTop} → 2.25 mm`,
+    )
+  })
+
+  it('leaves out edits that end where they started, and empty patches', () => {
+    const scrub: Op[] = [
+      { t: 'update', id: band, patch: { widthTop: widthTop + 0.1 } },
+      { t: 'update', id: band, patch: { widthTop } },
+    ]
+    expect(labelForOps(scrub, d)).toBe('No change')
+    expect(labelForOps([{ t: 'update', id: band, patch: { transform: {} } }], d)).toBe('No change')
+  })
+})
+
+describe('squashOps, variant switches', () => {
+  it('does not merge across a switch of variant, which drops the old variant’s keys', () => {
+    const d = designFrom('pendant', [
+      { id: 'body', kind: 'vectorBody' },
+      { id: 'p', kind: 'pave', host: 'body' },
+    ])
+    const ops: Op[] = [
+      { t: 'update', id: 'p', patch: { region: { direction: [0, 0, 1] } } },
+      { t: 'update', id: 'p', patch: { region: { type: 'all' } } },
+      { t: 'update', id: 'p', patch: { region: { type: 'facing', maxAngle: 40 } } },
+    ]
+    expect(applyOps(d, squashOps(ops)).design).toEqual(applyOps(d, ops).design)
   })
 })

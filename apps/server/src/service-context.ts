@@ -1,7 +1,7 @@
 import type { JobStatus } from '@pave/schema'
-import { eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { putAsset, readAsset } from './assets/assets'
-import type { Ctx } from './context'
+import { type Ctx, invoke } from './context'
 import * as t from './db/schema'
 import { notFound } from './errors'
 import type { JobKind } from './events'
@@ -41,7 +41,14 @@ export function serviceContext(ctx: Ctx): ServiceContext {
       const { asset, bytes } = await readAsset(ctx, id)
       return { bytes, name: asset.name, mime: asset.mime }
     },
-    invoke: ctx.invoke,
+    invoke: (name, input) => invoke(ctx, name, input),
+    cachedRender: async (cacheKey) => {
+      const row = await ctx.repo.renders.first(
+        and(eq(t.renderJob.cacheKey, cacheKey), eq(t.renderJob.status, 'done')),
+        desc(t.renderJob.createdAt),
+      )
+      return row ? invoke(ctx, 'renders.get', { id: row.id }) : null
+    },
     jobSettled: (kind, id, signal) =>
       new Promise<TerminalStatus>((resolve, reject) => {
         if (signal?.aborted) return reject(signal.reason)

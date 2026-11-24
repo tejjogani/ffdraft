@@ -47,19 +47,38 @@ function wall(): Manifold {
       indices.push(a + k, b + k, b + k1, a + k, b + k1, a + k1)
     }
   }
-  return manifoldFromTriangles({ positions: Float32Array.from(positions), indices: Uint32Array.from(indices) })
+  return manifoldFromTriangles({
+    positions: Float32Array.from(positions),
+    indices: Uint32Array.from(indices),
+  })
 }
 
 export function crown(): Manifold {
   const { manifold: mf } = runtime()
   const parts: Manifold[] = [wall()]
   // Rolled band at the foot and a bead line above it.
-  parts.push(lathe(`M ${RADIUS - WALL * 0.5} 0 L ${RADIUS + 0.4} 0 C ${RADIUS + 1.3} 0 ${RADIUS + 1.3} 1.6 ${RADIUS + 0.4} 1.6 L ${RADIUS - WALL * 0.5} 1.6 Z`, 192))
-  parts.push(lathe(`M ${RADIUS - WALL * 0.5} 2.3 L ${RADIUS + 0.3} 2.3 C ${RADIUS + 0.9} 2.3 ${RADIUS + 0.9} 3.2 ${RADIUS + 0.3} 3.2 L ${RADIUS - WALL * 0.5} 3.2 Z`, 192))
+  parts.push(
+    lathe(
+      `M ${RADIUS - WALL * 0.5} 0 L ${RADIUS + 0.4} 0 C ${RADIUS + 1.3} 0 ${RADIUS + 1.3} 1.6 ${RADIUS + 0.4} 1.6 L ${RADIUS - WALL * 0.5} 1.6 Z`,
+      192,
+    ),
+  )
+  parts.push(
+    lathe(
+      `M ${RADIUS - WALL * 0.5} 2.3 L ${RADIUS + 0.3} 2.3 C ${RADIUS + 0.9} 2.3 ${RADIUS + 0.9} 3.2 ${RADIUS + 0.3} 3.2 L ${RADIUS - WALL * 0.5} 3.2 Z`,
+      192,
+    ),
+  )
   const ball = mf.Manifold.sphere(1.05, 32)
   for (let k = 0; k < POINTS; k++) {
     const theta = ((k + 0.5) / POINTS) * 2 * Math.PI
-    parts.push(ball.translate([(RADIUS - WALL / 2) * Math.cos(theta), (RADIUS - WALL / 2) * Math.sin(theta), BAND + POINT_HEIGHT + 0.5]))
+    parts.push(
+      ball.translate([
+        (RADIUS - WALL / 2) * Math.cos(theta),
+        (RADIUS - WALL / 2) * Math.sin(theta),
+        BAND + POINT_HEIGHT + 0.5,
+      ]),
+    )
   }
   try {
     // A point faces the viewer (−Y).

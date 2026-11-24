@@ -42,8 +42,10 @@ export function parseMesh(bytes: Uint8Array): { mesh: IndexedTriangles; format: 
     )
   }
   const mesh = PARSERS[format](bytes)
-  if (mesh.indices.length === 0) throw new Error(`The ${format.toUpperCase()} file contains no triangles`)
+  if (mesh.indices.length === 0)
+    throw new Error(`The ${format.toUpperCase()} file contains no triangles`)
   for (const v of mesh.positions)
-    if (!Number.isFinite(v)) throw new Error(`The ${format.toUpperCase()} file has invalid vertex coordinates`)
+    if (!Number.isFinite(v))
+      throw new Error(`The ${format.toUpperCase()} file has invalid vertex coordinates`)
   return { mesh, format }
 }

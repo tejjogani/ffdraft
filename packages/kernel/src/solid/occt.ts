@@ -3,7 +3,7 @@
  * handles for solids — tessellation, transforms, booleans, integral properties — lives here so
  * features never see an untyped WASM object or an opaque `WebAssembly.Exception`.
  */
-import { type AnyShape, type Shape3D, cast, makeCompound, measureArea } from 'replicad'
+import { type AnyShape, cast, makeCompound, measureArea, type Shape3D } from 'replicad'
 import type { TopoDS_Shape } from 'replicad-opencascadejs'
 import type { Mat4 } from '../geometry/vec'
 import { runtime } from '../runtime/index'

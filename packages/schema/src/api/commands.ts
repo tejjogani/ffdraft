@@ -95,6 +95,16 @@ const onModelShot = z.object({
   aspect: z.enum(IMAGE_ASPECTS).default('4:5'),
 })
 
+const modelCard = BrandModelSchema.shape.card
+/** A new model card: the details added after the first cards may be left out. */
+const newModelCard = modelCard.extend({
+  monkTone: modelCard.shape.monkTone.default(null),
+  undertone: modelCard.shape.undertone.default(null),
+  eyes: modelCard.shape.eyes.default(''),
+  marks: modelCard.shape.marks.default(''),
+  handLengthMm: modelCard.shape.handLengthMm.default(null),
+})
+
 const meshRequest = {
   /** One to four photos of the same object (front first). */
   imageAssetIds: z.array(id).min(1).max(4),
@@ -812,7 +822,7 @@ export const commands = {
     kind: 'mutation',
     input: z.object({
       name: z.string().min(1).max(80),
-      card: BrandModelSchema.shape.card,
+      card: newModelCard,
       attestedSynthetic: z.literal(true),
     }),
     output: BrandModelSchema,
@@ -824,7 +834,8 @@ export const commands = {
     input: z.object({
       id,
       name: z.string().min(1).max(80).optional(),
-      card: BrandModelSchema.shape.card.partial().optional(),
+      /** Only the fields given change. */
+      card: modelCard.partial().optional(),
       status: z.enum(['draft', 'approved']).optional(),
     }),
     output: BrandModelSchema,

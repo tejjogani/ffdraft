@@ -12,9 +12,9 @@ import {
   type Solid,
 } from '../core'
 import {
+  composeTransform,
   IDENTITY,
   type Mat4,
-  composeTransform,
   transformFrame,
   uniformScaleOf,
 } from '../geometry/vec'
@@ -52,7 +52,11 @@ function place(out: FeatureOutput, matrix: Mat4): Placed {
         : {
             ...st,
             frame: transformFrame(matrix, st.frame),
-            dims: { length: st.dims.length * s, width: st.dims.width * s, depth: st.dims.depth * s },
+            dims: {
+              length: st.dims.length * s,
+              width: st.dims.width * s,
+              depth: st.dims.depth * s,
+            },
           },
     ),
     cuts: (out.cuts ?? []).map((c) => ({ ...c, solid: move(c.solid) })),
@@ -155,7 +159,11 @@ export async function buildNode(
   const matrix = matrixOf(node)
   try {
     const placed = await withSolidScope(
-      async () => place(await (feature.build as (n: Node, c: BuildContext) => FeatureOutput)(node, ctx), matrix),
+      async () =>
+        place(
+          await (feature.build as (n: Node, c: BuildContext) => FeatureOutput)(node, ctx),
+          matrix,
+        ),
       solidsOf,
     )
     return {
@@ -180,7 +188,13 @@ export async function buildNode(
         ? `“${labelOf(node)}” was left out because ${reason}.`
         : `“${labelOf(node)}” could not be built: ${reason}`,
     })
-    return without(node, hash, blocked ? 'blocked' : 'failed', diagnostics, performance.now() - started)
+    return without(
+      node,
+      hash,
+      blocked ? 'blocked' : 'failed',
+      diagnostics,
+      performance.now() - started,
+    )
   } finally {
     for (const t of temporaries.reverse()) t.delete()
   }

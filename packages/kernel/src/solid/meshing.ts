@@ -76,6 +76,47 @@ export function weld(positions: Float32Array, indices: Uint32Array): IndexedTria
   return { positions: unique.slice(0, n * 3), indices: out.slice(0, t) }
 }
 
+/**
+ * Opens "kissing" contacts. A boolean can leave two sheets of a surface touching along an edge
+ * or at a point: valid topology, but any consumer that identifies vertices by position (every
+ * STL reader) sees a non-manifold edge there. Vertices that share a position are each drawn
+ * back along their own normal by `gap`, which parts the sheets by a hair. Returns null when no
+ * two vertices coincide.
+ */
+export function separateTouching(tris: IndexedTriangles, gap = 2e-4): IndexedTriangles | null {
+  const { positions, indices } = tris
+  const count = positions.length / 3
+  const welded = weld(positions, indices)
+  if (welded.positions.length === positions.length) return null
+  // Which vertices share their position with another one.
+  const key = (i: number) => `${positions[i * 3]},${positions[i * 3 + 1]},${positions[i * 3 + 2]}`
+  const seen = new Map<string, number>()
+  const shared = new Uint8Array(count)
+  for (let i = 0; i < count; i++) {
+    const k = key(i)
+    const other = seen.get(k)
+    if (other === undefined) seen.set(k, i)
+    else shared[i] = shared[other] = 1
+  }
+  const normals = new Float64Array(positions.length)
+  const fn = faceNormals(tris)
+  for (let t = 0; t < indices.length; t += 3)
+    for (let e = 0; e < 3; e++) {
+      const v = indices[t + e]! * 3
+      normals[v]! += fn[t]!
+      normals[v + 1]! += fn[t + 1]!
+      normals[v + 2]! += fn[t + 2]!
+    }
+  const moved = positions.slice()
+  for (let i = 0; i < count; i++) {
+    if (!shared[i]) continue
+    const l = Math.hypot(normals[i * 3]!, normals[i * 3 + 1]!, normals[i * 3 + 2]!) || 1
+    for (let c = 0; c < 3; c++)
+      moved[i * 3 + c] = positions[i * 3 + c]! - (normals[i * 3 + c]! / l) * gap
+  }
+  return { positions: moved, indices }
+}
+
 /** Unnormalised face normals (length = 2 × area), one xyz triple per triangle. */
 function faceNormals({ positions: p, indices }: IndexedTriangles): Float32Array {
   const normals = new Float32Array(indices.length)
@@ -178,7 +219,10 @@ export function creaseNormals(tris: IndexedTriangles, angle = CREASE_ANGLE): Mes
       let nz = 0
       for (let j = from; j < to; j++) {
         const o = corners[j]! - (corners[j]! % 3)
-        if (unit[t]! * unit[o]! + unit[t + 1]! * unit[o + 1]! + unit[t + 2]! * unit[o + 2]! >= cosLimit) {
+        if (
+          unit[t]! * unit[o]! + unit[t + 1]! * unit[o + 1]! + unit[t + 2]! * unit[o + 2]! >=
+          cosLimit
+        ) {
           nx += fn[o]!
           ny += fn[o + 1]!
           nz += fn[o + 2]!
@@ -211,7 +255,11 @@ export function creaseNormals(tris: IndexedTriangles, angle = CREASE_ANGLE): Mes
       outIdx[corner] = index
     }
   }
-  return { positions: outPos.slice(0, count * 3), normals: outNrm.slice(0, count * 3), indices: outIdx }
+  return {
+    positions: outPos.slice(0, count * 3),
+    normals: outNrm.slice(0, count * 3),
+    indices: outIdx,
+  }
 }
 
 /** Crease-normal display mesh plus feature edges for a welded surface. */
@@ -356,7 +404,8 @@ export function mergeTessellations(parts: readonly Tessellation[]): Tessellation
     out.mesh.positions.set(p.mesh.positions, v)
     out.mesh.normals.set(p.mesh.normals, v)
     const base = v / 3
-    for (let k = 0; k < p.mesh.indices.length; k++) out.mesh.indices[i + k] = p.mesh.indices[k]! + base
+    for (let k = 0; k < p.mesh.indices.length; k++)
+      out.mesh.indices[i + k] = p.mesh.indices[k]! + base
     out.edges.set(p.edges, e)
     v += p.mesh.positions.length
     i += p.mesh.indices.length

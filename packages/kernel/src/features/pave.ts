@@ -4,19 +4,19 @@
  * below the surface along the smoothed normal, and at production cuts the seats and raises
  * shared beads, each in one batch boolean (docs/research/06-freeform.md §5 and its Decisions).
  */
-import { GEM_CUTS, MELEE_SIZES_MM, type NodeOf, gemDims } from '@pave/schema'
+import { GEM_CUTS, gemDims, MELEE_SIZES_MM, type NodeOf } from '@pave/schema'
 import {
   type Addition,
   type BuildContext,
   type Cut,
+  defineFeature,
   type NodeResult,
   type Stone,
-  defineFeature,
   solidFromManifold,
 } from '../core'
 import { frameFromZ } from '../geometry/vec'
 import { layoutBeads } from '../mesh/pave/beads'
-import { type PlacedStone, layoutPave } from '../mesh/pave/layout'
+import { layoutPave, type PlacedStone } from '../mesh/pave/layout'
 import { type PaveField, type PlacedField, selectRegion } from '../mesh/pave/region'
 import { beadSolids, seatCutters } from '../mesh/pave/seats'
 import { PaveSurface } from '../mesh/pave/surface'
@@ -89,7 +89,13 @@ export const pave = defineFeature('pave', (node, ctx) => {
   const mesh = hostSurface(host)
   // Edge distances matter only up to the largest stone's radius plus the margin.
   const edgeCap = largest / 2 + node.margin + 0.5
-  const region = selectRegion(mesh, node.region, publishedField(host), Math.max(smallest / 2, 0.1), edgeCap)
+  const region = selectRegion(
+    mesh,
+    node.region,
+    publishedField(host),
+    Math.max(smallest / 2, 0.1),
+    edgeCap,
+  )
   if (region.area === 0) {
     ctx.report({
       level: 'warning',
@@ -140,13 +146,20 @@ export const pave = defineFeature('pave', (node, ctx) => {
   if (ctx.detail === 'draft' || stones.length === 0) return { stones }
 
   const cuts: Cut[] = [
-    { solid: solidFromManifold(seatCutters(stones, { opening: largest * 0.5 }, ctx.quality)), targets: [node.host] },
+    {
+      solid: solidFromManifold(seatCutters(stones, { opening: largest * 0.5 }, ctx.quality)),
+      targets: [node.host],
+    },
   ]
   const additions: Addition[] = []
   if (node.beads) {
     const beads = layoutBeads(layout.stones, node.gap, (q) => surface.snap(q))
     if (beads.length > 0)
-      additions.push({ solid: solidFromManifold(beadSolids(beads, ctx.quality)), target: node.host, afterCuts: true })
+      additions.push({
+        solid: solidFromManifold(beadSolids(beads, ctx.quality)),
+        target: node.host,
+        afterCuts: true,
+      })
   }
   return { stones, cuts, additions }
 })

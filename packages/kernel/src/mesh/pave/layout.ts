@@ -14,7 +14,7 @@
  *
  * Deterministic: the only randomness is the seeded lattice phase.
  */
-import { type Vec3, add, cross, dot, normalize, scale, sub } from '../../geometry/vec'
+import { add, cross, dot, normalize, scale, sub, type Vec3 } from '../../geometry/vec'
 import { PointGrid } from '../grid'
 import { seededRandom } from '../random'
 import type { PaveSurface } from './surface'
@@ -105,7 +105,10 @@ class Packer {
       first = false
     }
     for (const size of this.sizes) this.fillVoids(size)
-    const full = this.stones.reduce((sum, s) => sum + Math.PI * (s.diameter / 2 + this.o.gap / 2) ** 2, 0)
+    const full = this.stones.reduce(
+      (sum, s) => sum + Math.PI * (s.diameter / 2 + this.o.gap / 2) ** 2,
+      0,
+    )
     return { stones: this.select(full), packedArea: full }
   }
 
@@ -225,11 +228,16 @@ class Packer {
     const reach = 2 * this.largest
     let g: Vec3 = [0, 0, 0]
     this.surface.near(p, reach, (j) => {
-      g = add(g, scale(sub(this.surface.point(j), p), this.surface.depth[j]! - this.surface.depth[seed]!))
+      g = add(
+        g,
+        scale(sub(this.surface.point(j), p), this.surface.depth[j]! - this.surface.depth[seed]!),
+      )
     })
     g = sub(g, scale(n, dot(g, n)))
     // A clear slope across the footprint means the seed sits in a band, not an open field.
-    const banded = Math.hypot(g[0], g[1], g[2]) > 1e-3 * reach ** 4 && this.surface.depth[seed]! < 2 * this.largest
+    const banded =
+      Math.hypot(g[0], g[1], g[2]) > 1e-3 * reach ** 4 &&
+      this.surface.depth[seed]! < 2 * this.largest
     let e = banded ? cross(n, g) : sub(this.o.rowDirection, scale(n, dot(this.o.rowDirection, n)))
     if (Math.hypot(e[0], e[1], e[2]) < 1e-3) e = cross(n, [0, 0, 1])
     e = normalize(e, normalize(cross(n, [1, 0, 0])))
@@ -245,7 +253,10 @@ class Packer {
       // Seeded phase: shift the lattice by up to half a pitch so layouts differ per seed.
       const pitch = this.largest + this.o.gap
       const shifted = this.snap(
-        add(add(start, scale(rows, (this.random() - 0.5) * pitch)), scale(cross(n0, rows), (this.random() - 0.5) * pitch)),
+        add(
+          add(start, scale(rows, (this.random() - 0.5) * pitch)),
+          scale(cross(n0, rows), (this.random() - 0.5) * pitch),
+        ),
       )
       const d = shifted ? this.sizeFor(shifted.sample, shifted.p) : 0
       if (shifted && d > 0 && this.fits(shifted.p, shifted.n, d)) start = shifted.p
@@ -260,7 +271,9 @@ class Packer {
     let b = -1
     for (let k = 0; k < 6 && b < 0; k++) {
       const angle = (k * Math.PI) / 3
-      const dir = normalize(add(scale(rows, Math.cos(angle)), scale(cross(root.n, rows), Math.sin(angle))))
+      const dir = normalize(
+        add(scale(rows, Math.cos(angle)), scale(cross(root.n, rows), Math.sin(angle))),
+      )
       b = this.besideAlong(a, dir)
     }
     if (b < 0) return
@@ -285,7 +298,10 @@ class Packer {
         [i, j],
         [j, i],
       ] as const) {
-        const k = this.besideAlong(to, normalize(sub(this.stones[to]!.position, this.stones[from]!.position)))
+        const k = this.besideAlong(
+          to,
+          normalize(sub(this.stones[to]!.position, this.stones[from]!.position)),
+        )
         if (k >= 0) queue.push([to, k, -1])
       }
     }
@@ -300,7 +316,8 @@ class Packer {
       if (!hit) return -1
       const d = this.sizeFor(hit.sample, hit.p)
       if (d === 0) return -1
-      if (d / 2 >= r - EPS) return this.fits(hit.p, hit.n, 2 * r) ? this.place(hit.p, hit.n, 2 * r, hit.sample) : -1
+      if (d / 2 >= r - EPS)
+        return this.fits(hit.p, hit.n, 2 * r) ? this.place(hit.p, hit.n, 2 * r, hit.sample) : -1
       r = d / 2
     }
     return -1
@@ -322,7 +339,8 @@ class Packer {
       if (!hit) return -1
       const d = this.sizeFor(hit.sample, hit.p)
       if (d === 0) return -1
-      if (d / 2 >= r - EPS) return this.fits(hit.p, hit.n, 2 * r) ? this.place(hit.p, hit.n, 2 * r, hit.sample) : -1
+      if (d / 2 >= r - EPS)
+        return this.fits(hit.p, hit.n, 2 * r) ? this.place(hit.p, hit.n, 2 * r, hit.sample) : -1
       r = d / 2
     }
     return -1
@@ -333,7 +351,12 @@ class Packer {
    * found in the girdles' plane, snapped onto the surface and refined twice in the candidate's
    * own plane.
    */
-  private tangentPoint(i: number, j: number, r: number, side: number): ReturnType<PaveSurface['snap']> {
+  private tangentPoint(
+    i: number,
+    j: number,
+    r: number,
+    side: number,
+  ): ReturnType<PaveSurface['snap']> {
     const a = this.stones[i]!
     const b = this.stones[j]!
     const da = a.diameter / 2 + r + this.o.gap + SLACK
@@ -382,7 +405,9 @@ class Packer {
    */
   private nestle(p: Vec3, size: number): ReturnType<PaveSurface['snap']> {
     const near: [number, number][] = []
-    this.grid.near(p[0], p[1], p[2], size + this.largest + 2 * this.o.gap, (j, d2) => near.push([j, d2]))
+    this.grid.near(p[0], p[1], p[2], size + this.largest + 2 * this.o.gap, (j, d2) =>
+      near.push([j, d2]),
+    )
     if (near.length < 2) return null
     near.sort((a, b) => a[1] - b[1] || a[0] - b[0])
     const [i, j] = [near[0]![0], near[1]![0]]
@@ -392,7 +417,11 @@ class Packer {
       const hit = this.tangentPoint(i, j, size / 2, side)
       if (!hit) continue
       const d = Math.hypot(hit.p[0] - p[0], hit.p[1] - p[1], hit.p[2] - p[2])
-      if (d < bestD && this.sizeFor(hit.sample, hit.p) >= size - EPS && this.fits(hit.p, hit.n, size)) {
+      if (
+        d < bestD &&
+        this.sizeFor(hit.sample, hit.p) >= size - EPS &&
+        this.fits(hit.p, hit.n, size)
+      ) {
         best = hit
         bestD = d
       }
@@ -403,7 +432,9 @@ class Packer {
   /** The stones nearest the heart of the region until `coverage` of the field is kept. */
   private select(full: number): PlacedStone[] {
     if (this.o.coverage >= 1) return this.stones
-    const ids = this.stones.map((_, i) => i).sort((a, b) => this.depth[b]! - this.depth[a]! || a - b)
+    const ids = this.stones
+      .map((_, i) => i)
+      .sort((a, b) => this.depth[b]! - this.depth[a]! || a - b)
     const keep = new Set<number>()
     let area = 0
     for (const i of ids) {

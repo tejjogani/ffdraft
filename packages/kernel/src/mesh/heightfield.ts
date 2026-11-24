@@ -32,8 +32,22 @@ export function heightfieldSolid(grid: HeightGrid, bottom: number): Manifold {
   const low = (i: number, j: number) => n + j * nx + i
   for (let j = 0; j + 1 < ny; j++)
     for (let i = 0; i + 1 < nx; i++) {
-      indices.push(top(i, j), top(i + 1, j), top(i + 1, j + 1), top(i, j), top(i + 1, j + 1), top(i, j + 1))
-      indices.push(low(i, j), low(i + 1, j + 1), low(i + 1, j), low(i, j), low(i, j + 1), low(i + 1, j + 1))
+      indices.push(
+        top(i, j),
+        top(i + 1, j),
+        top(i + 1, j + 1),
+        top(i, j),
+        top(i + 1, j + 1),
+        top(i, j + 1),
+      )
+      indices.push(
+        low(i, j),
+        low(i + 1, j + 1),
+        low(i + 1, j),
+        low(i, j),
+        low(i, j + 1),
+        low(i + 1, j + 1),
+      )
     }
   // Side walls along the four borders; walking a → b, the outside is on the right.
   const wall = (a: [number, number], b: [number, number]) =>

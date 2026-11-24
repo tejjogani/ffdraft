@@ -77,11 +77,14 @@ function polar(centre: Vec2, primitives: readonly Primitive[]): (phi: number) =>
   }
 }
 
-const angleTo = (centre: Vec2, p: Vec2): number => norm(Math.atan2(p[1] - centre[1], p[0] - centre[0]))
+const angleTo = (centre: Vec2, p: Vec2): number =>
+  norm(Math.atan2(p[1] - centre[1], p[0] - centre[0]))
 
 /** Mains at equal angular steps starting from `first`, each break halfway to the next. */
 function evenMains(count: number, first = 0): Pick<Outline, 'mains' | 'breaks'> {
-  const mains = Array.from({ length: count }, (_, k) => norm(first + (k * TAU) / count)).sort((a, b) => a - b)
+  const mains = Array.from({ length: count }, (_, k) => norm(first + (k * TAU) / count)).sort(
+    (a, b) => a - b,
+  )
   return { mains, breaks: mains.map((m) => norm(m + Math.PI / count)) }
 }
 
@@ -108,7 +111,10 @@ function polygonMains(centre: Vec2, vertices: readonly Vec2[]): Pick<Outline, 'm
   const order = vertices
     .map((p, i) => {
       const q = vertices[(i + 1) % vertices.length]!
-      return { main: angleTo(centre, p), brk: angleTo(centre, [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]) }
+      return {
+        main: angleTo(centre, p),
+        brk: angleTo(centre, [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]),
+      }
     })
     .sort((a, b) => a.main - b.main)
   return { mains: order.map((o) => o.main), breaks: order.map((o) => o.brk) }
@@ -138,7 +144,19 @@ function cushion(length: number): Outline {
     corners: [],
     prongs: [],
     // Mains on the corners (the diagonals of the bounding box) and the middles of the sides.
-    ...mainsAt([0, 0], [[a, b], [-a, b], [-a, -b], [a, -b], [a, 0], [0, b], [-a, 0], [0, -b]]),
+    ...mainsAt(
+      [0, 0],
+      [
+        [a, b],
+        [-a, b],
+        [-a, -b],
+        [a, -b],
+        [a, 0],
+        [0, b],
+        [-a, 0],
+        [0, -b],
+      ],
+    ),
   }
 }
 
@@ -149,11 +167,19 @@ function rectangle(length: number, cut: number): Outline {
   const c = Math.min(cut, 0.45)
   const centre: Vec2 = [0, 0]
   if (c < 1e-6) {
-    const pts: Vec2[] = [[a, b], [-a, b], [-a, -b], [a, -b]]
+    const pts: Vec2[] = [
+      [a, b],
+      [-a, b],
+      [-a, -b],
+      [a, -b],
+    ]
     return {
       length,
       centre,
-      radius: polar(centre, pts.map((p, i) => ({ type: 'line', a: p, b: pts[(i + 1) % 4]! }))),
+      radius: polar(
+        centre,
+        pts.map((p, i) => ({ type: 'line', a: p, b: pts[(i + 1) % 4]! })),
+      ),
       corners: pts.map((p) => angleTo(centre, p)).sort((x, y) => x - y),
       prongs: pts.map((p) => ({ phi: angleTo(centre, p), point: true })),
       ...polygonMains(centre, pts),
@@ -167,7 +193,10 @@ function rectangle(length: number, cut: number): Outline {
   return {
     length,
     centre,
-    radius: polar(centre, pts.map((p, i) => ({ type: 'line', a: p, b: pts[(i + 1) % 8]! }))),
+    radius: polar(
+      centre,
+      pts.map((p, i) => ({ type: 'line', a: p, b: pts[(i + 1) % 8]! })),
+    ),
     corners: pts.map((p) => angleTo(centre, p)).sort((x, y) => x - y),
     // Claws sit on the four corner cuts (every second edge, starting with the upper right).
     prongs: [1, 3, 5, 7].map((i) => {
@@ -206,12 +235,18 @@ function marquise(length: number): Outline {
   return {
     length,
     centre: [0, 0],
-    radius: polar([0, 0], [
-      { type: 'arc', c: [0.5 - big, 0], r: big, keep: (p) => p[0] >= 0 },
-      { type: 'arc', c: [big - 0.5, 0], r: big, keep: (p) => p[0] <= 0 },
-    ]),
+    radius: polar(
+      [0, 0],
+      [
+        { type: 'arc', c: [0.5 - big, 0], r: big, keep: (p) => p[0] >= 0 },
+        { type: 'arc', c: [big - 0.5, 0], r: big, keep: (p) => p[0] <= 0 },
+      ],
+    ),
     corners: [Math.PI / 2, (3 * Math.PI) / 2],
-    prongs: [{ phi: Math.PI / 2, point: true }, { phi: (3 * Math.PI) / 2, point: true }],
+    prongs: [
+      { phi: Math.PI / 2, point: true },
+      { phi: (3 * Math.PI) / 2, point: true },
+    ],
     ...evenMains(8),
   }
 }
@@ -246,7 +281,11 @@ function triangle(length: number): Outline {
   // Each side is an arc through its two corners bulging 5 % of the width; the base corners are
   // raised by that much so the bowed base still ends at −length / 2.
   const sag = 0.05
-  const pts: Vec2[] = [[0, length / 2], [-0.5, -length / 2 + sag], [0.5, -length / 2 + sag]]
+  const pts: Vec2[] = [
+    [0, length / 2],
+    [-0.5, -length / 2 + sag],
+    [0.5, -length / 2 + sag],
+  ]
   const centre: Vec2 = [0, -length / 6]
   const primitives: Primitive[] = []
   const sideMids: Vec2[] = []
@@ -315,7 +354,8 @@ export function outlineAnchors(o: Outline): number[] {
   const anchors = o.corners.map(norm)
   for (let k = 0; k < 8; k++) {
     const a = (k * TAU) / 8
-    if (!anchors.some((c) => Math.abs(c - a) < 0.25 || Math.abs(c - a) > TAU - 0.25)) anchors.push(a)
+    if (!anchors.some((c) => Math.abs(c - a) < 0.25 || Math.abs(c - a) > TAU - 0.25))
+      anchors.push(a)
   }
   return anchors.sort((a, b) => a - b)
 }
@@ -365,8 +405,14 @@ export function outlineLoop(o: Outline): Loop {
     const h =
       bend < 1e-8
         ? chord / 3
-        : ((8 / 3) * ((mid[0] - (p0[0] + p3[0]) / 2) * dx + (mid[1] - (p0[1] + p3[1]) / 2) * dy)) / bend
+        : ((8 / 3) * ((mid[0] - (p0[0] + p3[0]) / 2) * dx + (mid[1] - (p0[1] + p3[1]) / 2) * dy)) /
+          bend
     const handle = Math.min(Math.max(h, chord * 0.1), chord * 0.6)
-    return [p0, [p0[0] + t0[0] * handle, p0[1] + t0[1] * handle], [p3[0] - t1[0] * handle, p3[1] - t1[1] * handle], p3]
+    return [
+      p0,
+      [p0[0] + t0[0] * handle, p0[1] + t0[1] * handle],
+      [p3[0] - t1[0] * handle, p3[1] - t1[1] * handle],
+      p3,
+    ]
   })
 }

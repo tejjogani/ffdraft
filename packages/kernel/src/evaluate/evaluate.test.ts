@@ -1,9 +1,11 @@
-import { TEMPLATES, applyOps, buildDesign, designFrom, metalMassG } from '@pave/schema'
+import { applyOps, buildDesign, designFrom, metalMassG, TEMPLATES } from '@pave/schema'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { QUALITY } from '../core'
 import { createKernel } from '../kernel'
 import { runtime } from '../runtime/index'
+import { weld } from '../solid/meshing'
 import { coreEvaluator, evaluate, failures } from '../testing/core'
+import type { MeshData } from '../types'
 import type { Evaluator } from './evaluate'
 
 let evaluator: Evaluator
@@ -13,6 +15,27 @@ beforeAll(async () => {
 
 const template = (id: string) => buildDesign(TEMPLATES.find((t) => t.id === id)!.spec)
 
+/**
+ * What a caster's software would reject: with vertices identified by position (as in an STL),
+ * every edge must be shared by exactly two triangles and no triangle may have collapsed.
+ */
+function castingFaults(mesh: MeshData): { openOrPinchedEdges: number; collapsedTriangles: number } {
+  const welded = weld(mesh.positions, mesh.indices)
+  const n = welded.positions.length / 3
+  const uses = new Map<number, number>()
+  for (let t = 0; t < welded.indices.length; t += 3)
+    for (let e = 0; e < 3; e++) {
+      const a = welded.indices[t + e]!
+      const b = welded.indices[t + ((e + 1) % 3)]!
+      const key = a < b ? a * n + b : b * n + a
+      uses.set(key, (uses.get(key) ?? 0) + 1)
+    }
+  return {
+    openOrPinchedEdges: [...uses.values()].filter((c) => c !== 2).length,
+    collapsedTriangles: (mesh.indices.length - welded.indices.length) / 3,
+  }
+}
+
 describe('numbers', () => {
   it('a US 6 ring has a 16.51 mm bore — in the report and in the metal', async () => {
     const scene = await evaluator.scene(template('solitaire'), { detail: 'production' })
@@ -20,7 +43,8 @@ describe('numbers', () => {
     // Smallest distance from the finger's axis (Y) to any vertex of the band.
     const { positions } = scene.nodes.get('band')!.bodies[0]!.solid.triangles(QUALITY.production)
     let bore = Infinity
-    for (let i = 0; i < positions.length; i += 3) bore = Math.min(bore, Math.hypot(positions[i]!, positions[i + 2]!))
+    for (let i = 0; i < positions.length; i += 3)
+      bore = Math.min(bore, Math.hypot(positions[i]!, positions[i + 2]!))
     expect(2 * bore).toBeCloseTo(16.51, 2)
   })
 
@@ -28,7 +52,9 @@ describe('numbers', () => {
     const e = await evaluate(evaluator, designFrom('other', [{ id: 'g', kind: 'gem', width: 6.5 }]))
     expect(e.stones[0]!.carat).toBeCloseTo(1.0, 1)
     expect(e.report.caratTotal).toBe(e.stones[0]!.carat)
-    expect(e.report.lots).toMatchObject([{ cut: 'round', stone: 'diamond', width: 6.5, count: 1, role: 'center' }])
+    expect(e.report.lots).toMatchObject([
+      { cut: 'round', stone: 'diamond', width: 6.5, count: 1, role: 'center' },
+    ])
     // The instance matrix scales the unit mesh to the stone's real size.
     expect(e.stones[0]!.matrix[0]).toBeCloseTo(6.5, 6)
     expect(e.stones[0]!.dims.depth).toBeCloseTo(6.5 * 0.615, 6)
@@ -38,7 +64,17 @@ describe('numbers', () => {
     const e = await evaluate(
       evaluator,
       designFrom('other', [
-        { id: 'g', kind: 'gem', cut: 'oval', width: 6, sourcing: { provider: 'x', sku: '1', measured: { length: 8.31, width: 6.12, depth: 3.9 } } },
+        {
+          id: 'g',
+          kind: 'gem',
+          cut: 'oval',
+          width: 6,
+          sourcing: {
+            provider: 'x',
+            sku: '1',
+            measured: { length: 8.31, width: 6.12, depth: 3.9 },
+          },
+        },
       ]),
     )
     expect(e.stones[0]!.dims).toEqual({ length: 8.31, width: 6.12, depth: 3.9 })
@@ -56,7 +92,11 @@ describe('numbers', () => {
     // Exact volume: draft and production agree although their meshes differ.
     expect(production.report.metalMassG).toBeCloseTo(draft.report.metalMassG, 4)
     expect(draft.report.metals).toEqual([
-      { material: 'au18k-yellow', volumeMm3: draft.parts[0]!.volumeMm3, massG: metalMassG('au18k-yellow', draft.parts[0]!.volumeMm3) },
+      {
+        material: 'au18k-yellow',
+        volumeMm3: draft.parts[0]!.volumeMm3,
+        massG: metalMassG('au18k-yellow', draft.parts[0]!.volumeMm3),
+      },
     ])
     // Pappus: volume = cross-section area × path of its centroid; a court profile fills 75–88 %
     // of its 4 × 1.8 mm box and its centroid sits near mid-thickness.
@@ -100,7 +140,9 @@ describe('incremental evaluation', () => {
     expect(again.report).toEqual(first.report)
 
     // The halo depends on the centre stone but not on the head or the band.
-    const edited = applyOps(design, [{ t: 'update', id: 'halo', patch: { stoneWidth: 1.5 } }]).design
+    const edited = applyOps(design, [
+      { t: 'update', id: 'halo', patch: { stoneWidth: 1.5 } },
+    ]).design
     const third = await evaluate(evaluator, edited)
     expect(Object.keys(third.timings).filter((k) => !k.startsWith('@'))).toEqual(['halo'])
     const rev = (e: typeof first, id: string) => e.parts.find((p) => p.nodeId === id)!.rev
@@ -110,7 +152,11 @@ describe('incremental evaluation', () => {
     // Resizing the centre stone rebuilds everything that hangs off it, but not the band.
     const resized = applyOps(design, [{ t: 'update', id: 'center', patch: { width: 7 } }]).design
     const fourth = await evaluate(evaluator, resized)
-    expect(Object.keys(fourth.timings).filter((k) => !k.startsWith('@')).sort()).toEqual(['center', 'halo', 'head'])
+    expect(
+      Object.keys(fourth.timings)
+        .filter((k) => !k.startsWith('@'))
+        .sort(),
+    ).toEqual(['center', 'halo', 'head'])
   })
 
   it('a feature that fails does not take the piece down with it', async () => {
@@ -172,7 +218,17 @@ describe('incremental evaluation', () => {
 describe('templates', () => {
   // Rings, studs and the solitaire pendant; the freeform and chain templates are covered by
   // the tests of the features that build them.
-  const ids = ['solitaire', 'oval-pave', 'halo', 'three-stone', 'wedding-band', 'eternity', 'signet', 'pendant-solitaire', 'studs']
+  const ids = [
+    'solitaire',
+    'oval-pave',
+    'halo',
+    'three-stone',
+    'wedding-band',
+    'eternity',
+    'signet',
+    'pendant-solitaire',
+    'studs',
+  ]
   it.each(ids)('%s evaluates at both detail levels without a failed feature', async (id) => {
     const kernel = createKernel()
     const design = template(id)
@@ -181,9 +237,19 @@ describe('templates', () => {
       expect(failures(e), `${id} (${detail})`).toEqual([])
       // Kinds this build does not include are named, never silently dropped.
       const missing = Object.values(design.nodes).filter((n) => !kernel.kinds.includes(n.kind))
-      expect(e.diagnostics.filter((d) => d.code === 'feature.unsupported')).toHaveLength(missing.length)
+      expect(e.diagnostics.filter((d) => d.code === 'feature.unsupported')).toHaveLength(
+        missing.length,
+      )
       expect(e.parts.length, id).toBeGreaterThan(0)
       expect(e.report.metalMassG).toBeGreaterThan(0)
+      for (const part of e.parts)
+        expect(design.nodes[part.nodeId], `${id}: part ${part.id} names a node`).toBeDefined()
+      if (detail === 'production')
+        for (const part of e.parts)
+          expect(castingFaults(part.mesh), `${id}: ${part.id}`).toEqual({
+            openOrPinchedEdges: 0,
+            collapsedTriangles: 0,
+          })
     }
     kernel.dispose()
   })

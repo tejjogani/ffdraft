@@ -34,7 +34,11 @@ export function hollowBody(body: Manifold, envelope: Manifold, wall: number): Ho
   const box = envelope.boundingBox()
   const extent = Math.max(...[0, 1, 2].map((k) => box.max[k]! - box.min[k]!))
   const spacing = Math.max(wall * SPACING_PER_WALL, MIN_SPACING, extent / MAX_CELLS)
-  const grid = distanceGrid(trianglesFromManifold(envelope), { spacing, band: wall + 3 * spacing, votes: 1 })
+  const grid = distanceGrid(trianglesFromManifold(envelope), {
+    spacing,
+    band: wall + 3 * spacing,
+    votes: 1,
+  })
   // Interpolation can pull the iso-surface up to ~¼ cell toward the outside; keep walls ≥ wall.
   const cavity = levelSetOf(grid, wall + spacing / 4)
   const owned: Manifold[] = [cavity]
