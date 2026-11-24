@@ -12,6 +12,8 @@ import { z } from 'zod'
 import { ChangeSchema, DesignSchema, OpSchema, PIECE_KINDS } from '../design/design'
 import { PieceSpecSchema } from '../design/spec'
 import {
+  ASSISTANT_MODELS,
+  ASSISTANT_TIERS,
   AssetSchema,
   ATTESTATION_RIGHTS,
   BoardSchema,
@@ -68,13 +70,28 @@ export interface CommandDef<I extends z.ZodType = z.ZodType, O extends z.ZodType
   tool?: true | { confirm: true }
 }
 
-const def = <I extends z.ZodType, O extends z.ZodType>(d: CommandDef<I, O>) => d
+type ToolFlag = CommandDef['tool']
+
+/**
+ * Declares a command, keeping whether it is a tool in its type, so the set of tool commands is
+ * known at compile time (e.g. every tool must have an assistant chip label).
+ */
+const def = <I extends z.ZodType, O extends z.ZodType, const T extends ToolFlag = undefined>(
+  d: CommandDef<I, O> & { tool?: T },
+) => d as CommandDef<I, O> & { tool: T }
 
 const id = z.string()
 const ok = z.object({ ok: z.literal(true) })
 const none = z.object({})
 /** A JSON merge patch (RFC 7396): objects merge, arrays and scalars replace, null deletes. */
 const mergePatch = z.record(z.string(), z.unknown())
+
+/** Which model each assistant tier runs on; null = the tier's default. */
+const tierModels = z.object({
+  power: z.enum(ASSISTANT_MODELS).nullable(),
+  standard: z.enum(ASSISTANT_MODELS).nullable(),
+  light: z.enum(ASSISTANT_MODELS).nullable(),
+})
 
 /** What a paid generation will cost before it is confirmed. */
 export const EstimateSchema = z.object({
@@ -199,8 +216,10 @@ export const commands = {
     output: z.object({
       traceRetentionDays: z.number().int(),
       allowEvalUse: z.boolean(),
-      /** Null means the assistant's default model. */
-      assistantModel: z.string().nullable(),
+      /** The tier a new conversation starts on; null means Standard. */
+      assistantTier: z.enum(ASSISTANT_TIERS).nullable(),
+      /** The model each tier runs on; null means that tier's default model. */
+      assistantModels: tierModels,
       monthlyBudgetUsd: z.number().nullable(),
     }),
   }),
@@ -211,7 +230,9 @@ export const commands = {
     input: z.object({
       traceRetentionDays: z.number().int().min(0).max(3650).optional(),
       allowEvalUse: z.boolean().optional(),
-      assistantModel: z.string().nullable().optional(),
+      assistantTier: z.enum(ASSISTANT_TIERS).nullable().optional(),
+      /** Only the tiers given change; null puts a tier back on its default model. */
+      assistantModels: tierModels.partial().optional(),
       monthlyBudgetUsd: z.number().nonnegative().nullable().optional(),
     }),
     output: ok,
@@ -1010,6 +1031,8 @@ export const commands = {
           selection: z.array(id).max(200).default([]),
         })
         .default({ selection: [] }),
+      /** The model tier for this run (the composer's picker); omitted = the organisation's default. */
+      tier: z.enum(ASSISTANT_TIERS).optional(),
       /** The studio window sending it, which client tools are asked first. */
       clientId: z.string().min(1).max(64),
       clientMessageId: z.string().min(1).max(64),
@@ -1116,7 +1139,13 @@ export type CommandParsedInput<N extends CommandName> = z.output<(typeof command
 export type CommandOutput<N extends CommandName> = z.output<(typeof commands)[N]['output']>
 export const COMMAND_NAMES = Object.keys(commands) as CommandName[]
 
-export const isToolCommand = (name: CommandName): boolean => 'tool' in commands[name]
+/** The commands offered to the assistant and over MCP. */
+export type ToolCommandName = {
+  [K in CommandName]: (typeof commands)[K]['tool'] extends undefined ? never : K
+}[CommandName]
+
+export const isToolCommand = (name: CommandName): name is ToolCommandName =>
+  commands[name].tool !== undefined
 export const needsConfirmation = (name: CommandName): boolean => {
   const c: CommandDef = commands[name]
   return typeof c.tool === 'object' && c.tool.confirm

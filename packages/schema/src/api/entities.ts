@@ -746,11 +746,31 @@ export const MessageSchema = z.object({
 })
 export type Message = z.infer<typeof MessageSchema>
 
+/**
+ * The assistant's model tiers, as a person picks them in the composer. Settings point each tier
+ * at one model of the allow-list below; the default mapping and the prices live in @pave/agent.
+ */
+export const ASSISTANT_TIERS = ['power', 'standard', 'light'] as const
+export type AssistantTier = (typeof ASSISTANT_TIERS)[number]
+
+/** The models a tier may point at. Every request rule and price is keyed by these ids. */
+export const ASSISTANT_MODELS = [
+  'claude-fable-5-2',
+  'claude-opus-5-5',
+  'claude-sonnet-5-5',
+  'claude-haiku-5-5',
+] as const
+export type AssistantModelId = (typeof ASSISTANT_MODELS)[number]
+
 export const RUN_STATUS = ['running', 'done', 'failed', 'canceled', 'awaiting-approval'] as const
 /** Why a run stopped short, so the UI can say what to do next. */
 export const RUN_ERROR_CODES = [
   'rate_limited',
   'provider_auth',
+  /** Claude's API could not be reached, or failed to answer. */
+  'provider_unreachable',
+  /** The tier's model cannot be used by this key or organisation (access, data retention). */
+  'model_unavailable',
   'refusal',
   'interrupted',
   'budget_exceeded',
@@ -772,6 +792,8 @@ export const RunSchema = z.object({
   pieceId: id.nullable(),
   userId: id,
   model: z.string(),
+  /** The tier the run was asked for; null for MCP runs, which have no model of their own. */
+  tier: z.enum(ASSISTANT_TIERS).nullable(),
   /** `mcp` runs collect the calls an outside agent makes over MCP. */
   origin: z.enum(['studio', 'mcp']),
   status: z.enum(RUN_STATUS),

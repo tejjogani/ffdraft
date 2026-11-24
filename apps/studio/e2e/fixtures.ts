@@ -290,7 +290,8 @@ export const handlers: Handler = {
   'org.settings.get': () => ({
     traceRetentionDays: 90,
     allowEvalUse: false,
-    assistantModel: 'claude-opus-5-5',
+    assistantTier: null,
+    assistantModels: { power: null, standard: null, light: null },
     monthlyBudgetUsd: 150,
   }),
   'collections.list': () => collections,

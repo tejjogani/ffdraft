@@ -4,7 +4,7 @@
  * traces; every write here is safe to repeat where the loop may resume (messages by
  * `clientMessageId`, tool steps by `toolCallId`).
  */
-import type { Feedback, Message, Run, Step, Thread, Tokens } from '@pave/schema'
+import type { AssistantTier, Feedback, Message, Run, Step, Thread, Tokens } from '@pave/schema'
 import { and, eq, inArray, max, ne, sql } from 'drizzle-orm'
 import type { Ctx } from './context'
 import * as t from './db/schema'
@@ -42,6 +42,7 @@ export const toRun = (r: typeof t.agentRun.$inferSelect): Run => ({
   pieceId: r.pieceId,
   userId: r.userId,
   model: r.model,
+  tier: r.tier,
   origin: r.origin,
   status: r.status,
   tokens: {
@@ -118,6 +119,8 @@ export async function startRun(
   ctx: Ctx,
   input: {
     model: string
+    /** The tier the run was asked for; omitted for MCP runs. */
+    tier?: AssistantTier | null
     threadId?: string | null
     pieceId?: string | null
     parentRunId?: string | null
@@ -133,6 +136,7 @@ export async function startRun(
     id: createId('run'),
     userId: ctx.user.id,
     model: input.model,
+    tier: input.tier ?? null,
     origin: input.origin ?? 'studio',
     status: 'running',
     threadId: input.threadId ?? null,

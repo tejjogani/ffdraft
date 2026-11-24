@@ -159,3 +159,10 @@ Build brief: the judged synthesis of two independent design proposals.
 6. **Bridge.** `view.capture` and `ui.*` once the CAD viewport lands; the `lines` fallback.
 7. **MCP.** HTTP, then the stdio proxy.
 8. **Smoke script** and no-key polish.
+
+## 8. Decided since this brief (they override the sections above)
+
+- **Tiers, not one model.** Power, Standard and Light; defaults Fable 5.2, Opus 5.5 and Sonnet 5.5; any tier may point at any of Fable 5.2, Opus 5.5, Sonnet 5.5 or Haiku 5.5 (`ASSISTANT_MODELS`). The organisation's default tier is Standard (`org.settings.*.assistantTier`, `assistantModels`); the composer picks a tier per conversation (`threads.send.tier`) and a run records it (`Run.tier`). `PAVE_ASSISTANT_TIER` and `PAVE_ASSISTANT_MODEL_{POWER,STANDARD,LIGHT}` in `apps/server/.env` win over the settings (`resolveTiers` in `packages/agent/src/pricing.ts`).
+- **Per-model request rules** live in `MODELS`: Haiku 5.5 has no server-side fallback, so its requests carry no `fallbacks`; Fable 5.2 needs 30-day retention, so its 400 maps to `model_unavailable` with a sentence suggesting Standard. Effort is always sent (`high`); two of the models default lower.
+- **Error codes** gain `provider_unreachable` (connection failures, 5xx) and `model_unavailable` (no access to the tier's model, retention).
+- **Key entry in the app** replaces the scope cut in §6 (built in a later step); `pnpm agent:smoke` runs the real request shape against each tier with the founder's key.

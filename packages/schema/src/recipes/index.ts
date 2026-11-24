@@ -513,7 +513,7 @@ function studs(spec: PieceSpec): NodeInput[] {
 }
 
 /** Archetypes each kind has a recipe for; any other pairing is reported, not guessed at. */
-const RECIPES: Record<PieceKind, readonly Archetype[]> = {
+export const RECIPES: Record<PieceKind, readonly Archetype[]> = {
   ring: ['solitaire', 'halo', 'threeStone', 'eternity', 'band', 'signet', 'custom'],
   pendant: [
     'pendantSolitaire',

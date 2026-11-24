@@ -36,6 +36,20 @@
       "when": 1795487397394,
       "tag": "0004_reflective_zuras",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795548572618,
+      "tag": "0005_assistant_tiers",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795548573339,
+      "tag": "0006_drop_assistant_model",
+      "breakpoints": true
     }
   ]
 }

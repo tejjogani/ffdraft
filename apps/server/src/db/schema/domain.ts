@@ -6,6 +6,8 @@
  */
 import type {
   Actor,
+  AssistantModelId,
+  AssistantTier,
   BrandModel,
   CommandParsedInput,
   Design,
@@ -55,8 +57,13 @@ export const orgSettings = pgTable('org_settings', {
   orgId: orgId().primaryKey(),
   traceRetentionDays: integer('trace_retention_days').notNull().default(90),
   allowEvalUse: boolean('allow_eval_use').notNull().default(false),
-  /** Null = the assistant's default model. */
-  assistantModel: text('assistant_model'),
+  /** The tier new conversations start on; null = Standard. */
+  assistantTier: text('assistant_tier').$type<AssistantTier>(),
+  /** Model per tier; a missing or null entry = that tier's default model. */
+  assistantModels: jsonb('assistant_models')
+    .$type<Partial<Record<AssistantTier, AssistantModelId | null>>>()
+    .notNull()
+    .default({}),
   monthlyBudgetUsd: doublePrecision('monthly_budget_usd'),
   /** Set once the welcome workspace has been created, so deleting it does not bring it back. */
   welcomeSeededAt: timestamp('welcome_seeded_at', { withTimezone: true }),
@@ -421,6 +428,7 @@ export const agentRun = pgTable(
     /** Design version the model saw, so the run can be replayed. */
     baseSeq: integer('base_seq'),
     model: text('model').notNull(),
+    tier: text('tier').$type<AssistantTier>(),
     origin: text('origin').$type<Run['origin']>().notNull().default('studio'),
     status: text('status').$type<Run['status']>().notNull(),
     tokensIn: integer('tokens_in').notNull().default(0),

@@ -46,7 +46,8 @@ describe('session & organisation', () => {
     expect(await api.call('org.settings.get', {})).toEqual({
       traceRetentionDays: 90,
       allowEvalUse: false,
-      assistantModel: null,
+      assistantTier: null,
+      assistantModels: { power: null, standard: null, light: null },
       monthlyBudgetUsd: null,
     })
     await api.call('org.settings.update', { allowEvalUse: true, monthlyBudgetUsd: 250 })
@@ -55,6 +56,20 @@ describe('session & organisation', () => {
       monthlyBudgetUsd: 250,
       traceRetentionDays: 90,
     })
+    // Tiers not named keep their model; null puts a tier back on its default.
+    await api.call('org.settings.update', {
+      assistantTier: 'power',
+      assistantModels: { light: 'claude-haiku-5-5', power: 'claude-opus-5-5' },
+    })
+    await api.call('org.settings.update', { assistantModels: { power: null } })
+    expect(await api.call('org.settings.get', {})).toMatchObject({
+      assistantTier: 'power',
+      assistantModels: { power: null, standard: null, light: 'claude-haiku-5-5' },
+    })
+    const bad = await api.fail('org.settings.update', {
+      assistantModels: { light: 'claude-instant-1' as 'claude-haiku-5-5' },
+    })
+    expect(bad.status).toBe(400)
   })
 
   it('refuses to demote the last owner', async () => {
