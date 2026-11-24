@@ -289,6 +289,11 @@ export const Halo = z
       advanced: true,
       description: 'How far the halo sits below the centre stone’s girdle.',
     }),
+    clearClaws: toggle('Clear the claws', true, {
+      advanced: true,
+      description:
+        'Start the halo outside the centre stone’s claws, so no claw crosses a halo stone. Off: the layout of halos made before this option, stones evenly round at the gap to the centre stone with the claws crossing them.',
+    }),
   })
   .meta({
     title: 'Halo',

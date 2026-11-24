@@ -29,6 +29,12 @@ export const MOUNT = {
   /** Cathedral arches stop this far under the girdle plane, mm; and their range. */
   shoulderUnder: 0.3,
   shoulderRise: { min: 0.5, max: 8, none: 3 },
+  /**
+   * Highest rise the rule gives: arms climbing further than this become long struts standing
+   * away from the stone; above it the head's own legs and gallery carry the stone the rest of
+   * the way (a pinned rise may still go to `shoulderRise.max`).
+   */
+  shoulderAutoMax: 4,
   /** Metal-free space between a shoulder row's stones and a head, its claws or halo, mm. */
   rowClearance: 0.4,
   /** A round this wide and wider takes six claws (canon `ring.head.prongCountRound`). */
@@ -36,7 +42,7 @@ export const MOUNT = {
   /** Least claw wire (canon `ring.head.prongWire`; kernel `RULES.prongDiameter.warn`). */
   prongMin: 0.8,
   /** Metal beyond the outermost halo stones (kernel halo BORDER), mm. */
-  haloBorder: 0.25,
+  haloBorder: 0.45,
 } as const
 
 const round = (v: number, step: number) => Number((Math.round(v / step) * step).toFixed(4))
@@ -139,10 +145,11 @@ export function girdleRadius(g: Gem, b: Band): number {
 /**
  * Cathedral rise that brings the arches' peaks `MOUNT.shoulderUnder` under the girdle plane of
  * a stone whose girdle is `girdle` mm from the finger's axis (solved on the band's own peak
- * shape), within the field's range.
+ * shape), within the field's range and no higher than `MOUNT.shoulderAutoMax`.
  */
 export function shoulderHeightFor(girdle: number, outerRadius: number): number {
-  const { min, max }: { min: number; max: number } = MOUNT.shoulderRise
+  const { min } = MOUNT.shoulderRise
+  const max: number = MOUNT.shoulderAutoMax
   const target = girdle - MOUNT.shoulderUnder
   const peakZ = (rise: number) => {
     const { peak } = cathedralPeak(rise, outerRadius)
@@ -243,10 +250,16 @@ function headReach(top: BandView['tops'][number]): number {
   let reach = 0
   if (head?.style === 'prong' || head?.style === 'basket') reach = clawReach(head.prongDiameter!)
   else if (head?.style === 'bezel' || head?.style === 'halfBezel') reach = head.wall
+  const metal = reach
   for (const h of top.halos) {
     const melee = gemDims(h.cut, h.stoneWidth)
     const size = Math.max(melee.width, melee.length)
-    reach = Math.max(reach, h.offset + h.rows * (size + h.gap) - h.gap + MOUNT.haloBorder)
+    // The kernel starts a halo beyond the head's claws or bezel (unless it keeps the layout
+    // of an old piece).
+    const claws = head?.style === 'prong' || head?.style === 'basket'
+    const clear = metal > 0 ? metal + (claws ? h.gap : 0.05) : 0
+    const inner = h.clearClaws === false ? h.offset : Math.max(h.offset, clear)
+    reach = Math.max(reach, inner + h.rows * (size + h.gap) - h.gap + MOUNT.haloBorder)
   }
   return reach
 }
@@ -361,14 +374,19 @@ export interface Pin {
   rule: number
 }
 
-/** Two values of a follow field that build the same thing (within the field's step). */
-function sameValue(path: string, a: number, b: number, node: Node): boolean {
+/**
+ * Two values of a follow field that build the same thing (within the field's step), or with
+ * `exact`, that are the same value (within float noise): only those may be unpinned without
+ * changing what is built.
+ */
+function sameValue(path: string, a: number, b: number, node: Node, exact = false): boolean {
   if (path === 'prongSpin' && node.kind === 'setting') {
     // The claws repeat every 360/n degrees.
     const period = 360 / (node.prongCount ?? 4)
     const d = (((a - b) % period) + period) % period
-    return Math.min(d, period - d) < 0.5
+    return Math.min(d, period - d) < (exact ? 1e-6 : 0.5)
   }
+  if (exact) return Math.abs(a - b) < 1e-6
   const tolerance: Record<string, number> = {
     lw: 0.005,
     prongCount: 0.5,
@@ -435,15 +453,17 @@ export const pinsOffRule = (design: Design): Pin[] =>
   pins(design).filter((p) => !sameValue(p.path, p.value, p.rule, design.nodes[p.nodeId]!))
 
 /**
- * Removes every pin whose value equals what its rule gives, so it follows from now on. The
- * resolved document is unchanged by construction. Recipes run their output through this, and
- * designs from before follow fields are migrated with it.
+ * Removes every pin whose value equals what its rule gives (exactly, not within the field's
+ * step: a stored 0.99 mm wire stays pinned beside a rule of 1.0, or a later stone change would
+ * move it), so it follows from now on. The resolved document is unchanged by construction.
+ * Recipes run their output through this, and designs from before follow fields are migrated
+ * with it.
  */
 export function unpinAtRule(design: Design): Design {
   let out = design
   // One field at a time: a rule may read another follow field (the row reads the claws).
   for (const pin of pins(design)) {
-    if (!sameValue(pin.path, pin.value, pin.rule, design.nodes[pin.nodeId]!)) continue
+    if (!sameValue(pin.path, pin.value, pin.rule, design.nodes[pin.nodeId]!, true)) continue
     const current = out.nodes[pin.nodeId]!
     const next = without(current, pin.path)
     // Removing it must not move anything: check against the document as it now stands.
@@ -454,7 +474,13 @@ export function unpinAtRule(design: Design): Design {
     if (
       before &&
       after &&
-      sameValue(pin.path, read(before, pin.path) as number, read(after, pin.path) as number, before)
+      sameValue(
+        pin.path,
+        read(before, pin.path) as number,
+        read(after, pin.path) as number,
+        before,
+        true,
+      )
     )
       out = { ...out, nodes: { ...out.nodes, [pin.nodeId]: next } }
   }
@@ -472,7 +498,7 @@ export const DESIGN_VERSION = 2
  * `graduateTo` of 1.5 (no graduation) and a stone's `lw` of 1 on a cut that cannot be square
  * (the cut's own ratio). Those are removed; then every value that equals its rule is unpinned,
  * which by construction builds the same piece. Every other stored value stays pinned, so an
- * old piece looks exactly as it did.
+ * old piece looks exactly as it did. A halo is marked to keep its old layout (`clearClaws`).
  */
 export function migrateDesign(design: Design): Design {
   if (design.schemaVersion === DESIGN_VERSION) return design
@@ -482,6 +508,9 @@ export function migrateDesign(design: Design): Design {
     if (node.kind === 'gemRow' && node.graduateTo === 1.5) node = without(node, 'graduateTo')
     if (node.kind === 'gem' && node.lw === 1 && GEM_CUTS[node.cut].lw.min > 1)
       node = without(node, 'lw')
+    // A halo keeps its stones where they were (and so its stone list, carat and quote); the
+    // kernel offers the claw-clear layout as a fix.
+    if (node.kind === 'halo') node = { ...node, clearClaws: false }
     nodes[id] = node
   }
   return unpinAtRule({ ...design, schemaVersion: DESIGN_VERSION, nodes })

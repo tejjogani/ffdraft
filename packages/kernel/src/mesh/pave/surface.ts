@@ -161,6 +161,18 @@ export class PaveSurface {
   }
 
   /**
+   * Whether the body stays clear of a ray up the normal from surface point p for `reach` mm.
+   * A stone under an overhang (a cup's underside, a handle's root) has metal over its table:
+   * no setter's graver or bead tool can reach it.
+   */
+  openAbove(p: Vec3, n: Vec3, reach: number): boolean {
+    this.bvh ??= new TriangleBvh(this.host)
+    const lift = this.spacing * 0.05
+    const o: Vec3 = [p[0] + n[0] * lift, p[1] + n[1] * lift, p[2] + n[2] * lift]
+    return this.bvh.firstHit(o[0], o[1], o[2], n[0], n[1], n[2], lift, reach).triangle < 0
+  }
+
+  /**
    * Metal along the unit ray o + t·d, which starts outside the body: from where it enters to
    * where it next leaves, halved when it leaves through the region (that wall is seated from
    * its own side too, as in {@link thickness}). 0 when the ray misses the body or starts inside

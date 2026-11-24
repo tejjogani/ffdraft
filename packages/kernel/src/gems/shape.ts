@@ -128,6 +128,21 @@ export function stoneShape(stone: Stone): StoneShape {
       return out
     },
     offsetPath(distance) {
+      // Distance from a point to the girdle polygon.
+      const girdle = this.polygon(8).points
+      const clearance = (q: Vec2) =>
+        Math.min(
+          ...girdle.map((g, i) => {
+            const h = girdle[(i + 1) % girdle.length]!
+            const dx = h[0] - g[0]
+            const dy = h[1] - g[1]
+            const t = Math.max(
+              0,
+              Math.min(1, ((q[0] - g[0]) * dx + (q[1] - g[1]) * dy) / (dx * dx + dy * dy || 1)),
+            )
+            return Math.hypot(q[0] - g[0] - t * dx, q[1] - g[1] - t * dy)
+          }),
+        )
       const anchors = outlineAnchors(o)
       const sharp = new Set(o.corners.map((c) => Math.round((((c % TAU) + TAU) % TAU) * 1e6)))
       const path: Vec2[] = []
@@ -157,11 +172,19 @@ export function stoneShape(stone: Stone): StoneShape {
                 ])
               }
             else {
-              // A concave corner: the offsets of the two sides meet on the bisector, further
-              // out than `distance` by 1 / cos(half the turn).
+              // A concave corner: the offsets of the two sides meet on the bisector, where it
+              // first comes `distance` clear of the stone (for straight sides, 1 / cos(half
+              // the turn) out; curved sides such as a heart's lobes meet sooner).
               const n = normal(phi)
-              const reach = distance / Math.max(0.2, Math.cos(turn / 2))
-              path.push([p[0] + n[0] * reach, p[1] + n[1] * reach])
+              const at = (t: number): Vec2 => [p[0] + n[0] * t, p[1] + n[1] * t]
+              let lo = distance
+              let hi = distance / Math.max(0.2, Math.cos(turn / 2))
+              for (let k = 0; k < 30; k++) {
+                const mid = (lo + hi) / 2
+                if (clearance(at(mid)) < distance) lo = mid
+                else hi = mid
+              }
+              path.push(at(hi))
             }
           } else {
             const n = normal(phi)
@@ -171,20 +194,6 @@ export function stoneShape(stone: Stone): StoneShape {
       })
       // Beside a concave corner the offsets of neighbouring points cross over each other and
       // come closer to the stone than `distance`: drop those (the bisector point stays).
-      const girdle = this.polygon(8).points
-      const clearance = (q: Vec2) =>
-        Math.min(
-          ...girdle.map((g, i) => {
-            const h = girdle[(i + 1) % girdle.length]!
-            const dx = h[0] - g[0]
-            const dy = h[1] - g[1]
-            const t = Math.max(
-              0,
-              Math.min(1, ((q[0] - g[0]) * dx + (q[1] - g[1]) * dy) / (dx * dx + dy * dy || 1)),
-            )
-            return Math.hypot(q[0] - g[0] - t * dx, q[1] - g[1] - t * dy)
-          }),
-        )
       const kept = path.filter((q) => clearance(q) > distance * 0.98)
       return kept.length >= 3 ? kept : path
     },

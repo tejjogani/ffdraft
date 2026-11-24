@@ -52,6 +52,28 @@ describe('design.replaceStone', () => {
     expect((await api.call('pieces.get', { id: piece.id })).design).toEqual(before.design)
   })
 
+  it('gives a retried apply (same change id) the change it made, writing nothing new', async () => {
+    const piece = await api.call('pieces.create', { templateId: 'solitaire' })
+    const input = {
+      pieceId: piece.id,
+      target: { nodeId: 'center' },
+      change: { cut: 'oval' as const },
+      changeId: 'chg_retry_1',
+    }
+    const first = await api.call('design.replaceStone', input)
+    expect(first.applied).toBe(true)
+    // The response was lost and the call is sent again: the design already holds the change.
+    const retry = await api.call('design.replaceStone', input)
+    expect(retry).toMatchObject({
+      applied: true,
+      version: first.version,
+      ops: first.ops,
+      label: first.label,
+    })
+    expect(retry.change).toEqual(first.change)
+    expect(await api.call('design.history', { pieceId: piece.id })).toHaveLength(1)
+  })
+
   it('answers a bad target with 400', async () => {
     const piece = await api.call('pieces.create', { templateId: 'solitaire' })
     const bad = await api.fail('design.replaceStone', {

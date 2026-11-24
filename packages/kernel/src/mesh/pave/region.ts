@@ -227,6 +227,23 @@ class FieldTest {
   }
 }
 
+/**
+ * Distance from a world point to the cavity a host publishes, up to `cap` (returned when the
+ * cavity is farther, or when there is none). Seats and drill holes keep their metal to it: a
+ * hole that grazes a cavity corner leaves a tunnel the investment cannot fill.
+ */
+export function cavityDistance(placed: PlacedHidden | null): ((p: Vec3, cap: number) => number) | null {
+  if (!placed?.hidden.cavity || placed.hidden.cavity.indices.length === 0) return null
+  const toLocal = invertSimilarity(placed.matrix)
+  const scale = uniformScaleOf(placed.matrix)
+  const bvh = new TriangleBvh(placed.hidden.cavity)
+  const hit: ClosestHit = { d2: 0, x: 0, y: 0, z: 0, triangle: -1 }
+  return (p, cap) => {
+    const q = transformPoint(toLocal, p)
+    return bvh.closest(q[0], q[1], q[2], hit, cap / scale) ? Math.sqrt(hit.d2) * scale : cap
+  }
+}
+
 /** Whether a face of the host lies on its published cavity or flat back. */
 class HiddenTest {
   private readonly toLocal: Mat4

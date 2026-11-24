@@ -10,8 +10,8 @@ import type { Manifold } from 'manifold-3d'
 import { runtime } from '../runtime/index'
 import type { IndexedTriangles } from '../solid/meshing'
 import { trianglesFromManifold } from '../solid/solid'
-import { dropSpecks } from './pieces'
-import { distanceGrid, levelSetOf } from './sdf'
+import { keepPieces, SPECK_VOLUME } from './pieces'
+import { type DistanceGrid, distanceGrid, levelSetOf, sampleDistance } from './sdf'
 
 const DRAIN_RADIUS = 1
 /**
@@ -26,10 +26,24 @@ const MAX_CELLS = 160
 const MIN_CAVITY = 1
 /**
  * The cavity is never seen, so its level-set mesh (hundreds of thousands of triangles on a
- * 40 mm piece) is thinned to this share of the wall before it is cut. The inset grows by the
- * same amount, so the thinned cavity never comes closer to the outside than the wall asked for.
+ * 40 mm piece) is thinned to this share of the wall before it is cut. The level set is taken
+ * this much deeper than the wall, so the thinned faces never come closer to the outside than
+ * the wall asked for, while its vertices (where thinning leaves the surface) lie only this
+ * much farther: walls come out within a few per cent of the value asked for.
  */
-const CAVITY_TOLERANCE = 0.1
+const CAVITY_TOLERANCE = 0.04
+/**
+ * The cavity is opened (eroded, then dilated back) by this radius, mm: where the body is only a
+ * little thicker than two walls the inset is a slit, which the level set breaks into a sheet
+ * pierced by hundreds of pillars — handles investment cannot fill. Opened, such slits vanish
+ * and those parts stay solid.
+ */
+const OPEN_RADIUS = 0.5
+/** …and at least this many grid cells, below which a slit is a cell or two wide and survives. */
+const OPEN_CELLS = 1.5
+
+/** Metal a hollow wall asked for comes out with, at least (its faces) and typically (its vertices). */
+export const hollowWallMetal = (wall: number): number => wall * (1 + CAVITY_TOLERANCE)
 
 export interface Hollowed {
   manifold: Manifold
@@ -54,18 +68,20 @@ export function hollowBody(body: Manifold, envelope: Manifold, wall: number): Ho
   const box = envelope.boundingBox()
   const extent = Math.max(...[0, 1, 2].map((k) => box.max[k]! - box.min[k]!))
   const spacing = Math.max(wall * SPACING_PER_WALL, MIN_SPACING, extent / MAX_CELLS)
+  const level = hollowWallMetal(wall)
+  const open = Math.max(OPEN_RADIUS, OPEN_CELLS * spacing)
+  // The band must reach the eroded level, below which the opening starts.
   const grid = distanceGrid(trianglesFromManifold(envelope), {
     spacing,
-    band: wall + 3 * spacing,
+    band: level + open + 3 * spacing,
     votes: 1,
   })
-  // Interpolation can pull the iso-surface up to ~¼ cell toward the outside, and thinning the
-  // cavity moves it by up to its tolerance; keep walls ≥ wall.
-  const level = levelSetOf(grid, wall * (1 + CAVITY_TOLERANCE) + spacing / 4)
+  const opened = openedInset(grid, level, open)
+  if (!opened) return null
   // Thinned before anything is decided from it: thinning later could close a cavity's opening
   // through the flat back, leaving a sealed void that was meant to be a scoop.
-  const inset = level.simplify(wall * CAVITY_TOLERANCE)
-  level.delete()
+  const inset = opened.simplify(wall * CAVITY_TOLERANCE)
+  opened.delete()
   const pieces = inset.decompose()
   inset.delete()
   const owned: Manifold[] = [...pieces]
@@ -88,7 +104,7 @@ export function hollowBody(body: Manifold, envelope: Manifold, wall: number): Ho
     if (tools.length === 0) return null
     const tool = mf.Manifold.union(tools)
     owned.push(tool)
-    const result = dropSpecks(body.subtract(tool))
+    const result = withoutDebris(body.subtract(tool), grid, wall)
     if (result.isEmpty() || result.volume() >= body.volume()) {
       result.delete()
       return null
@@ -97,6 +113,102 @@ export function hollowBody(body: Manifold, envelope: Manifold, wall: number): Ho
   } finally {
     for (const m of owned) m.delete()
   }
+}
+
+/**
+ * The region deeper than `level` inside the grid's surface, opened by `radius`: eroded (the
+ * nodes `radius` deeper still), then dilated back by the distance to the eroded nodes, and
+ * never beyond `level`. The distance comes from an exact transform of the grid itself, which
+ * costs a fraction of a second where meshing the eroded region and sampling its distance
+ * would double the time hollowing takes. Null when nothing survives the erosion.
+ */
+function openedInset(grid: DistanceGrid, level: number, radius: number): Manifold | null {
+  const { values, spacing } = grid
+  const count = values.length
+  const d2 = new Float32Array(count)
+  let core = 0
+  for (let n = 0; n < count; n++)
+    if (values[n]! > level + radius) {
+      core++
+      d2[n] = 0
+    } else d2[n] = FAR
+  if (core * spacing ** 3 < MIN_CAVITY) return null
+  squaredDistanceTransform(d2, grid.size)
+  const opened = new Float32Array(count)
+  for (let n = 0; n < count; n++) {
+    // The eroded region's edge lies between its nearest node and the next one out: half a
+    // cell is the middle of that range.
+    const toCore = d2[n] === 0 ? 0 : Math.max(0, (Math.sqrt(d2[n]!) - 0.5) * spacing)
+    opened[n] = Math.min(values[n]! - level, radius - toCore)
+  }
+  return levelSetOf({ ...grid, values: opened }, 0)
+}
+
+/** "Infinitely" far, squared, in grid cells: no grid is this large. */
+const FAR = 1e12
+
+/**
+ * Exact squared Euclidean distance (in cells) from every node to the nearest node holding 0,
+ * in place: one pass of the lower envelope of parabolas per axis (Felzenszwalb–Huttenlocher).
+ */
+function squaredDistanceTransform(d2: Float32Array, size: readonly [number, number, number]): void {
+  const [nx, ny, nz] = size
+  const longest = Math.max(nx, ny, nz)
+  const f = new Float64Array(longest)
+  const out = new Float64Array(longest)
+  const v = new Int32Array(longest)
+  const z = new Float64Array(longest + 1)
+  const pass = (length: number, stride: number, starts: Iterable<number>) => {
+    for (const start of starts) {
+      for (let i = 0; i < length; i++) f[i] = d2[start + i * stride]!
+      envelope(length)
+      for (let i = 0; i < length; i++) d2[start + i * stride] = out[i]!
+    }
+  }
+  const envelope = (n: number) => {
+    let k = 0
+    v[0] = 0
+    z[0] = -Infinity
+    z[1] = Infinity
+    for (let q = 1; q < n; q++) {
+      let s = (f[q]! + q * q - (f[v[k]!]! + v[k]! * v[k]!)) / (2 * q - 2 * v[k]!)
+      while (s <= z[k]!) {
+        k--
+        s = (f[q]! + q * q - (f[v[k]!]! + v[k]! * v[k]!)) / (2 * q - 2 * v[k]!)
+      }
+      k++
+      v[k] = q
+      z[k] = s
+      z[k + 1] = Infinity
+    }
+    k = 0
+    for (let q = 0; q < n; q++) {
+      while (z[k + 1]! < q) k++
+      out[q] = (q - v[k]!) ** 2 + f[v[k]!]!
+    }
+  }
+  const rows = function* (outer: number, inner: number, outerStride: number, innerStride: number) {
+    for (let a = 0; a < outer; a++) for (let b = 0; b < inner; b++) yield a * outerStride + b * innerStride
+  }
+  pass(nx, 1, rows(nz, ny, nx * ny, nx))
+  pass(ny, nx, rows(nz, nx, nx * ny, 1))
+  pass(nz, nx * ny, rows(ny, nx, nx, 1))
+}
+
+/**
+ * The hollowed body without what cutting it left behind: specks, sealed voids (filled — a void
+ * cannot be cast, and its metal is cheaper than a casting that fails), and crumbs — pieces left
+ * standing inside the cavity, which touch the outside nowhere (every point deeper than half a
+ * wall). Consumes `m`.
+ */
+function withoutDebris(m: Manifold, grid: DistanceGrid, wall: number): Manifold {
+  return keepPieces(m, (volume, _largest, piece) => {
+    if (volume < SPECK_VOLUME) return false
+    const { positions: p } = trianglesFromManifold(piece)
+    for (let v = 0; v < p.length; v += 3)
+      if (sampleDistance(grid, p[v]!, p[v + 1]!, p[v + 2]!) < wall / 2) return true
+    return false
+  })
 }
 
 /** Escape holes along +Y from the highest and lowest back-facing points of one cavity. */

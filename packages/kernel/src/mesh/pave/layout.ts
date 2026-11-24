@@ -51,6 +51,11 @@ export interface LayoutOptions {
   sink: number
   /** Exact distance from a surface point to the region's edge (samples only approximate it). */
   edgeDistance: (p: Vec3) => number
+  /**
+   * Distance from a point to inner surfaces of the body that no seat or drill hole may come
+   * near (a hollow's cavity), capped at the second argument. Absent: none.
+   */
+  cavityDistance?: (p: Vec3, cap: number) => number
   /** Called now and then so long layouts can be aborted. */
   checkpoint?: () => void
 }
@@ -147,6 +152,13 @@ const FACE_LINK = 1.8
 /** Samples asked when choosing a frame row's size, and the share of them that must take it. */
 const ROW_PROBES = 200
 const ROW_FITS = 0.5
+/** Room a setter needs above a stone's table, along its axis (a graver, a bead tool), mm. */
+const SETTER_REACH = 3
+/** Metal kept between a cavity and a seat (as between two seats), and below a drill hole, mm. */
+const CAVITY_SEAT_WALL = CLASH_WALL
+const CAVITY_HOLE_WALL = 0.3
+/** Drill holes are walked down in steps of this, mm, to find where they must stop. */
+const HOLE_WALK = 0.05
 /** Stones whose gap is up to this much wider than specified are neighbours when ice spreads. */
 const NEIGHBOUR_SLACK = 0.3
 const EPS = 1e-9
@@ -470,7 +482,59 @@ class Packer {
       const min = (d + this.stones[j]!.diameter) / 2 + this.o.gap
       if (d2 < (min - EPS) * (min - EPS)) ok = false
     })
-    return ok && !this.clashNear(c, n, d)
+    return ok && !this.clashNear(c, n, d) && this.settable(p, n, d)
+  }
+
+  /** A setter can reach the stone, and its seat keeps clear of any cavity. */
+  private settable(p: Vec3, n: Vec3, d: number): boolean {
+    // Measured from the table, which stands up to about 0.2 d above the surface.
+    return (
+      this.surface.openAbove(p, n, SETTER_REACH + 0.2 * d) &&
+      this.clearOfCavity(this.girdle(p, n, d), n, d)
+    )
+  }
+
+  /** The seat's pavilion cone keeps CAVITY_SEAT_WALL of metal to the cavity, if there is one. */
+  private clearOfCavity(c: Vec3, n: Vec3, d: number): boolean {
+    const distance = this.o.cavityDistance
+    if (!distance) return true
+    const depth = this.seatDepth(0, d) - this.o.sink * d
+    const u = perpendicular(n)
+    const v = cross(n, u)
+    for (let k = 0; k <= 4; k++) {
+      const centre = add(c, scale(n, -(k / 4) * depth))
+      const rho = (d / 2) * (1 - k / 4)
+      for (let t = 0; t < (k === 4 ? 1 : 8); t++) {
+        const angle = (t * Math.PI) / 4
+        const q = add(centre, add(scale(u, rho * Math.cos(angle)), scale(v, rho * Math.sin(angle))))
+        if (distance(q, CAVITY_SEAT_WALL) < CAVITY_SEAT_WALL) return false
+      }
+    }
+    return true
+  }
+
+  /**
+   * How deep a drill hole below the culet of a seat (girdle centre c, axis n, diameter d) may
+   * go, at most `hole`, keeping CAVITY_HOLE_WALL to the cavity across its whole width. The
+   * layout's rays from the nearest sample miss a cavity's corner beside the axis.
+   */
+  private holeClearOfCavity(c: Vec3, n: Vec3, d: number, hole: number): number {
+    const distance = this.o.cavityDistance
+    if (!distance || hole <= 0) return hole
+    const culet = add(c, scale(n, -(this.seatDepth(0, d) - this.o.sink * d)))
+    const rh = (RULES.seatHole * d) / 2
+    const u = perpendicular(n)
+    const v = cross(n, u)
+    for (let z = 0; z <= hole + EPS; z += HOLE_WALK) {
+      const centre = add(culet, scale(n, -z))
+      for (let t = 0; t < 9; t++) {
+        const angle = (t * Math.PI) / 4
+        const r = t === 8 ? 0 : rh
+        const q = add(centre, add(scale(u, r * Math.cos(angle)), scale(v, r * Math.sin(angle))))
+        if (distance(q, CAVITY_HOLE_WALL) < CAVITY_HOLE_WALL) return Math.max(0, z - HOLE_WALK)
+      }
+    }
+    return hole
   }
 
   /** {@link clashes} against every placed stone close enough for the seats to meet. */
@@ -505,7 +569,9 @@ class Packer {
         push = add(push, scale(away, min - dist + SLACK))
       })
       if (worst === 0)
-        return this.clashNear(c, cur.n, d) ? -1 : this.place(cur.p, cur.n, d, cur.sample)
+        return this.clashNear(c, cur.n, d) || !this.settable(cur.p, cur.n, d)
+          ? -1
+          : this.place(cur.p, cur.n, d, cur.sample)
       if (worst > DRIFT * d) return -1
       const next = this.snap(add(cur.p, sub(push, scale(cur.n, dot(push, cur.n)))))
       if (!next || this.sizeFor(next.sample, next.p) < d - EPS) return -1
@@ -524,7 +590,7 @@ class Packer {
         this.surface.thickness(sample) - SEAT_DEPTH_PER_MM * d,
         this.ringSpare(sample, d, rh, 4) + this.seatDepth(rh, d) - SEAT_DEPTH_PER_MM * d,
       ) - FLOOR_METAL
-    const hole = Math.min(Math.max(spare, 0), MAX_HOLE_PER_MM * d)
+    const hole = this.holeClearOfCavity(c, n, d, Math.min(Math.max(spare, 0), MAX_HOLE_PER_MM * d))
     this.stones.push({ position: c, normal: n, diameter: d, hole })
     this.depth.push(this.surface.depth[sample]!)
     this.grid.add(c[0], c[1], c[2])
@@ -790,7 +856,7 @@ class Packer {
           edgeDistance: this.o.edgeDistance,
           level,
           step: ROW_STEP * d,
-          starts: members[f]!,
+          starts: fit?.rows === 1 ? this.endsFirst(members[f]!) : members[f]!,
           visit: (p0, n0, sample0) => {
             this.tick()
             // The level is read from samples, which seldom lie on the ridge itself: slide a
@@ -804,6 +870,25 @@ class Packer {
           checkpoint: this.o.checkpoint,
         })
     }
+  }
+
+  /**
+   * A face's samples, farthest from its centre first. A single row's level set is a loop down
+   * one side of the band's ridge and back up the other; walked from the middle, its stones
+   * close on themselves there with a gap of up to a stone. Walked from an end of the band, the
+   * loop closes where the row ends anyway.
+   */
+  private endsFirst(members: readonly number[]): number[] {
+    const s = this.surface
+    let c: Vec3 = [0, 0, 0]
+    for (const i of members) c = add(c, scale(s.point(i), 1 / members.length))
+    const far = new Map(
+      members.map((i) => {
+        const d = sub(s.point(i), c)
+        return [i, Math.hypot(d[0], d[1], d[2])]
+      }),
+    )
+    return [...members].sort((a, b) => far.get(b)! - far.get(a)! || a - b)
   }
 
   /**

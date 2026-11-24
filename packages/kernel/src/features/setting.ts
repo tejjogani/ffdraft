@@ -73,6 +73,11 @@ interface Head {
   railDepth: number | null
   /** Legs may reach sideways for band metal (false for the base rail itself, which stays on its outline). */
   reach?: boolean
+  /**
+   * Stations per 45° of outline for rails and bezel walls: fewer at draft, where a slider drag
+   * rebuilds the head and the triangle count is what costs (each station adds a ring of them).
+   */
+  perSpan: number
 }
 
 /** The claw parameters, from the node (the resolved design fills them) or the stone's rules. */
@@ -158,19 +163,23 @@ function railDepthOf(head: Head, standoff: number, wire: number): number | null 
   const { shape, host } = head
   if (!host) return null
   let deepest: number | null = null
-  for (const phi of shape.polygon(6).phis) {
-    const g = shape.point(phi)
-    const n = shape.normal(phi)
-    const [cx, cy] = shape.centre
-    const x = cx + (g[0] + n[0] * standoff - cx) * (1 - head.taper)
-    const y = cy + (g[1] + n[1] * standoff - cy) * (1 - head.taper)
-    const d = rootDepth(head, x, y, wire / 2 + 0.1)
-    if (d !== null)
-      deepest = Math.max(
-        deepest ?? 0,
-        Math.min(d, host.floorBelow(x, y) - FINGER_CLEARANCE - wire / 2),
-      )
-  }
+  // The rail runs between the outline (at the girdle) and its tapered footprint, depending on
+  // its depth: sample both and the way between, or a rail crossing a curved band further out
+  // than its tapered footprint could pass over it without touching.
+  for (const phi of shape.polygon(6).phis)
+    for (const k of [1, 0.5, 0]) {
+      const g = shape.point(phi)
+      const n = shape.normal(phi)
+      const [cx, cy] = shape.centre
+      const x = cx + (g[0] + n[0] * standoff - cx) * (1 - k * head.taper)
+      const y = cy + (g[1] + n[1] * standoff - cy) * (1 - k * head.taper)
+      const d = rootDepth(head, x, y, wire / 2 + 0.1)
+      if (d !== null)
+        deepest = Math.max(
+          deepest ?? 0,
+          Math.min(d, host.floorBelow(x, y) - FINGER_CLEARANCE - wire / 2),
+        )
+    }
   return deepest
 }
 
@@ -363,7 +372,7 @@ function prongs(
  */
 function rail(head: Head, depth: number, standoff: number, wire: number): Solid {
   const { shape } = head
-  const poly = shape.polygon(6)
+  const poly = shape.polygon(head.perSpan)
   const path = poly.phis.map((phi) => {
     const leg = legAt(head, phi, standoff, wire / 2 + 0.1)
     const t = clamp((depth - -leg.top[2]) / Math.max(1e-6, -leg.base[2] - -leg.top[2]), 0, 1)
@@ -446,7 +455,7 @@ function bezel(
     return sweepSolid({ closed, kinks, sections: frames.map((frame) => placeLoop(frame, loop)) })
   }
   if (!arcs) {
-    const poly = shape.polygon(8)
+    const poly = shape.polygon(Math.round(head.perSpan * 1.35))
     return [wallAlong(poly.phis, poly.corners, true)]
   }
   const corners = shape.unit.outline.corners
@@ -530,7 +539,27 @@ function checkProngs(
       })
   }
   const issues = clawLayoutIssues(shape, places)
-  if (issues.length) {
+  // A rotation kept from another stone (a pinned spin) is a common cause: when the count's own
+  // rotation lays the claws out cleanly, name the rotation, not the count.
+  const ruleSpin = prongSpinFor(claws.count)
+  const spun =
+    issues.length > 0 &&
+    Math.abs(claws.spin - ruleSpin) > 0.5 &&
+    clawLayoutIssues(shape, clawPlaces(node, shape, { ...claws, spin: ruleSpin })).length === 0
+  if (spun)
+    ctx.report({
+      level: 'warning',
+      code: 'prong.count',
+      message: `${claws.count} claws on a ${cut(shape)}: ${issues.join('; ')}. The claws are turned ${fmtDeg(claws.spin)}°; ${fmtDeg(ruleSpin)}° lays ${claws.count} out symmetrically.`,
+      value: claws.spin,
+      limit: ruleSpin,
+      at,
+      fix: {
+        label: `Turn the claws to ${fmtDeg(ruleSpin)}°`,
+        ops: [{ t: 'update', id: node.id, patch: { prongSpin: null } }],
+      },
+    })
+  else if (issues.length) {
     const cut = GEM_CUTS[shape.stone.cut]
     const usual = prongCountFor(shape.stone.cut, shape.stone.dims)
     ctx.report({
@@ -571,6 +600,7 @@ function checkProngs(
 }
 
 const cut = (shape: StoneShape) => GEM_CUTS[shape.stone.cut].label.toLowerCase()
+const fmtDeg = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1))
 
 /** What a head publishes for a halo around the same stone: where its metal reaches past the girdle. */
 export interface HeadData {
@@ -606,7 +636,13 @@ export const setting = defineFeature('setting', (node, ctx) => {
   if (!stone) throw new Error('the stone it holds was not built')
   const shape = stoneShape(stone)
   const placed = gemData(gem)
-  const head: Head = { shape, host: placed.host, taper: node.taper, railDepth: null }
+  const head: Head = {
+    shape,
+    host: placed.host,
+    taper: node.taper,
+    railDepth: null,
+    perSpan: ctx.detail === 'production' ? 6 : 2,
+  }
   const solids: Solid[] = []
   const cuts: Cut[] = []
   // A head of another alloy than its band is cast on its own and soldered on: it needs metal of

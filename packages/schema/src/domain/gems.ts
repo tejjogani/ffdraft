@@ -350,6 +350,16 @@ export function culetDepth(cutId: GemCutId, dims: GemDims): number {
   return (dims.depth * (c.pavilionPct + c.girdlePct / 2)) / c.depthPct
 }
 
+/**
+ * Round melee under 2 mm weighs more than the volume formula says: small stones are cut with
+ * proportionally thicker girdles and deeper pavilions, so the trade's per-stone weights run
+ * about 30 % over the formula at 0.8–1 mm and meet it at 2 mm (0.8 mm 0.0025 ct, 1 mm 0.005,
+ * 1.3 mm 0.01, 1.5 mm 0.015, 1.8 mm 0.025, 2 mm 0.03). Without this an iced piece's melee is
+ * under-quoted.
+ */
+const meleeWeight = (cutId: GemCutId, width: number): number =>
+  cutId === 'round' ? 1 + 0.27 * Math.min(1.2, Math.max(0, 2 - width)) : 1
+
 /** Estimated carat weight for a cut of the given dimensions and material. */
 export function gemCarat(
   cutId: GemCutId,
@@ -357,7 +367,7 @@ export function gemCarat(
   material: GemMaterialId = 'diamond',
 ): number {
   const c: GemCut = GEM_CUTS[cutId]
-  const f = caratFactor(c, dims.length / dims.width)
+  const f = caratFactor(c, dims.length / dims.width) * meleeWeight(cutId, dims.width)
   return dims.length * dims.width * dims.depth * f * (GEM_MATERIALS[material].sg / DIAMOND_SG)
 }
 
@@ -371,7 +381,11 @@ export function gemDimsFromCarat(
   const c: GemCut = GEM_CUTS[cutId]
   const ratio = Math.min(c.lw.max, Math.max(c.lw.min, lw ?? c.lw.default))
   const k = ratio * c.depthPct * caratFactor(c, ratio) * (GEM_MATERIALS[material].sg / DIAMOND_SG)
-  return gemDims(cutId, Math.cbrt(carat / k), ratio)
+  // The melee allowance depends on the width being solved for; it varies slowly, so a few
+  // fixed-point steps settle it (to well under a micron).
+  let width = Math.cbrt(carat / k)
+  for (let i = 0; i < 8; i++) width = Math.cbrt(carat / (k * meleeWeight(cutId, width)))
+  return gemDims(cutId, width, ratio)
 }
 
 /**

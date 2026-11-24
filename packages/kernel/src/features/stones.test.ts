@@ -9,6 +9,7 @@ import {
   gemDims,
   type NodeOf,
   prongSpinFor,
+  replaceStone,
   ringInnerDiameter,
   culetDepth as schemaCuletDepth,
   TEMPLATES,
@@ -67,6 +68,22 @@ describe('heads', () => {
     }
   })
 
+  it('oval-pavé × every cut at 5 ct: one casting, no seat cut through, open cathedral arms', async () => {
+    const base = template('oval-pave')
+    const before = (await kernel.evaluate(base)).report.metalMassG
+    for (const cut of GEM_CUT_IDS) {
+      const r = replaceStone(base, { nodeId: 'center' }, { cut, carat: 5 })
+      const e = await kernel.evaluate(applyOps(base, r.ops).design, { detail: 'production' })
+      expect(e.parts.length, cut).toBe(1)
+      const codes = e.diagnostics.map((x) => x.code)
+      expect(codes, cut).not.toContain('seat.through')
+      expect(codes, cut).not.toContain('metal.disconnected')
+      // The arms are a strip with the arch open under them: a 5 ct stone does not double the
+      // band's weight.
+      expect(e.report.metalMassG, cut).toBeLessThan(before * 1.6)
+    }
+  }, 120_000)
+
   it('a head of another alloy than its band is one casting of its own', async () => {
     const d = update(template('solitaire'), 'head', { material: 'au18k-yellow' })
     const e = await kernel.evaluate(d, { detail: 'production' })
@@ -117,6 +134,16 @@ describe('heads', () => {
     const e = await kernel.evaluate(d)
     const p = e.diagnostics.find((x) => x.code === 'prong.count')!
     expect(p.fix?.ops).toEqual([{ t: 'update', id: 'head', patch: { prongCount: null } }])
+  })
+
+  it('blames a pinned rotation, not the count, when the count is right and the spin is not', async () => {
+    const d = update(update(template('solitaire'), 'center', { width: 8.2 }), 'head', {
+      prongCount: 6,
+      prongSpin: 45,
+    })
+    const p = (await kernel.evaluate(d)).diagnostics.find((x) => x.code === 'prong.count')!
+    expect(p.message).toMatch(/turned 45°; 0° lays 6 out symmetrically/)
+    expect(p.fix?.ops).toEqual([{ t: 'update', id: 'head', patch: { prongSpin: null } }])
   })
 
   it('reports claws far too heavy or light for the stone, with a reset to auto', async () => {
@@ -194,7 +221,7 @@ describe('stones', () => {
 })
 
 describe('halo and rows', () => {
-  it('halo stones leave windows for the centre’s claws, so none is buried at production', async () => {
+  it('halo stones never collide, for any centre cut (the heart’s cleft included)', async () => {
     const scene = await kernel.scene(template('halo'))
     const claws = (scene.nodes.get('head')!.data as HeadData).claws
     expect(claws).toHaveLength(4)
@@ -205,6 +232,67 @@ describe('halo and rows', () => {
         e.diagnostics.filter((x) => x.code === 'stone.overlap'),
         cut,
       ).toEqual([])
+    }
+  })
+
+  it('the halo template is continuous: claws inside the ring, even spacing, free of stone.inMetal at production', async () => {
+    const scene = await kernel.scene(template('halo'), { detail: 'production' })
+    const e = scene.evaluation
+    const halo = scene.nodes.get('halo')!.stones
+    // Stone to stone, round the ring: the template's 0.15 mm gap, nowhere a bald corner.
+    const gaps = halo.map((s, i) => {
+      const o = s.frame.origin
+      const q = halo[(i + 1) % halo.length]!.frame.origin
+      return Math.hypot(o[0] - q[0], o[1] - q[1], o[2] - q[2]) - s.dims.width
+    })
+    expect(Math.min(...gaps)).toBeGreaterThan(0.1)
+    expect(Math.max(...gaps)).toBeLessThan(0.4)
+    const bad = e.diagnostics.filter(
+      (x) => x.nodeId === 'halo' && ['stone.inMetal', 'seat.wall', 'stone.overlap'].includes(x.code),
+    )
+    expect(bad).toEqual([])
+    expect(e.parts).toHaveLength(1)
+  })
+
+  it('every centre cut at 5 ct in the halo is free of stone.inMetal errors at production', async () => {
+    const base = template('halo')
+    for (const cut of GEM_CUT_IDS) {
+      const r = replaceStone(base, { nodeId: 'center' }, { cut, carat: 5 })
+      const e = await kernel.evaluate(applyOps(base, r.ops).design, { detail: 'production' })
+      expect(
+        e.diagnostics.filter((x) => x.code === 'stone.inMetal' || x.code === 'stone.overlap'),
+        cut,
+      ).toEqual([])
+      expect(e.parts.length, cut).toBe(1)
+    }
+  }, 120_000)
+
+  it('a halo on a small centre stands on posts on the band, so a head of another alloy leaves it one casting with the band', async () => {
+    const small = update(template('halo'), 'center', { cut: 'round', width: 3.66 })
+    const scene = await kernel.scene(small)
+    expect(scene.nodes.get('halo')!.bodies.length).toBeGreaterThan(1)
+    const twoAlloy = update(template('halo'), 'head', { material: 'pt950' })
+    const e = await kernel.evaluate(twoAlloy, { detail: 'production' })
+    expect(e.diagnostics.map((x) => x.code)).not.toContain('metal.disconnected')
+  }, 60_000)
+
+  it('a halo saved before claw clearance keeps its stones, and is offered the clear layout', async () => {
+    const v1 = { ...template('halo'), schemaVersion: 1 } as Design
+    const old = await kernel.scene(v1)
+    const fix = old.evaluation.diagnostics.find((x) => x.code === 'halo.claws')!
+    expect(fix.fix?.ops).toEqual([{ t: 'update', id: 'halo', patch: { clearClaws: true } }])
+    // The old layout: stones evenly round at the stored gap, as the version-1 kernel built them.
+    const centre = old.nodes.get('center')!.stones[0]!
+    const halo = old.nodes.get('halo')!.stones
+    const shape = stoneShape(centre)
+    expect(halo.length).toBe(16)
+    for (const s of halo) {
+      const local = s.frame.origin.map((v, k) => v - centre.frame.origin[k]!)
+      const x = local.reduce((a, v, k) => a + v * centre.frame.x[k]!, 0)
+      const y = local.reduce((a, v, k) => a + v * centre.frame.y[k]!, 0)
+      // On the path 0.25 mm + half a stone off the girdle.
+      const d = Math.min(...shape.offsetPath(0.25 + 0.65).map(([px, py]) => Math.hypot(px - x, py - y)))
+      expect(d).toBeLessThan(0.2)
     }
   })
 

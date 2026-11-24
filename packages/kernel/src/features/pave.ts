@@ -25,6 +25,7 @@ import {
   stoneForMetal,
 } from '../mesh/pave/layout'
 import {
+  cavityDistance,
   type HiddenSurfaces,
   type PaveField,
   type PlacedField,
@@ -87,8 +88,9 @@ function thinAdvice(
   const base = `The metal under most of the region is about ${thickness.toFixed(2)} mm deep, which ${takes}; a ${largest} mm stone needs ${need.toFixed(2)} mm (its seat plus 0.4 mm below it).`
   const hostNode = host.node
   if (hostNode.kind === 'meshBody' && hostNode.hollow > 0) {
-    // The cavity is offset a little beyond the wall asked for; round up to a tenth.
-    const wall = Math.ceil(need * 10) / 10
+    // Hollow walls come out between the wall asked for and hollowWallMetal of it (mesh/shell),
+    // so the metal needed, rounded up to a tenth, is the least wall sure to take the seat.
+    const wall = Math.ceil(need * 10 - 1e-9) / 10
     return {
       message: `${base} Use ${wall} mm hollow walls for these stones, or smaller stones.`,
       value: thickness,
@@ -234,6 +236,7 @@ function packed(
     rowDirection: [1, 0, 0],
     sink: GEM_CUTS.round.girdlePct / 2 + GIRDLE_BELOW,
     edgeDistance: (p) => region.edgeDistance(p),
+    cavityDistance: cavityDistance(publishedHidden(host)) ?? undefined,
     checkpoint: () => ctx.signal?.throwIfAborted(),
   })
   const result = { region, surface, full }

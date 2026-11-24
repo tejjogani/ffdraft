@@ -26,7 +26,7 @@ import {
 } from '../domain/gems'
 import { nodeTitle } from './describe'
 import type { Design, Op } from './design'
-import { migrateDesign, pinsOffRule, resolveDesign, stoneDims } from './mount'
+import { measuredUsable, migrateDesign, pinsOffRule, resolveDesign, stoneDims } from './mount'
 import { type Node, type NodeOf, StoneQuality, StoneSourcing } from './nodes'
 
 // ── Input ────────────────────────────────────────────────────────────────────────────────────
@@ -41,6 +41,11 @@ export const StoneTargetSchema = z.object({
 })
 export type StoneTarget = z.input<typeof StoneTargetSchema>
 
+/** A change of grade: StoneQuality's keys, each optional and with no default. */
+const StoneQualityChange = StoneQuality.extend({
+  origin: StoneQuality.shape.origin.unwrap().optional(),
+}).partial()
+
 export const StoneChangeSchema = z
   .object({
     cut: z.enum(GEM_CUT_IDS).optional(),
@@ -51,7 +56,11 @@ export const StoneChangeSchema = z
     lw: z.number().min(0.8).max(5).optional(),
     /** The material, which is the colour: `sapphire-blue`, `ruby`, `diamond-lab`. */
     stone: z.enum(GEM_MATERIAL_IDS).optional(),
-    quality: StoneQuality.optional(),
+    /**
+     * Only the grade keys given change: a colour-only change keeps the stone's origin. (Parsed
+     * without StoneQuality's defaults, which would write origin `any` over a lab stone.)
+     */
+    quality: StoneQualityChange.optional(),
     /** A real stone with its measured size: fit the mount to it (Sourcing's "fit to this stone"). */
     fit: StoneSourcing.optional(),
     /** Three-stone: keep the side stones' size (default) or resize them to keep the proportion. */
@@ -217,6 +226,16 @@ export function replaceStone(
   targetInput: StoneTarget,
   changeInput: StoneChange,
 ): IntentResult {
+  return plan(input, targetInput, changeInput, true)
+}
+
+/** `pair`: check a lone side stone against its partner (off when planning that partner's twin). */
+function plan(
+  input: Design,
+  targetInput: StoneTarget,
+  changeInput: StoneChange,
+  pair: boolean,
+): IntentResult {
   const target = StoneTargetSchema.parse(targetInput)
   const parsed = StoneChangeSchema.safeParse(changeInput)
   if (!parsed.success) throw new IntentError(z.prettifyError(parsed.error))
@@ -370,15 +389,75 @@ export function replaceStone(
       notes.push('Side stones keep their size and move to sit 0.5 mm from the new girdle')
   }
 
+  // One side stone changed alone: its partner keeps the old stone, so the pair no longer
+  // matches, and nothing else would say so.
+  const side =
+    first.kind === 'gem' && targets.length === 1 && first.placement.type === 'ringTop'
+      ? first.placement.side
+      : undefined
+  if (first.kind === 'gem' && side && ops.length && pair) {
+    const shank = (first.placement as Extract<Gem['placement'], { type: 'ringTop' }>).shank
+    const onBand = design.order
+      .map((id) => design.nodes[id]!)
+      .filter(
+        (n): n is Gem =>
+          n.kind === 'gem' && n.placement.type === 'ringTop' && n.placement.shank === shank,
+      )
+    const partner = onBand.find(
+      (n) =>
+        n.id !== first.id &&
+        (n.placement as Extract<Gem['placement'], { type: 'ringTop' }>).side ===
+          (side === 'left' ? 'right' : 'left') &&
+        alike(n),
+    )
+    if (partner) {
+      const twin = plan(design, { nodeId: partner.id }, changeInput, false)
+      warnings.push({
+        code: 'side.pair',
+        nodeId: first.id,
+        message: `Only “${nodeTitle(first)}” changes; its partner “${nodeTitle(partner)}” keeps the old stone, so the two sides no longer match.`,
+        ...(twin.ops.length
+          ? {
+              suggestion: {
+                label: `Make the same change to “${nodeTitle(partner)}”`,
+                ops: twin.ops,
+              },
+            }
+          : {}),
+      })
+    }
+    // Against the centre stone (the ring-top stone without a side nearest the top).
+    const centreGem = onBand.find(
+      (n) => !(n.placement as Extract<Gem['placement'], { type: 'ringTop' }>).side,
+    )
+    if (centreGem) {
+      const after = applyPatches(design, ops)
+      const centreWidth = stoneDims(resolved.nodes[centreGem.id] as Gem).width
+      const ratio = stoneDims(after.nodes[first.id] as Gem).width / centreWidth
+      if (ratio < 0.45 || ratio > 0.75)
+        warnings.push({
+          code: 'side.proportion',
+          nodeId: first.id,
+          message: `“${nodeTitle(first)}” would be ${fmt(ratio)} of the centre stone's width (0.45 to 0.75 looks balanced)${ratio >= 1 ? ', larger than the centre stone itself' : ''}.`,
+        })
+    }
+  }
+
   const after = applyPatches(design, ops)
   const ids = new Set(targets.map((n) => n.id))
   const related = relatedTo(after, ids)
   if (ops.length) notes.push(...followNotes(design, after, related))
 
   // Pins: a follow field the designer fixed is kept, and named when it now breaks its rule.
+  // Not the fields this change writes itself (a fitted stone's measured ratio is not a hand
+  // pin), and not the nominal ratio of a stone sized from its measurement, which the
+  // measured stone overrides.
+  const written = new Map(patched.map(({ node, patch }) => [node.id, new Set(Object.keys(patch))]))
   for (const pin of pinsOffRule(after)) {
     if (!related.has(pin.nodeId)) continue
+    if (written.get(pin.nodeId)?.has(pin.path.split('.')[0]!)) continue
     const n = after.nodes[pin.nodeId]!
+    if (pin.path === 'lw' && n.kind === 'gem' && measuredUsable(n.sourcing?.measured)) continue
     const [head, tail] = pin.path.split('.') as [string, string | undefined]
     warnings.push({
       code: 'pin.offRule',
@@ -428,6 +507,26 @@ function applyPatches(design: Design, ops: readonly Op[]): Design {
 
 type Change = z.output<typeof StoneChangeSchema>
 
+/**
+ * The grade keys a change sets that differ from the stone's, or nothing. Ops merge objects key
+ * by key, so the keys left out (origin, certification) are kept.
+ */
+function qualityPatch(
+  current: StoneQuality | undefined,
+  change: Change['quality'],
+): Record<string, unknown> | undefined {
+  if (!change) return undefined
+  const changed = Object.fromEntries(
+    Object.entries(change).filter(
+      ([k, v]) =>
+        v !== undefined &&
+        JSON.stringify((current as Record<string, unknown> | undefined)?.[k]) !==
+          JSON.stringify(v),
+    ),
+  )
+  return Object.keys(changed).length ? changed : undefined
+}
+
 /** The stone fields of one gem. */
 function gemPatch(
   node: Gem,
@@ -463,13 +562,15 @@ function gemPatch(
       `Fitted to ${change.fit.provider} ${change.fit.sku}: ${fmt(m.length)} × ${fmt(m.width)} × ${fmt(m.depth)} mm`,
     )
     if (change.stone) patch.stone = change.stone
-    if (change.quality) patch.quality = change.quality
+    const grade = qualityPatch(node.quality, change.quality)
+    if (grade) patch.quality = grade
     return patch
   }
 
   if (change.cut && change.cut !== node.cut) patch.cut = change.cut
   if (change.stone && change.stone !== node.stone) patch.stone = change.stone
-  if (change.quality) patch.quality = change.quality
+  const grade = qualityPatch(node.quality, change.quality)
+  if (grade) patch.quality = grade
 
   // Length : width: given (clamped to the cut), or reset to follow a new cut.
   let lw: number | undefined = cut === node.cut ? node.lw : undefined
@@ -529,7 +630,8 @@ function fieldPatch(
   const patch: Record<string, unknown> = {}
   if (change.cut && change.cut !== node.cut) patch.cut = change.cut
   if (change.stone && change.stone !== node.stone) patch.stone = change.stone
-  if (change.quality) patch.quality = change.quality
+  const grade = qualityPatch(node.quality, change.quality)
+  if (grade) patch.quality = grade
   if (change.fit)
     warnings.push({
       code: 'fit.field',

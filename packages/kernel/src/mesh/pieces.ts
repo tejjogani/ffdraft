@@ -29,18 +29,18 @@ export const dropSpecks = (m: Manifold): Manifold =>
   keepPieces(m, (volume) => Math.abs(volume) >= SPECK_VOLUME)
 
 /**
- * The pieces for which `keep(volume, largest)` holds, composed into one body. Consumes `m`;
+ * The pieces for which `keep(volume, largest, piece)` holds, composed into one body. Consumes `m`;
  * returns `m` itself when every piece is kept.
  */
 export function keepPieces(
   m: Manifold,
-  keep: (volume: number, largest: number) => boolean,
+  keep: (volume: number, largest: number, piece: Manifold) => boolean,
 ): Manifold {
   const pieces = m.decompose()
   try {
     const volumes = pieces.map((p) => p.volume())
     const largest = Math.max(0, ...volumes)
-    const kept = pieces.filter((_, i) => keep(volumes[i]!, largest))
+    const kept = pieces.filter((piece, i) => keep(volumes[i]!, largest, piece))
     if (kept.length === pieces.length) return m
     m.delete()
     return runtime().manifold.Manifold.compose(kept)

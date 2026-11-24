@@ -199,3 +199,53 @@ describe('replaceStone: sourcing', () => {
     ])
   })
 })
+
+describe('replaceStone: round-2 regressions', () => {
+  it('a colour-only change keeps a lab stone lab (no origin default written)', () => {
+    const lab = applyOps(template('solitaire'), [
+      {
+        t: 'update',
+        id: 'center',
+        patch: {
+          stone: 'diamond-lab',
+          quality: { origin: 'lab', colors: ['D'], certified: true },
+        },
+      },
+    ]).design
+    const r = replaceStone(lab, { nodeId: 'center' }, { quality: { colors: ['E', 'F'] } })
+    expect(r.ops).toEqual([
+      { t: 'update', id: 'center', patch: { quality: { colors: ['E', 'F'] } } },
+    ])
+    const after = applyOps(lab, r.ops).design.nodes.center as NodeOf<'gem'>
+    expect(after.quality).toEqual({ origin: 'lab', colors: ['E', 'F'], certified: true })
+    // The same grade again changes nothing.
+    expect(replaceStone(applyOps(lab, r.ops).design, { nodeId: 'center' }, { quality: { colors: ['E', 'F'] } }).ops).toEqual([])
+  })
+
+  it('fitting a measured stone does not call its own ratio a hand pin, now or on a repeat', () => {
+    const fit = { provider: 'diaex', sku: 'OV1', measured: { length: 9.1, width: 6.6, depth: 4 } }
+    const r = replaceStone(template('solitaire'), { nodeId: 'center' }, { cut: 'oval', fit })
+    expect(r.ops[0]).toMatchObject({ patch: { lw: 1.379 } })
+    expect(r.warnings).toEqual([])
+    const again = replaceStone(
+      applyOps(template('solitaire'), r.ops).design,
+      { nodeId: 'center' },
+      { cut: 'oval', fit },
+    )
+    expect(again.ops).toEqual([])
+    expect(again.warnings).toEqual([])
+  })
+
+  it('one side stone changed alone warns that the pair no longer matches, with the twin edit', () => {
+    const base = template('three-stone')
+    const r = replaceStone(base, { nodeId: 'side1' }, { widthMm: 6 })
+    const pair = r.warnings.find((w) => w.code === 'side.pair')!
+    expect(pair.suggestion?.ops).toEqual([{ t: 'update', id: 'side2', patch: { width: 6 } }])
+    // 6 mm sides on a 5.69 mm centre: out of proportion, and larger than the centre.
+    const prop = r.warnings.find((w) => w.code === 'side.proportion')!
+    expect(prop.message).toMatch(/larger than the centre stone/)
+    // Both together: no pair warning.
+    const both = replaceStone(base, { nodeId: 'side1', scope: 'alike' }, { stone: 'ruby' })
+    expect(both.warnings.find((w) => w.code === 'side.pair')).toBeUndefined()
+  })
+})

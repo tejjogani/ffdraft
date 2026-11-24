@@ -97,6 +97,7 @@ describe('pavé beads at the edge of the field', () => {
     const beads = scene.nodes.get('ice')!.additions[0]!.solid.manifold(QUALITY.production)
     const pieces = beads.decompose()
     expect(pieces.length).toBeGreaterThanOrEqual(stones.length)
+    const zs = stones.map((s) => s.matrix[14]!).sort((a, b) => a - b)
     let square = 0
     let side = 0
     for (const piece of pieces) {
@@ -114,13 +115,15 @@ describe('pavé beads at the edge of the field', () => {
       )
       const dx = Math.abs(c[0]! - near.matrix[12]!)
       const dz = Math.abs(c[2]! - near.matrix[14]!)
-      if (dx > dz) {
+      // The two end stones have one neighbour and are held round their open end.
+      const end = near.matrix[14] === zs[0] || near.matrix[14] === zs.at(-1)
+      if (dx > dz && !end) {
         side++
         if (Math.atan2(dz, dx) < (2 * Math.PI) / 180) square++
       }
       piece.delete()
     }
-    // The two end stones have one neighbour and are held round their open end.
-    expect(square).toBeGreaterThanOrEqual(side - 4)
+    expect(side).toBeGreaterThanOrEqual(2 * (stones.length - 2))
+    expect(square).toBe(side)
   }, 60_000)
 })

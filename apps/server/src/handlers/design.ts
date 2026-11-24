@@ -7,6 +7,7 @@ import {
   type Op,
   OpError,
   replaceStone,
+  type StoredChange,
 } from '@pave/schema'
 import { and, desc, eq, lt, sql } from 'drizzle-orm'
 import { putAsset } from '../assets/assets'
@@ -134,6 +135,23 @@ function compareFacts(before: EvaluationSummary | null, after: EvaluationSummary
   }
 }
 
+/**
+ * The answer to a repeated apply: the change as it was recorded. Its notes and facts were given
+ * with the first answer and are not recomputed (the design may have moved on since).
+ */
+function replayed(change: StoredChange) {
+  return {
+    applied: true,
+    version: change.seq,
+    change,
+    ops: change.ops,
+    label: change.label,
+    notes: [`Already applied as change ${change.seq}; this is the change as recorded.`],
+    warnings: [],
+    ...compareFacts(null, null),
+  }
+}
+
 /** The stone intent on a design, with its errors as a bad request. */
 function planStone(design: Design, input: Parameters<typeof replaceStone>): IntentResult {
   try {
@@ -234,6 +252,17 @@ export const design: HandlerGroup<'design'> = {
       geometry
         ? geometry.evaluate(design, { detail: 'draft', pieceId: piece.id }, serviceContext(ctx))
         : Promise.resolve(null)
+    const actor = ctx.actor
+    const changeId =
+      input.changeId ??
+      (actor.type === 'agent' && actor.toolCallId ? `chg_${actor.toolCallId}` : undefined)
+    // A retry of an apply (a dropped response, the same tool call) must get back the change it
+    // made. Recomputing the intent on the already-changed design would find nothing to do and
+    // answer "not applied", so look the change up first.
+    if (!input.dryRun && changeId) {
+      const existing = await ctx.repo.changes.first(eq(t.designChange.id, changeId))
+      if (existing && existing.pieceId === piece.id) return replayed(toStoredChange(existing))
+    }
     const preview = planStone(piece.design, args)
     const outcome = (intent: IntentResult) => ({
       ops: intent.ops,
@@ -258,21 +287,21 @@ export const design: HandlerGroup<'design'> = {
         ...compareFacts(before, after),
       }
     }
-    let committed: IntentResult = preview
+    let committed: IntentResult | null = null
     let base: Design = piece.design
-    const actor = ctx.actor
     const { version, change } = await commitChange(ctx, {
       pieceId: input.pieceId,
       baseVersion: input.baseVersion,
-      changeId:
-        input.changeId ??
-        (actor.type === 'agent' && actor.toolCallId ? `chg_${actor.toolCallId}` : undefined),
+      changeId,
       plan: async (_tx, current) => {
         base = current
         committed = planStone(current, [current, input.target, input.change])
         return { ops: committed.ops, label: committed.label }
       },
     })
+    // The same change id was committed between the lookup above and this commit (two retries
+    // racing): the commit replayed it without planning.
+    if (!committed) return replayed(change)
     const before = await evaluate(base)
     const after = await evaluate(applyOps(base, committed.ops).design)
     return { applied: true, version, change, ...outcome(committed), ...compareFacts(before, after) }

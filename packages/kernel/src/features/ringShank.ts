@@ -48,17 +48,35 @@ const SPLIT_BURIED = 66 * DEG
  * Cathedral shoulders: the outer surface leaves the band on a tangent, climbs `rise` to a peak
  * either side of the head and dips between the peaks to cradle the stone's pavilion.
  */
-function cathedral(rise: number, outerRadius: number): (theta: number) => number {
+interface Cathedral {
+  /** Height of the shoulder's top above the band at θ (0 beyond the arms). */
+  rise(theta: number): number
+  /** The arms run from the band at ±start up to their peaks at ±peak, radians. */
+  start: number
+  peak: number
+}
+
+/**
+ * Cathedral shoulders: two arms that leave the band on a tangent, climb `rise` to a peak either
+ * side of the head, just under the stone's girdle, and dip between the peaks to cradle the
+ * stone's pavilion. The arms are a strip of the band's own thickness: the space between them
+ * and the band is the open arch, so a high rise adds a little metal, not a solid wall.
+ */
+function cathedral(rise: number, outerRadius: number): Cathedral {
   // Where the peaks stand is the mount rules' (design/mount.ts), which also pick the rise that
   // brings them just under the stone's girdle.
   const { peak } = cathedralPeak(rise, outerRadius)
   // A straight line tangent to the band reaches the peak's height after this angle.
   const start = Math.min(peak + Math.acos(outerRadius / (outerRadius + rise)) * 1.15, 110 * DEG)
-  return (theta) => {
-    const t = Math.abs(theta)
-    if (t >= start) return 0
-    if (t >= peak) return rise * smootherstep((start - t) / (start - peak))
-    return rise * lerp(0.3, 1, smootherstep(t / peak))
+  return {
+    start,
+    peak,
+    rise: (theta) => {
+      const t = Math.abs(theta)
+      if (t >= start) return 0
+      if (t >= peak) return rise * smootherstep((start - t) / (start - peak))
+      return rise * lerp(0.3, 1, smootherstep(t / peak))
+    },
   }
 }
 
@@ -84,6 +102,9 @@ interface Strand {
   width(theta: number): number
   /** 1 where the strand runs hidden inside another and is drawn a hair smaller, else 0. */
   buried(theta: number): number
+  /** Radial thickness, and how far its inside stands off the finger (0: on the finger). */
+  thickness(theta: number): number
+  lift(theta: number): number
 }
 
 function shankShape(node: ShankNode) {
@@ -91,15 +112,18 @@ function shankShape(node: ShankNode) {
   const top = (theta: number) => (1 + Math.cos(theta)) / 2
   const baseWidth = (theta: number) => lerp(node.widthBottom, node.widthTop, top(theta))
   const baseThickness = (theta: number) => lerp(node.thicknessBottom, node.thicknessTop, top(theta))
-  const shoulder =
+  const arms =
     node.shoulder === 'cathedral'
       ? cathedral(node.shoulderHeight ?? MOUNT.shoulderRise.none, innerRadius + node.thicknessTop)
-      : () => 0
+      : null
   const base = node.baseShape === 'euro' ? euro(innerRadius + node.thicknessBottom) : () => 0
-  const thickness = (theta: number) => {
-    const t = baseThickness(theta) + shoulder(theta)
+  /** The band itself, without the arms. */
+  const bandThickness = (theta: number) => {
+    const t = baseThickness(theta)
     return t + base(theta, innerRadius + t)
   }
+  /** To the outer surface: the top of an arm where there is one. */
+  const thickness = (theta: number) => bandThickness(theta) + (arms?.rise(theta) ?? 0)
 
   // Split shank: the strands' outer edges run to ±E and their facing edges to ±I; I < 0 means
   // the strands still overlap (one band), I > 0 is the open gap.
@@ -121,8 +145,28 @@ function shankShape(node: ShankNode) {
       centre: (t) => (split ? (outerEdge(t) + innerEdge(t)) / 2 : 0),
       width: (t) => (split ? outerEdge(t) - innerEdge(t) : baseWidth(t)),
       buried: () => 0,
+      thickness: bandThickness,
+      lift: () => 0,
     },
   ]
+  if (arms) {
+    // The arms are one strip from inside the band on one side, over the peaks and the dip that
+    // cradles the stone, to inside the band on the other. Its top sits a hair under the outer
+    // surface the rest of the kernel measures, so it never shares a face with the band where
+    // the two merge.
+    const end = arms.start + 2 * DEG
+    const steps = Math.max(16, Math.ceil((2 * end) / (2 * DEG)))
+    const armThickness = (t: number) => Math.min(baseThickness(t), thickness(t) - 0.03)
+    strands.push({
+      angles: Array.from({ length: steps + 1 }, (_, i) => -end + (2 * end * i) / steps),
+      closed: false,
+      centre: () => 0,
+      width: baseWidth,
+      buried: () => 0,
+      thickness: armThickness,
+      lift: (t) => thickness(t) - 0.03 - armThickness(t),
+    })
+  }
   if (split) {
     const steps = Math.ceil((2 * SPLIT_BURIED) / ((2 * Math.PI) / SECTIONS))
     strands.push({
@@ -135,6 +179,8 @@ function shankShape(node: ShankNode) {
       width: (t) => outerEdge(t) - innerEdge(t),
       // The mirrored strand ends inside the first one and surfaces over the next few degrees.
       buried: (t) => 1 - smootherstep((SPLIT_START - Math.abs(t)) / (8 * DEG)),
+      thickness: bandThickness,
+      lift: () => 0,
     })
   }
   return {
@@ -162,8 +208,8 @@ export const ringShank = defineFeature('ringShank', (node, ctx) => {
           bandLoop(
             node.profile,
             strand.width(theta) - 2 * inset,
-            thickness(theta) - 2 * inset,
-            innerRadius + inset,
+            strand.thickness(theta) - 2 * inset,
+            innerRadius + strand.lift(theta) + inset,
             strand.centre(theta),
           ),
         )
