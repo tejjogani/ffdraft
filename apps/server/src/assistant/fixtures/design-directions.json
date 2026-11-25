@@ -1,0 +1,253 @@
+{
+  "runs": [
+    [
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "An open anniversary brief, about a carat, for someone who works with her hands. The big open decision is how the centre stone is presented; keep the carat and size fixed."
+          },
+          {
+            "type": "text",
+            "text": "I'll read the brief, then build three directions that differ in how the stone is presented."
+          },
+          {
+            "type": "tool_use",
+            "name": "pieces_get",
+            "input": {
+              "id": "{{pieceId}}"
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "pieces_proposeDirections",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "directions": [
+                {
+                  "name": "Low bezel",
+                  "idea": "A 1 ct round in a low bezel on a fine band, for hands that work.",
+                  "tradeOff": "Shows a little less of the stone; the most durable of the three, nothing to catch.",
+                  "spec": {
+                    "kind": "ring",
+                    "archetype": "solitaire",
+                    "title": "Low bezel",
+                    "summary": "A 1 ct round in a low yellow-gold bezel on a fine band.",
+                    "style": [
+                      "minimal"
+                    ],
+                    "metal": {
+                      "alloy": "au18k-yellow"
+                    },
+                    "ring": {
+                      "size": {
+                        "system": "us",
+                        "value": 6
+                      }
+                    },
+                    "stones": [
+                      {
+                        "role": "center",
+                        "cut": "round",
+                        "carat": 1,
+                        "setting": "bezel"
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "Cushion halo",
+                  "idea": "A 1 ct cushion framed by a pavé halo on a substantial white band.",
+                  "tradeOff": "Reads a carat bigger for the money; sixteen small stones to keep tight.",
+                  "spec": {
+                    "kind": "ring",
+                    "archetype": "halo",
+                    "title": "Cushion halo",
+                    "summary": "A 1 ct cushion in a single pavé halo, white gold.",
+                    "style": [
+                      "glamorous"
+                    ],
+                    "metal": {
+                      "alloy": "au18k-white",
+                      "plating": "rhodium"
+                    },
+                    "ring": {
+                      "size": {
+                        "system": "us",
+                        "value": 6
+                      },
+                      "bandWidthMm": 2.6
+                    },
+                    "stones": [
+                      {
+                        "role": "center",
+                        "cut": "cushion",
+                        "carat": 1
+                      },
+                      {
+                        "role": "halo",
+                        "widthMm": 1.3
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "Three-stone",
+                  "idea": "A 0.7 ct oval between two pears: past, present and future.",
+                  "tradeOff": "A smaller centre to stay in budget; the widest head, so it catches most.",
+                  "spec": {
+                    "kind": "ring",
+                    "archetype": "threeStone",
+                    "title": "Three-stone",
+                    "summary": "A 0.7 ct oval between two pear sides.",
+                    "style": [
+                      "classic"
+                    ],
+                    "metal": {
+                      "alloy": "au18k-yellow"
+                    },
+                    "ring": {
+                      "size": {
+                        "system": "us",
+                        "value": 6
+                      }
+                    },
+                    "stones": [
+                      {
+                        "role": "center",
+                        "cut": "oval",
+                        "carat": 0.7
+                      },
+                      {
+                        "role": "side",
+                        "cut": "pear",
+                        "carat": 0.25
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "text",
+            "text": "Three directions, all about a carat in US 6:\n\n- **A, Low bezel**: the most protective, nothing to catch; the lightest to make.\n- **B, Cushion halo**: looks biggest for the money; more small stones to look after, and the halo sits close to the band's edge.\n- **C, Three-stone**: a smaller oval centre with pear sides; the widest head.\n\nFor hands that work, I'd go with A. Which one, or a mix?"
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "text",
+            "text": "Building the low bezel of A on B's wider white band."
+          },
+          {
+            "type": "tool_use",
+            "name": "pieces_proposeDirections",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "directions": [
+                {
+                  "name": "Bezel on a heavier band",
+                  "tradeOff": "About a gram more gold than A; the bezel stays the most protective.",
+                  "mix": {
+                    "base": "A",
+                    "take": [
+                      {
+                        "from": "B",
+                        "parts": [
+                          "band",
+                          "metal"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "text",
+            "text": "**D** is A's low bezel on B's 2.6 mm white-gold band. It is heavier than A and keeps the bezel's protection. Choose it on its card, or tell me."
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "pieces_chooseDirection",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "directionId": "D"
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "text",
+            "text": "D is now the piece's design, and the piece is in CAD. The other directions stay on the Design tab."
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "design_apply",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "label": "Widen band to 3 mm",
+              "ops": [
+                {
+                  "t": "update",
+                  "id": "band",
+                  "patch": {
+                    "widthTop": 3
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "text",
+            "text": "Widened the band to 3 mm at the top. The canon notes it is above 2.9 mm for a 1 ct solitaire; say if you want it back to 2.6."
+          }
+        ]
+      }
+    ]
+  ]
+}

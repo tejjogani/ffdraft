@@ -37,8 +37,11 @@ describe('classifying a dropped file', () => {
       expect(classifyImport(name)).toBeNull()
   })
 
-  it('accepts in the file dialog exactly what it classifies', () => {
-    for (const ext of IMPORT_ACCEPT.split(',')) expect(classifyImport(`file${ext}`)).not.toBeNull()
+  it('accepts in the file dialog what it classifies, and STEP only to say it is planned', () => {
+    const planned = new Set(['.step', '.stp'])
+    for (const ext of IMPORT_ACCEPT.split(','))
+      if (planned.has(ext)) expect(classifyImport(`file${ext}`)).toBeNull()
+      else expect(classifyImport(`file${ext}`)).not.toBeNull()
   })
 })
 

@@ -25,7 +25,9 @@ import {
   Dialog,
   IconButton,
   Sheet,
+  Skeleton,
   Spinner,
+  toast,
 } from '@pave/ui'
 import { useNavigate } from '@tanstack/react-router'
 import { PanelLeft, PanelRight, Plus } from 'lucide-react'
@@ -38,6 +40,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { QualityIndicator } from '../../components/stage/QualityIndicator'
 import { Stage } from '../../components/stage/Stage'
 import type { Viewer, ViewerState } from '../../components/stage/viewer'
 import { runCommand } from '../../lib/commands'
@@ -48,14 +51,20 @@ import { usePieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { activeOrg, useSession } from '../../lib/session'
+import { useAssistant } from '../../stores/assistant'
+import { planProgress } from '../assistant/jobs/status'
+import { useLiveRun } from '../assistant/jobs/useJob'
 import { useQuickIntent } from '../assistant/quick-intent-store'
 import { type Subject, subjectFor } from '../assistant/quick-intents'
+import { ImagePlanes } from '../references/ImagePlanes'
+import { renderThisView } from '../render/shot-actions'
 import { useViewportTools } from './capture-tool'
 import { useCadCommands } from './commands'
 import { captureCover } from './cover'
 import { EmptyDesign } from './empty/EmptyDesign'
 import { exportFormats, runExport } from './export'
 import { ChangeChip } from './hud/ChangeChip'
+import { pieceFigures } from './hud/figures'
 import { Hud } from './hud/Hud'
 import { toIssues } from './hud/issues'
 import { useProductionCheck } from './hud/useProductionCheck'
@@ -168,8 +177,19 @@ export function PieceDesign({ pieceId }: { pieceId: string }) {
   const piece = useRpc('pieces.get', { id: pieceId })
   if (piece.isPending)
     return (
-      <div className="stage absolute inset-0 flex items-center justify-center">
-        <Spinner />
+      // The workspace's own shape while the piece loads: toolbar and tree, then the model.
+      <div
+        className="stage absolute inset-0"
+        role="status"
+        aria-busy="true"
+        aria-label="Opening the design"
+      >
+        <Skeleton className="absolute top-3 left-1/2 h-9 w-72 -translate-x-1/2 rounded-lg" />
+        <div className="absolute top-3 left-3 flex w-52 flex-col gap-2 max-md:hidden">
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-5 w-32" />
+        </div>
       </div>
     )
   if (!piece.data) return null
@@ -211,6 +231,8 @@ function Workspace({ piece }: { piece: Piece }) {
     settled,
     kernel.status === 'ready' && view.order.length > 0,
   )
+  // One set of figures for the readout and the Facts panel.
+  const figures = pieceFigures(evaluation, check, view === settled)
 
   const viewer = useRef<Viewer | null>(null)
   const viewport = useRef<HTMLElement>(null)
@@ -251,6 +273,36 @@ function Workspace({ piece }: { piece: Piece }) {
     () => new Set(run ? [...Object.keys(run.prior), ...run.added] : []),
     [run],
   )
+  // The parts an assistant edit just touched glow once in the AI colour (not under reduced
+  // motion, where the feature list's AI badge says the same without movement).
+  const [aiTint, setAiTint] = useState<string[]>([])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a landed change is the trigger
+  useEffect(() => {
+    if (!landed || !latestRun) return
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    setAiTint([...Object.keys(latestRun.prior), ...latestRun.added])
+    const t = setTimeout(() => setAiTint([]), 1800)
+    return () => clearTimeout(t)
+  }, [landed])
+
+  // ── The assistant at work on this piece ──────────────────────────────────────────────────
+  const activity = useAssistant((s) => (s.activity?.pieceId === pieceId ? s.activity : null))
+  // Any live run on this piece, whether or not the dock that started it is open.
+  const pieceRuns = useRpc('traces.runs', { pieceId, limit: 10 })
+  const liveRun = useLiveRun(pieceRuns.data?.find((r) => r.status === 'running') ?? null).run
+  const working = liveRun?.status === 'running' ? liveRun : null
+  const workingRunId = working?.id ?? activity?.runId ?? null
+  const workingLabel =
+    (activity?.runId === workingRunId ? activity?.label : undefined) ??
+    (working?.job ? planProgress(working.job).current?.label : undefined) ??
+    'Assistant is working'
+  const stopRun = useRpcMutation('runs.cancel', { meta: { silent: true } })
+  // What is selected here goes along when the assistant is opened with mod+j.
+  useEffect(() => {
+    const set = useAssistant.getState().setLiveSelection
+    set(selection.length ? { pieceId, nodeIds: [...selection] } : null)
+  }, [selection, pieceId])
+  useEffect(() => () => useAssistant.getState().setLiveSelection(null), [])
 
   // ── Actions ──────────────────────────────────────────────────────────────────────────────
   const requestDelete = useCallback(
@@ -357,6 +409,13 @@ function Workspace({ piece }: { piece: Piece }) {
     steps,
     hasRun: !!run,
     openAddMenu: () => setAddOpen(true),
+    renderThisView: () => {
+      const camera = viewer.current?.shotCamera()
+      if (!camera) return
+      void renderThisView(piece.id, view.kind, camera)
+        .then(() => navigate({ to: '/pieces/$id/render', params: { id: piece.id } }))
+        .catch((e: Error) => toast.error('Couldn’t copy the view to a shot', e.message))
+    },
     requestDelete,
     exportAs: (f: ExportFormat) =>
       void runExport(piece, view, f, {
@@ -399,8 +458,8 @@ function Workspace({ piece }: { piece: Piece }) {
   }
 
   const viewerState = useMemo<ViewerState>(
-    () => ({ display, selection, stone, hover, hidden, xray }),
-    [display, selection, stone, hover, hidden, xray],
+    () => ({ display, selection, stone, hover, hidden, xray, aiTint }),
+    [display, selection, stone, hover, hidden, xray, aiTint],
   )
 
   const empty = view.order.length === 0
@@ -460,7 +519,7 @@ function Workspace({ piece }: { piece: Piece }) {
         <PiecePanel
           piece={piece}
           design={view}
-          evaluation={evaluation}
+          figures={figures}
           session={session}
           readOnly={readOnly}
         />
@@ -516,6 +575,13 @@ function Workspace({ piece }: { piece: Piece }) {
             />
           )}
           {sweep > 0 && <Sweep key={sweep} />}
+          <ImagePlanes
+            viewer={viewerHandle}
+            pieceId={pieceId}
+            bounds={evaluation?.report.bounds ?? null}
+            readOnly={readOnly}
+            stoneMm={evaluation?.stones.find((x) => x.role === 'center')?.dims.width ?? null}
+          />
           {!empty && (
             <Dimensions viewer={viewerHandle} evaluation={evaluation} edit={selectedEdit} />
           )}
@@ -527,7 +593,8 @@ function Workspace({ piece }: { piece: Piece }) {
               onDone={() => setMarker(null)}
             />
           )}
-          <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-2 [&>*]:pointer-events-auto">
+          {/* On a phone the two toolbars do not fit one row: saving and export wrap below. */}
+          <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex flex-wrap items-start justify-between gap-2 [&>*]:pointer-events-auto">
             <div className="flex min-w-0 items-center gap-2">
               {!dockOutliner && (
                 <IconButton
@@ -537,9 +604,9 @@ function Workspace({ piece }: { piece: Piece }) {
                   className="glass size-9 shrink-0 rounded-lg shadow-sm"
                 />
               )}
-              <ViewToolbar canUndo={undoable} canRedo={redoable} />
+              <ViewToolbar canUndo={undoable} canRedo={redoable} compact={compact} />
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="ml-auto flex shrink-0 items-center gap-2">
               <FileToolbar
                 save={save}
                 formats={empty ? [] : formats}
@@ -556,7 +623,29 @@ function Workspace({ piece }: { piece: Piece }) {
               )}
             </div>
           </div>
-          {run && (
+          {workingRunId && (
+            <div className="pointer-events-none absolute inset-x-0 top-16 z-30 flex justify-center">
+              <div
+                role="status"
+                data-assistant-working={workingRunId}
+                className="glass pointer-events-auto flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm shadow-sm"
+              >
+                <AiMark className="size-3.5 animate-pulse" />
+                <span className="max-w-72 truncate">{workingLabel}</span>
+                <span aria-hidden className="text-fg-subtle">
+                  ·
+                </span>
+                <button
+                  type="button"
+                  className="font-medium hover:underline"
+                  onClick={() => stopRun.mutate({ runId: workingRunId })}
+                >
+                  Stop
+                </button>
+              </div>
+            </div>
+          )}
+          {run && !workingRunId && (
             <div className="absolute inset-x-0 top-16 z-20 flex justify-center">
               <ChangeChip
                 run={run}
@@ -605,10 +694,11 @@ function Workspace({ piece }: { piece: Piece }) {
                       {s.label}
                     </Button>
                   ))}
+                <QualityIndicator source={viewerHandle} className="self-end" />
               </div>
               <Hud
                 design={view}
-                evaluation={evaluation}
+                figures={figures}
                 issues={issues}
                 check={check}
                 evaluating={status === 'evaluating'}

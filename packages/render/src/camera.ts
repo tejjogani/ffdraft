@@ -54,15 +54,78 @@ export function cameraBasis(
   return { right, up: cross(back, right), back }
 }
 
+/**
+ * The camera's own right / up / back after its roll: positive roll turns the camera
+ * counter-clockwise as seen from behind it, so the picture turns clockwise.
+ */
+export function rolledBasis(
+  azimuth: number,
+  elevation: number,
+  roll = 0,
+): { right: Vec3; up: Vec3; back: Vec3 } {
+  const { right, up, back } = cameraBasis(azimuth, elevation)
+  if (!roll) return { right, up, back }
+  const r = (roll * Math.PI) / 180
+  const c = Math.cos(r)
+  const s = Math.sin(r)
+  return { right: add(scale(right, c), scale(up, s)), up: sub(scale(up, c), scale(right, s)), back }
+}
+
 export function cameraPose(
-  c: Pick<ResolvedCamera, 'target' | 'azimuth' | 'elevation' | 'distance'>,
+  c: Pick<ResolvedCamera, 'target' | 'azimuth' | 'elevation' | 'distance'> & { roll?: number },
 ): {
   position: Vec3
   quaternion: Quat
 } {
-  const { up, back } = cameraBasis(c.azimuth, c.elevation)
+  const { up, back } = rolledBasis(c.azimuth, c.elevation, c.roll)
   const position = add(c.target, scale(back, c.distance))
   return { position, quaternion: lookAtQuat(position, c.target, up) }
+}
+
+/** Closest a custom camera may stand to its target, as a share of the piece's radius. */
+export const MIN_DISTANCE_SHARE = 0.25
+
+/** Elevation a custom camera is held inside: straight up or down has no azimuth to keep. */
+export const MAX_ELEVATION = 89.5
+
+/** Orbit angles and distance of a camera standing at `position` and looking at `target`. */
+export function orbitOf(
+  position: Vec3,
+  target: Vec3,
+): { azimuth: number; elevation: number; distance: number } {
+  const offset = sub(position, target)
+  const distance = length(offset)
+  const d = normalize(offset)
+  const elevation = (Math.asin(Math.max(-1, Math.min(1, d[2]))) * 180) / Math.PI
+  // Straight above or below there is no horizontal direction; call it the front.
+  const flat = Math.hypot(d[0], d[1]) < 1e-9
+  const azimuth = flat ? 0 : (Math.atan2(d[0], -d[1]) * 180) / Math.PI
+  return { azimuth, elevation, distance }
+}
+
+/**
+ * Where a custom camera stands on this piece. On the piece it was framed on (`framedOn` equal
+ * to its bounds) that is exactly the stored position and target; on a piece of another size the
+ * whole camera scales about the bounds centre, so a house shot frames every piece alike.
+ */
+export function placeCustom(
+  camera: Pick<RenderScene['camera'], 'position' | 'target' | 'framedOn'>,
+  center: Vec3,
+  radius: number,
+): { position: Vec3; target: Vec3 } {
+  const target0 = camera.target ?? center
+  const position0 = camera.position ?? add(target0, orbitDirection(35, 24))
+  const f = camera.framedOn
+  if (!f) return { position: position0, target: target0 }
+  const same =
+    f.radius === radius &&
+    f.center[0] === center[0] &&
+    f.center[1] === center[1] &&
+    f.center[2] === center[2]
+  if (same) return { position: position0, target: target0 }
+  const k = radius / f.radius
+  const move = (p: Vec3): Vec3 => add(center, scale(sub(p, f.center), k))
+  return { position: move(position0), target: move(target0) }
 }
 
 /** Half-angle tangents of the view, with the sensor width on the larger image side. */
@@ -183,12 +246,10 @@ export function resolveCamera(
   let distance: number
 
   if (camera.preset === 'custom' || camera.position) {
-    target = camera.target ?? boundsCenter(subject.bounds)
-    const offset = sub(camera.position ?? add(target, orbitDirection(35, 24)), target)
-    distance = Math.max(length(offset), radius * 0.5)
-    const d = normalize(offset)
-    elevation = (Math.asin(Math.max(-1, Math.min(1, d[2]))) * 180) / Math.PI
-    azimuth = (Math.atan2(d[0], -d[1]) * 180) / Math.PI
+    const placed = placeCustom(camera, boundsCenter(subject.bounds), radius)
+    target = placed.target
+    ;({ azimuth, elevation, distance } = orbitOf(placed.position, target))
+    distance = Math.max(distance, radius * MIN_DISTANCE_SHARE)
   } else {
     const spec = CAMERA_PRESETS[camera.preset]
     const stones = spec.frame === 'stones' ? stoneBounds(subject) : null
@@ -207,6 +268,7 @@ export function resolveCamera(
     azimuth,
     elevation,
     distance,
+    roll: camera.roll ?? 0,
     focalLength: camera.focalLength,
     sensorWidth: SENSOR_WIDTH_MM,
     focusDistance: Math.max(1, -dot(sub(focus, position), forward)),

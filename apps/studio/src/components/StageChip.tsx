@@ -22,8 +22,19 @@ export function StageChip({ stage }: { stage: Stage }) {
   )
 }
 
-/** A stage chip that opens a menu to change the stage. */
-export function StagePicker({ stage, onChange }: { stage: Stage; onChange: (s: Stage) => void }) {
+/**
+ * A stage chip that opens a menu to change the stage. `labelled` prefixes "Stage" where the bare
+ * word would read as one of the tabs beside it (the CAD and Render workspaces).
+ */
+export function StagePicker({
+  stage,
+  onChange,
+  labelled = false,
+}: {
+  stage: Stage
+  onChange: (s: Stage) => void
+  labelled?: boolean
+}) {
   return (
     <Menu
       trigger={
@@ -32,6 +43,7 @@ export function StagePicker({ stage, onChange }: { stage: Stage; onChange: (s: S
           aria-label={`Stage: ${STAGE_LABEL[stage]}`}
           className="group inline-flex h-7 items-center gap-1.5 rounded-sm px-1.5 text-sm text-fg hover:bg-bg-hover data-popup-open:bg-bg-active"
         >
+          {labelled && <span className="text-fg-subtle">Stage</span>}
           <StageIcon stage={stage} />
           {STAGE_LABEL[stage]}
           <ChevronDown className="hover-reveal size-3 text-fg-subtle" aria-hidden />

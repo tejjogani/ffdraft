@@ -1,0 +1,22 @@
+{
+  "journey": "h-imagegen",
+  "pieces": [
+    {
+      "title": "Trophy pendant",
+      "kind": "pendant",
+      "stage": "idea",
+      "version": 0,
+      "spec": null,
+      "design": {
+        "kind": "pendant",
+        "nodes": {},
+        "order": [],
+        "schemaVersion": 2
+      },
+      "directions": [],
+      "changes": [],
+      "takes": []
+    }
+  ],
+  "runs": []
+}

@@ -24,6 +24,7 @@ class Camera(TypedDict):
     azimuth: float
     elevation: float
     distance: float
+    roll: float
     focalLength: float
     sensorWidth: float
     focusDistance: float
@@ -168,7 +169,7 @@ class Job(TypedDict):
     outDir: str
 
 
-SUPPORTED_VERSION = 1
+SUPPORTED_VERSION = 2
 
 
 def load_job(path: Path) -> Job:

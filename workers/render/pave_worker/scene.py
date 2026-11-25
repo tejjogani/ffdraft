@@ -5,7 +5,7 @@ Hierarchy (mirrors the three.js side so both renderers move identically):
   piece   empty at the rig pivot (x, y); turntables rotate it about Z
   rig     empty at the rig pivot; light sweeps rotate it about Z; holds panels and sparkles
   orbit   empty at the camera target, rotation (−elevation, 0, azimuth); holds the camera at
-          (0, −distance, 0) looking back along +Y
+          (0, −distance, 0) looking back along +Y, rolled about its view axis
 """
 
 from __future__ import annotations
@@ -261,7 +261,10 @@ def build_camera(c: Camera) -> tuple[bpy.types.Object, bpy.types.Object]:
         data.dof.focus_distance = c["focusDistance"] * MM
     cam = _link(bpy.data.objects.new("camera", data), orbit)
     cam.location = (0.0, -c["distance"] * MM, 0.0)
-    cam.rotation_euler = (math.pi / 2, 0.0, 0.0)
+    # Looking back along +Y, then rolled about its own view axis. Turning the camera about its
+    # local Z by +roll is the parent's −Y rotation applied after the X turn, so the XYZ Euler is
+    # (90°, −roll, 0); positive roll turns the picture clockwise, as in @pave/render.
+    cam.rotation_euler = (math.pi / 2, -math.radians(c["roll"]), 0.0)
     bpy.context.scene.camera = cam
     return orbit, cam
 

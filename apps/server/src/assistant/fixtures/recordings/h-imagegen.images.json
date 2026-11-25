@@ -1,0 +1,36 @@
+{
+  "journey": "h-imagegen",
+  "note": "Recorded live: Claude played by hand through the fake API; the four images came from OpenAI (gpt-image-1-mini, draft). A replay uses the fake image provider, so image bytes and the provider differ; Claude's side, the verdicts, the prompt and every decision must not.",
+  "brief": {
+    "verdict": "allow",
+    "category": null,
+    "prompt": "A jewelry concept picture of an 18k yellow gold pendant shaped like the two-handled trophy cup in reference 1: a rounded cup with two slender looped handles on a short stem and a stepped base, about 25 mm tall and 18 mm wide, made entirely in polished gold (the black base becomes gold). Borrow the style of the vintage pendant in reference 2: a fine milgrain beaded edge around the cup's rim and the base, a small round bail rising from the centre of the rim, and a soft hand-engraved floral motif on the front of the cup. Front view, straight on, the whole pendant centred and in frame, no chain. Even studio light with soft reflections and true gold colour, on a plain seamless light grey background, no props, text or watermark.",
+    "understanding": "The two-handled trophy cup made into a pendant, with the vintage pendant's milgrain border, small round bail and engraved finish.",
+    "piece": {
+      "kind": "pendant",
+      "view": "front, straight on",
+      "metal": "18k yellow gold",
+      "stones": null
+    },
+    "claudeUsd": 0.024821
+  },
+  "generate": {
+    "kept": 4,
+    "refused": [],
+    "claudeUsd": 0.031163,
+    "decisions": [
+      "request:null:allow",
+      "image:1:allow",
+      "image:2:allow",
+      "image:3:allow",
+      "image:4:allow"
+    ]
+  },
+  "refusal": {
+    "verdict": "refuse",
+    "category": "likeness",
+    "reason": "An engraved portrait of a named real person needs that person's consent, which Pav\u00e9 cannot confirm. The same oval pendant with an anonymous profile, a monogram or a motif works. Pav\u00e9 does not make images of a real person without their consent.",
+    "prompt": "",
+    "claudeUsd": 0.010539
+  }
+}

@@ -9,6 +9,7 @@
 import { z } from 'zod'
 import { CLIENT_TOOL_NAMES } from './client-tools'
 import {
+  AiJobSchema,
   JOB_KINDS,
   JOB_STATUS,
   MessageSchema,
@@ -60,6 +61,11 @@ export const ServerEventSchema = z.discriminatedUnion('type', [
     runId: id.nullable(),
     tool: z.enum(CLIENT_TOOL_NAMES),
     input: z.unknown(),
+    /**
+     * For a capture: the design version the server has committed, which the window waits for
+     * before it draws, so the picture shows the edit the assistant just made.
+     */
+    atVersion: z.number().int().nullable().optional(),
   }),
 ])
 export type ServerEvent = z.infer<typeof ServerEventSchema>
@@ -106,7 +112,14 @@ export const RunEventSchema = z.discriminatedUnion('type', [
     /** One plain sentence describing what will happen. */
     summary: z.string(),
     /** Only when the service can say what it will cost. */
-    estimate: z.object({ usd: z.number(), seconds: z.number().nullable() }).nullable(),
+    estimate: z
+      .object({
+        usd: z.number(),
+        seconds: z.number().nullable(),
+        /** The seconds are this computer's own time (a render), and nothing is paid. */
+        machine: z.boolean().optional(),
+      })
+      .nullable(),
   }),
   z.object({
     type: z.literal('tool.finished'),
@@ -118,8 +131,24 @@ export const RunEventSchema = z.discriminatedUnion('type', [
     changeIds: z.array(id),
     assetIds: z.array(id),
   }),
+  /**
+   * The call started a job (a render take); the run now waits for it with no model call open,
+   * and goes on by itself when the job settles.
+   */
+  z.object({
+    type: z.literal('tool.waiting'),
+    ...run,
+    toolCallId: id,
+    name: z.string(),
+    job: z.object({ kind: z.enum(JOB_KINDS), id }),
+  }),
   z.object({ type: z.literal('usage'), ...run, tokens: TokensSchema, costUsd: z.number() }),
+  /** An AI job's plan moved (a step started or finished). */
+  z.object({ type: z.literal('job.updated'), ...run, job: AiJobSchema }),
   z.object({ type: z.literal('run.finished'), ...run, run: RunSchema }),
 ])
 export type RunEvent = z.infer<typeof RunEventSchema>
 export type RunEventType = RunEvent['type']
+export const RUN_EVENT_TYPES = RunEventSchema.options.map(
+  (o) => o.shape.type.value,
+) as RunEventType[]

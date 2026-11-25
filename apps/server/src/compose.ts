@@ -15,7 +15,10 @@
  * Until a section is filled in, its commands answer 501 and `session.get` reports them absent.
  */
 import type { CreateAppOptions } from './app'
+import { type AssistantParts, createAssistant } from './assistant'
 import { createEngines, enginesConfigFromEnv } from './engines'
+import { createImageGen } from './imagegen'
+import { referenceServicesFromEnv } from './references'
 import type { Runtime } from './runtime'
 import type { Services } from './services'
 
@@ -25,10 +28,24 @@ export function servicesFromEnv(env: NodeJS.ProcessEnv, runtime: Runtime): Parti
     // ── Core engines: `geometry`, `production` (kernel worker pool), `renderQueue` and
     //    `renderEngine` (Blender). Local compute; Blender's absence only turns renders off.
     ...createEngines(runtime, enginesConfigFromEnv(env, runtime.config)),
+    // ── References: search over the keyless museum collections, and the safe capture of web
+    //    pictures. Always on: neither needs a key.
+    ...referenceServicesFromEnv(env),
   }
 }
 
 /** The options `main.ts` passes to `createApp`. */
 export function compose(env: NodeJS.ProcessEnv = process.env): CreateAppOptions {
-  return { services: (runtime) => servicesFromEnv(env, runtime) }
+  let assistant: AssistantParts | null = null
+  return {
+    services: (runtime) => {
+      // ── Assistant: Claude with the key from .env or Settings, AI; registered while a key exists.
+      assistant = createAssistant(runtime, { env })
+      // ── Image generation: the provider keys from .env or Settings, AI; `imageGen` is
+      //    registered while one exists. Claude (the assistant's key) writes and checks.
+      const images = createImageGen(runtime, { env })
+      return { ...servicesFromEnv(env, runtime), ...assistant.services, ...images.services }
+    },
+    routes: (app, _runtime, withCtx) => assistant?.routes(app, withCtx),
+  }
 }

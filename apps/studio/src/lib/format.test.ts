@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { carats, compact, grams, mm, num, plural, relativeTime, usd } from './format'
+import {
+  carats,
+  compact,
+  grams,
+  mm,
+  modelName,
+  num,
+  plural,
+  relativeTime,
+  unitFor,
+  usd,
+} from './format'
 
 /** The same formatter `relativeTime` uses, so the tests hold in any locale. */
 const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto', style: 'short' })
@@ -88,5 +99,19 @@ describe('money and large numbers', () => {
     expect(compact(12_345)).toBe(
       (12_345).toLocaleString(undefined, { notation: 'compact', maximumFractionDigits: 1 }),
     )
+  })
+})
+
+describe('labels people read', () => {
+  it('counts units in the plural', () => {
+    expect(unitFor(33, 'second')).toBe('seconds')
+    expect(unitFor(96.3, 'second')).toBe('seconds')
+    expect(unitFor(1, 'second')).toBe('second')
+    expect(unitFor(1200, 'tokens')).toBe('tokens')
+  })
+
+  it('names Claude models as people know them', () => {
+    expect(modelName('claude-opus-5-5')).toBe('Claude Opus 5.5')
+    expect(modelName('gemini-x')).toBe('gemini-x')
   })
 })

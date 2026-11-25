@@ -20,7 +20,8 @@ const BY_EXTENSION: Record<string, ImportKind> = {
   webp: 'image',
 }
 
-export const IMPORT_ACCEPT = Object.keys(BY_EXTENSION)
+// STEP is accepted by the picker only to say plainly that opening it is planned.
+export const IMPORT_ACCEPT = [...Object.keys(BY_EXTENSION), 'step', 'stp']
   .map((e) => `.${e}`)
   .join(',')
 

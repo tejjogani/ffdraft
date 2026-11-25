@@ -41,7 +41,7 @@ export const PIECE_TABS = [
 export const clientTools = {
   'viewport.capture': def({
     description:
-      'Look at a piece: images of its current CAD from up to six angles, plus the facts of the design. Use after edits to check your work visually. `clay` (default) shows form; `rendered` shows metal and stones; `technical` is a hidden-line drawing. `focusNodeIds` frames and highlights those features; `annotate` labels them. Without an open window the server answers with `technical` views.',
+      'Look at a piece: images of its current CAD from up to six angles, plus the facts of the design. Use after edits to check your work visually. `clay` (default) shows form; `rendered` shows metal and stones; `technical` is a hidden-line drawing. `focusNodeIds` frames and highlights those features; `annotate` labels them. When no Pavé window can show the piece, the server draws plain shaded clay views instead (no materials, labels or highlights), so you can still compare outlines.',
     kind: 'query',
     // The images are stored as assets, which needs write access.
     role: 'designer',
@@ -57,7 +57,7 @@ export const clientTools = {
     output: z.object({
       /** The design version the images show. */
       version: z.number().int(),
-      /** `studio` = a window's live viewport; `server` = the headless hidden-line fallback. */
+      /** `studio` = a window's live viewport; `server` = the headless shaded-clay fallback. */
       source: z.enum(['studio', 'server']),
       images: z.array(z.object({ view: ViewSchema, assetId: id })),
       summary: EvaluationSummarySchema,
