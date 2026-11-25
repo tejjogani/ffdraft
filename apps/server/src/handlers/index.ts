@@ -3,6 +3,7 @@ import { collections } from './collections'
 import { design } from './design'
 import { freeform } from './freeform'
 import { ideate } from './ideate'
+import { images } from './images'
 import { match } from './match'
 import { mesh3d } from './mesh3d'
 import { models } from './models'
@@ -23,6 +24,7 @@ export const handlers: Handlers = {
   ...pieces,
   ...design,
   ...ideate,
+  ...images,
   ...freeform,
   ...match,
   ...mesh3d,

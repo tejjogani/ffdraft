@@ -20,6 +20,7 @@
     "@hono/node-server": "2.1.11",
     "@pave/agent": "workspace:*",
     "@pave/canon": "workspace:*",
+    "@pave/ideation": "workspace:*",
     "@pave/kernel": "workspace:*",
     "@pave/match": "workspace:*",
     "@pave/production": "workspace:*",

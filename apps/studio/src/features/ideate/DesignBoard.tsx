@@ -46,7 +46,7 @@ import {
 } from 'react'
 import { assetUrl } from '../../lib/assets'
 import { useRpcMutation } from '../../lib/query'
-import { providerLabel, ProvenanceButton, RightsChip } from '../references/Provenance'
+import { ProvenanceButton, providerLabel, RightsChip } from '../references/Provenance'
 import { SketchPad } from '../references/SketchPad'
 import {
   addFiles,
@@ -59,6 +59,7 @@ import {
   useTakeToCad,
 } from './actions'
 import { BOARD_ACCEPT, canvasLayout, movedTo, takeToCadRefusal, urlsIn } from './board'
+import { GeneratePanel } from './GeneratePanel'
 import { ModelViewer } from './ModelViewer'
 import { SearchSheet } from './SearchSheet'
 
@@ -88,6 +89,7 @@ export function DesignBoard({
   const [sketching, setSketching] = useState(false)
   const [noting, setNoting] = useState(false)
   const [linking, setLinking] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const [busy, setBusy] = useState(false)
   const [over, setOver] = useState(false)
   const files = useRef<HTMLInputElement>(null)
@@ -172,6 +174,15 @@ export function DesignBoard({
             <Button size="sm" variant="secondary" icon={Search} onClick={() => setSearching(true)}>
               Search references
             </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={Sparkles}
+              aria-pressed={generating}
+              onClick={() => setGenerating((g) => !g)}
+            >
+              Generate concepts
+            </Button>
             <Menu
               trigger={
                 <Button size="sm" variant="ghost" icon={Plus} disabled={busy}>
@@ -216,8 +227,8 @@ export function DesignBoard({
               </MenuItem>
               <MenuItem
                 icon={Sparkles}
-                disabled
-                description="Four concepts from your references need an image model"
+                description="Four concepts from your words and references"
+                onClick={() => setGenerating(true)}
               >
                 Generate concepts
               </MenuItem>
@@ -249,6 +260,15 @@ export function DesignBoard({
           }}
         />
       </div>
+
+      {generating && !readOnly && (
+        <GeneratePanel
+          board={board}
+          references={references}
+          onClose={() => setGenerating(false)}
+          onTakeToCad={(r) => void takeToCad(board, r)}
+        />
+      )}
 
       {references.length === 0 ? (
         <EmptyBoard
@@ -428,7 +448,13 @@ function Tile({
             {r.title || (r.type === 'note' ? 'Note' : 'Untitled')}
           </p>
           <p className="mt-0.5 flex items-center gap-1.5 text-3xs text-fg-subtle">
+            {r.type === 'generated' && (
+              <Sparkles className="size-3 shrink-0 text-ai" aria-label="Generated" />
+            )}
             {r.source && <span className="truncate">{providerLabel(r.source.provider)}</span>}
+            {r.generation?.costUsd != null && (
+              <span className="font-mono tabular">${r.generation.costUsd.toFixed(3)}</span>
+            )}
             <RightsChip rights={r.rights} />
           </p>
         </div>

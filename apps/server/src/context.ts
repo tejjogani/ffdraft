@@ -1,10 +1,13 @@
+import type { ModelClient } from '@pave/agent'
 import type {
   Actor,
+  AssistantModelId,
   CommandInput,
   CommandName,
   CommandOutput,
   PlanName,
   Role,
+  Tokens,
   User,
 } from '@pave/schema'
 import type { BlobStore } from './assets/blob-store'
@@ -51,6 +54,23 @@ export interface Ctx {
    * (a fit, a render on the server) passes it on; most commands are short and ignore it.
    */
   readonly signal?: AbortSignal
+  /**
+   * Inside an assistant run: the run's own Claude client and tier, for commands that make a
+   * separate Claude call (an image brief, the check of generated images), so the call is billed
+   * to the run. Outside a run, those commands use the organisation's default tier.
+   */
+  readonly claude?: ClaudeCall
+}
+
+/** A Claude client a command may use for a structured call, and where its spend goes. */
+export interface ClaudeCall {
+  readonly client: ModelClient
+  readonly model: AssistantModelId
+  /** Ledger key prefix: each call appends its own suffix, so a retry is metered once. */
+  readonly key: string
+  readonly runId: string | null
+  /** Adds a call's tokens and cost to the run's totals (a no-op outside a run). */
+  spent(tokens: Tokens, costUsd: number): Promise<void>
 }
 
 export type Execute = (name: CommandName, input: unknown, ctx: Ctx) => Promise<unknown>

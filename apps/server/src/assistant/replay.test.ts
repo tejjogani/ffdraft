@@ -29,6 +29,7 @@ import {
 import type { RenderJob, Run } from '@pave/schema'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { putAsset } from '../assets/assets'
 import type { JobHandle, RenderJobPatch, ServiceContext } from '../services'
 import { BOOT_TIMEOUT, type Client, client } from '../test/harness'
 import { type AssistantServer, assistantServer, settled } from './testing'
@@ -116,6 +117,8 @@ beforeAll(async () => {
       PAVE_ASSISTANT_MODEL_STANDARD: undefined,
     },
     source,
+    // Concept images: the fake provider stands in for the live OpenAI images of journey h.
+    images: { env: { PAVE_IMAGE_GEN: 'fake' } },
   })
   api = client(s.server)
   s.server.runtime.services.register('renderQueue', new InstantQueue().service as never)
@@ -451,5 +454,77 @@ describe('the recorded journeys replay through the real loop', () => {
       }
       return [state.piece!]
     })
+  }, 600_000)
+
+  it('h. concept images: a brief from two board pictures, four checked images, a refusal', async () => {
+    const want = load<{
+      brief: Record<string, unknown>
+      generate: { kept: number; refused: unknown[]; claudeUsd: number; decisions: string[] }
+      refusal: Record<string, unknown>
+    }>('h-imagegen.images.json')
+    let got: Record<string, unknown> = {}
+    await replay('h-imagegen', async () => {
+      const piece = await api.call('pieces.create', { kind: 'pendant', title: 'Trophy pendant' })
+      const board = await api.call('boards.forPiece', { pieceId: piece.id })
+      const ctx = await s.server.runtime.context(s.server.runtime.local!)
+      const picture = async (name: string, color: string) =>
+        putAsset(ctx, {
+          bytes: await sharp({ create: { width: 96, height: 96, channels: 3, background: color } })
+            .png()
+            .toBuffer(),
+          name,
+        })
+      const [a, b] = await api.call('references.save', {
+        boardId: board.id,
+        items: [
+          { assetId: (await picture('trophy.png', '#c9a13b')).id, title: 'The trophy' },
+          { assetId: (await picture('pendant.png', '#b8902a')).id, title: 'A pendant I like' },
+        ],
+      })
+      const brief = await api.call('references.brief', {
+        boardId: board.id,
+        request: 'This trophy as a pendant, in the style of this pendant.',
+        referenceIds: [a!.id, b!.id],
+        roles: [
+          { id: a!.id, role: 'subject' },
+          { id: b!.id, role: 'style' },
+        ],
+      })
+      const gen = await api.call('references.generate', { briefId: brief.id, count: 4 })
+      const refusal = await api.call('references.brief', {
+        boardId: board.id,
+        request:
+          'A pendant with a portrait of Taylor Swift engraved in the centre, like the pendant on the board.',
+        referenceIds: [b!.id],
+        roles: [{ id: b!.id, role: 'style' }],
+      })
+      got = {
+        brief: {
+          verdict: brief.verdict,
+          category: brief.category,
+          prompt: brief.prompt,
+          understanding: brief.understanding,
+          piece: brief.piece,
+          claudeUsd: brief.claudeUsd,
+        },
+        generate: {
+          kept: gen.references.length,
+          refused: gen.refused,
+          claudeUsd: gen.cost.claudeUsd,
+          decisions: gen.brief.decisions.map((d) => `${d.stage}:${d.index}:${d.verdict}`),
+        },
+        refusal: {
+          verdict: refusal.verdict,
+          category: refusal.category,
+          reason: refusal.reason,
+          prompt: refusal.prompt,
+          claudeUsd: refusal.claudeUsd,
+        },
+      }
+      return [piece.id]
+    })
+    expect(got.brief).toEqual(want.brief)
+    expect(got.generate).toEqual(want.generate)
+    expect(got.refusal).toEqual(want.refusal)
   }, 600_000)
 })

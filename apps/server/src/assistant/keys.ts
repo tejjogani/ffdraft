@@ -30,21 +30,30 @@ export interface KeyInfo {
 
 const purpose = (orgId: string) => `assistant-key:${orgId}`
 
-function seal(runtime: Runtime, orgId: string, plain: string): string {
+/**
+ * Seals a secret for one organisation under a key derived for `purposeOf` (each kind of key has
+ * its own). Exported for the image providers' keys, which follow the same rules.
+ */
+export function seal(runtime: Runtime, orgId: string, plain: string, purposeOf = purpose): string {
   const iv = randomBytes(12)
-  const cipher = createCipheriv('aes-256-gcm', runtime.deriveKey(purpose(orgId)), iv)
+  const cipher = createCipheriv('aes-256-gcm', runtime.deriveKey(purposeOf(orgId)), iv)
   // The org id is bound in as associated data, so a sealed key moved to another org fails to open.
   cipher.setAAD(Buffer.from(orgId))
   const body = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()])
   return Buffer.concat([iv, cipher.getAuthTag(), body]).toString('base64')
 }
 
-function unseal(runtime: Runtime, orgId: string, sealed: string): string | null {
+export function unseal(
+  runtime: Runtime,
+  orgId: string,
+  sealed: string,
+  purposeOf = purpose,
+): string | null {
   try {
     const raw = Buffer.from(sealed, 'base64')
     const decipher = createDecipheriv(
       'aes-256-gcm',
-      runtime.deriveKey(purpose(orgId)),
+      runtime.deriveKey(purposeOf(orgId)),
       raw.subarray(0, 12),
     )
     decipher.setAAD(Buffer.from(orgId))

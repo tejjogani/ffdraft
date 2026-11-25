@@ -14,8 +14,13 @@ import type {
   CommandParsedInput,
   Design,
   Feedback,
+  GuardrailDecision,
+  ImageBrief,
+  ImageProviderId,
+  ImageQuality,
   JOB_STATUS,
   JobStage,
+  KeyedImageProvider,
   METERS,
   MeshJob,
   Message,
@@ -74,6 +79,15 @@ export const orgSettings = pgTable('org_settings', {
   monthlyBudgetUsd: doublePrecision('monthly_budget_usd'),
   /** The organisation's plan; null = the default (Free). Set by billing, not by members. */
   plan: text('plan').$type<PlanName>(),
+  /** The image provider boards use unless one picks another; null = the first with a key. */
+  imageProvider: text('image_provider').$type<ImageProviderId>(),
+  /** How much to spend per generated image; null = standard. */
+  imageQuality: text('image_quality').$type<ImageQuality>(),
+  /** Model per image provider; a missing or null entry = that provider's default model. */
+  imageModels: jsonb('image_models')
+    .$type<Partial<Record<KeyedImageProvider, string | null>>>()
+    .notNull()
+    .default({}),
   /** Set once the welcome workspace has been created, so deleting it does not bring it back. */
   welcomeSeededAt: timestamp('welcome_seeded_at', { withTimezone: true }),
   updatedAt: at('updated_at'),
@@ -93,6 +107,24 @@ export const assistantKey = pgTable('assistant_key', {
   updatedBy: text('updated_by'),
   updatedAt: at('updated_at'),
 })
+
+/**
+ * Image providers' API keys (Gemini, OpenAI, Higgsfield), sealed like the Claude key: one row per
+ * organisation and provider.
+ */
+export const imageKey = pgTable(
+  'image_key',
+  {
+    orgId: orgId(),
+    provider: text('provider').$type<KeyedImageProvider>().notNull(),
+    /** base64(iv ‖ tag ‖ ciphertext). */
+    sealed: text('sealed').notNull(),
+    last4: text('last4').notNull(),
+    updatedBy: text('updated_by'),
+    updatedAt: at('updated_at'),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.provider] })],
+)
 
 export const collection = pgTable(
   'collection',
@@ -239,6 +271,8 @@ export const board = pgTable(
     title: text('title').notNull(),
     description: text('description').notNull().default(''),
     icon: text('icon'),
+    /** The image provider this board generates with; null = the organisation's default. */
+    imageProvider: text('image_provider').$type<ImageProviderId>(),
     createdAt: at('created_at'),
     updatedAt: at('updated_at'),
   },
@@ -277,6 +311,47 @@ export const reference = pgTable(
     createdAt: at('created_at'),
   },
   (t) => [index('reference_board_idx').on(t.boardId, t.position)],
+)
+
+/**
+ * A generation request as Claude understood it: the guardrail's verdict, the enhanced prompt, and
+ * every decision since (the check of the request, each image's check, the provider's own filter).
+ * It is the trace of what was allowed and refused; refused images themselves are never stored.
+ */
+export const imageBrief = pgTable(
+  'image_brief',
+  {
+    id: text('id').primaryKey(),
+    orgId: orgId(),
+    boardId: text('board_id')
+      .notNull()
+      .references(() => board.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull(),
+    /** The assistant run that asked, when one did. */
+    runId: text('run_id'),
+    request: text('request').notNull(),
+    mode: text('mode').$type<ImageBrief['mode']>().notNull(),
+    parentId: text('parent_id'),
+    referenceIds: jsonb('reference_ids').$type<string[]>().notNull().default([]),
+    roles: jsonb('roles').$type<{ id: string; role: string }[]>().notNull().default([]),
+    verdict: text('verdict').$type<ImageBrief['verdict']>().notNull(),
+    category: text('category').$type<ImageBrief['category']>(),
+    reason: text('reason').notNull(),
+    rightsSubject: text('rights_subject'),
+    attestation: jsonb('attestation').$type<ImageBrief['attestation']>(),
+    understanding: text('understanding').notNull(),
+    piece: jsonb('piece').$type<ImageBrief['piece']>().notNull(),
+    prompt: text('prompt').notNull(),
+    aspect: text('aspect').$type<ImageBrief['aspect']>().notNull(),
+    provider: text('provider').$type<ImageProviderId>().notNull(),
+    model: text('model').notNull(),
+    claudeModel: text('claude_model').notNull(),
+    claudeMicros: bigint('claude_micros', { mode: 'number' }).notNull().default(0),
+    decisions: jsonb('decisions').$type<GuardrailDecision[]>().notNull().default([]),
+    generations: integer('generations').notNull().default(0),
+    createdAt: at('created_at'),
+  },
+  (t) => [index('image_brief_board_idx').on(t.boardId, t.createdAt)],
 )
 
 /** Saved shots: per piece, or the org's house shots when `piece_id` is null. */

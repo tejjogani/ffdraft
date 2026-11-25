@@ -13,6 +13,17 @@ import { ChangeSchema, DesignSchema, OpSchema, PIECE_KINDS } from '../design/des
 import { DirectionSchema, MIX_PARTS } from '../design/directions'
 import { PhotoReadSchema } from '../design/photo-read'
 import { PieceSpecSchema } from '../design/spec'
+import {
+  BRIEF_MODES,
+  GENERATION_COUNT,
+  GenerationCostSchema,
+  GUARDRAIL_CATEGORIES,
+  IMAGE_PROVIDERS,
+  IMAGE_QUALITIES,
+  ImageBriefSchema,
+  ImageSetupSchema,
+  KEYED_IMAGE_PROVIDERS,
+} from '../images/imagegen'
 import { PlanStatusSchema } from '../plans/plans'
 import {
   ASSISTANT_MODELS,
@@ -24,8 +35,8 @@ import {
   CanvasPlacementSchema,
   CapabilitiesSchema,
   CollectionSchema,
-  FolderTotalSchema,
   FeedbackSchema,
+  FolderTotalSchema,
   GENERATION_ROLES,
   GenerationInputSchema,
   IMAGE_ASPECTS,
@@ -43,8 +54,8 @@ import {
   PieceOriginInputSchema,
   PieceSchema,
   PieceSummarySchema,
-  ProjectCostSchema,
   ProductionPackageSchema,
+  ProjectCostSchema,
   QuickAnswersSchema,
   QuickQuestionSchema,
   ReferenceSchema,
@@ -210,20 +221,25 @@ const newModelCard = modelCard.extend({
   handLengthMm: modelCard.shape.handLengthMm.default(null),
 })
 
-/** An image generation request, as estimated and as generated onto a board. */
-const generateRequest = z.object({
-  prompt: z.string().min(3).max(4000),
+/** How a generation request is checked and enhanced before any image is made (`references.brief`). */
+const briefRequest = z.object({
+  boardId: id,
+  /** What the designer wants, in their words ("this trophy as a pendant, in the style of this one"). */
+  request: z.string().trim().min(2).max(2000),
+  /** Pictures on the board to work from, in the order the request names them. */
   referenceIds: z.array(id).max(8).default([]),
-  count: z.number().int().min(1).max(4).default(2),
-  /** What each reference is for ("image 1 = silhouette"); ids must be among `referenceIds`. */
+  /** What each reference is for; ids must be among `referenceIds`. */
   roles: z
     .array(z.object({ id, role: z.enum(GENERATION_ROLES) }))
     .max(8)
     .default([]),
+  /** new: fresh images; vary: a variation of `parentId`; refine: `parentId` changed as asked. */
+  mode: z.enum(BRIEF_MODES).default('new'),
+  /** The generated image to vary or refine. */
+  parentId: id.optional(),
   aspect: z.enum(IMAGE_ASPECTS).default('1:1'),
-  style: z.enum(['photo', 'sketch', 'technical', 'render']).default('photo'),
-  /** Repeat a result exactly, where the provider supports seeds. */
-  seed: z.number().int().min(0).optional(),
+  /** Another provider than the board's for this request. */
+  provider: z.enum(IMAGE_PROVIDERS).optional(),
 })
 
 const portraitViews = z.array(z.enum(['face', 'hands', 'neck', 'ear', 'body'])).min(1)
@@ -676,6 +692,8 @@ export const commands = {
       description: z.string().max(2000).optional(),
       icon: z.string().max(8).nullable().optional(),
       pieceId: id.nullable().optional(),
+      /** The image provider this board generates with; null = the organisation's default. */
+      imageProvider: z.enum(IMAGE_PROVIDERS).nullable().optional(),
     }),
     output: BoardSchema,
   }),
@@ -892,19 +910,68 @@ export const commands = {
   }),
   'references.estimate': def({
     description:
-      'What references.generate would cost for this request and how long it takes, before asking for confirmation.',
+      'What generating images on a board would cost with its image provider (the provider’s price plus Claude’s check of each image), and about how long it takes.',
     kind: 'query',
     tool: true,
-    input: generateRequest,
-    output: EstimateSchema,
+    input: z.object({
+      boardId: id,
+      count: z.number().int().min(1).max(GENERATION_COUNT).default(GENERATION_COUNT),
+      provider: z.enum(IMAGE_PROVIDERS).optional(),
+    }),
+    output: EstimateSchema.extend({ count: z.number().int(), perImageUsd: z.number() }),
+  }),
+  'references.brief': def({
+    description:
+      'Before generating concept images: Claude reads the designer’s request and the board pictures it names, checks it against Pavé’s rules (no nudity, minors, a real person’s likeness, hate or violence; another company’s trademark or design needs the designer’s attestation), and writes the enhanced jewelry prompt (piece, metal, stones and cut, proportions, view, light, a clean background). Returns the brief to show before references.generate. Costs a little.',
+    kind: 'mutation',
+    tool: true,
+    input: briefRequest,
+    output: ImageBriefSchema,
+  }),
+  'references.attestBrief': def({
+    description:
+      'The designer attests that they own, have licensed or have permission to use the brand or design a brief names, which lets it generate. People only: never a tool.',
+    kind: 'mutation',
+    input: z.object({ id, rights: z.enum(ATTESTATION_RIGHTS) }),
+    output: ImageBriefSchema,
   }),
   'references.generate': def({
     description:
-      'Generate concept images from a prompt, optionally conditioned on references from a board. New images are saved to the board with their lineage. Costs money per image.',
+      'Generate concept images (four unless asked for fewer) from a brief made by references.brief, onto its board. Each image is checked by Claude before it is kept; refused images are never stored. Pass `prompt` only to change the brief’s enhanced prompt (it is checked again). Each image keeps its prompt, references and parents. Costs money per image.',
     kind: 'mutation',
     tool: { confirm: true },
-    input: generateRequest.extend({ boardId: id }),
-    output: z.array(ReferenceSchema),
+    input: z.object({
+      briefId: id,
+      /** The enhanced prompt as the designer edited it; checked again when it differs. */
+      prompt: z.string().trim().min(3).max(4000).optional(),
+      count: z.number().int().min(1).max(GENERATION_COUNT).default(GENERATION_COUNT),
+      /** Repeat a result exactly, where the provider supports seeds. */
+      seed: z.number().int().min(0).optional(),
+    }),
+    output: z.object({
+      brief: ImageBriefSchema,
+      /** The images kept, in the order the provider returned them. */
+      references: z.array(ReferenceSchema),
+      /** Images the guardrail (or the provider’s own filter) refused; never stored. */
+      refused: z.array(
+        z.object({
+          index: z.number().int(),
+          category: z.enum(GUARDRAIL_CATEGORIES),
+          reason: z.string(),
+        }),
+      ),
+      provider: z.enum(IMAGE_PROVIDERS),
+      model: z.string(),
+      cost: GenerationCostSchema,
+      notes: z.array(z.string()),
+    }),
+  }),
+  'references.briefs': def({
+    description:
+      'The image briefs of a board, newest first: each request, its guardrail verdict and decisions, and the enhanced prompt.',
+    kind: 'query',
+    input: z.object({ boardId: id, limit: z.number().int().min(1).max(50).default(20) }),
+    output: z.array(ImageBriefSchema),
   }),
   'references.read': def({
     description:
@@ -1647,6 +1714,64 @@ export const commands = {
     role: 'admin',
     input: none,
     output: AssistantSetupSchema,
+  }),
+
+  'images.setup.get': def({
+    description:
+      'How image generation is set up: each provider, where its key comes from (never the key), its models and prices, the default provider and quality.',
+    kind: 'query',
+    input: none,
+    output: ImageSetupSchema,
+  }),
+  'images.key.set': def({
+    description:
+      'Save an image provider’s API key on the server (encrypted). It takes effect at once. Refused while the provider’s key is set in apps/server/.env.',
+    kind: 'mutation',
+    role: 'admin',
+    secret: ['apiKey'],
+    input: z.object({
+      provider: z.enum(KEYED_IMAGE_PROVIDERS),
+      apiKey: z.string().trim().min(8).max(500),
+    }),
+    output: ImageSetupSchema,
+  }),
+  'images.key.test': def({
+    description:
+      'Check an image provider’s key with a free request to the provider (its model list): the key given, or else the one in use.',
+    kind: 'query',
+    role: 'admin',
+    secret: ['apiKey'],
+    input: z.object({
+      provider: z.enum(KEYED_IMAGE_PROVIDERS),
+      apiKey: z.string().trim().min(8).max(500).optional(),
+    }),
+    output: z.object({
+      ok: z.boolean(),
+      code: z.enum(KEY_CHECK_CODES).nullable(),
+      message: z.string(),
+    }),
+  }),
+  'images.key.remove': def({
+    description: 'Remove an image provider’s saved API key.',
+    kind: 'mutation',
+    role: 'admin',
+    input: z.object({ provider: z.enum(KEYED_IMAGE_PROVIDERS) }),
+    output: ImageSetupSchema,
+  }),
+  'images.settings.update': def({
+    description:
+      'Choose the default image provider, the quality (draft is cheapest) and each provider’s model.',
+    kind: 'mutation',
+    role: 'admin',
+    input: z.object({
+      defaultProvider: z.enum(IMAGE_PROVIDERS).nullable().optional(),
+      quality: z.enum(IMAGE_QUALITIES).optional(),
+      /** Only the providers given change; null puts one back on its default model. */
+      models: z
+        .partialRecord(z.enum(KEYED_IMAGE_PROVIDERS), z.string().max(80).nullable())
+        .optional(),
+    }),
+    output: ImageSetupSchema,
   }),
 
   // ── Usage ─────────────────────────────────────────────────────────────────────────────────

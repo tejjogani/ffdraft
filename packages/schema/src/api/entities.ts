@@ -8,6 +8,7 @@ import { DirectionSchema } from '../design/directions'
 import { PieceSpecSchema } from '../design/spec'
 import { GEM_MATERIAL_IDS } from '../domain/gems'
 import { FINISH_IDS, METAL_IDS, PLATING_IDS } from '../domain/metals'
+import { IMAGE_PROVIDERS } from '../images/imagegen'
 
 const id = z.string()
 const iso = z.string()
@@ -226,6 +227,8 @@ export const BoardSchema = z.object({
   pinsFor: id.nullable(),
   coverAssetIds: z.array(id),
   referenceCount: z.number(),
+  /** The image provider this board generates with; null = the organisation's default. */
+  imageProvider: z.enum(IMAGE_PROVIDERS).nullable(),
   createdAt: iso,
   updatedAt: iso,
 })
@@ -248,6 +251,7 @@ export const RIGHTS_SENTENCE: Record<Rights, string> = {
 
 /** What a reference is for when it conditions an image generation. */
 export const GENERATION_ROLES = ['subject', 'style', 'identity', 'layout', 'product'] as const
+export type GenerationRole = (typeof GENERATION_ROLES)[number]
 
 /** Where a reference sits on the board's free canvas (board units; `z` is the stacking order). */
 export const CanvasPlacementSchema = z.object({
@@ -328,6 +332,13 @@ export const ReferenceSchema = z.object({
       prompt: z.string(),
       model: z.string(),
       seed: z.number().int().nullable(),
+      /** What the person wrote, before Claude enhanced it into `prompt` (newer images only). */
+      request: z.string().nullable().optional(),
+      /** The brief the image was generated from, with its guardrail decisions. */
+      briefId: id.nullable().optional(),
+      provider: z.string().nullable().optional(),
+      /** What this one image cost at the provider (USD). */
+      costUsd: z.number().nullable().optional(),
       /** Walkable edges to the parents (which may since have been deleted). */
       parentIds: z.array(id),
       /** Snapshot of each parent at generation time, for credit lines. */
@@ -815,6 +826,7 @@ export const BrandModelSchema = z.object({
 export type BrandModel = z.infer<typeof BrandModelSchema>
 
 export const IMAGE_ASPECTS = ['1:1', '4:5', '3:2', '16:9'] as const
+export type ImageAspect = (typeof IMAGE_ASPECTS)[number]
 /** The on-model pipeline: render CAD references → generate → verify against the CAD → label. */
 export const SHOT_STAGES = ['references', 'generate', 'verify', 'label'] as const
 

@@ -41,6 +41,9 @@ importers:
       '@pave/canon':
         specifier: workspace:*
         version: link:../../packages/canon
+      '@pave/ideation':
+        specifier: workspace:*
+        version: link:../../packages/ideation
       '@pave/kernel':
         specifier: workspace:*
         version: link:../../packages/kernel
@@ -200,6 +203,12 @@ importers:
       '@pave/kernel':
         specifier: workspace:*
         version: link:../kernel
+
+  packages/ideation:
+    dependencies:
+      '@pave/schema':
+        specifier: workspace:*
+        version: link:../schema
 
   packages/kernel:
     dependencies:

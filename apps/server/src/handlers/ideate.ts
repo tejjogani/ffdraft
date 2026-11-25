@@ -12,10 +12,10 @@ import * as t from '../db/schema'
 import { badRequest, conflict, forbidden, NotConfiguredError, notFound } from '../errors'
 import { designBoardFor } from '../ideas'
 import { createId } from '../ids'
+import { attestBrief, boardBriefs, estimate, generate, writeBrief } from '../imagegen/pipeline'
 import { ensure, ensureAll, getBoard, getPiece, getReference } from '../lookups'
 import { ensurePinBoard, pinBoardOf } from '../references/pins'
 import { serviceContext } from '../service-context'
-import type { ImageGenRequest } from '../services'
 import { assertBudget } from '../usage'
 import { toPieceSummary } from './pieces'
 import type { HandlerGroup } from './types'
@@ -95,6 +95,7 @@ async function toBoards(ctx: Ctx, rows: BoardRow[]): Promise<Board[]> {
       .slice(0, COVER_COUNT)
       .map((r) => r.assetId!),
     referenceCount: countOf.get(b.id) ?? 0,
+    imageProvider: b.imageProvider ?? null,
     createdAt: b.createdAt.toISOString(),
     updatedAt: b.updatedAt.toISOString(),
   }))
@@ -356,31 +357,6 @@ const cosine = (a: number[], b: number[]) => {
     nb += b[i]! ** 2
   }
   return na && nb ? dot / Math.sqrt(na * nb) : 0
-}
-
-/**
- * The request a generation provider receives: the references, checked to belong to the org and
- * to allow generative use, and roles only for those references.
- */
-async function generationRequest(
-  ctx: Ctx,
-  { referenceIds, ...input }: CommandParsedInput<'references.estimate'>,
-): Promise<ImageGenRequest> {
-  const refs = referenceIds.length
-    ? await ctx.repo.references.many({ where: inArray(t.reference.id, referenceIds) })
-    : []
-  const missing = referenceIds.filter((id) => !refs.some((r) => r.id === id))
-  if (missing.length) throw notFound('Reference', missing[0])
-  const stray = input.roles.find((r) => !referenceIds.includes(r.id))
-  if (stray) throw badRequest(`A role was given for "${stray.id}", which is not among referenceIds`)
-  const viewOnly = refs.filter((r) => r.rights === 'viewOnly')
-  if (viewOnly.length)
-    throw badRequest(
-      `These references are view-only and cannot be sent to a generative model: ${viewOnly.map((r) => r.title || r.id).join(', ')}`,
-    )
-  // In the order asked for, so "image 1" in a prompt is the first id given.
-  const references = referenceIds.map((id) => toReference(refs.find((r) => r.id === id)!))
-  return { ...input, references }
 }
 
 export const ideate: HandlerGroup<'boards' | 'references'> = {
@@ -693,61 +669,9 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
     return { ok: true }
   },
 
-  'references.estimate': async (ctx, input) => {
-    const request = await generationRequest(ctx, input)
-    return ctx.services.get('imageGen').estimate(request, serviceContext(ctx))
-  },
-
-  'references.generate': async (ctx, { boardId, ...input }) => {
-    const board = await getBoard(ctx, boardId)
-    const request = await generationRequest(ctx, input)
-    const imageGen = ctx.services.get('imageGen')
-    const base = serviceContext(ctx)
-    // A generation on a piece's design board is Design work on that project (the stage comes
-    // from the image meter; the piece from the board).
-    const sctx = {
-      ...base,
-      recordUsage: (event: Parameters<typeof base.recordUsage>[0]) =>
-        base.recordUsage({ pieceId: board.pieceId ?? board.pinsFor, stage: 'design', ...event }),
-    }
-    // The figure the person confirmed is the one checked against the budget.
-    await assertBudget(ctx, (await imageGen.estimate(request, sctx)).usd)
-
-    const { referenceIds } = input
-    const parents = request.references
-    const result = await imageGen.generate(request, sctx)
-    // Credit lines survive the parents being deleted.
-    const inputs: GenerationInput[] = parents.map((p) => ({
-      id: p.id,
-      role: input.roles.find((r) => r.id === p.id)?.role ?? null,
-      title: p.title,
-      provider: p.source?.provider ?? null,
-      url: p.source?.url ?? null,
-      credit: p.source?.credit ?? null,
-      license: p.source?.license ?? null,
-      rights: p.rights,
-    }))
-    const items: NewReference[] = []
-    for (const [i, image] of result.images.entries()) {
-      const asset = await putAsset(ctx, { ...image, kind: 'image' })
-      items.push({
-        type: 'generated',
-        assetId: asset.id,
-        title: `${input.prompt.slice(0, 80)} (${i + 1})`,
-        source: source({ provider: result.model, url: null, capturedAt: asset.createdAt }),
-        rights: 'own',
-        generation: {
-          prompt: input.prompt,
-          model: result.model,
-          seed: result.seed ?? input.seed ?? null,
-          parentIds: referenceIds,
-          inputs,
-          runId: actorRunId(ctx.actor),
-        },
-        width: asset.width,
-        height: asset.height,
-      })
-    }
-    return insertReferences(ctx, boardId, items)
-  },
+  'references.estimate': (ctx, input) => estimate(ctx, input),
+  'references.brief': (ctx, input) => writeBrief(ctx, input),
+  'references.attestBrief': (ctx, input) => attestBrief(ctx, input),
+  'references.briefs': (ctx, { boardId, limit }) => boardBriefs(ctx, boardId, limit),
+  'references.generate': (ctx, input) => generate(ctx, input),
 }

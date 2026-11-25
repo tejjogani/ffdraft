@@ -125,6 +125,13 @@ export class Runtime {
     return rows.map((r) => r.orgId)
   }
 
+  /** Organisations that saved an image provider's key, with the provider — system scope, for boot. */
+  async imageKeyOrgs(): Promise<{ orgId: string; provider: string }[]> {
+    return this.#database.db
+      .select({ orgId: t.imageKey.orgId, provider: t.imageKey.provider })
+      .from(t.imageKey)
+  }
+
   /** The context for an HTTP request: the local identity, or the Better Auth session's user. */
   async contextForRequest(headers: Headers): Promise<Ctx> {
     if (this.local) return this.context(this.local)

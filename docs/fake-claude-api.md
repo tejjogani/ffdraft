@@ -75,7 +75,9 @@ mix and a pick (a); the CAD job, paused by a hand edit, resumed and accepted (b)
 question about a selected stone (c); a photo to a design, with the structured photo read (d); the
 Render job with real Blender takes, a retake and a rose-gold variant (e); the key test and save
 (f, outcome only: the Models API carries no conversation); one thread on all three tiers with Light
-on Haiku (g). A replay plays the designer's side through the API and Claude's from the recording;
+on Haiku (g); concept images: a brief from two board pictures, four images checked one by one and
+a refused request, recorded with live OpenAI images and replayed with the fake image provider (h,
+with the expected verdicts in `h-imagegen.images.json`). A replay plays the designer's side through the API and Claude's from the recording;
 it must send the same request shapes, have the fake refuse nothing, and end with the recorded
 outcome. Tool-result text that may differ (timings, the capture's source, take facts from the
 stand-in render engine) is listed in `replay.test.ts`.

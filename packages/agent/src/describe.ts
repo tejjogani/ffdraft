@@ -130,6 +130,10 @@ export const TOOL_CHIPS = {
     running: 'Pricing image generation',
     done: 'Priced image generation',
   },
+  'references.brief': {
+    running: 'Reading the request and checking it',
+    done: 'Wrote the image brief',
+  },
   'references.generate': {
     running: 'Generating images',
     done: (i) => `Generated ${plural(i.count, 'image')}`,

@@ -85,6 +85,7 @@ export const QUERY_NAMES = [
   'references.lineage',
   'references.similar',
   'references.estimate',
+  'references.briefs',
   'mesh3d.estimate',
   'mesh3d.list',
   'mesh3d.get',
@@ -110,6 +111,8 @@ export const QUERY_NAMES = [
   'usage.summary',
   'assistant.setup.get',
   'assistant.key.test',
+  'images.setup.get',
+  'images.key.test',
   'plan.get',
 ] as const satisfies readonly CommandName[]
 

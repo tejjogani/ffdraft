@@ -62,6 +62,8 @@ export interface TurnContext {
   canon: string | null
   /** The plan's allowances left this month (`allowanceLine`), so a job plans within them. */
   plan?: string | null
+  /** Whether concept images can be generated, with which provider and at what price per image. */
+  images?: string | null
   /** The open piece's pinned references, in the designer's order. */
   pins?: ContextPin[]
 }
@@ -159,6 +161,7 @@ export function renderContext(c: TurnContext): string {
       ...c.designerEdits.map((e) => `- v${e.seq} ${e.label} (${e.by})`),
     )
   if (c.plan) out.push(line('Plan', c.plan))
+  if (c.images) out.push(line('Image generation', c.images))
   if (c.canon) out.push('', c.canon)
   return out.join('\n')
 }

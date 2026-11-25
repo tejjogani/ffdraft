@@ -24,6 +24,7 @@
  *    run to its service's `resume` (render, image-to-3D, on-model, assistant). A job whose
  *    service cannot resume it is failed as interrupted; browser renders are left to their window.
  */
+import type { ImageProvider } from '@pave/ideation'
 import type {
   Actor,
   Asset,
@@ -36,8 +37,11 @@ import type {
   EvaluationSummary,
   FinishId,
   GemMaterialId,
+  ImageProviderId,
+  ImageQuality,
   JobKind,
   JobStatus,
+  KeyedImageProvider,
   MeshJob,
   MetalId,
   ModelShot,
@@ -54,7 +58,7 @@ import type {
   View,
 } from '@pave/schema'
 import type { NewAsset } from './assets/assets'
-import type { Invoke } from './context'
+import type { ClaudeCall, Invoke } from './context'
 import type { PhotoFitResult, PhotoFitTask, PictureShot } from './engines/kernel/protocol'
 import { NotConfiguredError } from './errors'
 import type { NewUsage } from './usage'
@@ -223,24 +227,59 @@ export interface SearchService extends Service {
   ): Promise<SearchResult | null>
 }
 
-export type ImageGenRequest = Omit<CommandParsedInput<'references.estimate'>, 'referenceIds'> & {
-  references: Reference[]
+/** The provider, model, quality and key one generation uses. The key goes to the adapter only. */
+export interface ResolvedImageProvider {
+  provider: ImageProvider
+  model: string
+  quality: ImageQuality
+  apiKey: string
 }
 
+/**
+ * Image generation on the design board, over the provider family in `packages/ideation`.
+ * Registered while some organisation has a provider key (or the test provider stands in); the
+ * pipeline around it (Claude's brief and check, storing, metering) is `src/imagegen/pipeline.ts`.
+ */
 export interface ImageGenService extends Service {
+  /** Providers this organisation can generate with now, in Settings order. */
+  available(orgId: string): ImageProviderId[]
   /**
-   * What `generate` would cost for this request (`references.estimate`); the same figure is
-   * checked against the org's budget before generating.
+   * The provider a request uses (`want`, else the organisation's default), with its model,
+   * quality and key; {@link NotConfiguredError} without a usable key.
    */
-  estimate(request: ImageGenRequest, sctx: ServiceContext): Promise<Estimate>
-  /**
-   * `references` are already filtered to items whose rights allow generative use; read their
-   * pixels with `sctx.readAsset(reference.assetId)`. `roles` say what each one is for.
-   */
-  generate(
-    request: ImageGenRequest,
+  resolve(sctx: ServiceContext, want: ImageProviderId | null): Promise<ResolvedImageProvider>
+  /** The price per image of a provider (or the default) without opening its key. */
+  price(
     sctx: ServiceContext,
-  ): Promise<{ model: string; images: FileData[]; seed?: number | null }>
+    want: ImageProviderId | null,
+  ): Promise<{ provider: ImageProvider; model: string; perImageUsd: number }>
+}
+
+/**
+ * Image generation's setup (provider keys, default provider, quality, models) for
+ * `images.setup.get`, `images.key.*` and `images.settings.update`. Always registered, so a key
+ * can be entered in the app; the role checks are the commands' own.
+ */
+export interface ImageSetupService extends Service {
+  get(sctx: ServiceContext, opts: { admin: boolean }): Promise<CommandOutput<'images.setup.get'>>
+  setKey(
+    provider: KeyedImageProvider,
+    apiKey: string,
+    sctx: ServiceContext,
+  ): Promise<CommandOutput<'images.setup.get'>>
+  testKey(
+    provider: KeyedImageProvider,
+    apiKey: string | null,
+    sctx: ServiceContext,
+  ): Promise<CommandOutput<'images.key.test'>>
+  removeKey(
+    provider: KeyedImageProvider,
+    sctx: ServiceContext,
+  ): Promise<CommandOutput<'images.setup.get'>>
+  update(
+    input: CommandParsedInput<'images.settings.update'>,
+    sctx: ServiceContext,
+  ): Promise<CommandOutput<'images.setup.get'>>
 }
 
 /** Fetches pictures from the web on the server's behalf. */
@@ -417,6 +456,12 @@ export interface AssistantService extends Service {
     sctx: ServiceContext,
   ): Promise<CommandOutput<'references.read'>>
   /**
+   * A Claude client on the organisation's default tier, for a command's own structured call
+   * outside a run (an image brief, the check of generated images); {@link NotConfiguredError}
+   * without a key.
+   */
+  claude?(sctx: ServiceContext, purpose: string): Promise<ClaudeCall>
+  /**
    * Whether this organisation can use the assistant now (it has a key). The service is shared by
    * every organisation of the server, so `session.get` asks this for the caller's one.
    */
@@ -514,6 +559,7 @@ export interface Services {
   geometry: GeometryService
   search: SearchService
   imageGen: ImageGenService
+  imageSetup: ImageSetupService
   capture: CaptureService
   renderQueue: RenderQueue
   renderEngine: RenderEngineService
@@ -533,7 +579,9 @@ const NOT_CONFIGURED: Record<ServiceName, string> = {
   geometry:
     'No geometry kernel is configured on this server, so CAD cannot be evaluated or exported.',
   search: 'No image search providers are configured on this server.',
-  imageGen: 'No image generation provider is configured on this server.',
+  imageGen:
+    'Generating images needs an image provider’s API key (Google Gemini, OpenAI or Higgsfield). An owner or admin can add one in Settings, AI.',
+  imageSetup: 'This server cannot generate images, so there are no image keys to set up.',
   capture: 'This server cannot fetch images from the web.',
   renderQueue: 'No render queue is configured on this server.',
   renderEngine: 'This server cannot look for a render engine.',
@@ -559,7 +607,18 @@ const DEFAULTS: Services = {
     renderInput: missing('geometry'),
   },
   search: { search: missing('search'), resolve: missing('search') },
-  imageGen: { estimate: missing('imageGen'), generate: missing('imageGen') },
+  imageGen: {
+    available: () => [],
+    resolve: missing('imageGen'),
+    price: missing('imageGen'),
+  },
+  imageSetup: {
+    get: missing('imageSetup'),
+    setKey: missing('imageSetup'),
+    testKey: missing('imageSetup'),
+    removeKey: missing('imageSetup'),
+    update: missing('imageSetup'),
+  },
   capture: { capture: missing('capture') },
   renderQueue: { submit: missing('renderQueue'), cancel: missing('renderQueue') },
   renderEngine: { status: missing('renderEngine'), configure: missing('renderEngine') },

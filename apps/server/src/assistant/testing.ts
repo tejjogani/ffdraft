@@ -22,6 +22,7 @@ import {
 } from '@pave/agent/testing/fake-api'
 import type { CreateAppOptions } from '../app'
 import { createEngines } from '../engines'
+import { createImageGen, type ImageGenOptions } from '../imagegen'
 import type { Services } from '../services'
 import { type TestServer, testServer } from '../test/harness'
 import type { ModelFactory } from './host'
@@ -58,6 +59,8 @@ export function replyOf(turn: ScriptedTurn): FakeReply {
     if (hasTool) reply.fault = { type: 'max_tokens_in_tool' }
     else reply.stop_reason = 'max_tokens'
   } else if (stop === 'pause_turn') reply.fault = { type: 'pause_turn' }
+  // A safety refusal as the API sends it: stop_details with a category, no server-side fallback.
+  else if (stop === 'refusal') reply.fault = { type: 'refusal', category: 'cyber' }
   else if (stop && stop !== 'tool_use' && stop !== 'end_turn') reply.stop_reason = stop
   else if (stop === 'end_turn' && hasTool) reply.stop_reason = 'end_turn'
   if (turn.error instanceof APIConnectionError) reply.fault = { type: 'reset' }
@@ -239,6 +242,8 @@ export async function assistantServer(
     engines?: boolean
     /** More engines to register (search, capture, …). */
     services?: Partial<Services>
+    /** Image generation: its env (keys, PAVE_IMAGE_GEN=fake) and replacement providers. */
+    images?: ImageGenOptions
   } & Pick<CreateAppOptions, 'config'> = {},
 ): Promise<AssistantServer> {
   const model = await new TestModel().start({ source: opts.source })
@@ -268,11 +273,13 @@ export async function assistantServer(
           )
         },
       })
-      if (!opts.engines) return { ...opts.services, ...parts.services }
+      const images = opts.images ? createImageGen(runtime, opts.images).services : {}
+      if (!opts.engines) return { ...opts.services, ...parts.services, ...images }
       return {
         ...createEngines(runtime, { engineFile: null, pool: { size: 2 } }),
         ...opts.services,
         ...parts.services,
+        ...images,
       }
     },
     routes: (app, _runtime, withCtx) => parts?.routes(app, withCtx),

@@ -72,7 +72,7 @@ import { resolveAnswers } from '@pave/schema'
 import { and, asc, desc, eq, gt, inArray, isNull, max, ne, or } from 'drizzle-orm'
 import { readAsset } from '../assets/assets'
 import { framingRefusal } from '../cinema'
-import { type Ctx, publish } from '../context'
+import { type ClaudeCall, type Ctx, publish } from '../context'
 import * as t from '../db/schema'
 import { AppError } from '../errors'
 import { getPiece } from '../lookups'
@@ -559,6 +559,18 @@ function approvalSummary(def: ToolDef, input: unknown): string {
   }
 }
 
+/**
+ * The approval sentence, with the enhanced prompt for an image generation, so the person sees
+ * exactly what will be sent to the provider before paying for it.
+ */
+async function generateSummary(host: RunHost, def: ToolDef, input: unknown): Promise<string> {
+  if (def.command !== 'references.generate') return approvalSummary(def, input)
+  const i = input as CommandParsedInput<'references.generate'>
+  const brief = await host.ctx.repo.imageBriefs.first(eq(t.imageBrief.id, i.briefId))
+  const prompt = (i.prompt ?? brief?.prompt ?? '').trim()
+  return `Generate ${i.count} image${i.count === 1 ? '' : 's'} from this prompt: “${prompt.length > 400 ? `${prompt.slice(0, 400)}…` : prompt}” Each is checked before it is kept. This is paid.`
+}
+
 /** What a paid call will cost, when its service can say; null otherwise. */
 async function estimateFor(
   host: RunHost,
@@ -568,10 +580,15 @@ async function estimateFor(
   const ctx = host.forCall(job.call.id)
   try {
     if (job.def.command === 'references.generate') {
-      const e = await run.execute('references.estimate', job.input, ctx)
-      return e && typeof e === 'object'
-        ? { usd: (e as { usd: number }).usd, seconds: (e as { seconds?: number }).seconds ?? null }
-        : null
+      const i = job.input as CommandParsedInput<'references.generate'>
+      const brief = await ctx.repo.imageBriefs.first(eq(t.imageBrief.id, i.briefId))
+      if (!brief) return null
+      const e = (await run.execute(
+        'references.estimate',
+        { boardId: brief.boardId, count: i.count, provider: brief.provider },
+        ctx,
+      )) as CommandOutput<'references.estimate'>
+      return { usd: e.usd, seconds: e.seconds }
     }
     if (job.def.command === 'renders.create') {
       const i = job.input as CommandParsedInput<'renders.create'>
@@ -803,7 +820,9 @@ async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepO
         toolCallId: call.id,
         name: parsed.command,
         input: parsed.input,
-        summary: [approvalSummary(parsed.def, parsed.input), lastFree].filter(Boolean).join(' '),
+        summary: [await generateSummary(host, parsed.def, parsed.input), lastFree]
+          .filter(Boolean)
+          .join(' '),
         estimate: await estimateFor(host, job),
       })
       waiting = true
@@ -995,8 +1014,28 @@ interface CommandRun {
   notes?: string[]
 }
 
+/** Commands that make their own Claude call: inside a run they use the run's client and tier. */
+const CLAUDE_COMMANDS = new Set<string>(['references.brief', 'references.generate'])
+
+/** The run's Claude client for a command's own structured call, billed to the run. */
+function claudeOfRun(host: RunHost, job: Job): ClaudeCall {
+  return {
+    client: host.client,
+    model: host.model as AssistantModelId,
+    key: `${host.runId}:${job.call.id}`,
+    runId: host.runId,
+    spent: async (tokens, costUsd) => {
+      await addUsage(host.ctx, host.runId, { tokens, costUsd })
+      host.emit({ type: 'usage', tokens, costUsd })
+    },
+  }
+}
+
 async function runCommand(host: RunHost, job: Job): Promise<CommandRun> {
-  const ctx = host.forCall(job.call.id)
+  const base = host.forCall(job.call.id)
+  const ctx: Ctx = CLAUDE_COMMANDS.has(job.def.command)
+    ? { ...base, claude: claudeOfRun(host, job) }
+    : base
   const input = job.input as Record<string, unknown>
   if (job.def.client) return runClientTool(host, job, ctx)
   const command = job.def.command as CommandName

@@ -7,6 +7,7 @@ import type { AssistantModelId, AssistantTier } from '@pave/schema'
 import { Chip, Segmented, Select, Skeleton, toast } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
 import { KeyForm, useIsAdmin } from '../../features/assistant/KeyForm'
+import { ImageSettings } from '../../features/images/ImageSettings'
 import { usd } from '../../lib/format'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { SettingsGroup, SettingsRow, SettingsTitle } from './SettingsLayout'
@@ -126,6 +127,8 @@ export function AiSettings() {
               </SettingsRow>
             </SettingsGroup>
           )}
+
+          <ImageSettings />
 
           {(setup.data.envOverrides.length > 0 || setup.data.warnings.length > 0) && (
             <SettingsGroup title="From apps/server/.env">

@@ -245,7 +245,28 @@ viewer draws it before the piece in a scene of its own, so it never reaches a ca
 or an export, and its moves have their own undo history. The panel is a reference window: docked
 beside the work or floating over it, with tabs for References, a Sketch pad (a sketch is saved as
 the person's own pinned picture and can be laid in a view like any other) and, only when an image
-model is configured, Generated.
+provider has a key, Generated.
+
+## Concept images
+
+The design board generates concept images in three commands (`apps/server/src/imagegen/pipeline.ts`):
+`references.brief` (a structured Claude call, `packages/agent/src/imagegen.ts`: the guardrail's
+verdict, the reading of the request and the prompt enhanced for jewelry, stored as an
+`image_brief`), `references.attestBrief` (a person, never a tool, attests the right to a brand the
+brief named) and `references.generate` (the provider makes the images from exactly the brief's
+prompt; a second structured Claude call checks each image, and only the allowed ones are stored as
+`generated` references with their lineage). Inside a run both Claude calls use the run's client
+and tier (`Ctx.claude`, set by the loop) and are billed to the run; outside, the organisation's
+default tier (`Assistant.claude`). Every guardrail failure fails closed. Each decision (the
+request, each image, the provider's own filter, an attestation) is appended to the brief, which is
+the trace for person-made generations; in a run the step output carries it too.
+
+The providers are one family in `packages/ideation` (Gemini's `generateContent`, OpenAI's Images
+API, Higgsfield's queued SOUL model, and a fake), each with its safety settings at the strictest
+sensible level, injected `fetch` and a price table. `apps/server/src/imagegen/setup.ts` owns the
+keys (sealed per organisation and provider like the Claude key, `.env` wins), the default
+provider, quality and models, and registers `imageGen` exactly while a key exists. Claude's spend
+is metered on `llm` and the provider's on `image`, both as Design work on the board's project.
 
 ## Platform
 

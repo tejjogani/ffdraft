@@ -13,6 +13,10 @@ export const PROVIDER_LABEL: Record<string, string> = {
   cleveland: 'Cleveland Museum of Art',
   web: 'The web',
   upload: 'Uploaded',
+  gemini: 'Google Gemini',
+  openai: 'OpenAI',
+  higgsfield: 'Higgsfield',
+  fake: 'Test images',
 }
 
 export const providerLabel = (id: string | null | undefined) =>

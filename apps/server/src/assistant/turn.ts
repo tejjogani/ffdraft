@@ -13,6 +13,7 @@ import { getBoard, getPiece } from '../lookups'
 import { planStatus } from '../plans'
 import { pinnedRows } from '../references/pins'
 import { viewOnlyAssets } from '../references/rights'
+import { serviceContext } from '../service-context'
 import { modelImage } from './images'
 
 type Send = CommandParsedInput<'threads.send'>
@@ -256,6 +257,7 @@ export async function contextText(
     designerEdits: piece ? await designerEdits(ctx, piece.id, run.threadId, run.id) : [],
     canon: piece ? canonText({ spec: piece.spec, design: piece.design }) : null,
     plan: allowanceLine(await planStatus(ctx)),
+    images: await imagesLine(ctx),
     pins: media.pins,
   })
   const notes = [
@@ -265,4 +267,17 @@ export async function contextText(
       `Not shown to you (view-only references; their pictures never are): ${media.withheld.join(', ')}.`,
   ].filter(Boolean)
   return notes.length ? `${text}\n${notes.join('\n')}` : text
+}
+
+/** One line on whether concept images can be generated here, so a job never promises them. */
+async function imagesLine(ctx: Ctx): Promise<string> {
+  const imageGen = ctx.services.optional('imageGen')
+  if (!imageGen || imageGen.available(ctx.orgId).length === 0)
+    return 'not set up (no image provider key); do not offer to generate images, say an owner or admin can add a key in Settings, AI.'
+  try {
+    const p = await imageGen.price(serviceContext(ctx), null)
+    return `available with ${p.provider.label} (${p.model}), about $${p.perImageUsd.toFixed(3)} an image; references.brief first, then references.generate.`
+  } catch {
+    return 'available; references.brief first, then references.generate.'
+  }
 }

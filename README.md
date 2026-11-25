@@ -33,12 +33,13 @@ folders (a folder can hold folders, one level deep), and each shows what every s
 | --- | --- |
 | Workspace: home, projects in folders (with what each stage cost), library of metals, stones, cuts and ring sizes | Works |
 | Templates: 14 starting points, from a solitaire to an iced-out trophy pendant | Works |
-| **Design** tab: the project's design board (uploads, sketch sheets, sketches, pasted Pinterest or Google links, notes, 3D models as inspiration, museum search), **Take to CAD**, **Start CAD**, **Open as CAD** | Works. Generating concept images needs an image model, which this build does not include; Google and Pinterest search need their keys (paste links meanwhile) |
+| **Design** tab: the project's design board (uploads, sketch sheets, sketches, pasted Pinterest or Google links, notes, 3D models as inspiration, museum search), **Take to CAD**, **Start CAD**, **Open as CAD** | Works. Google and Pinterest search need their keys (paste links meanwhile) |
+| **Generate concepts** on the design board: Claude reads your request and the board pictures you pick, writes the prompt for jewelry and checks it, four images from Google Gemini, OpenAI or Higgsfield, each checked before it is kept; vary, refine, take one to CAD | Works with an image provider's key and your Claude key ([below](#concept-images-on-the-design-board)). OpenAI was checked live; Gemini and Higgsfield only against recorded answers |
 | **Try variants** in CAD: built alternatives of the current CAD to compare, mix and choose | Works |
 | **CAD** tab: feature list, inspector, live weight, carats and stone count, manufacturability checks, undo and redo | Works; being tested and fixed, so expect rough edges |
 | **Render** tab: shots, looks, framing a shot by hand in the viewfinder, animations (turntable, orbit, push-in, macro sweep, sparkle pass) as MP4 with a GIF, Blender takes, browser previews without Blender | Works; Blender is optional (animations need it) |
 | The assistant: chat in the dock, AI jobs for each stage, a design from a written brief or from a photo, edits by chat, questions about a selected part | Works with your own Claude API key ([below](#use-the-assistant-with-your-claude-api-key)). Built and tested against recorded stand-ins for Claude, not yet against Claude itself: run `pnpm agent:smoke` once with your key to check it |
-| Reference window beside CAD: museum search, pins with their rights, a sketch pad, pictures laid in a view as image planes | Works. The museum search was tested with recorded answers only. Generating images needs an image model, which this build does not include |
+| Reference window beside CAD: museum search, pins with their rights, a sketch pad, generated images, pictures laid in a view as image planes | Works. The museum search was tested with recorded answers only |
 | Exports: STL, 3MF, OBJ, GLB, STEP, 3DM | Works |
 | The Pavé file (`.pave`): save a piece with its history, references and shots, and open it on another computer | Works; always free ([the format](docs/pave-file.md)) |
 | Plans: Free and Pro, with monthly counts of Blender renders and Rhino/STEP exports | Counting works; there is no payment yet |
@@ -423,7 +424,40 @@ renders or exports, and their moves have their own undo.
 **Sketch** is a sketch pad (pen, eraser, undo, clear). **Save as reference** pins the sketch as
 your own picture; **Save and lay in a view** also puts it in the Front, Top or Right view as an
 image plane, to model over. Unsaved strokes last only while the window is open. **Generated**
-appears only when an image model is set up, which this build does not include.
+appears once an image provider's key is set, and shows the concept images made on the piece's
+design board.
+
+## Concept images on the design board
+
+**Generate concepts** on the design board turns words and board pictures into four concept
+images: "this trophy as a pendant, in the style of this pendant", with the trophy and the pendant
+picked as references (subject and style).
+
+1. **Write the prompt.** Claude (on your organisation's default tier) reads the request and the
+   pictures, checks it against Pavé's rules and writes the prompt for the image model: the piece,
+   metal, stones and cut, proportions, one clear view, even light and a plain background that
+   helps CAD later. You see the prompt before anything is paid for, and can edit it (an edited
+   prompt is checked again).
+2. **Generate 4.** The provider makes the images; Claude looks at each one, and an image it
+   refuses is never stored. Each kept image shows its cost and keeps its prompt, your words, its
+   references and its parents.
+3. **Vary**, **Refine** ("a smaller bail") or **Take to CAD**: the picture is pinned beside CAD
+   and the CAD job starts from it.
+
+Pavé refuses, with a plain reason, nudity, minors, a real person's likeness, hateful or violent
+content. Another company's logo or design needs you to say you own it or may use it (the
+assistant can never say so for you). Each provider's own safety filter is set to its strictest
+sensible level, and every decision is kept on the request (`references.briefs`).
+
+Keys: **Settings › AI › Image generation** has a field for each provider, with Test, Save and
+Remove, like the Claude key (stored encrypted on your computer; only the last four characters are
+shown). A key in `apps/server/.env` wins: `GEMINI_API_KEY` (from Google AI Studio),
+`OPENAI_API_KEY` (from platform.openai.com) or `HIGGSFIELD_API_KEY`. Pick the default provider,
+each provider's model and the quality there (Draft is the cheapest); a board can use another
+provider. Generating also needs the Claude key. Rough prices per image at Standard: Gemini 3.1
+Flash Image about $0.07, GPT Image 2.5 Flare about $0.03, GPT Image 1 Mini about $0.01 (Draft
+about $0.002); Higgsfield bills in credits, so its figure is a rough estimate. Each request's real
+cost is worked out from what the provider reports, and shown in Settings › Usage.
 
 ## Where your work is kept
 
@@ -604,6 +638,7 @@ use this address while editing code.
 | `packages/canon` | Design rules, style guides and reference designs |
 | `packages/agent` | The assistant: its tools, prompts, tiers and prices, and the Claude adapter |
 | `packages/match` | Fitting a design to a photo |
+| `packages/ideation` | Image providers for concept images: Google Gemini, OpenAI, Higgsfield and a test fake |
 | `packages/render` | Materials, lighting, scene description, the Blender job runner |
 | `packages/production` | Drawings, bill of materials, costing, the manufacturer's package |
 | `packages/sourcing` | Stone requirements from CAD; marketplace links |

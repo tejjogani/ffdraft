@@ -44,7 +44,14 @@ const DOMAIN_QUERIES: Record<string, QueryName[]> = {
   // A design change makes earlier takes stale (computed by the server).
   design: ['pieces.get', 'pieces.list', 'design.history', 'design.evaluate', 'renders.list'],
   boards: ['boards.list', 'boards.get', 'pieces.get', 'references.pins', 'projects.summary'],
-  references: ['boards.get', 'boards.list', 'references.pins', 'projects.summary'],
+  references: [
+    'boards.get',
+    'boards.list',
+    'references.pins',
+    'references.briefs',
+    'projects.summary',
+    'usage.summary',
+  ],
   projects: ['projects.summary'],
   renders: [
     'renders.list',
@@ -63,7 +70,8 @@ const DOMAIN_QUERIES: Record<string, QueryName[]> = {
   plan: ['plan.get', 'projects.summary'],
   threads: ['threads.list', 'threads.get'],
   runs: ['threads.list', 'threads.get', 'traces.runs', 'traces.run', 'projects.summary'],
-  assistant: ['assistant.setup.get', 'session.get'],
+  assistant: ['assistant.setup.get', 'session.get', 'images.setup.get'],
+  images: ['images.setup.get', 'session.get', 'references.estimate'],
   traces: ['traces.runs', 'traces.run'],
   usage: ['usage.summary', 'projects.summary'],
 }

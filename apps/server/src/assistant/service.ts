@@ -12,7 +12,7 @@ import {
 } from '@pave/agent'
 import type { AiJob, CommandOutput, CommandParsedInput, Run, Thread } from '@pave/schema'
 import { and, desc, eq, inArray } from 'drizzle-orm'
-import type { Ctx } from '../context'
+import type { ClaudeCall, Ctx } from '../context'
 import * as t from '../db/schema'
 import { conflict, NotConfiguredError } from '../errors'
 import { createId } from '../ids'
@@ -434,6 +434,35 @@ export class Assistant implements AssistantService {
       usage: { key: `${id}:llm`, runId: null, pieceId: null },
     })
     return output
+  }
+
+  /**
+   * A Claude client on the organisation's default tier for a command's own structured call
+   * outside a run (an image brief, the check of generated images), metered by the caller.
+   */
+  async claude(sctx: ServiceContext, purpose: string): Promise<ClaudeCall> {
+    const ctx = await this.#ctx(sctx)
+    if (!this.#available(ctx.orgId))
+      throw new NotConfiguredError(
+        'assistant',
+        'This needs a Claude API key. An owner or admin can add one in Settings, AI.',
+      )
+    const settings = await ctx.repo.settings.first()
+    const resolved = resolveTiers(
+      settings
+        ? { assistantTier: settings.assistantTier, assistantModels: settings.assistantModels }
+        : null,
+      this.#deps.env,
+    )
+    const { model } = modelForRun(resolved, undefined)
+    const id = createId(purpose.slice(0, 8) || 'call')
+    const client = this.#deps.model({
+      runId: id,
+      model,
+      apiKey: this.#deps.scripted ? null : await this.#deps.keys.key(ctx),
+      pieceId: () => null,
+    })
+    return { client, model, key: id, runId: null, spent: async () => {} }
   }
 
   /**
