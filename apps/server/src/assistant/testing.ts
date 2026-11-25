@@ -1,10 +1,24 @@
 /**
  * Test helpers for the assistant: a model that plays turns given up front or worked out from the
  * request (to use the id of a piece the run just made), and a server with the assistant on it.
+ *
+ * By default every turn travels the real way: the run's client is the real SDK client
+ * (`anthropicModel`), pointed at the strict fake Claude API (@pave/agent/testing/fake-api), which
+ * validates each request as the real API would and streams the turn back as SSE. So every
+ * assistant test also proves the harness never sends a request the API would refuse; a refused
+ * request fails the test with the rule it broke. `PAVE_TEST_TRANSPORT=direct` (or
+ * `new TestModel({ transport: 'direct' })`) plays turns in-process instead, without the SDK.
  */
+import { APIConnectionError, APIError } from '@anthropic-ai/sdk'
 import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/messages/messages'
-import { type ModelStream, type ScriptedTurn, scriptedModel } from '@pave/agent'
-import type { KeyCheck } from '@pave/agent/anthropic'
+import { type ModelClient, type ModelStream, type ScriptedTurn, scriptedModel } from '@pave/agent'
+import { anthropicModel, type KeyCheck } from '@pave/agent/anthropic'
+import {
+  type FakeApi,
+  type FakeReply,
+  type ReplyBlock,
+  startFakeApi,
+} from '@pave/agent/testing/fake-api'
 import type { CreateAppOptions } from '../app'
 import { createEngines } from '../engines'
 import type { Services } from '../services'
@@ -19,21 +33,120 @@ export type TurnFn = (x: {
   signal: AbortSignal | undefined
 }) => ScriptedTurn | Promise<ScriptedTurn>
 
+/** Header that tells the fake which run a request belongs to (the fake ignores it otherwise). */
+const RUN_HEADER = 'x-pave-test-run'
+
+/** A scripted turn as the fake API serves it: same content, same usage, faults for errors. */
+export function replyOf(turn: ScriptedTurn): FakeReply {
+  const content = turn.content as ReplyBlock[]
+  const hasTool = content.some((b) => b.type === 'tool_use')
+  const u = turn.usage
+  const reply: FakeReply = {
+    content,
+    // The usage the in-process model reports, so costs stay what the tests expect.
+    usage: {
+      input_tokens: u?.input_tokens ?? 100,
+      output_tokens: u?.output_tokens ?? 50,
+      cache_read_input_tokens: u?.cache_read_input_tokens ?? 0,
+      cache_creation_input_tokens: u?.cache_creation_input_tokens ?? 0,
+    },
+    ...(turn.model ? { servedBy: turn.model } : {}),
+  }
+  const stop = turn.stop_reason
+  if (stop === 'max_tokens') {
+    if (hasTool) reply.fault = { type: 'max_tokens_in_tool' }
+    else reply.stop_reason = 'max_tokens'
+  } else if (stop === 'pause_turn') reply.fault = { type: 'pause_turn' }
+  else if (stop && stop !== 'tool_use' && stop !== 'end_turn') reply.stop_reason = stop
+  else if (stop === 'end_turn' && hasTool) reply.stop_reason = 'end_turn'
+  if (turn.error instanceof APIConnectionError) reply.fault = { type: 'reset' }
+  else if (turn.error instanceof APIError && turn.error.status)
+    reply.fault = {
+      type: 'http',
+      status: turn.error.status as 400,
+      message: (turn.error.error as { error?: { message?: string } } | undefined)?.error?.message ?? turn.error.message,
+    }
+  else if (turn.error) throw new Error('TestModel: over the fake API a turn can fail only with an SDK error')
+  if (turn.failAfterContent) reply.fault = { type: 'drop', afterBlocks: content.length }
+  return reply
+}
+
 export class TestModel {
   /** Every request, as JSON copies, in order. */
   readonly requests: BetaMessageStreamParams[] = []
   /** The key each run's client was built with. */
   readonly keys: (string | null)[] = []
   readonly queue: (ScriptedTurn | TurnFn)[] = []
+  readonly transport: 'fake' | 'direct'
+  /** The fake Claude API the runs talk to through the real SDK (after `start`). */
+  api: FakeApi | null = null
   #n = 0
+  readonly #runs = new Map<string, Parameters<ModelFactory>[0]>()
+
+  constructor(opts: { transport?: 'fake' | 'direct' } = {}) {
+    this.transport =
+      opts.transport ?? (process.env.PAVE_TEST_TRANSPORT === 'direct' ? 'direct' : 'fake')
+  }
 
   push(...turns: (ScriptedTurn | TurnFn)[]): this {
     this.queue.push(...turns)
     return this
   }
 
+  /** Starts the fake API (no-op for the direct transport). */
+  async start(): Promise<this> {
+    if (this.transport !== 'fake' || this.api) return this
+    this.api = await startFakeApi({
+      // A refused request fails the run; say why where the test output shows it.
+      onExchange: (e) => {
+        if (e.violation) console.error(`fake Claude API refused a request (${e.violation.rule}): ${e.violation.message}`)
+        if (e.sourceError) console.error(`fake Claude API could not serve a turn: ${e.sourceError}`)
+      },
+      source: {
+        next: async (req) => {
+          const run = this.#runs.get(req.headers[RUN_HEADER] ?? '')
+          const n = ++this.#n
+          if (process.env.PAVE_TEST_DEBUG) console.log(`fake request ${n} from ${req.headers[RUN_HEADER]} (${this.queue.length} queued)`)
+          const next = this.queue.shift()
+          const turn =
+            typeof next === 'function'
+              ? await next({
+                  n,
+                  pieceId: run?.pieceId() ?? null,
+                  params: req.body as unknown as BetaMessageStreamParams,
+                  signal: req.signal,
+                })
+              : next
+          if (!turn) throw new Error(`TestModel: no turn left for request ${n}`)
+          return replyOf({
+            ...turn,
+            content: turn.content.map((b, i) =>
+              b.type === 'tool_use' && !b.id ? { ...b, id: `toolu_t${n}_${i}` } : b,
+            ),
+          })
+        },
+      },
+    })
+    return this
+  }
+
+  async close(): Promise<void> {
+    await this.api?.close()
+    this.api = null
+  }
+
+  /** Requests the fake API refused, or turns it could not serve: a test expects none. */
+  problems(): string[] {
+    return (this.api?.problems() ?? []).map((e) =>
+      e.violation
+        ? `request refused (${e.violation.rule}): ${e.violation.message}`
+        : `turn not served: ${e.sourceError}`,
+    )
+  }
+
   readonly factory: ModelFactory = (run) => {
     this.keys.push(run.apiKey)
+    if (this.transport === 'fake') return this.#fakeClient(run)
     return {
       stream: (params, { signal }): ModelStream => {
         this.requests.push(JSON.parse(JSON.stringify(params)))
@@ -65,6 +178,29 @@ export class TestModel {
       },
     }
   }
+
+  #fakeClient(run: Parameters<ModelFactory>[0]): ModelClient {
+    const api = this.api
+    if (!api) throw new Error('TestModel: call start() before runs use the fake API')
+    this.#runs.set(run.runId, run)
+    const client = anthropicModel({
+      apiKey: api.apiKey,
+      baseURL: api.url,
+      // Errors reach the run as the turn says; the SDK's retries are tested with the fake itself.
+      maxRetries: 0,
+      fetch: (url, init) => {
+        const headers = new Headers(init?.headers)
+        headers.set(RUN_HEADER, run.runId)
+        return fetch(url, { ...init, headers })
+      },
+    })
+    return {
+      stream: (params, options) => {
+        this.requests.push(JSON.parse(JSON.stringify(params)))
+        return client.stream(params, options)
+      },
+    }
+  }
 }
 
 export const tool = (name: string, input: unknown, id?: string): ScriptedTurn['content'][number] =>
@@ -90,7 +226,7 @@ export async function assistantServer(
     services?: Partial<Services>
   } & Pick<CreateAppOptions, 'config'> = {},
 ): Promise<AssistantServer> {
-  const model = new TestModel()
+  const model = await new TestModel().start()
   const checks: string[] = []
   let parts: AssistantParts | null = null
   const server = await testServer({
@@ -98,7 +234,14 @@ export async function assistantServer(
     config: opts.config,
     services: (runtime) => {
       parts = createAssistant(runtime, {
-        env: opts.env ?? {},
+        // PAVE_TEST_MODEL points the Standard tier (the default) at another model, so a whole
+        // test file can run on each tier's model (scripts/test-tiers.sh).
+        env: {
+          ...(process.env.PAVE_TEST_MODEL
+            ? { PAVE_ASSISTANT_MODEL_STANDARD: process.env.PAVE_TEST_MODEL }
+            : {}),
+          ...opts.env,
+        },
         model: model.factory,
         checkKey: async (key) => {
           checks.push(key)
@@ -114,6 +257,11 @@ export async function assistantServer(
     },
     routes: (app, _runtime, withCtx) => parts?.routes(app, withCtx),
   })
+  const dispose = server.dispose
+  server.dispose = async () => {
+    await dispose()
+    await model.close()
+  }
   return { server, parts: parts!, model, checks }
 }
 

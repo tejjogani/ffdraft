@@ -4,7 +4,7 @@
  * ledger, and the request staying append-only.
  */
 import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/messages/messages'
-import { ScriptAbortError } from '@pave/agent'
+import { MODELS, ScriptAbortError } from '@pave/agent'
 import { type RunEvent, TEMPLATES } from '@pave/schema'
 import { and, eq } from 'drizzle-orm'
 import sharp from 'sharp'
@@ -22,6 +22,15 @@ import {
 } from './testing'
 
 const KEY = 'sk-ant-test-0000000000000000000000000000-KEYZ'
+/** The Standard tier's model: Opus 5.5 unless the file runs on another tier (PAVE_TEST_MODEL). */
+const STANDARD = (process.env.PAVE_TEST_MODEL ?? 'claude-opus-5-5') as keyof typeof MODELS
+/** Uncached input tokens that cost $3.20 on the Standard model (Haiku's long-prompt rate applies). */
+function capTokens(): number {
+  const m = MODELS[STANDARD] as (typeof MODELS)[keyof typeof MODELS] & {
+    longPrompt?: { rates: { input: number } }
+  }
+  return Math.ceil(3.2e6 / (m.longPrompt?.rates.input ?? m.rates.input))
+}
 const halo = TEMPLATES.find((x) => x.id === 'halo')!.spec
 
 let s: AssistantServer
@@ -156,7 +165,7 @@ describe('a brief becomes a built, edited piece', () => {
       { content: [text('Built and named. Anything else?')] },
     )
     const { thread, run } = await send('A halo ring for a trophy', { tier: 'standard' })
-    expect(run).toMatchObject({ status: 'running', tier: 'standard', model: 'claude-opus-5-5' })
+    expect(run).toMatchObject({ status: 'running', tier: 'standard', model: STANDARD })
     await settled(s.parts, run.id)
 
     // Paused at the build: the card waits for a person.
@@ -564,8 +573,8 @@ describe('how a run can end', () => {
   it('pauses at the per-run cap of $3 and says how to go on', async () => {
     model.push({
       content: [tool('pieces_list', {})],
-      // 800K uncached input tokens on Opus 5.5 is $3.20.
-      usage: { input_tokens: 800_000, output_tokens: 10 },
+      // $3.20 of uncached input on the Standard model (800K tokens on Opus 5.5).
+      usage: { input_tokens: capTokens(), output_tokens: 10 },
     })
     const { run } = await send('Expensive')
     const detail = await finish(run.id)
@@ -663,14 +672,17 @@ describe('the ledger', () => {
       models.map((m) => `${run.id}:${m.index}:llm`).sort(),
     )
     const cost = (r: (typeof rows)[number]) => r.costMicros / 1e6
-    // Opus 5.5: 1000 × $4 + 100 × $20 per million; Sonnet 5.5: 1000 × $2 + 100 × $10.
+    // 1000 input and 100 output tokens, at the rates of the model that answered: with Opus 5.5 as
+    // Standard, 1000 × $4 + 100 × $20 per million; Sonnet 5.5: 1000 × $2 + 100 × $10.
+    const price = (m: keyof typeof MODELS) =>
+      (1000 * MODELS[m].rates.input + 100 * MODELS[m].rates.output) / 1e6
     expect(rows.map((r) => [r.model, cost(r)]).sort()).toEqual(
       [
-        ['claude-opus-5-5', 0.006],
+        [STANDARD, price(STANDARD)],
         ['claude-sonnet-5-5', 0.003],
       ].sort(),
     )
-    expect(detail.run.costUsd).toBeCloseTo(0.009, 6)
+    expect(detail.run.costUsd).toBeCloseTo(price(STANDARD) + 0.003, 6)
   })
 })
 
@@ -757,8 +769,9 @@ describe('the request prefix (property)', () => {
               pick < 0.4
                 ? [tool('pieces_list', {})]
                 : pick < 0.6
-                  ? // Invalid input: answered with an error, nothing runs.
-                    [tool('pieces_get', {})]
+                  ? // Invalid input: answered with an error, nothing runs. (A strict tool
+                    // cannot be sent invalid input by the real API, so this uses a non-strict one.)
+                    [tool('design_apply', {})]
                   : pick < 0.8
                     ? [
                         { type: 'thinking', thinking: `step ${seed}.${m}.${i}` },

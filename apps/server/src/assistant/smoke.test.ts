@@ -173,7 +173,7 @@ const ring = (title: string, over: Partial<PieceSpecInput>): PieceSpecInput => (
 
 describe('the journeys, with scripted turns for Claude', () => {
   it('runs design, edit and render (skipped without Blender), approving what a run asks', async () => {
-    const model = new TestModel()
+    const model = await new TestModel().start()
     const cached = { usage: { cache_read_input_tokens: 20_000, output_tokens: 50 } }
     model.push(
       // a. The Design job: it reads the piece, asks first (as every job does), then proposes.
@@ -280,7 +280,7 @@ const keyInEnvFile =
 
 describe('the photo journey, with scripted turns for Claude', () => {
   it('draws the photo with the kernel, attaches it, and checks the piece the run made', async () => {
-    const model = new TestModel()
+    const model = await new TestModel().start()
     let attached = ''
     model.push(
       ({ params }) => {
@@ -319,7 +319,7 @@ describe('the photo journey, with scripted turns for Claude', () => {
 
 describe('a journey that fails', () => {
   it('is reported with the run’s code and sentence, and what depends on it is skipped', async () => {
-    const model = new TestModel()
+    const model = await new TestModel().start()
     model.push({
       content: [],
       error: APIError.generate(

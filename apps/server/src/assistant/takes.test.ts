@@ -235,8 +235,13 @@ describe('a render in a conversation', () => {
     await api.call('runs.decide', { runId: run.id, toolCallId: 'toolu_c1', decision: 'approve' })
     await until(run.id, 'waiting')
     const [take] = await takesOf(piece.id)
+    const calls = s.model.requests.length
     await api.call('runs.cancel', { runId: run.id })
     expect((await api.call('renders.get', { id: take!.id })).status).toBe('canceled')
+    // Stop means no more model calls: the canceled take must not wake the run it belonged to.
+    await new Promise((r) => setTimeout(r, 300))
+    expect(s.model.requests.length).toBe(calls)
+    expect(s.parts.driver.isLive(run.id)).toBe(false)
     expect(queue.canceled).toContain(take!.id)
     expect((await api.call('traces.run', { id: run.id })).run.status).toBe('canceled')
     // The call is answered, so the conversation stays valid for the next message.

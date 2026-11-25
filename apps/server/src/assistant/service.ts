@@ -52,6 +52,12 @@ export class Assistant implements AssistantService {
   /** Sends in flight by `${userId}:${clientMessageId}`, so a double submit starts one run. */
   readonly #sending = new Map<string, Promise<{ thread: Thread; run: Run }>>()
   readonly #available: (orgId: string) => boolean
+  /**
+   * Runs being stopped right now. Canceling a run's takes settles them, and a settled take wakes
+   * the run that waited for it: without this, Stop could start one more model call between
+   * canceling the takes and marking the run canceled. One event loop, so the set needs no lock.
+   */
+  readonly #stopping = new Set<string>()
 
   constructor(deps: AssistantDeps, available: (orgId: string) => boolean) {
     this.#deps = deps
@@ -284,8 +290,13 @@ export class Assistant implements AssistantService {
     if (this.#deps.driver.isLive(runId)) await this.#deps.driver.abort(runId, 'cancel')
     const run = await getRun(ctx, runId)
     if (!LIVE_RUNS.includes(run.status)) return toRun(run)
-    await this.#cancelTakes(ctx, runId)
-    return closeOut(ctx, runId, { status: 'canceled' })
+    this.#stopping.add(runId)
+    try {
+      await this.#cancelTakes(ctx, runId)
+      return await closeOut(ctx, runId, { status: 'canceled' })
+    } finally {
+      this.#stopping.delete(runId)
+    }
   }
 
   /** Stop means stop: the takes a stopped run is still waiting for are canceled with it. */
@@ -315,9 +326,12 @@ export class Assistant implements AssistantService {
    * waits on, so a wake for a run that is no longer waiting does nothing.
    */
   wake(w: Waiter): void {
+    if (this.#stopping.has(w.runId)) return
     void (async () => {
       const ctx = await this.#ctx({ orgId: w.orgId, userId: w.userId })
       const run = await ctx.repo.runs.first(eq(t.agentRun.id, w.runId))
+      // Checked again after the read: the designer may have pressed Stop meanwhile.
+      if (this.#stopping.has(w.runId)) return
       if (run?.status !== 'waiting' && !this.#deps.driver.isLive(w.runId)) return
       this.#start({ orgId: w.orgId, userId: w.userId }, w.runId, w.threadId)
     })().catch((err) => console.error(`Waking run ${w.runId} failed:`, err))
