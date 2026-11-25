@@ -1,5 +1,9 @@
 [
   {
+    "name": "Studio focus: settings readability, CAD editor, delete (lane A, A8)",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_0cd65989-929/journal.jsonl"
+  },
+  {
     "name": "Spec as the source of truth (lane A, A7)",
     "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_a9861f4a-9a2/journal.jsonl"
   },
