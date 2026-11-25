@@ -12,7 +12,8 @@ Each session owns a **lane**: a set of work items and the branches they live on.
 |---|---|---|---|
 | **A, integration** | The cloud session on the founder's main account | Finishing and integrating builds; engine fixes; releases to the founder; fixes from his testing; anything not assigned | `claude/busy-bardeen-o482lo` (the integration branch: the only place work is merged), `claude/assistant-build` |
 | **B, research and freeform CAD** | A session on the founder's laptop, second account (Fable 5.2 when available) | Deep research and plans; then Rhino-class modeling from `docs/plans/freeform-cad.md` | `claude/fable-research` (research and plans), `claude/freeform-cad` (the build) |
-| C, D, … | Any later session | Whatever the board assigns | `claude/<lane>-<topic>`, named on the board |
+| **C, integrations research** | A laptop session (any account) | Research and plans for accounts, API connectivity and the ERP side | `claude/integrations-research` |
+| D, … | Any later session | Whatever the board assigns | `claude/<lane>-<topic>`, named on the board |
 
 - **The board** is `docs/agents/BOARD.md` on the integration branch. Lane A is its only writer, so it never conflicts. Every work item has an id (A3, B2, …), an owner lane, a state, its branch, what it depends on, and what "done" means.
 - **A lane's status file** is `docs/inbox/<lane>/STATUS.md` on that lane's own branch (for lane B: `docs/inbox/fable-research/STATUS.md`). It is how a lane talks to everyone else: done (with commit ids), now, next, questions, and **requests** (for example "B asks to take item X" or "B2 step 3 is ready to merge at commit …").
