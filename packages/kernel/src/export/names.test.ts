@@ -2,7 +2,7 @@
  * What a recipient's program has to cope with: object names taken from what a designer typed
  * (quotes, accents, pasted control characters, repeats) and selections that hold nothing.
  */
-import { type Design, designFrom } from '@pave/schema'
+import { type Design, designFrom, emptyDesign } from '@pave/schema'
 import { unzipSync } from 'fflate'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { createKernel, type LocalKernel } from '../kernel'
@@ -96,5 +96,17 @@ describe('object names in exported files', () => {
     const obj = new TextDecoder().decode((await kernel.export(design, 'obj')).bytes)
     const groups = [...obj.matchAll(/^g (.+)$/gm)].map((m) => m[1])
     expect([...groups].sort()).toEqual(clean.map((n) => n.replace(/\s+/g, '_')).sort())
+  })
+})
+
+describe('a selection with nothing in it', () => {
+  it('is refused by every format, GLB and STEP included', async () => {
+    const one = blocks(['Block'])
+    for (const format of ['glb', 'stl', '3mf', 'obj', '3dm', 'step'] as const) {
+      await expect(kernel.export(one, format, { only: ['nope'] }), format).rejects.toThrow(
+        /Nothing/,
+      )
+      await expect(kernel.export(emptyDesign('ring'), format), format).rejects.toThrow(/Nothing/)
+    }
   })
 })
