@@ -113,6 +113,19 @@ describe('http surface', () => {
     expect(read.headers.get('access-control-allow-origin')).toBeNull()
   })
 
+  // Needs a decision (which hosts a local install answers to), so it is recorded, not fixed.
+  // A page whose domain is re-pointed at 127.0.0.1 (DNS rebinding) is same-origin with this
+  // server: the Origin check above passes and, with no sign-in, it can read and change
+  // everything. Refusing a Host that is not loopback, the public URL or HOST would stop it.
+  it.fails('refuses a request sent to a host name that is not this server (local mode)', async () => {
+    const res = await server.app.request('http://attacker.example:8787/api/rpc/pieces.list', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'http://attacker.example:8787' },
+      body: '{}',
+    })
+    expect(res.status).toBeGreaterThanOrEqual(400)
+  })
+
   it('streams org events over SSE', async () => {
     const api = client(server)
     const abort = new AbortController()
