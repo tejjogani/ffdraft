@@ -67,8 +67,10 @@ import type {
   Run,
   SavedScene,
 } from '@pave/schema'
+import { resolveAnswers } from '@pave/schema'
 import { and, asc, desc, eq, gt, inArray, isNull, max, ne, or } from 'drizzle-orm'
 import { readAsset } from '../assets/assets'
+import { framingRefusal } from '../cinema'
 import { type Ctx, publish } from '../context'
 import * as t from '../db/schema'
 import { AppError } from '../errors'
@@ -141,6 +143,17 @@ const storedResult = (s: StepRow): BetaToolResultBlockParam | null => {
 function settledResult(s: StepRow, toolUseId: string): BetaToolResultBlockParam | null {
   if (s.status === 'done' || s.status === 'failed')
     return storedResult(s) ?? closedResult(toolUseId, 'its result was lost')
+  if (s.status === 'denied' && s.name === 'chat.ask')
+    return {
+      type: 'tool_result',
+      tool_use_id: toolUseId,
+      content: [
+        {
+          type: 'text',
+          text: 'The designer did not pick from these options. If they wrote a message, it is their answer; otherwise go on with the defaults you offered. Do not ask again.',
+        },
+      ],
+    }
   if (s.status === 'denied') {
     const note = s.approval?.note ? ` Their note: ${s.approval.note}` : ''
     return errorResult(
@@ -522,6 +535,8 @@ function approvalSummary(def: ToolDef, input: unknown): string {
       return `Generate ${typeof i.count === 'number' ? i.count : 2} images from a prompt. This is paid.`
     case 'mesh3d.create':
       return 'Turn photos into a 3D model with an outside service. This is paid.'
+    case 'chat.ask':
+      return typeof i.intro === 'string' ? i.intro : 'A few quick questions.'
     case 'renders.create': {
       const scene = i.scene as { output?: { width?: number; height?: number } } | undefined
       const what = typeof i.variantLabel === 'string' ? ` in ${i.variantLabel}` : ''
@@ -726,6 +741,19 @@ async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepO
       await refuse(errorResult(call.id, admission.message), parsed.command)
       continue
     }
+    // A take of a shot that cuts the piece off (or loses it in the frame) wastes machine time:
+    // the model fixes the camera first. People render whatever they like.
+    if (parsed.command === 'renders.create') {
+      const framing = await framingRefusal(
+        ctx,
+        parsed.input as CommandParsedInput<'renders.create'>,
+        host.signal,
+      ).catch(() => null)
+      if (framing) {
+        await refuse(errorResult(call.id, framing), parsed.command)
+        continue
+      }
+    }
     // The last free render or export of the month is the person's to spend, job or not.
     const lastFree = await allowances.spend(parsed.command, parsed.input)
     if (lastFree) admission = { kind: 'approve' }
@@ -898,8 +926,13 @@ async function execute(host: RunHost, job: Job): Promise<BetaToolResultBlockPara
 
 function assetIdsOf(value: unknown): string[] {
   if (!value || typeof value !== 'object') return []
-  const v = value as { images?: { assetId?: unknown }[]; asset?: { id?: unknown } }
-  const ids = (v.images ?? [])
+  const v = value as {
+    images?: { assetId?: unknown }[]
+    shots?: { assetId?: unknown }[]
+    asset?: { id?: unknown }
+  }
+  // Captures (viewport.capture's images, scenes.capture's shots) show in the conversation.
+  const ids = [...(v.images ?? []), ...(v.shots ?? [])]
     .map((i) => i.assetId)
     .filter((x): x is string => typeof x === 'string')
   if (typeof v.asset?.id === 'string') ids.push(v.asset.id)
@@ -918,6 +951,7 @@ async function runCommand(host: RunHost, job: Job): Promise<CommandRun> {
   if (job.def.client) return runClientTool(host, job, ctx)
   const command = job.def.command as CommandName
   if (command === 'references.read') return readInRun(host, job, ctx)
+  if (command === 'chat.ask') return answerOf(host, job)
   const notes: string[] = []
   let callInput: unknown = job.input
   if (command === 'design.apply') {
@@ -929,6 +963,8 @@ async function runCommand(host: RunHost, job: Job): Promise<CommandRun> {
   }
   const value = await host.deps.runtime.execute(command, callInput, ctx)
   await afterCommand(host, command, input, value, notes)
+  if (command === 'scenes.capture')
+    return { value, notes, images: await shotImages(ctx, value as CommandOutput<'scenes.capture'>) }
   return { value, notes }
 }
 
@@ -976,6 +1012,29 @@ async function runClientTool(host: RunHost, job: Job, ctx: Ctx): Promise<Command
         `${err.message} These pictures were drawn on the server instead: plain shaded clay (metal grey, stones pale blue), no materials or labels.`,
       ],
     }
+  }
+}
+
+/**
+ * A question the person answered: their picks (stored with the approval) made whole, every
+ * question they left alone taking its defaults.
+ */
+async function answerOf(host: RunHost, job: Job): Promise<CommandRun> {
+  const step = await host.ctx.repo.steps.first(
+    and(eq(t.agentStep.runId, host.runId), eq(t.agentStep.toolCallId, job.call.id))!,
+  )
+  const { questions } = job.input as CommandParsedInput<'chat.ask'>
+  const value = resolveAnswers(questions, step?.approval?.answers)
+  const said = value.answers
+    .map(
+      (a) =>
+        `${a.question} ${a.chosen.map((c) => c.label).join(', ')}${a.default ? ' (your default)' : ''}`,
+    )
+    .join(' · ')
+  const note = step?.approval?.note ? ` Their note: ${step.approval.note}` : ''
+  return {
+    value,
+    notes: [`The designer answered: ${said}.${note} Say in one line what you will do, then do it.`],
   }
 }
 
@@ -1159,6 +1218,23 @@ async function overlapFor(host: RunHost, pieceId: string, ops: { t: string; id?:
 }
 
 /** The views a capture returned, as images for the model. */
+/** Each shot's look through its own camera, labelled with its framing, for the model to see. */
+async function shotImages(ctx: Ctx, value: CommandOutput<'scenes.capture'>): Promise<ShapeImage[]> {
+  const out: ShapeImage[] = []
+  for (const shot of value.shots) {
+    if (!shot.assetId) continue
+    const { asset, bytes } = await readAsset(ctx, shot.assetId)
+    const resized = await modelImage(bytes, asset.mime)
+    if (!resized) continue
+    const verdict = shot.ok ? 'framing ok' : `framing problem: ${shot.problem}`
+    out.push({
+      label: `Shot “${shot.title}” (${shot.id}), ${shot.framing}, ${verdict}`,
+      ...resized,
+    })
+  }
+  return out
+}
+
 async function captureImages(ctx: Ctx, value: unknown): Promise<ShapeImage[]> {
   const v = value as { version?: number; images?: { view: unknown; assetId: string }[] } | null
   if (!v?.images?.length) return []

@@ -5,7 +5,7 @@
  * one, the count starts again each calendar month (UTC), and PAVE_PLAN or the organisation's
  * plan lifts the limits up to the fair-use ceiling. Engines are fakes the tests settle by hand.
  */
-import { planLimitMessage } from '@pave/schema'
+import { ANIMATION_RENDER_COST, planLimitMessage } from '@pave/schema'
 import { sql } from 'drizzle-orm'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { configFromEnv, planWarning } from './config'
@@ -160,6 +160,33 @@ describe('a Free plan', () => {
     )
     // Refused before the work started: no take was queued.
     expect((await api.call('renders.list', { pieceId })).length).toBe(before)
+  })
+
+  it('counts a Blender animation as ANIMATION_RENDER_COST renders, all or none', async () => {
+    expect(ANIMATION_RENDER_COST).toBe(2)
+    const motion = { ...scene, animation: { type: 'turntable' as const, seconds: 1, fps: 24 } }
+    const turntable = await api.call('renders.create', { pieceId, scene: motion })
+    expect(await used(api)).toEqual({ render: 2, export: 0 })
+    await fake.takes
+      .get(turntable.id)!
+      .update({ status: 'done', progress: 1, assetIds: [], seconds: 30 })
+    expect(await used(api)).toEqual({ render: 2, export: 0 })
+
+    // A failed animation gives both back.
+    const failed = await api.call('renders.create', { pieceId, scene: motion })
+    expect(await used(api)).toEqual({ render: 4, export: 0 })
+    await fake.takes.get(failed.id)!.update({ status: 'failed', error: 'blender crashed' })
+    expect(await used(api)).toEqual({ render: 2, export: 0 })
+
+    // With one free render left, an animation is refused whole (nothing is held) and a still fits.
+    await api.call('renders.create', { pieceId, scene })
+    await api.call('renders.create', { pieceId, scene })
+    expect(await used(api)).toEqual({ render: 4, export: 0 })
+    const refused = await api.fail('renders.create', { pieceId, scene: motion })
+    expect(refused.status).toBe(402)
+    expect(await used(api)).toEqual({ render: 4, export: 0 })
+    await api.call('renders.create', { pieceId, scene })
+    expect(await used(api)).toEqual({ render: 5, export: 0 })
   })
 
   it('gives back the render of a take its queue would not accept', async () => {

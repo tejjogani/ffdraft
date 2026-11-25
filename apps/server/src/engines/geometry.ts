@@ -42,8 +42,11 @@ export function createGeometry(pool: KernelPool): GeometryService {
 
     subject: (design, sctx, call) => pool.run({ kind: 'subject', design }, poolOptions(sctx, call)),
 
-    picture: (design, { views, size, focus, ...call }, sctx) =>
-      pool.run({ kind: 'picture', design, views, size, focus }, poolOptions(sctx, call)),
+    picture: (design, { views, size, focus, shots, ...call }, sctx) =>
+      pool.run(
+        { kind: 'picture', design, views, size, focus, ...(shots ? { shots } : {}) },
+        poolOptions(sctx, call),
+      ),
 
     fitPhoto: (design, { fit, ...call }, sctx) =>
       pool.run({ kind: 'photoFit', design, fit }, poolOptions(sctx, call)),

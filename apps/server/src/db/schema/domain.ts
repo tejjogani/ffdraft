@@ -283,6 +283,8 @@ export const renderScene = pgTable(
     /** The take a person put in the set for this shot; null = the shot's newest finished take. */
     takeId: text('take_id'),
     createdBy: text('created_by').notNull(),
+    /** Who made the shot: a person, or an assistant run (so changes to it count as feedback). */
+    actor: jsonb('actor').$type<Actor>(),
     createdAt: at('created_at'),
     updatedAt: at('updated_at'),
   },
@@ -577,6 +579,8 @@ export const runFeedback = pgTable('run_feedback', {
   kind: text('kind').$type<Feedback['kind']>().notNull(),
   /** The agent change implicit feedback is about. */
   changeId: text('change_id'),
+  /** A render signal's subject: `render:<takeId>` or `scene:<sceneId>`. */
+  target: text('target'),
   /** Explicit thumbs only; superseded by `kind`. */
   rating: text('rating').$type<'up' | 'down'>(),
   note: text('note'),

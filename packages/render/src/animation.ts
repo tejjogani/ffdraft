@@ -44,6 +44,21 @@ const key = (frame: number, value: number, e: Ease = 'easeInOut'): Keyframe => (
 /** Rack focus at f/2.8 unless the scene chose an aperture (research §3). */
 export const RACK_FOCUS_FSTOP = 2.8
 
+/** Whether a motion loops: a turntable always; anything else when asked (it goes and comes back). */
+export function loops(animation: Pick<NonNullable<RenderScene['animation']>, 'type' | 'loop'>) {
+  return animation.type === 'turntable' || animation.loop === true
+}
+
+/**
+ * A move from `a` to `b` over the take. Looping, it goes there by the middle and comes back by
+ * frame n, which equals frame 0 and is not rendered, so the video loops without a jump.
+ */
+function move(n: number, a: number, b: number, loop: boolean, e: Ease = 'easeInOut'): Keyframe[] {
+  if (!loop) return [key(0, a, e), key(n - 1, b, e)]
+  const mid = Math.round(n / 2)
+  return [key(0, a, e), key(mid, b, e), key(n, a, e)]
+}
+
 export function resolveAnimation(
   animation: NonNullable<RenderScene['animation']>,
   camera: ResolvedCamera,
@@ -53,21 +68,30 @@ export function resolveAnimation(
   const fps = animation.fps
   const n = Math.max(2, Math.round(animation.seconds * fps))
   const tracks: Partial<Record<TrackTarget, Keyframe[]>> = {}
-  let loop = false
+  const loop = loops(animation)
   switch (animation.type) {
     // 360° linear; the key at frame n equals frame 0, which is not rendered — a seamless loop.
     case 'turntable':
       tracks.pieceRotation = [key(0, 0, 'linear'), key(n, 360, 'linear')]
-      loop = true
+      break
+    // Half way round, through the shot's own angle: from one profile to the other.
+    case 'half-orbit':
+      tracks.cameraAzimuth = move(n, camera.azimuth - 90, camera.azimuth + 90, loop)
       break
     case 'orbit-arc':
-      tracks.cameraAzimuth = [key(0, camera.azimuth - 30), key(n - 1, camera.azimuth + 30)]
+      tracks.cameraAzimuth = move(n, camera.azimuth - 30, camera.azimuth + 30, loop)
       break
+    // The light turns, the piece and camera stay: sparkle walks across the stones.
     case 'light-sweep':
-      tracks.rigRotation = [key(0, rigRotation), key(n - 1, rigRotation + 120)]
+      tracks.rigRotation = move(n, rigRotation, rigRotation + 120, loop)
       break
     case 'push-in':
-      tracks.cameraDistance = [key(0, camera.distance * 1.35), key(n - 1, camera.distance)]
+      tracks.cameraDistance = move(n, camera.distance * 1.35, camera.distance, loop)
+      break
+    // Close in and drift across the stone: a slow push with a small sideways arc.
+    case 'macro-sweep':
+      tracks.cameraDistance = move(n, camera.distance * 1.25, camera.distance * 0.95, loop)
+      tracks.cameraAzimuth = move(n, camera.azimuth - 15, camera.azimuth + 15, loop)
       break
     // Hold on the near side (prongs), travel, hold on the far side (band).
     case 'rack-focus': {
@@ -75,12 +99,15 @@ export function resolveAnimation(
       const far = camera.focusDistance + radius * 0.6
       const a = Math.round(n * 0.2)
       const b = Math.round(n * 0.8)
-      tracks.focusDistance = [
-        key(0, near, 'linear'),
-        key(a, near),
-        key(b, far, 'linear'),
-        key(n - 1, far),
-      ]
+      tracks.focusDistance = loop
+        ? [
+            key(0, near, 'linear'),
+            key(a, near),
+            key(Math.round(n / 2), far),
+            key(b, far),
+            key(n, near),
+          ]
+        : [key(0, near, 'linear'), key(a, near), key(b, far, 'linear'), key(n - 1, far)]
       break
     }
   }

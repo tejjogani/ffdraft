@@ -28,6 +28,7 @@ import {
   runHasLiveChanges,
   splitQuiet,
 } from './model'
+import { QuestionsCard } from './QuestionsCard'
 import { RenderBatchApproval, TakeCard } from './RenderCalls'
 import { CapPill, RunError, RunFooter, Thinking, WorkingPill } from './RunStates'
 import { useRunStream } from './run-stream'
@@ -228,7 +229,21 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
               />
             )}
             {loud.map((c) =>
-              batch.length > 1 && batch.includes(c) ? null : c.status === 'awaiting' ? (
+              batch.length > 1 && batch.includes(c) ? null : c.status === 'awaiting' &&
+                c.name === 'chat.ask' ? (
+                <QuestionsCard
+                  key={c.toolCallId}
+                  call={c}
+                  busy={actions.decide.isPending}
+                  onGo={(answers) =>
+                    c.runId &&
+                    actions.decide.mutate(
+                      { runId: c.runId, toolCallId: c.toolCallId, decision: 'approve', answers },
+                      { onError: (e) => toast.error('Couldn’t send that', e.message) },
+                    )
+                  }
+                />
+              ) : c.status === 'awaiting' ? (
                 <ApprovalCard
                   key={c.toolCallId}
                   call={c}

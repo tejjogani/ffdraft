@@ -43,6 +43,8 @@ import {
   PieceSchema,
   PieceSummarySchema,
   ProductionPackageSchema,
+  QuickAnswersSchema,
+  QuickQuestionSchema,
   ReferenceSchema,
   RenderEngineStatusSchema,
   RenderEstimateSchema,
@@ -1019,6 +1021,61 @@ export const commands = {
     }),
     output: SavedSceneSchema,
   }),
+  'scenes.suggest': def({
+    description:
+      'Before setting up shots: what matters in this piece for photography (its kind, centre stone, halo, pavé, engraving, gallery) and the shot vocabulary for it, each with a camera already placed for the aspect ratio you give (hero three-quarter, profile, top-down, macro on the centre stone, low angle; per kind for pendants, earrings and bracelets), the framing it predicts, and default quick questions for chat.ask. Pass a camera to scenes.create as it is or adjusted; then check the framing with scenes.capture before rendering.',
+    kind: 'query',
+    tool: true,
+    input: z.object({
+      pieceId: id,
+      aspect: z.enum(['1:1', '4:5', '9:16', '16:9', '3:2']).default('1:1'),
+    }),
+    output: z.object({
+      kind: z.enum(PIECE_KINDS),
+      /** What matters about the piece in pictures, one plain line each. */
+      features: z.array(z.string()),
+      centreStoneNodeId: id.nullable(),
+      shots: z.array(
+        z.object({
+          key: z.string(),
+          title: z.string(),
+          /** Why a jeweller shoots it: what it shows. */
+          why: z.string(),
+          camera: RenderSceneSchema.shape.camera,
+          /** e.g. "64% · good" (the piece), or the centre stone's fill for a macro. */
+          framing: z.string(),
+        }),
+      ),
+      questions: z.array(QuickQuestionSchema),
+    }),
+  }),
+  'scenes.capture': def({
+    description:
+      "Look through saved shots' cameras before spending render time: a plain clay picture of each shot exactly as its camera frames it (its aspect ratio, lens and roll), drawn on the server, with the framing measured: how much of the frame the piece fills (for a macro, the centre stone) and whether anything is cut off or too small. Fix a shot that fails with scenes.update and capture it again.",
+    kind: 'query',
+    tool: true,
+    input: z.object({
+      ids: z.array(id).min(1).max(6),
+      /** Long side of each picture, in pixels. */
+      size: z.number().int().min(192).max(768).default(384),
+    }),
+    output: z.object({
+      version: z.number().int(),
+      shots: z.array(
+        z.object({
+          id,
+          title: z.string(),
+          assetId: id.nullable(),
+          /** What must be in the frame: the whole piece, or the centre stone for a macro. */
+          subject: z.enum(['piece', 'centre stone']),
+          framing: z.string(),
+          ok: z.boolean(),
+          /** What is wrong and how to fix it, in plain words; null when the framing is good. */
+          problem: z.string().nullable(),
+        }),
+      ),
+    }),
+  }),
   'scenes.history': def({
     description: 'The changes made to a saved shot, newest first: before and after, and by whom.',
     kind: 'query',
@@ -1388,8 +1445,24 @@ export const commands = {
       toolCallId: id,
       decision: z.enum(['approve', 'deny']),
       note: z.string().max(2000).optional(),
+      /**
+       * Answering a `chat.ask`: the option ids picked, by question id. A question left out (or
+       * answered with nothing valid) takes its defaults, so Go alone is a full answer.
+       */
+      answers: z.record(z.string(), z.array(z.string()).max(6)).optional(),
     }),
     output: RunSchema,
+  }),
+  'chat.ask': def({
+    description:
+      'Ask the designer one to three short questions as quick replies, and wait for their answer: each with two to six options and the good default already picked (`defaults`), so one press of Go answers with no typing. Ask only what changes the work and cannot be read from the piece (what the images are for, aspect ratios, which animations); never more than three. Write `intro` as one plain sentence saying what you saw and what you are about to do. The result is what they picked; if they type a message instead, that message is the answer.',
+    kind: 'query',
+    tool: { confirm: true },
+    input: z.object({
+      intro: z.string().min(1).max(300),
+      questions: z.array(QuickQuestionSchema).min(1).max(3),
+    }),
+    output: QuickAnswersSchema,
   }),
   'runs.cancel': def({
     description: 'Stop an assistant run. Edits it already made stay, and can be undone.',

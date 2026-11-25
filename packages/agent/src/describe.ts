@@ -145,6 +145,20 @@ export const TOOL_CHIPS = {
         : 'Adjusted the shot',
   },
   'scenes.revert': { running: 'Undoing a shot change', done: 'Undid a shot change' },
+  'scenes.suggest': {
+    running: 'Looking at the piece for shots',
+    done: 'Looked at the piece and planned the shots',
+  },
+  'scenes.capture': {
+    // A look, like viewport.capture: its pictures show when the line is opened.
+    quiet: true,
+    running: 'Checking the framing',
+    done: (i) => `Checked the framing of ${plural(i.ids.length, 'shot')}`,
+  },
+  'chat.ask': {
+    running: 'Asking you',
+    done: (i) => `Asked ${plural(i.questions.length, 'quick question')}`,
+  },
   'renders.list': { quiet: true, running: 'Listing renders', done: 'Listed renders' },
   'renders.get': { quiet: true, running: 'Checking the render', done: 'Checked the render' },
   'renders.estimate': {

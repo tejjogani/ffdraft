@@ -42,7 +42,7 @@ export function jobState(run: Pick<Run, 'status'> & { job: AiJob | null }): JobS
 
 export const JOB_STATE_LABEL: Record<JobState, string> = {
   running: 'Working',
-  waiting: 'Needs your go-ahead',
+  waiting: 'Waiting for you',
   rendering: 'Rendering',
   paused: 'Paused',
   review: 'Ready for review',

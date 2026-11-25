@@ -16,7 +16,7 @@ import { queryClient, rpcKey, useRpc } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { reportPlanLimit } from '../plans/plan-limit'
 import { ensureShotsSaved } from './shot-actions'
-import { type Shot, shotList } from './shots'
+import { type Shot, shotList, takeMedia } from './shots'
 
 export function useShots(pieceId: string) {
   const piece = useRpc('pieces.get', { id: pieceId })
@@ -153,7 +153,7 @@ export function useShots(pieceId: string) {
       act('Couldn’t set the cover', async () => {
         await rpc.call('pieces.update', {
           id: pieceId,
-          coverAssetId: t.assetIds[0]!,
+          coverAssetId: takeMedia(t).still ?? t.assetIds[0]!,
           coverAuto: false,
         })
         void queryClient.invalidateQueries({ queryKey: rpcKey('pieces.get') })

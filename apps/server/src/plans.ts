@@ -259,6 +259,14 @@ export async function exportClaim(
 // ── Keys, one per kind of counted work ────────────────────────────────────────────────────
 
 export const renderKey = (takeId: string) => `render:${takeId}`
+/**
+ * Every key a take claims: one per render it counts as (an animation counts as
+ * `ANIMATION_RENDER_COST`), so each holds its own numbered slot and is settled with the take.
+ */
+export const renderKeys = (takeId: string, cost: number): string[] =>
+  Array.from({ length: Math.max(1, cost) }, (_, i) =>
+    i === 0 ? renderKey(takeId) : `${renderKey(takeId)}#${i + 1}`,
+  )
 export const packageKey = (packageId: string) => `package:${packageId}`
 
 /** An assistant's retried call claims once; anything else is a new export each time. */

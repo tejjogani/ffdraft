@@ -24,6 +24,7 @@ import { chooseDirection, proposeDirections, removeDirection, toDirection } from
 import { badRequest, conflict, forbidden } from '../errors'
 import { createId } from '../ids'
 import { ensure, ensureAll, getCollection, getPiece } from '../lookups'
+import { recordRenderFeedback, takeAgent } from '../render-feedback'
 import type { HandlerGroup } from './types'
 
 type PieceRow = typeof t.piece.$inferSelect
@@ -158,6 +159,25 @@ async function insertPiece(
   return toPiece(ctx, row)
 }
 
+/** A person made one of the assistant's takes the piece's cover: the strongest "kept". */
+async function noteCover(ctx: Ctx, pieceId: string, assetId: string): Promise<void> {
+  if (ctx.actor.type !== 'user') return
+  const takes = await ctx.repo.renders.many({
+    where: and(eq(t.renderJob.pieceId, pieceId), eq(t.renderJob.status, 'done')),
+    orderBy: desc(t.renderJob.createdAt),
+    limit: 200,
+  })
+  const take = takes.find((r) => r.assetIds.includes(assetId))
+  const agent = take && takeAgent(take)
+  if (agent)
+    await recordRenderFeedback(ctx, {
+      agent,
+      kind: 'kept',
+      target: `render:${take.id}`,
+      detail: `Set the take “${take.title}”, which the assistant rendered, as the piece’s cover.`,
+    })
+}
+
 export const pieces: HandlerGroup<'pieces'> = {
   'pieces.list': async (ctx, input) => {
     const where: SQL[] = []
@@ -206,6 +226,8 @@ export const pieces: HandlerGroup<'pieces'> = {
       updatedAt: new Date(),
     })
     publish(ctx, { type: 'piece.updated', pieceId: id })
+    if (patch.coverAssetId && patch.coverAssetId !== current.coverAssetId)
+      await noteCover(ctx, id, patch.coverAssetId)
     return toPieceSummary(row!)
   },
 

@@ -3,7 +3,7 @@
  * crosses: a design in; facts, file bytes (transferred, not copied) or a package out.
  */
 import type { ExportFormat, ExportResult } from '@pave/kernel/types'
-import type { PhotoFitOutcome, ViewSeed } from '@pave/match'
+import type { Camera as MatchCamera, PhotoFitOutcome, ViewSeed } from '@pave/match'
 import type { Manifest, PieceInfo, ProductionOptions, RenderImage } from '@pave/production'
 import type { Design, EvaluationSummary, PieceSpec, View } from '@pave/schema'
 import type { RenderSubject } from '../../services'
@@ -25,9 +25,24 @@ export type KernelTask =
   | { kind: 'subject'; design: Design }
   | { kind: 'package'; design: Design; build: PackageBuild }
   /** Shaded clay pictures (RGBA, `size`×`size`) from the software rasteriser. */
-  | { kind: 'picture'; design: Design; views: View[]; size: number; focus: string[] }
+  | {
+      kind: 'picture'
+      design: Design
+      views: View[]
+      size: number
+      focus: string[]
+      /** Instead of `views`: pictures through these exact cameras, at their own sizes (shots). */
+      shots?: PictureShot[]
+    }
   /** Fit the design's outline numbers to one photo's matte (`match.fit`). */
   | { kind: 'photoFit'; design: Design; fit: PhotoFitTask }
+
+/** A picture through a render shot's camera, converted to the rasteriser's camera. */
+export interface PictureShot {
+  camera: MatchCamera
+  width: number
+  height: number
+}
 
 export interface PhotoFitTask {
   matte: Uint8Array

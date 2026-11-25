@@ -8,6 +8,7 @@ import {
   ALLOWANCE_WORDS,
   ALLOWANCES,
   type Allowance,
+  ANIMATION_RENDER_COST,
   FAIR_USE,
   PLAN_NAMES,
   PLANS,
@@ -22,6 +23,10 @@ export const COUNTED_EXPORT_FORMATS = ['3dm', 'step'] as const
 
 export const exportCounts = (format: string): boolean =>
   (COUNTED_EXPORT_FORMATS as readonly string[]).includes(format)
+
+/** How many renders one Blender take counts as: an animation {@link ANIMATION_RENDER_COST}. */
+export const renderCost = (scene: { animation?: unknown } | null | undefined): number =>
+  scene?.animation ? ANIMATION_RENDER_COST : 1
 
 /** The allowance period a moment falls in: its calendar month in UTC, as `YYYY-MM`. */
 export const periodOf = (at: Date): string => at.toISOString().slice(0, 7)

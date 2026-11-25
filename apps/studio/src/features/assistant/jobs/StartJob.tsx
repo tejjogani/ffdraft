@@ -5,8 +5,9 @@
  * piece: the photo goes with the job's message and the goal says to rebuild it.
  */
 import { JOB_RECIPES } from '@pave/agent/studio'
-import { DEFAULT_SHOTS, LOOK_CHOICES, lookLabel, machineTime, QUALITY_LABELS } from '@pave/render'
+import { DEFAULT_SHOTS, machineTime, QUALITY_LABELS } from '@pave/render'
 import {
+  ANIMATION_RENDER_COST,
   type Asset,
   type AssistantTier,
   type JobStage,
@@ -218,14 +219,15 @@ export function StartJob({
 }
 
 /**
- * The Render job's plan in numbers: which shots, in which look, at what size and quality, and
- * how long they would keep this computer busy. The choices become the job's goal.
+ * The Render job before it starts: what it will do first (look at the piece, then two or three
+ * quick questions with defaults ready, so one Go is enough), the quality it renders at, what the
+ * standard set would take of this computer's time, and the free renders left. The quality and
+ * the allowance become part of the job's goal; the shots, look and motion come from the answers.
  */
 function RenderPlan({ pieceId, onGoal }: { pieceId: string; onGoal: (goal: string) => void }) {
   const piece = useRpc('pieces.get', { id: pieceId })
   const saved = useRpc('scenes.list', { pieceId })
   const engine = useRpc('renders.engine', {})
-  const [look, setLook] = useState<RenderScene['look']>('catalog-white')
   const [quality, setQuality] = useState<RenderScene['output']['quality']>('standard')
   const shots = piece.data
     ? saved.data?.length
@@ -235,45 +237,38 @@ function RenderPlan({ pieceId, onGoal }: { pieceId: string; onGoal: (goal: strin
           scene: RenderSceneSchema.parse(d.scene),
         }))
     : []
-  const planned = shots.map((x) => ({ ...x.scene, look, output: { ...x.scene.output, quality } }))
+  const planned = shots.map((x) => ({ ...x.scene, output: { ...x.scene.output, quality } }))
   const estimate = useRpc(
     'renders.estimate',
     { pieceId, takes: planned.map((scene) => ({ scene })) },
     { enabled: planned.length > 0 },
   )
   const browser = engine.data ? !engine.data.available : false
-  const titles = shots.map((x) => x.title)
   // Blender takes count against the plan; the job plans within what is left.
   const plan = useRpc('plan.get', {})
   const renders = plan.data?.allowances.find((a) => a.allowance === 'render')
   const left = !browser && renders && renders.limit !== null ? renders.left : null
   const within =
-    left !== null && left < titles.length
-      ? ` Only ${left} free ${left === 1 ? 'render is' : 'renders are'} left this month: render the shots that matter most first, and ask before the last one.`
+    left !== null && left < shots.length
+      ? ` Only ${left} free ${left === 1 ? 'render is' : 'renders are'} left this month (an animation counts as ${ANIMATION_RENDER_COST}): render what matters most first, and ask before the last one.`
       : ''
-  const goal = `Render ${titles.length ? titles.join(', ') : 'the standard shots'} in ${lookLabel(look)} at ${QUALITY_LABELS[quality].toLowerCase()} quality. Look at every take, re-render what falls short (at most twice per shot), and hand the set over for review.${within}`
+  const goal = `${JOB_RECIPES.render.goal} Render at ${QUALITY_LABELS[quality].toLowerCase()} quality.${within}`
   const last = useRef('')
   useEffect(() => {
-    if (!titles.length || last.current === goal) return
+    if (!piece.data || last.current === goal) return
     last.current = goal
     onGoal(goal)
-  }, [goal, onGoal, titles.length])
+  }, [goal, onGoal, piece.data])
   return (
     <div className="flex flex-col gap-2 rounded-md bg-bg-muted p-2.5">
-      <div className="flex flex-wrap gap-1">
-        {LOOK_CHOICES.slice(0, 3).map((l) => (
-          <Button
-            key={l.look}
-            size="sm"
-            variant={l.look === look ? 'primary' : 'ghost'}
-            onClick={() => setLook(l.look)}
-          >
-            {l.label}
-          </Button>
-        ))}
-      </div>
+      <p className="text-xs text-fg-muted">
+        It looks at the piece first, then asks at most three quick questions (what the images are
+        for, the shapes, any animations) with good answers already picked, so one Go is enough. It
+        places every camera itself and checks the framing before rendering.
+      </p>
       <Segmented
         size="sm"
+        aria-label="Quality"
         value={quality}
         onChange={setQuality}
         options={(['preview', 'standard', 'final'] as const).map((q) => ({
@@ -282,12 +277,10 @@ function RenderPlan({ pieceId, onGoal }: { pieceId: string; onGoal: (goal: strin
         }))}
       />
       <p className="text-xs text-fg-muted">
-        {titles.length} shots ({titles.join(', ')}), each{' '}
-        {shots[0] ? `${shots[0].scene.output.width}×${shots[0].scene.output.height}` : ''}.{' '}
         {browser
-          ? 'Without Blender they are drawn in the browser at preview quality, in seconds.'
+          ? 'Without Blender, stills are drawn in the browser at preview quality, in seconds; animations need Blender.'
           : estimate.data
-            ? `About ${machineTime(estimate.data.seconds).replace(/^about /, '')} of this computer’s time, plus up to two re-renders a shot. Nothing is paid.`
+            ? `A set of ${shots.length} stills takes about ${machineTime(estimate.data.seconds).replace(/^about /, '')} of this computer’s time; animations count every frame. Nothing is paid.`
             : 'Working out the time…'}
       </p>
       {left !== null && renders && (
@@ -300,7 +293,7 @@ function RenderPlan({ pieceId, onGoal }: { pieceId: string; onGoal: (goal: strin
               </Link>
             </>
           ) : (
-            `${left} of ${renders.limit} free Blender renders left this month; each finished take and re-render uses one, and you are asked before the last.`
+            `${left} of ${renders.limit} free Blender renders left this month; each finished take uses one (an animation ${ANIMATION_RENDER_COST}), and you are asked before the last.`
           )}
         </p>
       )}

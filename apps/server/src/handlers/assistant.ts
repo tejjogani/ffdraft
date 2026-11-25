@@ -2,7 +2,7 @@ import { type Message, roleAllows } from '@pave/schema'
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import type { Ctx } from '../context'
 import * as t from '../db/schema'
-import { forbidden, notFound } from '../errors'
+import { badRequest, forbidden, notFound } from '../errors'
 import { createId } from '../ids'
 import { ensure, ensureAll, getBoard, getPiece, getRun, getScene, getThread } from '../lookups'
 import { serviceContext } from '../service-context'
@@ -53,7 +53,15 @@ async function ownRun(ctx: Ctx, id: string) {
   return run
 }
 
-export const assistant: HandlerGroup<'threads' | 'runs' | 'client' | 'traces' | 'assistant'> = {
+export const assistant: HandlerGroup<
+  'threads' | 'runs' | 'client' | 'traces' | 'assistant' | 'chat'
+> = {
+  // Inside a run the loop answers it with what the person picked; on its own it has nobody to ask.
+  'chat.ask': async () => {
+    throw badRequest(
+      'chat.ask asks the designer inside an assistant conversation; there is no one to answer it here.',
+    )
+  },
   // Setup works without a key (that is how one is entered); the key itself never comes back.
   'assistant.setup.get': async (ctx) =>
     ctx.services

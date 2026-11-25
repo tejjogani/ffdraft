@@ -3,7 +3,7 @@
  * catalogue, the scene resolver and the numeric render critique. Renderer backends live in
  * `@pave/render/three` (viewport) and `@pave/render/node` (Blender worker).
  */
-export { ease, RACK_FOCUS_FSTOP, sampleTrack } from './animation'
+export { ease, loops, RACK_FOCUS_FSTOP, resolveAnimation, sampleTrack } from './animation'
 export {
   type AdjustablePath,
   applyAdjustments,
@@ -27,6 +27,25 @@ export {
   SENSOR_WIDTH_MM,
   viewTangents,
 } from './camera'
+export {
+  ASPECTS,
+  type AspectKey,
+  aspectOf,
+  cinemaQuestions,
+  MOTION_CHOICES,
+  type MotionChoice,
+  motionChoice,
+  motionOf,
+  outputSize,
+  type PieceFeatures,
+  PURPOSES,
+  pieceFeatures,
+  placeShot,
+  type ShotFraming,
+  type ShotRecipe,
+  shotFraming,
+  shotVocabulary,
+} from './cinema'
 export { hexToRgb, kelvinToRgb, luminance, type Rgb, srgbToLinear } from './color'
 export {
   type CustomCamera,

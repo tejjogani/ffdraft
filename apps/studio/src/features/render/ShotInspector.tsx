@@ -1,10 +1,23 @@
 /**
  * Adjusting a shot in plain words: the look (Studio white, Black acrylic, Soft gradient and
- * more), the angle, the lens, the light, the backdrop, the metal, the size and the quality,
- * with how long a take of it would keep this computer busy. Sliders show their value while
+ * more), the angle, the lens, the light, the backdrop, the metal, the motion (a still, or a
+ * turntable, orbit, push-in, macro sweep or sparkle pass with its length, frame rate and loop),
+ * the shape, the size and the quality, with how long a take of it would keep this computer busy. Sliders show their value while
  * dragged and save once, on release.
  */
-import { LOOK_CHOICES, machineTime, QUALITY_LABELS, SIZE_PRESETS } from '@pave/render'
+import {
+  ASPECTS,
+  type AspectKey,
+  aspectOf,
+  LOOK_CHOICES,
+  loops,
+  MOTION_CHOICES,
+  machineTime,
+  motionOf,
+  outputSize,
+  QUALITY_LABELS,
+  SIZE_PRESETS,
+} from '@pave/render'
 import { METAL_IDS, type RenderScene } from '@pave/schema'
 import { cn, Segmented, Select, Slider, Switch } from '@pave/ui'
 import { type ReactNode, useEffect, useState } from 'react'
@@ -235,7 +248,89 @@ export function ShotInspector({
         />
       </Section>
 
+      <Section title="Motion">
+        <Select
+          value={scene.animation?.type ?? 'still'}
+          onChange={(type) =>
+            onChange({
+              animation:
+                type === 'still'
+                  ? null
+                  : motionOf(type as (typeof MOTION_CHOICES)[number]['type'], scene.animation?.fps),
+            })
+          }
+          options={[
+            { value: 'still', label: 'Still picture', hint: 'No motion' },
+            ...MOTION_CHOICES.map((m) => ({ value: m.type, label: m.label, hint: m.hint })),
+          ]}
+        />
+        {scene.animation && (
+          <>
+            <LiveSlider
+              label="Length"
+              value={scene.animation.seconds}
+              min={1}
+              max={20}
+              step={0.5}
+              format={(v) => `${v} s`}
+              onCommit={(seconds) => onChange({ animation: { seconds } })}
+            />
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="text-fg-muted">Frame rate</span>
+              <Segmented
+                size="sm"
+                aria-label="Frame rate"
+                value={String(scene.animation.fps)}
+                onChange={(fps) => onChange({ animation: { fps: Number(fps) } })}
+                options={['24', '30', '60'].map((f) => ({ value: f, label: `${f} fps` }))}
+              />
+            </div>
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="text-fg-muted">
+                Loop
+                <span className="block text-[11px] text-fg-subtle">
+                  {scene.animation.type === 'turntable'
+                    ? 'A full turn always loops without a jump.'
+                    : 'Goes there and comes back, so it plays round.'}
+                </span>
+              </span>
+              <Switch
+                checked={loops(scene.animation)}
+                disabled={scene.animation.type === 'turntable'}
+                onChange={(loop) => onChange({ animation: { loop } })}
+                aria-label="Loop"
+              />
+            </div>
+            <p className="text-[11px] text-fg-subtle">
+              {Math.max(2, Math.round(scene.animation.seconds * scene.animation.fps))} frames · MP4
+              (H.264), with a poster and a small GIF. Scrub the motion in the viewfinder before
+              rendering.
+              {engine === 'browser' &&
+                ' Animations need Blender: the browser can preview the motion but not export it.'}
+            </p>
+          </>
+        )}
+      </Section>
+
       <Section title="Size">
+        <Segmented
+          size="sm"
+          aria-label="Shape"
+          value={aspectOf(scene.output.width, scene.output.height)}
+          onChange={(aspect) =>
+            onChange({
+              output: outputSize(
+                aspect as AspectKey,
+                Math.max(scene.output.width, scene.output.height),
+              ),
+            })
+          }
+          options={(['1:1', '4:5', '9:16', '16:9'] as const).map((k) => ({
+            value: k,
+            label: k,
+            title: ASPECTS[k].use,
+          }))}
+        />
         <Select
           value={size}
           onChange={(key) => {

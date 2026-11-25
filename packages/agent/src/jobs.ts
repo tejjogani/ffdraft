@@ -119,16 +119,27 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
     stage: 'render',
     label: 'Render',
     button: 'Render with AI',
-    goal: 'Render a studio shot set of the piece, look at every take, re-render what falls short, and hand the set over for review.',
+    goal: 'Look at the piece, ask me at most three quick questions, then place the cameras for a shot set and any animations, check the framing, render each take, look at it, re-render what falls short, and hand the set over for review.',
     steps: [
       {
+        id: 'look',
+        label: 'Look at the piece and ask what the images are for',
+        tools: ['pieces.get', 'scenes.list', 'scenes.suggest', 'chat.ask'],
+      },
+      {
         id: 'setup',
-        label: 'Set up the shots and the look',
-        tools: ['pieces.get', 'scenes.list', 'scenes.create', 'scenes.update', 'renders.estimate'],
+        label: 'Place each camera and the look; check the framing',
+        tools: [
+          'scenes.create',
+          'scenes.update',
+          'scenes.revert',
+          'scenes.capture',
+          'renders.estimate',
+        ],
       },
       {
         id: 'render',
-        label: 'Render each shot, look at it, re-render what falls short',
+        label: 'Render the stills and animations, look at each, re-render what falls short',
         tools: ['renders.create', 'renders.get', 'renders.list', 'viewport.capture'],
       },
       {
@@ -139,7 +150,7 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
       },
     ],
     // Starting the job approves the renders its plan describes; past that a person approves.
-    approved: { tools: ['renders.create'], limit: 12 },
+    approved: { tools: ['renders.create'], limit: 16 },
   },
 }
 

@@ -9,9 +9,9 @@ import type { RenderJob } from '@pave/schema'
 import { AiMark, Button, Chip, Textarea, toast } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
-import { assetUrl } from '../../lib/assets'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { isLive, takeLabel } from '../render/shots'
+import { TakeMedia } from '../render/TakeMedia'
 import { TakeProgress } from '../render/TakeProgress'
 import type { CallItem } from './model'
 
@@ -35,8 +35,10 @@ export function TakeCard({ call, pieceId }: { call: CallItem; pieceId: string })
     <div className="ml-6 max-w-[300px] overflow-hidden rounded-lg bg-bg shadow-[0_0_0_1px_var(--line)]">
       {take.status === 'done' && image ? (
         <Link to="/pieces/$id/render" params={{ id: pieceId }} className="block">
-          <img
-            src={assetUrl(image, 640)}
+          <TakeMedia
+            take={take}
+            width={640}
+            large={!!take.scene.animation}
             alt={`Take: ${takeLabel(take)}`}
             className="aspect-square w-full bg-bg-muted object-cover"
           />

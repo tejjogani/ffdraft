@@ -333,7 +333,7 @@ describe('the Render job', () => {
     expect(refused.isError).toBe(true)
     expect(refused.text).toContain('re-rendered 2 times')
     expect(done.job).toMatchObject({ stage: 'render', review: 'pending' })
-    expect(done.job!.plan.map((p) => p.state)).toEqual(['done', 'done', 'pending'])
+    expect(done.job!.plan.map((p) => p.state)).toEqual(['done', 'skipped', 'done', 'pending'])
   })
 })
 

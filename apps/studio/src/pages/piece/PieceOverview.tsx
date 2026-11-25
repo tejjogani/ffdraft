@@ -5,6 +5,7 @@ import { ImageIcon, Lightbulb, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { SectionTitle } from '../../components/Page'
 import { SpecCard } from '../../components/SpecCard'
+import { takeMedia } from '../../features/render/shots'
 import { assetUrl } from '../../lib/assets'
 import { plural, relativeTime } from '../../lib/format'
 import { useUpdatePiece } from '../../lib/pieces'
@@ -108,7 +109,7 @@ export function Moodboards({ pieceId }: { pieceId: string }) {
 
 function LatestRenders({ pieceId }: { pieceId: string }) {
   const renders = useRpc('renders.list', { pieceId, limit: 8 })
-  const done = renders.data?.filter((r) => r.status === 'done' && r.assetIds[0]) ?? []
+  const done = renders.data?.filter((r) => r.status === 'done' && takeMedia(r).still) ?? []
   return (
     <section>
       <SectionTitle
@@ -135,7 +136,7 @@ function LatestRenders({ pieceId }: { pieceId: string }) {
           {done.map((r) => (
             <img
               key={r.id}
-              src={assetUrl(r.assetIds[0]!, 320)}
+              src={assetUrl(takeMedia(r).still ?? r.assetIds[0]!, 320)}
               alt={r.title}
               loading="lazy"
               className="stage aspect-square w-36 shrink-0 rounded-lg object-cover shadow-[0_0_0_1px_var(--line)]"

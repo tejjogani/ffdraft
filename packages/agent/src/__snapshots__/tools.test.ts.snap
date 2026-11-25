@@ -2,12 +2,13 @@
 
 exports[`tool schemas > is sorted and stable (snapshot) 1`] = `
 {
-  "hash": "1a440b624edbdf",
+  "hash": "1c3e878905e368",
   "tools": [
     "boards_create mutation",
     "boards_delete mutation confirm strict",
     "boards_get query strict",
     "boards_list query",
+    "chat_ask query confirm",
     "collections_create mutation",
     "collections_list query",
     "design_apply mutation",
@@ -49,9 +50,11 @@ exports[`tool schemas > is sorted and stable (snapshot) 1`] = `
     "renders_estimate query",
     "renders_get query strict",
     "renders_list query",
+    "scenes_capture query",
     "scenes_create mutation",
     "scenes_list query strict",
     "scenes_revert mutation",
+    "scenes_suggest query",
     "scenes_update mutation",
     "shots_create mutation confirm",
     "shots_estimate query",

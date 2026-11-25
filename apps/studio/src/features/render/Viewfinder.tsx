@@ -21,7 +21,7 @@ import {
 } from '@pave/render'
 import type { RenderScene } from '@pave/schema'
 import { Chip, cn, IconButton } from '@pave/ui'
-import { Grid3x3, Lock, LockOpen, RotateCcw } from 'lucide-react'
+import { Grid3x3, Lock, LockOpen, Pause, Play, RotateCcw } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createWheelClassifier } from '../../components/stage/wheel'
 import { ShotRenderer } from './shot-renderer'
@@ -127,10 +127,12 @@ export function Viewfinder({
   const aspect = resolved
     ? resolved.output.width / resolved.output.height
     : scene.output.width / scene.output.height
+  // An animated shot keeps a row under the frame for its scrubber.
+  const room = { width: box.width, height: Math.max(0, box.height - (scene.animation ? 40 : 0)) }
   const fit =
-    box.width / Math.max(1, box.height) > aspect
-      ? { width: box.height * aspect, height: box.height }
-      : { width: box.width, height: box.width / aspect }
+    room.width / Math.max(1, room.height) > aspect
+      ? { width: room.height * aspect, height: room.height }
+      : { width: room.width, height: room.width / aspect }
 
   useEffect(() => {
     const r = renderer.current
@@ -172,6 +174,35 @@ export function Viewfinder({
     [resolved, pieceId, version],
   )
   useEffect(() => onHash?.(hash), [hash, onHash])
+
+  // ── Motion ──────────────────────────────────────────────────────────────────────────────
+  // An animated shot can be scrubbed and played before render time is spent: the same tracks,
+  // sampled by the same easing, that Blender keys. A new picture starts again at frame 0.
+  const motion = resolved?.animation ?? null
+  const [frame, setFrame] = useState(0)
+  const [playing, setPlaying] = useState(false)
+  const frameRef = useRef(0)
+  frameRef.current = frame
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new resolved scene is the trigger
+  useEffect(() => {
+    setFrame(0)
+    setPlaying(false)
+  }, [resolved])
+  useEffect(() => {
+    if (motion) renderer.current?.setFrame(frame)
+  }, [frame, motion])
+  useEffect(() => {
+    if (!playing || !motion) return
+    let raf = 0
+    const from = performance.now()
+    const first = frameRef.current
+    const tick = (now: number) => {
+      setFrame((first + Math.floor(((now - from) / 1000) * motion.fps)) % motion.frameCount)
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [playing, motion])
 
   // ── Gestures ────────────────────────────────────────────────────────────────────────────
   const latest = useRef({ resolved, radius, scene, onCommit, fit, locked, aspect })
@@ -313,7 +344,10 @@ export function Viewfinder({
 
   return (
     <div className={className}>
-      <div ref={host} className="relative flex size-full items-center justify-center">
+      <div
+        ref={host}
+        className="relative flex size-full flex-col items-center justify-center gap-2"
+      >
         <div
           className="relative"
           style={{ width: fit.width, height: fit.height }}
@@ -406,12 +440,77 @@ export function Viewfinder({
             </span>
           )}
         </div>
+        {motion && !failed && evaluation && (
+          <MotionScrubber
+            width={Math.min(box.width, Math.max(220, fit.width))}
+            frame={frame}
+            frameCount={motion.frameCount}
+            fps={motion.fps}
+            playing={playing}
+            onFrame={(f) => {
+              setPlaying(false)
+              setFrame(f)
+            }}
+            onPlay={setPlaying}
+          />
+        )}
         {failed && (
           <p className="absolute max-w-sm text-center text-sm text-fg-muted">
             The live preview isn’t available in this browser ({failed}). Takes still render.
           </p>
         )}
       </div>
+    </div>
+  )
+}
+
+/**
+ * Scrubbing an animated shot: play or pause, and a slider over its frames with the time. Not
+ * started on its own (reduced motion is respected by never auto-playing).
+ */
+function MotionScrubber({
+  width,
+  frame,
+  frameCount,
+  fps,
+  playing,
+  onFrame,
+  onPlay,
+}: {
+  /** The frame's width: the scrubber sits under it, as wide. */
+  width: number
+  frame: number
+  frameCount: number
+  fps: number
+  playing: boolean
+  onFrame: (frame: number) => void
+  onPlay: (playing: boolean) => void
+}) {
+  return (
+    <div
+      className="flex h-8 shrink-0 items-center gap-2 rounded-md bg-bg px-1.5 shadow-[0_0_0_1px_var(--line)]"
+      style={{ width }}
+    >
+      <IconButton
+        icon={playing ? Pause : Play}
+        size="sm"
+        label={playing ? 'Pause the motion' : 'Play the motion'}
+        onClick={() => onPlay(!playing)}
+      />
+      <input
+        type="range"
+        min={0}
+        max={frameCount - 1}
+        step={1}
+        value={frame}
+        aria-label="Motion frame"
+        aria-valuetext={`Frame ${frame + 1} of ${frameCount}`}
+        onChange={(e) => onFrame(Number(e.target.value))}
+        className="min-w-0 flex-1 accent-[var(--select)]"
+      />
+      <span className="shrink-0 font-mono text-[10px] text-fg-muted tabular">
+        {(frame / fps).toFixed(1)} / {(frameCount / fps).toFixed(1)} s
+      </span>
     </div>
   )
 }

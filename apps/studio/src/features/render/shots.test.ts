@@ -1,6 +1,6 @@
 import { type RenderJob, RenderSceneSchema, type SavedScene } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
-import { pickOf, secondsLeft, shotList, takeLabel, takesOf } from './shots'
+import { motionLabel, pickOf, secondsLeft, shotList, takeLabel, takeMedia, takesOf } from './shots'
 
 const scene = RenderSceneSchema.parse({})
 const saved = (id: string, takeId: string | null = null): SavedScene => ({
@@ -87,5 +87,22 @@ describe('time left', () => {
     expect(takeLabel(take('t', 'x', { variantLabel: 'Platinum' }))).toBe('Platinum')
     expect(takeLabel(take('t', 'x', { retryOf: 'a', note: 'warmer key' }))).toBe('warmer key')
     expect(takeLabel(take('t', 'x'))).toBe('Hero')
+  })
+})
+
+describe('a take’s files', () => {
+  const still = { scene: RenderSceneSchema.parse({}), assetIds: ['as_still'] }
+  const turntable = {
+    scene: RenderSceneSchema.parse({ animation: { type: 'turntable', seconds: 6, fps: 30 } }),
+    assetIds: ['as_mp4', 'as_poster', 'as_gif'],
+  }
+  it('a still is its image; an animation is its video, poster and GIF', () => {
+    expect(takeMedia(still)).toEqual({ still: 'as_still', video: null, gif: null })
+    expect(takeMedia(turntable)).toEqual({ video: 'as_mp4', still: 'as_poster', gif: 'as_gif' })
+    expect(takeMedia({ ...turntable, assetIds: ['as_mp4'] }).still).toBeNull()
+  })
+  it('names the motion and its length', () => {
+    expect(motionLabel(turntable)).toBe('360° turntable · 6 s')
+    expect(motionLabel(still)).toBeNull()
   })
 })

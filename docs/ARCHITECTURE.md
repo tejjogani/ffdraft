@@ -116,6 +116,16 @@ roll, and the bounds it was framed on, so a house shot scales to other pieces) a
 shot change (`scenes.history`, `scenes.revert`), and a locked camera moves for nobody, the
 assistant included. The vision pass is the assistant's own look at the finished take, inside a
 traced run.
+The Render job is a cinematographer (`@pave/render` `cinema.ts`, the assistant's cinema skill):
+`scenes.suggest` reads what matters in the piece and places a camera for each shot of its kind's
+vocabulary, `chat.ask` asks at most three quick questions as an approval-style wait whose answer
+(`runs.decide {answers}`) comes back as the tool result, `scenes.capture` draws each shot through
+its own camera on the server and measures the framing, and the loop refuses an assistant's take
+of a shot that cuts the piece off. Animations (turntable, half orbit, push-in, macro sweep,
+sparkle pass) are keyframed once and played by both renderers; a Blender animation take is an
+MP4 from bpy's built-in encoder, its first frame as a poster, and a GIF made with sharp. A
+person's later actions on the assistant's takes and shots (kept, swapped, starred, deleted,
+reframed, restyled, re-rendered) are written as implicit feedback on its run (`render-feedback.ts`).
 Without Blender, a take is drawn by one of the person's own windows from the same resolved scene
 and labelled "Preview quality". A render costs this computer's time, never money: estimates are
 machine time, learnt from this machine's finished takes.

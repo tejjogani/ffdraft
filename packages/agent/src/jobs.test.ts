@@ -85,11 +85,13 @@ describe('AI job plans', () => {
 
   it('writes the person’s turn for each way a job starts', () => {
     const job = newJob('render')
-    expect(jobMessage(job, { type: 'start' })).toContain('Render job: Render a studio shot set')
-    expect(jobMessage(job, { type: 'start' })).toContain('1. Set up the shots')
+    expect(jobMessage(job, { type: 'start' })).toContain('Render job: Look at the piece, ask me')
+    expect(jobMessage(job, { type: 'start' })).toContain(
+      '1. Look at the piece and ask what the images are for',
+    )
     expect(jobMessage(job, { type: 'resume' })).toContain('keep my changes')
     expect(jobMessage(job, { type: 'resume' })).toContain(
-      'Still to do: Set up the shots and the look; Render each shot',
+      'Still to do: Look at the piece and ask what the images are for; Place each camera',
     )
     expect(jobMessage(job, { type: 'redo', step: 'Render the takes' })).toContain(
       'Render the takes',
@@ -127,5 +129,7 @@ describe('AI job plans', () => {
     expect(jobApproves(render, 'references.generate', 0)).toBe(false)
     expect(jobApproves(newJob('cad'), 'renders.create', 0)).toBe(false)
     expect(jobApproves(null, 'renders.create', 0)).toBe(false)
+    // The quick questions always wait for the person: no plan answers for them.
+    expect(jobApproves(render, 'chat.ask', 0)).toBe(false)
   })
 })

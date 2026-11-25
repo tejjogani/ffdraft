@@ -273,6 +273,7 @@ export class Assistant implements AssistantService {
     await decideStep(ctx, input.runId, input.toolCallId, {
       decision: input.decision,
       note: input.note ?? null,
+      ...(input.answers ? { answers: input.answers } : {}),
     })
     if (run.threadId) this.#start(sctx, run.id, run.threadId)
     return toRun(await getRun(ctx, input.runId))

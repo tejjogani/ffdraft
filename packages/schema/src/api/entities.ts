@@ -332,6 +332,22 @@ const Vec3 = z.tuple([z.number(), z.number(), z.number()])
  * the real-time viewport and a fixed Blender runner consume — the assistant edits this, it never
  * writes Python.
  */
+/**
+ * The camera and light moves an animation take can make: a seamless 360° turntable, a half
+ * orbit round the front, a slow push-in, a macro sweep across the centre stone, a light sweep
+ * that walks the sparkle across the stones, a short orbit arc and a rack focus.
+ */
+export const ANIMATION_TYPES = [
+  'turntable',
+  'half-orbit',
+  'push-in',
+  'macro-sweep',
+  'light-sweep',
+  'orbit-arc',
+  'rack-focus',
+] as const
+export type AnimationType = (typeof ANIMATION_TYPES)[number]
+
 export const RenderSceneSchema = z.object({
   /** Lighting + staging recipe; see @pave/render for the catalogue. */
   look: z
@@ -489,9 +505,7 @@ export const RenderSceneSchema = z.object({
     }),
   animation: z
     .object({
-      type: z
-        .enum(['turntable', 'orbit-arc', 'rack-focus', 'light-sweep', 'push-in'])
-        .meta({ title: 'Motion' }),
+      type: z.enum(ANIMATION_TYPES).meta({ title: 'Motion' }),
       seconds: z.number().min(1).max(20).default(6).meta({ title: 'Length', unit: 's', step: 0.5 }),
       fps: z
         .number()
@@ -500,6 +514,15 @@ export const RenderSceneSchema = z.object({
         .max(60)
         .default(30)
         .meta({ title: 'Frame rate', step: 1, advanced: true }),
+      /**
+       * Ends where it starts, so it plays round and round without a jump. A turntable always
+       * loops (it turns a full circle); any other move goes there and comes back. Unset = the
+       * motion's own default (only the turntable loops).
+       */
+      loop: z.boolean().optional().meta({
+        title: 'Loop',
+        description: 'Ends where it starts, so it plays round without a jump.',
+      }),
     })
     .optional()
     .meta({ title: 'Motion', group: 'Motion', description: 'Leave unset for a still.' }),
@@ -638,6 +661,10 @@ export const RenderJobSchema = z.object({
   sceneHash: z.string().nullable(),
   /** The piece has changed since this was rendered (server-computed). */
   stale: z.boolean(),
+  /**
+   * The take's files. A still: the image. An animation: the video (MP4, H.264) first, then a
+   * poster still (its first frame), then a small looping GIF when one was made.
+   */
   assetIds: z.array(id),
   /** The numeric critique: each preview draft, what it measured and what was adjusted. */
   critique: z
@@ -1001,6 +1028,8 @@ export const StepSchema = z.object({
       decidedBy: id.nullable(),
       decidedAt: iso.nullable(),
       note: z.string().nullable(),
+      /** For `chat.ask`: the options the person picked, by question id. */
+      answers: z.record(z.string(), z.array(z.string())).optional(),
     })
     .nullable(),
   /** Model steps: tokens and cost of the call, and why the model stopped. */
@@ -1013,6 +1042,30 @@ export const StepSchema = z.object({
 export type Step = z.infer<typeof StepSchema>
 
 /**
+ * Kinds of feedback. Design: thumbs, and an agent's change undone, corrected or removed. Render
+ * (a person acting on a take or shot the assistant made): kept (set as the cover, or swapped
+ * into the set), swapped (another take put in its place), starred and unstarred, deleted,
+ * reframed (its camera moved), restyled (look, light, backdrop or materials changed) and
+ * rerendered (rendered again by hand).
+ */
+export const FEEDBACK_KINDS = [
+  'up',
+  'down',
+  'undone',
+  'corrected',
+  'removed',
+  'kept',
+  'swapped',
+  'starred',
+  'unstarred',
+  'deleted',
+  'reframed',
+  'restyled',
+  'rerendered',
+] as const
+export type FeedbackKind = (typeof FEEDBACK_KINDS)[number]
+
+/**
  * Feedback on a run: explicit (thumbs, from a person) or implicit, read from the edit history —
  * an agent's change undone, corrected or removed by a person soon after.
  */
@@ -1021,15 +1074,100 @@ export const FeedbackSchema = z.object({
   runId: id,
   stepId: id.nullable(),
   source: z.enum(['explicit', 'implicit']),
-  kind: z.enum(['up', 'down', 'undone', 'corrected', 'removed']),
+  kind: z.enum(FEEDBACK_KINDS),
   /** The agent change the implicit feedback is about. */
   changeId: id.nullable(),
+  /**
+   * What a render signal is about: `render:<takeId>` or `scene:<sceneId>` (a take or shot the
+   * assistant made); null for design feedback.
+   */
+  target: z.string().nullable(),
   /** A person's note, or what the implicit signal saw. */
   detail: z.string(),
   userId: id.nullable(),
   at: iso,
 })
 export type Feedback = z.infer<typeof FeedbackSchema>
+
+// ── Quick questions ──────────────────────────────────────────────────────────────────────────
+
+const choiceId = z
+  .string()
+  .regex(/^[a-z0-9][a-z0-9-]{0,31}$/, 'lowercase letters, digits and hyphens')
+
+/**
+ * One question the assistant asks as quick replies: two to six options, the good default
+ * already picked, so the person can press Go without typing.
+ */
+export const QuickQuestionSchema = z
+  .object({
+    id: choiceId,
+    question: z.string().min(1).max(120),
+    options: z
+      .array(
+        z.object({
+          id: choiceId,
+          label: z.string().min(1).max(60),
+          hint: z.string().max(120).optional(),
+        }),
+      )
+      .min(2)
+      .max(6),
+    /** Several options may be picked (aspect ratios, animations); otherwise exactly one. */
+    multiple: z.boolean().default(false),
+    /** Picked before the person touches anything. */
+    defaults: z.array(choiceId).min(1).max(6),
+  })
+  .refine((q) => q.defaults.every((d) => q.options.some((o) => o.id === d)), {
+    message: 'Every default must be one of the options',
+  })
+  .refine((q) => q.multiple || q.defaults.length === 1, {
+    message: 'A single-choice question has exactly one default',
+  })
+  .refine((q) => new Set(q.options.map((o) => o.id)).size === q.options.length, {
+    message: 'Option ids must differ',
+  })
+export type QuickQuestion = z.infer<typeof QuickQuestionSchema>
+
+/** What the person answered, question by question, in words the model reads. */
+export const QuickAnswersSchema = z.object({
+  answers: z.array(
+    z.object({
+      id: z.string(),
+      question: z.string(),
+      chosen: z.array(z.object({ id: z.string(), label: z.string() })),
+      /** True when the person left the default as it was. */
+      default: z.boolean(),
+    }),
+  ),
+})
+export type QuickAnswers = z.infer<typeof QuickAnswersSchema>
+
+/**
+ * Picks for each question, made whole: unknown option ids are dropped, a single-choice
+ * question keeps one pick, and a question with no valid pick takes its defaults.
+ */
+export function resolveAnswers(
+  questions: readonly QuickQuestion[],
+  picks: Readonly<Record<string, readonly string[]>> | undefined,
+): QuickAnswers {
+  return {
+    answers: questions.map((q) => {
+      const valid = (picks?.[q.id] ?? []).filter(
+        (id, i, all) => q.options.some((o) => o.id === id) && all.indexOf(id) === i,
+      )
+      const chosenIds = valid.length ? (q.multiple ? valid : valid.slice(0, 1)) : q.defaults
+      const same =
+        chosenIds.length === q.defaults.length && chosenIds.every((id) => q.defaults.includes(id))
+      return {
+        id: q.id,
+        question: q.question,
+        chosen: chosenIds.map((id) => ({ id, label: q.options.find((o) => o.id === id)!.label })),
+        default: same,
+      }
+    }),
+  }
+}
 
 // ── Usage ────────────────────────────────────────────────────────────────────────────────────
 

@@ -55,7 +55,7 @@ import type {
 } from '@pave/schema'
 import type { NewAsset } from './assets/assets'
 import type { Invoke } from './context'
-import type { PhotoFitResult, PhotoFitTask } from './engines/kernel/protocol'
+import type { PhotoFitResult, PhotoFitTask, PictureShot } from './engines/kernel/protocol'
 import { NotConfiguredError } from './errors'
 import type { NewUsage } from './usage'
 
@@ -190,7 +190,13 @@ export interface GeometryService extends Service {
    */
   picture?(
     design: Design,
-    opts: { views: View[]; size: number; focus: string[] } & GeometryCall,
+    opts: {
+      views: View[]
+      size: number
+      focus: string[]
+      /** Instead of `views`: pictures through these cameras at their own sizes. */
+      shots?: PictureShot[]
+    } & GeometryCall,
     sctx: ServiceContext,
   ): Promise<{ images: Uint8Array[]; summary: EvaluationSummary }>
   /** Fits the design's outline numbers to a photo's matte (`match.fit`). Optional, as above. */

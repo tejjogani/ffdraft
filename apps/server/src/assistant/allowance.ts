@@ -4,9 +4,10 @@
  * spends the last free render or export of the month, even where a Render job's plan would
  * otherwise approve the call by itself.
  */
-import { ALLOWANCE_WORDS, type Allowance, exportCounts, PLANS } from '@pave/schema'
+import { ALLOWANCE_WORDS, type Allowance, exportCounts, PLANS, renderCost } from '@pave/schema'
 import type { Ctx } from '../context'
 import { engineFor } from '../handlers/render'
+import { getScene } from '../lookups'
 import { allowanceLeft } from '../plans'
 
 /** Which allowance a tool call would spend, if any. */
@@ -24,6 +25,16 @@ export function allowanceOf(ctx: Ctx, command: string, input: unknown): Allowanc
     default:
       return null
   }
+}
+
+/** How many of its allowance a call spends: an animation take counts as more than one render. */
+async function costOf(ctx: Ctx, command: string, input: unknown): Promise<number> {
+  if (command !== 'renders.create') return 1
+  const i = (input ?? {}) as { scene?: { animation?: unknown }; sceneId?: string }
+  if (i.scene) return renderCost(i.scene)
+  if (!i.sceneId) return 1
+  const saved = await getScene(ctx, i.sceneId).catch(() => null)
+  return renderCost(saved?.scene)
 }
 
 /**
@@ -44,9 +55,15 @@ export function lastFreeTracker(ctx: Ctx) {
       }
       const remaining = left.get(allowance) ?? null
       if (remaining === null) return null
-      left.set(allowance, Math.max(0, remaining - 1))
-      if (remaining !== 1) return null
-      return `It uses your last free ${ALLOWANCE_WORDS[allowance].one} this month (${PLANS.pro.label} has unlimited).`
+      const cost = await costOf(ctx, command, input)
+      left.set(allowance, Math.max(0, remaining - cost))
+      if (remaining <= 0 || remaining > cost) return null
+      const words = ALLOWANCE_WORDS[allowance]
+      const what =
+        cost === 1
+          ? `your last free ${words.one}`
+          : `your last ${remaining === 1 ? `free ${words.one}` : `${remaining} free ${words.many}`} (an animation counts as ${cost})`
+      return `It uses ${what} this month (${PLANS.pro.label} has unlimited).`
     },
   }
 }

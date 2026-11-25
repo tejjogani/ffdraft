@@ -17,6 +17,18 @@ export type PlanName = (typeof PLAN_NAMES)[number]
 export const ALLOWANCES = ['render', 'export'] as const
 export type Allowance = (typeof ALLOWANCES)[number]
 
+/**
+ * How many renders one finished Blender animation take counts as; a still counts as one.
+ *
+ * Two, because the allowance counts finished pictures a person takes away (the machine time
+ * is their own computer's, so frames are not what is counted), and an animation is one
+ * deliverable that does the work of a few stills: the turntable on a product page or a social
+ * post. Counting it as two leaves room on Free to try a turntable and a still in the same month
+ * without making videos free of charge; per frame (180 for six seconds) would make any video
+ * impossible on Free. Change it here; the limit cards, the assistant and the estimates follow.
+ */
+export const ANIMATION_RENDER_COST = 2
+
 /** The plan an organisation is on until something says otherwise. */
 export const DEFAULT_PLAN: PlanName = 'free'
 

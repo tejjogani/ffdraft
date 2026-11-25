@@ -86,6 +86,13 @@ export class ShotRenderer {
     this.renderer.render(this.#scene, this.#camera)
   }
 
+  /** Poses an animated shot at `frame` (piece, camera and light as the take will) and draws it. */
+  setFrame(frame: number): void {
+    if (!this.#built) return
+    this.#built.stage.setFrame(frame)
+    this.renderer.render(this.#scene, this.#camera)
+  }
+
   /** The last frame as a PNG. */
   toBlob(): Promise<Blob> {
     return new Promise((resolve, reject) =>

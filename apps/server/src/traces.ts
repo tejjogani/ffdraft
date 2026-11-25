@@ -94,6 +94,7 @@ export const toFeedback = (r: typeof t.runFeedback.$inferSelect): Feedback => ({
   source: r.source,
   kind: r.kind,
   changeId: r.changeId,
+  target: r.target ?? null,
   detail: r.note ?? '',
   userId: r.userId,
   at: r.createdAt.toISOString(),
@@ -291,7 +292,12 @@ export async function decideStep(
   ctx: Ctx,
   runId: string,
   toolCallId: string,
-  input: { decision: 'approve' | 'deny'; note?: string | null },
+  input: {
+    decision: 'approve' | 'deny'
+    note?: string | null
+    /** A `chat.ask` answer: option ids by question id. */
+    answers?: Record<string, string[]>
+  },
 ): Promise<Step> {
   const step = await ctx.repo.steps.first(
     and(eq(t.agentStep.runId, runId), eq(t.agentStep.toolCallId, toolCallId)),
@@ -309,6 +315,7 @@ export async function decideStep(
         decidedBy: ctx.user.id,
         decidedAt: new Date().toISOString(),
         note: input.note ?? null,
+        ...(input.answers ? { answers: input.answers } : {}),
       },
     },
   )

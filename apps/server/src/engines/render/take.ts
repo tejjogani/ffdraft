@@ -15,6 +15,7 @@ import {
 } from '@pave/render'
 import { type BlenderRenderResult, type RuntimeOptions, renderWithBlender } from '@pave/render/node'
 import { type RenderJob, type RenderScene, RenderSceneSchema } from '@pave/schema'
+import sharp from 'sharp'
 import type { RenderSubject } from '../../services'
 
 export type Critique = NonNullable<RenderJob['critique']>
@@ -68,6 +69,38 @@ export function autoFixes(issues: ReturnType<typeof assessRender>): SceneAdjustm
 }
 
 const sameScene = (a: RenderScene, b: RenderScene) => JSON.stringify(a) === JSON.stringify(b)
+
+/** A GIF is a courtesy copy for places that will not play video: small, at most 15 fps. */
+const GIF_LONG_SIDE = 360
+const GIF_MAX_FPS = 15
+const GIF_MAX_FRAMES = 240
+
+/**
+ * A looping GIF of the composited frames, made with sharp (already the server's image library,
+ * so no new dependency), or null when there is nothing worth making or it fails: the MP4 is the
+ * take, the GIF only rides along.
+ */
+export async function gifOf(frames: string[], fps: number, out: string): Promise<string | null> {
+  const step = Math.max(1, Math.round(fps / GIF_MAX_FPS))
+  const picked = frames.filter((_, i) => i % step === 0)
+  if (picked.length < 2 || picked.length > GIF_MAX_FRAMES) return null
+  try {
+    const { width = 0, height = 0 } = await sharp(picked[0]).metadata()
+    const k = Math.min(1, GIF_LONG_SIDE / Math.max(width, height, 1))
+    const size = { width: Math.round(width * k), height: Math.round(height * k) }
+    const pages = await Promise.all(
+      picked.map((f) => sharp(f).resize(size).flatten({ background: '#ffffff' }).png().toBuffer()),
+    )
+    const delay = Math.round((1000 * step) / fps)
+    await sharp(pages, { join: { animated: true } })
+      .gif({ delay: pages.map(() => delay), loop: 0 })
+      .toFile(out)
+    return out
+  } catch (err) {
+    console.error('Making the take’s GIF failed (the video is unaffected):', err)
+    return null
+  }
+}
 
 export async function renderTake(o: TakeOptions): Promise<TakeResult> {
   let seconds = 0
@@ -125,11 +158,19 @@ export async function renderTake(o: TakeOptions): Promise<TakeResult> {
 
   const take = await blend(scene, o.autoTune ? 0.35 : 0, 0.95)
   passes.push({ adjustments: [], issues: assessRender(take.metrics, scene), draftAssetId: null })
+  const frames = take.files.frames ?? []
+  // An animation: the video, its first frame as a poster, and a small GIF when it comes cheap.
   const outputs = take.files.image
     ? [take.files.image]
     : take.files.video
-      ? [take.files.video]
-      : (take.files.frames ?? [])
+      ? [
+          take.files.video,
+          ...frames.slice(0, 1),
+          ...[await gifOf(frames, scene.animation?.fps ?? 30, join(o.workDir, 'take.gif'))].filter(
+            (g): g is string => g !== null,
+          ),
+        ]
+      : frames
   const assetIds: string[] = []
   for (const path of outputs) assetIds.push(await store(path, 'take'))
   return {

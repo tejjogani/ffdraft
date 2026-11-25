@@ -4,15 +4,17 @@ import {
   rateFrom,
   shotChangeRefusal,
 } from '@pave/render'
-import type { RenderJob, SavedScene } from '@pave/schema'
+import { type RenderJob, renderCost, type SavedScene } from '@pave/schema'
 import { and, asc, desc, eq, gt, inArray, isNull, lt, max, type SQL } from 'drizzle-orm'
+import { captureShots, suggestShots } from '../cinema'
 import { type Ctx, publish } from '../context'
 import * as t from '../db/schema'
 import { badRequest, conflict, forbidden } from '../errors'
 import { createId } from '../ids'
 import { renderHandle, stopJob, submitJob, updateRender } from '../jobs'
 import { ensure, ensureAll, getPiece, getRender, getScene } from '../lookups'
-import { claim, renderKey, settle } from '../plans'
+import { claim, renderKeys, settle } from '../plans'
+import { noteShotChange, recordRenderFeedback, shotAgent, takeAgent } from '../render-feedback'
 import { changeScene, patchScene, revertScene, sceneHistory } from '../scenes'
 import { isTerminal, publishJob, serviceContext } from '../service-context'
 import { toPiece } from './pieces'
@@ -113,6 +115,64 @@ async function renderHistory(ctx: Ctx) {
   }))
 }
 
+/**
+ * A take put in a shot's place in the set: kept, if the assistant rendered it; otherwise the
+ * assistant's take it replaced (the shot's newest, or the one swapped in before) was swapped out.
+ */
+async function noteSwap(ctx: Ctx, shot: SceneRow, take: RenderRow): Promise<void> {
+  if (ctx.actor.type !== 'user') return
+  const mine = takeAgent(take)
+  if (mine) {
+    await recordRenderFeedback(ctx, {
+      agent: mine,
+      kind: 'kept',
+      target: `render:${take.id}`,
+      detail: `Swapped the take “${take.title}”, which the assistant rendered, into the set for “${shot.title}”.`,
+    })
+    return
+  }
+  const others = await ctx.repo.renders.many({
+    where: and(eq(t.renderJob.sceneId, shot.id), eq(t.renderJob.status, 'done')),
+    orderBy: desc(t.renderJob.createdAt),
+    limit: 10,
+  })
+  const replaced = others.find((r) => r.id !== take.id && takeAgent(r))
+  const agent = replaced && takeAgent(replaced)
+  if (agent)
+    await recordRenderFeedback(ctx, {
+      agent,
+      kind: 'swapped',
+      target: `render:${replaced.id}`,
+      detail: `Put another take in the set for “${shot.title}” instead of the assistant’s.`,
+    })
+}
+
+/** A person rendered again what the assistant rendered (`retryOf`) or set up (the shot). */
+async function noteRerender(ctx: Ctx, row: RenderRow, shot: SceneRow | null): Promise<void> {
+  if (ctx.actor.type !== 'user') return
+  const original = row.retryOf
+    ? await ctx.repo.renders.first(eq(t.renderJob.id, row.retryOf))
+    : null
+  const fromTake = original ? takeAgent(original) : null
+  if (original && fromTake) {
+    await recordRenderFeedback(ctx, {
+      agent: fromTake,
+      kind: 'rerendered',
+      target: `render:${original.id}`,
+      detail: `Rendered “${original.title}” again by hand${row.note ? ` (${row.note})` : ''}.`,
+    })
+    return
+  }
+  const fromShot = shot ? await shotAgent(ctx, shot) : null
+  if (shot && fromShot)
+    await recordRenderFeedback(ctx, {
+      agent: fromShot,
+      kind: 'rerendered',
+      target: `scene:${shot.id}`,
+      detail: `Rendered the shot “${shot.title}”, which the assistant set up, by hand.`,
+    })
+}
+
 export const render: HandlerGroup<'renders' | 'scenes'> = {
   'scenes.list': async (ctx, { pieceId }) => {
     await ensure(getPiece, ctx, pieceId)
@@ -136,25 +196,38 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
       scene: input.scene,
       position: input.position ?? (last?.position ?? 0) + 1,
       createdBy: ctx.user.id,
+      actor: ctx.actor,
     })
     announceScene(ctx, row)
     return toSavedScene(row)
   },
 
   'scenes.update': async (ctx, { id, patch, takeId, ...rest }) => {
+    let swappedIn: RenderRow | null = null
     if (takeId) {
       const current = await getScene(ctx, id)
       const take = await getRender(ctx, takeId)
       if (take.pieceId !== current.pieceId) throw badRequest('That take is of another piece')
       if (take.status !== 'done') throw conflict('Only a finished take can go in the set')
+      swappedIn = take
     }
-    const { row } = await changeScene(ctx, id, async (current) => ({
-      scene: patch ? patchScene(current.scene, patch) : current.scene,
-      fields: { ...rest, ...(takeId === undefined ? {} : { takeId }) },
-    }))
+    let before: SceneRow | null = null
+    const { row } = await changeScene(ctx, id, async (current) => {
+      before = current
+      return {
+        scene: patch ? patchScene(current.scene, patch) : current.scene,
+        fields: { ...rest, ...(takeId === undefined ? {} : { takeId }) },
+      }
+    })
     announceScene(ctx, row)
+    if (before) await noteShotChange(ctx, row, (before as SceneRow).scene, row.scene)
+    if (swappedIn) await noteSwap(ctx, row, swappedIn)
     return toSavedScene(row)
   },
+
+  'scenes.suggest': (ctx, input) => suggestShots(ctx, input, ctx.signal),
+
+  'scenes.capture': (ctx, input) => captureShots(ctx, input, ctx.signal),
 
   'scenes.history': (ctx, { id, limit }) => sceneHistory(ctx, id, limit),
 
@@ -166,8 +239,17 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
 
   'scenes.delete': async (ctx, { id }) => {
     const row = await getScene(ctx, id)
+    // Read before the delete: the shot's history goes with it.
+    const agent = ctx.actor.type === 'user' ? await shotAgent(ctx, row) : null
     await ctx.repo.scenes.delete(eq(t.renderScene.id, id))
     announceScene(ctx, row)
+    if (agent)
+      await recordRenderFeedback(ctx, {
+        agent,
+        kind: 'removed',
+        target: `scene:${row.id}`,
+        detail: `Deleted the shot “${row.title}”, which the assistant set up.`,
+      })
     return { ok: true }
   },
 
@@ -241,13 +323,20 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     const id = createId('rnd')
     // A Blender take claims its render before anything is queued; the take settling settles
     // the claim (updateRender). Browser takes are previews and never count.
-    if (engine === 'blender')
-      await claim(ctx, {
-        allowance: 'render',
-        key: renderKey(id),
-        subject: 'render',
-        pieceId: piece.id,
-      })
+    // An animation counts as more than one render: one claim per render it counts as, all or none.
+    const keys = renderKeys(id, renderCost(scene))
+    if (engine === 'blender') {
+      const taken: string[] = []
+      try {
+        for (const key of keys) {
+          await claim(ctx, { allowance: 'render', key, subject: 'render', pieceId: piece.id })
+          taken.push(key)
+        }
+      } catch (err) {
+        for (const key of taken) await settle(ctx, key, 'released')
+        throw err
+      }
+    }
     const row = await ctx.repo.renders
       .insert({
         id,
@@ -269,11 +358,12 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
         createdBy: ctx.user.id,
       })
       .catch(async (err: unknown) => {
-        await settle(ctx, renderKey(id), 'released')
+        if (engine === 'blender') for (const key of keys) await settle(ctx, key, 'released')
         throw err
       })
     const job = await one(ctx, row)
     announce(ctx, row)
+    await noteRerender(ctx, row, saved)
     if (engine === 'blender') {
       const handle = renderHandle(ctx, job)
       const subject = await toPiece(ctx, piece)
@@ -310,9 +400,17 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
   },
 
   'renders.update': async (ctx, { id, ...patch }) => {
-    await getRender(ctx, id)
+    const before = await getRender(ctx, id)
     const [row] = await ctx.repo.renders.update(eq(t.renderJob.id, id), patch)
     announce(ctx, row!)
+    const agent = takeAgent(before)
+    if (agent && patch.starred !== undefined && patch.starred !== before.starred)
+      await recordRenderFeedback(ctx, {
+        agent,
+        kind: patch.starred ? 'starred' : 'unstarred',
+        target: `render:${id}`,
+        detail: `${patch.starred ? 'Starred' : 'Unstarred'} the take “${before.title}”, which the assistant rendered.`,
+      })
     return one(ctx, row!)
   },
 
@@ -331,6 +429,14 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     const job = await getRender(ctx, id)
     if (!isTerminal(job.status)) throw conflict('Cancel this render before deleting it')
     await ctx.repo.renders.delete(eq(t.renderJob.id, id))
+    const agent = takeAgent(job)
+    if (agent)
+      await recordRenderFeedback(ctx, {
+        agent,
+        kind: 'deleted',
+        target: `render:${id}`,
+        detail: `Deleted the take “${job.title}”, which the assistant rendered.`,
+      })
     return { ok: true }
   },
 

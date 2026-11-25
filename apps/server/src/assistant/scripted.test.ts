@@ -2,6 +2,7 @@ import { readdirSync } from 'node:fs'
 import { RateLimitError } from '@anthropic-ai/sdk'
 import { parseToolCall } from '@pave/agent'
 import { mapError } from '@pave/agent/anthropic'
+import { cinemaQuestions } from '@pave/render'
 import { PhotoReadSchema } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
 import { FIXTURES_DIR, scriptedFactory, scriptedFromEnv } from './scripted'
@@ -13,6 +14,10 @@ const run = (pieceId: string | null = 'p1') => ({
   apiKey: null,
   pieceId: () => pieceId,
 })
+
+// What `scenes.suggest` gives a fixture's placeholders: a placed camera and the default questions.
+const PLACED = { preset: 'custom', position: [50, -80, 40], target: [0, 0, 4], focalLength: 100 }
+const QUESTIONS = cinemaQuestions({ halo: false, pave: false, stones: 1 })
 
 describe('scripted fixtures', () => {
   it('fail with the SDK’s own typed error, so the studio shows the real error state', async () => {
@@ -52,7 +57,9 @@ describe('scripted fixtures', () => {
             const input = JSON.parse(
               JSON.stringify(block.input)
                 .replaceAll('{{pieceId}}', 'p_1')
-                .replaceAll('{{attachment}}', 'as_1'),
+                .replaceAll('{{attachment}}', 'as_1')
+                .replace(/"\{\{suggest:[a-z-]+\}\}"/g, JSON.stringify(PLACED))
+                .replaceAll('"{{questions}}"', JSON.stringify(QUESTIONS)),
             )
             const parsed = parseToolCall(block.name, input)
             expect(parsed.ok, `${name}: ${block.name} ${parsed.ok ? '' : parsed.error}`).toBe(true)

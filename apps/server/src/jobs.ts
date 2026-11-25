@@ -3,12 +3,12 @@
  * through which a render queue, image-to-3D provider or on-model pipeline reports on a job —
  * when it is submitted, and again when it is resumed after a restart (see `Runtime.recover`).
  */
-import { COUNTED_EXPORT_FORMATS } from '@pave/schema'
+import { COUNTED_EXPORT_FORMATS, renderCost } from '@pave/schema'
 import { and, eq, inArray } from 'drizzle-orm'
 import type { Ctx } from './context'
 import * as t from './db/schema'
 import { AppError } from './errors'
-import { packageKey, renderKey, settle } from './plans'
+import { packageKey, renderKeys, settle } from './plans'
 import { isTerminal, jobHandle, LIVE_STATUSES, stepProgress } from './service-context'
 import type {
   JobHandle,
@@ -34,7 +34,8 @@ export async function updateRender(ctx: Ctx, id: string, patch: RenderJobPatch) 
   )
   if (row && row.engine === 'blender' && isTerminal(row.status)) {
     const delivered = row.status === 'done' && row.seconds !== 0
-    await settle(ctx, renderKey(row.id), delivered ? 'used' : 'released')
+    for (const key of renderKeys(row.id, renderCost(row.requestedScene ?? row.scene)))
+      await settle(ctx, key, delivered ? 'used' : 'released')
   }
   return row
 }

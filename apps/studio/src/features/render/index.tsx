@@ -6,11 +6,11 @@
 import { Chip, EmptyState, Skeleton } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
 import { Column, PageHeader, PageTitle } from '../../components/Page'
-import { assetUrl } from '../../lib/assets'
 import { relativeTime } from '../../lib/format'
 import { useRpc } from '../../lib/query'
 import { RenderStudio } from './RenderStudio'
 import { takeLabel } from './shots'
+import { TakeMedia } from './TakeMedia'
 
 export function PieceRender({ pieceId }: { pieceId: string }) {
   return <RenderStudio pieceId={pieceId} />
@@ -47,14 +47,7 @@ export function RendersPage() {
                   className="group block overflow-hidden rounded-lg bg-bg shadow-[0_0_0_1px_var(--line)]"
                 >
                   <div className="relative aspect-square bg-bg-muted">
-                    {t.assetIds[0] && (
-                      <img
-                        src={assetUrl(t.assetIds[0], 480)}
-                        alt=""
-                        loading="lazy"
-                        className="size-full object-cover"
-                      />
-                    )}
+                    <TakeMedia take={t} width={480} className="size-full object-cover" />
                     <div className="absolute top-1.5 left-1.5 flex gap-1">
                       {t.engine === 'browser' && <Chip className="bg-bg/85">Preview quality</Chip>}
                       {t.stale && (

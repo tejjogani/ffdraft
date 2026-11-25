@@ -33,7 +33,8 @@ import { assistant, openAssistant } from '../../stores/assistant'
 import { EngineDialog, engineLabel } from './EngineDialog'
 import { ShotInspector } from './ShotInspector'
 import { addShot, saveHouseShot, takeShotIntent } from './shot-actions'
-import { isLive, pickOf, type Shot, takeLabel, takesOf } from './shots'
+import { isLive, pickOf, type Shot, takeLabel, takeMedia, takesOf } from './shots'
+import { TakeMedia } from './TakeMedia'
 import { TakeTile } from './TakeTile'
 import { useShots } from './useShots'
 import { Viewfinder } from './Viewfinder'
@@ -322,8 +323,10 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               <Compare a={pair[0]!} b={pair[1]!} onClose={() => setComparing(null)} />
             ) : view ? (
               <figure className="absolute inset-4 flex flex-col items-center justify-center gap-2">
-                <img
-                  src={assetUrl(view.assetIds[0]!, 1600)}
+                <TakeMedia
+                  take={view}
+                  width={1600}
+                  large
                   alt={`Take: ${takeLabel(view)}`}
                   className="min-h-0 max-w-full flex-1 object-contain shadow-[0_0_0_1px_var(--line)]"
                 />
@@ -368,7 +371,8 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                 }
               />
             ) : null}
-            {!view && !pair && shot && (
+            {/* An animated shot's scrubber sits where this caption would. */}
+            {!view && !pair && shot && !shot.scene.animation && (
               <span className="glass absolute bottom-3 left-3 rounded-md px-2 py-1 text-[11px] whitespace-nowrap text-fg-muted">
                 Viewfinder ·{' '}
                 {browser ? 'takes draw in the browser' : 'takes render exactly this in Blender'}
@@ -400,7 +404,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                       take={t}
                       estimate={perTake}
                       inSet={pick?.id === t.id}
-                      isCover={!!t.assetIds[0] && s.piece!.coverAssetId === t.assetIds[0]}
+                      isCover={!!takeMedia(t).still && s.piece!.coverAssetId === takeMedia(t).still}
                       selected={viewing === t.id}
                       actions={actions}
                       liveHash={liveHash}
@@ -422,7 +426,9 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                         take={t}
                         estimate={null}
                         inSet={false}
-                        isCover={!!t.assetIds[0] && s.piece!.coverAssetId === t.assetIds[0]}
+                        isCover={
+                          !!takeMedia(t).still && s.piece!.coverAssetId === takeMedia(t).still
+                        }
                         selected={viewing === t.id}
                         actions={actions}
                       />
@@ -486,7 +492,11 @@ function ShotRow({
     >
       <span className="relative size-10 shrink-0 overflow-hidden rounded-sm bg-bg-muted shadow-[inset_0_0_0_1px_var(--line)]">
         {pick && (
-          <img src={assetUrl(pick.assetIds[0]!, 96)} alt="" className="size-full object-cover" />
+          <img
+            src={assetUrl(takeMedia(pick).still ?? pick.assetIds[0]!, 96)}
+            alt=""
+            className="size-full object-cover"
+          />
         )}
         {live && (
           <span className="absolute right-0.5 bottom-0.5 size-2 animate-pulse rounded-full bg-select motion-reduce:animate-none" />

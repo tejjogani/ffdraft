@@ -11,6 +11,11 @@
  * message), so a fixture can read and fit "the photo the designer just sent". `{{take1}}`,
  * `{{take2}}` and `{{scene1}}`, `{{scene2}}` are the takes and saved shots named in the latest
  * tool results, in order, so a fixture can adjust and re-render "the take it just looked at".
+ * `{{shot1}}` … `{{shot9}}` are the saved shots in the order they first appear in any tool result
+ * of the conversation (the shots a run created, in creation order). `"{{suggest:<key>}}"` (a
+ * JSON string) becomes the camera object the latest `scenes.suggest` placed for that shot, and
+ * `"{{questions}}"` its default questions, so a fixture "places" cameras as a model would: from
+ * the numbers the server measured on this very piece.
  *
  * Two extras for watching the studio (screenshots, demos), neither part of the API:
  *  - `"paceMs": 40` streams the turn's text a word at a time, waiting that long between events;
@@ -120,7 +125,8 @@ function fill(
   pieceId: string | null,
   tag: string,
   attachment: string | null,
-  named: { takes: string[]; scenes: string[] },
+  named: { takes: string[]; scenes: string[]; shots: string[] },
+  suggestion: Suggestion | null,
 ): ScriptedTurn {
   const json = JSON.stringify(turn)
     .replaceAll('{{pieceId}}', pieceId ?? 'no-piece')
@@ -129,6 +135,11 @@ function fill(
       const list = kind === 'take' ? named.takes : named.scenes
       return list[Number(n) - 1] ?? `no-${kind}`
     })
+    .replace(/\{\{shot([1-9])\}\}/g, (_, n: string) => named.shots[Number(n) - 1] ?? 'no-shot')
+    .replace(/"\{\{suggest:([a-z-]+)\}\}"/g, (_, key: string) =>
+      JSON.stringify(suggestion?.cameras[key] ?? { preset: 'hero', focalLength: 90 }),
+    )
+    .replaceAll('"{{questions}}"', JSON.stringify(suggestion?.questions ?? []))
   const { paceMs: _pace, error, ...filled } = JSON.parse(json) as FixtureTurn
   return {
     ...filled,
@@ -162,6 +173,51 @@ function latestNamed(params: Parameters<ModelClient['stream']>[0]) {
   return { takes: [], scenes: [] }
 }
 
+/** Every saved shot named in the conversation's tool results, in order of first appearance. */
+function allShots(params: Parameters<ModelClient['stream']>[0]): string[] {
+  const seen = new Set<string>()
+  for (const m of params.messages) {
+    if (m.role !== 'user') continue
+    const text = JSON.stringify(m.content)
+    if (!text.includes('tool_result')) continue
+    for (const x of text.matchAll(/(scn_[A-Za-z0-9_-]{16})/g)) seen.add(x[1]!)
+  }
+  return [...seen]
+}
+
+interface Suggestion {
+  cameras: Record<string, unknown>
+  questions: unknown[]
+}
+
+/** The cameras and questions of the latest `scenes.suggest` result in the conversation. */
+function latestSuggestion(params: Parameters<ModelClient['stream']>[0]): Suggestion | null {
+  for (let i = params.messages.length - 1; i >= 0; i--) {
+    const m = params.messages[i]!
+    if (m.role !== 'user' || !Array.isArray(m.content)) continue
+    for (const block of m.content as { type: string; content?: unknown }[]) {
+      if (block.type !== 'tool_result' || !Array.isArray(block.content)) continue
+      for (const part of block.content as { type: string; text?: string }[]) {
+        if (part.type !== 'text' || !part.text?.startsWith('{')) continue
+        try {
+          const out = JSON.parse(part.text) as {
+            shots?: { key: string; camera: unknown; why?: string }[]
+            questions?: unknown[]
+          }
+          if (!out.shots?.length || !out.questions || out.shots[0]?.why === undefined) continue
+          return {
+            cameras: Object.fromEntries(out.shots.map((s) => [s.key, s.camera])),
+            questions: out.questions,
+          }
+        } catch {
+          // Not a JSON result: keep looking.
+        }
+      }
+    }
+  }
+  return null
+}
+
 /** A model factory playing the fixture: one queue of turns per run, kept across its sessions. */
 export function scriptedFactory(fixture: Fixture): ModelFactory {
   const queues = new Map<string, FixtureTurn[]>()
@@ -179,7 +235,16 @@ export function scriptedFactory(fixture: Fixture): ModelFactory {
         const tag = `${run.runId.slice(-8)}${q.length}`
         const stream = scriptedModel(
           turn
-            ? [fill(turn, run.pieceId(), tag, latestAttachment(params), latestNamed(params))]
+            ? [
+                fill(
+                  turn,
+                  run.pieceId(),
+                  tag,
+                  latestAttachment(params),
+                  { ...latestNamed(params), shots: allShots(params) },
+                  latestSuggestion(params),
+                ),
+              ]
             : [],
         ).stream(params, options)
         return turn?.paceMs ? paced(stream, turn.paceMs, options.signal) : stream

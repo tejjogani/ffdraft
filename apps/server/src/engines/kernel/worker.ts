@@ -162,10 +162,14 @@ async function run(
         .map(([id]) => id)
       // Rasterising is synchronous; check between views so a cancel lands between pictures.
       const images: Uint8Array<ArrayBuffer>[] = []
-      for (const view of task.views) {
+      const jobs = task.shots
+        ? task.shots.map((s) => ({ camera: s.camera, size: { width: s.width, height: s.height } }))
+        : task.views.map((view) => ({
+            camera: viewCamera(evaluation, view, { hide }),
+            size: { width: task.size, height: task.size },
+          }))
+      for (const { camera, size } of jobs) {
         signal.throwIfAborted()
-        const camera = viewCamera(evaluation, view, { hide })
-        const size = { width: task.size, height: task.size }
         images.push(own(shade(evaluation, camera, size, { focus: task.focus, hide })))
       }
       return {

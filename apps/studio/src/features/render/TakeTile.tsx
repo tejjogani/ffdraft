@@ -7,9 +7,18 @@
  */
 import type { RenderJob } from '@pave/schema'
 import { AiMark, Button, Chip, cn, IconButton, Menu, MenuItem, MenuSeparator } from '@pave/ui'
-import { Download, Image as ImageIcon, MoreHorizontal, RefreshCw, Rows2, Star } from 'lucide-react'
+import {
+  Download,
+  Film,
+  Image as ImageIcon,
+  MoreHorizontal,
+  RefreshCw,
+  Rows2,
+  Star,
+} from 'lucide-react'
 import { assetUrl } from '../../lib/assets'
-import { byAssistant, isLive, takeLabel } from './shots'
+import { byAssistant, isLive, motionLabel, takeLabel, takeMedia } from './shots'
+import { TakeMedia } from './TakeMedia'
 import { TakeProgress } from './TakeProgress'
 
 export interface TakeActions {
@@ -42,8 +51,10 @@ export function TakeTile({
   /** The viewfinder's scene fingerprint, to say when this take is exactly that view. */
   liveHash?: string | null
 }) {
-  const image = take.assetIds[0]
+  const { still, video } = takeMedia(take)
+  const image = video ?? still
   const done = take.status === 'done' && !!image
+  const motion = motionLabel(take)
   return (
     <article
       aria-label={`Take: ${takeLabel(take)}`}
@@ -60,12 +71,7 @@ export function TakeTile({
         aria-label={done ? `Show ${takeLabel(take)} large` : undefined}
       >
         {done ? (
-          <img
-            src={assetUrl(image, 320)}
-            alt=""
-            className="size-full object-cover"
-            loading="lazy"
-          />
+          <TakeMedia take={take} width={320} className="size-full object-cover" />
         ) : isLive(take) ? (
           <div className="absolute inset-0 flex items-center px-3">
             <TakeProgress take={take} estimate={estimate} compact />
@@ -79,6 +85,11 @@ export function TakeTile({
           </div>
         )}
         <div className="absolute top-1.5 left-1.5 flex flex-wrap gap-1">
+          {motion && (
+            <Chip tone="neutral" className="bg-bg/85 backdrop-blur">
+              <Film className="size-3" aria-hidden /> {motion}
+            </Chip>
+          )}
           {take.engine === 'browser' && done && (
             <Chip tone="neutral" className="bg-bg/85 backdrop-blur">
               Preview quality
@@ -124,23 +135,38 @@ export function TakeTile({
                   Use in the set
                 </MenuItem>
               )}
-              {done && (
+              {done && still && (
                 <MenuItem icon={ImageIcon} disabled={isCover} onClick={() => actions.cover(take)}>
                   {isCover ? 'Is the cover' : 'Set as cover'}
                 </MenuItem>
               )}
-              {done && <MenuItem onClick={() => actions.compare(take)}>Compare…</MenuItem>}
+              {done && !video && (
+                <MenuItem onClick={() => actions.compare(take)}>Compare…</MenuItem>
+              )}
               {done && (
                 <MenuItem
                   icon={Download}
                   onClick={() => {
                     const a = document.createElement('a')
                     a.href = assetUrl(image)
-                    a.download = `${takeLabel(take)}.png`
+                    a.download = `${takeLabel(take)}.${video ? 'mp4' : 'png'}`
                     a.click()
                   }}
                 >
                   Download
+                </MenuItem>
+              )}
+              {done && takeMedia(take).gif && (
+                <MenuItem
+                  icon={Download}
+                  onClick={() => {
+                    const a = document.createElement('a')
+                    a.href = assetUrl(takeMedia(take).gif!)
+                    a.download = `${takeLabel(take)}.gif`
+                    a.click()
+                  }}
+                >
+                  Download GIF
                 </MenuItem>
               )}
               {done && (

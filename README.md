@@ -34,7 +34,7 @@ watch, pause, take over or stop.
 | Templates: 14 starting points, from a solitaire to an iced-out trophy pendant | Works |
 | **Design** tab: the brief, and directions to compare, mix and choose (by hand from templates, or proposed by the assistant) | Works |
 | **CAD** tab: feature list, inspector, live weight, carats and stone count, manufacturability checks, undo and redo | Works; being tested and fixed, so expect rough edges |
-| **Render** tab: shots, looks, framing a shot by hand in the viewfinder, Blender takes, browser previews without Blender | Works; Blender is optional |
+| **Render** tab: shots, looks, framing a shot by hand in the viewfinder, animations (turntable, orbit, push-in, macro sweep, sparkle pass) as MP4 with a GIF, Blender takes, browser previews without Blender | Works; Blender is optional (animations need it) |
 | The assistant: chat in the dock, AI jobs for each stage, a design from a written brief or from a photo, edits by chat, questions about a selected part | Works with your own Claude API key ([below](#use-the-assistant-with-your-claude-api-key)). Built and tested against recorded stand-ins for Claude, not yet against Claude itself: run `pnpm agent:smoke` once with your key to check it |
 | Reference panel beside CAD: museum search, pins with their rights, pictures laid in a view as image planes | Works. The museum search was tested with recorded answers only |
 | Exports: STL, 3MF, OBJ, GLB, STEP, 3DM | Works |
@@ -201,10 +201,18 @@ Changing the piece by hand pauses the job; **Resume** carries on from the piece 
    in words ("make the band 0.3 mm wider", "swap the centre stone for a 1.5 ct oval and keep the
    setting"). To ask about a part, select it in the model and press `Ctrl+J`: the part goes
    along with your question.
-3. **Render.** Press **Render with AI** on the **Render** tab: the assistant sets up a shot set,
-   renders each shot, looks at every take, re-renders what falls short and hands the set over
-   for you to review. With Blender these are photoreal takes; without it, your browser draws
-   previews.
+3. **Render.** Press **Render with AI** on the **Render** tab. The assistant looks at the piece
+   (its centre stone, halo, pavé, gallery), then asks at most three quick questions in the dock:
+   what the images are for, which shapes (1:1, 4:5, 9:16, 16:9) and which animations (a 360°
+   turntable, a macro sweep, a sparkle pass, a half orbit). Good answers are already picked, so
+   **Go** alone is enough; or type what you want instead. It then places every camera itself
+   (hero three-quarter, profile, top-down, a macro on the stone, a low angle), checks each
+   framing through the shot's own camera before spending render time, renders the stills and
+   animations, looks at every still, re-renders what falls short and hands the set over for you
+   to review. Animation takes play in the filmstrip; download them as MP4 (or a small GIF). With
+   Blender these are photoreal takes; without it, your browser draws still previews.
+   Whatever you then do to its work (star, swap, set a cover, move a camera, change the look,
+   re-render, delete) is recorded on the run as feedback, so the shot choices can improve.
 
 From a **photo**: drop a picture of a piece into the assistant's message box (or attach it to
 **Make the CAD with AI**) and ask it to make the piece. It reads the photo, builds the design,
@@ -299,7 +307,9 @@ Pavé has two plans. What they include is set in one file,
 | Finished Blender renders | 5 a month | Unlimited (fair use: 1,000 a month) |
 | Rhino (3DM) and STEP exports, and production packages that contain them | 5 a month | Unlimited (fair use: 2,000 a month) |
 
-Months are calendar months in UTC. A render or export that fails, is cancelled, or comes from
+A finished Blender animation counts as two renders (`ANIMATION_RENDER_COST` in the same file):
+the allowance counts pictures you take away, not frames, and a video does the work of a few
+stills. Months are calendar months in UTC. A render or export that fails, is cancelled, or comes from
 the render cache is not counted. When the month's allowance is used up, Pavé says so calmly and
 offers the alternatives (a browser preview instead of a Blender render); the assistant asks
 before it spends the last free one. **Settings → Plan** shows this month's use and when it
@@ -342,6 +352,14 @@ same shot gives the same picture again on the same computer; a take that matches
 says "= this view". **Render this view**, in the CAD tab's view toolbar (the Views menu on a
 narrow screen), copies the CAD camera into a new shot. **Add shot** can also save a shot for the whole organisation and reuse it on
 other pieces, scaled to fit.
+
+**Animations.** Pick a motion under **Motion** in the shot's settings: a 360° turntable (it
+loops without a jump), a half orbit, a slow push-in, a macro sweep across the centre stone, a
+sparkle pass that sweeps the light, a short arc or a rack focus, with its length, frame rate and
+loop. **Shape** sets 1:1, 4:5, 9:16 or 16:9. The viewfinder plays and scrubs the motion before
+you render; the time estimate counts every frame (a 6-second turntable at 30 fps is 180 frames,
+so start with Draft quality). A take is an MP4 (H.264, from Blender's own encoder) with a poster
+frame and a small looping GIF; it plays in the filmstrip on hover and with controls when opened.
 
 ## References beside CAD
 

@@ -7,6 +7,7 @@ import { toolDefs } from '../tools'
 import { CORE_PROMPT, DESIGN_KNOWLEDGE } from './core'
 import { NODE_REFERENCE } from './node-reference'
 import { ASK_SKILL } from './skills/ask'
+import { CINEMA_SKILL } from './skills/cinema'
 import { DIRECTIONS_SKILL } from './skills/directions'
 import { EDITING_SKILL } from './skills/editing'
 import { PHOTO_SKILL } from './skills/photo'
@@ -24,6 +25,7 @@ export const SKILLS = [
   PHOTO_SKILL,
   PRODUCTION_SKILL,
   RENDER_SKILL,
+  CINEMA_SKILL,
   ASK_SKILL,
 ].join('\n\n')
 

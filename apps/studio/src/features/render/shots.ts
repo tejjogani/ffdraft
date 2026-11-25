@@ -80,3 +80,38 @@ export function takeLabel(take: RenderJob): string {
 
 /** Whether a take was the assistant's. */
 export const byAssistant = (take: Pick<RenderJob, 'actor'>) => take.actor.type === 'agent'
+
+/**
+ * A take's files by role. A still: its image. An animation: the video first, then its poster
+ * (the first frame) and, when one was made, a GIF (see RenderJob.assetIds). A browser take of
+ * an animation is refused, so every animation take with files came from Blender.
+ */
+export function takeMedia(take: Pick<RenderJob, 'scene' | 'assetIds'>): {
+  /** A picture to show or use as a cover: the still, or the animation's poster. */
+  still: string | null
+  video: string | null
+  gif: string | null
+} {
+  if (!take.scene.animation) return { still: take.assetIds[0] ?? null, video: null, gif: null }
+  return {
+    video: take.assetIds[0] ?? null,
+    still: take.assetIds[1] ?? null,
+    gif: take.assetIds[2] ?? null,
+  }
+}
+
+/** "360° turntable · 6 s" for an animation take; null for a still. */
+export function motionLabel(take: Pick<RenderJob, 'scene'>): string | null {
+  const a = take.scene.animation
+  if (!a) return null
+  const names: Record<string, string> = {
+    turntable: '360° turntable',
+    'half-orbit': 'Half orbit',
+    'push-in': 'Push-in',
+    'macro-sweep': 'Macro sweep',
+    'light-sweep': 'Sparkle pass',
+    'orbit-arc': 'Short arc',
+    'rack-focus': 'Rack focus',
+  }
+  return `${names[a.type] ?? a.type} · ${a.seconds} s`
+}
