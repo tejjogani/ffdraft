@@ -52,6 +52,22 @@ describe('http surface', () => {
     expect(empty.status).toBe(200)
   })
 
+  it('refuses a command body no valid input could need', async () => {
+    const send = (body: string) =>
+      server.app.request('/api/rpc/pieces.list', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+      })
+    const huge = await send(JSON.stringify({ q: 'ring', pad: 'x'.repeat(64 * 1024 * 1024) }))
+    expect(huge.status).toBe(413)
+    expect(await huge.json()).toMatchObject({ error: { code: 'payload_too_large' } })
+    // A large but plausible body (a design with long paths) is still read.
+    expect((await send(JSON.stringify({ q: 'ring', pad: 'x'.repeat(1024 * 1024) }))).status).toBe(
+      200,
+    )
+  })
+
   // Local mode has no sign-in, so a browser on any website can reach it. A POST with no body, or
   // a multipart upload, needs no CORS preflight: only the Origin header tells them apart.
   it('refuses writes sent by a page of another website', async () => {
