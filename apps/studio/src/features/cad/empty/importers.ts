@@ -26,7 +26,8 @@ export const IMPORT_ACCEPT = Object.keys(BY_EXTENSION)
 
 export function classifyImport(fileName: string): ImportKind | null {
   const ext = fileName.toLowerCase().split('.').pop() ?? ''
-  return BY_EXTENSION[ext] ?? null
+  // Own keys only: "constructor" and "toString" are not file types.
+  return Object.hasOwn(BY_EXTENSION, ext) ? BY_EXTENSION[ext]! : null
 }
 
 const baseName = (fileName: string) => fileName.replace(/\.[^.]+$/, '').slice(0, 80) || undefined
