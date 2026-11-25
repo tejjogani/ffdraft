@@ -15,6 +15,7 @@ import * as t from '../db/schema'
 import { commitChange, FACTS_DETAIL, storeFacts, toStoredChange } from '../design'
 import { AppError, badRequest, conflict, notFound } from '../errors'
 import { getPiece } from '../lookups'
+import { exportClaim, withClaim } from '../plans'
 import { serviceContext } from '../service-context'
 import { assertAttested } from './pieces'
 import type { HandlerGroup } from './types'
@@ -319,6 +320,17 @@ export const design: HandlerGroup<'design'> = {
     const summary = await ctx.services
       .get('geometry')
       .evaluate(piece.design, { detail: input.detail, pieceId: piece.id }, serviceContext(ctx))
+    // All zeros with no diagnostics reads as "fine"; an empty design is worth saying out loud.
+    if (Object.keys(piece.design.nodes).length === 0)
+      summary.diagnostics = [
+        ...summary.diagnostics,
+        {
+          level: 'warning',
+          code: 'empty_design',
+          message:
+            'The design is empty: there is nothing to measure or check. Build it from a spec, start from a template, or model it.',
+        },
+      ]
     // Facts come from one detail level only, so a draft answer never overwrites production facts.
     if (input.detail === FACTS_DETAIL) await storeFacts(ctx, piece.id, piece.version, summary)
     return summary
@@ -327,14 +339,18 @@ export const design: HandlerGroup<'design'> = {
   'design.export': async (ctx, input) => {
     const piece = await getPiece(ctx, input.pieceId)
     assertAttested(piece)
-    const { file, notes } = await ctx.services
-      .get('geometry')
-      .export(
+    const geometry = ctx.services.get('geometry')
+    const work = async () => {
+      const { file, notes } = await geometry.export(
         piece.design,
         { format: input.format, stones: input.stones ?? true, pieceId: piece.id },
         serviceContext(ctx),
       )
-    const asset = await putAsset(ctx, { ...file, kind: 'mesh' })
-    return { asset, notes }
+      const asset = await putAsset(ctx, { ...file, kind: 'mesh' })
+      return { asset, notes }
+    }
+    // Rhino and STEP claim one export first; an export that fails gives it back.
+    const key = await exportClaim(ctx, input)
+    return key ? withClaim(ctx, key, work) : work()
   },
 }

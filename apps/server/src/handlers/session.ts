@@ -1,5 +1,17 @@
 import { effectiveRole } from '../auth/roles'
+import type { Ctx } from '../context'
 import type { HandlerGroup } from './types'
+
+/** The deployment's capabilities, with the assistant only where this organisation has a key. */
+async function capabilities(ctx: Ctx) {
+  const caps = ctx.services.capabilities()
+  const assistant = ctx.services.optional('assistant')
+  if (caps.assistant && assistant?.available) caps.assistant = await assistant.available(ctx.orgId)
+  // Image keys belong to one organisation too.
+  const imageGen = ctx.services.optional('imageGen')
+  caps.imageGeneration = imageGen ? imageGen.available(ctx.orgId) : []
+  return caps
+}
 
 export const session: HandlerGroup<'session'> = {
   'session.get': async (ctx) => {
@@ -14,7 +26,7 @@ export const session: HandlerGroup<'session'> = {
         role: effectiveRole(role),
       })),
       activeOrgId: ctx.orgId,
-      capabilities: ctx.services.capabilities(),
+      capabilities: await capabilities(ctx),
     }
   },
 }

@@ -1,9 +1,10 @@
 /** The bounded auto-tune: which draft is rendered and which measured fixes are applied. */
 import type { RenderIssue } from '@pave/render'
+import { draftOf } from '@pave/render'
 import type { BlenderRenderResult } from '@pave/render/node'
 import { RenderSceneSchema } from '@pave/schema'
 import { describe, expect, it, vi } from 'vitest'
-import { autoFixes, draftOf, renderTake } from './take'
+import { autoFixes, renderTake } from './take'
 
 const blender = vi.hoisted(() => ({ calls: 0 }))
 vi.mock('@pave/render/node', () => ({
@@ -79,6 +80,7 @@ describe('renderTake', () => {
       autoTune: true,
       glb: new Uint8Array(),
       subject,
+      design: { pieceId: 'pc_1', version: 1 },
       workDir: 'unused',
       runtime: {},
       signal: controller.signal,

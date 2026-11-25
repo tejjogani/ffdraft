@@ -22,7 +22,8 @@
     "seed": "pnpm --filter @pave/server seed",
     "check:install": "node scripts/install.mjs --check",
     "setup:render": "node workers/render/setup.mjs",
-    "match:bench": "pnpm --filter @pave/match bench"
+    "match:bench": "pnpm --filter @pave/match bench",
+    "agent:smoke": "tsx apps/server/src/smoke-cli.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.8",

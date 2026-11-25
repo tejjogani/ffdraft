@@ -1,10 +1,12 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
-import { Activity, Blocks, Box, Settings, Shield, Users } from 'lucide-react'
+import { Activity, BadgeCheck, Blocks, Box, Settings, Shield, Sparkles, Users } from 'lucide-react'
 import { PageHeader } from '../../components/Page'
 
 const NAV = [
   { to: '/settings/general', label: 'General', icon: Settings },
   { to: '/settings/members', label: 'Members', icon: Users },
+  { to: '/settings/ai', label: 'AI', icon: Sparkles },
+  { to: '/settings/plan', label: 'Plan', icon: BadgeCheck },
   { to: '/settings/usage', label: 'Usage', icon: Activity },
   { to: '/settings/traces', label: 'Traces', icon: Box },
   { to: '/settings/privacy', label: 'Data & privacy', icon: Shield },
@@ -22,7 +24,23 @@ export function SettingsLayout() {
           { label: current?.label ?? '' },
         ]}
       />
-      <div className="mx-auto flex w-full max-w-[1080px] gap-10 px-6 pt-10 pb-24 sm:px-12">
+      {/* On a phone the section list is a row of pills under the header, scrolled sideways.
+          shrink-0: in the page's flex column a scrolling row would otherwise collapse. */}
+      <nav
+        aria-label="Settings sections"
+        className="scroll-fade-x sticky top-11 z-10 flex shrink-0 gap-1 overflow-x-auto bg-bg px-4 py-2 md:hidden"
+      >
+        {NAV.map(({ to, label }) => (
+          <Link
+            key={to}
+            to={to}
+            className="flex h-7 shrink-0 items-center rounded-full px-3 text-sm text-fg-muted shadow-[inset_0_0_0_1px_var(--line)] data-[status=active]:bg-ink data-[status=active]:text-ink-fg data-[status=active]:shadow-none"
+          >
+            {label}
+          </Link>
+        ))}
+      </nav>
+      <div className="mx-auto flex w-full max-w-[1080px] gap-10 px-4 pt-6 pb-24 sm:px-12 md:pt-10">
         <nav
           aria-label="Settings"
           className="sticky top-21 hidden w-44 shrink-0 self-start md:block"
@@ -93,7 +111,8 @@ export function SettingsRow({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex items-center justify-between gap-8 py-3.5">
+    // A phone stacks the control under its label instead of squeezing both onto one line.
+    <div className="flex flex-col gap-2 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
       <div className="min-w-0">
         <div className="text-sm text-fg">{label}</div>
         {description && <div className="mt-0.5 text-xs text-fg-subtle">{description}</div>}

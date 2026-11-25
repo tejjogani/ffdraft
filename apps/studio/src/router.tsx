@@ -12,17 +12,21 @@ import { AcceptInvitePage } from './pages/auth/AcceptInvitePage'
 import { HomePage } from './pages/home/HomePage'
 import { LIBRARY_TABS, LibraryPage, type LibraryTab } from './pages/library/LibraryPage'
 import { NotFound, RouteError } from './pages/NotFound'
+import { PieceDirections } from './pages/piece/PieceDirections'
 import { PieceHistory } from './pages/piece/PieceHistory'
 import { PieceOverview } from './pages/piece/PieceOverview'
 import { PiecePage, PieceTab } from './pages/piece/PiecePage'
 import { PiecesPage, type PiecesSearch } from './pages/pieces/PiecesPage'
+import { AiSettings } from './pages/settings/AiSettings'
 import { GeneralSettings } from './pages/settings/GeneralSettings'
 import { IntegrationsSettings } from './pages/settings/IntegrationsSettings'
 import { MembersSettings } from './pages/settings/MembersSettings'
+import { PlanSettings } from './pages/settings/PlanSettings'
 import { PrivacySettings } from './pages/settings/PrivacySettings'
 import { SettingsLayout } from './pages/settings/SettingsLayout'
 import { TraceDetail, TracesSettings } from './pages/settings/TracesSettings'
 import { UsageSettings } from './pages/settings/UsageSettings'
+import { UpgradePage } from './pages/upgrade/UpgradePage'
 
 // Feature folders load on demand: the CAD and render workspaces bring heavy 3D dependencies.
 const PieceDesign = lazy(async () => ({ default: (await import('./features/cad')).PieceDesign }))
@@ -98,7 +102,7 @@ const pieceTab = (
     component: function Tab() {
       const { id } = pieceRoute.useParams()
       return (
-        <PieceTab bleed={bleed}>
+        <PieceTab bleed={bleed} pieceId={id}>
           <Component pieceId={id} />
         </PieceTab>
       )
@@ -157,6 +161,7 @@ const routeTree = rootRoute.addChildren([
   collectionRoute,
   pieceRoute.addChildren([
     pieceTab('/', PieceOverview),
+    pieceTab('directions', PieceDirections),
     pieceTab('design', PieceDesign, true),
     pieceTab('render', PieceRender, true),
     pieceTab('on-model', PieceOnModel),
@@ -171,6 +176,7 @@ const routeTree = rootRoute.addChildren([
   modelRoute,
   route('/sourcing', () => <SourcingPage />),
   libraryRoute,
+  route('/upgrade', () => <UpgradePage />),
   settingsRoute.addChildren([
     createRoute({
       getParentRoute: () => settingsRoute,
@@ -182,6 +188,8 @@ const routeTree = rootRoute.addChildren([
     }),
     setting('general', GeneralSettings),
     setting('members', MembersSettings),
+    setting('ai', AiSettings),
+    setting('plan', PlanSettings),
     setting('usage', UsageSettings),
     setting('traces', TracesSettings),
     traceRoute,

@@ -1,17 +1,20 @@
 /**
- * Exports, labelled by purpose. They run in the export worker (production detail: seats cut,
- * metal fused and watertight), so the viewport stays responsive; when that fails the server's
- * `design.export` is the fallback. A piece made from someone's artwork needs a person's
- * attestation first, as the server would require.
+ * Exports, labelled by purpose. Uncounted formats run in the export worker (production detail:
+ * seats cut, metal fused and watertight), so the viewport stays responsive; when that fails the
+ * server's `design.export` is the fallback. Rhino and STEP count against the plan, so the server
+ * always makes them and counts only what it delivered. A piece made from someone's artwork needs
+ * a person's attestation first, as the server would require.
  */
 import type { ExportFormat } from '@pave/kernel'
-import { type Design, originNeedsAttestation, type Piece } from '@pave/schema'
+import { type Design, exportCounts, originNeedsAttestation, type Piece } from '@pave/schema'
 import { toast } from '@pave/ui'
 import { assetUrl } from '../../lib/assets'
 import { plural } from '../../lib/format'
 import { exportDesign } from '../../lib/kernel/client'
+import { invalidateFor, queryClient } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { safeFileName, saveFile } from '../../lib/save-file'
+import { reportPlanLimit } from '../plans/plan-limit'
 
 export const EXPORT_PURPOSE: Record<
   ExportFormat,
@@ -52,23 +55,34 @@ export async function runExport(
   const name = piece.title || 'Untitled piece'
   const pending = toast({ title: `Preparing ${format.toUpperCase()}…`, timeout: 0 })
   try {
-    let blob: Blob
-    let notes: string[]
+    let blob!: Blob
+    let notes!: string[]
     let extension: string = format
-    try {
-      const result = await exportDesign(design, format)
-      blob = new Blob([result.bytes as BlobPart], { type: result.mime })
-      notes = result.notes
-      extension = result.extension.replace(/^\./, '')
-    } catch (local) {
-      // The in-browser exporter failed; the server may have a geometry engine that can.
-      const { asset, notes: serverNotes } = await rpc
-        .call('design.export', { pieceId: piece.id, format })
-        .catch(() => {
-          throw local
-        })
+    const fromServer = async () => {
+      const { asset, notes: serverNotes } = await rpc.call('design.export', {
+        pieceId: piece.id,
+        format,
+      })
+      invalidateFor(queryClient, 'plan')
       blob = await (await fetch(assetUrl(asset.id))).blob()
       notes = serverNotes
+    }
+    if (exportCounts(format)) {
+      // Rhino and STEP count against the plan, so the server makes them: it counts only a file
+      // it delivered, and a failed export is never counted.
+      await fromServer()
+    } else {
+      try {
+        const result = await exportDesign(design, format)
+        blob = new Blob([result.bytes as BlobPart], { type: result.mime })
+        notes = result.notes
+        extension = result.extension.replace(/^\./, '')
+      } catch (local) {
+        // The in-browser exporter failed; the server's geometry engine may manage.
+        await fromServer().catch(() => {
+          throw local
+        })
+      }
     }
     toast.dismiss(pending)
     const purpose = EXPORT_PURPOSE[format]
@@ -89,6 +103,7 @@ export async function runExport(
       })
   } catch (e) {
     toast.dismiss(pending)
+    if (reportPlanLimit(e)) return
     toast.error(
       `Couldn’t export ${format.toUpperCase()}`,
       e instanceof Error ? e.message : String(e),

@@ -79,10 +79,13 @@ describe('the command registry', () => {
       'scenes.update',
     ] as const)
       expect(needsConfirmation(name), name).toBe(false)
-    // Every paid generation can be priced before it is confirmed, with the same request.
-    const generate = commands['references.generate'].input.parse({ boardId: 'b', prompt: 'a ring' })
-    const { boardId: _, ...request } = generate
-    expect(commands['references.estimate'].input.parse({ prompt: 'a ring' })).toEqual(request)
+    // A generation is four images from a checked brief unless asked otherwise, priced by count.
+    const generate = commands['references.generate'].input.parse({ briefId: 'b' })
+    expect(generate.count).toBe(4)
+    expect(commands['references.estimate'].input.parse({ boardId: 'x' }).count).toBe(4)
+    // Attesting rights to a brand is a person's act: never a tool.
+    expect(isToolCommand('references.attestBrief')).toBe(false)
+    expect(isToolCommand('references.brief')).toBe(true)
     expect(isToolCommand('references.estimate') && isToolCommand('models.estimatePortraits')).toBe(
       true,
     )
@@ -106,7 +109,7 @@ describe('the command registry', () => {
     expect(render.safeParse({ pieceId: 'p' }).success).toBe(false)
     expect(render.parse({ pieceId: 'p', sceneId: 's' })).toMatchObject({
       engine: 'auto',
-      autoTune: true,
+      autoTune: false,
       purpose: 'take',
     })
     const complete = commands['renders.complete'].input

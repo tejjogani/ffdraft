@@ -1,10 +1,47 @@
 # Live status of agents and tasks
 
-_Generated 25 Nov 2026 13:36 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 25 Nov 2026 18:39 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+
+## Spec as the source of truth (lane A, A7)
+
+| Agent | State | Outcome |
+|---|---|---|
+| plan | running or interrupted |  |
+
+## Release verification (lane A, A3)
+
+Branch `claude/busy-bardeen-o482lo`, head: 61ce861 Agents: lessons from running many agents at once; trial, Diaex connection and release check on the status page
+
+| Agent | State | Outcome |
+|---|---|---|
+| verify:1 | running or interrupted |  |
+
+## Trial on five real pieces (lane A)
+
+| Agent | State | Outcome |
+|---|---|---|
+| setup | done | The trial install is ready and the HOWTO is proven, but I stopped another session's Pavé server by mistake while cleaning up. That comes first. ## Incident: my cleanup killed another session's server - **What I did:** a… |
+| trial:solitaire | running or interrupted |  |
+| trial:halo | running or interrupted |  |
+
+## Diaex connection (lane A)
+
+| Agent | State | Outcome |
+|---|---|---|
+| build | running or interrupted |  |
+
+## Integration and release (lane A, A3)
+
+Branch `claude/busy-bardeen-o482lo`, head: 61ce861 Agents: lessons from running many agents at once; trial, Diaex connection and release check on the status page
+
+| Agent | State | Outcome |
+|---|---|---|
+| merge | running or interrupted |  |
+| verify:1 | running or interrupted |  |
 
 ## Assistant build (lane A, A1)
 
-Branch `claude/assistant-build`, head: 84f032a wip: review fixes (temporary)
+Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix commit as superseded
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -30,11 +67,14 @@ Branch `claude/assistant-build`, head: 84f032a wip: review fixes (temporary)
 | build:imagegen | done | commit 1149e99. Step 18 is built and committed as 1149e99 on ai/assistant, on top of 8df7d93. It is not pushed. The design board can now generate concept images. - **How it works.** The designer writes a request and picks board picture… |
 | review:e2e | done | 1 blocker, 2 major, 11 minor. FAIL for the founder's first hour. One blocker, two majors, and a set of polish issues, all reproduced in a real browser. The setup: the studio as committed, `… |
 | review:design | done | 6 major, 15 minor. FAIL on the premium-design bar, with no blockers. Nothing I saw puts the founder's test, money or the key at risk. Six major issues break flows or the design-l… |
-| fix:1 | running or interrupted |  |
+| fix:1 | done | fixed 31, not fixed 15; commit 9f8675c |
+| verify:1 | done | 2 major, 7 minor. Most claimed fixes hold. Both blockers are closed: sec-1 (a DNS-rebound Host now gets 403 on RPC, assets and events) and fh-1 (a custom spec now gets a plain n… |
+| fix:2 | done | fixed 2, not fixed 0; commit f57efe2 |
+| verify:2 | done | 5 minor. Both fixes hold where they were aimed. Four small issues are still open and none of them blocks. dsn-4: the Facts panel and the readout now agree in every stat… |
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: aa86f49 Status: agents and tasks, 12:35 UTC
+Branch `claude/busy-bardeen-o482lo`, head: 61ce861 Agents: lessons from running many agents at once; trial, Diaex connection and release check on the status page
 
 | Agent | State | Outcome |
 |---|---|---|

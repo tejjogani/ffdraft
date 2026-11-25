@@ -76,7 +76,7 @@ export function EmptyDesign({
         {step === 'doors' && (
           <>
             <div className="mb-6 text-center">
-              <h2 className="font-serif text-[30px] leading-9 text-fg">Start this piece</h2>
+              <h2 className="font-serif text-title text-fg">Start this piece</h2>
               <p className="mt-1 text-sm text-fg-muted">
                 Pick a way in. Everything stays editable afterwards.
               </p>
@@ -232,6 +232,11 @@ function ImportDoor({
   const [over, setOver] = useState(false)
   const take = async (file: File) => {
     const kind = classifyImport(file.name)
+    if (/\.(step|stp)$/i.test(file.name))
+      return toast({
+        title: 'STEP can’t be opened as CAD yet',
+        description: 'That is planned. Export it as STL, OBJ, GLB, 3MF or PLY and open that.',
+      })
     if (!kind)
       return toast.error(
         'That file type isn’t supported',

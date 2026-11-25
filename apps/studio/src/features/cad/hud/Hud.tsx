@@ -1,22 +1,25 @@
 /**
  * The facts strip over the viewport: weight, carats, stone count, and whether the piece is
- * ready to cast. Draft numbers are approximate (seats are not cut), so they carry "≈"; only a
- * production check of the current version may say "Ready to cast". Only the verdict is a live
+ * ready to cast. Draft numbers are approximate (seats are not cut), so they carry "≈"; once the
+ * production check of the current version has run, its figures replace them (the same ones the
+ * overview shows), and only it may say "Ready to cast". Only the verdict is a live
  * region: the numbers change on every edit and would be re-announced each time.
  */
-import type { Diagnostic, Evaluation } from '@pave/kernel'
+import type { Diagnostic } from '@pave/kernel'
 import type { Design } from '@pave/schema'
 import { METALS, type MetalId, nodeTitle } from '@pave/schema'
 import { Button, cn, Popover, Spinner } from '@pave/ui'
 import { Check, Crosshair, TriangleAlert, Wrench } from 'lucide-react'
 import { useState } from 'react'
 import { carats, grams, plural } from '../../../lib/format'
+import type { PieceFigures } from './figures'
 import { type Issue, readableMessage } from './issues'
 import type { ProductionCheck } from './useProductionCheck'
 
 export interface HudProps {
   design: Design
-  evaluation: Evaluation | null
+  /** The figures the Facts panel shows too (see ./figures). */
+  figures: PieceFigures | null
   issues: readonly Issue[]
   check: ProductionCheck
   evaluating: boolean
@@ -29,7 +32,7 @@ const metalName = (id: string) => (id in METALS ? METALS[id as MetalId].label : 
 
 export function Hud({
   design,
-  evaluation,
+  figures,
   issues,
   check,
   evaluating,
@@ -37,21 +40,26 @@ export function Hud({
   onShow,
   onFix,
 }: HudProps) {
-  if (!evaluation) return null
-  const r = evaluation.report
+  if (!figures) return null
+  const { exact, report: r } = figures
   const metal = r.metals.toSorted((a, b) => b.massG - a.massG)[0]
   return (
-    <div className="glass shadow-md flex h-9 max-w-full min-w-0 items-center gap-3 rounded-lg pr-1.5 pl-3.5 text-xs whitespace-nowrap">
-      <span className="flex min-w-0 items-center gap-1.5">
-        <span
-          className="font-mono text-fg-subtle"
-          title="Approximate until a production check: seats are not cut yet"
-        >
-          ≈
-        </span>
-        <span className="font-mono text-fg tabular">{grams(r.metalMassG)}</span>
+    <div className="chip-solid flex h-9 max-w-full min-w-0 items-center gap-3 rounded-lg pr-1.5 pl-3.5 text-xs whitespace-nowrap">
+      <span className="flex min-w-0 items-center gap-1.5 max-sm:shrink-0">
+        {!exact && (
+          <span
+            className="shrink-0 font-mono text-fg-subtle"
+            title="Approximate until a production check: seats are not cut yet"
+          >
+            ≈
+          </span>
+        )}
+        {/* The number never shrinks; the metal's name gives way (and on a phone, goes). */}
+        <span className="shrink-0 font-mono text-fg tabular">{grams(r.metalMassG)}</span>
         {metal && (
-          <span className="min-w-0 truncate text-fg-muted">{metalName(metal.material)}</span>
+          <span className="min-w-0 truncate text-fg-muted max-sm:hidden">
+            {metalName(metal.material)}
+          </span>
         )}
       </span>
       {r.stoneCount > 0 && (
@@ -87,7 +95,7 @@ function Checks({
   readOnly,
   onShow,
   onFix,
-}: Omit<HudProps, 'evaluation'>) {
+}: Omit<HudProps, 'figures'>) {
   const [open, setOpen] = useState(false)
   if (issues.length === 0 && check.state === 'failed')
     return (
