@@ -1,12 +1,18 @@
 import type { Part, PartRegion } from '@pave/kernel/types'
 import { METALS } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
-import { billOfMaterials } from './bom'
+import { billOfMaterials, stoneRows } from './bom'
 import { createContext } from './context'
 import { estimateCost } from './cost'
 import { csvCell, encodeCsv, toCsv } from './csv'
 import { bundleRoot, safeSegment, skuSlug, uniqueName } from './paths'
-import { evaluationOf, fixtureKernel, stoneAt, templateDesign } from './testing/fixtures'
+import {
+  evaluationOf,
+  fixtureKernel,
+  pavePendant,
+  stoneAt,
+  templateDesign,
+} from './testing/fixtures'
 import { box } from './testing/shapes'
 import type { BuildInput } from './types'
 
@@ -127,6 +133,115 @@ describe('cost estimate', () => {
     const s = estimateCost(ctx).lines.find((l) => l.id === 'stones:S1')!
     expect(s.amount).toBe(4321)
     expect(s.inputs.find((i) => i.source === 'sourcing')!.value).toBe(4321)
+  })
+})
+
+describe('attached stone prices that do not map one to one onto lots', () => {
+  type Sourcing = { provider: string; sku: string; priceUsd?: number; certificate?: string }
+  /** `design` with a supplier record attached to some of its stone nodes. */
+  const attach = (design: ReturnType<typeof templateDesign>, by: Record<string, Sourcing>) => ({
+    ...design,
+    nodes: Object.fromEntries(
+      Object.entries(design.nodes).map(([id, n]) => [id, by[id] ? { ...n, sourcing: by[id] } : n]),
+    ) as typeof design.nodes,
+  })
+  /** Lots as the kernel groups them: by cut, stone, size, setting and role, across nodes. */
+  const kernelLots = (evaluation: BuildInput['evaluation']): BuildInput['evaluation'] => {
+    const lots = new Map<string, BuildInput['evaluation']['report']['lots'][number]>()
+    for (const s of evaluation.stones) {
+      const key = [s.cut, s.stone, s.dims.width, s.dims.length, s.setting, s.role].join('|')
+      const lot = lots.get(key) ?? {
+        cut: s.cut,
+        stone: s.stone,
+        width: s.dims.width,
+        length: s.dims.length,
+        count: 0,
+        caratEach: s.carat,
+        caratTotal: 0,
+        setting: s.setting,
+        role: s.role,
+        nodeIds: [],
+      }
+      lot.count++
+      lot.caratTotal += s.carat
+      if (!lot.nodeIds.includes(s.nodeId)) lot.nodeIds.push(s.nodeId)
+      lots.set(key, lot)
+    }
+    return { ...evaluation, report: { ...evaluation.report, lots: [...lots.values()] } }
+  }
+  const stoneLines = (ctx: ReturnType<typeof createContext>) =>
+    estimateCost(ctx).lines.filter((l) => l.group === 'stones')
+  const threeStone = (by: Record<string, Sourcing>) => {
+    const evaluation = kernelLots(
+      evaluationOf(
+        [{ id: 'band', name: 'Ring', material: 'pt950', mesh: box([0, 0, 0], [10, 10, 10]) }],
+        [
+          stoneAt('center:0', 'center', 6.5, [5, 5, 12]),
+          stoneAt('side1:0', 'side1', 4, [0, 5, 12], 'side'),
+          stoneAt('side2:0', 'side2', 4, [10, 5, 12], 'side'),
+        ],
+      ),
+    )
+    return createContext({
+      ...input({}, attach(templateDesign('three-stone'), by)),
+      evaluation,
+      kernel: fixtureKernel(evaluation),
+    })
+  }
+
+  it('counts a parcel price once when the parcel spans two lots', () => {
+    // One pavé field in two graded sizes is two lots; its supplier quoted one price for the lot.
+    const { design, evaluation } = pavePendant(0.3)
+    const ctx = createContext({
+      ...input({}, attach(design, { ice: { provider: 'diaex', sku: 'PARCEL-9', priceUsd: 1000 } })),
+      evaluation,
+      kernel: fixtureKernel(evaluation),
+    })
+    expect(ctx.lots.map((l) => l.lot.nodeIds)).toEqual([['ice'], ['ice']])
+    const lines = stoneLines(ctx)
+    expect(lines.map((l) => l.formula)).toEqual(['parcel_price × share', 'parcel_price × share'])
+    // To the cent, however the shares round.
+    expect(Math.round(lines.reduce((t, l) => t + l.amount, 0) * 100)).toBe(100_000)
+    // Shared by weight: each lot pays for its carats.
+    const [a, b] = ctx.lots.map((l) => l.lot.caratTotal)
+    expect(lines[0]!.amount).toBeCloseTo((1000 * a!) / (a! + b!), 2)
+    expect(lines[1]!.amount).toBeCloseTo((1000 * b!) / (a! + b!), 2)
+  })
+
+  it('keeps a parcel in one lot at its price', () => {
+    const { design, evaluation } = pavePendant(0.3)
+    const one = kernelLots({
+      ...evaluation,
+      stones: evaluation.stones.filter((s) => s.dims.width > 1),
+    })
+    const ctx = createContext({
+      ...input({}, attach(design, { ice: { provider: 'diaex', sku: 'PARCEL-9', priceUsd: 1000 } })),
+      evaluation: one,
+      kernel: fixtureKernel(one),
+    })
+    expect(stoneLines(ctx).map((l) => [l.formula, l.amount])).toEqual([['parcel_price', 1000]])
+  })
+
+  it('adds up two stones that share a lot but were bought at different prices', () => {
+    const ctx = threeStone({
+      side1: { provider: 'diaex', sku: 'D-1', priceUsd: 400, certificate: 'GIA 1' },
+      side2: { provider: 'diaex', sku: 'D-2', priceUsd: 450, certificate: 'GIA 2' },
+    })
+    expect(ctx.lots.map((l) => l.lot.nodeIds)).toEqual([['center'], ['side1', 'side2']])
+    const side = stoneLines(ctx)[1]!
+    expect(side.amount).toBe(850)
+    expect(side.note).toBe('diaex D-1; diaex D-2')
+    // The stone list names both stones and both certificates, not only the first.
+    const row = stoneRows(ctx)[1]!
+    expect(row.sourcingSku).toBe('D-1; D-2')
+    expect(row.certificate).toBe('GIA 1; GIA 2')
+    expect(row.sourcingProvider).toBe('diaex')
+  })
+
+  it('prices an unpriced twin in the lot like the stone it matches', () => {
+    // A mirrored stud, or the second side stone before it is bought: same estimate as before.
+    const ctx = threeStone({ side1: { provider: 'diaex', sku: 'D-1', priceUsd: 400 } })
+    expect(stoneLines(ctx)[1]!.amount).toBe(800)
   })
 })
 
