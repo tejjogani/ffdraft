@@ -1,6 +1,6 @@
 # Live status of agents and tasks
 
-_Generated 25 Nov 2026 10:54 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 25 Nov 2026 11:14 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## Assistant build (lane A, A1)
 
@@ -31,7 +31,7 @@ Branch `claude/assistant-build`, head: 8df7d93 The Design stage becomes an image
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: ab29e98 Status: agents and tasks, 10:35 UTC
+Branch `claude/busy-bardeen-o482lo`, head: c7af5d3 Status: agents and tasks, 10:54 UTC
 
 | Agent | State | Outcome |
 |---|---|---|
