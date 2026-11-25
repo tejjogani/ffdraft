@@ -37,9 +37,33 @@ Kept on purpose and pinned by a test: a stone in a lot with no price of its own 
 
 Not reached: DFM check thresholds, drawing dimensions, render looks and cameras, the other Blender worker modules, the heavy match and canon suites.
 
-## 2. Server: `claude/bugsweep-server`
+## 2. Server: `claude/bugsweep-server` (8 commits, done)
 
-Running.
+Checks run: 13 server test files pass (two runs: 68 passed and 40 passed, each with 1 expected failure, which is finding 8 below); `pnpm -s typecheck` exits 0; the formatter clean on changed files; `drizzle-kit generate` against a scratch copy reports no schema drift. Eight tests added. **Not run:** the engine suites that need the kernel or Blender; engine code is unchanged. Note: the server runs on Postgres (embedded PGlite or `pg`), not SQLite.
+
+| # | Severity | Where (under `apps/server/src`) | What was wrong | Commit |
+|---|---|---|---|---|
+| 1 | Major | `http/assets.ts`, `http/events.ts` | A guest can run no command, but both routes checked only membership. A guest could download any organisation file by id and receive every live event, including the full ops of each CAD edit. Both now need the viewer role. | `eca02bf` |
+| 2 | Major | `app.ts`, `http/rpc.ts` | Local mode has no session cookie, and two kinds of POST need no CORS preflight. Any website open in the user's browser could run a command with an empty body (`pieces.create` made a piece) and upload files of up to 200 MB. Writes from an untrusted Origin now get 403. | `e813c79` |
+| 3 | Major | `rpc/execute.ts`, `audit.ts` | A lone surrogate in any input string passed the handler's write, then failed the audit insert: the change was made, the answer was 500, and no audit row was left. A NUL character gave 500 on any command. Such input now gets 400 before anything is written. | `4f62c6e` |
+| 4 | Major | `handlers/pieces.ts` | Deleting a piece removed its job rows without telling the engines. Blender takes and paid image jobs carried on. Live jobs are now cancelled first. Production package builds have no cancel and still run to completion. | `29f7baf` |
+| 5 | Minor | `http/rpc.ts` | A command's request body had no size limit. Now 64 MB, 413 beyond. | `1171b6c` |
+| 6 | Minor | `handlers/production.ts` | Concurrent `production.create` calls collided on the revision number and returned 500. They now get consecutive revisions. | `37656a5` |
+| 7 | Minor | `recovery.ts` | A run whose assistant failed to resume at boot stayed `running` for good. It is now failed as interrupted. | `24a300a` |
+| 8 | **Major, not fixed** | `app.ts`, `config.ts` | **A local install answers to any Host name.** A DNS-rebinding page is same-origin with the server, so fix 2 does not stop it: it can read and change the whole workspace and call `renders.configureEngine`, which probes a path as an executable. Recorded as an expected failure in `http.test.ts` (`4cf476c`). A Host allowlist (loopback, the public URL, `HOST`) would stop it but could lock out people who use a LAN address. **Needs a decision.** Research 20 found the same gap independently; `docs/plans/accounts-and-developer-api.md` plans the fix as its first step. |
+
+### Seen but not fixed
+
+1. `org.setRole`'s last-owner check is not atomic: two owners demoting each other at once could leave none. Not reproduced.
+2. A negative `limit` is accepted by `design.history`, `renders.list`, `threads.list` and `traces.runs`. PGlite returns nothing; real Postgres would likely error. The clean fix is a contract change in `packages/schema`.
+3. Missing indexes: `brand_model` and `run_feedback` have none on `org_id` or `run_id`; `reference.asset_id` and `model_shot.piece_id` are filtered without one. Needs a migration.
+4. A mutation and its audit row are not one transaction (`rpc/execute.ts`).
+5. The auth library's `get-full-organization` route is reachable by any signed-in user; whether a guest can list members through it was not tested.
+6. **For the assistant branch:** extra routes mounted through `routes(app, runtime, withCtx)` (the run stream, `/mcp`) get membership only. They need their own role check, as `/api/events` did.
+
+Found clean: tenancy scoping in every handler, asset path and type handling, error and secret hygiene, job terminal states, migrations against the schema.
+
+Not reached: the Blender queue and kernel pool under failure, the auth library's organisation routes beyond two probes, rate limiting on `/api/auth/*`, static file serving.
 
 ## 3. Studio and UI: `claude/bugsweep-studio` (11 commits, done)
 
@@ -79,4 +103,4 @@ Not reached: `features/assistant`, the middle of the viewer (picking, model buil
 
 ## 4. Kernel and schema: `claude/bugsweep-kernel`
 
-Queued.
+Running.

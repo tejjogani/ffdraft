@@ -30,7 +30,7 @@ Three items in the first `.pave` version on `claude/assistant-build` (details in
 
 Two security gaps in the server, to fix before the founder installs a build that stores his key (research 20):
 
-4. The local server has no Host or Origin check (`apps/server/src/app.ts`, around lines 95 to 128). A DNS-rebinding page or any local program can call it and spend the stored Claude key. The bug-sweep branch `claude/bugsweep-server` has a related fix ("refuse writes sent by a page of another website"); check that it covers the Host header too.
+4. The local server has no Host or Origin check (`apps/server/src/app.ts`, around lines 95 to 128). A DNS-rebinding page or any local program can call it and spend the stored Claude key. The bug-sweep branch `claude/bugsweep-server` fixes the cross-site write half (commit `e813c79`). The Host half (DNS rebinding) is still open and recorded there as an expected failure; it needs a decision on which hosts to allow.
 5. Accounts mode accepts unverified emails, and the auth library links a social sign-in to an existing account by email. That allows a pre-registration takeover once Google or Microsoft sign-in is switched on. Also, one auth secret both signs sessions and derives the key that seals customers' AI keys.
 
 Also: `docs/pave-file.md` says adding an entry or a field is not a breaking change, but the reader refuses unknown entries, rejects new enum values and checks names before the version. A newer file gets the wrong error instead of "update Pavé". `geometry/exact.step` inside the file hands the paid STEP export to anyone who unzips it, and open never reads it.
@@ -79,10 +79,10 @@ The founder also asked (25 Nov) for an agent team to look for bugs, obvious miss
 
 | Branch | Area | State |
 |---|---|---|
-| `claude/bugsweep-server` | `apps/server` | Running |
+| `claude/bugsweep-server` | `apps/server` | Done: 7 fixes, 1 open major (any Host name is answered), 8 tests; see `BUGSWEEP.md` |
 | `claude/bugsweep-studio` | `apps/studio`, `packages/ui` | Done: 14 defects fixed in 11 commits, 65 tests; see `BUGSWEEP.md` |
 | `claude/bugsweep-packages` | production, render, match, canon, sourcing, installers | Done: 7 fixes, 11 tests; see `BUGSWEEP.md` |
-| `claude/bugsweep-kernel` | `packages/kernel`, `packages/schema` | Queued (starts when the renderer spike frees the machine) |
+| `claude/bugsweep-kernel` | `packages/kernel`, `packages/schema` | Running |
 
 Each branch is based on `claude/busy-bardeen-o482lo` at `cb7dcd0` and becomes one pull request into it. The nine open majors lane A carries into A4 are left alone. **Request to lane A:** these are extra `claude/bugsweep-*` branches outside the board; the founder asked for them directly.
 
