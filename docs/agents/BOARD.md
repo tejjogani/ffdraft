@@ -11,9 +11,9 @@ _Written by lane A only (see `docs/agents/OPERATING-MODEL.md`). Other lanes writ
 
 | Id | Owner | State | Branch | Depends on | Done means |
 |---|---|---|---|---|---|
-| A1 | A | In progress: step 16 of 16 (Claude in the loop), then four reviews and fixes | `claude/assistant-build` | — | No blocker or major left after review; verified by fresh agents |
+| A1 | A | Done: 18 steps, four reviews, two fix rounds; no blocker or major left, 5 minors (head `f57efe2` on `claude/assistant-build`) | `claude/assistant-build` | — | No blocker or major left after review; verified by fresh agents |
 | A2 | A | Done at `f8542ef`: all suites green; 9 majors still open (pavé on 3D hosts and its draft speed, script İ, name-pendant bail stems, recipe and canon defaults, canon halo measure, a mesh copy check, the replace-stone dialog outliving its tab), carried into A4 | `claude/busy-bardeen-o482lo` | — | All suites green; majors fixed or explained; verified |
-| A3 | A | Waiting | `claude/busy-bardeen-o482lo` | A1, A2 | Assistant and engine merged; right-click "Ask AI" connected to the assistant; type check, every suite, studio build and a fresh-clone install pass; the founder gets one commit and what to try |
+| A3 | A | In progress: merge, wire right-click Ask AI to the assistant, full checks, fresh-clone install and a browser pass, fixes | `claude/busy-bardeen-o482lo` | A1, A2 | Assistant and engine merged; right-click "Ask AI" connected to the assistant; type check, every suite, studio build and a fresh-clone install pass; the founder gets one commit and what to try |
 | A4 | A | Waiting | `claude/busy-bardeen-o482lo` | A3 | Problems from the founder's own test (including `pnpm agent:smoke` with his key) fixed |
 | A5 | A | Later | new lane-A branch | A4 | Durable jobs, step 1 of `docs/plans/deploy-and-durable-jobs.md` |
 | A6 | A | Queued after A4 | new lane-A branch | A3 | Design images by AI: an image-model provider (key in Settings, AI, like the Claude key), a Design-stage job that generates realistic images of the piece; the person picks one; the CAD job first asks for sizes (ring size, stone sizes, metal) and shows an estimate (weight, carats, rough cost) before building from the image; then the render job. Works today without an image model when the person brings their own picture |
