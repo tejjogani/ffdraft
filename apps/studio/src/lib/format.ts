@@ -14,7 +14,9 @@ export function relativeTime(iso: string, now = Date.now()): string {
   let delta = (new Date(iso).getTime() - now) / 1000
   if (Math.abs(delta) < 45) return 'just now'
   for (const [unit, size] of STEPS) {
-    if (Math.abs(delta) < size) return rtf.format(Math.round(delta), unit)
+    // Rounded before it is compared: 59.6 s reads "1 min. ago", never "60 sec. ago".
+    const rounded = Math.round(delta)
+    if (Math.abs(rounded) < size) return rtf.format(rounded, unit)
     delta /= size
   }
   return ''
@@ -44,7 +46,8 @@ export const num = (v: number, digits = 2): string =>
   v.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: 0 })
 
 export const grams = (v: number): string => `${num(v, v < 10 ? 2 : 1)} g`
-export const carats = (v: number): string => `${num(v, 2)} ct`
+/** Melee is weighed in thousandths: a 0.8 mm stone is 0.003 ct, not "0 ct". */
+export const carats = (v: number): string => `${num(v, v !== 0 && Math.abs(v) < 0.1 ? 3 : 2)} ct`
 export const mm = (v: number): string => `${num(v, 2)} mm`
 export const compact = (v: number): string =>
   v.toLocaleString(undefined, { notation: 'compact', maximumFractionDigits: 1 })
