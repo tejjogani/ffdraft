@@ -18,6 +18,7 @@ Not written yet. It lands here when the plans have been reviewed.
 - Research 20, accounts and identity: `docs/research/20-accounts-and-identity.md`. Keep Better Auth (the only option that runs in-process, so the same code serves an offline laptop and hosted; no licence cost). Local installs get a profile, not a login. Connecting to hosted is a device link plus a one-time claim, with a signed entitlement lease of about two weeks.
 - Research 19, ERP, POS and accounting APIs: `docs/research/19-erp-and-pos-apis.md`. Tally is the better first live target (XML on port 9000, JSON from release 7.0, and a local install can post to it directly; the port has no authentication). The Edge has no API. Shopify does not feed The Edge or Jewel360: both push to Shopify and take no new stock from it. Shopify's and Xero's terms forbid using API data to train or improve AI.
 - Research 16, AI human models and on-model imagery: `docs/research/16-ai-models-on-model.md`. No image or video model keeps a jewelry design true, so the pipeline is render-first: render the CAD on a simple proxy, let the model paint the brand model around it, paste the true render back, then gate with checks. Default provider Gemini, fallback OpenAI. Higgsfield's help centre says it may train on user content unless enterprise, so unreleased designs should not go there by default. Video by API has shrunk: Veo 3.1 left the Gemini API on 22 Oct 2026 and OpenAI's video API closed on 24 Sep 2026. Estimated cost: $0.30 to $0.70 per accepted still, $1.50 to $4 per accepted 5-second clip.
+- Research 22, full Rhino parity: `docs/research/22-rhino-full-parity.md`. Rhino 8's command list has 1,078 names, grouped into 195 capabilities. The product has 16 today and 58 in part. Steps 1 to 8 of the freeform plan finish 37 more. After step 8, 142 of 195 (73%) are still open. Of those, 74 are cheap on today's engines, 55 are known algorithms and 13 need research or a new engine (SubD, QuadRemesh, Squish, BlendSrf, exact cage deformation). Three causes sit under most gaps: the plan's "bodies are closed" rule, the shipped OpenCascade build being a 353-class subset, and no SubD engine. The file proposes 15 further steps (9 to 23), about 65 to 90 lane-weeks by estimate.
 
 ## Requests and findings for lane A (from the research so far)
 
@@ -43,6 +44,7 @@ Corrections to earlier research:
 - Etsy now lists webhook events for commercial and personal apps (`08-channels.md` flagged this as a contradiction).
 - `01-cad.md` says STEP AP214; `step.ts` writes AP242.
 - RhinoGold is discontinued; RhinoArtisan is a separate product from another company, not its new name. MatrixGold is at 4.0, Rhino at 9, 3Design at V13.
+- Research 12 and `freeform-cad.md` treat Make2D as absent, and research 12 lists ShrinkWrap as an existing tool. Neither matches the code: `packages/production/src/drawing/` already draws hidden-line sheets, and level-set re-surfacing runs in `mesh/resurface.ts`. The assistant branch's README says MCP is "Planned, not built".
 - `freeform-cad.md` lists Make2D and shrinkage compensation as cut or later, while `production/drawing` and `shrinkagePct` already exist.
 - `03-rendering.md` says Open Image Denoise runs on the CPU; it has run on the GPU since Blender 4.1. A comment in the render worker's `devices.py` about Metal on Intel Macs is wrong since Blender 4.3.
 - `docs/ARCHITECTURE.md` (lines 177 to 182) still describes "Continue with Diaex" as a sign-in through OpenID. The contract links an organisation by plain OAuth. The `guest` role can currently call no command at all.
@@ -54,7 +56,7 @@ Ten research subagents, one per topic, one file each (topic 22 was added on the 
 
 | File | Topic | State |
 |---|---|---|
-| `docs/research/13-jewelry-cad-features.md` | Full jewelry CAD feature set | Done |
+| `docs/research/13-jewelry-cad-features.md` | Full jewelry CAD feature set | Done; plan being written |
 | `docs/research/14-jewelry-rendering.md` | Rendering state of the art for jewelry | Running |
 | `docs/research/15-own-renderer.md` | Our own renderer (priority) | Running |
 | `docs/research/16-ai-models-on-model.md` | AI human models, on-model imagery | Done; plan being written |
@@ -63,7 +65,7 @@ Ten research subagents, one per topic, one file each (topic 22 was added on the 
 | `docs/research/19-erp-and-pos-apis.md` | ERP, POS and accounting APIs | Done; plan being written |
 | `docs/research/20-accounts-and-identity.md` | Accounts and identity | Done; plan being written |
 | `docs/research/21-connectors-and-developer-api.md` | Connectors and developer API | Done; plans being written |
-| `docs/research/22-rhino-full-parity.md` | Every Rhino 8 CAD capability against the plan and the product | Running |
+| `docs/research/22-rhino-full-parity.md` | Every Rhino 8 CAD capability (and Rhino 9's additions) against the plan and the product | Done; plan being written |
 
 ## Next
 
@@ -136,6 +138,14 @@ From research 20 (accounts):
 23. Offline lease: 14 or 30 days?
 24. Which legal entity registers the Google, Microsoft and Apple sign-in apps? (Same as the open `LICENSE` holder question.)
 25. Which roles cost a seat?
+
+From research 22 (full Rhino parity):
+34. Is the target Rhino 8 as a frozen baseline with Rhino 9 tracked (recommended), or Rhino 9 outright?
+35. Reverse the plan's "bodies are closed" rule to allow open surfaces as objects? About two dozen capabilities depend on it.
+36. Build SubD, and to which grade: castable mesh only, or exact NURBS too?
+37. Accept our own OpenCascade build (a bigger download and a build pipeline)?
+38. Grasshopper: a graph view plus formulas (recommended), or a full canvas?
+39. Confirm the leave-out list: digitisers, marine and sun tools, legacy and proprietary formats, DWG, and Rhino's binary plug-ins.
 
 From research 18 (machines):
 16. Which Air exactly (13 or 15 inch, 8 or 16 GB, 8 or 10 GPU cores, macOS version)? Is 8 GB a supported target?
