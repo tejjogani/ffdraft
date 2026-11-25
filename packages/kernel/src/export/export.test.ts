@@ -422,7 +422,18 @@ describe('export fidelity', () => {
       m.slice(1).map(Number),
     )
     expect(values.length).toBeGreaterThan(0)
-    for (const v of values) expect(Math.fround(v)).toBe(Math.fround(Math.fround(v)))
+    // The STL holds the same welded vertices as raw float32: every OBJ vertex, read back as
+    // float32, must be one of them bit for bit, and none may be missing.
+    const stl = parseStl((await exportOf(solitaire(), 'stl', true)).bytes).triangles.positions
+    const corners = (p: readonly number[]) => {
+      const set = new Set<string>()
+      for (let i = 0; i < p.length; i += 3) set.add(`${p[i]},${p[i + 1]},${p[i + 2]}`)
+      return set
+    }
+    const written = corners(values.map(Math.fround))
+    const expected = corners(stl)
+    expect(written.size).toBe(expected.size)
+    expect([...written].filter((c) => !expected.has(c))).toEqual([])
     // Finer than the old 0.1 µm grid somewhere: slivers keep their vertices apart.
     expect(values.some((v) => Math.abs(v * 1e4 - Math.round(v * 1e4)) > 1e-3)).toBe(true)
   })
