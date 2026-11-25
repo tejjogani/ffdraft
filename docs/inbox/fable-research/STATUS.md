@@ -77,6 +77,15 @@ Each plan's section 4 ends with its full list and my recommendation for each. Th
 - Effort figures in every plan are estimates by the agents who wrote them. Nothing was built.
 - Several vendor pages would not open (Intuit, parts of Xero, SAP, Lightspeed, JewelCAD). Those rows are marked.
 
+## New on 25 November, afternoon: research on product-page renders, and the render skill
+
+The founder asked for deep research on making the Blender render workflow deterministic and true to life for jewelry product pages, and on how animations are made, and for the render skill to be updated from it.
+
+- **Report:** `docs/research/reports/Jewelry product page renders.md` (about 8,000 words, 24 prioritised changes with evidence). Notes from five researchers are in `docs/research/research_notes/Jewelry product page renders/`. Test scripts, logs and comparison images are in `docs/research/spikes/23-render-tests/`.
+- **Measured in Blender 5.3.0 on a CPU (349 renders, one small scene; no GPU, no Mac):** a fixed seed with no time limit gives bit-identical pixels across runs and thread counts, with the denoiser on or off; a time limit breaks it; glossy bounces at 16 leave 17.7% of a diamond's pixels more than 10% too dark; an indirect clamp of 20 removed 39% of the stone's light in the test studio; AgX cuts yellow gold's colour strength by about a third against Khronos PBR Neutral; depth-of-field f-numbers do nothing in a scene built at 1 unit = 1 mm; a fixed seed flickers less than an animated one on static, denoised background.
+- **The skill:** the updated `.claude/skills/jewelry-render/SKILL.md` is on `claude/skill-jewelry-render` (pull request 6). Every changed setting is marked measured, sourced or estimate. Its code blocks were run in Blender 5.3.0 and its ffmpeg lines on test frames before pushing; that run caught and fixed two mistakes (noted at the end of the report).
+- **For lane A, from this research:** `packages/render` still sets glossy bounces below transmission in `quality.ts` (already requested); the same tests suggest checking the product's own render worker for an indirect clamp, the view transform used for white-background takes, and depth-of-field values typed as photographic f-numbers in a millimetre scene.
+
 ## Pull requests open into `claude/busy-bardeen-o482lo` (25 November, 11:50 Pacific)
 
 For lane A to review and merge. Each branch has the integration head merged in and was re-checked after that merge.

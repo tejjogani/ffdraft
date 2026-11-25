@@ -1,0 +1,29 @@
+256 spp. Linear-light figures in the stone; noise = RMS(seed0-seed1)/sqrt(2) relative to mean; fireflies outside the stone.
+wf (clamp20, blur0.2)      stone mean 1.7118 | p99 6.69 | p99.9 9.18 / 9.49 | max lum 10.8 / 10.5 | coloured px 0.656, their saturation 0.517 | display chroma mean 10.73 | clipped(>=250) 0.000 | noise stone 0.170 metal 0.247 ground 0.0081 | fireflies off-stone 97 / 88, in-stone 160 / 167 | 44.8s
+clamp 10                   stone mean 1.6070 | p99 5.47 | p99.9 6.14 / 6.13 | max lum 6.9 / 6.9 | coloured px 0.778, their saturation 0.512 | display chroma mean 11.75 | clipped(>=250) 0.000 | noise stone 0.163 metal 0.246 ground 0.0081 | fireflies off-stone 95 / 87, in-stone 130 / 149 | 25.9s
+clamp 0 (off)              stone mean 2.8143 | p99 6.87 | p99.9 535.84 / 537.39 | max lum 610.0 / 612.9 | coloured px 0.618, their saturation 0.534 | display chroma mean 10.70 | clipped(>=250) 0.002 | noise stone 0.982 metal 0.560 ground 0.0082 | fireflies off-stone 144 / 138, in-stone 258 / 265 | 25.7s
+blur_glossy 0              stone mean 1.7122 | p99 6.69 | p99.9 9.18 / 9.49 | max lum 10.8 / 10.5 | coloured px 0.657, their saturation 0.517 | display chroma mean 10.73 | clipped(>=250) 0.000 | noise stone 0.170 metal 0.247 ground 0.0081 | fireflies off-stone 99 / 87, in-stone 157 / 167 | 25.6s
+clamp 0 + blur 0           stone mean 2.8147 | p99 6.87 | p99.9 535.84 / 537.39 | max lum 610.0 / 612.9 | coloured px 0.619, their saturation 0.534 | display chroma mean 10.71 | clipped(>=250) 0.002 | noise stone 0.982 metal 0.562 ground 0.0082 | fireflies off-stone 146 / 136, in-stone 256 / 265 | 25.4s
+wf + caustics on           stone mean 1.7137 | p99 6.69 | p99.9 9.18 / 9.49 | max lum 10.8 / 10.5 | coloured px 0.656, their saturation 0.517 | display chroma mean 10.74 | clipped(>=250) 0.000 | noise stone 0.170 metal 0.245 ground 0.0140 | fireflies off-stone 97 / 86, in-stone 162 / 167 | 26.2s
+1024 spp wf_s0_1024   stone mean 1.7119  p99 6.68  p99.9 9.47  max 10.3  metal mean 1.1211  ground mean 1.5408  fireflies off-stone 83
+1024 spp c0_s0_1024   stone mean 2.8252  p99 6.83  p99.9 549.56  max 597.2  metal mean 1.1495  ground mean 1.5408  fireflies off-stone 139
+clamp 20 vs clamp 0 at 1024 spp, stone: px_equal=False  lin_max=669.5  lin_mean=0.9803  d8_max=167  d8_mean=1.678  d8_rmse=8.821  ssim=0.9806  dE00_mean=1.267
+
+display space, 256 spp
+wf (clamp20, blur0.2)      seed0 vs seed1 in stone: d8_max=155  d8_mean=8.318  d8_rmse=12.93  dE00_mean=8.22 | stone px with all channels >=250: 0, >=240: 0, max 8-bit value 244
+clamp 10                   seed0 vs seed1 in stone: d8_max=129  d8_mean=7.865  d8_rmse=12.03  dE00_mean=7.737 | stone px with all channels >=250: 0, >=240: 0, max 8-bit value 232
+clamp 0 (off)              seed0 vs seed1 in stone: d8_max=232  d8_mean=8.845  d8_rmse=14.86  dE00_mean=8.476 | stone px with all channels >=250: 80, >=240: 89, max 8-bit value 255
+blur_glossy 0              seed0 vs seed1 in stone: d8_max=155  d8_mean=8.322  d8_rmse=12.94  dE00_mean=8.22 | stone px with all channels >=250: 0, >=240: 0, max 8-bit value 244
+clamp 0 + blur 0           seed0 vs seed1 in stone: d8_max=232  d8_mean=8.847  d8_rmse=14.86  dE00_mean=8.475 | stone px with all channels >=250: 80, >=240: 89, max 8-bit value 255
+wf + caustics on           seed0 vs seed1 in stone: d8_max=155  d8_mean=8.316  d8_rmse=12.93  dE00_mean=8.216 | stone px with all channels >=250: 0, >=240: 0, max 8-bit value 244
+wf vs c10   same seed, stone: px_equal=False  lin_mean=0.2078  d8_max=52  d8_mean=2.786  d8_rmse=5.419  dE00_mean=2.447
+wf vs c10   same seed, ground: px_equal=False  lin_mean=1.752e-05  d8_max=2  d8_mean=0.0004125  d8_rmse=0.0239  dE00_mean=0.0003923
+wf vs c0    same seed, stone: px_equal=False  lin_mean=0.9702  d8_max=214  d8_mean=1.353  d8_rmse=7.787  dE00_mean=1.02
+wf vs c0    same seed, ground: px_equal=False  lin_mean=4.61e-06  d8_max=3  d8_mean=7.933e-05  d8_rmse=0.01321  dE00_mean=0.000129
+wf vs b0    same seed, stone: px_equal=False  lin_mean=0.001484  d8_max=29  d8_mean=0.1087  d8_rmse=0.6968  dE00_mean=0.1202
+wf vs b0    same seed, ground: px_equal=False  lin_mean=0  d8_max=0  d8_mean=0  d8_rmse=0  dE00_mean=0
+wf vs caus  same seed, stone: px_equal=False  lin_mean=0.002388  d8_max=36  d8_mean=0.1169  d8_rmse=0.6401  dE00_mean=0.1266
+wf vs caus  same seed, ground: px_equal=False  lin_mean=0.02272  d8_max=8  d8_mean=0.5725  d8_rmse=0.8781  dE00_mean=0.4167
+c0_s0_1024: stone px with lum > 20: 103 (0.31%) carrying 39.1% of the stone's summed luminance; > 100: 77
+wf_s0_1024: stone px with lum > 20: 0 (0.00%) carrying 0.0% of the stone's summed luminance; > 100: 0
+mean luminance of the stone pixels that are below 20 in the unclamped render: clamp off 1.7266, clamp 20 1.6963 (ratio 0.982)

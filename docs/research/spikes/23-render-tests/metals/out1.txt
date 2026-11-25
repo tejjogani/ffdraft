@@ -1,0 +1,99 @@
+VERSION 5.3.0 b'2026-11-10'
+/home/claude/scratch/23/introspect.py:3: DeprecationWarning: 'Material.use_nodes' is expected to be removed in Blender 6.0
+  mat = bpy.data.materials.new("m"); mat.use_nodes = True
+
+== ShaderNodeBsdfMetallic Metallic BSDF
+  PROP distribution default= MULTI_GGX items= [('BECKMANN', 'Beckmann', ''), ('GGX', 'GGX', ''), ('MULTI_GGX', 'Multiscatter GGX', 'GGX with additional correction to account for multiple scattering, preserve energy and prevent unexpected darkening at high roughness')]
+  PROP fresnel_type default= F82 items= [('PHYSICAL_CONDUCTOR', 'Physical Conductor', 'Fresnel conductor based on the complex refractive index per color channel'), ('F82', 'F82 Tint', 'An approximation of the Fresnel conductor curve based on the colors at perpendicular and near-grazing (roughly 82°) angles')]
+  IN 'Base Color' Base Color RGBA (0.617, 0.577, 0.54, 1.0) [0.0,1.0] hard[0.0,3.4028234663852886e+38] enabled | 
+  IN 'Edge Tint' Edge Tint RGBA (0.695, 0.726, 0.77, 1.0) [0.0,1.0] hard[0.0,3.4028234663852886e+38] enabled | 
+  IN 'IOR' IOR VECTOR (2.757, 2.513, 2.231) [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] disabled | 
+  IN 'Extinction' Extinction VECTOR (3.867, 3.404, 3.009) [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] disabled | 
+  IN 'Roughness' Roughness VALUE 0.5 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Anisotropy' Anisotropy VALUE 0.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Rotation' Rotation VALUE 0.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Normal' Normal VECTOR (0.0, 0.0, 0.0) [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Tangent' Tangent VECTOR (0.0, 0.0, 0.0) [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Weight' Weight VALUE 0.0 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] disabled | 
+  IN 'Thin Film Thickness' Thin Film Thickness VALUE 0.0 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Thin Film IOR' Thin Film IOR VALUE 1.3300000429153442 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+
+== ShaderNodeBsdfPrincipled Principled BSDF
+  PROP distribution default= MULTI_GGX items= [('GGX', 'GGX', ''), ('MULTI_GGX', 'Multiscatter GGX', 'GGX with additional correction to account for multiple scattering, preserve energy and prevent unexpected darkening at high roughness')]
+  PROP subsurface_method default= RANDOM_WALK items= [('BURLEY', 'Christensen-Burley', 'Approximation to physically based volume scattering'), ('RANDOM_WALK', 'Random Walk', 'Volumetric approximation to physically based volume scattering, using the scattering radius as specified'), ('RANDOM_WALK_SKIN', 'Random Walk (Skin)', 'Volumetric approximation to physically based volume scattering, with scattering radius automatically adjusted to match color textures. Designed for skin shading.'), ('RANDOM_WALK_LEGACY', 'Random Walk (Legacy)', 'Volumetric approximation to physically based volume scattering, using the scattering radius as specified')]
+  IN 'Base Color' Base Color RGBA (0.8, 0.8, 0.8, 1.0) [0.0,1.0] hard[0.0,3.4028234663852886e+38] enabled | 
+  IN 'Metallic' Metallic VALUE 0.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Roughness' Roughness VALUE 0.5 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'IOR' IOR VALUE 1.5 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Alpha' Alpha VALUE 1.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Thin Wall' Thin Wall BOOLEAN False  enabled | 
+  IN 'Normal' Normal VECTOR (0.0, 0.0, 0.0) [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Weight' Weight VALUE 0.0 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] disabled | 
+  IN 'Diffuse Roughness' Diffuse Roughness VALUE 0.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Subsurface Weight' Subsurface Weight VALUE 0.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Subsurface Radius' Subsurface Radius VECTOR (1.0, 0.2, 0.1) [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Subsurface Scale' Subsurface Scale VALUE 0.004999999888241291 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Subsurface IOR' Subsurface IOR VALUE 1.399999976158142 [0.0,1.0] hard[0.0,1.0] disabled | 
+  IN 'Subsurface Anisotropy' Subsurface Anisotropy VALUE 0.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Specular IOR Level' Specular IOR Level VALUE 0.5 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Specular Tint' Specular Tint RGBA (1.0, 1.0, 1.0, 1.0) [0.0,1.0] hard[0.0,3.4028234663852886e+38] enabled | 
+  IN 'Anisotropic' Anisotropic VALUE 0.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Anisotropic Rotation' Anisotropic Rotation VALUE 0.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Tangent' Tangent VECTOR (0.0, 0.0, 0.0) [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Transmission Weight' Transmission Weight VALUE 0.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Transmission Dispersion Scale' Transmission Dispersion Scale VALUE 0.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Transmission Dispersion Abbe Number' Transmission Dispersion Abbe Number VALUE 20.0 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Coat Weight' Coat Weight VALUE 0.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Coat Roughness' Coat Roughness VALUE 0.029999999329447746 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Coat IOR' Coat IOR VALUE 1.5 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Coat Tint' Coat Tint RGBA (1.0, 1.0, 1.0, 1.0) [0.0,1.0] hard[0.0,3.4028234663852886e+38] enabled | 
+  IN 'Coat Normal' Coat Normal VECTOR (0.0, 0.0, 0.0) [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Sheen Weight' Sheen Weight VALUE 0.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Sheen Roughness' Sheen Roughness VALUE 0.5 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Sheen Tint' Sheen Tint RGBA (1.0, 1.0, 1.0, 1.0) [0.0,1.0] hard[0.0,3.4028234663852886e+38] enabled | 
+  IN 'Emission Color' Emission Color RGBA (1.0, 1.0, 1.0, 1.0) [0.0,1.0] hard[0.0,3.4028234663852886e+38] enabled | 
+  IN 'Emission Strength' Emission Strength VALUE 0.0 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Thin Film Thickness' Thin Film Thickness VALUE 0.0 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Thin Film IOR' Thin Film IOR VALUE 1.3300000429153442 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+
+== ShaderNodeBsdfGlass Glass BSDF
+  PROP distribution default= MULTI_GGX items= [('BECKMANN', 'Beckmann', ''), ('GGX', 'GGX', ''), ('MULTI_GGX', 'Multiscatter GGX', 'GGX with additional correction to account for multiple scattering, preserve energy and prevent unexpected darkening at high roughness')]
+  IN 'Color' Color RGBA (1.0, 1.0, 1.0, 1.0) [0.0,1.0] hard[0.0,3.4028234663852886e+38] enabled | 
+  IN 'Roughness' Roughness VALUE 0.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Anisotropy' Anisotropy VALUE 0.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Rotation' Rotation VALUE 0.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'IOR' IOR VALUE 1.5 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Normal' Normal VECTOR (0.0, 0.0, 0.0) [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Tangent' Tangent VECTOR (0.0, 0.0, 0.0) [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Weight' Weight VALUE 0.0 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] disabled | 
+  IN 'Thin Film Thickness' Thin Film Thickness VALUE 0.0 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Thin Film IOR' Thin Film IOR VALUE 1.3300000429153442 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+
+== ShaderNodeBsdfRefraction Refraction BSDF
+  PROP distribution default= BECKMANN items= [('BECKMANN', 'Beckmann', ''), ('GGX', 'GGX', '')]
+  IN 'Color' Color RGBA (1.0, 1.0, 1.0, 1.0) [0.0,1.0] hard[0.0,3.4028234663852886e+38] enabled | 
+  IN 'Roughness' Roughness VALUE 0.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'IOR' IOR VALUE 1.4500000476837158 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Normal' Normal VECTOR (0.0, 0.0, 0.0) [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Weight' Weight VALUE 0.0 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] disabled | 
+
+== ShaderNodeVolumeAbsorption Volume Absorption
+  IN 'Color' Color RGBA (0.8, 0.8, 0.8, 1.0) [0.0,1.0] hard[0.0,3.4028234663852886e+38] enabled | 
+  IN 'Density' Density VALUE 1.0 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Weight' Weight VALUE 0.0 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] disabled | 
+
+== ShaderNodeBevel Bevel
+  IN 'Radius' Radius VALUE 0.05000000074505806 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Normal' Normal VECTOR (0.0, 0.0, 0.0) [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+
+== ShaderNodeBsdfGlossy Glossy BSDF
+  PROP distribution default= MULTI_GGX items= [('BECKMANN', 'Beckmann', ''), ('GGX', 'GGX', ''), ('ASHIKHMIN_SHIRLEY', 'Ashikhmin-Shirley', ''), ('MULTI_GGX', 'Multiscatter GGX', 'GGX with additional correction to account for multiple scattering, preserve energy and prevent unexpected darkening at high roughness')]
+  IN 'Color' Color RGBA (0.8, 0.8, 0.8, 1.0) [0.0,1.0] hard[0.0,3.4028234663852886e+38] enabled | 
+  IN 'Roughness' Roughness VALUE 0.5 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Anisotropy' Anisotropy VALUE 0.0 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Rotation' Rotation VALUE 0.0 [0.0,1.0] hard[0.0,1.0] enabled | 
+  IN 'Normal' Normal VECTOR (0.0, 0.0, 0.0) [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Tangent' Tangent VECTOR (0.0, 0.0, 0.0) [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] enabled | 
+  IN 'Weight' Weight VALUE 0.0 [-10000.0,10000.0] hard[-3.4028234663852886e+38,3.4028234663852886e+38] disabled | 
+fresnel PHYSICAL_CONDUCTOR [('Base Color', False), ('Edge Tint', False), ('IOR', True), ('Extinction', True), ('Roughness', True), ('Anisotropy', True), ('Rotation', True), ('Normal', True), ('Tangent', True), ('Weight', False), ('Thin Film Thickness', True), ('Thin Film IOR', True)]
+fresnel F82 [('Base Color', True), ('Edge Tint', True), ('IOR', False), ('Extinction', False), ('Roughness', True), ('Anisotropy', True), ('Rotation', True), ('Normal', True), ('Tangent', True), ('Weight', False), ('Thin Film Thickness', True), ('Thin Film IOR', True)]

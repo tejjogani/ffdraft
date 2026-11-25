@@ -1,0 +1,27 @@
+!! 00:00.334  cycles           | WARNING CUEW initialization failed: Error opening the library
+!! 00:00.290  cycles           | WARNING CUEW initialization failed: Error opening the library
+!! 00:00.281  cycles           | WARNING CUEW initialization failed: Error opening the library
+!! 00:00.305  cycles           | WARNING CUEW initialization failed: Error opening the library
+!! 00:00.305  cycles           | WARNING CUEW initialization failed: Error opening the library
+!! 00:00.308  cycles           | WARNING CUEW initialization failed: Error opening the library
+!! 00:00.283  cycles           | WARNING CUEW initialization failed: Error opening the library
+!! 00:00.284  cycles           | WARNING CUEW initialization failed: Error opening the library
+reference self-consistency: seeds 1+2 vs seeds 3+4 (2048 each):
+  half A vs half B                 stone: rel RMSE(linear) 0.085 | display mean abs 4.14/255, RMSE 6.91/255 | SSIM(stone) 0.949 | dE00 4.19 | edge energy vs ref 1.00 | mean lum ratio 1.000
+  64 spp, no denoise               stone: rel RMSE(linear) 0.344 | display mean abs 17.00/255, RMSE 30.00/255 | SSIM(stone) 0.713 | dE00 12.07 | edge energy vs ref 1.23 | mean lum ratio 1.001
+  64 spp, OIDN albedo+normal       stone: rel RMSE(linear) 0.177 | display mean abs 8.85/255, RMSE 14.80/255 | SSIM(stone) 0.876 | dE00 7.15 | edge energy vs ref 0.94 | mean lum ratio 0.986
+  64 spp, OIDN albedo only         stone: rel RMSE(linear) 0.188 | display mean abs 9.21/255, RMSE 15.37/255 | SSIM(stone) 0.863 | dE00 7.52 | edge energy vs ref 0.94 | mean lum ratio 0.997
+  64 spp, OIDN no guides (RGB)     stone: rel RMSE(linear) 0.176 | display mean abs 8.38/255, RMSE 13.95/255 | SSIM(stone) 0.883 | dE00 6.93 | edge energy vs ref 0.92 | mean lum ratio 1.006
+ 256 spp, no denoise               stone: rel RMSE(linear) 0.176 | display mean abs 8.49/255, RMSE 14.32/255 | SSIM(stone) 0.870 | dE00 7.53 | edge energy vs ref 1.06 | mean lum ratio 1.000
+ 256 spp, OIDN albedo+normal       stone: rel RMSE(linear) 0.131 | display mean abs 6.26/255, RMSE 10.50/255 | SSIM(stone) 0.927 | dE00 5.68 | edge energy vs ref 1.00 | mean lum ratio 0.994
+ 256 spp, OIDN albedo only         stone: rel RMSE(linear) 0.135 | display mean abs 6.59/255, RMSE 11.03/255 | SSIM(stone) 0.914 | dE00 6.00 | edge energy vs ref 1.01 | mean lum ratio 0.996
+ 256 spp, OIDN no guides (RGB)     stone: rel RMSE(linear) 0.127 | display mean abs 6.01/255, RMSE 10.04/255 | SSIM(stone) 0.931 | dE00 5.49 | edge energy vs ref 0.98 | mean lum ratio 1.001
+1024 spp, no denoise               stone: rel RMSE(linear) 0.094 | display mean abs 4.60/255, RMSE 7.67/255 | SSIM(stone) 0.941 | dE00 4.57 | edge energy vs ref 1.01 | mean lum ratio 1.000
+1024 spp, OIDN albedo+normal       stone: rel RMSE(linear) 0.094 | display mean abs 4.44/255, RMSE 7.38/255 | SSIM(stone) 0.947 | dE00 4.41 | edge energy vs ref 1.01 | mean lum ratio 1.000
+1024 spp, OIDN no guides (RGB)     stone: rel RMSE(linear) 0.088 | display mean abs 4.13/255, RMSE 6.82/255 | SSIM(stone) 0.956 | dE00 4.08 | edge energy vs ref 1.00 | mean lum ratio 1.000
+  64 spp, OIDN a+n, follow refl. off stone: rel RMSE(linear) 0.206 | display mean abs 9.35/255, RMSE 15.65/255 | SSIM(stone) 0.862 | dE00 7.89 | edge energy vs ref 0.99 | mean lum ratio 0.992
+ 256 spp, OIDN a+n, follow refl. off stone: rel RMSE(linear) 0.146 | display mean abs 6.76/255, RMSE 11.28/255 | SSIM(stone) 0.914 | dE00 6.23 | edge energy vs ref 1.02 | mean lum ratio 0.998
+  64 spp, OIDN a+n, prefilter NONE stone: rel RMSE(linear) 0.273 | display mean abs 14.78/255, RMSE 27.25/255 | SSIM(stone) 0.746 | dE00 10.70 | edge energy vs ref 1.17 | mean lum ratio 0.992
+time   64 spp: no denoise 13.3s, OIDN a+n 13.9s, OIDN rgb 6.8s
+time  256 spp: no denoise 44.8s, OIDN a+n 46.6s, OIDN rgb 26.0s
+time 1024 spp: no denoise 191.2s, OIDN a+n 108.4s, OIDN rgb 105.1s

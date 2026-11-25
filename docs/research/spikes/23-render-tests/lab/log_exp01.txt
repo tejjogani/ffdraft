@@ -1,0 +1,11 @@
+== denoiser off
+same process, 1st vs 2nd render      float px sha equal=True  EXR file sha equal=False  PNG file sha equal=False | lin_max=0  lin_mean=0  d8_max=0  d8_mean=0 | t=9.2s/6.8s
+process 1 vs fresh process 2         float px sha equal=True  EXR file sha equal=False  PNG file sha equal=False | lin_max=0  lin_mean=0  d8_max=0  d8_mean=0 | t=9.2s/7.0s
+fresh process 2 vs fresh process 3   float px sha equal=True  EXR file sha equal=False  PNG file sha equal=False | lin_max=0  lin_mean=0  d8_max=0  d8_mean=0 | t=7.0s/7.9s
+2 threads vs 1 thread                float px sha equal=True  EXR file sha equal=False  PNG file sha equal=False | lin_max=0  lin_mean=0  d8_max=0  d8_mean=0 | t=7.0s/13.7s
+== denoiser on (Open Image Denoise)
+same process, 1st vs 2nd render      float px sha equal=True  EXR file sha equal=False  PNG file sha equal=False | lin_max=0  lin_mean=0  d8_max=0  d8_mean=0 | t=9.5s/7.3s
+process 1 vs fresh process 2         float px sha equal=True  EXR file sha equal=False  PNG file sha equal=False | lin_max=0  lin_mean=0  d8_max=0  d8_mean=0 | t=9.5s/7.4s
+fresh process 2 vs fresh process 3   float px sha equal=True  EXR file sha equal=False  PNG file sha equal=False | lin_max=0  lin_mean=0  d8_max=0  d8_mean=0 | t=7.4s/7.4s
+2 threads vs 1 thread                float px sha equal=True  EXR file sha equal=False  PNG file sha equal=False | lin_max=0  lin_mean=0  d8_max=0  d8_mean=0 | t=7.4s/14.4s
+denoise on vs off (64 spp), for scale: px_equal=False  lin_max=46.6  lin_mean=0.1886  d8_max=179  d8_mean=6.555  d8_rmse=12.81  ssim=0.8728  dE00_mean=4.846

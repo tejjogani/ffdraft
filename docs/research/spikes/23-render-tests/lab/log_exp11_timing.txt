@@ -1,0 +1,9 @@
+disp    32 spp: wall 9.0s cpu 17.9s (load 1.1) | 96 spp: wall 26.6s cpu 52.9s (load 1.4) | marginal per sample: wall 0.275s, cpu 0.547s | fixed overhead ~0.2s wall
+nodisp  32 spp: wall 9.0s cpu 17.9s (load 1.5) | 96 spp: wall 26.4s cpu 52.6s (load 1.7) | marginal per sample: wall 0.272s, cpu 0.543s | fixed overhead ~0.3s wall
+tm_disp_96_oidn    wall 28.1s cpu 55.9s load 1.8 -> cpu per sample 0.582s
+tm_disp_96_d64     wall 30.4s cpu 60.4s load 1.9 -> cpu per sample 0.629s
+tm_disp_96_g32     wall 28.4s cpu 56.5s load 2.0 -> cpu per sample 0.589s
+tm_disp_96_t1      wall 52.3s cpu 52.2s load 1.4 -> cpu per sample 0.544s
+
+all renders of the lab: cpu-seconds per sample per megapixel
+total CPU-seconds rendered in the lab: 6258 (= 52.1 min on 2 cores)
