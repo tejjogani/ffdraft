@@ -1,6 +1,6 @@
 # Live status of agents and tasks
 
-_Generated 25 Nov 2026 09:34 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 25 Nov 2026 09:54 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## Assistant build (lane A, A1)
 
@@ -18,16 +18,19 @@ Branch `claude/assistant-build`, head: 342481a Verify the assistant harness agai
 | build:mcp | done | commit 4589090. Most of step 15 was already in the branch: commit e36e71b, made between steps 9 and 10, added pnpm agent:smoke (apps/server/src/smoke-cli.ts and apps/server/src/assistant/smoke.ts), the installer's --check key report, t… |
 | build:framing | done | commit f8aacab. Step 8 is built and committed as f8aacab on ai/assistant (on top of f555352, not pushed). An earlier interrupted attempt had left most of the code uncommitted. I reviewed all of it and kept it. Then I fixed what the rea… |
 | build:references | done | commit 010345f. I built step 9 and committed it as 010345f on ai/assistant, on top of f8aacab. It is not pushed. There is now a reference panel beside CAD. - **The panel.** It sits beside the CAD workspace and the Render tab as a flat … |
-| build:harness | running or interrupted |  |
+| build:harness | done | commit 342481a. Step 16 is built and committed as 342481a on ai/assistant, on top of the checkpoint 207340c and e5d18f2's line. It is not pushed. Every layer of the assistant harness is now checked against a strict fake Claude API, and… |
 | build:cinema | done | commit 7df93f9. Step 10 is built and committed as 7df93f9 on ai/assistant, on top of e36e71b. It is not pushed. The Render job now works as an AI cinematographer. - **Looks first.** The new `scenes.suggest` tool reads what matters in t… |
 | build:polish | done | commit 95f4336. Step 13, the premium design pass, is committed as 95f4336 on ai/assistant, on top of ed6cf7c. It is not pushed. No behaviour changes. - **Biggest find: the frosted glass never frosted in Chromium or Electron.** We wrote… |
 | build:flow | done | commit c4eddee. Step 11 is built and committed as c4eddee on ai/assistant, on top of 7df93f9. It is not pushed. - **The assistant window.** It has three forms. Docked, it sits in the right-hand sidebar. Pulled out, it is a floating fro… |
 | build:pavefile | done | commit ed6cf7c. I built step 12, the native Pavé file, and committed it as ed6cf7c on ai/assistant, on top of c4eddee. It is not pushed. The tests, typecheck and three Playwright passes all pass. - **The file:** a zip with: - `mimetype… |
 | build:light | done | commit 499b203. Step 14 is built and committed as 499b203 on ai/assistant, on top of 95f4336. It is not pushed. Orbiting is now 22–37 frames a second in the slow test setup, up from 1–2. A slider step shows in 0.2–0.34 s, down from 2.1… |
+| review:api | running or interrupted |  |
+| review:safety | running or interrupted |  |
+| build:ideas | running or interrupted |  |
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: c743a25 Add the master plan and a live status file of every agent and task
+Branch `claude/busy-bardeen-o482lo`, head: 0532cdb Agents: the assistant build script as it now runs (steps 17 and 18 added)
 
 | Agent | State | Outcome |
 |---|---|---|
