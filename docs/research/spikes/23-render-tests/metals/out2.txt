@@ -1,0 +1,279 @@
+### CYCLES SCENE
+device = 'CPU' items=[('CPU', 'Use CPU for rendering'), ('GPU', 'Use GPU compute device for rendering, configured in the system tab in the user preferences')] | Device :: Device to use for rendering
+use_denoising = True | Use Denoising :: Denoise the rendered image
+00:00.294  cycles           | WARNING CUEW initialization failed: Error opening the library
+denoiser = 'OPENIMAGEDENOISE' items=[] | Denoiser :: Denoise the image with the selected denoiser. For denoising the image after rendering
+denoising_prefilter = 'ACCURATE' items=[('NONE', 'No prefiltering, use when guiding passes are noise-free'), ('FAST', 'Denoise color and guiding passes together. Improves quality when guiding passes are noisy using least amount of extra pr'), ('ACCURATE', 'Prefilter noisy guiding passes before denoising color. Improves quality when guiding passes are noisy using extra proces')] | Denoising Prefilter :: Prefilter noisy guiding (albedo and normal) passes to improve denoising quality when using OpenImageDenoise
+denoising_quality = 'HIGH' items=[('HIGH', 'High quality'), ('BALANCED', 'Balanced between performance and quality'), ('FAST', 'High performance')] | Denoising Quality :: Overall denoising quality when using OpenImageDenoise
+denoising_input_passes = 'RGB_ALBEDO_NORMAL' items=[('RGB', 'Do not use utility passes for denoising'), ('RGB_ALBEDO', 'Use albedo pass for denoising'), ('RGB_ALBEDO_NORMAL', 'Use albedo and normal passes for denoising')] | Denoising Input Passes :: Passes used by the denoiser to distinguish noise from shader and geometry detail
+denoising_use_gpu = False | Denoise on GPU :: Perform denoising on GPU devices configured in the system tab in the user preferences. This is significantly faster than on CPU, but requires additional GPU memory. When large scenes need more GPU memory, this option can be disabled
+use_preview_denoising = False | Use Viewport Denoising :: Denoise the image in the 3D viewport
+preview_denoiser = 'AUTO' items=[] | Viewport Denoiser :: Denoise the image after each preview update with the selected denoiser
+preview_denoising_prefilter = 'FAST' items=[('NONE', 'No prefiltering, use when guiding passes are noise-free'), ('FAST', 'Denoise color and guiding passes together. Improves quality when guiding passes are noisy using least amount of extra pr'), ('ACCURATE', 'Prefilter noisy guiding passes before denoising color. Improves quality when guiding passes are noisy using extra proces')] | Viewport Denoising Prefilter :: Prefilter noisy guiding (albedo and normal) passes to improve denoising quality when using OpenImageDenoise
+preview_denoising_quality = 'BALANCED' items=[('HIGH', 'High quality'), ('BALANCED', 'Balanced between performance and quality'), ('FAST', 'High performance')] | Viewport Denoising Quality :: Overall denoising quality when using OpenImageDenoise
+preview_denoising_input_passes = 'RGB_ALBEDO' items=[('RGB', 'Do not use utility passes for denoising'), ('RGB_ALBEDO', 'Use albedo pass for denoising'), ('RGB_ALBEDO_NORMAL', 'Use albedo and normal passes for denoising')] | Viewport Denoising Input Passes :: Passes used by the denoiser to distinguish noise from shader and geometry detail
+preview_denoising_start_sample = 1 range[0,16777216] soft[0,16777216] | Start Denoising :: Sample to start denoising the preview at
+preview_denoising_use_gpu = True | Denoise Preview on GPU :: Perform denoising on GPU devices configured in the system tab in the user preferences. This is significantly faster than on CPU, but requires additional GPU memory. When large scenes need more GPU memory, this option can be disabled
+preview_denoising_upscale_quality = 'BALANCED' items=[('NONE', 'Highest quality without upscaling'), ('QUALITY', 'Offers higher image quality than balanced mode'), ('BALANCED', 'Offers both optimized performance and image quality'), ('PERFORMANCE', 'Offers a higher performance boost than balanced mode'), ('ULTRA_PERFORMANCE', 'Offers the highest performance boost')] | Viewport Denoising Upscale Quality :: Overall upscale factor and denoising quality when using DLSS
+samples = 4096 range[1,16777216] soft[1,16777216] | Samples :: Number of samples to render for each pixel
+preview_samples = 1024 range[0,16777216] soft[1,16777216] | Viewport Samples :: Number of samples to render in the viewport, unlimited if 0
+sampling_pattern = 'AUTOMATIC' items=[] | Sampling Pattern :: Random sampling pattern used by the integrator
+scrambling_distance = 1.0 range[0.0,3.4028234663852886e+38] soft[0.0,1.0] | Scrambling Distance :: Reduce randomization between pixels to improve GPU rendering performance, at the cost of possible rendering artifacts if set too low
+preview_scrambling_distance = False | Scrambling Distance viewport :: Uses the Scrambling Distance value for the viewport. Faster but may flicker
+auto_scrambling_distance = False | Automatic Scrambling Distance :: Automatically reduce the randomization between pixels to improve GPU rendering performance, at the cost of possible rendering artifacts
+use_layer_samples = 'USE' items=[('USE', 'Per render layer number of samples override scene samples'), ('BOUNDED', 'Bound per render layer number of samples by global samples'), ('IGNORE', 'Ignore per render layer number of samples')] | Layer Samples :: How to use per view layer sample settings
+use_adaptive_sampling = True | Use Adaptive Sampling :: Automatically reduce the number of samples per pixel based on estimated noise level
+adaptive_threshold = 0.009999999776482582 range[0.0,1.0] soft[0.0010000000474974513,1.0] | Adaptive Sampling Threshold :: Noise level step to stop sampling at, lower values reduce noise at the cost of render time. Zero for automatic setting based on number of AA samples
+adaptive_min_samples = 0 range[0,4096] soft[0,4096] | Adaptive Min Samples :: Minimum AA samples for adaptive sampling, to discover noisy features before stopping sampling. Zero for automatic setting based on noise threshold
+use_preview_adaptive_sampling = True | Use Adaptive Sampling :: Automatically reduce the number of samples per pixel based on estimated noise level, for viewport renders
+preview_adaptive_threshold = 0.10000000149011612 range[0.0,1.0] soft[0.0010000000474974513,1.0] | Adaptive Sampling Threshold :: Noise level step to stop sampling at, lower values reduce noise at the cost of render time. Zero for automatic setting based on number of AA samples, for viewport renders
+preview_adaptive_min_samples = 0 range[0,4096] soft[0,4096] | Adaptive Min Samples :: Minimum AA samples for adaptive sampling, to discover noisy features before stopping sampling. Zero for automatic setting based on noise threshold, for viewport renders
+use_light_tree = True | Light Tree :: Sample multiple lights more efficiently based on estimated contribution at every shading point
+min_light_bounces = 0 range[0,1024] soft[0,1024] | Min Light Bounces :: Minimum number of light bounces. Setting this higher reduces noise in the first bounces, but can also be less efficient for more complex geometry like curves and volumes
+min_transparent_bounces = 0 range[0,1024] soft[0,1024] | Min Transparent Bounces :: Minimum number of transparent bounces. Setting this higher reduces noise in the first bounces, but can also be less efficient for more complex geometry like curves and volumes
+caustics_reflective = True | Reflective Caustics :: Use reflective caustics, resulting in a brighter image (more noise but added realism)
+caustics_refractive = True | Refractive Caustics :: Use refractive caustics, resulting in a brighter image (more noise but added realism)
+blur_glossy = 1.0 range[0.0,10.0] soft[0.0,10.0] | Filter Glossy :: Adaptively blur glossy shaders and image textures after blurry bounces, to reduce noise and improve texture cache efficiency at the cost of accuracy. Lower this value to render caustics
+use_guiding = False | Guiding :: Use path guiding for sampling paths. Path guiding incrementally learns the light distribution of the scene and guides path into directions with high direct and indirect light contributions
+use_deterministic_guiding = True | Deterministic :: Makes path guiding deterministic which means renderings will be reproducible with the same pixel values every time. This feature slows down training
+guiding_distribution_type = 'PARALLAX_AWARE_VMM' items=[('PARALLAX_AWARE_VMM', 'Use Parallax-aware von Mises-Fisher models as directional distribution'), ('DIRECTIONAL_QUAD_TREE', 'Use Directional Quad Trees as directional distribution'), ('VMM', 'Use von Mises-Fisher models as directional distribution')] | Guiding Distribution Type :: Type of representation for the guiding distribution
+guiding_directional_sampling_type = 'RIS' items=[('MIS', 'Guided diffuse BSDF component based on the incoming light distribution and the cosine product (closed form product)'), ('RIS', 'Perform RIS sampling to guided based on the product of the incoming light distribution and the BSDF'), ('ROUGHNESS', 'Adjust the guiding probability based on the roughness of the material components')] | Directional Sampling Type :: Type of the directional sampling used for guiding
+use_surface_guiding = True | Surface Guiding :: Use guiding when sampling directions on a surface
+surface_guiding_probability = 0.5 range[0.0,1.0] soft[0.0,1.0] | Surface Guiding Probability :: The probability of guiding a direction on a surface
+use_volume_guiding = True | Volume Guiding :: Use guiding when sampling directions inside a volume
+guiding_training_samples = 128 range[0,2147483647] soft[1,2147483647] | Training Samples :: The maximum number of samples used for training path guiding. Higher samples lead to more accurate guiding, however may also unnecessarily slow down rendering once guiding is accurate enough. A value of 0 will continue training until the last sample
+volume_guiding_probability = 0.5 range[0.0,1.0] soft[0.0,1.0] | Volume Guiding Probability :: The probability of guiding a direction inside a volume
+use_guiding_direct_light = True | Guide Direct Light :: Consider the contribution of directly visible light sources during guiding
+use_guiding_mis_weights = True | Use MIS Weights :: Use the MIS weight to weight the contribution of directly visible light sources during guiding
+guiding_roughness_threshold = 0.05000000074505806 range[0.0,1.0] soft[0.0,1.0] | Guiding Roughness Threshold :: The minimal roughness value of a material to apply guiding
+max_bounces = 12 range[0,1024] soft[0,1024] | Max Bounces :: Total maximum number of bounces
+diffuse_bounces = 4 range[0,1024] soft[0,1024] | Diffuse Bounces :: Maximum number of diffuse reflection bounces, bounded by total maximum
+glossy_bounces = 4 range[0,1024] soft[0,1024] | Glossy Bounces :: Maximum number of glossy reflection bounces, bounded by total maximum
+transmission_bounces = 12 range[0,1024] soft[0,1024] | Transmission Bounces :: Maximum number of transmission bounces, bounded by total maximum
+volume_bounces = 0 range[0,1024] soft[0,1024] | Volume Bounces :: Maximum number of volumetric scattering events
+transparent_max_bounces = 8 range[0,1024] soft[0,1024] | Transparent Max Bounces :: Maximum number of transparent bounces. This is independent of maximum number of other bounces
+volume_step_rate = 1.0 range[0.009999999776482582,100.0] soft[0.10000000149011612,10.0] | Step Rate :: Globally adjust detail for volume rendering, on top of automatically estimated step size. Higher values reduce render time, lower values render with more detail
+volume_preview_step_rate = 1.0 range[0.009999999776482582,100.0] soft[0.10000000149011612,10.0] | Step Rate :: Globally adjust detail for volume rendering, on top of automatically estimated step size. Higher values reduce render time, lower values render with more detail
+volume_max_steps = 1024 range[2,65536] soft[2,65536] | Max Steps :: Maximum number of steps through the volume before giving up, to avoid extremely long render times with big objects or small step sizes
+volume_biased = False | Biased :: Default volume rendering uses null scattering, which is unbiased and has less artifacts, but could be noisier. Biased option uses ray marching, with controls for steps size and max steps
+film_exposure = 1.0 range[0.0,4294967296.0] soft[0.0,1024.0] | Exposure :: Image brightness scale
+film_transparent_glass = False | Transparent Glass :: Render transmissive surfaces as transparent, for compositing glass over another background
+film_transparent_roughness = 0.10000000149011612 range[0.0,1.0] soft[0.0,1.0] | Transparent Roughness Threshold :: For transparent transmission, keep surfaces with roughness above the threshold opaque
+pixel_filter_type = 'BLACKMAN_HARRIS' items=[('BOX', 'Box filter'), ('GAUSSIAN', 'Gaussian filter'), ('BLACKMAN_HARRIS', 'Blackman-Harris filter')] | Filter Type :: Pixel filter type
+filter_width = 1.5 range[0.009999999776482582,10.0] soft[0.009999999776482582,10.0] | Filter Width :: Pixel filter width
+seed = 0 range[0,2147483647] soft[0,2147483647] | Seed :: Seed value for integrator to get different noise patterns
+use_animated_seed = False | Use Animated Seed :: Use different seed values (and hence noise patterns) at different frames
+sample_clamp_direct = 0.0 range[0.0,100000000.0] soft[0.0,100000000.0] | Clamp Direct :: If non-zero, the maximum value for a direct sample, higher values will be scaled down to avoid too much noise and slow convergence at the cost of accuracy
+sample_clamp_indirect = 10.0 range[0.0,100000000.0] soft[0.0,100000000.0] | Clamp Indirect :: If non-zero, the maximum value for an indirect sample, higher values will be scaled down to avoid too much noise and slow convergence at the cost of accuracy
+use_fast_gi = False | Fast GI Approximation :: Approximate diffuse indirect light with background tinted ambient occlusion. This provides fast alternative to full global illumination, for interactive viewport rendering or final renders with reduced quality
+ao_bounces = 1 range[0,1024] soft[0,1024] | AO Bounces :: After this number of light bounces, use approximate global illumination. 0 disables this feature
+ao_bounces_render = 1 range[0,1024] soft[0,1024] | AO Bounces Render :: After this number of light bounces, use approximate global illumination. 0 disables this feature
+use_auto_tile = True | Auto Tile :: Deprecated, tiling is always enabled
+tile_size = 2048 range[8,8192] soft[8,8192] | Tile Size :: Render high resolution images in tiles of this size, to reduce memory usage. Tiles are cached to disk while rendering to save memory
+debug_use_cuda_adaptive_compile = False | Adaptive Compile :: Compile the Cycles GPU kernel with only the feature set required for the current scene
+debug_use_hip_adaptive_compile = False | Adaptive Compile :: Compile the Cycles GPU kernel with only the feature set required for the current scene
+debug_use_metal_adaptive_compile = False | Adaptive Compile :: Compile the Cycles GPU kernel with only the feature set required for the current scene
+### RENDER film
+dither_intensity = 1.0 range[0.0,3.4028234663852886e+38] soft[0.0,2.0] | Dither Intensity :: Amount of dithering noise added to the rendered image to break up banding
+filter_size = 1.5 range[0.0,500.0] soft[0.009999999776482582,10.0] | Filter Size :: Width over which the reconstruction filter combines samples
+film_transparent = False | Transparent :: World background is transparent, for compositing the render over another background
+threads_mode = 'AUTO' items=[('AUTO', 'Automatically determine the number of threads, based on CPUs'), ('FIXED', 'Manually determine the number of threads')] | Threads Mode :: Determine the amount of render threads used
+use_persistent_data = False | Persistent Data :: Keep render data around for faster re-renders and animation renders, at the cost of increased memory usage
+### VIEW SETTINGS
+look = 'None' items=[('NONE', 'Do not modify image in an artistic manner')] | Look :: Additional transform applied before view transform for artistic needs
+view_transform = 'AgX' items=[('NONE', 'Do not perform any color transform on display, use old non-color managed technique for display')] | View :: View used when converting image to a display space
+exposure = 0.0 range[-32.0,32.0] soft[-10.0,10.0] | Exposure :: Exposure (stops) applied before display transform, multiplying by 2^exposure
+gamma = 1.0 range[0.0,5.0] soft[0.0,5.0] | Gamma :: Additional gamma encoding after display transform, for output with custom gamma
+curve_mapping = bpy.data.scenes['Scene']...CurveMapping | Curve :: Color curve mapping applied before display transform
+use_curve_mapping = False | Use Curves :: Use RGB curved for pre-display transformation
+use_white_balance = False | Use White Balance :: Perform chromatic adaption from a different white point
+white_balance_temperature = 6500.0 range[1800.0,100000.0] soft[2000.0,11000.0] | Temperature :: Color temperature of the scene's white point
+white_balance_tint = 10.0 range[-500.0,500.0] soft[-150.0,150.0] | Tint :: Color tint of the scene's white point (the default of 10 matches daylight)
+white_balance_whitepoint = (0.9993047714233398, 1.0003489255905151, 0.9985780119895935) range[0.0,3.4028234663852886e+38] soft[0.0,1.0] | White Point :: The color which gets mapped to white (automatically converted to/from temperature and tint)
+is_hdr = False | Is HDR :: The display and view transform supports high dynamic range colors
+support_emulation = True | Support Emulation :: The display and view transform supports automatic emulation for another display device, using the display color spaces mechanism in OpenColorIO v2 configurations
+### DISPLAY
+display_device = 'sRGB' items=[('NONE', '')] | Display :: Display name. For viewing, this is the display device that will be emulated by limiting the gamut and HDR colors. For image and video output, this is the display space used for writing.
+emulation = 'AUTO' items=[('OFF', 'Directly output image as produced by OpenColorIO. This is not correct in general, but may be used when the system config'), ('AUTO', 'Display images consistent with most other applications, to preview images and video for export. A best effort is made to')] | Display Emulation :: Control how images in the chosen display are mapped to the physical display
+### SEQ colorspace
+### image settings
+media_type = 'IMAGE' items=[('IMAGE', ''), ('MULTI_LAYER_IMAGE', ''), ('VIDEO', '')] | Media Type :: The type of media to save
+file_format = 'PNG' items=[('AVIF', 'Output image in AVIF format'), ('JPEG', 'Output image in JPEG format'), ('OPEN_EXR', 'Output image in OpenEXR format'), ('PNG', 'Output image in PNG format'), ('WEBP', 'Output image in WebP format'), ('BMP', 'Output image in bitmap format'), ('CINEON', 'Output image in Cineon format'), ('DPX', 'Output image in DPX format'), ('IRIS', 'Output image in SGI IRIS format'), ('JPEG2000', 'Output image in JPEG 2000 format'), ('HDR', 'Output image in Radiance HDR format'), ('TARGA', 'Output image in Targa format'), ('TARGA_RAW', 'Output image in uncompressed Targa format'), ('TIFF', 'Output image in TIFF format')] | File Format :: File format to save the rendered images as
+color_mode = 'RGBA' items=[('BW', 'Images get saved in 8-bit grayscale (only PNG, JPEG, TGA, TIF)'), ('RGB', 'Images are saved with RGB (color) data'), ('RGBA', 'Images are saved with RGB and Alpha data (if supported)')] | Color Mode :: Choose BW for saving grayscale images, RGB for saving red, green and blue channels, and RGBA for saving red, green, blue and alpha channels
+color_depth = '8' items=[('8', '8-bit color channels'), ('10', '10-bit color channels'), ('12', '12-bit color channels'), ('16', '16-bit color channels'), ('32', '32-bit color channels')] | Color Depth :: Bit depth per channel
+quality = 90 range[0,100] soft[0,100] | Quality :: Quality for image formats that support lossy compression
+compression = 15 range[0,100] soft[0,100] | Compression :: Amount of time to determine best compression: 0 = no compression with fast file output, 100 = maximum lossless compression with slow file output
+exr_codec = 'ZIP' items=[('NONE', 'No compression'), ('ZIP', 'Lossless zip compression of 16 row image blocks'), ('PIZ', 'Lossless wavelet compression, effective for noisy/grainy images'), ('DWAA', 'JPEG-like lossy compression on 32 row image blocks'), ('DWAB', 'JPEG-like lossy compression on 256 row image blocks'), ('HTJ2K', 'Lossless compression based on high throughput JPEG 2000 encoding. It produces smaller files, but it is new and not widel'), ('ZIPS', 'Lossless zip compression, each image row compressed separately'), ('RLE', 'Lossless run length encoding compression'), ('PXR24', 'Lossy compression for 32 bit float images (stores 24 bits of each float)'), ('B44', 'Lossy compression for 16 bit float images, at fixed 2.3:1 ratio'), ('B44A', 'Lossy compression for 16 bit float images, at fixed 2.3:1 ratio')] | Codec :: Compression codec settings for OpenEXR
+use_exr_interleave = False | Interleave :: Use legacy interleaved storage of views, layers and passes for compatibility with applications that do not support more efficient multi-part OpenEXR files.
+color_management = 'FOLLOW_SCENE' items=[('FOLLOW_SCENE', ''), ('OVERRIDE', '')] | Color Management :: Which color management settings to use for file saving
+linear_colorspace_settings = bpy.data.scenes['Scene'].render.image_settings.linear_colorspace_settings | Color Space Settings :: Output color space settings
+has_linear_colorspace = False | Has Linear Color Space :: File format expects linear color space
+looks AgX etc:
+ERR looks bpy_struct: item.attr = val: enum "NONE" not found in ('Standard', 'ACES 1.3', 'ACES 2.0', 'Khronos PBR Neutral', 'AgX', 'Filmic', 'Filmic Log', 'False Color', 'Raw')
+### LIGHT cycles
+use_temperature = False | Use Temperature :: Use blackbody temperature to define a natural light color
+color = (1.0, 1.0, 1.0) range[0.0,3.4028234663852886e+38] soft[0.0,1.0] | Color :: Light color
+temperature = 6500.0 range[800.0,20000.0] soft[800.0,20000.0] | Temperature :: Light color temperature in Kelvin
+temperature_color = (1.0, 1.0, 1.0) range[0.0,3.4028234663852886e+38] soft[0.0,1.0] | Temperature Color :: Color from Temperature
+specular_factor = 1.0 range[0.0,3.4028234663852886e+38] soft[0.0,1.0] | Specular Factor :: Specular reflection multiplier
+diffuse_factor = 1.0 range[0.0,3.4028234663852886e+38] soft[0.0,1.0] | Diffuse Factor :: Diffuse reflection multiplier
+transmission_factor = 1.0 range[0.0,3.4028234663852886e+38] soft[0.0,1.0] | Transmission Factor :: Transmission light multiplier
+volume_factor = 1.0 range[0.0,3.4028234663852886e+38] soft[0.0,1.0] | Volume Factor :: Volume light multiplier
+use_shadow = True | use_shadow :: 
+exposure = 0.0 range[-32.0,32.0] soft[-10.0,10.0] | Exposure :: Scales the power of the light exponentially, multiplying the intensity by 2^exposure
+normalize = True | Normalize :: Normalize intensity by light area, for consistent total light output regardless of size and shape
+energy = 10.0 range[-3.4028234663852886e+38,3.4028234663852886e+38] soft[0.0,1000000.0] | Power :: Light energy emitted over the entire area of the light in all directions, in units of radiant power (W)
+shadow_soft_size = 0.0 range[0.0,3.4028234663852886e+38] soft[0.0,100.0] | Shadow Soft Size :: Light size for ray shadow sampling (Raytraced shadows)
+use_shadow_jitter = False | Shadow Jitter :: Enable jittered soft shadows to increase shadow precision (disabled in viewport unless enabled in the render settings). Has a high performance impact.
+shape = 'SQUARE' items=[('SQUARE', ''), ('RECTANGLE', ''), ('DISK', ''), ('ELLIPSE', '')] | Shape :: Shape of the area Light
+size = 0.25 range[0.0,3.4028234663852886e+38] soft[0.0,100.0] | Size :: Size of the area of the area light, X direction size for rectangle shapes
+size_y = 0.25 range[0.0,3.4028234663852886e+38] soft[0.0,100.0] | Size Y :: Size of the area of the area light in the Y direction for rectangle shapes
+spread = 3.1415927410125732 range[0.0,3.1415927410125732] soft[0.0,3.1415927410125732] | Spread :: How widely the emitted light fans out, as in the case of a gridded softbox
+light.cycles.max_bounces = 1024 range[0,1024] soft[0,1024] | Max Bounces :: Maximum number of bounces the light will contribute to the render
+light.cycles.use_multiple_importance_sampling = True | Multiple Importance Sample :: Use multiple importance sampling for the light, reduces noise for area lights and sharp glossy materials
+light.cycles.is_portal = False | Is Portal :: Use this area light to guide sampling of the background, note that this will make the light invisible
+light.cycles.is_caustics_light = False | Shadow Caustics :: Generate approximate caustics in shadows of refractive surfaces. Lights, caster and receiver objects must have shadow caustics options set to enable this
+point.use_soft_falloff = True | Soft Falloff :: Apply falloff to avoid sharp edges when the light geometry intersects with other objects
+point.energy = 10.0 range[-3.4028234663852886e+38,3.4028234663852886e+38] soft[0.0,1000000.0] | Power :: Light energy emitted over the entire area of the light in all directions, in units of radiant power (W)
+point.shadow_soft_size = 0.0 range[0.0,3.4028234663852886e+38] soft[0.0,100.0] | Shadow Soft Size :: Light size for ray shadow sampling (Raytraced shadows)
+point.shadow_filter_radius = 1.0 range[0.0,3.4028234663852886e+38] soft[0.0,5.0] | Shadow Filter Radius :: Blur shadow aliasing using Percentage Closer Filtering
+### OBJECT
+hide_render = False | Disable in Renders :: Globally disable in renders
+visible_camera = True | Camera Visibility :: Object visibility to camera rays
+visible_diffuse = True | Diffuse Visibility :: Object visibility to diffuse rays
+visible_glossy = True | Glossy Visibility :: Object visibility to glossy rays
+visible_transmission = True | Transmission Visibility :: Object visibility to transmission rays
+visible_volume_scatter = True | Volume Scatter Visibility :: Object visibility to volume scattering rays
+visible_shadow = True | Shadow Visibility :: Object visibility to shadow rays
+is_holdout = False | Holdout :: Render objects as a holdout or matte, creating a hole in the image with zero alpha, to fill out in compositing with real footage or another render
+is_shadow_catcher = False | Shadow Catcher :: Only render shadows and reflections on this object, for compositing renders into real footage. Objects with this setting are considered to already exist in the footage, objects without it are synthetic objects being composited into it.
+visible_raycast = True | Raycast Visibility :: Object visibility to raycast rays. Implicitly false for Blended materials in EEVEE.
+lightgroup = '' | Lightgroup :: Lightgroup that the object belongs to
+light_linking = bpy.data.objects['o'].light_linking | Light Linking :: Light linking settings
+ob.cycles.use_motion_blur = True | Use Motion Blur :: Use motion blur for this object
+ob.cycles.use_deform_motion = True | Use Deformation Motion :: Use deformation motion blur for this object
+ob.cycles.motion_steps = 1 range[1,7] soft[1,7] | Motion Steps :: Control accuracy of motion blur, more steps gives more memory usage (actual number of steps is 2^(steps - 1))
+ob.cycles.use_camera_cull = False | Use Camera Cull :: Allow this object and its duplicators to be culled by camera space culling
+ob.cycles.use_distance_cull = False | Use Distance Cull :: Allow this object and its duplicators to be culled by distance from camera
+ob.cycles.shadow_terminator_offset = 0.0 range[0.0,1.0] soft[0.0,1.0] | Shadow Terminator Shading Offset :: Push the shadow terminator towards the light to hide artifacts on low poly geometry
+ob.cycles.shadow_terminator_geometry_offset = 0.10000000149011612 range[0.0,1.0] soft[0.0,1.0] | Shadow Terminator Geometry Offset :: Offset rays from the surface to reduce shadow terminator artifact on low poly geometry. Only affects triangles at grazing angles to light
+ob.cycles.ao_distance = 0.0 range[0.0,3.4028234663852886e+38] soft[0.0,3.4028234663852886e+38] | AO Distance :: AO distance used for approximate global illumination (0 means use world setting)
+ob.cycles.is_caustics_caster = False | Cast Shadow Caustics :: With refractive materials, generate approximate caustics in shadows of this object. Up to 10 bounces inside this object are taken into account. Lights, caster and receiver objects must have shadow caustics options set to enable this
+ob.cycles.is_caustics_receiver = False | Receive Shadow Caustics :: Receive approximate caustics from refractive materials in shadows on this object. Lights, caster and receiver objects must have shadow caustics options set to enable this
+ob.light_linking.receiver_collection = None | Receiver Collection :: Collection which defines light linking relation of this emitter
+ob.light_linking.blocker_collection = None | Blocker Collection :: Collection which defines objects which block light from this emitter
+### CAMERA
+id_type = 'CAMERA' items=[('ACTION', ''), ('ARMATURE', ''), ('BRUSH', ''), ('CACHEFILE', ''), ('CAMERA', ''), ('COLLECTION', ''), ('CURVE', ''), ('CURVES', ''), ('FONT', ''), ('GREASEPENCIL', ''), ('GREASEPENCIL_V3', ''), ('IMAGE', ''), ('KEY', ''), ('LATTICE', '')] | Type :: Type identifier of this data-block
+type = 'PERSP' items=[('PERSP', ''), ('ORTHO', ''), ('PANO', ''), ('CUSTOM', '')] | Type :: Camera types
+sensor_fit = 'AUTO' items=[('AUTO', 'Fit to the sensor width or height depending on image resolution'), ('HORIZONTAL', 'Fit to the sensor width'), ('VERTICAL', 'Fit to the sensor height')] | Sensor Fit :: Method to fit image and field of view angle inside the sensor
+clip_start = 0.10000000149011612 range[9.999999974752427e-07,3.4028234663852886e+38] soft[0.0010000000474974513,3.4028234663852886e+38] | Clip Start :: Camera near clipping distance
+clip_end = 1000.0 range[9.999999974752427e-07,3.4028234663852886e+38] soft[0.0010000000474974513,3.4028234663852886e+38] | Clip End :: Camera far clipping distance
+lens = 50.0 range[1.0,3.4028234663852886e+38] soft[1.0,5000.0] | Focal Length :: Perspective Camera focal length value in millimeters
+sensor_width = 36.0 range[1.0,3.4028234663852886e+38] soft[1.0,100.0] | Sensor Width :: Horizontal size of the image sensor area in millimeters
+sensor_height = 24.0 range[1.0,3.4028234663852886e+38] soft[1.0,100.0] | Sensor Height :: Vertical size of the image sensor area in millimeters
+ortho_scale = 6.0 range[0.0,3.4028234663852886e+38] soft[0.0010000000474974513,10000.0] | Orthographic Scale :: Orthographic Camera scale (similar to zoom)
+shift_x = 0.0 range[-3.4028234663852886e+38,3.4028234663852886e+38] soft[-2.0,2.0] | Shift X :: Camera horizontal shift
+shift_y = 0.0 range[-3.4028234663852886e+38,3.4028234663852886e+38] soft[-2.0,2.0] | Shift Y :: Camera vertical shift
+show_sensor = False | Show Sensor Size :: Show sensor size (film gate) in Camera view
+lens_unit = 'MILLIMETERS' items=[('MILLIMETERS', 'Specify focal length of the lens in millimeters'), ('FOV', "Specify the lens as the field of view's angle")] | Lens Unit :: Unit to edit lens in for the user interface
+panorama_type = 'FISHEYE_EQUISOLID' items=[('EQUIRECTANGULAR', 'Spherical camera for environment maps, also known as Lat Long panorama'), ('EQUIANGULAR_CUBEMAP_FACE', 'Single face of an equiangular cubemap'), ('MIRRORBALL', 'Mirror ball mapping for environment maps'), ('FISHEYE_EQUIDISTANT', 'Ideal for fulldomes, ignore the sensor dimensions'), ('FISHEYE_EQUISOLID', 'Similar to most fisheye modern lens, takes sensor dimensions into consideration'), ('FISHEYE_LENS_POLYNOMIAL', 'Defines the lens projection as polynomial to allow real world camera lenses to be mimicked'), ('CENTRAL_CYLINDRICAL', 'Projection onto a virtual cylinder from its center, similar as a rotating panoramic camera')] | Panorama Type :: Distortion to use for the calculation
+fisheye_lens = 10.5 range[0.009999999776482582,100.0] soft[0.009999999776482582,15.0] | Fisheye Lens :: Lens focal length (mm)
+dof.use_dof = False | Depth of Field :: Use Depth of Field
+dof.focus_object = None | Focus Object :: Use this object to define the depth of field focal point
+dof.focus_subtarget = '' | Focus Bone :: Use this armature bone to define the depth of field focal point
+dof.focus_distance = 10.0 range[0.0,3.4028234663852886e+38] soft[0.0,5000.0] | Focus Distance :: Distance to the focus point for depth of field
+dof.aperture_fstop = 2.799999952316284 range[0.0,3.4028234663852886e+38] soft[0.10000000149011612,128.0] | F-Stop :: F-Stop ratio (lower numbers give more defocus, higher numbers give a sharper image)
+dof.aperture_blades = 0 range[0,16] soft[0,16] | Blades :: Number of blades in aperture for polygonal bokeh (at least 3)
+dof.aperture_rotation = 0.0 range[-3.1415927410125732,3.1415927410125732] soft[-3.1415927410125732,3.1415927410125732] | Rotation :: Rotation of blades in aperture
+dof.aperture_ratio = 1.0 range[0.009999999776482582,3.4028234663852886e+38] soft[0.009999999776482582,2.0] | Ratio :: Distortion to simulate anamorphic lens bokeh
+### VIEWLAYER
+pass_alpha_threshold = 0.5 range[0.0,1.0] soft[0.0,1.0] | Alpha Threshold :: Z, Index, normal, UV and vector passes are only affected by surfaces with alpha transparency equal to or higher than this threshold
+use_pass_cryptomatte_object = False | Cryptomatte Object :: Render cryptomatte object pass, for isolating objects in compositing
+use_pass_cryptomatte_material = False | Cryptomatte Material :: Render cryptomatte material pass, for isolating materials in compositing
+use_pass_cryptomatte_asset = False | Cryptomatte Asset :: Render cryptomatte asset pass, for isolating groups of objects with the same parent
+pass_cryptomatte_depth = 6 range[2,16] soft[2,16] | Cryptomatte Levels :: Sets how many unique objects can be distinguished per pixel
+use_pass_cryptomatte_accurate = True | Cryptomatte Accurate :: Generate a more accurate cryptomatte pass
+use_pass_combined = True | Combined :: Deliver full combined RGBA buffer
+use_pass_z = False | Depth :: Deliver depth values pass
+use_pass_vector = False | Vector :: Deliver speed vector pass
+use_pass_position = False | Position :: Deliver position pass
+use_pass_normal = False | Normal :: Deliver normal pass
+use_pass_uv = False | UV :: Deliver texture UV pass
+use_pass_mist = False | Mist :: Deliver mist factor pass (0.0 to 1.0)
+use_pass_object_index = False | Object Index :: Deliver object index pass
+use_pass_material_index = False | Material Index :: Deliver material index pass
+use_pass_shadow = False | Shadow :: Deliver shadow pass
+use_pass_ambient_occlusion = False | Ambient Occlusion :: Deliver Ambient Occlusion pass
+use_pass_emit = False | Emission :: Deliver emission pass
+use_pass_environment = False | Environment :: Deliver environment lighting pass
+use_pass_diffuse_direct = False | Diffuse Direct :: Deliver diffuse direct pass
+use_pass_diffuse_indirect = False | Diffuse Indirect :: Deliver diffuse indirect pass
+use_pass_diffuse_color = False | Diffuse Color :: Deliver diffuse color pass
+use_pass_glossy_direct = False | Glossy Direct :: Deliver glossy direct pass
+use_pass_glossy_indirect = False | Glossy Indirect :: Deliver glossy indirect pass
+use_pass_glossy_color = False | Glossy Color :: Deliver glossy color pass
+use_pass_transmission_direct = False | Transmission Direct :: Deliver transmission direct pass
+use_pass_transmission_indirect = False | Transmission Indirect :: Deliver transmission indirect pass
+use_pass_transmission_color = False | Transmission Color :: Deliver transmission color pass
+use_pass_subsurface_direct = False | Subsurface Direct :: Deliver subsurface direct pass
+use_pass_subsurface_indirect = False | Subsurface Indirect :: Deliver subsurface indirect pass
+use_pass_subsurface_color = False | Subsurface Color :: Deliver subsurface color pass
+use_pass_grease_pencil = False | Grease Pencil :: Deliver Grease Pencil render result in a separate pass
+vl.cycles.pass_debug_sample_count = False | Debug Sample Count :: Number of samples per pixel taken, divided by the maximum number of samples. To analyze adaptive sampling
+vl.cycles.pass_render_time = False | Render Time :: Reports time per pixel in milliseconds. Supported only on CPU render devices
+vl.cycles.use_pass_volume_direct = False | Volume Direct :: Deliver direct volumetric scattering pass
+vl.cycles.use_pass_volume_indirect = False | Volume Indirect :: Deliver indirect volumetric scattering pass
+vl.cycles.use_pass_volume_scatter = False | Volume Scatter :: Contribution of paths that scattered in the volume at the primary ray
+vl.cycles.use_pass_volume_transmit = False | Volume Transmit :: Contribution of paths that transmitted through the volume at the primary ray
+vl.cycles.use_pass_volume_majorant = False | Volume Majorant :: Majorant transmittance of the volume
+vl.cycles.use_pass_shadow_catcher = False | Shadow Catcher :: Pass containing shadows and light which is to be multiplied into backdrop
+vl.cycles.use_denoising = True | Use Denoising :: Denoise the rendered image
+vl.cycles.denoising_store_passes = False | Store Denoising Passes :: Store the denoising feature passes and the noisy image. The passes adapt to the denoiser selected for rendering
+vl.cycles.denoising_store_motion_passes = False | Store Denoising Motion Passes :: Store the denoising motion passes, for temporal denoisers
+vl.cycles.denoising_pass_follow_reflections = True | Denoising Pass Reflections :: Follow reflections for the denoising feature passes
+vl.cycles.denoising_pass_use_albedo_roughness_weighting = True | Denoising Pass Albedo Roughness Weighting :: Use roughness-based weighting of the albedo for the denoising feature passes
+### WORLD cycles
+w.cycles.is_caustics_light = False | Shadow Caustics :: Generate approximate caustics in shadows of refractive surfaces. Lights, caster and receiver objects must have shadow caustics options set to enable this
+w.cycles.sampling_method = 'AUTOMATIC' items=[('NONE', 'Do not sample the background, faster but might cause noise for non-solid backgrounds'), ('AUTOMATIC', 'Automatically try to determine the best setting'), ('MANUAL', 'Manually set the resolution of the sampling map, higher values are slower and require more memory but reduce noise')] | Sampling Method :: How to sample the background light
+w.cycles.sample_map_resolution = 1024 range[4,8192] soft[4,8192] | Map Resolution :: Importance map size is resolution x resolution/2; higher values potentially produce less noise, at the cost of memory and speed
+w.cycles.max_bounces = 1024 range[0,1024] soft[0,1024] | Max Bounces :: Maximum number of bounces the background light will contribute to the render
+w.cycles.volume_sampling = 'EQUIANGULAR' items=[('DISTANCE', 'Use distance sampling, best for dense volumes with lights far away'), ('EQUIANGULAR', 'Use equiangular sampling, best for volumes with low density with light inside or near the volume'), ('MULTIPLE_IMPORTANCE', 'Combine distance and equiangular sampling for volumes where neither method is ideal')] | Volume Sampling :: Sampling method to use for volumes
+w.cycles.volume_interpolation = 'LINEAR' items=[('LINEAR', 'Good smoothness and speed'), ('CUBIC', 'Smoothed high quality interpolation, but slower')] | Volume Interpolation :: Interpolation method to use for volumes
+w.cycles.volume_step_size = 1.0 range[1.0000000116860974e-07,100000.0] soft[0.10000000149011612,100.0] | Step Size :: Distance between volume shader samples when rendering the volume (lower values give more accurate and detailed results, but also increased render time)
+w.cycles.use_shadows = True | Shadows :: Enable shadow casting from the world
+w.vis.camera = True | Camera :: World visibility for camera rays
+w.vis.diffuse = True | Diffuse :: World visibility for diffuse reflection rays
+w.vis.glossy = True | Glossy :: World visibility for glossy reflection rays
+w.vis.transmission = True | Transmission :: World visibility for transmission rays
+w.vis.shadow = True | Shadow :: World visibility for shadow rays
+w.vis.scatter = True | Volume Scatter :: World visibility for volume scatter rays
+### MATERIAL
+mat.cycles.emission_sampling = 'AUTO' items=[('NONE', 'Do not use this surface as a light for sampling'), ('AUTO', 'Automatically determine if the surface should be treated as a light for sampling, based on estimated emission intensity'), ('FRONT', 'Treat only front side of the surface as a light, usually for closed meshes whose interior is not visible'), ('BACK', 'Treat only back side of the surface as a light for sampling'), ('FRONT_BACK', 'Treat surface as a light for sampling, emitting from both the front and back side')] | Emission Sampling :: Sampling strategy for emissive surfaces
+mat.cycles.use_bump_map_correction = True | Bump Map Correction :: Apply corrections to solve shadow terminator artifacts caused by bump mapping
+mat.cycles.volume_sampling = 'MULTIPLE_IMPORTANCE' items=[('DISTANCE', 'Use distance sampling, best for dense volumes with lights far away'), ('EQUIANGULAR', 'Use equiangular sampling, best for volumes with low density with light inside or near the volume'), ('MULTIPLE_IMPORTANCE', 'Combine distance and equiangular sampling for volumes where neither method is ideal')] | Volume Sampling :: Sampling method to use for volumes
+mat.cycles.volume_interpolation = 'LINEAR' items=[('LINEAR', 'Good smoothness and speed'), ('CUBIC', 'Smoothed high quality interpolation, but slower')] | Volume Interpolation :: Interpolation method to use for smoke/fire volumes
+mat.cycles.volume_step_rate = 1.0 range[0.0010000000474974513,1000.0] soft[0.10000000149011612,10.0] | Step Rate :: Scale the distance between volume shader samples when rendering the volume (lower values give more accurate and detailed results, but also increased render time)
+surface_render_method = 'DITHERED' items=[('DITHERED', 'Allows for grayscale hashed transparency, and compatible with render passes and raytracing. Also known as deferred rende'), ('BLENDED', 'Allows for colored transparency, but incompatible with render passes and raytracing. Also known as forward rendering.')] | Surface Render Method :: Controls the blending and the compatibility with certain features
+displacement_method = 'BUMP' items=[('BUMP', 'Bump mapping to simulate the appearance of displacement'), ('DISPLACEMENT', 'Use true displacement of surface only, requires fine subdivision'), ('BOTH', 'Combination of true displacement and bump mapping for finer detail')] | Displacement Method :: Method to use for the displacement
+blend_method = 'HASHED' items=[('OPAQUE', 'Render surface without transparency'), ('CLIP', 'Use the alpha threshold to clip the visibility (binary visibility)'), ('HASHED', 'Use noise to dither the binary visibility (works well with multi-samples)'), ('BLEND', 'Render polygon transparent, depending on alpha channel of the texture')] | Blend Mode :: Blend Mode for Transparent Faces (Deprecated: use 'surface_render_method')
+use_transparency_overlap = True | Use Transparency Overlap :: Render multiple transparent layers (may introduce transparency sorting problems)
+use_backface_culling = False | Backface Culling :: Use back face culling to hide the back side of faces
+use_backface_culling_shadow = False | Shadow Backface Culling :: Use back face culling when casting shadows
+use_backface_culling_lightprobe_volume = True | Light Probe Volume Backface Culling :: Consider material single sided for light probe volume capture. Additionally helps rejecting probes inside the object to avoid light leaks.
+thickness_mode = 'SPHERE' items=[('SPHERE', 'Approximate the object as a sphere whose diameter is equal to the thickness defined by the node tree'), ('SLAB', 'Approximate the object as an infinite slab of thickness defined by the node tree')] | Thickness Mode :: Approximation used to model the light interactions inside the object
+volume_intersection_method = 'FAST' items=[('FAST', 'Each face is considered as a medium interface. Gives correct results for manifold geometry that contains no inner parts.'), ('ACCURATE', 'Faces are considered as medium interface only when they have different consecutive facing. Gives correct results as long')] | Volume Intersection Method :: Determines which inner part of the mesh will produce volumetric effect
+max_vertex_displacement = 0.0 range[0.0,3.4028234663852886e+38] soft[0.0,3.4028234663852886e+38] | Max Vertex Displacement :: The max distance a vertex can be displaced. Displacements over this threshold may cause visibility issues.
+### mesh/bevel modifier
+width = 0.10000000149011612 range[0.0,3.4028234663852886e+38] soft[0.0,100.0] | Width :: Bevel amount
+width_pct = 0.10000000149011612 range[0.0,3.4028234663852886e+38] soft[0.0,100.0] | Width Percent :: Bevel amount for percentage method
+segments = 1 range[1,1000] soft[1,100] | Segments :: Number of segments for round edges/verts
+affect = 'EDGES' items=[('VERTICES', 'Affect only vertices'), ('EDGES', 'Affect only edges')] | Affect :: Affect edges or vertices
+limit_method = 'ANGLE' items=[('NONE', 'Bevel the entire mesh by a constant amount'), ('ANGLE', 'Only bevel edges with sharp enough angles between faces'), ('WEIGHT', 'Use bevel weights to determine how much bevel is applied in edge mode'), ('VGROUP', 'Use vertex group weights to select whether vertex or edge is beveled')] | Limit Method :: 
+angle_limit = 0.5235987901687622 range[0.0,3.1415927410125732] soft[0.0,3.1415927410125732] | Angle :: Angle above which to bevel edges
+offset_type = 'OFFSET' items=[('OFFSET', 'Amount is offset of new edges from original'), ('WIDTH', 'Amount is width of new face'), ('DEPTH', 'Amount is perpendicular distance from original edge to bevel face'), ('PERCENT', 'Amount is percent of adjacent edge length'), ('ABSOLUTE', 'Amount is absolute distance along adjacent edge')] | Width Type :: What distance Width measures
+profile_type = 'SUPERELLIPSE' items=[('SUPERELLIPSE', 'The profile can be a concave or convex curve'), ('CUSTOM', 'The profile can be any arbitrary path between its endpoints')] | Profile Type :: The type of shape used to rebuild a beveled section
+profile = 0.5 range[0.0,1.0] soft[0.0,1.0] | Profile :: The profile shape (0.5 = round)
+harden_normals = False | Harden Normals :: Match normals of new faces to adjacent faces
+miter_outer = 'MITER_SHARP' items=[('MITER_SHARP', 'Outside of miter is sharp'), ('MITER_PATCH', 'Outside of miter is squared-off patch'), ('MITER_ARC', 'Outside of miter is arc')] | Outer Miter :: Pattern to use for outside of miters
+miter_inner = 'MITER_SHARP' items=[('MITER_SHARP', 'Inside of miter is sharp'), ('MITER_ARC', 'Inside of miter is arc')] | Inner Miter :: Pattern to use for inside of miters
+custom_profile = bpy.data.objects['o']...CurveProfile | Custom Profile Path :: The path for the custom profile

@@ -1,0 +1,10 @@
+off (scale 0)                            stone mean lum 1.7183 | display chroma: raw mean 3.19, cross-seed RMS (signal) 6.54, p99 24.2 | coloured px 0.201 sat 0.477 | noise: rel RMS 0.039, chroma-noise RMS 0.71 | render 25.3s / 25.5s cpu 50.4
+scale 0.36, Abbe 20 (wf as read)         stone mean lum 1.7118 | display chroma: raw mean 10.73, cross-seed RMS (signal) 12.34, p99 46.7 | coloured px 0.656 sat 0.517 | noise: rel RMS 0.170, chroma-noise RMS 8.29 | render 44.8s / 37.8s cpu 52.3
+scale 1.0, Abbe 55.3 (diamond)           stone mean lum 1.7118 | display chroma: raw mean 10.75, cross-seed RMS (signal) 12.38, p99 46.9 | coloured px 0.658 sat 0.517 | noise: rel RMS 0.170, chroma-noise RMS 8.29 | render 26.0s / 26.1s cpu 51.8
+scale 0.36, Abbe 55.3                    stone mean lum 1.7117 | display chroma: raw mean 8.79, cross-seed RMS (signal) 8.58, p99 37.6 | coloured px 0.603 sat 0.469 | noise: rel RMS 0.170, chroma-noise RMS 8.33 | render 26.2s / 25.5s cpu 52.2
+scale 1.0, Abbe 20 (node default Abbe)   stone mean lum 1.7056 | display chroma: raw mean 13.83, cross-seed RMS (signal) 16.57, p99 51.4 | coloured px 0.741 sat 0.586 | noise: rel RMS 0.169, chroma-noise RMS 8.18 | render 27.3s / 26.6s cpu 52.8
+scale 0.3617/Abbe 20 vs scale 1.0/Abbe 55.3, same seed: px_equal=False  lin_max=0.2108  lin_mean=0.001084  d8_max=80  d8_mean=0.08493  d8_rmse=0.7464  ssim=0.9998  dE00_mean=0.09401
+scale 0.36/Abbe 20 vs scale 1.0/Abbe 55.3, same seed: px_equal=False  lin_max=0.4513  lin_mean=0.006887  d8_max=88  d8_mean=0.5349  d8_rmse=2.256  ssim=0.9985  dE00_mean=0.5529
+for scale, seed0 vs seed1 of scale 0.36/Abbe 20:    px_equal=False  lin_max=3.347  lin_mean=0.2508  d8_max=155  d8_mean=8.318  d8_rmse=12.93  ssim=0.9086  dE00_mean=8.22
+off vs scale 0.36/Abbe 20, same seed:                px_equal=False  lin_max=14.71  lin_mean=0.2938  d8_max=170  d8_mean=9.321  d8_rmse=16.61  ssim=0.9089  dE00_mean=8.144
+scale 0.36/Abbe 55.3 vs off, same seed:              px_equal=False  lin_max=9.936  lin_mean=0.2389  d8_max=173  d8_mean=6.833  d8_rmse=11.47  ssim=0.9384  dE00_mean=6.761

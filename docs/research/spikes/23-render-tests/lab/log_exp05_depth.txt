@@ -1,0 +1,26 @@
+== main test, 1024 spp, seed 0
+(a) total/glossy/transmission=32/16/32  stone mean lum 1.7119 (95.29% of d)  median 1.0050  p99.9 9.47  metal mean 1.1211  ground mean 1.5408  render 191.2s cpu 211.2s  px_sha 418d8bb6740637a3
+(b) total/glossy/transmission=32/32/32  stone mean lum 1.7647 (98.23% of d)  median 1.0691  p99.9 9.48  metal mean 1.1283  ground mean 1.5408  render 183.1s cpu 231.3s  px_sha 3b7aa04c4ebe2110
+(c) total/glossy/transmission=16/16/16  stone mean lum 1.6977 (94.50% of d)  median 0.9879  p99.9 9.43  metal mean 1.1187  ground mean 1.5408  render 203.0s cpu 202.7s  px_sha c375cb6b7ca49c7c
+(d) total/glossy/transmission=64/64/64  stone mean lum 1.7965 (100.00% of d)  median 1.1026  p99.9 9.51  metal mean 1.1327  ground mean 1.5408  render 253.1s cpu 254.1s  px_sha 3d9303bfbae835ac
+(a) vs (c) in the stone: px_equal=False  lin_max=5.826  lin_mean=0.01467  d8_max=209  d8_mean=1.363  d8_rmse=6.013  ssim=0.9935  dE00_mean=1.039  frac px differing >1%: 0.288  frac darker by >10%: 0.000
+(a) vs (b) in the stone: px_equal=False  lin_max=5.244  lin_mean=0.05175  d8_max=223  d8_mean=4.733  d8_rmse=14.68  ssim=0.96  dE00_mean=2.871  frac px differing >1%: 0.470  frac darker by >10%: 0.177
+(c) vs (b) in the stone: px_equal=False  lin_max=7.782  lin_mean=0.065  d8_max=225  d8_mean=5.971  d8_rmse=17.02  ssim=0.9508  dE00_mean=3.483  frac px differing >1%: 0.529  frac darker by >10%: 0.215
+(b) vs (d) in the stone: px_equal=False  lin_max=4.069  lin_mean=0.03144  d8_max=183  d8_mean=2.288  d8_rmse=7.914  ssim=0.9824  dE00_mean=1.483  frac px differing >1%: 0.369  frac darker by >10%: 0.109
+(a) vs (d) in the stone: px_equal=False  lin_max=5.317  lin_mean=0.08129  d8_max=221  d8_mean=6.891  d8_rmse=19.4  ssim=0.9329  dE00_mean=3.826  frac px differing >1%: 0.540  frac darker by >10%: 0.231
+== sweep, 64 spp, seed 0: stone mean luminance
+t32_g2_tr32        stone mean lum 1.2307  median 0.3606  render 8.8s  px_sha d04a5dc60c11538a
+t32_g4_tr32        stone mean lum 1.4520  median 0.5581  render 9.9s  px_sha 28d663e139583dc7
+t32_g8_tr32        stone mean lum 1.6233  median 0.8990  render 11.5s  px_sha 62360dac8b139c33
+t32_g16_tr32       stone mean lum 1.7127  median 1.0090  render 13.5s  px_sha db19bef603ccbfe5
+t32_g32_tr32       stone mean lum 1.7656  median 1.0689  render 15.0s  px_sha af0186d61001bd17
+t4_g4_tr4          stone mean lum 1.3208  median 0.4049  render 9.4s  px_sha 3dba11c438aa8603
+t8_g8_tr8          stone mean lum 1.5777  median 0.8282  render 11.3s  px_sha cb60f1c9f4547690
+t16_g16_tr16       stone mean lum 1.6984  median 0.9924  render 13.0s  px_sha 9eff79d69a96a2f8
+t32_g32_tr4        stone mean lum 1.7615  median 1.0620  render 14.7s  px_sha 14abe112bc6135fa
+t32_g32_tr8        stone mean lum 1.7656  median 1.0688  render 15.2s  px_sha 16de39d4372acd1c
+t32_g32_tr16       stone mean lum 1.7656  median 1.0689  render 14.4s  px_sha af0186d61001bd17
+t8_g32_tr32        stone mean lum 1.5777  median 0.8282  render 10.9s  px_sha cb60f1c9f4547690
+t64_g64_tr64       stone mean lum 1.7972  median 1.1026  render 8.0s  px_sha c0b51285719cb2dc
+t128_g128_tr128    stone mean lum 1.8064  median 1.1159  render 8.1s  px_sha e6201228b8372f97
+t64_g16_tr64       stone mean lum 1.7127  median 1.0090  render 6.5s  px_sha db19bef603ccbfe5

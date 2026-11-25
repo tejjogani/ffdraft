@@ -1,0 +1,69 @@
+python 3.13.18 | bpy 5.3.0 02f0899d78e3 built 2026-11-10 branch blender-v5.3-release | OCIO  2,  5,  0 | OIIO  3,  1, 16
+default view transform: AgX / look: None / exposure 0.0 / display sRGB
+view Standard | looks accepted: ['None', 'Medium High Contrast', 'Medium Contrast', 'High Contrast', 'Very High Contrast']
+view AgX | looks accepted: ['None', 'AgX - Base Contrast', 'AgX - Medium High Contrast', 'AgX - High Contrast', 'AgX - Very High Contrast', 'AgX - Punchy', 'AgX - Greyscale']
+view Filmic | looks accepted: ['None', 'Medium High Contrast', 'Medium Contrast', 'High Contrast', 'Very High Contrast']
+view Khronos PBR Neutral | looks accepted: ['None', 'Medium High Contrast', 'Medium Contrast', 'High Contrast', 'Very High Contrast']
+view Raw | looks accepted: ['None', 'Medium High Contrast', 'Medium Contrast', 'High Contrast', 'Very High Contrast']
+view False Color | looks accepted: ['None']
+view ACES 1.3 | looks accepted: ['None']
+view ACES 2.0 | looks accepted: ['None']
+view Filmic Log | looks accepted: ['None', 'Medium High Contrast', 'Medium Contrast', 'High Contrast', 'Very High Contrast']
+cycles.samples = 4096  | Number of samples to render for each pixel
+cycles.seed = 0  | Seed value for integrator to get different noise patterns
+cycles.use_animated_seed = False  | Use different seed values (and hence noise patterns) at different frames
+cycles.use_adaptive_sampling = True  | Automatically reduce the number of samples per pixel based on estimated noise level
+cycles.adaptive_threshold = 0.009999999776482582  | Noise level step to stop sampling at, lower values reduce noise at the cost of render time. Zero for automatic setting based on number of AA samples
+cycles.adaptive_min_samples = 0  | Minimum AA samples for adaptive sampling, to discover noisy features before stopping sampling. Zero for automatic setting based on noise threshold
+cycles.time_limit = 0.0  | Limit the render time (excluding synchronization time). Zero disables the limit
+cycles.max_bounces = 12  | Total maximum number of bounces
+cycles.diffuse_bounces = 4  | Maximum number of diffuse reflection bounces, bounded by total maximum
+cycles.glossy_bounces = 4  | Maximum number of glossy reflection bounces, bounded by total maximum
+cycles.transmission_bounces = 12  | Maximum number of transmission bounces, bounded by total maximum
+cycles.volume_bounces = 0  | Maximum number of volumetric scattering events
+cycles.transparent_max_bounces = 8  | Maximum number of transparent bounces. This is independent of maximum number of other bounces
+cycles.sample_clamp_direct = 0.0  | If non-zero, the maximum value for a direct sample, higher values will be scaled down to avoid too much noise and slow convergence at the cost of accuracy
+cycles.sample_clamp_indirect = 10.0  | If non-zero, the maximum value for an indirect sample, higher values will be scaled down to avoid too much noise and slow convergence at the cost of accuracy
+cycles.blur_glossy = 1.0  | Adaptively blur glossy shaders and image textures after blurry bounces, to reduce noise and improve texture cache efficiency at the cost of accuracy. Lower this value to render caustics
+cycles.caustics_reflective = True  | Use reflective caustics, resulting in a brighter image (more noise but added realism)
+cycles.caustics_refractive = True  | Use refractive caustics, resulting in a brighter image (more noise but added realism)
+cycles.use_denoising = True  | Denoise the rendered image
+cycles.denoiser = 'OPENIMAGEDENOISE' [] | Denoise the image with the selected denoiser. For denoising the image after rendering
+cycles.denoising_input_passes = 'RGB_ALBEDO_NORMAL' ['RGB', 'RGB_ALBEDO', 'RGB_ALBEDO_NORMAL'] | Passes used by the denoiser to distinguish noise from shader and geometry detail
+cycles.denoising_prefilter = 'ACCURATE' ['NONE', 'FAST', 'ACCURATE'] | Prefilter noisy guiding (albedo and normal) passes to improve denoising quality when using OpenImageDenoise
+cycles.denoising_quality = 'HIGH' ['HIGH', 'BALANCED', 'FAST'] | Overall denoising quality when using OpenImageDenoise
+cycles.pixel_filter_type = 'BLACKMAN_HARRIS' ['BOX', 'GAUSSIAN', 'BLACKMAN_HARRIS'] | Pixel filter type
+cycles.filter_width = 1.5  | Pixel filter width
+cycles.use_light_tree = True  | Sample multiple lights more efficiently based on estimated contribution at every shading point
+cycles.use_guiding = False  | Use path guiding for sampling paths. Path guiding incrementally learns the light distribution of the scene and guides path into directions with high direct and indirect light contributions
+cycles.use_deterministic_guiding = True  | Makes path guiding deterministic which means renderings will be reproducible with the same pixel values every time. This feature slows down training
+view_layer.cycles.denoising_store_passes = False | Store the denoising feature passes and the noisy image. The passes adapt to the denoiser selected for rendering
+view_layer.cycles.denoising_pass_follow_reflections = True | Follow reflections for the denoising feature passes
+view_layer.cycles.denoising_pass_use_albedo_roughness_weighting = True | Use roughness-based weighting of the albedo for the denoising feature passes
+render.dither_intensity = 1.0 | Amount of dithering noise added to the rendered image to break up banding
+render.threads = 2 | Maximum number of CPU cores to use simultaneously while rendering (for multi-core/CPU systems)
+render.threads_mode = 'AUTO' | Determine the amount of render threads used
+render.use_stamp_time = True | Include the rendered frame timecode as HH:MM:SS.FF in image metadata
+render.use_stamp_date = True | Include the current date in image/video metadata
+render.use_stamp_frame = True | Include the frame number in image metadata
+render.use_stamp_frame_range = False | Include the rendered frame range in image/video metadata
+render.use_stamp_camera = True | Include the name of the active camera in image metadata
+render.use_stamp_lens = False | Include the active camera's lens in image metadata
+render.use_stamp_scene = True | Include the name of the active scene in image/video metadata
+render.use_stamp_note = False | Include a custom note in image/video metadata
+render.use_stamp_marker = False | Include the name of the last marker in image metadata
+render.use_stamp_filename = True | Include the .blend filename in image/video metadata
+render.use_stamp_sequencer_strip = False | Include the name of the foreground sequence strip in image metadata
+render.use_stamp_render_time = True | Include the render time in image metadata
+render.use_stamp = False | Render the stamp info text in the rendered image
+render.use_stamp_labels = True | Display stamp labels ("Camera" in front of camera name, etc.)
+render.metadata_input = 'SCENE' | Where to take the metadata from
+render.use_stamp_memory = False | Include the peak memory usage in image metadata
+render.use_stamp_hostname = False | Include the hostname of the machine that rendered the frame
+render.use_persistent_data = False | Keep render data around for faster re-renders and animation renders, at the cost of increased memory usage
+Principled BSDF sockets: ['Base Color', 'Metallic', 'Roughness', 'IOR', 'Alpha', 'Thin Wall', 'Normal', 'Weight', 'Diffuse Roughness', 'Subsurface Weight', 'Subsurface Radius', 'Subsurface Scale', 'Subsurface IOR', 'Subsurface Anisotropy', 'Specular IOR Level', 'Specular Tint', 'Anisotropic', 'Anisotropic Rotation', 'Tangent', 'Transmission Weight', 'Transmission Dispersion Scale', 'Transmission Dispersion Abbe Number', 'Coat Weight', 'Coat Roughness', 'Coat IOR', 'Coat Tint', 'Coat Normal', 'Sheen Weight', 'Sheen Roughness', 'Sheen Tint', 'Emission Color', 'Emission Strength', 'Thin Film Thickness', 'Thin Film IOR']
+  IOR default 1.5, soft range -10000.0..10000.0, hard range -3.4028234663852886e+38..3.4028234663852886e+38, description ''
+  Transmission Weight default 0.0, soft range 0.0..1.0, hard range 0.0..1.0, description ''
+  Transmission Dispersion Scale default 0.0, soft range 0.0..1.0, hard range 0.0..1.0, description ''
+  Transmission Dispersion Abbe Number default 20.0, soft range -10000.0..10000.0, hard range -3.4028234663852886e+38..3.4028234663852886e+38, description ''
+has a socket named 'Dispersion': False

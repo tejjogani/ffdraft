@@ -1,0 +1,13 @@
+normalmap : 2-thread fresh x4 hashes ['d16530280d1ca5a0'] | same process x2 ['d16530280d1ca5a0'] | 1-thread fresh x3 ['d16530280d1ca5a0']
+   all nine pixel buffers identical: True
+aniso : 2-thread fresh x4 hashes ['ecea70e1c348441c'] | same process x2 ['aebfe017a23b616b', 'ecea70e1c348441c'] | 1-thread fresh x3 ['ecea70e1c348441c']
+   all nine pixel buffers identical: False
+    tan_aniso_t2_0 vs tan_aniso_t2_same0 px_equal=False  lin_max=1.192e-07  lin_mean=2.122e-12  d8_max=0  d8_mean=0  d8_rmse=0  ssim=1  dE00_mean=0
+control (plain gold, no tangents) 2 threads x2 identical: True
+normal-mapped vs plain gold (to show the material took effect): px_equal=False  lin_max=148.9  lin_mean=0.06593  d8_max=215  d8_mean=3.656  d8_rmse=13.7  ssim=0.9003  dE00_mean=1.42
+anisotropic vs plain gold: px_equal=False  lin_max=141.7  lin_mean=0.03587  d8_max=222  d8_mean=1.821  d8_rmse=9.042  ssim=0.9636  dE00_mean=0.7902
+
+repeat counts
+normalmap 2 threads: 16 renders -> {'d16530280d1ca5a0': 16} | 1 thread: 8 renders -> {'d16530280d1ca5a0': 8}
+aniso 2 threads: 16 renders -> {'ecea70e1c348441c': 15, 'aebfe017a23b616b': 1} | 1 thread: 8 renders -> {'ecea70e1c348441c': 8}
+   odd one out: tan_aniso_t2_same0  pixels differing 3 of 65536, max abs diff 1.19e-07 (relative 1.97e-07), 8-bit PNG pixels equal: True

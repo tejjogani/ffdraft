@@ -1,0 +1,10 @@
+adaptive 0.01 (max 512), run a vs run b              px sha equal=True  | lin_max=0  lin_mean=0  d8_max=0  d8_mean=0  d8_rmse=0  d8_frac_gt2=0  ssim=1  dE00_mean=0 | t=52.3s / 52.2s
+adaptive 0.01, 2 threads vs 1 thread                 px sha equal=True  | lin_max=0  lin_mean=0  d8_max=0  d8_mean=0  d8_rmse=0  d8_frac_gt2=0  ssim=1  dE00_mean=0 | t=52.3s / 102.8s
+adaptive 0.01 + OIDN, run a vs run b                 px sha equal=True  | lin_max=0  lin_mean=0  d8_max=0  d8_mean=0  d8_rmse=0  d8_frac_gt2=0  ssim=1  dE00_mean=0 | t=68.5s / 77.9s
+adaptive 0.01 (max 512) vs fixed 512                 px sha equal=False | lin_max=0.2458  lin_mean=0.002316  d8_max=9  d8_mean=0.0706  d8_rmse=0.2834  d8_frac_gt2=0.0008465  ssim=0.9992  dE00_mean=0.03446 | t=52.3s / 145.1s
+time limit 10 s (max 4096), run a vs run b           px sha equal=False | lin_max=2.075  lin_mean=0.03791  d8_max=154  d8_mean=1.024  d8_rmse=2.737  d8_frac_gt2=0.1492  ssim=0.9938  dE00_mean=0.8367 | t=10.3s / 10.2s
+time limit 10 s, 2 threads vs 1 thread               px sha equal=True  | lin_max=0  lin_mean=0  d8_max=0  d8_mean=0  d8_rmse=0  d8_frac_gt2=0  ssim=1  dE00_mean=0 | t=10.3s / 10.7s
+adaptive 0.01 + time limit 10 s, run a vs b          px sha equal=False | lin_max=34.52  lin_mean=0.1364  d8_max=177  d8_mean=4.209  d8_rmse=8.74  d8_frac_gt2=0.5545  ssim=0.9547  dE00_mean=3.135 | t=10.3s / 10.1s
+time-limit runs, pixel hashes: {'a': 'd79a59226b5eaad6', 'b': '9c3033b01b5cbb36', 'c': 'd79a59226b5eaad6', 'd': 'a0d00d69ca028bb7', 'e': 'd79a59226b5eaad6'}
+adaptive+time-limit runs, pixel hashes: {'a': '7662bf8ac7cfaa6a', 'b': 'e2b834af7a0e63d4'}
+cpu-seconds: adaptive(max 512) 103.7 vs fixed 512 106.5

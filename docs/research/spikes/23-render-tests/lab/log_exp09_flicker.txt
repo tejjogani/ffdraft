@@ -1,0 +1,25 @@
+frame-to-frame change in static ground patches (display 8-bit units unless noted)
+OIDN        fixed     
+    top-left 56x56: f2f mean 0.037 max 1 | temporal std/px 0.031 | 8x8-block temporal std 0.011 | patch-mean std 0.004 | in-frame grain std 1.572 | linear rel temporal std 0.0006
+    top-right 56x56: f2f mean 0.040 max 1 | temporal std/px 0.033 | 8x8-block temporal std 0.012 | patch-mean std 0.002 | in-frame grain std 0.977 | linear rel temporal std 0.0006
+    bottom-right 40x40: f2f mean 0.134 max 2 | temporal std/px 0.237 | 8x8-block temporal std 0.193 | patch-mean std 0.079 | in-frame grain std 2.298 | linear rel temporal std 0.0049
+OIDN        anim      
+    top-left 56x56: f2f mean 0.054 max 1 | temporal std/px 0.045 | 8x8-block temporal std 0.025 | patch-mean std 0.006 | in-frame grain std 1.564 | linear rel temporal std 0.0010
+    top-right 56x56: f2f mean 0.071 max 1 | temporal std/px 0.061 | 8x8-block temporal std 0.036 | patch-mean std 0.003 | in-frame grain std 0.988 | linear rel temporal std 0.0013
+    bottom-right 40x40: f2f mean 0.159 max 2 | temporal std/px 0.251 | 8x8-block temporal std 0.205 | patch-mean std 0.079 | in-frame grain std 2.305 | linear rel temporal std 0.0054
+OIDN        animstatic
+    top-left 56x56: f2f mean 0.058 max 1 | temporal std/px 0.047 | 8x8-block temporal std 0.025 | patch-mean std 0.006 | in-frame grain std 1.568 | linear rel temporal std 0.0010
+    top-right 56x56: f2f mean 0.073 max 1 | temporal std/px 0.063 | 8x8-block temporal std 0.037 | patch-mean std 0.004 | in-frame grain std 0.988 | linear rel temporal std 0.0013
+    bottom-right 40x40: f2f mean 0.098 max 1 | temporal std/px 0.088 | 8x8-block temporal std 0.054 | patch-mean std 0.018 | in-frame grain std 2.181 | linear rel temporal std 0.0019
+no denoise  fixed     
+    top-left 56x56: f2f mean 0.001 max 1 | temporal std/px 0.001 | 8x8-block temporal std 0.001 | patch-mean std 0.000 | in-frame grain std 1.805 | linear rel temporal std 0.0000
+    top-right 56x56: f2f mean 0.000 max 1 | temporal std/px 0.000 | 8x8-block temporal std 0.000 | patch-mean std 0.000 | in-frame grain std 1.857 | linear rel temporal std 0.0000
+    bottom-right 40x40: f2f mean 0.380 max 5 | temporal std/px 0.578 | 8x8-block temporal std 0.210 | patch-mean std 0.087 | in-frame grain std 3.127 | linear rel temporal std 0.0135
+no denoise  anim      
+    top-left 56x56: f2f mean 1.069 max 5 | temporal std/px 0.853 | 8x8-block temporal std 0.056 | patch-mean std 0.009 | in-frame grain std 1.823 | linear rel temporal std 0.0204
+    top-right 56x56: f2f mean 1.730 max 10 | temporal std/px 1.355 | 8x8-block temporal std 0.080 | patch-mean std 0.005 | in-frame grain std 1.859 | linear rel temporal std 0.0330
+    bottom-right 40x40: f2f mean 2.373 max 14 | temporal std/px 1.879 | 8x8-block temporal std 0.227 | patch-mean std 0.087 | in-frame grain std 3.174 | linear rel temporal std 0.0464
+render time per frame (s): {'d_fixed': np.float64(3.33), 'd_anim': np.float64(3.34), 'n_fixed': np.float64(3.17), 'n_anim': np.float64(3.1)}
+fixed seed, frame 0 vs frame 1 (ring moved 2 deg): whole-frame px_equal=False  lin_max=46.49  lin_mean=0.03593  d8_max=172  d8_mean=1.657  d8_rmse=7.977  ssim=0.9589  dE00_mean=0.8237
+animated seed, frame 0 vs frame 1:                 whole-frame px_equal=False  lin_max=53.56  lin_mean=0.04037  d8_max=175  d8_mean=1.755  d8_rmse=8.189  ssim=0.9567  dE00_mean=0.8893
+seed check: fixed-seed f0 == anim-seed f0 pixels? False
