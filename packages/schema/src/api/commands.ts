@@ -28,6 +28,7 @@ import {
   GENERATION_ROLES,
   GenerationInputSchema,
   IMAGE_ASPECTS,
+  ImagePlaneSchema,
   JOB_STAGES,
   JOB_STATUS,
   MESH_QUALITIES,
@@ -673,6 +674,58 @@ export const commands = {
         .max(50),
     }),
     output: z.array(ReferenceSchema),
+  }),
+  'references.pins': def({
+    description:
+      'The references pinned to a piece for the reference panel beside CAD, in the designer’s order, with source, credit, licence and rights. A view-only pin comes with its details only: its picture is never shown to you and cannot be read or fitted.',
+    kind: 'query',
+    tool: true,
+    input: z.object({ pieceId: id }),
+    output: z.object({
+      /** The piece's pin board; null until the first pin. */
+      boardId: id.nullable(),
+      references: z.array(ReferenceSchema),
+    }),
+  }),
+  'references.pin': def({
+    description:
+      'Pin references to a piece so they show in the reference panel beside CAD. Each item is exactly one of `result` (a search result, re-checked with its provider; its picture is kept only where the provider’s terms allow), `assetId` (an uploaded picture), `url` (a web page, kept as a view-only link) or `referenceId` (a reference on one of the organisation’s boards, copied with its provenance and rights).',
+    kind: 'mutation',
+    tool: true,
+    input: z.object({
+      pieceId: id,
+      items: z
+        .array(
+          z
+            .object({
+              result: SearchResultSchema.optional(),
+              url: z.string().url().optional(),
+              assetId: id.optional(),
+              referenceId: id.optional(),
+              title: z.string().max(200).optional(),
+              note: z.string().max(4000).optional(),
+              /** As in references.save: uploads may say whose they are; others can only be lowered to `viewOnly`. */
+              rights: z.enum(RIGHTS).optional(),
+            })
+            .refine(
+              (item) =>
+                [item.result, item.url, item.assetId, item.referenceId].filter(
+                  (x) => x !== undefined,
+                ).length === 1,
+              { message: 'Give exactly one of result, url, assetId or referenceId' },
+            ),
+        )
+        .min(1)
+        .max(20),
+    }),
+    output: z.array(ReferenceSchema),
+  }),
+  'references.place': def({
+    description:
+      'Lay a pinned picture in a CAD view (front, top or right) as an image plane to model over; move, scale, fade or lock it; or take it out of the view with `plane: null`. A plane belongs to the viewport, never to the design.',
+    kind: 'mutation',
+    input: z.object({ id, plane: ImagePlaneSchema.nullable() }),
+    output: ReferenceSchema,
   }),
   'references.update': def({
     description:

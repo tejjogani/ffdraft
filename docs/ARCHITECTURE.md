@@ -133,6 +133,22 @@ the designer, the chosen one becoming the piece's design. Runs, steps, tool call
 design changes they produced; organisations control retention and whether their traces may be
 used for evaluation.
 
+## References beside CAD
+
+A reference panel sits beside the CAD workspace and the Render tab. It searches the keyless open
+collections of The Met, the Art Institute of Chicago and the Cleveland Museum of Art
+(`apps/server/src/references`), the piece's own photos and moodboards, the organisation's
+boards, a pasted link or a dropped picture. Pins are references on one board per piece
+(`board.pins_for`), so they share the boards' provenance and rights rules: a search result is
+re-read from its provider before it is saved, and its picture is kept only where the provider's
+terms allow (CC0); a pasted link stays a view-only link until someone captures its picture,
+explicitly, through the SSRF-guarded safe fetch (`apps/server/src/net/safe-fetch.ts`). The model
+sees pinned pictures it may use (labelled, once per conversation) and only the details of
+view-only ones; `references.read` and `match.fit` refuse view-only pictures for anyone. A pinned
+picture can be laid in the front, top or right view as an image plane (`references.place`): the
+viewer draws it before the piece in a scene of its own, so it never reaches a capture, a render
+or an export, and its moves have their own undo history.
+
 ## Platform
 
 - **Tenancy and auth** — Better Auth with organisations; `org_id` on every row behind a scoped

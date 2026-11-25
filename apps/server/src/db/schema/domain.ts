@@ -225,13 +225,20 @@ export const board = pgTable(
     id: text('id').primaryKey(),
     orgId: orgId(),
     pieceId: text('piece_id').references(() => piece.id, { onDelete: 'set null' }),
+    /** The piece whose pinned references this board holds; they go with the piece. */
+    pinsFor: text('pins_for').references(() => piece.id, { onDelete: 'cascade' }),
     title: text('title').notNull(),
     description: text('description').notNull().default(''),
     icon: text('icon'),
     createdAt: at('created_at'),
     updatedAt: at('updated_at'),
   },
-  (t) => [index('board_org_idx').on(t.orgId, t.updatedAt), index('board_piece_idx').on(t.pieceId)],
+  (t) => [
+    index('board_org_idx').on(t.orgId, t.updatedAt),
+    index('board_piece_idx').on(t.pieceId),
+    // One pin board per piece: two windows pinning at once race to create it, and this decides.
+    uniqueIndex('board_pins_for_idx').on(t.pinsFor),
+  ],
 )
 
 export const reference = pgTable(
@@ -254,6 +261,7 @@ export const reference = pgTable(
     generation: jsonb('generation').$type<Reference['generation']>(),
     pieceId: text('piece_id').references(() => piece.id, { onDelete: 'set null' }),
     canvas: jsonb('canvas').$type<Reference['canvas']>(),
+    plane: jsonb('plane').$type<Reference['plane']>(),
     width: integer('width'),
     height: integer('height'),
     position: doublePrecision('position').notNull(),

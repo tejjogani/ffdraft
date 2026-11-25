@@ -148,7 +148,8 @@ export class Assistant implements AssistantService {
       job,
     })
     try {
-      const { content, skipped } = await userContent(ctx, input)
+      const runRef = { id: run.id, threadId: thread.id, pieceId }
+      const { content, media } = await userContent(ctx, input, runRef)
       const message = await addMessage(ctx, {
         threadId: thread.id,
         runId: run.id,
@@ -164,12 +165,7 @@ export class Assistant implements AssistantService {
           run: toRun(await getRun(ctx, message.runId!)),
         }
       }
-      const text = await contextText(
-        ctx,
-        input,
-        { id: run.id, threadId: thread.id, pieceId },
-        skipped,
-      )
+      const text = await contextText(ctx, input, runRef, media)
       await addMessage(ctx, {
         threadId: thread.id,
         runId: run.id,

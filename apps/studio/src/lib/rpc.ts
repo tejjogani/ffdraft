@@ -79,6 +79,7 @@ export const QUERY_NAMES = [
   'boards.list',
   'boards.get',
   'references.search',
+  'references.pins',
   'references.lineage',
   'references.similar',
   'references.estimate',

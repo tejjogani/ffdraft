@@ -21,6 +21,7 @@ import {
   changeOfCall,
   commandOf,
   conversationItems,
+  ownBlocks,
   runHasLiveChanges,
   splitQuiet,
   tokenCount,
@@ -264,5 +265,17 @@ describe('markdown', () => {
     // Text stays text; a javascript: link is not a link.
     expect(nodes[0]).toBe('<img src=x onerror=alert(1)> and ')
     expect(nodes[1]).toBe('x')
+  })
+})
+
+describe('pinned pictures in a designer’s message', () => {
+  it('are hidden from the conversation with their labels', () => {
+    const blocks = [
+      { type: 'text', text: '[Pinned reference 1: “Posy ring” (ref_1)]' },
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: '' } },
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: '' } },
+      { type: 'text', text: 'Make it like this' },
+    ]
+    expect(ownBlocks(blocks).map((b) => b.type)).toEqual(['image', 'text'])
   })
 })

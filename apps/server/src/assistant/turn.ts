@@ -3,7 +3,7 @@
  * blocks), and the context message after it — the open piece, selection, board, references and
  * the edits people made since the assistant's last turn — rendered once and stored, never edited.
  */
-import { canonText, renderContext, type TurnContext } from '@pave/agent'
+import { type ContextPin, canonText, pinLabel, renderContext, type TurnContext } from '@pave/agent'
 import { allowanceLine, type CommandParsedInput } from '@pave/schema'
 import { and, asc, desc, eq, gt, inArray, isNull, max, ne } from 'drizzle-orm'
 import { readAsset } from '../assets/assets'
@@ -11,6 +11,8 @@ import type { Ctx } from '../context'
 import * as t from '../db/schema'
 import { getBoard, getPiece } from '../lookups'
 import { planStatus } from '../plans'
+import { pinnedRows } from '../references/pins'
+import { viewOnlyAssets } from '../references/rights'
 import { modelImage } from './images'
 
 type Send = CommandParsedInput<'threads.send'>
@@ -19,18 +21,111 @@ type Piece = Awaited<ReturnType<typeof getPiece>>
 /** People's edits listed in one context message at most. */
 const MAX_EDITS = 20
 
-/** The user message: photos first (as Claude reads best), then the text. */
+/** Pinned pictures sent in one message at most; the rest stay readable by asset id. */
+const MAX_PIN_PICTURES = 6
+
+type RunRef = { id: string; threadId: string; pieceId: string | null }
+type PinRow = Awaited<ReturnType<typeof pinnedRows>>[number]
+
+/** What a message carries besides its text, for the context message to describe. */
+export interface TurnMedia {
+  /** Attachments in a format Claude cannot read. */
+  skipped: string[]
+  /** Attachments that are view-only references: never sent. */
+  withheld: string[]
+  /** The open piece's pins, and what the model can see of each. */
+  pins: ContextPin[]
+}
+
+/**
+ * The open piece's pins and which pictures go with this message: those pinned since the
+ * thread's previous message about the piece (all of them on the first), never a view-only one.
+ */
+async function pinsForTurn(
+  ctx: Ctx,
+  run: RunRef,
+): Promise<{ rows: PinRow[]; send: PinRow[]; earlier: Set<string>; blocked: Set<string> }> {
+  const none = { rows: [], send: [], earlier: new Set<string>(), blocked: new Set<string>() }
+  if (!run.pieceId) return none
+  const rows = await pinnedRows(ctx, run.pieceId)
+  if (!rows.length) return none
+  const blocked = await viewOnlyAssets(
+    ctx,
+    rows.flatMap((r) => (r.assetId ? [r.assetId] : [])),
+  )
+  for (const r of rows) if (r.rights === 'viewOnly' && r.assetId) blocked.add(r.assetId)
+  const prev = await ctx.repo.runs.first(
+    and(
+      eq(t.agentRun.threadId, run.threadId),
+      eq(t.agentRun.pieceId, run.pieceId),
+      ne(t.agentRun.id, run.id),
+    )!,
+    desc(t.agentRun.startedAt),
+  )
+  const sendable = rows.filter(
+    (r) => r.assetId && r.rights !== 'viewOnly' && !blocked.has(r.assetId),
+  )
+  const fresh = sendable.filter((r) => !prev || r.createdAt > prev.startedAt)
+  return {
+    rows,
+    send: fresh.slice(0, MAX_PIN_PICTURES),
+    earlier: new Set(sendable.filter((r) => !fresh.includes(r)).map((r) => r.id)),
+    blocked,
+  }
+}
+
+/**
+ * The user message: pinned pictures first, each after its label, then the designer's photos
+ * (as Claude reads best), then the text. View-only pictures are never among them.
+ */
 export async function userContent(
   ctx: Ctx,
   input: Send,
-): Promise<{ content: Record<string, unknown>[]; skipped: string[] }> {
+  run: RunRef,
+): Promise<{ content: Record<string, unknown>[]; media: TurnMedia }> {
   const content: Record<string, unknown>[] = []
-  const skipped: string[] = []
+  const media: TurnMedia = { skipped: [], withheld: [], pins: [] }
+  const pins = await pinsForTurn(ctx, run)
+  const shown = new Set<string>()
+  for (const r of pins.send) {
+    const { asset, bytes } = await readAsset(ctx, r.assetId!)
+    const image = await modelImage(bytes, asset.mime)
+    if (!image) continue
+    content.push(
+      { type: 'text', text: pinLabel(pins.rows.indexOf(r) + 1, r.title, r.id) },
+      { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.data } },
+    )
+    shown.add(r.id)
+  }
+  media.pins = pins.rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    provider: r.source?.provider ?? null,
+    credit: r.source?.credit ?? null,
+    license: r.source?.license ?? null,
+    assetId: r.assetId,
+    plane: r.plane?.view ?? null,
+    picture: !r.assetId
+      ? 'none'
+      : r.rights === 'viewOnly' || pins.blocked.has(r.assetId)
+        ? 'viewOnly'
+        : shown.has(r.id)
+          ? 'above'
+          : pins.earlier.has(r.id)
+            ? 'earlier'
+            : 'available',
+  }))
+
+  const blocked = await viewOnlyAssets(ctx, input.attachments)
   for (const id of input.attachments) {
     const { asset, bytes } = await readAsset(ctx, id)
+    if (blocked.has(id)) {
+      media.withheld.push(asset.name)
+      continue
+    }
     const image = await modelImage(bytes, asset.mime)
     if (!image) {
-      skipped.push(`${asset.name} (${asset.mime})`)
+      media.skipped.push(`${asset.name} (${asset.mime})`)
       continue
     }
     content.push({
@@ -39,7 +134,7 @@ export async function userContent(
     })
   }
   content.push({ type: 'text', text: input.text })
-  return { content, skipped }
+  return { content, media }
 }
 
 /** Selected ids as the studio sends them: a node, or one stone of a row (`nodeId:index`). */
@@ -109,8 +204,8 @@ async function designerEdits(
 export async function contextText(
   ctx: Ctx,
   input: Send,
-  run: { id: string; threadId: string; pieceId: string | null },
-  skipped: readonly string[],
+  run: RunRef,
+  media: TurnMedia,
 ): Promise<string> {
   const piece = run.pieceId ? await getPiece(ctx, run.pieceId) : null
   const board = input.context.boardId ? await getBoard(ctx, input.context.boardId) : null
@@ -149,7 +244,9 @@ export async function contextText(
     // In the order sent, matching the images in the message.
     attachments: input.attachments.flatMap((id) => {
       const a = assets.find((x) => x.id === id)
-      return a ? [{ assetId: a.id, name: a.name, mime: a.mime }] : []
+      return a && !media.withheld.includes(a.name)
+        ? [{ assetId: a.id, name: a.name, mime: a.mime }]
+        : []
     }),
     references: refs.map((r) => ({
       id: r.id,
@@ -159,8 +256,13 @@ export async function contextText(
     designerEdits: piece ? await designerEdits(ctx, piece.id, run.threadId, run.id) : [],
     canon: piece ? canonText({ spec: piece.spec, design: piece.design }) : null,
     plan: allowanceLine(await planStatus(ctx)),
+    pins: media.pins,
   })
-  return skipped.length
-    ? `${text}\nNot shown to you (a format you cannot read): ${skipped.join(', ')}.`
-    : text
+  const notes = [
+    media.skipped.length &&
+      `Not shown to you (a format you cannot read): ${media.skipped.join(', ')}.`,
+    media.withheld.length &&
+      `Not shown to you (view-only references; their pictures never are): ${media.withheld.join(', ')}.`,
+  ].filter(Boolean)
+  return notes.length ? `${text}\n${notes.join('\n')}` : text
 }

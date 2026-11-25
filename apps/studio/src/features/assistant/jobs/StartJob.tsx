@@ -17,7 +17,7 @@ import { AiMark, Button, cn, Popover, Segmented, Spinner, Textarea, toast } from
 import { Link } from '@tanstack/react-router'
 import { Circle, ImagePlus, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { uploadAsset } from '../../../lib/assets'
+import { assetUrl, uploadAsset } from '../../../lib/assets'
 import { useRpc } from '../../../lib/query'
 import { useSession } from '../../../lib/session'
 import { assistant, useAssistant } from '../../../stores/assistant'
@@ -49,7 +49,7 @@ export function StartJob({
   // The goal the render plan last wrote, so a person's own words are never overwritten.
   const renderGoal = useRef(recipe.goal)
   const [tier, setTier] = useState<AssistantTier | null>(null)
-  const [photo, setPhoto] = useState<Asset | null>(null)
+  const [photo, setPhoto] = useState<Pick<Asset, 'id' | 'url' | 'name'> | null>(null)
   const [uploading, setUploading] = useState(false)
   const file = useRef<HTMLInputElement>(null)
   const { send, pending } = useSend({ pieceId })
@@ -173,6 +173,15 @@ export function StartJob({
             )}
           </div>
         )}
+        {stage === 'cad' && !photo && (
+          <PinnedPhotos
+            pieceId={pieceId}
+            onPick={(p) => {
+              setPhoto(p)
+              if (goal === recipe.goal) setGoal(PHOTO_GOAL)
+            }}
+          />
+        )}
         {stage === 'render' && (
           <RenderPlan
             pieceId={pieceId}
@@ -295,6 +304,51 @@ function RenderPlan({ pieceId, onGoal }: { pieceId: string; onGoal: (goal: strin
           )}
         </p>
       )}
+    </div>
+  )
+}
+
+/**
+ * Pictures pinned to the piece that the job may read (never a view-only one: its picture is not
+ * sent to AI), offered as the photo to rebuild.
+ */
+function PinnedPhotos({
+  pieceId,
+  onPick,
+}: {
+  pieceId: string
+  onPick: (photo: Pick<Asset, 'id' | 'url' | 'name'>) => void
+}) {
+  const pins = useRpc('references.pins', { pieceId })
+  const usable = (pins.data?.references ?? []).filter(
+    (r) => r.assetId && r.rights !== 'viewOnly' && (r.type === 'image' || r.type === 'generated'),
+  )
+  const viewOnly = (pins.data?.references ?? []).some((r) => r.rights === 'viewOnly')
+  if (!usable.length) return null
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs text-fg-subtle">
+        Or a pinned picture{viewOnly ? ' (view-only pins cannot be sent to AI)' : ''}:
+      </span>
+      <div className="flex flex-wrap gap-1.5">
+        {usable.slice(0, 8).map((r) => (
+          <button
+            key={r.id}
+            type="button"
+            aria-label={`Rebuild from the pinned picture ${r.title || ''}`.trim()}
+            onClick={() =>
+              onPick({
+                id: r.assetId!,
+                url: assetUrl(r.assetId!, 240),
+                name: r.title || 'Pinned picture',
+              })
+            }
+            className="size-11 overflow-hidden rounded-md shadow-[0_0_0_1px_var(--line)] hover:shadow-[0_0_0_1px_var(--line-strong)]"
+          >
+            <img src={assetUrl(r.assetId!, 120)} alt="" className="size-full object-cover" />
+          </button>
+        ))}
+      </div>
     </div>
   )
 }

@@ -17,6 +17,7 @@
 import type { CreateAppOptions } from './app'
 import { type AssistantParts, createAssistant } from './assistant'
 import { createEngines, enginesConfigFromEnv } from './engines'
+import { referenceServicesFromEnv } from './references'
 import type { Runtime } from './runtime'
 import type { Services } from './services'
 
@@ -26,6 +27,9 @@ export function servicesFromEnv(env: NodeJS.ProcessEnv, runtime: Runtime): Parti
     // ── Core engines: `geometry`, `production` (kernel worker pool), `renderQueue` and
     //    `renderEngine` (Blender). Local compute; Blender's absence only turns renders off.
     ...createEngines(runtime, enginesConfigFromEnv(env, runtime.config)),
+    // ── References: search over the keyless museum collections, and the safe capture of web
+    //    pictures. Always on: neither needs a key.
+    ...referenceServicesFromEnv(env),
   }
 }
 

@@ -35,8 +35,8 @@ const DOMAIN_QUERIES: Record<string, QueryName[]> = {
   pieces: ['pieces.list', 'pieces.get', 'collections.list', 'design.history', 'design.evaluate'],
   // A design change makes earlier takes stale (computed by the server).
   design: ['pieces.get', 'pieces.list', 'design.history', 'design.evaluate', 'renders.list'],
-  boards: ['boards.list', 'boards.get', 'pieces.get'],
-  references: ['boards.get', 'boards.list'],
+  boards: ['boards.list', 'boards.get', 'pieces.get', 'references.pins'],
+  references: ['boards.get', 'boards.list', 'references.pins'],
   renders: [
     'renders.list',
     'renders.get',

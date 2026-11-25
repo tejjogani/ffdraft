@@ -29,6 +29,25 @@ export interface ContextSelection {
   instance?: number
 }
 
+/** A reference pinned to the open piece, as the model is told about it. */
+export interface ContextPin {
+  id: string
+  title: string
+  /** Who has it and on what terms: provider, credit line, licence. */
+  provider: string | null
+  credit: string | null
+  license: string | null
+  /**
+   * What the model can see of its picture: `above` (in the designer's message, labelled),
+   * `earlier` (in an earlier message), `available` (not attached; its asset may be read),
+   * `viewOnly` (details only, never the picture) or `none` (a link without a picture).
+   */
+  picture: 'above' | 'earlier' | 'available' | 'viewOnly' | 'none'
+  assetId: string | null
+  /** The CAD view it is laid in as an image plane, if any. */
+  plane: string | null
+}
+
 export interface TurnContext {
   /** Today's date (YYYY-MM-DD), for anything time-dependent. */
   date: string
@@ -43,6 +62,24 @@ export interface TurnContext {
   canon: string | null
   /** The plan's allowances left this month (`allowanceLine`), so a job plans within them. */
   plan?: string | null
+  /** The open piece's pinned references, in the designer's order. */
+  pins?: ContextPin[]
+}
+
+const PIN_PICTURE: Record<ContextPin['picture'], (assetId: string | null) => string> = {
+  above: () => 'its picture is in the message above, labelled',
+  earlier: (a) => `its picture was shown earlier in this conversation (asset ${a})`,
+  available: (a) => `picture not attached; asset ${a} may be read with references.read`,
+  viewOnly: () =>
+    'view only: its details are known; its picture is never shown to you and cannot be read or fitted',
+  none: () => 'a link without a picture',
+}
+
+const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
+
+function pinLine(p: ContextPin, n: number): string {
+  const terms = [p.provider, p.credit && clip(p.credit, 160), p.license].filter(Boolean).join('; ')
+  return `${n}. “${p.title || 'Untitled'}” (id ${p.id}${terms ? `; ${terms}` : ''}; ${PIN_PICTURE[p.picture](p.assetId)})${p.plane ? `; laid in the ${p.plane} view as an image plane` : ''}`
 }
 
 const line = (label: string, value: string) => `${label}: ${value}`
@@ -110,6 +147,11 @@ export function renderContext(c: TurnContext): string {
           )
           .join(', '),
       ),
+    )
+  if (c.pins?.length)
+    out.push(
+      'Pinned references (the designer’s reference panel beside CAD, in their order):',
+      ...c.pins.map((p, i) => pinLine(p, i + 1)),
     )
   if (c.designerEdits.length)
     out.push(

@@ -30,7 +30,7 @@ import {
   toThreePoint,
   zUpGroup,
 } from '@pave/render/three'
-import { RenderSceneSchema } from '@pave/schema'
+import { type ImagePlaneView, RenderSceneSchema } from '@pave/schema'
 import CameraControls from 'camera-controls'
 import {
   Box3,
@@ -59,7 +59,9 @@ import {
   WebGLRenderer,
 } from 'three'
 import { acceleratedRaycast, computeBoundsTree } from 'three-mesh-bvh'
+import { VIEW_ANGLES } from '../../lib/image-planes'
 import { viewportScene } from './environment'
+import { ImagePlaneLayer, type ImagePlaneSpec } from './image-planes'
 import {
   contactShadowTexture,
   createModeMaterials,
@@ -173,6 +175,8 @@ export class Viewer {
   /** Nodes the default framing is about (e.g. a pendant without its chain); empty = everything. */
   private frameFocus: readonly string[] = []
   private shadowAllowed = false
+  /** Reference pictures to model over; drawn before the piece and never captured. */
+  private readonly planes: ImagePlaneLayer
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -188,6 +192,8 @@ export class Viewer {
     this.tier = gpuTier(this.renderer.getContext())
     this.policy = qualityFor(this.tier)
     this.materials = createModeMaterials(readPalette(themeRoot))
+    this.planes = new ImagePlaneLayer(this.invalidate)
+    this.planes.setSelectColor(readPalette(themeRoot).select)
     this.controls = new CameraControls(this.camera, canvas)
     this.controls.dollyToCursor = true
     this.controls.smoothTime = 0.12
@@ -234,7 +240,16 @@ export class Viewer {
 
   private draw(): void {
     const start = performance.now()
-    this.renderer.render(this.scene, this.camera)
+    if (this.planes.isEmpty) this.renderer.render(this.scene, this.camera)
+    else {
+      // Pictures first, then the piece over them with a fresh depth buffer: the piece is never
+      // hidden behind a reference, whatever the angle.
+      this.renderer.render(this.planes.scene, this.camera)
+      this.renderer.autoClear = false
+      this.renderer.clearDepth()
+      this.renderer.render(this.scene, this.camera)
+      this.renderer.autoClear = true
+    }
     this.frameTimes.push(performance.now() - start)
     if (this.frameTimes.length > 60) this.frameTimes.shift()
     for (const l of this.renderListeners) l()
@@ -332,6 +347,7 @@ export class Viewer {
   refreshTheme(): void {
     this.materials.dispose()
     this.materials = createModeMaterials(readPalette(this.themeRoot))
+    this.planes.setSelectColor(readPalette(this.themeRoot).select)
     this.setSize(this.width, this.height)
     this.applyLook()
   }
@@ -353,6 +369,7 @@ export class Viewer {
     for (const [nodeId, parts] of byNode) this.lastGood.set(nodeId, parts)
 
     this.evaluation = evaluation
+    this.planes.setBounds(evaluation.report.bounds)
     const resolved = viewportScene(
       resolveScene(
         RenderSceneSchema.parse({ look: 'studio-soft', output: { width: 1024, height: 1024 } }),
@@ -793,6 +810,32 @@ export class Viewer {
     this.invalidate()
   }
 
+  /** Looks straight at an image plane's view (front, top or right), framing the piece. */
+  alignView(view: ImagePlaneView, animate = true): void {
+    const { azimuth, elevation } = VIEW_ANGLES[view]
+    this.look(azimuth, elevation, this.pointsFor(), 0.66, animate)
+  }
+
+  // ── Image planes ─────────────────────────────────────────────────────────────────────────
+
+  setImagePlanes(specs: readonly ImagePlaneSpec[]): void {
+    this.planes.set(specs)
+  }
+
+  private ndc(x: number, y: number): Vector2 {
+    return new Vector2((x / this.width) * 2 - 1, -(y / this.height) * 2 + 1)
+  }
+
+  /** The image plane under a point in CSS pixels, or null. */
+  pickPlane(x: number, y: number): string | null {
+    return this.planes.pick(this.ndc(x, y), this.camera)
+  }
+
+  /** Where a point in CSS pixels falls on a view's picture plane, in that view's mm. */
+  pointOnPlane(view: ImagePlaneView, x: number, y: number): [number, number] | null {
+    return this.planes.pointOn(view, this.ndc(x, y), this.camera)
+  }
+
   // ── Picking ──────────────────────────────────────────────────────────────────────────────
 
   private readonly raycaster = new Raycaster()
@@ -984,6 +1027,7 @@ export class Viewer {
     this.geometries.clear()
     this.lastGood.clear()
     this.environment?.dispose()
+    this.planes.dispose()
     this.materials.dispose()
     this.shadow.geometry.dispose()
     const shadowMaterial = this.shadow.material as MeshBasicMaterial

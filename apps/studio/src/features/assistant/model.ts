@@ -8,7 +8,7 @@
  *    taken from the live run when it is streaming, else from its stored result;
  *  - while the model writes, its unfinished blocks come last.
  */
-import { describeCall, type RunView, TOOL_CHIPS } from '@pave/agent/studio'
+import { describeCall, isPinLabel, type RunView, TOOL_CHIPS } from '@pave/agent/studio'
 import type { Message, Run, StoredChange } from '@pave/schema'
 
 /** `waiting`: the call started a take; its result comes when the take is finished. */
@@ -85,6 +85,23 @@ export function mergeMessages(stored: readonly Message[], live: RunView | null):
   return [...stored, ...live.messages.filter((m) => !ids.has(m.id))].sort((a, b) => a.seq - b.seq)
 }
 
+/**
+ * What the designer typed and attached: pinned pictures the server added for the model (each a
+ * label block, then its image) are not theirs to see in the conversation.
+ */
+export function ownBlocks(blocks: readonly Block[]): Block[] {
+  const out: Block[] = []
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i]!
+    if (b.type === 'text' && isPinLabel(String(b.text))) {
+      if (blocks[i + 1]?.type === 'image') i++
+      continue
+    }
+    out.push(b)
+  }
+  return out
+}
+
 export function conversationItems(stored: readonly Message[], live: RunView | null): Item[] {
   const messages = mergeMessages(stored, live)
   const results = new Map<string, { isError: boolean; text: string }>()
@@ -99,12 +116,13 @@ export function conversationItems(stored: readonly Message[], live: RunView | nu
     if (m.role === 'system') continue
     const blocks = m.content as Block[]
     if (m.role === 'user') {
-      const text = blocks
+      const typed = ownBlocks(blocks)
+      const text = typed
         .filter((b) => b.type === 'text')
         .map((b) => String(b.text))
         .join('\n\n')
       if (!text) continue
-      const photos = blocks.filter((b) => b.type === 'image').length
+      const photos = typed.filter((b) => b.type === 'image').length
       items.push({ kind: 'user', key: m.id, runId: m.runId, text, photos })
       continue
     }

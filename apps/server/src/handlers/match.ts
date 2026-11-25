@@ -9,6 +9,7 @@ import { checkTarget, FIT_FLOOR, underFloor } from '@pave/match'
 import { conflict, NotConfiguredError } from '../errors'
 import { getPiece } from '../lookups'
 import { photoMatte } from '../photos'
+import { assertSendable } from '../references/rights'
 import { serviceContext } from '../service-context'
 import type { HandlerGroup } from './types'
 
@@ -16,6 +17,8 @@ const round = (x: number) => Number(x.toFixed(3))
 
 export const match: HandlerGroup<'match'> = {
   'match.fit': async (ctx, input) => {
+    // Fitting a design to someone's view-only picture would be copying it, whoever asks.
+    await assertSendable(ctx, [input.assetId], () => 'That photo')
     const geometry = ctx.services.get('geometry')
     if (!geometry.fitPhoto)
       throw new NotConfiguredError('geometry', 'This server cannot fit designs to photos.')

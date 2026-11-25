@@ -44,6 +44,7 @@ import { activeOrg, useSession } from '../../lib/session'
 import { useAssistant } from '../../stores/assistant'
 import { planProgress } from '../assistant/jobs/status'
 import { useLiveRun } from '../assistant/jobs/useJob'
+import { ImagePlanes } from '../references/ImagePlanes'
 import { renderThisView } from '../render/shot-actions'
 import { useViewportTools } from './capture-tool'
 import { useCadCommands } from './commands'
@@ -447,6 +448,13 @@ function Workspace({ piece }: { piece: Piece }) {
           onHover={(p) => ws().setHover(p)}
         >
           {sweep > 0 && <Sweep key={sweep} />}
+          <ImagePlanes
+            viewer={viewerHandle}
+            pieceId={pieceId}
+            bounds={evaluation?.report.bounds ?? null}
+            readOnly={readOnly}
+            stoneMm={evaluation?.stones.find((x) => x.role === 'center')?.dims.width ?? null}
+          />
           {!empty && (
             <Dimensions viewer={viewerHandle} evaluation={evaluation} edit={selectedEdit} />
           )}

@@ -80,7 +80,7 @@ describe('directing the camera in words', () => {
       } as never)
       await settled(s.parts, run.id, SLOW)
       const trace = await api.call('traces.run', { id: run.id })
-      expect(trace.run.errorText ?? null).toBeNull()
+      expect(trace.run.error).toBeNull()
 
       // The result told the model where the camera now stands and how the piece fills the frame.
       expect(told).toMatch(/Shot cameras/)

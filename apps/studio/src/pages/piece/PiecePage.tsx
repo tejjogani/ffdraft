@@ -21,14 +21,16 @@ import {
   tabListClass,
 } from '@pave/ui'
 import { Link, Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
-import { Copy, Folder, FolderInput, MoreHorizontal, Trash2 } from 'lucide-react'
-import { type ReactNode, Suspense, useEffect, useState } from 'react'
+import { Copy, Folder, FolderInput, Images, MoreHorizontal, Trash2 } from 'lucide-react'
+import { type ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { KindGlyph } from '../../components/KindGlyph'
 import { Column, PageHeader } from '../../components/Page'
 import { StagePicker } from '../../components/StageChip'
 import { JobPanel } from '../../features/assistant/jobs/JobPanel'
 import { StageStepper } from '../../features/assistant/jobs/StageStepper'
 import { StartJob } from '../../features/assistant/jobs/StartJob'
+import { DOCK_PANEL_PX, ReferenceDock } from '../../features/references/ReferencePanel'
+import { useReferencePanel } from '../../features/references/store'
 import { type Command, useRegisterCommands } from '../../lib/commands'
 import { KIND_LABEL, metalLabel, metalSwatch } from '../../lib/domain'
 import { carats, grams } from '../../lib/format'
@@ -122,7 +124,8 @@ export function PiecePage({ id }: { id: string }) {
               </Link>
             ))}
             {bleed && p && (
-              <div className="ml-auto pl-3">
+              <div className="ml-auto flex items-center gap-1 pl-3">
+                <ReferencesToggle />
                 <PieceStage piece={p} />
               </div>
             )}
@@ -135,11 +138,57 @@ export function PiecePage({ id }: { id: string }) {
   )
 }
 
-/** Wraps each tab: workspaces fill the remaining page; documents sit in the reading column. */
-export function PieceTab({ bleed, children }: { bleed: boolean; children: ReactNode }) {
+/**
+ * Wraps each tab: workspaces fill the remaining page, with the reference panel beside them;
+ * documents sit in the reading column.
+ */
+export function PieceTab({
+  bleed,
+  pieceId,
+  children,
+}: {
+  bleed: boolean
+  pieceId: string
+  children: ReactNode
+}) {
   const content = <Suspense fallback={<Spinner className="mx-auto mt-16" />}>{children}</Suspense>
-  if (bleed) return <div className="relative min-h-0 flex-1">{content}</div>
+  if (bleed) return <Workbench pieceId={pieceId}>{content}</Workbench>
   return <Column className="pt-8">{content}</Column>
+}
+
+/** A workspace tab and the reference panel: docked when there is room, else a sheet. */
+function Workbench({ pieceId, children }: { pieceId: string; children: ReactNode }) {
+  const piece = useRpc('pieces.get', { id: pieceId })
+  const box = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState(1440)
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!el) return
+    setWidth(el.clientWidth)
+    const observer = new ResizeObserver(([entry]) => setWidth(entry!.contentRect.width))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+  return (
+    <div ref={box} className="relative flex min-h-0 flex-1">
+      <div className="relative min-w-0 flex-1">{children}</div>
+      {piece.data && <ReferenceDock piece={piece.data} docked={width >= DOCK_PANEL_PX} />}
+    </div>
+  )
+}
+
+/** Shows or hides the reference panel (a sheet on narrow screens). */
+function ReferencesToggle() {
+  const open = useReferencePanel((s) => s.open)
+  const toggle = useReferencePanel((s) => s.toggle)
+  return (
+    <IconButton
+      icon={Images}
+      label={open ? 'Hide references' : 'Show references'}
+      aria-pressed={open}
+      onClick={toggle}
+    />
+  )
 }
 
 function PieceStage({ piece }: { piece: Piece }) {

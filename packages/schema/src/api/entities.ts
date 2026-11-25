@@ -177,6 +177,11 @@ export const BoardSchema = z.object({
   icon: z.string().nullable(),
   description: z.string(),
   pieceId: id.nullable(),
+  /**
+   * Set on a piece's pinned references (the reference panel beside CAD): one such board per
+   * piece, created on the first pin and not listed among the moodboards.
+   */
+  pinsFor: id.nullable(),
   coverAssetIds: z.array(id),
   referenceCount: z.number(),
   createdAt: iso,
@@ -189,6 +194,15 @@ export type Board = z.infer<typeof BoardSchema>
  * generative models by default; `viewOnly` items stay on the board as inspiration.
  */
 export const RIGHTS = ['open', 'licensed', 'own', 'viewOnly'] as const
+export type Rights = (typeof RIGHTS)[number]
+
+/** What each rights tier allows, as the one sentence people read beside a reference's credit. */
+export const RIGHTS_SENTENCE: Record<Rights, string> = {
+  open: 'Open access: can be shown, kept and sent to AI.',
+  licensed: 'Licensed: can be shown and sent to AI within the licence’s terms.',
+  own: 'Yours: can be shown, kept and sent to AI.',
+  viewOnly: 'View only: can be shown here as inspiration. Can’t be sent to AI.',
+}
 
 /** What a reference is for when it conditions an image generation. */
 export const GENERATION_ROLES = ['subject', 'style', 'identity', 'layout', 'product'] as const
@@ -201,6 +215,26 @@ export const CanvasPlacementSchema = z.object({
   z: z.number().int(),
 })
 export type CanvasPlacement = z.infer<typeof CanvasPlacementSchema>
+
+/** The CAD views a reference picture can be placed in as an image plane. */
+export const IMAGE_PLANE_VIEWS = ['front', 'top', 'right'] as const
+export type ImagePlaneView = (typeof IMAGE_PLANE_VIEWS)[number]
+
+/**
+ * A pinned picture laid in a CAD view to model over, like Rhino's Picture command. It belongs to
+ * the viewport only: never part of the design, so never in renders, exports or the kernel.
+ */
+export const ImagePlaneSchema = z.object({
+  view: z.enum(IMAGE_PLANE_VIEWS),
+  /** The picture's centre in the view's own axes, in mm: front (x, z), top (x, y), right (y, z). */
+  center: z.tuple([z.number(), z.number()]),
+  /** The whole picture's width in mm; its height follows the picture's proportions. */
+  width: z.number().positive().max(2000),
+  opacity: z.number().min(0.05).max(1),
+  /** A locked plane cannot be moved or scaled until it is unlocked. */
+  locked: z.boolean(),
+})
+export type ImagePlane = z.infer<typeof ImagePlaneSchema>
 
 /**
  * A parent of a generated image as it was when the image was made: its credit and rights
@@ -259,6 +293,8 @@ export const ReferenceSchema = z.object({
   pieceId: id.nullable(),
   /** Placement on the board's canvas view; null until arranged there. */
   canvas: CanvasPlacementSchema.nullable(),
+  /** For a piece's pinned picture: where it lies in a CAD view; null when not placed. */
+  plane: ImagePlaneSchema.nullable(),
   width: z.number().nullable(),
   height: z.number().nullable(),
   /** Order in the masonry view and in the DOM, in both views. */
@@ -277,6 +313,8 @@ export const SearchResultSchema = z.object({
   pageUrl: z.string().nullable(),
   credit: z.string().nullable(),
   license: z.string().nullable(),
+  /** Where the licence or the provider's terms are written; absent from older clients. */
+  licenseUrl: z.string().nullable().optional(),
   rights: z.enum(RIGHTS),
   /** The provider's terms let us store the pixels (CC0, public domain); otherwise only a link is kept. */
   mayStore: z.boolean(),

@@ -112,6 +112,52 @@ describe('the context message', () => {
       expect(text).toContain(s)
   })
 
+  it('lists the pinned references and what the model may see of each', () => {
+    const pin = {
+      provider: 'met',
+      credit: 'The Metropolitan Museum of Art',
+      license: 'CC0 1.0 (public domain)',
+      plane: null,
+    }
+    const text = renderContext({
+      date: '2026-11-25',
+      piece: null,
+      selection: [],
+      board: null,
+      attachments: [],
+      references: [],
+      designerEdits: [],
+      canon: null,
+      pins: [
+        {
+          ...pin,
+          id: 'ref_1',
+          title: 'Posy ring',
+          picture: 'above',
+          assetId: 'as_1',
+          plane: 'front',
+        },
+        {
+          ...pin,
+          id: 'ref_2',
+          title: 'Shop page',
+          picture: 'viewOnly',
+          assetId: 'as_2',
+          provider: 'web',
+        },
+        { ...pin, id: 'ref_3', title: '', picture: 'none', assetId: null },
+      ],
+    })
+    expect(text).toContain(
+      '1. “Posy ring” (id ref_1; met; The Metropolitan Museum of Art; CC0 1.0 (public domain); its picture is in the message above, labelled); laid in the front view as an image plane',
+    )
+    expect(text).toContain('2. “Shop page” (id ref_2; web;')
+    expect(text).toContain('its picture is never shown to you and cannot be read or fitted')
+    // A view-only pin's asset id is not offered for reading.
+    expect(text).not.toContain('as_2')
+    expect(text).toContain('3. “Untitled” (id ref_3;')
+  })
+
   it('carries the canon slice of a piece', () => {
     const text = canonText({ spec: TEMPLATES.find((t) => t.id === 'solitaire')!.spec })
     expect(text).toMatch(/^# Canon /)

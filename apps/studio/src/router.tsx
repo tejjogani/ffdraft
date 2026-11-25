@@ -102,7 +102,7 @@ const pieceTab = (
     component: function Tab() {
       const { id } = pieceRoute.useParams()
       return (
-        <PieceTab bleed={bleed}>
+        <PieceTab bleed={bleed} pieceId={id}>
           <Component pieceId={id} />
         </PieceTab>
       )

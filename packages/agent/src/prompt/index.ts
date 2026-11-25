@@ -40,6 +40,7 @@ export const PROMPT_HASH = `prompt-${hash(JSON.stringify({ system: SYSTEM_BLOCKS
 
 export {
   type ContextPiece,
+  type ContextPin,
   type ContextSelection,
   canonText,
   renderContext,

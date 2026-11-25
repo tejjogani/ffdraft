@@ -92,6 +92,13 @@
       "when": 1795567236704,
       "tag": "0012_scene_changes",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1795570835907,
+      "tag": "0013_reference_pins",
+      "breakpoints": true
     }
   ]
 }

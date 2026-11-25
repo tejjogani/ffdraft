@@ -7,6 +7,7 @@ import { type ModelStream, type ScriptedTurn, scriptedModel } from '@pave/agent'
 import type { KeyCheck } from '@pave/agent/anthropic'
 import type { CreateAppOptions } from '../app'
 import { createEngines } from '../engines'
+import type { Services } from '../services'
 import { type TestServer, testServer } from '../test/harness'
 import type { ModelFactory } from './host'
 import { type AssistantParts, createAssistant } from './index'
@@ -85,6 +86,8 @@ export async function assistantServer(
     check?: (key: string) => KeyCheck
     /** Also run the real engines (kernel workers): captures and fits that need geometry. */
     engines?: boolean
+    /** More engines to register (search, capture, …). */
+    services?: Partial<Services>
   } & Pick<CreateAppOptions, 'config'> = {},
 ): Promise<AssistantServer> {
   const model = new TestModel()
@@ -102,9 +105,10 @@ export async function assistantServer(
           return opts.check?.(key) ?? { ok: true, models: ['claude-opus-5-5', 'claude-sonnet-5-5'] }
         },
       })
-      if (!opts.engines) return parts.services
+      if (!opts.engines) return { ...opts.services, ...parts.services }
       return {
         ...createEngines(runtime, { engineFile: null, pool: { size: 2 } }),
+        ...opts.services,
         ...parts.services,
       }
     },

@@ -91,6 +91,15 @@ export const TOOL_CHIPS = {
     running: 'Saving references',
     done: (i) => `Saved ${plural(i.items.length, 'reference')} to the board`,
   },
+  'references.pins': {
+    quiet: true,
+    running: 'Reading the pinned references',
+    done: 'Read the pinned references',
+  },
+  'references.pin': {
+    running: 'Pinning references',
+    done: (i) => `Pinned ${plural(i.items.length, 'reference')} to the piece`,
+  },
   'references.lineage': {
     quiet: true,
     running: 'Tracing where a reference came from',

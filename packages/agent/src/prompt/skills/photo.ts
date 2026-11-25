@@ -1,6 +1,6 @@
 /** Skill: from a photo of a piece to a parametric design (research 11, plans/reference-match). */
 export const PHOTO_SKILL = `## Skill: a design from a photo
-Use when the designer uploads or picks a picture of a piece and wants it (or something like it) in Pavé. The images are in their message; their asset ids are in the context message.
+Use when the designer uploads or picks a picture of a piece and wants it (or something like it) in Pavé. The images are in their message; their asset ids are in the context message. A picture pinned to the piece works the same way: use its asset id from the context's pinned references. A view-only pin cannot be read or fitted (the tools refuse it): say so and ask for a picture the designer may use.
 
 What a photo can and cannot tell you:
 - Read categories, not totals: the kind, the archetype, the cut and shape of the hero stone, the setting style and claw tips, the band profile and shoulders, halo or not, the metal colour, the surface. These you can read well.

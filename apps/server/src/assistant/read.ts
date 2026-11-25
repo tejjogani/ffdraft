@@ -19,6 +19,7 @@ import { readAsset } from '../assets/assets'
 import type { Ctx } from '../context'
 import { AppError, badRequest } from '../errors'
 import { photoMatte } from '../photos'
+import { assertSendable } from '../references/rights'
 import { assertBudget, recordUsage } from '../usage'
 import { modelImage } from './images'
 
@@ -37,6 +38,7 @@ export async function readPhotos(
 ): Promise<{ output: CommandOutput<'references.read'>; tokens: Tokens; costUsd: number }> {
   const { ctx, input } = call
   await assertBudget(ctx)
+  await assertSendable(ctx, input.assetIds, (id) => `Photo ${input.assetIds.indexOf(id) + 1}`)
   const images = []
   for (const id of input.assetIds) {
     const { asset, bytes } = await readAsset(ctx, id)
