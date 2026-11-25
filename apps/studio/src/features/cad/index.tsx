@@ -203,6 +203,9 @@ function Workspace({ piece }: { piece: Piece }) {
   const undoable = useSessionState(session, canUndo) ?? false
   const redoable = useSessionState(session, canRedo) ?? false
   const version = useSessionState(session, (s) => s.version) ?? piece.version
+  // A feature that left the design (an undo, a teammate's or the assistant's delete) is no longer
+  // selected: commands and the inspector would otherwise act on something that is not there.
+  useEffect(() => ws().retain((id) => Object.hasOwn(view.nodes, id)), [view])
   const { evaluation, status } = usePieceEvaluation(pieceId)
   const check = useProductionCheck(
     pieceId,
@@ -252,14 +255,16 @@ function Workspace({ piece }: { piece: Piece }) {
 
   // ── Actions ──────────────────────────────────────────────────────────────────────────────
   const requestDelete = useCallback(
-    (ids: string[]) => {
+    (selected: string[]) => {
+      // The selection can outlive a feature (an undo, someone else's delete).
+      const ids = selected.filter((id) => Object.hasOwn(view.nodes, id))
       if (!ids.length) return
       const dependents = [...new Set(ids.flatMap((id) => dependentsOf(view, id)))].filter(
         (d) => !ids.includes(d),
       )
       if (dependents.length) setConfirm({ ids, dependents })
       else {
-        session?.commit(remove(ids))
+        session?.commit(remove(view, ids))
         ws().select([])
       }
     },
@@ -666,7 +671,7 @@ function Workspace({ piece }: { piece: Piece }) {
             <Button
               variant="danger"
               onClick={() => {
-                if (confirm) session?.commit(remove(confirm.ids))
+                if (confirm) session?.commit(remove(view, confirm.ids))
                 ws().select([])
                 setConfirm(null)
               }}

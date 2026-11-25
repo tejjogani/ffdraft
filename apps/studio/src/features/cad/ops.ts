@@ -64,9 +64,16 @@ export function dependentsOf(design: Design, id: string): string[] {
   return design.order.filter((x) => out.has(x))
 }
 
-/** Removes nodes and everything that depends on them. */
-export const remove = (ids: readonly string[]): Op[] =>
-  ids.map((id) => ({ t: 'remove', id, cascade: true }))
+/**
+ * Removes nodes and everything that depends on them. An id that is not in the design (a stale
+ * selection) is skipped, and so is a node that another listed node's removal already takes with
+ * it: removing it a second time would refuse the whole change.
+ */
+export function remove(design: Design, ids: readonly string[]): Op[] {
+  const present = [...new Set(ids)].filter((id) => Object.hasOwn(design.nodes, id))
+  const taken = new Set(present.flatMap((id) => dependentsOf(design, id)))
+  return present.filter((id) => !taken.has(id)).map((id) => ({ t: 'remove', id, cascade: true }))
+}
 
 type Fields = Record<string, unknown>
 const METAL_KEYS = ['material', 'finish', 'plating'] as const
