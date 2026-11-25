@@ -1,4 +1,4 @@
-import type { METERS, UsageEvent } from '@pave/schema'
+import type { JobStage, METERS, UsageEvent } from '@pave/schema'
 import { gte, sum } from 'drizzle-orm'
 import { actorRunId, type Ctx } from './context'
 import * as t from './db/schema'
@@ -19,7 +19,22 @@ export interface NewUsage {
   idempotencyKey?: string
   runId?: string | null
   pieceId?: string | null
+  /**
+   * The project stage it was spent on. Omitted: an image generation is Design work and a render
+   * is Render work; anything else counts against no stage unless its caller says.
+   */
+  stage?: JobStage | null
 }
+
+/** The stage a usage event counts against when its caller does not say. */
+export const stageOfUsage = (event: Pick<NewUsage, 'meter' | 'stage'>): JobStage | null =>
+  event.stage !== undefined
+    ? event.stage
+    : event.meter === 'image'
+      ? 'design'
+      : event.meter === 'render'
+        ? 'render'
+        : null
 
 export const toMicros = (usd: number): number => Math.round(usd * 1_000_000)
 export const fromMicros = (micros: number): number => micros / 1_000_000
@@ -38,6 +53,7 @@ export async function recordUsage(ctx: Ctx, event: NewUsage): Promise<boolean> {
     userId: ctx.user.id,
     runId: event.runId ?? actorRunId(ctx.actor),
     pieceId: event.pieceId ?? null,
+    stage: stageOfUsage(event),
   })
   return row !== undefined
 }
@@ -83,5 +99,6 @@ export const toUsageEvent = (r: typeof t.usageEvent.$inferSelect): UsageEvent =>
   userId: r.userId,
   runId: r.runId,
   pieceId: r.pieceId,
+  stage: r.stage,
   at: r.occurredAt.toISOString(),
 })

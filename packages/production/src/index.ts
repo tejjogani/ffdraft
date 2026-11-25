@@ -3,7 +3,9 @@ export {
   type CostEstimate,
   type CostInput,
   type CostLine,
+  type CostSummary,
   PLACEHOLDER_NOTE,
+  roughCost,
   type RateInput,
   type RateSource,
 } from './cost'

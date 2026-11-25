@@ -1,0 +1,258 @@
+{
+  "runs": [
+    [
+      {
+        "paceMs": 30,
+        "content": [
+          {
+            "type": "text",
+            "text": "Let me look at the ring first."
+          },
+          {
+            "type": "tool_use",
+            "name": "scenes_list",
+            "input": {
+              "pieceId": "{{pieceId}}"
+            }
+          },
+          {
+            "type": "tool_use",
+            "name": "scenes_suggest",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "aspect": "1:1"
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 30,
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "A four-claw solitaire with a round centre stone: the hero three-quarter, the profile for the gallery, and a macro on the stone. No saved shots. Ask what the pictures are for, the shapes and the motion, with the defaults ready."
+          },
+          {
+            "type": "tool_use",
+            "name": "chat_ask",
+            "input": {
+              "intro": "A four-claw solitaire with a round centre stone, about 1 ct. Three quick choices, and the defaults are ready if you just press Go.",
+              "questions": "{{questions}}"
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 30,
+        "content": [
+          {
+            "type": "text",
+            "text": "Doing it: three stills on studio white (hero three-quarter, profile for the gallery, a macro on the stone) and a short 360° turntable, all square, at draft size so you can judge them quickly. I am placing each camera now and will check the framing before anything renders."
+          },
+          {
+            "type": "tool_use",
+            "name": "scenes_create",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "title": "Hero three-quarter",
+              "scene": {
+                "look": "catalog-white",
+                "camera": "{{suggest:hero}}",
+                "sparkle": 0.6,
+                "output": {
+                  "width": 640,
+                  "height": 640,
+                  "quality": "preview"
+                }
+              }
+            }
+          },
+          {
+            "type": "tool_use",
+            "name": "scenes_create",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "title": "Profile",
+              "scene": {
+                "look": "catalog-white",
+                "camera": {
+                  "preset": "custom",
+                  "position": [
+                    0,
+                    -40,
+                    6
+                  ],
+                  "target": [
+                    0,
+                    0,
+                    6
+                  ],
+                  "focalLength": 100
+                },
+                "sparkle": 0.6,
+                "output": {
+                  "width": 640,
+                  "height": 640,
+                  "quality": "preview"
+                }
+              }
+            }
+          },
+          {
+            "type": "tool_use",
+            "name": "scenes_create",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "title": "Macro on the stone",
+              "scene": {
+                "look": "catalog-white",
+                "camera": "{{suggest:macro}}",
+                "sparkle": 0.6,
+                "output": {
+                  "width": 640,
+                  "height": 640,
+                  "quality": "preview"
+                }
+              }
+            }
+          },
+          {
+            "type": "tool_use",
+            "name": "scenes_create",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "title": "Turntable",
+              "scene": {
+                "look": "catalog-white",
+                "camera": "{{suggest:hero}}",
+                "sparkle": 0.6,
+                "output": {
+                  "width": 256,
+                  "height": 256,
+                  "quality": "preview"
+                },
+                "animation": {
+                  "type": "turntable",
+                  "seconds": 1,
+                  "fps": 24
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Checking the framing of all four through their own cameras."
+          },
+          {
+            "type": "tool_use",
+            "name": "scenes_capture",
+            "input": {
+              "ids": [
+                "{{shot1}}",
+                "{{shot2}}",
+                "{{shot3}}",
+                "{{shot4}}"
+              ],
+              "size": 320
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "text",
+            "text": "Hero, macro and turntable frame well. The **Profile** is cut off: that camera stands too close in front. Moving its camera round to the side, at eye level, so the gallery under the stone shows."
+          },
+          {
+            "type": "tool_use",
+            "name": "scenes_update",
+            "input": {
+              "id": "{{shot2}}",
+              "patch": {
+                "camera": "{{suggest:profile}}"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "scenes_capture",
+            "input": {
+              "ids": [
+                "{{shot2}}"
+              ],
+              "size": 320
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "text",
+            "text": "The profile holds the whole ring now. Rendering the three stills and the turntable."
+          },
+          {
+            "type": "tool_use",
+            "name": "renders_create",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "sceneId": "{{shot1}}",
+              "title": "Hero three-quarter"
+            }
+          },
+          {
+            "type": "tool_use",
+            "name": "renders_create",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "sceneId": "{{shot2}}",
+              "title": "Profile"
+            }
+          },
+          {
+            "type": "tool_use",
+            "name": "renders_create",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "sceneId": "{{shot3}}",
+              "title": "Macro on the stone"
+            }
+          },
+          {
+            "type": "tool_use",
+            "name": "renders_create",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "sceneId": "{{shot4}}",
+              "title": "Turntable"
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "Hero: the stone faces the lens and the claws are crisp. Profile: the gallery and the head height read. Macro: the table and claws are sharp, the band falls soft. The turntable loops; I cannot watch it, only its poster."
+          },
+          {
+            "type": "text",
+            "text": "The set is in. **Hero three-quarter**: the stone faces the lens and the claws are crisp against the white. **Profile**: the gallery under the stone and the height of the head read clearly. **Macro**: the table and claws are sharp, with the band falling soft behind. The **turntable** is a one-second loop at draft size; I cannot watch video, so play it in the filmstrip and say if the speed or angle should change. Swap, star or set a cover as you like."
+          }
+        ]
+      }
+    ]
+  ]
+}

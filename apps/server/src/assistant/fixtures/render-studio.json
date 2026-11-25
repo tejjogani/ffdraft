@@ -1,0 +1,215 @@
+{
+  "runs": [
+    [
+      {
+        "paceMs": 30,
+        "content": [
+          {
+            "type": "text",
+            "text": "I will set up two shots for this ring, Hero and Top, on studio white, render them, look at each take, and re-render what falls short."
+          },
+          {
+            "type": "tool_use",
+            "name": "scenes_list",
+            "input": {
+              "pieceId": "{{pieceId}}"
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "No saved shots yet, so I will save the two."
+          },
+          {
+            "type": "tool_use",
+            "name": "scenes_create",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "title": "Hero",
+              "scene": {
+                "look": "catalog-white",
+                "camera": {
+                  "preset": "hero",
+                  "focalLength": 90
+                },
+                "output": {
+                  "width": 640,
+                  "height": 640,
+                  "quality": "preview"
+                }
+              }
+            }
+          },
+          {
+            "type": "tool_use",
+            "name": "scenes_create",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "title": "Top",
+              "scene": {
+                "look": "catalog-white",
+                "camera": {
+                  "preset": "top",
+                  "focalLength": 90
+                },
+                "output": {
+                  "width": 640,
+                  "height": 640,
+                  "quality": "preview"
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Both shots are saved. Rendering them now; each takes under a minute of this computer's time."
+          },
+          {
+            "type": "tool_use",
+            "name": "renders_create",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "sceneId": "{{scene1}}",
+              "title": "Hero"
+            }
+          },
+          {
+            "type": "tool_use",
+            "name": "renders_create",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "sceneId": "{{scene2}}",
+              "title": "Top"
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "Hero: sharp claws, the stone has contrast, framing fills the frame. Top: the table reads, but the band falls into shadow on the left; a stronger key would separate the shank from the white."
+          },
+          {
+            "type": "text",
+            "text": "The **Hero** take works: the claws are crisp and the centre stone has contrast against the white. The **Top** take is a little flat: the shank on the left falls into grey and does not separate from the backdrop. I will raise the key by 30% and render the Top shot again."
+          },
+          {
+            "type": "tool_use",
+            "name": "scenes_update",
+            "input": {
+              "id": "{{scene2}}",
+              "patch": {
+                "environment": {
+                  "intensity": 1.3
+                }
+              }
+            }
+          },
+          {
+            "type": "tool_use",
+            "name": "renders_create",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "sceneId": "{{scene2}}",
+              "title": "Top",
+              "retryOf": "{{take2}}",
+              "note": "brighter key"
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "text",
+            "text": "The brighter key fixed the Top: the shank now reads against the white without blowing the table.\n\n- **Hero**: first take kept.\n- **Top**: re-rendered once with a 30% brighter key.\n\nBoth are preview takes (640 px) from Blender. The set is ready for your review: swap a take, star one, or set the cover."
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "text",
+            "text": "One Hero take in each metal, as a pair you can compare."
+          },
+          {
+            "type": "tool_use",
+            "name": "renders_create",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "title": "Hero",
+              "groupId": "metals-1",
+              "variantLabel": "18k rose gold",
+              "scene": {
+                "look": "catalog-white",
+                "camera": {
+                  "preset": "hero",
+                  "focalLength": 90
+                },
+                "output": {
+                  "width": 640,
+                  "height": 640,
+                  "quality": "preview"
+                },
+                "overrides": {
+                  "*": {
+                    "material": "au18k-rose"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "tool_use",
+            "name": "renders_create",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "title": "Hero",
+              "groupId": "metals-1",
+              "variantLabel": "Platinum",
+              "scene": {
+                "look": "catalog-white",
+                "camera": {
+                  "preset": "hero",
+                  "focalLength": 90
+                },
+                "output": {
+                  "width": 640,
+                  "height": 640,
+                  "quality": "preview"
+                },
+                "overrides": {
+                  "*": {
+                    "material": "pt950"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "text",
+            "text": "Both metals are in. The rose gold warms the white backdrop and makes the diamond look whiter by contrast; the platinum reads cooler and closer to the stone. They are grouped as one variant set in the Render tab."
+          }
+        ]
+      }
+    ]
+  ]
+}

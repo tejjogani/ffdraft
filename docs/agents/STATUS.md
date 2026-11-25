@@ -1,10 +1,47 @@
 # Live status of agents and tasks
 
-_Generated 25 Nov 2026 10:14 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 25 Nov 2026 18:39 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+
+## Spec as the source of truth (lane A, A7)
+
+| Agent | State | Outcome |
+|---|---|---|
+| plan | running or interrupted |  |
+
+## Release verification (lane A, A3)
+
+Branch `claude/busy-bardeen-o482lo`, head: 61ce861 Agents: lessons from running many agents at once; trial, Diaex connection and release check on the status page
+
+| Agent | State | Outcome |
+|---|---|---|
+| verify:1 | running or interrupted |  |
+
+## Trial on five real pieces (lane A)
+
+| Agent | State | Outcome |
+|---|---|---|
+| setup | done | The trial install is ready and the HOWTO is proven, but I stopped another session's Pavé server by mistake while cleaning up. That comes first. ## Incident: my cleanup killed another session's server - **What I did:** a… |
+| trial:solitaire | running or interrupted |  |
+| trial:halo | running or interrupted |  |
+
+## Diaex connection (lane A)
+
+| Agent | State | Outcome |
+|---|---|---|
+| build | running or interrupted |  |
+
+## Integration and release (lane A, A3)
+
+Branch `claude/busy-bardeen-o482lo`, head: 61ce861 Agents: lessons from running many agents at once; trial, Diaex connection and release check on the status page
+
+| Agent | State | Outcome |
+|---|---|---|
+| merge | running or interrupted |  |
+| verify:1 | running or interrupted |  |
 
 ## Assistant build (lane A, A1)
 
-Branch `claude/assistant-build`, head: 342481a Verify the assistant harness against a strict fake Claude API, with the founder's journeys recorded by Claude and replayed
+Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix commit as superseded
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -24,13 +61,20 @@ Branch `claude/assistant-build`, head: 342481a Verify the assistant harness agai
 | build:flow | done | commit c4eddee. Step 11 is built and committed as c4eddee on ai/assistant, on top of 7df93f9. It is not pushed. - **The assistant window.** It has three forms. Docked, it sits in the right-hand sidebar. Pulled out, it is a floating fro… |
 | build:pavefile | done | commit ed6cf7c. I built step 12, the native Pavé file, and committed it as ed6cf7c on ai/assistant, on top of c4eddee. It is not pushed. The tests, typecheck and three Playwright passes all pass. - **The file:** a zip with: - `mimetype… |
 | build:light | done | commit 499b203. Step 14 is built and committed as 499b203 on ai/assistant, on top of 95f4336. It is not pushed. Orbiting is now 22–37 frames a second in the slow test setup, up from 1–2. A slider step shows in 0.2–0.34 s, down from 2.1… |
-| review:api | running or interrupted |  |
-| review:safety | running or interrupted |  |
-| build:ideas | running or interrupted |  |
+| review:api | done | 2 major, 3 minor. The request builder is mostly sound on every model and tier. Every request it builds keeps adaptive thinking with summarized display and sets effort to high ex… |
+| review:safety | done | 1 blocker, 4 major, 2 minor. FAIL. The key itself is handled well, but the security and cost rules are broken in several places. What held up when tested: the saved key is sealed with AES-… |
+| build:ideas | done | commit 8df7d93. Step 17 is built and committed as 8df7d93 on ai/assistant, on top of 342481a. It is not pushed. The Design stage no longer holds 3D: it is the piece's design board, a board of pictures, sketches and models. - **Design b… |
+| build:imagegen | done | commit 1149e99. Step 18 is built and committed as 1149e99 on ai/assistant, on top of 8df7d93. It is not pushed. The design board can now generate concept images. - **How it works.** The designer writes a request and picks board picture… |
+| review:e2e | done | 1 blocker, 2 major, 11 minor. FAIL for the founder's first hour. One blocker, two majors, and a set of polish issues, all reproduced in a real browser. The setup: the studio as committed, `… |
+| review:design | done | 6 major, 15 minor. FAIL on the premium-design bar, with no blockers. Nothing I saw puts the founder's test, money or the key at risk. Six major issues break flows or the design-l… |
+| fix:1 | done | fixed 31, not fixed 15; commit 9f8675c |
+| verify:1 | done | 2 major, 7 minor. Most claimed fixes hold. Both blockers are closed: sec-1 (a DNS-rebound Host now gets 403 on RPC, assets and events) and fh-1 (a custom spec now gets a plain n… |
+| fix:2 | done | fixed 2, not fixed 0; commit f57efe2 |
+| verify:2 | done | 5 minor. Both fixes hold where they were aimed. Four small issues are still open and none of them blocks. dsn-4: the Facts panel and the readout now agree in every stat… |
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 9098679 Status: agents and tasks, 09:54 UTC
+Branch `claude/busy-bardeen-o482lo`, head: 61ce861 Agents: lessons from running many agents at once; trial, Diaex connection and release check on the status page
 
 | Agent | State | Outcome |
 |---|---|---|

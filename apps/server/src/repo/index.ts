@@ -29,6 +29,9 @@ export class Repo extends OrgScope {
   }
 
   readonly settings = this.scope(t.orgSettings)
+  readonly assistantKeys = this.scope(t.assistantKey)
+  readonly imageKeys = this.scope(t.imageKey)
+  readonly imageBriefs = this.scope(t.imageBrief)
   readonly collections = this.scope(t.collection)
   readonly pieces = this.scope(t.piece)
   readonly changes = this.scope(t.designChange)
@@ -38,6 +41,7 @@ export class Repo extends OrgScope {
   readonly boards = this.scope(t.board)
   readonly references = this.scope(t.reference)
   readonly scenes = this.scope(t.renderScene)
+  readonly sceneChanges = this.scope(t.renderSceneChange)
   readonly renders = this.scope(t.renderJob)
   readonly models = this.scope(t.brandModel)
   readonly shots = this.scope(t.modelShot)
@@ -49,6 +53,7 @@ export class Repo extends OrgScope {
   readonly messages = this.scope(t.agentMessage)
   readonly feedback = this.scope(t.runFeedback)
   readonly usage = this.scope(t.usageEvent)
+  readonly planClaims = this.scope(t.planClaim)
   readonly audit = this.scope(t.auditLog)
   readonly invitations = new ScopedTable(
     this.db,

@@ -10,9 +10,19 @@ import {
   type ClientToolParsedInput,
   clientTools,
 } from '@pave/schema'
+import { useEffect } from 'react'
+import { onServerEvent } from './events'
+import { rpc } from './rpc'
+
+/** What the server adds to a request besides the tool's input. */
+export interface ClientToolCall {
+  /** For a capture: the design version the server committed, to wait for before drawing. */
+  atVersion: number | null
+}
 
 type Handler<N extends ClientToolName> = (
   input: ClientToolParsedInput<N>,
+  call: ClientToolCall,
 ) => Promise<ClientToolOutput<N>>
 
 const handlers = new Map<ClientToolName, Handler<never>>()
@@ -34,11 +44,36 @@ export const canRunClientTool = (name: ClientToolName): boolean => handlers.has(
 export async function runClientTool<N extends ClientToolName>(
   name: N,
   input: unknown,
+  call: ClientToolCall = { atVersion: null },
 ): Promise<ClientToolOutput<N>> {
   const handler = handlers.get(name) as Handler<N> | undefined
-  if (!handler) throw new Error(`No open screen can run ${name}`)
+  if (!handler) throw new Error(`No open screen in this window can run ${name}`)
   const parsed = clientTools[name].input.parse(input) as ClientToolParsedInput<N>
-  return handler(parsed)
+  return handler(parsed, call)
+}
+
+/**
+ * Answers the assistant's client-tool requests addressed to this window (`client.request`),
+ * with `client.respond`. A window that cannot run the tool says so, so the server can wait for
+ * another window or draw a capture itself. Mount once, in the authenticated shell.
+ */
+export function useClientToolRelay(): void {
+  useEffect(
+    () =>
+      onServerEvent('client.request', (e) => {
+        void (async () => {
+          try {
+            const output = await runClientTool(e.tool, e.input, { atVersion: e.atVersion ?? null })
+            await rpc.call('client.respond', { requestId: e.requestId, output })
+          } catch (err) {
+            const error = (err instanceof Error ? err.message : String(err)).slice(0, 2000)
+            // Another window may already have answered; then this answer is not wanted.
+            await rpc.call('client.respond', { requestId: e.requestId, error }).catch(() => {})
+          }
+        })()
+      }),
+    [],
+  )
 }
 
 // Development and e2e hook: lets a test call a client tool the way the assistant's relay will.

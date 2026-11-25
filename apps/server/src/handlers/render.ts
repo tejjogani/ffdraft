@@ -1,12 +1,21 @@
-import { mergePatch, type RenderJob, RenderSceneSchema, type SavedScene } from '@pave/schema'
-import { and, asc, desc, eq, inArray, isNull, lt, max, type SQL } from 'drizzle-orm'
-import { z } from 'zod'
+import {
+  BROWSER_TAKE_SECONDS,
+  estimateTakeSeconds,
+  rateFrom,
+  shotChangeRefusal,
+} from '@pave/render'
+import { type RenderJob, renderCost, type SavedScene } from '@pave/schema'
+import { and, asc, desc, eq, gt, inArray, isNull, lt, max, type SQL } from 'drizzle-orm'
+import { captureShots, suggestShots } from '../cinema'
 import { type Ctx, publish } from '../context'
 import * as t from '../db/schema'
-import { AppError, badRequest, conflict, forbidden } from '../errors'
+import { badRequest, conflict, forbidden } from '../errors'
 import { createId } from '../ids'
 import { renderHandle, stopJob, submitJob, updateRender } from '../jobs'
 import { ensure, ensureAll, getPiece, getRender, getScene } from '../lookups'
+import { claim, renderKeys, settle } from '../plans'
+import { noteShotChange, recordRenderFeedback, shotAgent, takeAgent } from '../render-feedback'
+import { changeScene, patchScene, revertScene, sceneHistory } from '../scenes'
 import { isTerminal, publishJob, serviceContext } from '../service-context'
 import { toPiece } from './pieces'
 import type { HandlerGroup } from './types'
@@ -29,6 +38,7 @@ export const toRenderJob = (r: RenderRow, pieceVersion: number): RenderJob => ({
   status: r.status,
   progress: r.progress,
   sourceVersion: r.sourceVersion,
+  sceneHash: r.sceneHash,
   stale: r.sourceVersion < pieceVersion,
   assetIds: r.assetIds,
   critique: r.critique ?? null,
@@ -39,6 +49,7 @@ export const toRenderJob = (r: RenderRow, pieceVersion: number): RenderJob => ({
   device: r.device,
   error: r.error,
   actor: r.actor,
+  createdBy: r.createdBy,
   createdAt: r.createdAt.toISOString(),
   finishedAt: r.finishedAt?.toISOString() ?? null,
 })
@@ -65,6 +76,7 @@ const toSavedScene = (r: SceneRow): SavedScene => ({
   title: r.title,
   scene: r.scene,
   position: r.position,
+  takeId: r.takeId,
   updatedAt: r.updatedAt.toISOString(),
 })
 
@@ -77,18 +89,89 @@ const sceneScope = (pieceId: string | null): SQL =>
 const announceScene = (ctx: Ctx, row: SceneRow) =>
   publish(ctx, { type: 'scene.updated', sceneId: row.id, pieceId: row.pieceId })
 
-const isObject = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v)
+/** Which engine `auto` means here: Blender when the queue is set up and found it. */
+export function engineFor(ctx: Ctx, asked: 'auto' | 'blender' | 'browser'): 'blender' | 'browser' {
+  if (asked !== 'auto') return asked
+  return ctx.services.isConfigured('renderQueue') && ctx.services.capabilities().blender
+    ? 'blender'
+    : 'browser'
+}
 
-/** Paths a merge patch writes that the parsed result does not have (stripped as unknown). */
-function strippedKeys(patch: Record<string, unknown>, parsed: unknown, path = ''): string[] {
-  if (!isObject(parsed)) return []
-  return Object.entries(patch).flatMap(([k, v]) => {
-    const at = path ? `${path}.${k}` : k
-    if (v === null) return []
-    if (!(k in parsed)) return [at]
-    return isObject(v) ? strippedKeys(v, parsed[k], at) : []
+/** This machine's recent finished Blender takes (not cache hits), for the time estimate. */
+async function renderHistory(ctx: Ctx) {
+  const rows = await ctx.repo.renders.many({
+    where: and(
+      eq(t.renderJob.engine, 'blender'),
+      eq(t.renderJob.status, 'done'),
+      gt(t.renderJob.seconds, 0),
+    ),
+    orderBy: desc(t.renderJob.finishedAt),
+    limit: 20,
   })
+  return rows.map((r) => ({
+    scene: r.requestedScene ?? r.scene,
+    autoTune: r.autoTune,
+    seconds: r.seconds ?? 0,
+    device: r.device,
+  }))
+}
+
+/**
+ * A take put in a shot's place in the set: kept, if the assistant rendered it; otherwise the
+ * assistant's take it replaced (the shot's newest, or the one swapped in before) was swapped out.
+ */
+async function noteSwap(ctx: Ctx, shot: SceneRow, take: RenderRow): Promise<void> {
+  if (ctx.actor.type !== 'user') return
+  const mine = takeAgent(take)
+  if (mine) {
+    await recordRenderFeedback(ctx, {
+      agent: mine,
+      kind: 'kept',
+      target: `render:${take.id}`,
+      detail: `Swapped the take “${take.title}”, which the assistant rendered, into the set for “${shot.title}”.`,
+    })
+    return
+  }
+  const others = await ctx.repo.renders.many({
+    where: and(eq(t.renderJob.sceneId, shot.id), eq(t.renderJob.status, 'done')),
+    orderBy: desc(t.renderJob.createdAt),
+    limit: 10,
+  })
+  const replaced = others.find((r) => r.id !== take.id && takeAgent(r))
+  const agent = replaced && takeAgent(replaced)
+  if (agent)
+    await recordRenderFeedback(ctx, {
+      agent,
+      kind: 'swapped',
+      target: `render:${replaced.id}`,
+      detail: `Put another take in the set for “${shot.title}” instead of the assistant’s.`,
+    })
+}
+
+/** A person rendered again what the assistant rendered (`retryOf`) or set up (the shot). */
+async function noteRerender(ctx: Ctx, row: RenderRow, shot: SceneRow | null): Promise<void> {
+  if (ctx.actor.type !== 'user') return
+  const original = row.retryOf
+    ? await ctx.repo.renders.first(eq(t.renderJob.id, row.retryOf))
+    : null
+  const fromTake = original ? takeAgent(original) : null
+  if (original && fromTake) {
+    await recordRenderFeedback(ctx, {
+      agent: fromTake,
+      kind: 'rerendered',
+      target: `render:${original.id}`,
+      detail: `Rendered “${original.title}” again by hand${row.note ? ` (${row.note})` : ''}.`,
+    })
+    return
+  }
+  const fromShot = shot ? await shotAgent(ctx, shot) : null
+  if (shot && fromShot)
+    await recordRenderFeedback(ctx, {
+      agent: fromShot,
+      kind: 'rerendered',
+      target: `scene:${shot.id}`,
+      detail: `Rendered the shot “${shot.title}”, which the assistant set up, by hand.`,
+    })
 }
 
 export const render: HandlerGroup<'renders' | 'scenes'> = {
@@ -114,38 +197,60 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
       scene: input.scene,
       position: input.position ?? (last?.position ?? 0) + 1,
       createdBy: ctx.user.id,
+      actor: ctx.actor,
     })
     announceScene(ctx, row)
     return toSavedScene(row)
   },
 
-  'scenes.update': async (ctx, { id, patch, ...rest }) => {
-    const current = await getScene(ctx, id)
-    let scene = current.scene
-    if (patch) {
-      const parsed = RenderSceneSchema.safeParse(mergePatch(current.scene, patch))
-      if (!parsed.success) throw badRequest(z.prettifyError(parsed.error), parsed.error.issues)
-      // Parsing strips unknown keys; a misspelt one must fail, not "succeed" with no change.
-      const unknown = strippedKeys(patch, parsed.data)
-      if (unknown.length)
-        throw new AppError('bad_request', `Unknown scene fields: ${unknown.join(', ')}`, {
-          paths: unknown,
-        })
-      scene = parsed.data
+  'scenes.update': async (ctx, { id, patch, takeId, ...rest }) => {
+    let swappedIn: RenderRow | null = null
+    if (takeId) {
+      const current = await getScene(ctx, id)
+      const take = await getRender(ctx, takeId)
+      if (take.pieceId !== current.pieceId) throw badRequest('That take is of another piece')
+      if (take.status !== 'done') throw conflict('Only a finished take can go in the set')
+      swappedIn = take
     }
-    const [row] = await ctx.repo.scenes.update(eq(t.renderScene.id, id), {
-      ...rest,
-      scene,
-      updatedAt: new Date(),
+    let before: SceneRow | null = null
+    const { row } = await changeScene(ctx, id, async (current) => {
+      before = current
+      return {
+        scene: patch ? patchScene(current.scene, patch) : current.scene,
+        fields: { ...rest, ...(takeId === undefined ? {} : { takeId }) },
+      }
     })
-    announceScene(ctx, row!)
-    return toSavedScene(row!)
+    announceScene(ctx, row)
+    if (before) await noteShotChange(ctx, row, (before as SceneRow).scene, row.scene)
+    if (swappedIn) await noteSwap(ctx, row, swappedIn)
+    return toSavedScene(row)
+  },
+
+  'scenes.suggest': (ctx, input) => suggestShots(ctx, input, ctx.signal),
+
+  'scenes.capture': (ctx, input) => captureShots(ctx, input, ctx.signal),
+
+  'scenes.history': (ctx, { id, limit }) => sceneHistory(ctx, id, limit),
+
+  'scenes.revert': async (ctx, { id, changeId }) => {
+    const { row, change } = await revertScene(ctx, id, changeId)
+    announceScene(ctx, row)
+    return { scene: toSavedScene(row), change: change! }
   },
 
   'scenes.delete': async (ctx, { id }) => {
     const row = await getScene(ctx, id)
+    // Read before the delete: the shot's history goes with it.
+    const agent = ctx.actor.type === 'user' ? await shotAgent(ctx, row) : null
     await ctx.repo.scenes.delete(eq(t.renderScene.id, id))
     announceScene(ctx, row)
+    if (agent)
+      await recordRenderFeedback(ctx, {
+        agent,
+        kind: 'removed',
+        target: `scene:${row.id}`,
+        detail: `Deleted the shot “${row.title}”, which the assistant set up.`,
+      })
     return { ok: true }
   },
 
@@ -156,6 +261,7 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
       where: and(
         eq(t.renderJob.purpose, input.purpose),
         input.pieceId ? eq(t.renderJob.pieceId, input.pieceId) : undefined,
+        input.status ? inArray(t.renderJob.status, input.status) : undefined,
         before ? lt(t.renderJob.createdAt, before) : undefined,
       ),
       orderBy: desc(t.renderJob.createdAt),
@@ -165,6 +271,40 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
   },
 
   'renders.get': async (ctx, { id }) => one(ctx, await getRender(ctx, id)),
+
+  'renders.estimate': async (ctx, input) => {
+    const piece = await getPiece(ctx, input.pieceId)
+    const scenes = await Promise.all(
+      input.takes.map(async (take) => {
+        if (take.scene) return take.scene
+        const saved = await getScene(ctx, take.sceneId!)
+        if (saved.pieceId !== null && saved.pieceId !== piece.id)
+          throw badRequest('That shot belongs to another piece')
+        return saved.scene
+      }),
+    )
+    const engine = engineFor(ctx, input.engine)
+    if (engine === 'browser')
+      return {
+        engine,
+        seconds: scenes.length * BROWSER_TAKE_SECONDS,
+        takes: scenes.map(() => BROWSER_TAKE_SECONDS),
+        basis: 'browser' as const,
+        device: null,
+      }
+    // The device Cycles reported last: the estimate learns from that device's takes.
+    const device =
+      (await ctx.services.optional('renderEngine')?.status(serviceContext(ctx)))?.device ?? null
+    const rate = rateFrom(await renderHistory(ctx), device)
+    const takes = scenes.map((s) => Math.round(estimateTakeSeconds(s, input.autoTune, rate)))
+    return {
+      engine,
+      seconds: takes.reduce((a, b) => a + b, 0),
+      takes,
+      basis: rate.basis,
+      device,
+    }
+  },
 
   // Blender jobs go to the render queue; browser jobs wait for the user's studio to render them
   // and deliver the result with renders.complete.
@@ -176,35 +316,57 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     await ensure(getRender, ctx, input.retryOf)
     // Asking for Blender without a render queue is refused up front (501), before any row exists.
     if (input.engine === 'blender') ctx.services.require('renderQueue')
-    const engine =
-      input.engine === 'blender' ||
-      (input.engine === 'auto' &&
-        ctx.services.isConfigured('renderQueue') &&
-        ctx.services.capabilities().blender)
-        ? 'blender'
-        : 'browser'
+    const engine = engineFor(ctx, input.engine)
     const scene = input.scene ?? saved!.scene
-    const row = await ctx.repo.renders.insert({
-      id: createId('rnd'),
-      pieceId: piece.id,
-      title: input.title ?? saved?.title ?? piece.title,
-      scene,
-      requestedScene: scene,
-      sceneId: saved?.id ?? null,
-      groupId: input.groupId ?? null,
-      variantLabel: input.variantLabel ?? null,
-      purpose: input.purpose,
-      engine,
-      autoTune: input.autoTune,
-      status: 'queued',
-      sourceVersion: piece.version,
-      retryOf: input.retryOf ?? null,
-      note: input.note ?? null,
-      actor: ctx.actor,
-      createdBy: ctx.user.id,
-    })
+    // A locked shot is rendered as it is framed: the assistant cannot re-frame it in passing.
+    if (saved && input.scene && ctx.actor.type === 'agent') {
+      const refusal = shotChangeRefusal(saved.scene, input.scene, 'agent')
+      if (refusal) throw conflict(refusal)
+    }
+    const id = createId('rnd')
+    // A Blender take claims its render before anything is queued; the take settling settles
+    // the claim (updateRender). Browser takes are previews and never count.
+    // An animation counts as more than one render: one claim per render it counts as, all or none.
+    const keys = renderKeys(id, renderCost(scene))
+    if (engine === 'blender') {
+      const taken: string[] = []
+      try {
+        for (const key of keys) {
+          await claim(ctx, { allowance: 'render', key, subject: 'render', pieceId: piece.id })
+          taken.push(key)
+        }
+      } catch (err) {
+        for (const key of taken) await settle(ctx, key, 'released')
+        throw err
+      }
+    }
+    const row = await ctx.repo.renders
+      .insert({
+        id,
+        pieceId: piece.id,
+        title: input.title ?? saved?.title ?? piece.title,
+        scene,
+        requestedScene: scene,
+        sceneId: saved?.id ?? null,
+        groupId: input.groupId ?? null,
+        variantLabel: input.variantLabel ?? null,
+        purpose: input.purpose,
+        engine,
+        autoTune: input.autoTune,
+        status: 'queued',
+        sourceVersion: piece.version,
+        retryOf: input.retryOf ?? null,
+        note: input.note ?? null,
+        actor: ctx.actor,
+        createdBy: ctx.user.id,
+      })
+      .catch(async (err: unknown) => {
+        if (engine === 'blender') for (const key of keys) await settle(ctx, key, 'released')
+        throw err
+      })
     const job = await one(ctx, row)
     announce(ctx, row)
+    await noteRerender(ctx, row, saved)
     if (engine === 'blender') {
       const handle = renderHandle(ctx, job)
       const subject = await toPiece(ctx, piece)
@@ -215,7 +377,7 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     return job
   },
 
-  'renders.complete': async (ctx, { id, assetIds, error, seconds, device }) => {
+  'renders.complete': async (ctx, { id, assetIds, error, seconds, device, sceneHash }) => {
     const job = await getRender(ctx, id)
     if (job.engine !== 'browser') throw conflict('Only browser renders are completed this way')
     if (job.createdBy !== ctx.user.id)
@@ -232,6 +394,7 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
       error: error ?? null,
       seconds: seconds ?? null,
       device: device ?? null,
+      sceneHash: error === undefined ? (sceneHash ?? null) : null,
     })
     // First write wins: a second delivery, or one after a cancel, is refused.
     if (!row) throw conflict(`This render is already ${job.status}`)
@@ -240,9 +403,17 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
   },
 
   'renders.update': async (ctx, { id, ...patch }) => {
-    await getRender(ctx, id)
+    const before = await getRender(ctx, id)
     const [row] = await ctx.repo.renders.update(eq(t.renderJob.id, id), patch)
     announce(ctx, row!)
+    const agent = takeAgent(before)
+    if (agent && patch.starred !== undefined && patch.starred !== before.starred)
+      await recordRenderFeedback(ctx, {
+        agent,
+        kind: patch.starred ? 'starred' : 'unstarred',
+        target: `render:${id}`,
+        detail: `${patch.starred ? 'Starred' : 'Unstarred'} the take “${before.title}”, which the assistant rendered.`,
+      })
     return one(ctx, row!)
   },
 
@@ -261,6 +432,14 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     const job = await getRender(ctx, id)
     if (!isTerminal(job.status)) throw conflict('Cancel this render before deleting it')
     await ctx.repo.renders.delete(eq(t.renderJob.id, id))
+    const agent = takeAgent(job)
+    if (agent)
+      await recordRenderFeedback(ctx, {
+        agent,
+        kind: 'deleted',
+        target: `render:${id}`,
+        detail: `Deleted the take “${job.title}”, which the assistant rendered.`,
+      })
     return { ok: true }
   },
 

@@ -3,6 +3,8 @@ import type { SearchResult, ServerEvent } from '@pave/schema'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { putAsset } from './assets/assets'
+import { insertReferences } from './handlers/ideate'
+import { createImageGen } from './imagegen'
 import type { Services } from './services'
 import { BOOT_TIMEOUT, type Client, client, type TestServer, testServer } from './test/harness'
 
@@ -39,44 +41,17 @@ const capture = vi.fn<Services['capture']['capture']>(async (url) => ({
   file: { bytes: await png('#204060'), name: 'capture.png', mime: 'image/png' },
   sourceUrl: url,
 }))
-const generate = vi.fn<Services['imageGen']['generate']>(async (req) => ({
-  model: 'acme-1',
-  seed: 42,
-  images: Array.from({ length: req.count }, (_, i) => ({
-    bytes: new Uint8Array(),
-    name: `g${i}.png`,
-    mime: 'image/png',
-  })),
-}))
-
 beforeAll(async () => {
-  const tiny = await png()
-  generate.mockImplementation(async (req) => ({
-    model: 'acme-1',
-    seed: 42,
-    images: Array.from({ length: req.count }, (_, i) => ({
-      bytes: tiny,
-      name: `g${i}.png`,
-      mime: 'image/png',
-    })),
-  }))
   server = await testServer({
-    services: {
+    services: (runtime) => ({
       search: {
         search: async () => ({ results: [met], providers: ['met'], unavailable: [] }),
         resolve,
       },
       capture: { capture },
-      imageGen: {
-        estimate: async (req) => ({
-          provider: 'fake',
-          model: 'img-1',
-          usd: 0.04 * req.count,
-          seconds: 9,
-        }),
-        generate,
-      },
-    },
+      // The fake provider, so a request reaches the rights check (Claude is not needed before it).
+      ...createImageGen(runtime, { env: { PAVE_IMAGE_GEN: 'fake' } }).services,
+    }),
   })
   api = client(server)
 }, BOOT_TIMEOUT)
@@ -215,78 +190,87 @@ describe('saving references', () => {
     await api.call('references.remove', { ids: [link!.id, again!.id] })
     const [orphan] = await save({ assetId: captured.assetId! })
     expect(orphan).toMatchObject({ rights: 'viewOnly', source: { provider: 'web' } })
-    const refused = await api.fail('references.generate', {
+    const refused = await api.fail('references.brief', {
       boardId: board.id,
-      prompt: 'a ring like this',
+      request: 'a ring like this',
       referenceIds: [orphan!.id],
     })
     expect(refused.status).toBe(400)
+    expect(refused.error.message).toContain('view-only')
     expect((await api.fail('references.update', { id: orphan!.id })).status).toBe(400)
   })
 })
 
 describe('generation and lineage', () => {
-  it('snapshots parents with roles and seed, and walks lineage after a parent is deleted', async () => {
+  // Generating itself (brief, provider, check) is covered in imagegen/imagegen.test.ts; here the
+  // generated items are written as the pipeline writes them, to test lineage on its own.
+  it('snapshots parents with roles, and walks lineage after a parent is deleted', async () => {
     const board = await api.call('boards.create', { title: 'Gen' })
     const ctx = await server.runtime.context(server.runtime.local!)
     const asset = await putAsset(ctx, { bytes: await png(), name: 'mine.png' })
-    const [parent, view] = await api.call('references.save', {
+    const [parent] = await api.call('references.save', {
       boardId: board.id,
-      items: [{ assetId: asset.id, title: 'Silhouette' }, { url: 'https://example.com/v' }],
+      items: [{ assetId: asset.id, title: 'Silhouette' }],
     })
-    expect(
-      (
-        await api.fail('references.generate', {
-          boardId: board.id,
-          prompt: 'a pendant',
-          referenceIds: [parent!.id],
-          roles: [{ id: view!.id, role: 'style' }],
-        })
-      ).status,
-    ).toBe(400)
-
-    const [child] = await api.call('references.generate', {
-      boardId: board.id,
-      prompt: 'a pendant',
-      referenceIds: [parent!.id],
-      roles: [{ id: parent!.id, role: 'subject' }],
-      count: 1,
-      seed: 7,
-    })
-    expect(generate.mock.calls.at(-1)![0]).toMatchObject({
-      roles: [{ id: parent!.id, role: 'subject' }],
-      seed: 7,
-    })
-    expect(child!.generation).toMatchObject({
+    const generated = async (parentId: string, role: 'subject' | null) => {
+      const p = (await api.call('boards.get', { id: board.id })).references.find(
+        (r) => r.id === parentId,
+      )!
+      const [r] = await insertReferences(ctx, board.id, [
+        {
+          type: 'generated',
+          assetId: asset.id,
+          title: 'A pendant',
+          rights: 'own',
+          generation: {
+            prompt: 'a pendant',
+            model: 'fake-image-1',
+            seed: 42,
+            parentIds: [parentId],
+            inputs: [
+              {
+                id: p.id,
+                role,
+                title: p.title,
+                provider: p.source?.provider ?? null,
+                url: null,
+                credit: null,
+                license: null,
+                rights: p.rights,
+              },
+            ],
+            runId: null,
+          },
+        },
+      ])
+      return r!
+    }
+    const child = await generated(parent!.id, 'subject')
+    expect(child.generation).toMatchObject({
       seed: 42,
       parentIds: [parent!.id],
       inputs: [
         { id: parent!.id, role: 'subject', title: 'Silhouette', provider: 'upload', rights: 'own' },
       ],
     })
-    const [grandchild] = await api.call('references.generate', {
-      boardId: board.id,
-      prompt: 'tighter',
-      referenceIds: [child!.id],
-      count: 1,
-    })
+    const grandchild = await generated(child.id, null)
     const piece = await api.call('pieces.create', {
       kind: 'pendant',
-      origin: { kind: 'references', referenceIds: [grandchild!.id] },
+      origin: { kind: 'references', referenceIds: [grandchild.id] },
     })
 
     const fromParent = await api.call('references.lineage', { id: parent!.id })
     expect(fromParent.ancestors).toEqual([])
-    expect(fromParent.descendants.map((d) => d.id)).toEqual([child!.id, grandchild!.id])
+    expect(fromParent.descendants.map((d) => d.id)).toEqual([child.id, grandchild.id])
     expect(fromParent.pieces.map((p) => p.id)).toEqual([piece.id])
 
     await api.call('references.remove', { ids: [parent!.id] })
-    const fromGrandchild = await api.call('references.lineage', { id: grandchild!.id })
+    const fromGrandchild = await api.call('references.lineage', { id: grandchild.id })
     expect(fromGrandchild.ancestors).toEqual([
       expect.objectContaining({
-        id: child!.id,
+        id: child.id,
         depth: 1,
-        reference: expect.objectContaining({ id: child!.id }),
+        reference: expect.objectContaining({ id: child.id }),
       }),
       expect.objectContaining({
         id: parent!.id,

@@ -4,9 +4,11 @@
  */
 import { z } from 'zod'
 import { ActorSchema, ChangeSchema, DesignSchema, PIECE_KINDS } from '../design/design'
+import { DirectionSchema } from '../design/directions'
 import { PieceSpecSchema } from '../design/spec'
 import { GEM_MATERIAL_IDS } from '../domain/gems'
 import { FINISH_IDS, METAL_IDS, PLATING_IDS } from '../domain/metals'
+import { IMAGE_PROVIDERS } from '../images/imagegen'
 
 const id = z.string()
 const iso = z.string()
@@ -34,11 +36,22 @@ export type Org = z.infer<typeof OrgSchema>
 export const MemberSchema = z.object({ user: UserSchema, role: z.enum(ROLES), joinedAt: iso })
 export type Member = z.infer<typeof MemberSchema>
 
+/**
+ * How deep folders nest: a folder (a client, a season) and folders inside it (its collections).
+ * Two levels keep the breadcrumb, the move menu and the totals one glance deep; deeper trees
+ * belong to tags or search, not to more clicks.
+ */
+export const MAX_FOLDER_DEPTH = 2
+
+/** A folder of projects (shown as "Folders"; stored as collections). */
 export const CollectionSchema = z.object({
   id,
   name: z.string(),
   icon: z.string().nullable(),
   position: z.number(),
+  /** The folder it sits in; null at the top. At most MAX_FOLDER_DEPTH levels. */
+  parentId: id.nullable(),
+  /** Projects directly in this folder (not in its sub-folders). */
   pieceCount: z.number(),
 })
 export type Collection = z.infer<typeof CollectionSchema>
@@ -102,6 +115,35 @@ export const originNeedsAttestation = (origin: PieceOrigin | null): boolean =>
   origin.attestation === null &&
   origin.sourceAssetIds.length + origin.referenceIds.length > 0
 
+/** One save of a piece to a .pave file: where and when, so a piece passed around keeps its trail. */
+export const PaveHopSchema = z.object({
+  /** A new id for every save. */
+  fileId: z.string().min(8).max(64),
+  savedAt: iso,
+  app: z.string().max(60),
+  appVersion: z.string().max(40),
+  formatVersion: z.number().int().positive(),
+  /** The piece it was saved from, as the place that saved it knew it. */
+  pieceId: z.string().max(64),
+  /** A fingerprint of the organisation that saved it (a hash: never its id or name). */
+  org: z.string().max(64),
+})
+export type PaveHop = z.infer<typeof PaveHopSchema>
+
+/** Set on a piece opened from a .pave file. */
+export const PieceProvenanceSchema = z.object({
+  /** When the piece was first made, wherever that was. */
+  createdAt: iso,
+  /** Every save it travelled through, oldest first; the last is the file it was opened from. */
+  files: z.array(PaveHopSchema).min(1).max(32),
+  fileName: z.string().max(200),
+  openedAt: iso,
+  openedBy: id,
+  /** The file was saved by another organisation or another install of Pavé. */
+  elsewhere: z.boolean(),
+})
+export type PieceProvenance = z.infer<typeof PieceProvenanceSchema>
+
 export const PieceSummarySchema = z.object({
   id,
   title: z.string(),
@@ -136,6 +178,12 @@ export const PieceSchema = PieceSummarySchema.extend({
   boardIds: z.array(id),
   /** Set for pieces started from a picture, logo, text, mesh, references or another piece. */
   origin: PieceOriginSchema.nullable(),
+  /** The Design stage's alternatives, oldest first (see design/directions.ts). */
+  directions: z.array(DirectionSchema),
+  /** The direction the piece's design was last taken from; null when none was chosen. */
+  chosenDirectionId: id.nullable(),
+  /** Where the piece came from when it was opened from a .pave file; null otherwise. */
+  provenance: PieceProvenanceSchema.nullable(),
 })
 export type Piece = z.infer<typeof PieceSchema>
 
@@ -172,8 +220,15 @@ export const BoardSchema = z.object({
   icon: z.string().nullable(),
   description: z.string(),
   pieceId: id.nullable(),
+  /**
+   * Set on a piece's pinned references (the reference panel beside CAD): one such board per
+   * piece, created on the first pin and not listed among the moodboards.
+   */
+  pinsFor: id.nullable(),
   coverAssetIds: z.array(id),
   referenceCount: z.number(),
+  /** The image provider this board generates with; null = the organisation's default. */
+  imageProvider: z.enum(IMAGE_PROVIDERS).nullable(),
   createdAt: iso,
   updatedAt: iso,
 })
@@ -184,9 +239,19 @@ export type Board = z.infer<typeof BoardSchema>
  * generative models by default; `viewOnly` items stay on the board as inspiration.
  */
 export const RIGHTS = ['open', 'licensed', 'own', 'viewOnly'] as const
+export type Rights = (typeof RIGHTS)[number]
+
+/** What each rights tier allows, as the one sentence people read beside a reference's credit. */
+export const RIGHTS_SENTENCE: Record<Rights, string> = {
+  open: 'Open access: can be shown, kept and sent to AI.',
+  licensed: 'Licensed: can be shown and sent to AI within the licence’s terms.',
+  own: 'Yours: can be shown, kept and sent to AI.',
+  viewOnly: 'View only: can be shown here as inspiration. Can’t be sent to AI.',
+}
 
 /** What a reference is for when it conditions an image generation. */
 export const GENERATION_ROLES = ['subject', 'style', 'identity', 'layout', 'product'] as const
+export type GenerationRole = (typeof GENERATION_ROLES)[number]
 
 /** Where a reference sits on the board's free canvas (board units; `z` is the stacking order). */
 export const CanvasPlacementSchema = z.object({
@@ -196,6 +261,26 @@ export const CanvasPlacementSchema = z.object({
   z: z.number().int(),
 })
 export type CanvasPlacement = z.infer<typeof CanvasPlacementSchema>
+
+/** The CAD views a reference picture can be placed in as an image plane. */
+export const IMAGE_PLANE_VIEWS = ['front', 'top', 'right'] as const
+export type ImagePlaneView = (typeof IMAGE_PLANE_VIEWS)[number]
+
+/**
+ * A pinned picture laid in a CAD view to model over, like Rhino's Picture command. It belongs to
+ * the viewport only: never part of the design, so never in renders, exports or the kernel.
+ */
+export const ImagePlaneSchema = z.object({
+  view: z.enum(IMAGE_PLANE_VIEWS),
+  /** The picture's centre in the view's own axes, in mm: front (x, z), top (x, y), right (y, z). */
+  center: z.tuple([z.number(), z.number()]),
+  /** The whole picture's width in mm; its height follows the picture's proportions. */
+  width: z.number().positive().max(2000),
+  opacity: z.number().min(0.05).max(1),
+  /** A locked plane cannot be moved or scaled until it is unlocked. */
+  locked: z.boolean(),
+})
+export type ImagePlane = z.infer<typeof ImagePlaneSchema>
 
 /**
  * A parent of a generated image as it was when the image was made: its credit and rights
@@ -213,10 +298,14 @@ export const GenerationInputSchema = z.object({
 })
 export type GenerationInput = z.infer<typeof GenerationInputSchema>
 
+export const REFERENCE_TYPES = ['image', 'generated', 'note', 'link', 'swatch', 'model'] as const
+export type ReferenceType = (typeof REFERENCE_TYPES)[number]
+
 export const ReferenceSchema = z.object({
   id,
   boardId: id,
-  type: z.enum(['image', 'generated', 'note', 'link', 'swatch']),
+  /** `model` is a 3D file (STL, OBJ, GLB, 3MF, PLY) kept on a board as inspiration, view-only in 3D. */
+  type: z.enum(REFERENCE_TYPES),
   assetId: id.nullable(),
   /** Remote thumbnail for unsaved search results. */
   thumbUrl: z.string().nullable(),
@@ -243,6 +332,13 @@ export const ReferenceSchema = z.object({
       prompt: z.string(),
       model: z.string(),
       seed: z.number().int().nullable(),
+      /** What the person wrote, before Claude enhanced it into `prompt` (newer images only). */
+      request: z.string().nullable().optional(),
+      /** The brief the image was generated from, with its guardrail decisions. */
+      briefId: id.nullable().optional(),
+      provider: z.string().nullable().optional(),
+      /** What this one image cost at the provider (USD). */
+      costUsd: z.number().nullable().optional(),
       /** Walkable edges to the parents (which may since have been deleted). */
       parentIds: z.array(id),
       /** Snapshot of each parent at generation time, for credit lines. */
@@ -254,6 +350,8 @@ export const ReferenceSchema = z.object({
   pieceId: id.nullable(),
   /** Placement on the board's canvas view; null until arranged there. */
   canvas: CanvasPlacementSchema.nullable(),
+  /** For a piece's pinned picture: where it lies in a CAD view; null when not placed. */
+  plane: ImagePlaneSchema.nullable(),
   width: z.number().nullable(),
   height: z.number().nullable(),
   /** Order in the masonry view and in the DOM, in both views. */
@@ -272,6 +370,8 @@ export const SearchResultSchema = z.object({
   pageUrl: z.string().nullable(),
   credit: z.string().nullable(),
   license: z.string().nullable(),
+  /** Where the licence or the provider's terms are written; absent from older clients. */
+  licenseUrl: z.string().nullable().optional(),
   rights: z.enum(RIGHTS),
   /** The provider's terms let us store the pixels (CC0, public domain); otherwise only a link is kept. */
   mayStore: z.boolean(),
@@ -289,6 +389,22 @@ const Vec3 = z.tuple([z.number(), z.number(), z.number()])
  * the real-time viewport and a fixed Blender runner consume — the assistant edits this, it never
  * writes Python.
  */
+/**
+ * The camera and light moves an animation take can make: a seamless 360° turntable, a half
+ * orbit round the front, a slow push-in, a macro sweep across the centre stone, a light sweep
+ * that walks the sparkle across the stones, a short orbit arc and a rack focus.
+ */
+export const ANIMATION_TYPES = [
+  'turntable',
+  'half-orbit',
+  'push-in',
+  'macro-sweep',
+  'light-sweep',
+  'orbit-arc',
+  'rack-focus',
+] as const
+export type AnimationType = (typeof ANIMATION_TYPES)[number]
+
 export const RenderSceneSchema = z.object({
   /** Lighting + staging recipe; see @pave/render for the catalogue. */
   look: z
@@ -312,6 +428,10 @@ export const RenderSceneSchema = z.object({
           group: 'Angle',
           description: 'Orbiting the view by hand sets `custom`.',
         }),
+      /**
+       * A custom camera (`preset: 'custom'`): where it stands and what it looks at, in the piece's
+       * millimetres (Z up, the front faces −Y). Framing a shot in the viewfinder writes these.
+       */
       position: Vec3.optional().meta({
         title: 'Camera position',
         unit: 'mm',
@@ -325,6 +445,35 @@ export const RenderSceneSchema = z.object({
         widget: 'vec3',
         group: 'Angle',
         advanced: true,
+      }),
+      /** Turns the picture about its centre, degrees; positive turns it clockwise. */
+      roll: z.number().min(-180).max(180).optional().meta({
+        title: 'Roll',
+        unit: 'deg',
+        step: 1,
+        group: 'Angle',
+        advanced: true,
+        description: 'Turns the picture about its centre; positive turns it clockwise.',
+      }),
+      /**
+       * The piece's bounds centre and half-diagonal (mm) when the custom camera was set. On a
+       * piece of another size (a house shot reused, or a design that grew) the camera scales and
+       * moves with the piece; on the piece it was framed on it is used exactly as stored.
+       */
+      framedOn: z
+        .object({ center: Vec3, radius: z.number().positive() })
+        .optional()
+        .meta({ title: 'Framed on', group: 'Angle', advanced: true }),
+      /** The preset the custom camera started from, so Reset can go back to it. */
+      basePreset: z
+        .enum(['hero', 'front', 'side', 'top', 'three-quarter', 'macro'])
+        .optional()
+        .meta({ title: 'Started from', group: 'Angle', advanced: true }),
+      /** A locked camera is not moved by the viewfinder or the assistant until a person unlocks it. */
+      locked: z.boolean().optional().meta({
+        title: 'Lock camera',
+        group: 'Angle',
+        description: 'Keeps the framing as it is: no orbiting, and the assistant cannot move it.',
       }),
       /** 35 mm-equivalent focal length. Jewelry reads best at 85–105. */
       focalLength: z
@@ -413,9 +562,7 @@ export const RenderSceneSchema = z.object({
     }),
   animation: z
     .object({
-      type: z
-        .enum(['turntable', 'orbit-arc', 'rack-focus', 'light-sweep', 'push-in'])
-        .meta({ title: 'Motion' }),
+      type: z.enum(ANIMATION_TYPES).meta({ title: 'Motion' }),
       seconds: z.number().min(1).max(20).default(6).meta({ title: 'Length', unit: 's', step: 0.5 }),
       fps: z
         .number()
@@ -424,6 +571,15 @@ export const RenderSceneSchema = z.object({
         .max(60)
         .default(30)
         .meta({ title: 'Frame rate', step: 1, advanced: true }),
+      /**
+       * Ends where it starts, so it plays round and round without a jump. A turntable always
+       * loops (it turns a full circle); any other move goes there and comes back. Unset = the
+       * motion's own default (only the turntable loops).
+       */
+      loop: z.boolean().optional().meta({
+        title: 'Loop',
+        description: 'Ends where it starts, so it plays round without a jump.',
+      }),
     })
     .optional()
     .meta({ title: 'Motion', group: 'Motion', description: 'Leave unset for a still.' }),
@@ -462,9 +618,32 @@ export const SavedSceneSchema = z.object({
   scene: RenderSceneSchema,
   /** Order in the shot list. */
   position: z.number(),
+  /**
+   * The take this shot uses in the set (a person swapped it in); null = its newest finished take.
+   */
+  takeId: id.nullable(),
   updatedAt: iso,
 })
 export type SavedScene = z.infer<typeof SavedSceneSchema>
+
+/**
+ * One change to a saved shot, kept so it can be undone (by anyone, the assistant's included):
+ * the scene before and after, and who made it. Undoing is itself a change that `reverts` it.
+ */
+export const SceneChangeSchema = z.object({
+  id,
+  sceneId: id,
+  seq: z.number().int(),
+  before: RenderSceneSchema,
+  after: RenderSceneSchema,
+  actor: ActorSchema,
+  /** The change this one undoes, if it is an undo. */
+  reverts: id.nullable(),
+  /** Set when a later change undid this one. */
+  revertedBy: id.nullable(),
+  at: iso,
+})
+export type SceneChange = z.infer<typeof SceneChangeSchema>
 
 /** One numeric fix the critique proposes: a scene path and the value to set it to. */
 export const SceneAdjustmentSchema = z.object({
@@ -532,8 +711,17 @@ export const RenderJobSchema = z.object({
   progress: z.number().min(0).max(1),
   /** Design version rendered, so stale renders can be flagged. */
   sourceVersion: z.number().int(),
+  /**
+   * Fingerprint of the exact resolved scene rendered (`sceneHash` in @pave/render): the same
+   * hash means the same camera, light, materials and design version. Null until it has run.
+   */
+  sceneHash: z.string().nullable(),
   /** The piece has changed since this was rendered (server-computed). */
   stale: z.boolean(),
+  /**
+   * The take's files. A still: the image. An animation: the video (MP4, H.264) first, then a
+   * poster still (its first frame), then a small looping GIF when one was made.
+   */
   assetIds: z.array(id),
   /** The numeric critique: each preview draft, what it measured and what was adjusted. */
   critique: z
@@ -557,10 +745,25 @@ export const RenderJobSchema = z.object({
   device: z.string().nullable(),
   error: z.string().nullable(),
   actor: ActorSchema,
+  /** The person who queued it (or whose assistant did): only their window renders a browser take. */
+  createdBy: id.nullable(),
   createdAt: iso,
   finishedAt: iso.nullable(),
 })
 export type RenderJob = z.infer<typeof RenderJobSchema>
+
+/** How long takes would keep this computer busy: machine time, never money. */
+export const RenderEstimateSchema = z.object({
+  engine: z.enum(['blender', 'browser']),
+  /** All the takes together, in seconds. */
+  seconds: z.number(),
+  /** Each take, in the order asked. */
+  takes: z.array(z.number()),
+  /** `measured`: from this machine's finished takes; `typical`: a reference machine's rate. */
+  basis: z.enum(['measured', 'typical', 'browser']),
+  device: z.string().nullable(),
+})
+export type RenderEstimate = z.infer<typeof RenderEstimateSchema>
 
 /** Whether Blender can be used on this machine, and if not, why. */
 export const RenderEngineStatusSchema = z.object({
@@ -623,6 +826,7 @@ export const BrandModelSchema = z.object({
 export type BrandModel = z.infer<typeof BrandModelSchema>
 
 export const IMAGE_ASPECTS = ['1:1', '4:5', '3:2', '16:9'] as const
+export type ImageAspect = (typeof IMAGE_ASPECTS)[number]
 /** The on-model pipeline: render CAD references → generate → verify against the CAD → label. */
 export const SHOT_STAGES = ['references', 'generate', 'verify', 'label'] as const
 
@@ -746,11 +950,44 @@ export const MessageSchema = z.object({
 })
 export type Message = z.infer<typeof MessageSchema>
 
-export const RUN_STATUS = ['running', 'done', 'failed', 'canceled', 'awaiting-approval'] as const
+/**
+ * The assistant's model tiers, as a person picks them in the composer. Settings point each tier
+ * at one model of the allow-list below; the default mapping and the prices live in @pave/agent.
+ */
+export const ASSISTANT_TIERS = ['power', 'standard', 'light'] as const
+export type AssistantTier = (typeof ASSISTANT_TIERS)[number]
+
+/** The models a tier may point at. Every request rule and price is keyed by these ids. */
+export const ASSISTANT_MODELS = [
+  'claude-fable-5-2',
+  'claude-opus-5-5',
+  'claude-sonnet-5-5',
+  'claude-haiku-5-5',
+] as const
+export type AssistantModelId = (typeof ASSISTANT_MODELS)[number]
+
+export const RUN_STATUS = [
+  'running',
+  'done',
+  'failed',
+  'canceled',
+  'awaiting-approval',
+  /** An AI job a person paused (or took over, or edited by hand); Resume starts a run that replans. */
+  'paused',
+  /**
+   * Waiting for work its tools started to finish (a render take), with no model call open; the
+   * run goes on by itself when the work settles.
+   */
+  'waiting',
+] as const
 /** Why a run stopped short, so the UI can say what to do next. */
 export const RUN_ERROR_CODES = [
   'rate_limited',
   'provider_auth',
+  /** Claude's API could not be reached, or failed to answer. */
+  'provider_unreachable',
+  /** The tier's model cannot be used by this key or organisation (access, data retention). */
+  'model_unavailable',
   'refusal',
   'interrupted',
   'budget_exceeded',
@@ -766,12 +1003,66 @@ export const TokensSchema = z.object({
 })
 export type Tokens = z.infer<typeof TokensSchema>
 
+/**
+ * A piece moves through three stages, each done by hand or by an AI job: Design (directions),
+ * CAD (design to CAD) and Render (CAD to renders).
+ */
+export const JOB_STAGES = ['design', 'cad', 'render'] as const
+export type JobStage = (typeof JOB_STAGES)[number]
+
+export const PLAN_STEP_STATES = ['pending', 'running', 'done', 'failed', 'skipped'] as const
+export type PlanStepState = (typeof PLAN_STEP_STATES)[number]
+
+/**
+ * An AI job: an assistant run with a stage, a one-sentence goal and a short plan shown before
+ * it starts. The server moves the plan along as the run's tool calls go (the stage's recipe in
+ * @pave/agent says which tools belong to which step), so every window shows the same progress.
+ * Its outputs are the design changes (and, later, directions and takes) its run made.
+ */
+export const AiJobSchema = z.object({
+  stage: z.enum(JOB_STAGES),
+  goal: z.string(),
+  plan: z.array(z.object({ id: z.string(), label: z.string(), state: z.enum(PLAN_STEP_STATES) })),
+  /** The job run this one carries on (Resume, a re-run step, a change asked for in review). */
+  continues: id.nullable(),
+  /** Set when the run ends well: its outputs wait for a person, who accepts them. */
+  review: z.enum(['pending', 'accepted']).nullable(),
+  /** Why a paused job stopped: a person paused it, took over, or edited the piece by hand. */
+  pausedBy: z.enum(['pause', 'takeover', 'edit']).nullable(),
+  /**
+   * The machine time (seconds) the person saw in the Start popover for a Render job. The takes
+   * the job approves on its own stay within it; anything beyond asks. Absent: a default budget.
+   */
+  machineSeconds: z.number().int().min(0).max(604_800).nullable().optional(),
+  /**
+   * What the person answered to the job's quick questions (chat.ask), under the step that asked,
+   * so the plan shows what was settled and a resumed job does not ask again. Absent on jobs
+   * stored before questions were recorded.
+   */
+  answers: z
+    .array(
+      z.object({
+        stepId: z.string(),
+        id: z.string(),
+        question: z.string(),
+        answer: z.string(),
+        /** True when the person left the assistant's default as it was. */
+        default: z.boolean(),
+      }),
+    )
+    .optional(),
+})
+export type AiJob = z.infer<typeof AiJobSchema>
+export type JobAnswer = NonNullable<AiJob['answers']>[number]
+
 export const RunSchema = z.object({
   id,
   threadId: id.nullable(),
   pieceId: id.nullable(),
   userId: id,
   model: z.string(),
+  /** The tier the run was asked for; null for MCP runs, which have no model of their own. */
+  tier: z.enum(ASSISTANT_TIERS).nullable(),
   /** `mcp` runs collect the calls an outside agent makes over MCP. */
   origin: z.enum(['studio', 'mcp']),
   status: z.enum(RUN_STATUS),
@@ -781,12 +1072,21 @@ export const RunSchema = z.object({
   endedAt: iso.nullable(),
   error: z.string().nullable(),
   errorCode: z.enum(RUN_ERROR_CODES).nullable(),
+  /** Set when the run is an AI job (started from a stage, or continuing one). */
+  job: AiJobSchema.nullable(),
+  /**
+   * The stage its spend is counted against: the job's stage, else the stage tab the message was
+   * sent from; null for a run about no piece's stage (Home, MCP).
+   */
+  stage: z.enum(JOB_STAGES).nullable(),
 })
 export type Run = z.infer<typeof RunSchema>
 
 export const STEP_STATUS = [
   'running',
   'awaiting-approval',
+  /** The call started a job (a render take) and its result is the job's outcome, not yet in. */
+  'waiting',
   'done',
   'failed',
   'denied',
@@ -814,6 +1114,8 @@ export const StepSchema = z.object({
       decidedBy: id.nullable(),
       decidedAt: iso.nullable(),
       note: z.string().nullable(),
+      /** For `chat.ask`: the options the person picked, by question id. */
+      answers: z.record(z.string(), z.array(z.string())).optional(),
     })
     .nullable(),
   /** Model steps: tokens and cost of the call, and why the model stopped. */
@@ -826,6 +1128,30 @@ export const StepSchema = z.object({
 export type Step = z.infer<typeof StepSchema>
 
 /**
+ * Kinds of feedback. Design: thumbs, and an agent's change undone, corrected or removed. Render
+ * (a person acting on a take or shot the assistant made): kept (set as the cover, or swapped
+ * into the set), swapped (another take put in its place), starred and unstarred, deleted,
+ * reframed (its camera moved), restyled (look, light, backdrop or materials changed) and
+ * rerendered (rendered again by hand).
+ */
+export const FEEDBACK_KINDS = [
+  'up',
+  'down',
+  'undone',
+  'corrected',
+  'removed',
+  'kept',
+  'swapped',
+  'starred',
+  'unstarred',
+  'deleted',
+  'reframed',
+  'restyled',
+  'rerendered',
+] as const
+export type FeedbackKind = (typeof FEEDBACK_KINDS)[number]
+
+/**
  * Feedback on a run: explicit (thumbs, from a person) or implicit, read from the edit history —
  * an agent's change undone, corrected or removed by a person soon after.
  */
@@ -834,15 +1160,100 @@ export const FeedbackSchema = z.object({
   runId: id,
   stepId: id.nullable(),
   source: z.enum(['explicit', 'implicit']),
-  kind: z.enum(['up', 'down', 'undone', 'corrected', 'removed']),
+  kind: z.enum(FEEDBACK_KINDS),
   /** The agent change the implicit feedback is about. */
   changeId: id.nullable(),
+  /**
+   * What a render signal is about: `render:<takeId>` or `scene:<sceneId>` (a take or shot the
+   * assistant made); null for design feedback.
+   */
+  target: z.string().nullable(),
   /** A person's note, or what the implicit signal saw. */
   detail: z.string(),
   userId: id.nullable(),
   at: iso,
 })
 export type Feedback = z.infer<typeof FeedbackSchema>
+
+// ── Quick questions ──────────────────────────────────────────────────────────────────────────
+
+const choiceId = z
+  .string()
+  .regex(/^[a-z0-9][a-z0-9-]{0,31}$/, 'lowercase letters, digits and hyphens')
+
+/**
+ * One question the assistant asks as quick replies: two to six options, the good default
+ * already picked, so the person can press Go without typing.
+ */
+export const QuickQuestionSchema = z
+  .object({
+    id: choiceId,
+    question: z.string().min(1).max(120),
+    options: z
+      .array(
+        z.object({
+          id: choiceId,
+          label: z.string().min(1).max(60),
+          hint: z.string().max(120).optional(),
+        }),
+      )
+      .min(2)
+      .max(6),
+    /** Several options may be picked (aspect ratios, animations); otherwise exactly one. */
+    multiple: z.boolean().default(false),
+    /** Picked before the person touches anything. */
+    defaults: z.array(choiceId).min(1).max(6),
+  })
+  .refine((q) => q.defaults.every((d) => q.options.some((o) => o.id === d)), {
+    message: 'Every default must be one of the options',
+  })
+  .refine((q) => q.multiple || q.defaults.length === 1, {
+    message: 'A single-choice question has exactly one default',
+  })
+  .refine((q) => new Set(q.options.map((o) => o.id)).size === q.options.length, {
+    message: 'Option ids must differ',
+  })
+export type QuickQuestion = z.infer<typeof QuickQuestionSchema>
+
+/** What the person answered, question by question, in words the model reads. */
+export const QuickAnswersSchema = z.object({
+  answers: z.array(
+    z.object({
+      id: z.string(),
+      question: z.string(),
+      chosen: z.array(z.object({ id: z.string(), label: z.string() })),
+      /** True when the person left the default as it was. */
+      default: z.boolean(),
+    }),
+  ),
+})
+export type QuickAnswers = z.infer<typeof QuickAnswersSchema>
+
+/**
+ * Picks for each question, made whole: unknown option ids are dropped, a single-choice
+ * question keeps one pick, and a question with no valid pick takes its defaults.
+ */
+export function resolveAnswers(
+  questions: readonly QuickQuestion[],
+  picks: Readonly<Record<string, readonly string[]>> | undefined,
+): QuickAnswers {
+  return {
+    answers: questions.map((q) => {
+      const valid = (picks?.[q.id] ?? []).filter(
+        (id, i, all) => q.options.some((o) => o.id === id) && all.indexOf(id) === i,
+      )
+      const chosenIds = valid.length ? (q.multiple ? valid : valid.slice(0, 1)) : q.defaults
+      const same =
+        chosenIds.length === q.defaults.length && chosenIds.every((id) => q.defaults.includes(id))
+      return {
+        id: q.id,
+        question: q.question,
+        chosen: chosenIds.map((id) => ({ id, label: q.options.find((o) => o.id === id)!.label })),
+        default: same,
+      }
+    }),
+  }
+}
 
 // ── Usage ────────────────────────────────────────────────────────────────────────────────────
 
@@ -867,9 +1278,65 @@ export const UsageEventSchema = z.object({
   userId: id.nullable(),
   runId: id.nullable(),
   pieceId: id.nullable(),
+  /** The project stage it was spent on (Design, CAD or Render); null when it was about none. */
+  stage: z.enum(JOB_STAGES).nullable(),
   at: iso,
 })
 export type UsageEvent = z.infer<typeof UsageEventSchema>
+
+// ── Projects: what each stage of a piece holds and has cost ─────────────────────────────────
+
+/** One stage of a project, as its section on the project page and its column in lists. */
+export const StageCostSchema = z.object({
+  /** Claude runs counted against this stage, in USD. */
+  aiUsd: z.number(),
+  /** Paid image generations (Design only), in USD. */
+  imageUsd: z.number(),
+  /** Blender takes counted against the plan's render allowance (Render only). */
+  rendersUsed: z.number().int(),
+  /** Rhino and STEP exports counted against the plan's export allowance (CAD only). */
+  exportsUsed: z.number().int(),
+  /** What the stage holds: board items (Design), design changes (CAD), takes (Render). */
+  items: z.number().int(),
+})
+export type StageCost = z.infer<typeof StageCostSchema>
+
+export const ProjectCostSchema = z.object({
+  pieceId: id,
+  design: StageCostSchema,
+  cad: StageCostSchema,
+  render: StageCostSchema,
+  /** Spend on the project no stage claims (a chat about it from Home): counted in the total. */
+  otherUsd: z.number(),
+  /** Everything paid for this project, in USD: AI and image generations. Renders and exports are counts. */
+  totalUsd: z.number(),
+})
+export type ProjectCost = z.infer<typeof ProjectCostSchema>
+
+/** A folder's totals, its sub-folders' projects included. */
+export const FolderTotalSchema = z.object({
+  collectionId: id,
+  pieceCount: z.number().int(),
+  totalUsd: z.number(),
+  rendersUsed: z.number().int(),
+  exportsUsed: z.number().int(),
+})
+export type FolderTotal = z.infer<typeof FolderTotalSchema>
+
+/** What `pieces.estimate` says a spec would weigh and cost before anything is built. */
+export const SpecEstimateSchema = z.object({
+  metalMassG: z.number(),
+  caratTotal: z.number(),
+  stoneCount: z.number().int(),
+  /** The main metal (an alloy id). */
+  metal: z.string(),
+  boundsMm: z.object({ x: z.number(), y: z.number(), z: z.number() }),
+  /** Rough cost to make at the production estimate's placeholder rates; null when it cannot price it. */
+  costUsd: z.number().nullable(),
+  /** Kernel warnings and the canon's findings about the spec, in plain words. */
+  notes: z.array(z.string()),
+})
+export type SpecEstimate = z.infer<typeof SpecEstimateSchema>
 
 /** Which optional capabilities this deployment has credentials for. */
 export const CapabilitiesSchema = z.object({

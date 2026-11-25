@@ -52,7 +52,7 @@ export function ScrollArea({
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div aria-hidden className={cn('animate-pulse rounded-sm bg-bg-muted', className)} />
+  return <div aria-hidden className={cn('skeleton rounded-sm', className)} />
 }
 
 export function Spinner({ className, label = 'Loading' }: { className?: string; label?: string }) {

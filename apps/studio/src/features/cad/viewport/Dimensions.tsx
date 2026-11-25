@@ -133,7 +133,7 @@ export function Dimensions({
         trigger={
           <button
             type="button"
-            className="glass flex h-6 items-center rounded-md px-2 font-mono text-2xs text-fg tabular shadow-sm hover:bg-bg"
+            className="flex h-6 items-center rounded-md bg-bg px-2 font-mono text-2xs text-fg tabular shadow-[0_0_0_1px_var(--line),var(--shadow-sm)] hover:bg-bg-subtle"
             aria-label={`${chip.row.field.title}: ${chip.text}. Edit`}
           >
             {chip.text}

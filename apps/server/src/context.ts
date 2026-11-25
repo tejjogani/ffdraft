@@ -1,4 +1,15 @@
-import type { Actor, CommandInput, CommandName, CommandOutput, Role, User } from '@pave/schema'
+import type { ModelClient } from '@pave/agent'
+import type {
+  Actor,
+  AssistantModelId,
+  CommandInput,
+  CommandName,
+  CommandOutput,
+  PlanName,
+  Role,
+  Tokens,
+  User,
+} from '@pave/schema'
 import type { BlobStore } from './assets/blob-store'
 import type { AuthMode } from './config'
 import type { EventAudience, EventBus, ServerEvent } from './events'
@@ -29,8 +40,37 @@ export interface Ctx {
   readonly events: EventBus
   /** `local` (single-user desktop/self-host, no sign-in) or `accounts`. */
   readonly authMode: AuthMode
+  /**
+   * This organisation on this install, as a fingerprint (an HMAC of its id under a key derived
+   * from the auth secret): a .pave file says where it was saved without carrying the org's id.
+   */
+  readonly orgFingerprint: string
+  /** PAVE_PLAN on a local install (testing): wins over the organisation's plan. */
+  readonly planOverride: PlanName | null
   /** The command pipeline (role, validation, audit) for an explicit context; see {@link invoke}. */
   readonly execute: Execute
+  /**
+   * Aborted when whoever asked gives up, e.g. an assistant run is stopped mid-call. Long work
+   * (a fit, a render on the server) passes it on; most commands are short and ignore it.
+   */
+  readonly signal?: AbortSignal
+  /**
+   * Inside an assistant run: the run's own Claude client and tier, for commands that make a
+   * separate Claude call (an image brief, the check of generated images), so the call is billed
+   * to the run. Outside a run, those commands use the organisation's default tier.
+   */
+  readonly claude?: ClaudeCall
+}
+
+/** A Claude client a command may use for a structured call, and where its spend goes. */
+export interface ClaudeCall {
+  readonly client: ModelClient
+  readonly model: AssistantModelId
+  /** Ledger key prefix: each call appends its own suffix, so a retry is metered once. */
+  readonly key: string
+  readonly runId: string | null
+  /** Adds a call's tokens and cost to the run's totals (a no-op outside a run). */
+  spent(tokens: Tokens, costUsd: number): Promise<void>
 }
 
 export type Execute = (name: CommandName, input: unknown, ctx: Ctx) => Promise<unknown>

@@ -5,8 +5,9 @@
  * the piece's live session when one is open, else from the piece itself.
  *
  * The quick edits never need the assistant: they are the schema's pure intents applied as one
- * undoable change. While the assistant cannot answer, its row stays in place, disabled, with
- * the reason as its second line.
+ * undoable change. "Ask AI" opens the assistant on the piece with what was clicked as the
+ * selection (openAssistant), on the piece's own page so the message is about that piece; without
+ * a Claude key the assistant opens on the form that connects one, and the row says so.
  */
 import { type Design, METAL_IDS, METALS, type MetalId } from '@pave/schema'
 import {
@@ -18,12 +19,21 @@ import {
   MenuSub,
   Swatch,
 } from '@pave/ui'
+import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { Gem, Maximize2, Minimize2, Palette } from 'lucide-react'
 import { useLiveSession, useSessionState } from '../../lib/design-session/store'
 import { useRpc } from '../../lib/query'
 import { activeOrg, useSession } from '../../lib/session'
+import { openAssistant } from '../../stores/assistant'
 import { applyEdit, useQuickIntent } from './quick-intent-store'
-import { askAi, metalOps, type QuickIntent, quickIntents, type Subject } from './quick-intents'
+import {
+  askAi,
+  askAiRequest,
+  metalOps,
+  type QuickIntent,
+  quickIntents,
+  type Subject,
+} from './quick-intents'
 
 /** The piece's design as this window shows it. */
 export function usePieceDesign(pieceId: string): Design | null {
@@ -46,6 +56,8 @@ export function AskAiSection({ subject }: { subject: Subject }) {
   const design = usePieceDesign(subject.pieceId)
   const intents = design ? quickIntents(subject, design, { readOnly }) : []
   const ask = askAi(subject, auth.capabilities)
+  const navigate = useNavigate()
+  const path = useRouterState({ select: (s) => s.location.pathname })
 
   const run = (intent: QuickIntent) => {
     if (intent.id === 'replaceStone' && subject.type === 'stone')
@@ -82,8 +94,15 @@ export function AskAiSection({ subject }: { subject: Subject }) {
       )}
       <MenuItem
         leading={<AiMark className="size-4" />}
-        disabled={!!ask.disabled}
-        description={ask.disabled}
+        description={ask.hint}
+        onClick={() => {
+          // A message goes about the page's piece: from another page (a sidebar row), open the
+          // piece first, staying on its stage tab when already there.
+          const piecePath = `/pieces/${subject.pieceId}`
+          if (path !== piecePath && !path.startsWith(`${piecePath}/`))
+            void navigate({ to: '/pieces/$id', params: { id: subject.pieceId } })
+          openAssistant(askAiRequest(subject))
+        }}
       >
         {ask.label}
       </MenuItem>

@@ -34,8 +34,21 @@ export interface TextareaProps extends ComponentProps<'textarea'> {
 }
 
 /** A textarea that grows with its content. */
-export function Textarea({ className, bare, minRows = 2, onInput, ...props }: TextareaProps) {
+export function Textarea({
+  className,
+  bare,
+  minRows = 2,
+  onInput,
+  ref: outer,
+  ...props
+}: TextareaProps) {
   const ref = useRef<HTMLTextAreaElement>(null)
+  // The caller's ref (to focus it) and ours (to fit the height) both get the element.
+  const setRef = (el: HTMLTextAreaElement | null) => {
+    ref.current = el
+    if (typeof outer === 'function') outer(el)
+    else if (outer) outer.current = el
+  }
   const fit = () => {
     const el = ref.current
     if (!el) return
@@ -47,7 +60,7 @@ export function Textarea({ className, bare, minRows = 2, onInput, ...props }: Te
   useLayoutEffect(fit, [props.value])
   return (
     <textarea
-      ref={ref}
+      ref={setRef}
       rows={minRows}
       onInput={(e) => {
         fit()

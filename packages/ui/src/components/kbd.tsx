@@ -39,7 +39,8 @@ export function Kbd({ shortcut, children, tone = 'default', className }: KbdProp
   return (
     <kbd
       className={cn(
-        'inline-flex items-center gap-0.5 font-sans text-2xs leading-none tabular select-none',
+        // Touch screens have no keyboard to press: the hints would only be noise.
+        'inline-flex items-center gap-0.5 font-sans text-2xs leading-none tabular select-none pointer-coarse:hidden',
         tone === 'inverse' ? 'text-ink-fg/60' : 'text-fg-subtle',
         className,
       )}

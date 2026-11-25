@@ -15,6 +15,7 @@
 import {
   GEM_CUTS,
   GEM_MATERIALS,
+  type GemCutId,
   type GemMaterialId,
   METALS,
   type MetalFamily,
@@ -130,8 +131,88 @@ const DEFAULTS = {
 
 const r2 = (v: number) => Math.round(v * 100) / 100
 
+/**
+ * What an estimate is worked out from. A production package has all of it; a quick estimate
+ * (`roughCost`) has only an evaluation summary and prices it at the same placeholder rates.
+ */
+export interface CostBasis {
+  rates: RateInput
+  quantity: number
+  metals: readonly Pick<PackageContext['metals'][number], 'metal' | 'netGrams'>[]
+  lots: readonly (Pick<PackageContext['lots'][number], 'key' | 'sourcing' | 'suppliedBy'> & {
+    /** Every supplier record on the lot's nodes; absent for a quick estimate, which has none. */
+    sourced?: PackageContext['lots'][number]['sourced']
+    lot: Pick<
+      PackageContext['lots'][number]['lot'],
+      'stone' | 'cut' | 'width' | 'count' | 'caratEach' | 'caratTotal' | 'setting' | 'nodeIds'
+    >
+  })[]
+  /**
+   * Per node, its stones in each lot (`stonesByNode`), so an attached price is charged once and
+   * in full. Only a production package has the evaluation to work it out from.
+   */
+  nodeStones?: NodeStones
+  plated: boolean
+}
+
 export function estimateCost(ctx: PackageContext): CostEstimate {
-  const rates = ctx.input.options.rates ?? {}
+  return estimateFrom({
+    rates: ctx.input.options.rates ?? {},
+    quantity: ctx.quantity,
+    metals: ctx.metals,
+    lots: ctx.lots,
+    nodeStones: stonesByNode(ctx),
+    plated: ctx.input.evaluation.parts.some((p) => p.plating !== 'none'),
+  })
+}
+
+/** The evaluation facts a rough cost reads (`EvaluationSummary` from @pave/schema fits). */
+export interface CostSummary {
+  metals: readonly { material: string; massG: number }[]
+  lots: readonly {
+    cut: string
+    stone: string
+    width: number
+    count: number
+    caratTotal: number
+    setting: string
+  }[]
+}
+
+/**
+ * A rough cost for comparing designs (direction cards): the production estimate's formula at
+ * its placeholder rates, from evaluation facts alone. Stones are priced as the house buys them;
+ * plating is not known from the facts and is left out.
+ */
+export function roughCost(summary: CostSummary, rates: RateInput = {}): CostEstimate {
+  return estimateFrom({
+    rates,
+    quantity: 1,
+    metals: summary.metals
+      .filter((m) => m.material in METALS && m.massG > 0)
+      .map((m) => ({ metal: m.material as MetalId, netGrams: m.massG })),
+    lots: summary.lots
+      .filter((l) => l.stone in GEM_MATERIALS && l.cut in GEM_CUTS && l.count > 0)
+      .map((l, i) => ({
+        key: `L${i + 1}`,
+        suppliedBy: 'manufacturer' as const,
+        lot: {
+          stone: l.stone as GemMaterialId,
+          cut: l.cut as GemCutId,
+          width: l.width,
+          count: l.count,
+          caratEach: l.caratTotal / l.count,
+          caratTotal: l.caratTotal,
+          setting: l.setting,
+          nodeIds: [],
+        },
+      })),
+    plated: false,
+  })
+}
+
+function estimateFrom(ctx: CostBasis): CostEstimate {
+  const rates = ctx.rates
   const currency = rates.currency ?? 'USD'
   const placeholders = new Set<string>()
   const rate = (
@@ -201,13 +282,13 @@ export function estimateCost(ctx: PackageContext): CostEstimate {
   }
 
   // Stones, per lot.
-  const nodeStones = stonesByNode(ctx)
+  const nodeStones: NodeStones = ctx.nodeStones ?? new Map()
   /** What each parcel has been charged to the lots before this one, so the last takes the rest. */
   const charged = new Map<string, number>()
   ctx.lots.forEach((info, index) => {
     const { lot } = info
     const label = `${info.key} · ${lot.count} × ${GEM_MATERIALS[lot.stone].label}, ${GEM_CUTS[lot.cut].label.toLowerCase()} ${lot.width.toFixed(2)} mm`
-    const priced = info.sourced.flatMap(({ nodeId, sourcing }) =>
+    const priced = (info.sourced ?? []).flatMap(({ nodeId, sourcing }) =>
       sourcing.priceUsd === undefined ? [] : [{ nodeId, sourcing, price: sourcing.priceUsd }],
     )
     if (priced.length) {
@@ -377,7 +458,7 @@ export function estimateCost(ctx: PackageContext): CostEstimate {
       [hours, hourly],
       hours.value * hourly.value,
     )
-    if (ctx.input.evaluation.parts.some((p) => p.plating !== 'none')) {
+    if (ctx.plated) {
       const plating = rate('plating fee', rates.platingFee, DEFAULTS.platingFee, currency)
       labour('plating', 'Plating', 'plating_fee', [plating], plating.value)
     }
@@ -441,9 +522,9 @@ const round3 = (v: number) => Math.round(v * 1000) / 1000
  * total. Lots are matched the way the kernel builds them (cut, stone, size to 0.01 mm, setting,
  * role), among the lots that name the node.
  */
-function stonesByNode(
-  ctx: PackageContext,
-): Map<string, { count: number; carats: number[]; total: number }> {
+type NodeStones = Map<string, { count: number; carats: number[]; total: number }>
+
+function stonesByNode(ctx: PackageContext): NodeStones {
   const size = (v: number) => Math.round(v * 100) / 100
   const key = (o: {
     cut: string
@@ -457,7 +538,7 @@ function stonesByNode(
   ctx.lots.forEach(({ lot }, i) => {
     lotsByKey.set(key(lot), [...(lotsByKey.get(key(lot)) ?? []), i])
   })
-  const out = new Map<string, { count: number; carats: number[]; total: number }>()
+  const out: NodeStones = new Map()
   for (const s of ctx.input.evaluation.stones) {
     const node = out.get(s.nodeId) ?? { count: 0, carats: ctx.lots.map(() => 0), total: 0 }
     out.set(s.nodeId, node)

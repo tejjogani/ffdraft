@@ -4,11 +4,17 @@
  * ray-traced gem shader, so they start in clay mode, render at DPR 1 and trace fewer bounces.
  */
 import type { GemQuality } from '@pave/render/three'
+import type { Effects } from './adaptive'
 
 export type GpuTier = 'software' | 'low' | 'high'
 
 const SOFTWARE = /swiftshader|llvmpipe|softpipe|basic render|microsoft basic|software/i
-const LOW = /intel|mali|adreno [1-5]|powervr|apple gpu/i
+/**
+ * Integrated GPUs. Safari names every Apple GPU "Apple GPU"; Chrome and Electron name the chip
+ * ("ANGLE Metal Renderer: Apple M2"), so the base M-series chips of a MacBook Air are named here
+ * and their Pro, Max and Ultra siblings are not.
+ */
+const LOW = /intel|mali|adreno [1-5]|powervr|apple gpu|apple m\d+(?!\s*(pro|max|ultra))\b/i
 
 /** The renderer string, when the browser exposes it. */
 export function rendererName(gl: WebGLRenderingContext | WebGL2RenderingContext): string {
@@ -35,10 +41,15 @@ function hasPerformanceCaveat(): boolean {
   return caveat
 }
 
+/** The tier for a renderer string (exported for tests; `gpuTier` also probes the browser). */
+export function tierOfName(name: string): GpuTier {
+  if (SOFTWARE.test(name)) return 'software'
+  return LOW.test(name) ? 'low' : 'high'
+}
+
 export function gpuTier(gl: WebGLRenderingContext | WebGL2RenderingContext): GpuTier {
   const name = rendererName(gl)
-  if (SOFTWARE.test(name) || hasPerformanceCaveat()) return 'software'
-  return LOW.test(name) ? 'low' : 'high'
+  return hasPerformanceCaveat() ? 'software' : tierOfName(name)
 }
 
 export interface QualityPolicy {
@@ -86,4 +97,24 @@ export function qualityFor(tier: GpuTier): QualityPolicy {
         meleeBudget: 3000,
       }
   }
+}
+
+/**
+ * The gem shader quality for an effects level (see ./adaptive). `reduced` keeps dispersion as
+ * the tier has it (toggling it recompiles the shader) and lowers only the bounces, a uniform;
+ * `minimal` is one bounce without dispersion, a one-off recompile on a machine that needs it.
+ */
+export function gemQualityFor(
+  policy: QualityPolicy,
+  effects: Effects,
+  moving: boolean,
+): Record<'hero' | 'melee', GemQuality> {
+  const set = moving ? policy.moving : policy.rest
+  if (effects === 'full') return set
+  if (effects === 'reduced')
+    return {
+      hero: { bounces: Math.min(set.hero.bounces, 2), dispersion: set.hero.dispersion },
+      melee: { bounces: 1, dispersion: false },
+    }
+  return { hero: { bounces: 1, dispersion: false }, melee: { bounces: 1, dispersion: false } }
 }

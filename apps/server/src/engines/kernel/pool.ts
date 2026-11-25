@@ -15,7 +15,7 @@
  *    replaced. Either way only that task fails; the queue behind it carries on.
  */
 import { createRequire } from 'node:module'
-import { availableParallelism } from 'node:os'
+import { availableParallelism, totalmem } from 'node:os'
 import { pathToFileURL } from 'node:url'
 import { Worker } from 'node:worker_threads'
 import { AppError, type ErrorCode } from '../../errors'
@@ -37,7 +37,7 @@ export interface RunOptions {
 }
 
 export interface KernelPoolOptions {
-  /** Most workers at once. Default: one per CPU but one, between 1 and 4. */
+  /** Most workers at once. Default: from the machine's cores and memory (see `poolDefaults`). */
   size?: number
   timeoutMs?: Partial<Record<TaskKind, number>>
   /** A worker idle this long is stopped. */
@@ -54,18 +54,34 @@ const DEFAULT_TIMEOUT_MS: Record<TaskKind, number> = {
   evaluate: 120_000,
   export: 300_000,
   renderInput: 300_000,
+  subject: 120_000,
   package: 900_000,
+  picture: 120_000,
+  // The fit stops itself at its own budget (at most two minutes); this is the backstop.
+  photoFit: 180_000,
 }
 
 const VERB: Record<TaskKind, string> = {
   evaluate: 'evaluate this design',
   export: 'export this design',
   renderInput: 'prepare this design for rendering',
+  subject: 'measure this design for framing',
   package: 'build this production package',
+  picture: 'draw this design',
+  photoFit: 'fit this design to the photo',
 }
 
 /** Queue order: lower first. Anything above 0 is heavy and may not take the last free worker. */
-const RANK: Record<TaskKind, number> = { evaluate: 0, export: 1, renderInput: 1, package: 2 }
+const RANK: Record<TaskKind, number> = {
+  evaluate: 0,
+  picture: 0,
+  export: 1,
+  renderInput: 1,
+  subject: 0,
+  // A fit holds a worker for up to two minutes: heavy, so it never takes the last free one.
+  photoFit: 2,
+  package: 2,
+}
 const BACKGROUND_RANK = 2
 
 /** What the kernel refuses on purpose: the caller's request, not the server, is at fault. */
@@ -78,7 +94,38 @@ const REFUSALS: [RegExp, ErrorCode][] = [
 /** Remembered piece → worker routes; the oldest are forgotten beyond this. */
 const MAX_ROUTES = 2_000
 
-export const defaultPoolSize = (): number => Math.max(1, Math.min(4, availableParallelism() - 1))
+/** The share of the machine's memory the kernel workers may hold between them, by default. */
+const MEMORY_SHARE = 0.3
+/** Memory per worker, by default: smaller on a machine of 8 GB or less (a MacBook Air). */
+const WORKER_MB_SMALL = 1_024
+const WORKER_MB = 1_536
+const SMALL_MACHINE_MB = 8 * 1024
+
+/**
+ * Workers, memory per worker and warm pieces per worker for a machine of `cores` CPUs and
+ * `memoryMb` of memory. Pavé runs on the designer's own computer next to the browser (which runs
+ * its own kernel) and whatever else they have open, so the workers keep to about a third of the
+ * memory: an 8 GB laptop gets two workers of 1 GB, each warm on two pieces, instead of four
+ * workers that could grow to 6 GB between them. One CPU is always left for the server and the
+ * browser. Each `PAVE_KERNEL_*` variable overrides its part.
+ */
+export function poolDefaults(
+  cores = availableParallelism(),
+  memoryMb = totalmem() / 1024 / 1024,
+): { size: number; memoryBudgetMb: number; kernelsPerWorker: number } {
+  const small = memoryMb <= SMALL_MACHINE_MB
+  const perWorker = small ? WORKER_MB_SMALL : WORKER_MB
+  const share = memoryMb * MEMORY_SHARE
+  const size = Math.max(1, Math.min(4, cores - 1, Math.floor(share / perWorker)))
+  return {
+    size,
+    // A one-worker machine with very little memory still gets a workable worker.
+    memoryBudgetMb: Math.round(Math.max(512, Math.min(perWorker, share / size))),
+    kernelsPerWorker: small ? 2 : 3,
+  }
+}
+
+export const defaultPoolSize = (): number => poolDefaults().size
 
 /** The worker module next to this one; from TypeScript source it needs tsx's loader. */
 function workerEntry(): { url: URL; execArgv: string[] } {
@@ -144,12 +191,15 @@ export class KernelPool {
   #disposed = false
 
   constructor(options: KernelPoolOptions = {}) {
-    this.size = Math.max(1, Math.floor(options.size ?? defaultPoolSize()))
+    const machine = poolDefaults()
+    this.size = Math.max(1, Math.floor(options.size ?? machine.size))
     this.#timeouts = { ...DEFAULT_TIMEOUT_MS, ...options.timeoutMs }
     this.#idleMs = options.idleMs ?? 2 * 60_000
     this.#graceMs = options.graceMs ?? 3_000
-    this.#budget = (options.memoryBudgetMb ?? 1_536) * 1024 * 1024
-    this.#workerConfig = { kernels: Math.max(1, Math.floor(options.kernelsPerWorker ?? 3)) }
+    this.#budget = (options.memoryBudgetMb ?? machine.memoryBudgetMb) * 1024 * 1024
+    this.#workerConfig = {
+      kernels: Math.max(1, Math.floor(options.kernelsPerWorker ?? machine.kernelsPerWorker)),
+    }
     this.#slots = Array.from({ length: this.size }, (_, index) => ({
       index,
       worker: null,
