@@ -376,6 +376,37 @@ describe('edits that change no geometry', () => {
     fresh.dispose()
   })
 
+  it('two nodes that swap names are relabelled in each other’s messages, as a fresh kernel would', async () => {
+    // “Join” is left out because “Cut” failed; the message names both.
+    const design = designFrom('other', [
+      { id: 'p', kind: 'primitive', name: 'Plate', shape: 'box', size: [4, 4, 4] },
+      {
+        id: 'q',
+        kind: 'primitive',
+        name: 'Peg',
+        shape: 'box',
+        size: [2, 2, 2],
+        transform: { position: [20, 0, 0], rotation: [0, 0, 0], scale: 1 },
+      },
+      { id: 'cut', kind: 'boolean', name: 'Cut', op: 'intersect', target: 'p', tools: ['q'] },
+      { id: 'join', kind: 'boolean', name: 'Join', op: 'union', target: 'cut', tools: ['p'] },
+    ] as NodeInput[])
+    const swapped = applyOps(design, [
+      { t: 'update', id: 'cut', patch: { name: 'Join' } },
+      { t: 'update', id: 'join', patch: { name: 'Cut' } },
+    ]).design
+    const messages = (e: { diagnostics: { nodeId?: string; message: string }[] }) =>
+      e.diagnostics.map((d) => `${d.nodeId}: ${d.message}`).sort()
+    const warm = createKernel()
+    await warm.evaluate(design)
+    const fresh = createKernel()
+    const expected = messages(await fresh.evaluate(swapped))
+    expect(expected.some((m) => m.startsWith('join: “Cut” was left out because “Join”'))).toBe(true)
+    expect(messages(await warm.evaluate(swapped))).toEqual(expected)
+    warm.dispose()
+    fresh.dispose()
+  })
+
   it('the same nodes with their keys in another order rebuild nothing', async () => {
     const own = createKernel()
     const design = template('signet')
@@ -421,6 +452,101 @@ describe('copies that coincide', () => {
     expect(draft.report.metalMassG).toBeCloseTo(alone.report.metalMassG, 6)
     // Production fuses rotated tessellations of the ball, which is within 2% of the exact one.
     expect(Math.abs(production.report.metalMassG / draft.report.metalMassG - 1)).toBeLessThan(0.02)
+  })
+
+  // An L centred on the axis: turned 180° or mirrored, the copy has the L's bounding box and
+  // volume (40 mm³) but covers other ground. Turned, the two make a 6×6×2 frame with a 2×2 hole
+  // (64 mm³); mirrored across x, a U that shares the L's foot (56 mm³).
+  const L: NodeInput[] = [
+    {
+      id: 'foot',
+      kind: 'primitive',
+      shape: 'box',
+      size: [6, 2, 2],
+      transform: { position: [0, -2, 0] },
+    },
+    {
+      id: 'leg',
+      kind: 'primitive',
+      shape: 'box',
+      size: [2, 6, 2],
+      transform: { position: [-2, 0, 0] },
+    },
+    { id: 'L', kind: 'boolean', op: 'union', target: 'foot', tools: ['leg'] } as NodeInput,
+  ]
+  it.each([
+    ['turned 180°', { type: 'polar', axis: 'z', count: 2 }, 64],
+    ['mirrored', { type: 'mirror', axis: 'x' }, 56],
+  ])(
+    'keeps a copy %s that has its source’s box and volume but another shape',
+    async (_, how, union) => {
+      const design = designFrom('other', [
+        ...L,
+        { id: 'p', kind: 'pattern', sources: ['L'], ...how } as NodeInput,
+      ])
+      const alone = await kernel.evaluate(designFrom('other', L))
+      const density = alone.report.metalMassG / 40
+      for (const detail of ['draft', 'production'] as const) {
+        const e = await kernel.evaluate(design, { detail })
+        expect(e.report.metalMassG / density, detail).toBeCloseTo(union, 1)
+        expect(codes(e), detail).not.toContain('pattern.coincident')
+      }
+      // The casting holds the copy: only the turned or mirrored L reaches the corner at (3, 3).
+      const production = await kernel.evaluate(design, { detail: 'production' })
+      const metal = production.parts.reduce((sum, p) => sum + p.volumeMm3, 0)
+      expect(metal).toBeCloseTo(union, 1)
+      expect(production.parts.some((p) => p.bounds.max[0] > 2.9 && p.bounds.max[1] > 2.9)).toBe(
+        true,
+      )
+    },
+  )
+})
+
+describe('sealed cavities', () => {
+  const box = (id: string, size: number): NodeInput => ({
+    id,
+    kind: 'primitive',
+    shape: 'box',
+    size: [size, size, size],
+  })
+  // A 10 mm box with an 8 mm box taken out of its middle: 1000 − 512 = 488 mm³ of metal.
+  const hollow = designFrom('other', [
+    box('o', 10),
+    box('i', 8),
+    { id: 'b', kind: 'boolean', op: 'subtract', target: 'o', tools: ['i'] } as NodeInput,
+  ])
+
+  it('keeps the cavity in the casting and weighs what draft weighs', async () => {
+    const draft = await kernel.evaluate(hollow)
+    const production = await kernel.evaluate(hollow, { detail: 'production' })
+    const volume = production.parts.reduce((sum, p) => sum + p.volumeMm3, 0)
+    expect(volume).toBeCloseTo(488, 0)
+    expect(production.report.metalMassG).toBeCloseTo(draft.report.metalMassG, 2)
+    // The casting's mesh has both surfaces: the box's and the cavity's.
+    expect(production.parts[0]!.mesh.indices.length / 3).toBeGreaterThan(12)
+  })
+
+  it('says a sealed cavity cannot be cast, and where it is', async () => {
+    const production = await kernel.evaluate(hollow, { detail: 'production' })
+    const found = production.diagnostics.find((d) => d.code === 'metal.sealedCavity')
+    expect(found?.nodeId).toBe('b')
+    expect(found?.message).toMatch(/vent/)
+    expect(found?.value).toBeCloseTo(512, 0)
+    // A vent opens it: then there is nothing to say.
+    const vented = designFrom('other', [
+      box('o', 10),
+      box('i', 8),
+      {
+        id: 'v',
+        kind: 'primitive',
+        shape: 'cylinder',
+        size: [2, 2, 4],
+        transform: { position: [0, 0, 5] },
+      },
+      { id: 'b', kind: 'boolean', op: 'subtract', target: 'o', tools: ['i', 'v'] } as NodeInput,
+    ])
+    const open = await kernel.evaluate(vented, { detail: 'production' })
+    expect(codes(open)).not.toContain('metal.sealedCavity')
   })
 })
 

@@ -286,6 +286,28 @@ describe('a Worker that dies after starting', () => {
     expect(crashes).toEqual([])
   })
 
+  it('answers a second ready after the first one failed (a WASM download cut off)', async () => {
+    const { client: port, worker } = channel()
+    const locks = memoryLocks()
+    const local = coreKernel()
+    let tries = 0
+    const flaky: LocalKernel = {
+      ...local,
+      ready: () => (tries++ === 0 ? Promise.reject(new Error('NetworkError')) : local.ready()),
+    }
+    serveKernel(flaky, worker, locks)
+    const client = createKernelClient({ port, locks })
+    await expect(client.ready()).rejects.toThrow(/NetworkError/)
+    const second = await Promise.race([
+      client.ready().then(() => 'ready'),
+      new Promise((resolve) => setTimeout(() => resolve('still waiting'), 2000)),
+    ])
+    expect(second).toBe('ready')
+    expect((await client.evaluate(solitaire)).parts.length).toBeGreaterThan(0)
+    client.terminate()
+    local.dispose()
+  })
+
   it('keeps working after an uncaught error in a Worker that is still running', async () => {
     const { client: port, worker } = channel()
     const listeners: ((event: unknown) => void)[] = []

@@ -57,8 +57,20 @@ const POST_SINK = 0.3
 const CLAW_CLEARANCE = 0.08
 /** Widest gap between neighbouring halo stones before they read as spaced dots, mm. */
 const MAX_GAP = 0.35
+/** Widest gap between neighbouring halo stones spread to take up slack beside a claw, mm. */
+const MAX_PLAIN = 0.38
+/**
+ * Most slack a run of stones leaves beside a claw, mm: with the claw's clearance it stays under
+ * the 0.4 mm of bare plate a setter reads as a missing stone.
+ */
+const MAX_LEAD = 0.26
 /** Closest neighbouring halo stones may be drawn together to keep the outline's symmetry, mm. */
 const MIN_GAP = 0.05
+/**
+ * Most the rows may stand off their path midway between a point claw and its neighbours when
+ * they step out round it, mm; past it the claw stands in a notch instead.
+ */
+const MAX_SIDE_PUSH = 0.1
 /** Air between the ring's inner edge, tucked under the centre's girdle, and its pavilion, mm. */
 const PAVILION_CLEARANCE = 0.05
 
@@ -109,25 +121,77 @@ function evenLayout(
 /** How far a stone centred at a point of the stone's plane stands clear of something; < 0: it touches. */
 type Obstacle = (p: Vec2) => number
 
+/** The convex hull of a mesh's section at height `z` (flat triangles in the stone's frame). */
+function sectionHull(surface: Float32Array, z: number): Vec2[] {
+  const points: Vec2[] = []
+  for (let t = 0; t < surface.length; t += 9)
+    for (let e = 0; e < 3; e++) {
+      const a = t + e * 3
+      const b = t + ((e + 1) % 3) * 3
+      const za = surface[a + 2]!
+      const zb = surface[b + 2]!
+      if ((za - z) * (zb - z) > 0 || za === zb) continue
+      const k = (z - za) / (zb - za)
+      points.push([
+        surface[a]! + (surface[b]! - surface[a]!) * k,
+        surface[a + 1]! + (surface[b + 1]! - surface[a + 1]!) * k,
+      ])
+    }
+  return points.length >= 3 ? convexHull(points) : points
+}
+
+/** Signed distance from a point to a convex counter-clockwise polygon (negative inside). */
+function convexDistance(hull: readonly Vec2[], q: Vec2): number {
+  if (hull.length === 0) return Infinity
+  if (hull.length < 3) return Math.min(...hull.map((p) => Math.hypot(p[0] - q[0], p[1] - q[1])))
+  let inside = -Infinity
+  hull.forEach((a, i) => {
+    const b = hull[(i + 1) % hull.length]!
+    const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1
+    inside = Math.max(inside, ((q[0] - a[0]) * (b[1] - a[1]) - (q[1] - a[1]) * (b[0] - a[0])) / l)
+  })
+  return inside <= 0 ? inside : polygonDistance(hull, q)
+}
+
 /**
- * A claw as an obstacle for halo stones of `size`: its section at the girdle is a stadium
- * (round, tab, double and V-claws alike), `radius` out from its axis and `halfWidth` along the
- * girdle.
+ * A claw as an obstacle for halo stones of `stone`'s cut and size whose girdles stand at
+ * `girdleZ` (the centre's frame). Legs lean in and, on a band, sideways toward its metal, and the
+ * section turns where the claw bends over the crown, so the claw is taken as built: its sections
+ * at heights through the halo stone, each against the stone's own width at that height.
+ * Without a surface (a head that built none) it is its section at the girdle, a rounded
+ * rectangle `radius` out from its axis and `halfWidth` along the girdle.
  */
-function clawObstacle(shape: StoneShape, claw: ClawPlace, size: number): Obstacle {
-  const g = shape.point(claw.phi)
-  const n = shape.normal(claw.phi)
-  const t: Vec2 = [-n[1], n[0]]
-  const off = claw.reach - claw.radius
-  const axis: Vec2 = [g[0] + n[0] * off, g[1] + n[1] * off]
-  const straight = Math.max(0, claw.halfWidth - claw.radius)
-  return ([x, y]) => {
-    const u = (x - axis[0]) * n[0] + (y - axis[1]) * n[1]
-    const v = (x - axis[0]) * t[0] + (y - axis[1]) * t[1]
-    return (
-      Math.hypot(u, Math.max(0, Math.abs(v) - straight)) - claw.radius - size / 2 - CLAW_CLEARANCE
-    )
+function clawObstacle(
+  shape: StoneShape,
+  claw: ClawPlace,
+  small: StoneShape,
+  girdleZ: number,
+): Obstacle {
+  const size = Math.max(small.stone.dims.width, small.stone.dims.length)
+  const clear = (d: number, half: number) => d - half - CLAW_CLEARANCE
+  if (!claw.surface) {
+    const g = shape.point(claw.phi)
+    const n = shape.normal(claw.phi)
+    const t: Vec2 = [-n[1], n[0]]
+    const off = claw.reach - claw.radius
+    const axis: Vec2 = [g[0] + n[0] * off, g[1] + n[1] * off]
+    const r = Math.min(claw.corner, claw.radius)
+    const hu = claw.radius - r
+    const hv = Math.max(claw.halfWidth, claw.radius) - r
+    return ([x, y]) => {
+      const u = Math.abs((x - axis[0]) * n[0] + (y - axis[1]) * n[1]) - hu
+      const v = Math.abs((x - axis[0]) * t[0] + (y - axis[1]) * t[1]) - hv
+      const d = Math.hypot(Math.max(0, u), Math.max(0, v)) + Math.min(0, Math.max(u, v)) - r
+      return clear(d, size / 2)
+    }
   }
+  // From just under the halo stone's girdle to its table.
+  const levels = [-0.05, 0, small.girdleTop, ...[0.25, 0.5, 0.75, 1].map((f) => f * small.table)]
+  const sections = levels.flatMap((dz) => {
+    const hull = sectionHull(claw.surface!, girdleZ + dz)
+    return hull.length ? [{ hull, half: (size / 2) * small.scaleAt(dz) }] : []
+  })
+  return (p) => Math.min(...sections.map(({ hull, half }) => clear(convexDistance(hull, p), half)))
 }
 
 /** A closed path in the stone's plane, resampled about every `step` mm. */
@@ -248,6 +312,30 @@ function pointPush(
   }
 }
 
+/**
+ * How far a row stepped out by `push` stands off its path midway between a point claw and each
+ * of its neighbouring claws: more than a trace means the step carried a whole side out.
+ */
+function sidePush(
+  shape: StoneShape,
+  claws: readonly ClawPlace[],
+  push: (p: Vec2) => number,
+): (claw: ClawPlace) => number {
+  const turn = (v: number) => ((v % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)
+  const dirs = claws.map((c) => turn(Math.atan2(...dirOf(shape, c.phi)))).sort((a, b) => a - b)
+  const at = (a: number) =>
+    push([shape.centre[0] + Math.cos(a), shape.centre[1] + Math.sin(a)])
+  return (claw) => {
+    const own = turn(Math.atan2(...dirOf(shape, claw.phi)))
+    const i = dirs.findIndex((d) => Math.abs(d - own) < 1e-9)
+    const before = dirs[(i + dirs.length - 1) % dirs.length]!
+    const after = dirs[(i + 1) % dirs.length]!
+    const from = turn(own - before) || 2 * Math.PI
+    const to = turn(after - own) || 2 * Math.PI
+    return Math.max(at(own - from / 2), at(own + to / 2))
+  }
+}
+
 /** Direction (y, x for atan2) from the stone's centre to its girdle point at φ. */
 function dirOf(shape: StoneShape, phi: number): [number, number] {
   const g = shape.point(phi)
@@ -318,71 +406,155 @@ function rowCentres(
   const { total, at } = arcs(path)
   const plan = arcs(flat.map(([x, y]): Vec3 => [x, y, 0]))
   const [, cy] = shape.centre
-  const clefts = concaveCorners(shape).map((phi) => {
-    const c = axisCrossing(shape, flat, shape.point(phi)[1] > cy ? 1 : -1)
-    // Smallest half-window whose two ends are a stone and its gap apart.
-    let half = pitch / 2
-    while (half < total / 4 && distance(at(c - half), at(c + half)) < pitch) half += 0.01
-    return { c, half }
-  })
-  const blocked = (s: number): boolean =>
-    clefts.some(({ c, half }) => Math.abs(around(s, c, total)) < half) ||
+  const crosses = (s: number): boolean =>
     obstacles.some((o) => {
       const [x, y] = plan.at(s)
       return o([x, y]) < 0
     })
   const samples = Math.max(64, Math.ceil(total / 0.02))
   const ds = total / samples
-  const free = Array.from({ length: samples }, (_, i) => !blocked(i * ds))
-  const first = free.indexOf(false)
-  if (first < 0) {
-    // Start on the length axis at its larger-y end (a pear's point, a marquise's tip).
-    const start = axisCrossing(shape, flat, 1)
-    return evenLayout(shape, total, size, gap, (count) =>
-      Array.from({ length: count }, (_, i) => at(start + (total * i) / count)),
+  // Each stretch a claw blocks, as its centre and half-length. A claw that only grazes the row
+  // (a leg leaning in under a lowered halo) blocks less than a stone's width, which would let the
+  // stones either side of it overlap: such a notch is widened to a stone and its gap.
+  const notches: { c: number; half: number }[] = []
+  const hit = Array.from({ length: samples }, (_, i) => crosses(i * ds))
+  const start = hit.indexOf(false)
+  if (start >= 0)
+    for (let i = start; i < start + samples; i++) {
+      if (!hit[i % samples]) continue
+      let j = i
+      while (j + 1 < start + samples && hit[(j + 1) % samples]) j++
+      // To a micron, so the stretches either side of the axis mirror exactly.
+      const bisect = (out: number, inside: number) => {
+        for (let k = 0; k < 16; k++) {
+          const mid = (out + inside) / 2
+          if (crosses(mid)) inside = mid
+          else out = mid
+        }
+        return inside
+      }
+      const from = bisect((i - 1) * ds, i * ds)
+      const to = bisect((j + 1) * ds, j * ds)
+      notches.push({ c: (from + to) / 2, half: Math.max((to - from) / 2, pitch / 2) })
+      i = j
+    }
+  const corners = concaveCorners(shape).map((phi) =>
+    axisCrossing(shape, flat, shape.point(phi)[1] > cy ? 1 : -1),
+  )
+  if (corners.length === 0) return lay(false).map(({ p }) => p)
+  // At a cleft the stones beside it are set just far enough apart not to touch across it, or one
+  // stone sits in the V itself (where no claw stands there) with its neighbours a stone and its
+  // gap from it. Whichever leaves less bare metal beside the claws near the cleft: on a small
+  // heart the pair leaves the V bare for a stone's width, on a large one the single stone can
+  // leave a stretch between it and the lobe claws.
+  const pair = lay(false)
+  const single = lay(true)
+  return (bare(single) < bare(pair) - 1e-6 ? single : pair).map(({ p }) => p)
+
+  /** Widest stretch between neighbouring stones that no claw stands in, mm (in space). */
+  function bare(placed: { s: number; p: Vec3 }[]): number {
+    return Math.max(
+      ...placed.map(({ s, p }, i) => {
+        const next = placed[(i + 1) % placed.length]!
+        const reach = around(next.s, s, total)
+        const claw = notches.find(({ c }) => {
+          const k = around(c, s, total)
+          return reach > 0 ? k > 0 && k < reach : false
+        })
+        // A claw fills its notch but for the air either side of it.
+        const filled = claw ? Math.max(0, 2 * (claw.half - size / 2 - CLAW_CLEARANCE)) : 0
+        return distance(p, next.p) - size - filled
+      }),
     )
   }
-  // Where the path passes from blocked (at `from`) to free (at `to`), to a micron, so the runs
-  // either side of the axis mirror exactly.
-  const edge = (from: number, to: number): number => {
-    for (let k = 0; k < 16; k++) {
-      const mid = (from + to) / 2
-      if (blocked(mid)) from = mid
-      else to = mid
+
+  function lay(seat: boolean): { s: number; p: Vec3 }[] {
+    const clefts = corners.map((c) => {
+      const seated = seat && !crosses(c)
+      const apart = (h: number) =>
+        seated
+          ? Math.min(distance(at(c - h), at(c)), distance(at(c + h), at(c))) >= pitch
+          : distance(at(c - h), at(c + h)) >= pitch
+      let half = pitch / 2
+      while (half < total / 4 && !apart(half)) half += 0.01
+      return { c, half, seated }
+    })
+    const blocked = (s: number): boolean =>
+      clefts.some(({ c, half }) => Math.abs(around(s, c, total)) < half) ||
+      notches.some(({ c, half }) => Math.abs(around(s, c, total)) < half) ||
+      (start < 0 && crosses(s))
+    const free = Array.from({ length: samples }, (_, i) => !blocked(i * ds))
+    const first = free.indexOf(false)
+    if (first < 0) {
+      // Start on the length axis at its larger-y end (a pear's point, a marquise's tip).
+      const from = axisCrossing(shape, flat, 1)
+      return evenLayout(shape, total, size, gap, (count) =>
+        Array.from({ length: count }, (_, i) => at(from + (total * i) / count)),
+      ).map((p, i, all) => ({ s: from + (total * i) / all.length, p }))
     }
-    return to
-  }
-  const centres: Vec3[] = []
-  const widest = size + Math.max(gap, MAX_GAP)
-  for (let i = first; i < first + samples; i++) {
-    if (!free[i % samples]) continue
-    let j = i
-    while (j + 1 < first + samples && free[(j + 1) % samples]) j++
-    const a = edge((i - 1) * ds, i * ds)
-    const b = edge((j + 1) * ds, j * ds)
-    const span = Math.max(0, b - a)
-    // As many stones as fit at the asked gap, spread up to `MAX_GAP` with any slack beside the
-    // claws; or one more, drawn closer (never under `MIN_GAP`), when that is nearer the asked
-    // gap than the spread and the slack together.
-    const fit = Math.floor(span / pitch + 1e-9) + 1
-    const off = (count: number) => {
-      if (count < 2) return { count, step: 0, cost: span / 2 }
-      const step = Math.min(span / (count - 1), widest)
-      // Measured in space: round a curve stones stand closer than along the path.
-      const lead = (span - step * (count - 1)) / 2
-      const apart = Array.from({ length: count - 1 }, (_, k) =>
-        distance(at(a + lead + step * k), at(a + lead + step * (k + 1))),
-      ).every((d) => d >= size + MIN_GAP)
-      if (count > fit && !apart) return { count, step, cost: Infinity }
-      return { count, step, cost: Math.abs(step - size - gap) + lead }
+    // Where the path passes from blocked (at `from`) to free (at `to`), to a micron, so the runs
+    // either side of the axis mirror exactly.
+    const edge = (from: number, to: number): number => {
+      for (let k = 0; k < 16; k++) {
+        const mid = (from + to) / 2
+        if (blocked(mid)) from = mid
+        else to = mid
+      }
+      return to
     }
-    const best = [off(fit), off(fit + 1)].reduce((x, y) => (y.cost < x.cost ? y : x))
-    const { count, step } = best
-    const lead = (span - step * (count - 1)) / 2
-    for (let k = 0; k < count; k++) centres.push(at(a + lead + step * k))
-    i = j
+    const placed: { s: number; p: Vec3 }[] = clefts
+      .filter((k) => k.seated)
+      .map(({ c }) => ({ s: c, p: at(c) }))
+    const widest = size + Math.max(gap, MAX_GAP)
+    const inCleft = (s: number) =>
+      clefts.some(({ c, half }) => Math.abs(around(s, c, total)) < half)
+    for (let i = first; i < first + samples; i++) {
+      if (!free[i % samples]) continue
+      let j = i
+      while (j + 1 < first + samples && free[(j + 1) % samples]) j++
+      const a = edge((i - 1) * ds, i * ds)
+      const b = edge((j + 1) * ds, j * ds)
+      const span = Math.max(0, b - a)
+      // Slack goes beside the claws, which fill it, never beside a cleft: there the stones close
+      // up to the stone across it, so the row carries on round the cleft.
+      const clawEnds = [a - ds, b + ds].filter((s) => !inCleft(s)).length
+      const shareAtA = clawEnds === 0 ? 0.5 : inCleft(a - ds) ? 0 : 1 / clawEnds
+      // As many stones as fit at the asked gap, spread up to `MAX_GAP`; further, up to
+      // `MAX_PLAIN`, where the slack left beside a claw would show as bare metal (`MAX_LEAD`);
+      // or one more, drawn closer (never under `MIN_GAP`), when that is nearer the asked gap
+      // than the spread and the slack together.
+      const fit = Math.floor(span / pitch + 1e-9) + 1
+      const off = (count: number) => {
+        if (count < 2) return { count, step: 0, lead: span * shareAtA, cost: span / 2 }
+        let step = Math.min(span / (count - 1), widest)
+        const ends = Math.max(1, clawEnds)
+        if ((span - step * (count - 1)) / ends > MAX_LEAD)
+          step = Math.min(
+            span / (count - 1),
+            size + MAX_PLAIN,
+            (span - ends * MAX_LEAD) / (count - 1),
+          )
+        const slack = span - step * (count - 1)
+        const lead = slack * shareAtA
+        // Measured in space: round a curve stones stand closer than along the path.
+        const apart = Array.from({ length: count - 1 }, (_, k) =>
+          distance(at(a + lead + step * k), at(a + lead + step * (k + 1))),
+        ).every((d) => d >= size + MIN_GAP)
+        if (count > fit && !apart) return { count, step, lead, cost: Infinity }
+        return { count, step, lead, cost: Math.abs(step - size - gap) + slack / ends }
+      }
+      const { count, step, lead } = [off(fit), off(fit + 1)].reduce((x, y) =>
+        y.cost < x.cost ? y : x,
+      )
+      for (let k = 0; k < count; k++) {
+        const s = a + lead + step * k
+        placed.push({ s, p: at(s) })
+      }
+      i = j
+    }
+    const from = first * ds + total / 2
+    return placed.sort((x, y) => around(x.s, from, total) - around(y.s, from, total))
   }
-  return centres
 }
 
 /**
@@ -458,12 +630,53 @@ export const halo = defineFeature('halo', (node, ctx) => {
   const claws = head?.claws ?? []
   const clawReach = Math.max(0, ...claws.map((c) => c.reach))
   const wall = head?.wall ?? 0
-  const inner = legacy || wall === 0 ? node.offset : Math.max(node.offset, wall + 0.05)
-  if (inner > node.offset + 1e-6)
+  const gapInner = legacy || wall === 0 ? node.offset : Math.max(node.offset, wall + 0.05)
+  if (gapInner > node.offset + 1e-6)
     ctx.report({
       level: 'info',
       code: 'halo.offset',
-      message: `The halo starts ${inner.toFixed(2)} mm from the centre stone, just beyond its ${wall.toFixed(2)} mm bezel wall, not at the ${node.offset.toFixed(2)} mm gap asked.`,
+      message: `The halo starts ${gapInner.toFixed(2)} mm from the centre stone, just beyond its ${wall.toFixed(2)} mm bezel wall, not at the ${node.offset.toFixed(2)} mm gap asked.`,
+      value: gapInner,
+      limit: node.offset,
+      fix: {
+        label: `Set the gap to ${gapInner.toFixed(2)} mm`,
+        ops: [{ t: 'update', id: node.id, patch: { offset: Number(gapInner.toFixed(2)) } }],
+      },
+    })
+  // The inner row's seat wall runs in under the centre's girdle, so the ring's top must be low
+  // enough that the pavilion has narrowed by that wall (and air) there. A thick girdle (a large
+  // stone) takes the halo lower than its drop asks. Where the pavilion cannot give the whole wall
+  // (a flat-backed cabochon has none; a long heart narrows too slowly under its lobes before the
+  // ring would reach its culet), the row moves out by what is missing, as on a bezel.
+  let drop = node.drop
+  let inner = gapInner
+  const wallIn = RULES.channelWall + 0.02 + PAVILION_CLEARANCE - inner
+  if (!legacy && wallIn > 0) {
+    const girdle = shape.polygon(8)
+    const inset = (z: number) =>
+      Math.min(
+        ...girdle.phis.map((phi) => polygonDistance(girdle.points, shape.silhouette(phi, z))),
+      )
+    let top = shape.girdleBottom
+    while (top > shape.culet / 2 && inset(top) < wallIn) top -= 0.02
+    const gained = inset(top)
+    // Lowering the halo only pays where the pavilion actually narrows.
+    if (gained > 0.01) drop = Math.max(drop, 0.25 * crown - top)
+    if (gained < wallIn) inner += wallIn - gained
+  }
+  if (drop > node.drop + 0.05)
+    ctx.report({
+      level: 'info',
+      code: 'halo.lowered',
+      message: `The halo sits ${drop.toFixed(2)} mm below the girdle, not ${node.drop.toFixed(2)} mm: the inner stones need their seat wall under the centre stone’s girdle, and it is thick.`,
+      value: drop,
+      limit: node.drop,
+    })
+  if (inner > gapInner + 1e-6)
+    ctx.report({
+      level: 'info',
+      code: 'halo.offset',
+      message: `The halo starts ${inner.toFixed(2)} mm from the centre stone, not at the ${node.offset.toFixed(2)} mm gap asked: the centre’s pavilion leaves no room under its girdle for the inner stones’ seat wall, so the wall stands in the gap.`,
       value: inner,
       limit: node.offset,
       fix: {
@@ -471,22 +684,6 @@ export const halo = defineFeature('halo', (node, ctx) => {
         ops: [{ t: 'update', id: node.id, patch: { offset: Number(inner.toFixed(2)) } }],
       },
     })
-  // Claws along a side stand in notches of the row; round a claw on a point the row steps out.
-  const notched = legacy ? [] : claws.filter((c) => !c.point)
-  const onPoints = legacy ? [] : claws.filter((c) => c.point)
-  const obstacles = notched.map((c) => clawObstacle(shape, c, size))
-  const push = pointPush(shape, shape.offsetPath(inner + size / 2), legacy ? [] : claws, (c) =>
-    clawObstacle(shape, c, size),
-  )
-  const pushed = (flat: readonly Vec2[]): Vec2[] =>
-    onPoints.length === 0
-      ? [...flat]
-      : densify(flat, 0.1).map((q, i, all) => {
-          const m = outwardAt(all, i)
-          const k = push(q)
-          return [q[0] + m[0] * k, q[1] + m[1] * k]
-        })
-
   if (legacy && clawReach > node.offset + 0.02)
     ctx.report({
       level: 'warning',
@@ -503,33 +700,8 @@ export const halo = defineFeature('halo', (node, ctx) => {
   const width = node.rows * pitch - node.gap + 2 * (legacy ? LEGACY_BORDER : BORDER)
   const middle = inner + (node.rows * pitch - node.gap) / 2
   const depth = culet + FLOOR
-  const ringFlat = legacy
-    ? shape.offsetPath(middle)
-    : bridgeClefts(shape, shape.offsetPath(middle), width)
-
-  // The inner row's seat wall runs in under the centre's girdle, so the ring's top must be low
-  // enough that the pavilion has narrowed by that wall (and air) there. A thick girdle (a large
-  // stone) takes the halo lower than its drop asks.
-  let drop = node.drop
-  const wallIn = RULES.channelWall + 0.02 + PAVILION_CLEARANCE - inner
-  if (!legacy && wallIn > 0) {
-    const girdle = shape.polygon(8)
-    const inset = (z: number) =>
-      Math.min(
-        ...girdle.phis.map((phi) => polygonDistance(girdle.points, shape.silhouette(phi, z))),
-      )
-    let top = shape.girdleBottom
-    while (top > shape.culet / 2 && inset(top) < wallIn) top -= 0.02
-    drop = Math.max(drop, 0.25 * crown - top)
-  }
-  if (drop > node.drop + 0.05)
-    ctx.report({
-      level: 'info',
-      code: 'halo.lowered',
-      message: `The halo sits ${drop.toFixed(2)} mm below the girdle, not ${node.drop.toFixed(2)} mm: the inner stones need their seat wall under the centre stone’s girdle, and it is thick.`,
-      value: drop,
-      limit: node.drop,
-    })
+  const middleFlat = shape.offsetPath(middle)
+  const ringFlat = legacy ? middleFlat : bridgeClefts(shape, middleFlat, width)
 
   // On a band: lift the ring where it would sink into the band (a small centre stone sits low).
   let lift = 0
@@ -559,6 +731,42 @@ export const halo = defineFeature('halo', (node, ctx) => {
       message: `The halo is raised ${lift.toFixed(2)} mm above its drop so it does not sink into the band under a small centre stone.`,
       value: lift,
     })
+
+  // Claws along a side stand in notches of the row; round a claw on a point the row steps out,
+  // unless stepping out would carry the sides with it: a princess's or trillion's straight sides
+  // run from corner to corner, so stepping out round its V-claws pushed the whole row off the
+  // girdle (a moat of 0.6–1 mm). Those claws stand in notches too, and the row hugs the sides.
+  const small = stoneShape({
+    cut: node.cut,
+    stone: node.stone,
+    dims,
+    frame: centre.frame,
+    role: 'accent',
+    setting: 'pave',
+  })
+  const obstacle = (c: ClawPlace) => clawObstacle(shape, c, small, girdleZ)
+  const innerPath = shape.offsetPath(inner + size / 2)
+  const pushFor = (onPoint: readonly ClawPlace[]) =>
+    pointPush(
+      shape,
+      innerPath,
+      claws.map((c) => (onPoint.includes(c) ? c : { ...c, point: false })),
+      obstacle,
+    )
+  const stepOut = legacy ? [] : claws.filter((c) => c.point)
+  const sides = sidePush(shape, claws, pushFor(stepOut))
+  const onPoints = stepOut.filter((c) => sides(c) <= MAX_SIDE_PUSH)
+  const notched = legacy ? [] : claws.filter((c) => !onPoints.includes(c))
+  const obstacles = notched.map(obstacle)
+  const push = pushFor(onPoints)
+  const pushed = (flat: readonly Vec2[]): Vec2[] =>
+    onPoints.length === 0
+      ? [...flat]
+      : densify(flat, 0.1).map((q, i, all) => {
+          const m = outwardAt(all, i)
+          const k = push(q)
+          return [q[0] + m[0] * k, q[1] + m[1] * k]
+        })
 
   const stones: Stone[] = []
   const cuts: Cut[] = []
@@ -625,9 +833,12 @@ export const halo = defineFeature('halo', (node, ctx) => {
     .phis.map((phi) => shape.silhouette(phi, Math.min(surfaceZ, shape.girdleBottom)))
   const sections = frames.map((f, i) => {
     const q = stations[i]!
+    // Across a cleft's bridge the stones beside the cleft still follow the unbridged row, which
+    // dips inside the bridge, so the ring reaches in by that dip as well to keep their seat wall.
+    const dip = legacy ? 0 : polygonDistance(middleFlat, q)
     const inside = legacy
       ? width / 2
-      : clamp(polygonDistance(silhouette, q) - PAVILION_CLEARANCE, corner + 0.05, width / 2)
+      : clamp(polygonDistance(silhouette, q) - PAVILION_CLEARANCE, corner + 0.05, width / 2 + dip)
     const outside = width / 2 + push(q)
     // Loop x points outward from the stone (the path runs counter-clockwise, x = tangent × up).
     const loop = roundedRectLoop(inside + outside, thickness, corner)

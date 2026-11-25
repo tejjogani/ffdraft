@@ -12,7 +12,7 @@ export function copyChecks(scene: Scene): Diagnostic[] {
   for (const result of scene.nodes.values()) {
     if (result.status !== 'ok' || !result.node.visible || result.bodies.length < 2) continue
     const solids = result.bodies.map((b) => b.solid)
-    const extra = solids.length - distinctSolids(solids).length
+    const extra = solids.length - distinctSolids(solids, scene.quality).length
     if (extra === 0) continue
     out.push({
       level: 'warning',

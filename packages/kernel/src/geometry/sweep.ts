@@ -716,7 +716,9 @@ function buildBrep(net: Net): Shape3D {
 // ── Public ───────────────────────────────────────────────────────────────────────────────────
 
 /** The on-demand producers of a sweep, for callers that substitute one of them. */
-export function sweepRecipe(spec: SweepSpec): Required<SolidRecipe> {
+export function sweepRecipe(
+  spec: SweepSpec,
+): Required<Pick<SolidRecipe, 'brep' | 'mesh' | 'volume'>> {
   const net = buildNet(spec)
   return {
     brep: () => buildBrep(net),

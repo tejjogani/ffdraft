@@ -20,6 +20,7 @@ import {
   type IndexedTriangles,
   meshArea,
   meshVolume,
+  surfaceDefects,
   type Tessellation,
   tessellationOf,
   transformTessellation,
@@ -160,6 +161,12 @@ class SolidImpl implements Solid {
     return this.native !== null
   }
 
+  /** The recipe's own count of surface defects, when it has one. */
+  recipeDefects(quality: Quality): { open: number; nonManifold: number } | undefined {
+    this.assertAlive()
+    return this.recipe?.defects?.(quality)
+  }
+
   brep(): Shape3D | null {
     this.assertAlive()
     if (!this.shape && this.recipe?.brep) {
@@ -213,11 +220,13 @@ class SolidImpl implements Solid {
 
   area(): number {
     this.assertAlive()
-    this.areaMm2 ??= this.native
-      ? this.native.surfaceArea()
-      : this.shape
-        ? shapeArea(this.shape)
-        : meshArea(this.triangles())
+    this.areaMm2 ??= this.recipe?.area
+      ? this.recipe.area()
+      : this.native
+        ? this.native.surfaceArea()
+        : this.shape
+          ? shapeArea(this.shape)
+          : meshArea(this.triangles())
     return this.areaMm2
   }
 
@@ -263,6 +272,9 @@ class SolidImpl implements Solid {
           },
         }),
         ...(recipe.volume && { volume: () => recipe.volume!() * scale ** 3 }),
+        ...(recipe.area && { area: () => recipe.area!() * scale ** 2 }),
+        // A similarity moves edges, never joins or splits them.
+        ...(recipe.defects && { defects: recipe.defects }),
       },
       { from: this, matrix },
     )
@@ -324,6 +336,14 @@ class SolidImpl implements Solid {
     return level.surface
   }
 }
+
+/** Open and non-manifold edges of the solid's mesh at `quality` (see `SolidRecipe.defects`). */
+export const surfaceDefectsOf = (
+  solid: Solid,
+  quality: Quality,
+): { open: number; nonManifold: number } =>
+  (solid instanceof SolidImpl && solid.recipeDefects(quality)) ||
+  surfaceDefects(solid.triangles(quality))
 
 /** True for solids that are a Manifold already, so checking their surface would be wasted work. */
 export const isClosedByConstruction = (solid: Solid): boolean =>

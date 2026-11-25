@@ -805,10 +805,12 @@ export const TEMPLATES: readonly Template[] = [
       style: ['glamorous'],
       metal: { alloy: 'au18k-white', plating: 'rhodium' },
       ring: us(6),
+      // 1.1 mm melee keep the face at 1.6× the centre (a frame, not a tyre) and leave the 2 mm
+      // band its 0.4 mm seat wall each side of the row.
       stones: [
         { role: 'center', cut: 'cushion', carat: 1.2 },
-        { role: 'halo', widthMm: 1.3 },
-        { role: 'accent', widthMm: 1.3, setting: 'pave' },
+        { role: 'halo', widthMm: 1.1 },
+        { role: 'accent', widthMm: 1.1, setting: 'pave' },
       ],
     },
   },
@@ -851,7 +853,8 @@ export const TEMPLATES: readonly Template[] = [
       summary: 'Round brilliants set all the way around.',
       style: ['classic'],
       metal: { alloy: 'pt950' },
-      ring: { ...us(6), bandWidthMm: 2.6, bandThicknessMm: 1.9, profile: 'flat' },
+      // 2.9 mm leaves 2 mm stones their 0.4 mm seat wall each side.
+      ring: { ...us(6), bandWidthMm: 2.9, bandThicknessMm: 1.9, profile: 'flat' },
       stones: [{ role: 'accent', cut: 'round', widthMm: 2, setting: 'pave' }],
     },
   },

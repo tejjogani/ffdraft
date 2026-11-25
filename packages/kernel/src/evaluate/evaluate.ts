@@ -221,12 +221,13 @@ export class Evaluator {
       results.set(id, result)
     }
     // Messages name nodes in curly quotes; cached ones (this node's, its dependents', the
-    // whole-piece checks') still carry the old name after a rename. A message can only name the
-    // nodes it is about: its own node, the nodes that node reads, and its `related` ids. Only
-    // their renames apply, so a second node that shares the old name keeps it. Where one of
-    // those nodes still carries the old name, the quote is ambiguous and is left as it is.
-    const labels = (ids: Iterable<string>) =>
-      new Set([...ids].map((id) => `“${results.get(id)?.node.name ?? id}”`))
+    // whole-piece checks') still carry the names they were written with. A message can only
+    // name the nodes it is about: its own node, the nodes that node reads, and its `related`
+    // ids. Each of those quotes is swapped for its node's new name, all at once, so two nodes
+    // that swap names swap in the message too. A quote two of those nodes shared when the
+    // message was written could be either, and is left as it is.
+    const quotedAs = (id: string) =>
+      renames.get(id)?.before ?? `“${results.get(id)?.node.name ?? id}”`
     const relabel = (list: readonly Diagnostic[]): Diagnostic[] =>
       list.map((d) => {
         const own = d.nodeId ? results.get(d.nodeId)?.node : undefined
@@ -240,7 +241,7 @@ export class Evaluator {
           const rename = renames.get(id)
           if (!rename) continue
           const others = [...about].filter((other) => other !== id)
-          if (labels(others).has(rename.before)) continue
+          if (others.some((other) => quotedAs(other) === rename.before)) continue
           swaps.set(rename.before, rename.after)
         }
         if (swaps.size === 0) return d

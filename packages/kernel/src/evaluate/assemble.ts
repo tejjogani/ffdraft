@@ -9,6 +9,7 @@ import { type Design, METALS, type MetalId } from '@pave/schema'
 import type { Manifold } from 'manifold-3d'
 import {
   type Body,
+  type Cavity,
   IDENTITY,
   lazySolid,
   type MetalSpec,
@@ -19,6 +20,7 @@ import {
   type Solid,
   solidFromManifold,
 } from '../core'
+import { TriangleBvh } from '../mesh/bvh'
 import {
   boundsOfPositions,
   boundsOverlap,
@@ -80,23 +82,28 @@ const specOf = (b: MetalSpec): MetalSpec => ({
 })
 
 /**
- * The solids with coincident copies left out: the same body in the same place, recognised by
- * equal bounds (to 0.1 µm) and volume (to six figures). A polar pattern about an axis through
- * its source (the default) stacks every copy on the original; fusing eight coincident spheres
- * took seconds and adds nothing. A hash, not pairwise tests: a pavé has thousands of bodies.
- * Values that straddle a rounding step are merely kept, and fused as before.
+ * The solids with coincident copies left out: the same body in the same place. A polar pattern
+ * about an axis through its source (the default) stacks every copy on the original; fusing eight
+ * coincident spheres took seconds and adds nothing. Candidates are found by a hash of bounds (to
+ * 0.1 µm) and volume (to six figures), not pairwise tests, since a pavé has thousands of bodies;
+ * but equal box and volume is not the same body (an L turned 180° about its own centre, or
+ * mirrored across it, keeps both and covers other ground), so a candidate is dropped only when
+ * its surface and the earlier body's lie on each other (`sameShape`). Values that straddle a
+ * rounding step are merely kept, and fused as before.
  */
-export function distinctSolids(solids: readonly Solid[]): Solid[] {
-  const seen = new Set<string>()
+export function distinctSolids(solids: readonly Solid[], quality: Quality): Solid[] {
+  const placed = new Map<string, Solid[]>()
   return solids.filter((solid) => {
     const key = placeKey(solid)
-    if (seen.has(key)) return false
-    seen.add(key)
+    const candidates = placed.get(key)
+    if (candidates?.some((earlier) => sameShape(earlier, solid, quality))) return false
+    if (candidates) candidates.push(solid)
+    else placed.set(key, [solid])
     return true
   })
 }
 
-/** Equal for the same body in the same place (see `distinctSolids`). */
+/** Equal for the same body in the same place, and for bodies that merely share box and volume. */
 function placeKey(solid: Solid): string {
   const { min, max } = solid.bounds()
   return (
@@ -104,22 +111,78 @@ function placeKey(solid: Solid): string {
   )
 }
 
+/** At most this many vertices of each mesh are checked; the shapes told apart differ widely. */
+const SHAPE_SAMPLES = 2048
+/** BVHs are kept with the solid's cached triangles, so repeated checks of one body build one. */
+const surfaceIndex = new WeakMap<IndexedTriangles, TriangleBvh>()
+
+/**
+ * Whether two solids with equal box and volume are the same body: every (sampled) vertex of each
+ * lies on the other's surface. The tolerance covers two tessellations of one exact surface,
+ * which differ by up to a chord each (a rotated sphere's facets do not line up with the
+ * original's) at the chord the solid was really meshed with (see `relativeQuality`).
+ */
+function sameShape(a: Solid, b: Solid, quality: Quality): boolean {
+  if (a === b) return true
+  const { min, max } = a.bounds()
+  const size = Math.hypot(max[0] - min[0], max[1] - min[1], max[2] - min[2])
+  const tolerance = 2 * Math.max(quality.chord, size * 1e-4) + 1e-6
+  const ta = a.triangles(quality)
+  const tb = b.triangles(quality)
+  return liesOn(tb, ta, tolerance) && liesOn(ta, tb, tolerance)
+}
+
+function liesOn(points: IndexedTriangles, surface: IndexedTriangles, tolerance: number): boolean {
+  let bvh = surfaceIndex.get(surface)
+  if (!bvh) {
+    bvh = new TriangleBvh(surface)
+    surfaceIndex.set(surface, bvh)
+  }
+  const { positions } = points
+  const count = positions.length / 3
+  const step = Math.max(1, Math.floor(count / SHAPE_SAMPLES))
+  const hit = { d2: 0, x: 0, y: 0, z: 0, triangle: 0 }
+  for (let v = 0; v < count; v += step)
+    if (
+      !bvh.closest(positions[v * 3]!, positions[v * 3 + 1]!, positions[v * 3 + 2]!, hit, tolerance)
+    )
+      return false
+  return true
+}
+
 /**
  * The metal each part adds to the piece at draft, where parts are per node and not fused: a
  * body that sits exactly on a body of an earlier part (a polar pattern stacked on its source)
  * adds none, as production's fuse finds. Without this the inspector showed twice the metal of
- * a coincident pattern while `pattern.coincident` said its copies add none. Other overlaps
- * between nodes are left to production, as before.
+ * a coincident pattern while `pattern.coincident` said its copies add none. A body that only
+ * shares an earlier body's box and volume (an L turned about its own centre) adds what it does
+ * not share with it, found by fusing the two. Other overlaps between nodes are left to
+ * production, as before.
  */
 export function draftVolumes(parts: readonly ScenePart[], quality: Quality): number[] {
-  const placed = new Set<string>()
+  const placed = new Map<string, Solid[]>()
   return parts.map(({ part, sources }) => {
-    const solids = distinctSolids(sources.map((s) => s.body.solid))
-    const keys = solids.map(placeKey)
-    const kept = solids.filter((_, i) => !placed.has(keys[i]!))
-    for (const key of keys) placed.add(key)
-    if (kept.length === solids.length) return part.volumeMm3
-    return kept.length > 0 ? fusedVolume(kept, quality) : 0
+    const solids = distinctSolids(
+      sources.map((s) => s.body.solid),
+      quality,
+    )
+    const kept: Solid[] = []
+    const lookalikes = new Set<Solid>()
+    for (const solid of solids) {
+      const earlier = placed.get(placeKey(solid)) ?? []
+      if (earlier.some((e) => sameShape(e, solid, quality))) continue
+      kept.push(solid)
+      for (const e of earlier) lookalikes.add(e)
+    }
+    for (const solid of solids) {
+      const key = placeKey(solid)
+      placed.set(key, [...(placed.get(key) ?? []), solid])
+    }
+    if (kept.length === 0) return 0
+    if (lookalikes.size === 0)
+      return kept.length === solids.length ? part.volumeMm3 : fusedVolume(kept, quality)
+    const base = [...lookalikes]
+    return fusedVolume([...base, ...kept], quality) - fusedVolume(base, quality)
   })
 }
 
@@ -128,7 +191,7 @@ export function draftVolumes(parts: readonly ScenePart[], quality: Quality): num
  * tessellation deficit is added back so the figure is as good as the exact volumes allow.
  */
 function fusedVolume(all: readonly Solid[], quality: Quality): number {
-  const solids = all.length > 1 ? distinctSolids(all) : all
+  const solids = all.length > 1 ? distinctSolids(all, quality) : all
   if (solids.length === 1) return solids[0]!.volume()
   const { manifold: mf } = runtime()
   const meshes = solids.map((s) => s.manifold(quality))
@@ -460,6 +523,10 @@ export function assembleProduction(
     const cutterBoxes = [...everywhere, ...[...groups.values()].flatMap((g) => g.late)].map((c) =>
       c.bounds(),
     )
+    // Where a seat or engraving lies wholly inside the metal it cuts. That void is a buried
+    // stone, which the stone checks report as an error (stone.inMetal) by finding it in metal,
+    // so it stays filled: kept, it would read as a bare cavity and the stone as held by nothing.
+    const sealedCuts = [...everywhere, ...[...targeted.values()].flat()].map((c) => c.bounds())
     /** Every alloy fused so far: a later alloy gives up the metal it shares with an earlier one. */
     const castSoFar: { metal: Manifold; box: Bounds }[] = []
     // Smallest alloy first, so where castings of two alloys share metal the smaller one (a head,
@@ -477,7 +544,7 @@ export function assembleProduction(
       const single: Solid[] = []
       const multi = new Map<Solid, { tris: IndexedTriangles; shells: Shells; loose: Set<number> }>()
       // Coincident copies add no metal and cost a slow union; their sources stay on record.
-      for (const solid of distinctSolids(group.solids)) {
+      for (const solid of distinctSolids(group.solids, quality)) {
         const tris = solid.triangles(quality)
         const found = shellsIn(tris)
         // A chain is a separate component, bought or cast apart and threaded on after: its links
@@ -539,7 +606,7 @@ export function assembleProduction(
         ...group.precut,
         ...busyShells.map((b) => b.manifold),
       ]
-      const shells: { shell: Manifold; volume: number }[] = []
+      const shells: { shell: Manifold; volume: number; cavities: Cavity[] }[] = []
       if (busy.length > 0) {
         let fused = fuse(busy)
         if (seats) fused = temp(fused.subtract(seats))
@@ -552,17 +619,52 @@ export function assembleProduction(
         if (overlapping.length > 0)
           fused = temp(fused.subtract(fuse(overlapping.map((c) => c.metal))))
         castSoFar.push({ metal: fused, box })
+        const outer: { raw: Manifold; box: Bounds; cavities: Manifold[] }[] = []
+        const inner: Manifold[] = []
         for (const raw of fused.decompose()) {
-          const same = untouched(boundsOfManifold(raw), raw.volume())
+          const volume = raw.volume()
+          // A sealed cavity comes out as a shell of its own, facing inward (negative volume).
+          if (volume < -DUST_MM3) {
+            inner.push(raw)
+            continue
+          }
+          const same = untouched(boundsOfManifold(raw), volume)
           if (same) {
             // It only passed near the rest of the piece: back with its siblings, as it was.
             multi.get(same.home)!.loose.add(same.index)
             raw.delete()
             continue
           }
-          const shell = castable(raw)
+          outer.push({ raw, box: boundsOfManifold(raw), cavities: [] })
+        }
+        // Each cavity goes back into the shell around it (the smallest whose box holds it).
+        // Dropped as dust, it filled the casting solid: a hollow bead weighed as a solid ball
+        // and shipped as one, with nothing said.
+        for (const cavity of inner) {
+          const box = boundsOfManifold(cavity)
+          if (sealedCuts.some((cut) => contains(grown(cut, 1e-3), box))) {
+            cavity.delete()
+            continue
+          }
+          const home = outer
+            .filter((o) => contains(o.box, box))
+            .sort((a, b) => boxVolume(a.box) - boxVolume(b.box))[0]
+          if (home) home.cavities.push(cavity)
+          else cavity.delete()
+        }
+        for (const { raw, cavities } of outer) {
+          // Rejoined as one mesh: Manifold.compose drops inward-facing shells.
+          const whole =
+            cavities.length > 0
+              ? manifoldFromTriangles(
+                  concatTriangles([raw, ...cavities].map((m) => trianglesFromManifold(m))),
+                )
+              : raw
+          const found = cavities.map((c) => ({ box: boundsOfManifold(c), volume: -c.volume() }))
+          if (whole !== raw) for (const m of [raw, ...cavities]) m.delete()
+          const shell = castable(whole)
           const volume = shell.volume()
-          if (volume > DUST_MM3) shells.push({ shell, volume })
+          if (volume > DUST_MM3) shells.push({ shell, volume, cavities: found })
           else shell.delete()
         }
         shells.sort((a, b) => b.volume - a.volume)
@@ -614,7 +716,7 @@ export function assembleProduction(
           (sum, s) => sum + s.body.solid.volume() - meshVolume(s.body.solid.triangles(quality)),
           0,
         )
-      kept.forEach(({ shell, volume }, i) => {
+      kept.forEach(({ shell, volume, cavities }, i) => {
         const sources = fusedSources.filter((_, k) => owner[k] === i)
         const solid = solidFromManifold(shell)
         // A shell that no body's centre fell into is still named after the body nearest to it.
@@ -639,6 +741,7 @@ export function assembleProduction(
           fused: solid,
           sources,
           ...(kept.length > 1 && first ? { namedAfter: first.id } : {}),
+          ...(cavities.length > 0 ? { cavities } : {}),
         })
       })
       for (const [home, body] of loose) {
@@ -778,6 +881,32 @@ function shellTriangles(
   }
   return { positions: new Float32Array(outPositions), indices: new Uint32Array(outIndices) }
 }
+
+/** Separate meshes as one (their vertices are not shared). */
+function concatTriangles(list: readonly IndexedTriangles[]): IndexedTriangles {
+  const positions = new Float32Array(list.reduce((n, t) => n + t.positions.length, 0))
+  const indices = new Uint32Array(list.reduce((n, t) => n + t.indices.length, 0))
+  let v = 0
+  let i = 0
+  for (const t of list) {
+    positions.set(t.positions, v)
+    for (let k = 0; k < t.indices.length; k++) indices[i + k] = t.indices[k]! + v / 3
+    v += t.positions.length
+    i += t.indices.length
+  }
+  return { positions, indices }
+}
+
+const contains = (outer: Bounds, inner: Bounds) =>
+  [0, 1, 2].every((k) => outer.min[k]! <= inner.min[k]! && inner.max[k]! <= outer.max[k]!)
+
+const grown = (b: Bounds, by: number): Bounds => ({
+  min: [b.min[0] - by, b.min[1] - by, b.min[2] - by],
+  max: [b.max[0] + by, b.max[1] + by, b.max[2] + by],
+})
+
+const boxVolume = (b: Bounds) =>
+  (b.max[0] - b.min[0]) * (b.max[1] - b.min[1]) * (b.max[2] - b.min[2])
 
 function boundsOfManifold(m: Manifold): Bounds {
   const box = m.boundingBox()

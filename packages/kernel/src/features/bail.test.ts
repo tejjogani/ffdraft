@@ -400,13 +400,27 @@ describe('bail', () => {
               } as NodeInput,
             ]
           : []),
-        { id: 'bail', kind: 'bail', host: 'field', style: 'hidden', opening: 6, width: 4, wire: 1.4 },
+        {
+          id: 'bail',
+          kind: 'bail',
+          host: 'field',
+          style: 'hidden',
+          opening: 6,
+          width: 4,
+          wire: 1.4,
+        },
       ])
     const codes = async (plug: boolean) =>
       (await kernel.evaluate(plugged(plug))).diagnostics.map((d) => d.code)
     expect(await codes(true)).not.toContain('bail.showsThrough')
     // Without the plug the hole is open and the bail shows.
-    expect(await codes(false)).toContain('bail.showsThrough')
+    const open = await kernel.evaluate(plugged(false))
+    const shows = open.diagnostics.find((d) => d.code === 'bail.showsThrough')
+    expect(shows).toBeDefined()
+    // Its one-click fix hangs the piece from a bail on top, which nothing shows through.
+    expect(shows?.fix?.ops).toEqual([{ t: 'update', id: 'bail', patch: { style: 'tube' } }])
+    const fixed = await kernel.evaluate(applyOps(plugged(false), shows!.fix!.ops).design)
+    expect(fixed.diagnostics.map((d) => d.code)).not.toContain('bail.showsThrough')
   }, 60_000)
 
   it('hangs a hidden bail from the top rim of a scooped-out back', async () => {

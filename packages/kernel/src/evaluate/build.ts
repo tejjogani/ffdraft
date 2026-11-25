@@ -19,8 +19,8 @@ import {
   uniformScaleOf,
 } from '../geometry/vec'
 import { isRuntimeFault } from '../runtime/index'
-import { meshVolume, surfaceDefects } from '../solid/meshing'
-import { isClosedByConstruction, withSolidScope } from '../solid/solid'
+import { meshVolume } from '../solid/meshing'
+import { isClosedByConstruction, surfaceDefectsOf, withSolidScope } from '../solid/solid'
 import type { AssetResolver, Detail, Diagnostic } from '../types'
 
 export interface BuildEnvironment {
@@ -113,7 +113,7 @@ function checkGeometry(placed: Placed, env: BuildEnvironment): void {
       )
     if (isClosedByConstruction(solid)) continue
     if (tris.indices.length === 0) throw new Error('the shape it describes has no surface')
-    const { open, nonManifold } = surfaceDefects(tris)
+    const { open, nonManifold } = surfaceDefectsOf(solid, env.quality)
     if (open > 0 || nonManifold > 0)
       throw new Error(
         'the shape it describes is not a closed solid (its surface has gaps or crosses itself); check its profile, path or size',

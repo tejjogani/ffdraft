@@ -398,9 +398,9 @@ describe('iced sculpts and bails', () => {
       (x) => x.ruleId === 'iced.depth',
     )
     expect(f?.value).toBeCloseTo(body + 4, 6)
-    expect(lintDesign(design, summary(40, body + off), { spec }).map((x) => x.ruleId)).not.toContain(
-      'iced.depth',
-    )
+    expect(
+      lintDesign(design, summary(40, body + off), { spec }).map((x) => x.ruleId),
+    ).not.toContain('iced.depth')
   })
 
   it('hangs an iced letter from a bail on top: a hidden slot shows through its counters and gaps', () => {

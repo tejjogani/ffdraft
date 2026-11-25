@@ -32,6 +32,9 @@ export function serveKernel(
   const running = new Map<number, AbortController>()
   const assets = new Map<number, { resolve(bytes: Uint8Array): void; reject(error: Error): void }>()
   let nextAsset = 0
+  // Taken once per Worker. The lock outlives a ready that failed (a WASM download cut off), and
+  // a second request for it from this same Worker would queue behind itself for ever.
+  let held: Promise<boolean> | undefined
   // Asset bytes live on the main thread (it knows how to fetch them); ask for each one.
   const resolveAsset: AssetResolver = (assetId) =>
     new Promise((resolve, reject) => {
@@ -53,7 +56,8 @@ export function serveKernel(
     if (typeof data !== 'object' || data === null) return
     switch (data.type) {
       case 'ready':
-        Promise.all([kernel.ready(), holdLock(locks, data.lock)])
+        held ??= holdLock(locks, data.lock)
+        Promise.all([kernel.ready(), held])
           .then(([, locked]) =>
             port.postMessage({
               type: 'ready',

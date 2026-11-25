@@ -15,7 +15,15 @@ import {
   prongLightFor,
   prongSpinFor,
 } from '@pave/schema'
-import { type Body, type BuildContext, type Cut, defineFeature, metalOf, type Solid } from '../core'
+import {
+  type Body,
+  type BuildContext,
+  type Cut,
+  defineFeature,
+  metalOf,
+  type Solid,
+  type Stone,
+} from '../core'
 import { seatCutter } from '../gems/cutter'
 import {
   clawLayoutIssues,
@@ -44,10 +52,12 @@ import {
   normalize,
   scale,
   sub,
+  toFrame,
   type Vec2,
   type Vec3,
 } from '../geometry/vec'
 import { RULES } from '../rules'
+import { QUALITY } from '../solid/solid'
 import { gemData, type StoneHost } from './gem'
 
 type SettingNode = NodeOf<'setting'>
@@ -202,6 +212,8 @@ interface ProngStyle {
   loop: Loop
   /** Half the section's radial thickness: how far the claw's axis stands off the girdle. */
   radius: number
+  /** The section's corner radius (`radius` for a round section). */
+  corner: number
   /** How deep the claw bites over the girdle edge. */
   overlap: number
   /** Stations up the crown: fraction of the crown height and section scale. */
@@ -217,6 +229,7 @@ function prongStyle(node: SettingNode, d: number, onPoint: boolean): ProngStyle 
     return {
       loop: roundedRectLoop(d * 0.9, d * 1.7, d * 0.3),
       radius: d * 0.45,
+      corner: d * 0.3,
       overlap: Math.max(overlap, d * 0.3),
       crown: [
         [0.25, 1],
@@ -229,6 +242,7 @@ function prongStyle(node: SettingNode, d: number, onPoint: boolean): ProngStyle 
       return {
         loop: circleLoop(d / 2),
         radius: d / 2,
+        corner: d / 2,
         overlap,
         crown: [
           [0.3, 0.9],
@@ -241,6 +255,7 @@ function prongStyle(node: SettingNode, d: number, onPoint: boolean): ProngStyle 
       return {
         loop: roundedRectLoop(d * 0.65, d * 1.5, d * 0.2),
         radius: d * 0.325,
+        corner: d * 0.2,
         overlap,
         crown: [
           [0.25, 1],
@@ -252,6 +267,7 @@ function prongStyle(node: SettingNode, d: number, onPoint: boolean): ProngStyle 
       return {
         loop: circleLoop(d * 0.31),
         radius: d * 0.31,
+        corner: d * 0.31,
         overlap,
         crown: [
           [0.25, 1],
@@ -263,6 +279,7 @@ function prongStyle(node: SettingNode, d: number, onPoint: boolean): ProngStyle 
       return {
         loop: circleLoop(d / 2),
         radius: d / 2,
+        corner: d / 2,
         overlap,
         crown: [
           [0.25, 1],
@@ -346,8 +363,20 @@ export interface ClawPlace {
   halfWidth: number
   /** Half its thickness out from the girdle, mm: its axis stands `reach − radius` off the girdle. */
   radius: number
+  /**
+   * Corner radius of its section, mm (`radius` for a round wire): a V-claw's flat-ended section
+   * reaches further at its corners than a stadium of the same width, enough to touch a halo stone.
+   */
+  corner: number
   /** How far its outside stands beyond the girdle, mm. */
   reach: number
+  /**
+   * Its surface in the stone's frame, as flat triangles (nine numbers each). Legs lean in and, on
+   * a band, sideways toward its metal, and the section turns where the claw bends over the crown,
+   * so a halo stone set below the girdle must clear the claw as built, not its section at the
+   * girdle.
+   */
+  surface?: Float32Array
 }
 
 function clawPlaces(node: SettingNode, shape: StoneShape, claws: Claws): ClawPlace[] {
@@ -358,6 +387,7 @@ function clawPlaces(node: SettingNode, shape: StoneShape, claws: Claws): ClawPla
       point,
       halfWidth: clawHalfWidth(node, claws.diameter, point),
       radius: style.radius,
+      corner: style.corner,
       reach: 2 * style.radius - style.overlap,
     }
   })
@@ -368,12 +398,23 @@ function prongs(
   head: Head,
   claws: Claws,
   places: readonly ClawPlace[],
-): Solid[] {
-  return places.flatMap(({ phi, point }) => {
+): Solid[][] {
+  return places.map(({ phi, point }) => {
     const style = prongStyle(node, claws.diameter, point)
     const pair = !point && node.prongTip === 'double'
     return (pair ? [-0.4, 0.4] : [0]).map((k) => prong(head, phi, style, k * claws.diameter))
   })
+}
+
+/** Solids' draft surfaces in a stone's frame, as flat triangles. */
+function inStoneFrame(stone: Stone, solids: readonly Solid[]): Float32Array {
+  const out: number[] = []
+  for (const solid of solids) {
+    const { positions: p, indices } = solid.triangles(QUALITY.draft)
+    for (const i of indices)
+      out.push(...toFrame(stone.frame, [p[i * 3]!, p[i * 3 + 1]!, p[i * 3 + 2]!]))
+  }
+  return new Float32Array(out)
 }
 
 // ── Rails ────────────────────────────────────────────────────────────────────────────────────
@@ -691,7 +732,9 @@ export const setting = defineFeature('setting', (node, ctx) => {
     const standoff = claws.diameter / 2 - RULES.prongOverlap(claws.diameter)
     const wire = clamp(claws.diameter * 0.8, 0.5, 1.2)
     head.railDepth = railDepthOf(head, standoff, wire)
-    solids.push(...prongs(node, head, claws, places))
+    const clawSolids = prongs(node, head, claws, places)
+    places = places.map((place, i) => ({ ...place, surface: inStoneFrame(stone, clawSolids[i]!) }))
+    solids.push(...clawSolids.flat())
     const bottom = baseDepth(head, standoff)
     const girdle = -shape.girdleBottom
     if (node.style === 'basket')

@@ -19,7 +19,9 @@ import {
   creaseNormals,
   featureEdges,
   mergeTessellations,
+  meshArea,
   meshVolume,
+  surfaceDefects,
   tessellationOf,
   transformTessellation,
   transformTriangles,
@@ -45,6 +47,51 @@ export interface Instance {
   matrix: Mat4
 }
 
+const qualityKey = (q: Quality) => `${q.chord}/${q.angle}`
+
+/**
+ * The template with each quality's mesh kept once made. Templates are pure (no WASM objects),
+ * so a template kept across builds (see `Recent`) re-meshes nothing when its chain is rebuilt
+ * only to move it. Callers read the meshes and never mutate them.
+ */
+export function rememberMeshes(template: Template): Template {
+  const meshes = new Map<string, IndexedTriangles>()
+  return {
+    ...template,
+    mesh(quality) {
+      const key = qualityKey(quality)
+      let tris = meshes.get(key)
+      if (!tris) {
+        tris = template.mesh(quality)
+        meshes.set(key, tris)
+      }
+      return tris
+    },
+  }
+}
+
+/**
+ * The last few values made for a key, most recently used kept. For what a chain is made of
+ * (planned links, a clasp), which depends only on the chain's own fields: a chain hung from a
+ * bail is rebuilt with every bail edit, and re-planning its links (a contact solve) and
+ * re-meshing its clasp took most of a bail slider step. Only values that were made are kept;
+ * a maker that throws throws again next time.
+ */
+export class Recent<T> {
+  private readonly values = new Map<string, T>()
+  constructor(private readonly limit: number) {}
+
+  get(key: string, make: () => T): T {
+    let value = this.values.get(key)
+    if (value === undefined) value = make()
+    // Re-inserted, so the map's first key is always the least recently used.
+    this.values.delete(key)
+    this.values.set(key, value)
+    if (this.values.size > this.limit) this.values.delete(this.values.keys().next().value!)
+    return value
+  }
+}
+
 /** Concatenates welded triangle sets (vertices are not shared between them). */
 export function mergeTriangles(parts: readonly IndexedTriangles[]): IndexedTriangles {
   let vertices = 0
@@ -66,8 +113,6 @@ export function mergeTriangles(parts: readonly IndexedTriangles[]): IndexedTrian
   }
   return { positions, indices: out }
 }
-
-const qualityKey = (q: Quality) => `${q.chord}/${q.angle}`
 
 /**
  * Triangle caps for a whole instanced body. Draft: a 22" fine cable has ~600 links and a rope
@@ -93,6 +138,17 @@ function budgeted(template: Template, quality: Quality, share: number) {
     tris = template.mesh(q)
   }
   return { tris, reduced: steps > 0 }
+}
+
+/** Template meshes are kept across builds (`rememberMeshes`), so each is scanned once. */
+const scanned = new WeakMap<IndexedTriangles, { open: number; nonManifold: number }>()
+function defectsOf(tris: IndexedTriangles) {
+  let found = scanned.get(tris)
+  if (!found) {
+    found = surfaceDefects(tris)
+    scanned.set(tris, found)
+  }
+  return found
 }
 
 export interface InstancedSolid {
@@ -145,6 +201,22 @@ export function instancedSolid(
     volume: () => {
       const each = templates.map((t) => meshVolume(t.mesh(QUALITY.production)))
       return instances.reduce((sum, { template }) => sum + each[template]!, 0)
+    },
+    // The merged meshes are rigid copies that share no vertex, so their area and defects are
+    // the copies' summed: no need to merge a chain's copies at full detail just to measure it.
+    area: () => {
+      const each = meshed(QUALITY.production).map((t) => meshArea(t.tris))
+      return instances.reduce((sum, { template }) => sum + each[template]!, 0)
+    },
+    defects: (quality) => {
+      const each = meshed(quality).map((t) => defectsOf(t.tris))
+      return instances.reduce(
+        (sum, { template }) => ({
+          open: sum.open + each[template]!.open,
+          nonManifold: sum.nonManifold + each[template]!.nonManifold,
+        }),
+        { open: 0, nonManifold: 0 },
+      )
     },
     ...(exact && {
       brep: () => {

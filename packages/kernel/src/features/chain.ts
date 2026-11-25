@@ -30,7 +30,13 @@ import {
 import { trianglesFromManifold } from '../solid/solid'
 import { boxClasp, boxMin, type Clasp, lobsterClasp, lobsterMin, toward } from './chain/clasp'
 import { type ChainPath, drapePath, linkFrames, straightPath } from './chain/drape'
-import { type Instance, instancedSolid, type Template } from './chain/instances'
+import {
+  type Instance,
+  instancedSolid,
+  Recent,
+  rememberMeshes,
+  type Template,
+} from './chain/instances'
 import { type LinkSet, wireChain } from './chain/links'
 import { type ChainSection, holeProfile, seatHeight } from './chain/seat'
 import { NoRoomForHinge, type TennisLink, tennisLink } from './chain/tennis'
@@ -49,6 +55,12 @@ const BAIL_CLEARANCE = 0.1
 /** Widest a tennis link is made when the asked width leaves no room for its hinge, mm. */
 const TENNIS_SEARCH = 4
 
+// What a chain is made of, kept across builds by the fields it depends on (see `Recent`): a
+// chain in a bail is rebuilt with every bail edit only to rest in the new hole.
+const wirePlans = new Recent<LinkSet>(8)
+const tennisLinks = new Recent<TennisLink>(8)
+const clasps = new Recent<Template>(8)
+
 /**
  * The tennis link at the asked width, or, when that is too narrow to carry its hinge under the
  * stone (the node accepts links from 0.8 mm), the narrowest width that does, in 0.1 mm steps:
@@ -57,7 +69,10 @@ const TENNIS_SEARCH = 4
 function tennisAtLeast(node: ChainNode, ctx: BuildContext): TennisLink {
   for (let width = node.linkWidth; ; width = Math.round(width * 10 + 1) / 10) {
     try {
-      const link = tennisLink(width, node.wire, node.cut)
+      const link = tennisLinks.get(`${width}|${node.wire}|${node.cut}`, () => {
+        const made = tennisLink(width, node.wire, node.cut)
+        return { ...made, template: rememberMeshes(made.template) }
+      })
       if (width > node.linkWidth)
         ctx.report({
           level: 'warning',
@@ -78,7 +93,13 @@ function tennisAtLeast(node: ChainNode, ctx: BuildContext): TennisLink {
 }
 
 function planFor(node: ChainNode, ctx: BuildContext): ChainPlan {
-  if (node.style !== 'tennis') return wireChain(node.style, node.linkWidth, node.wire)
+  if (node.style !== 'tennis') {
+    const { style, linkWidth, wire } = node
+    return wirePlans.get(`${style}|${linkWidth}|${wire}`, () => {
+      const made = wireChain(style, linkWidth, wire)
+      return { ...made, templates: made.templates.map(rememberMeshes) }
+    })
+  }
   const link = tennisAtLeast(node, ctx)
   // Hang each link from its middle, so the chain's centre line runs through the links.
   const centred = translation([0, 0, -link.middle])
@@ -184,7 +205,7 @@ function claspAt(
   plan: ChainPlan,
   path: ChainPath,
   centres: readonly number[],
-): { dropped: Set<number>; clasp: Clasp; frame: Frame } | null {
+): { dropped: Set<number>; clasp: Clasp; key: string; frame: Frame } | null {
   if (node.clasp === 'none' || !path.closed || centres.length < 4) return null
   const top = path.length / 2
   const tennis = node.style === 'tennis'
@@ -236,7 +257,11 @@ function claspAt(
     const clasp = tennis
       ? boxClasp(2 * plan.half.y, 1.6 * plan.half.z, span)
       : lobsterClasp(node.linkWidth, plan.wire, span)
-    return { dropped: new Set(run), clasp, frame }
+    // Everything the clasp's shape depends on (its frame only places it).
+    const key = tennis
+      ? `box|${2 * plan.half.y}|${1.6 * plan.half.z}|${span}`
+      : `lobster|${node.linkWidth}|${plan.wire}|${span}`
+    return { dropped: new Set(run), clasp, key, frame }
   }
   return null
 }
@@ -246,7 +271,7 @@ function claspAt(
  * frame, meshed at full quality (a link's share of the triangle budget would lose its shape).
  */
 function claspTemplate(clasp: Clasp): Template {
-  return {
+  return rememberMeshes({
     fixed: true,
     mesh: (quality) => {
       const { manifold: mf } = runtime()
@@ -261,7 +286,7 @@ function claspTemplate(clasp: Clasp): Template {
         for (const m of owned) m.delete()
       }
     },
-  }
+  })
 }
 
 /** Facts published for dependents, checks and exporters (node-local space). */
@@ -333,7 +358,9 @@ export const chain = defineFeature('chain', (node, ctx) => {
     })
 
   // The clasp is one more part of the chain's one body: its shells stay apart from the links'.
-  const templates = clasp ? [...plan.templates, claspTemplate(clasp.clasp)] : plan.templates
+  const templates = clasp
+    ? [...plan.templates, clasps.get(clasp.key, () => claspTemplate(clasp.clasp))]
+    : plan.templates
   if (clasp)
     instances.push({
       template: templates.length - 1,

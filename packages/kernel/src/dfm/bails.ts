@@ -38,9 +38,17 @@ export function bailChecks(scene: Scene, _profile: DfmProfile): Diagnostic[] {
         nodeId: bail.id,
         message:
           'The hidden bail shows from the front through an opening in the piece. Make the bail’s opening smaller, or use a bail on top.',
-        ...(bail.frames.opening ? { at: [...bail.frames.opening.origin] as [number, number, number] } : {}),
+        ...(bail.frames.opening
+          ? { at: [...bail.frames.opening.origin] as [number, number, number] }
+          : {}),
         value: seen,
         limit: SHOWS,
+        // A bail on top stands above the piece, where no opening can show it; a smaller slot
+        // still crosses the same counter on most letters.
+        fix: {
+          label: 'Use a tube bail on top',
+          ops: [{ t: 'update', id: bail.id, patch: { style: 'tube' } }],
+        },
       })
   }
   return out

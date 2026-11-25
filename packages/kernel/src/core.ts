@@ -154,6 +154,13 @@ export interface SolidRecipe {
   mesh?: (quality: Quality) => SurfaceMesh
   /** Exact volume in mm³ if it is cheaper to compute than building the B-rep. */
   volume?: () => number
+  /** Area in mm² of the full-detail mesh, when cheaper than meshing and measuring it. */
+  area?: () => number
+  /**
+   * Open and non-manifold edges of `mesh(quality)`, when cheaper than scanning it: a body of
+   * moved copies has its parts' defects, counted once per part.
+   */
+  defects?: (quality: Quality) => { open: number; nonManifold: number }
 }
 
 export interface BooleanOptions {
@@ -318,6 +325,14 @@ export interface ScenePart {
   sources: readonly { nodeId: string; body: Body }[]
   /** The node whose name the part carries, if it is named after one (not after its alloy). */
   namedAfter?: string
+  /** Sealed voids inside the casting (production): metal a mould cannot reach. */
+  cavities?: readonly Cavity[]
+}
+
+export interface Cavity {
+  box: Bounds
+  /** mm³. */
+  volume: number
 }
 
 export interface SceneStone {
