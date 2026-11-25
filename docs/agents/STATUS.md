@@ -1,6 +1,6 @@
 # Live status of agents and tasks
 
-_Generated 25 Nov 2026 10:14 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 25 Nov 2026 10:34 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## Assistant build (lane A, A1)
 
@@ -30,7 +30,7 @@ Branch `claude/assistant-build`, head: 342481a Verify the assistant harness agai
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 9098679 Status: agents and tasks, 09:54 UTC
+Branch `claude/busy-bardeen-o482lo`, head: cb7dcd0 One laptop research prompt with subagents, covering B1 and C1
 
 | Agent | State | Outcome |
 |---|---|---|
