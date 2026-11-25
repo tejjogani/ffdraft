@@ -12,6 +12,7 @@ import {
   type Frame,
   type Mat4,
   metalOf,
+  QUALITY,
   runtime,
   type Solid,
   type Stone,
@@ -177,8 +178,8 @@ function pathPolyline(path: ChainPath, place: Mat4): Vec3[] {
  * Where the clasp goes on a closed drape: in place of the fewest links at the back of the loop
  * (opposite its low point, where a clasp sits on the neck) that leave it room. Returns the
  * indices of the links it replaces, the clasp sized to the gap they leave, and its frame (x
- * along the chord from the end of the last link before it to the start of the first after it,
- * z toward the chain's face).
+ * along the chord from the farthest metal of the last link before it to the nearest of the
+ * first after it, z toward the chain's face).
  */
 function claspAt(
   node: ChainNode,
@@ -189,6 +190,17 @@ function claspAt(
   if (node.clasp === 'none' || !path.closed || centres.length < 4) return null
   const top = path.length / 2
   const tennis = node.style === 'tennis'
+  // How far a link's metal reaches ahead of its centre and behind it: half its length for wire
+  // links, more for a tennis link, whose hinge tongue reaches under the next box.
+  let ahead = plan.linkLength / 2
+  let behind = -plan.linkLength / 2
+  for (const t of plan.templates) {
+    const p = t.mesh(QUALITY.draft).positions
+    for (let i = 0; i < p.length; i += 3) {
+      ahead = Math.max(ahead, p[i]!)
+      behind = Math.min(behind, p[i]!)
+    }
+  }
   const least = tennis ? boxMin(2 * plan.half.y) : lobsterMin(node.linkWidth, plan.wire)
   // Links nearest the top first; the nearest m form one run.
   const order = centres.map((s, i) => ({ i, d: Math.abs(s - top) })).sort((a, b) => a.d - b.d)
@@ -197,11 +209,28 @@ function claspAt(
     const first = Math.min(...run)
     const last = Math.max(...run)
     if (first === 0 || last === centres.length - 1) return null
-    const a = path.at(centres[first - 1]! + plan.linkLength / 2).point
-    const b = path.at(centres[last + 1]! - plan.linkLength / 2).point
+    const sa = centres[first - 1]!
+    const sb = centres[last + 1]!
+    const a0 = path.at(sa + ahead).point
+    const b0 = path.at(sb + behind).point
+    const x = toward(a0, b0)
+    // On a tight curve (a bracelet's) the end links and the straight clasp meet at an angle, and
+    // their corners reach across the gap by their width where they meet times its sine: each end
+    // stands off by that much (a box clasp touched the next box at the back of a 180 mm line).
+    // A box clasp meets a box across its whole width; a lobster's round eye and its ring meet
+    // round link ends, which clear by the clasp's own clearance.
+    const standOff = (s: number) => {
+      const t = toward(
+        path.at(s - plan.linkLength / 2).point,
+        path.at(s + plan.linkLength / 2).point,
+      )
+      const cos = Math.min(1, Math.abs(t[0] * x[0] + t[1] * x[1] + t[2] * x[2]))
+      return tennis ? 2 * plan.half.y * Math.sqrt(1 - cos * cos) : 0
+    }
+    const a = addScaled(a0, x, standOff(sa))
+    const b = addScaled(b0, x, -standOff(sb))
     const span = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])
     if (span < least) continue
-    const x = toward(a, b)
     const f = path.face
     const along = f[0] * x[0] + f[1] * x[1] + f[2] * x[2]
     const z = toward([0, 0, 0], [f[0] - along * x[0], f[1] - along * x[1], f[2] - along * x[2]])
