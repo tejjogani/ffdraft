@@ -276,6 +276,10 @@ const explained = (d: { recorded: string; live: string; after: string }) =>
   (d.recorded === 'you' && d.live === 'by the designer' && /^n- v\d+ /.test(d.after)) ||
   // The piece's facts the studio window keeps up to date as it evaluates; none is open here.
   /\bfacts\b/.test(d.after) ||
+  // The cover is drawn in the background after a build and lands when it is done: a read of the
+  // piece sees it or not depending on how fast this machine drew it.
+  (/\bcoverAssetId$/.test(d.after) &&
+    [d.recorded, d.live].every((v) => /^(null|as_[\w-]+)$/.test(v))) ||
   // A capture a studio window drew when recorded is drawn on the server here, and says so.
   /needs an|open Pav|No Pav|could do viewport|drawn on the/.test(
     `${d.after} ${d.recorded} ${d.live}`,

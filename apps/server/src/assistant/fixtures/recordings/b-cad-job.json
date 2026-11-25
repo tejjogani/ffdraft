@@ -14,8 +14,8 @@
      "thinking-binding-controls-2026-08-01",
      "compact-2026-01-12"
     ],
-    "toolsHash": "dccdda23aee84c41",
-    "systemHash": "771bf008cef2b4a9",
+    "toolsHash": "a4c23150429c309c",
+    "systemHash": "678e3d55fabe26f6",
     "conversation": 0,
     "prefix": 0,
     "tail": [
@@ -32,7 +32,7 @@
       "role": "system",
       "content": [
        {
-        "text": "Context (the studio when the designer sent the message above).\nDate: 2026-11-25\nOpen piece: Tenth anniversary ring (id pc_dpSYVRZuPwHPzzfo; ring, solitaire; stage design; design version 1)\nNodes: band (ringShank \"Band\"), center (gem \"Centre stone\"), head (setting \"Head\")\nDirections: A \"Low bezel round\" (id dir_pmidgrInS-tV4Jl-), B \"Oval in low claws\" (id dir_LcZHJND4IC2Q_taU), C \"East-west emerald\" (id dir_e6ttlnC6DiRmOK-t), D \"Bezel round on the slim band\" (id dir_xB5emJYtMPcEojYg, chosen)\nSelection: nothing\nPlan: Pro plan: Blender renders unlimited; Rhino and STEP exports unlimited (resets 2026-12-01). Browser previews, captures and STL, 3MF, OBJ and GLB exports are never counted.\nImage generation: available with Test images (fake-image-1), about $0.010 an image; references.brief first, then references.generate.\n\n# Canon canon-1e0781375cebc5 · ring/solitaire/0046d2982f30c2\n## Rules (typical [band]; warnings give the reason)\n- ring.solitaire.bandWidth (ringShank.widthTop) 1.93 [1.5–2.9]: The band frames the stone: under 1.8 mm reads fragile and bends, over 2.4 mm on a 1 ct swamps it. Delicate needs W ≤ 6.5.\n- ring.solitaire.elevation (gem.placement.elevation) 2.3 [0.5–2.6]: Classic sits 0.2–0.8 mm above the band; low (0.8–1.2) only in a basket or bezel; above 4 mm it catches on everything.\n- ring.solitaire.tableHeight (tableHeight) 6.26 [4.46–8.19]: Height is what the hand feels: 6–7 mm for a classic 1 ct, 7 for everyday, 10.5 only for a cocktail ring.\n- ring.solitaire.widthBottom (ringShank.widthBottom) 2 [1.8–2.2]: Band width at the base\n- ring.solitaire.thicknessTop (ringShank.thicknessTop) 1.8 [1.7–1.9]: Band thickness under the head\n- bezel.wall (setting.wall) 0.7 [0.6–0.8]: The wall grows with the stone: 0.5–0.6 mm to 5 mm, 0.6–0.8 to 7, 0.7–1.0 above; +0.2 in 22k. Under 0.45 it will not cast.\n- ring.scale.headToFinger (headToFinger) 0.55 [0.3–0.8]: Head to finger\n- stones.oneHero (secondStone) 4.51 [0–5.47]: One stone must win in a blink: the second-largest at most 0.85 of the hero, or the eye cannot settle.\n- ring.solitaire.thicknessBottom (ringShank.thicknessBottom) 1.6 [1.5–1.8]: Band thickness at the base\n- ring.base.euro (euroBase) 0 [0–1]: Euro base for big heads\n- stones.softInPave (softestInPave) 10 [8–10]: Flush, channel, bar and pavé stones take the knocks face-on: only Mohs 8 and harder survive them.\n- metals.colours (metalColours) 1 [1–2]: Unity: one or two metal colours. Three reads as three pieces fighting.\n- metals.finishes (finishCount) 1 [1–2]: Unity: at most two finishes, used to separate planes; more is noise.\n- rows.coverage (gemRow.coverage) 160 [120–270]: Coverage of a part row\n- ring.scale.stoneToFinger (stoneToFinger) 0.42 [0.3–0.65]: Stone to finger\n- stones.meleeColour (meleeColourGap) 1 [0–2]: Melee colour against the centre\n- metals.tipFamily (tipFamilies) 1 [1–1]: One claw-tip family\n- iced.levels (levelStep) 1.2 [0.8–1.5]: Steps between levels\n- stones.whiteHead (colourlessInYellowHead) 0 [0–0]: White head for colourless stones\n## Style: Minimal\nReads right: Proportion and weight are the design: nothing hides a bad number. One finish, one metal, one stone or none. Low profiles and closed shapes: bezels, cigar bands, plain court.\nDo: Set low. Keep to one finish. Check every proportion twice: there is nowhere to hide.\nDon't: Halos or pavé shoulders. Two metals. Decoration that does not carry the stone.\n- ringShank.widthTop 1.9 [1.8–2]: or a 5–8 mm cigar band\n- setting.wall 0.6 [0.5–0.7]\n- setting.prongDiameter 1 [0.9–1.1]: four claws on 6.5 mm\n- gem.placement.elevation 1 [0.5–1.2]: low, in a basket or bezel\n## Exemplars\n- sol-minimal-bezel, Low bezel solitaire (solitaire, classic; minimal): metal au18k-yellow, cut round, head bezel, W 6.44, bandW 1.9, bandT 1.9, e 1, wall 0.6\n  Why: A closed 0.6 mm bezel set low: nothing to snag, one clean line. Band 1.9 mm, one metal, one finish: proportion is the whole design. Table under 5 mm off the finger. Bad twin: A wall too thin to close over the girdle.\n- sol-delicate-oval, Delicate oval solitaire (solitaire, delicate; delicate): metal au18k-yellow, cut oval, head basket, W 5.09, bandW 1.65, bandT 1.7, e 2.2, wire 0.95, prongs 4\n  Why: A 1.65 mm band is only right under a stone of 6.5 mm or less: here 5.1 mm. The narrow band is nearly as deep as it is wide, so the head cannot twist it. North-south oval at 1.4 L:W lengthens the finger. Bad twin: A heavy band that swamps a small oval.\n- sol-retro-cocktail, Two-tone aquamarine cocktail ring (solitaire, bold; retro, cocktail): metal au18k-rose, cut emerald, head basket, W 10.5, bandW 7, bandT 2.5, e 3, wire 1.5, prongs 4\n  Why: A wide rose band that tapers to 3.5 mm carries a 10.5 mm stone like a 1940s tank ring. Heavy 1.5 mm claws and a euro base keep a big step cut upright. One alloy: a yellow head would be soldered on, which the kernel cannot check yet. Bad twin: Claws too fine for a 10 mm stone.\n## Cannot build: say so, offer the stand-in\n- French and U-cut pavé → build shared prong and say the setter will cut it\n- Half-bezel arc other than 110° → the arc is fixed at 110° a side: a wider or narrower grip is a maker note\n- Antique and fancy cuts → old European, rose, polki, tapered baguette, trapezoid and half-moon are not cuts here: name the stand-in\n- Alloys and finishes we cannot specify → 21k, enamel, per-region plating and hand engraving: pick the nearest alloy and note the rest\n## Watch for\n- A stone row running into the head\n- Fat claws that hide the stone\n- A \"lollipop\" head: a big head on a stick of a shank\n- Band and stone out of scale with each other\n- A dead under-gallery: bare claws or a solid block from the side\n## Ask (at most three)\n- Ring size?\n- Centre stone: shape, size or carat, natural or lab?\n- Metal, and active hands or a flush-fit wedding band beside it?",
+        "text": "Context (the studio when the designer sent the message above).\nDate: 2026-11-25\nOpen piece: \"Tenth anniversary ring\" (id pc_GNC7SNizrFIeyonV; ring, solitaire; stage design; design version 1)\nNodes: band (ringShank \"Band\"), center (gem \"Centre stone\"), head (setting \"Head\")\nDirections: A \"Low bezel round\" (id dir_7Kna3DrMQ2r8o3__), B \"Oval in low claws\" (id dir_donYcI8JHX8lL4jT), C \"East-west emerald\" (id dir_sP_UGaB2OvmnIFhr), D \"Bezel round on the slim band\" (id dir_aU2UCqwEvA_1KEQf, chosen)\nSelection: nothing\nPlan: Pro plan: Blender renders unlimited; Rhino and STEP exports unlimited (resets 2026-12-01). Browser previews, captures and STL, 3MF, OBJ and GLB exports are never counted.\nImage generation: available with Test images (fake-image-1), about $0.010 an image; references.brief first, then references.generate.\n\n# Canon canon-08905d6a681c29 · ring/solitaire/0579fe5fa8136d\n## Rules (typical [band]; warnings give the reason)\n- ring.solitaire.bandWidth (ringShank.widthTop) 1.93 [1.5–2.9]: The band frames the stone: under 1.8 mm reads fragile and bends, over 2.4 mm on a 1 ct swamps it. Delicate needs W ≤ 6.5.\n- ring.solitaire.elevation (gem.placement.elevation) 2.3 [0.5–2.6]: Classic sits 0.2–0.8 mm above the band; low (0.8–1.2) only in a basket or bezel; above 4 mm it catches on everything.\n- ring.solitaire.tableHeight (tableHeight) 6.26 [4.46–8.19]: Height is what the hand feels: 6–7 mm for a classic 1 ct, 7 for everyday, 10.5 only for a cocktail ring.\n- ring.solitaire.widthBottom (ringShank.widthBottom) 2 [1.8–2.2]: Band width at the base\n- ring.solitaire.thicknessTop (ringShank.thicknessTop) 1.8 [1.7–1.9]: Band thickness under the head\n- bezel.wall (setting.wall) 0.7 [0.6–0.8]: The wall grows with the stone: 0.5–0.6 mm to 5 mm, 0.6–0.8 to 7, 0.7–1.0 above; +0.2 in 22k. Under 0.45 it will not cast.\n- ring.scale.headToFinger (headToFinger) 0.55 [0.3–0.8]: Head to finger\n- stones.oneHero (secondStone) 4.51 [0–5.47]: One stone must win in a blink: the second-largest at most 0.85 of the hero, or the eye cannot settle.\n- ring.solitaire.thicknessBottom (ringShank.thicknessBottom) 1.6 [1.5–1.8]: Band thickness at the base\n- ring.base.euro (euroBase) 0 [0–1]: Euro base for big heads\n- stones.softInPave (softestInPave) 10 [8–10]: Flush, channel, bar and pavé stones take the knocks face-on: only Mohs 8 and harder survive them.\n- metals.colours (metalColours) 1 [1–2]: Unity: one or two metal colours. Three reads as three pieces fighting.\n- metals.finishes (finishCount) 1 [1–2]: Unity: at most two finishes, used to separate planes; more is noise.\n- rows.coverage (gemRow.coverage) 160 [120–270]: Coverage of a part row\n- ring.scale.stoneToFinger (stoneToFinger) 0.42 [0.3–0.65]: Stone to finger\n- stones.meleeColour (meleeColourGap) 1 [0–2]: Melee colour against the centre\n- metals.tipFamily (tipFamilies) 1 [1–1]: One claw-tip family\n- iced.levels (levelStep) 1.2 [0.8–1.5]: Steps between levels\n- stones.whiteHead (colourlessInYellowHead) 0 [0–0]: White head for colourless stones\n## Style: Minimal\nReads right: Proportion and weight are the design: nothing hides a bad number. One finish, one metal, one stone or none. Low profiles and closed shapes: bezels, cigar bands, plain court.\nDo: Set low. Keep to one finish. Check every proportion twice: there is nowhere to hide.\nDon't: Halos or pavé shoulders. Two metals. Decoration that does not carry the stone.\n- ringShank.widthTop 1.9 [1.8–2]: or a 5–8 mm cigar band\n- setting.wall 0.6 [0.5–0.7]\n- setting.prongDiameter 1 [0.9–1.1]: four claws on 6.5 mm\n- gem.placement.elevation 1 [0.5–1.2]: low, in a basket or bezel\n## Exemplars\n- sol-minimal-bezel, Low bezel solitaire (solitaire, classic; minimal): metal au18k-yellow, cut round, head bezel, W 6.44, bandW 1.9, bandT 1.9, e 1, wall 0.6\n  Why: A closed 0.6 mm bezel set low: nothing to snag, one clean line. Band 1.9 mm, one metal, one finish: proportion is the whole design. Table under 5 mm off the finger. Bad twin: A wall too thin to close over the girdle.\n- sol-delicate-oval, Delicate oval solitaire (solitaire, delicate; delicate): metal au18k-yellow, cut oval, head basket, W 5.09, bandW 1.65, bandT 1.7, e 2.2, wire 0.95, prongs 4\n  Why: A 1.65 mm band is only right under a stone of 6.5 mm or less: here 5.1 mm. The narrow band is nearly as deep as it is wide, so the head cannot twist it. North-south oval at 1.4 L:W lengthens the finger. Bad twin: A heavy band that swamps a small oval.\n- sol-retro-cocktail, Two-tone aquamarine cocktail ring (solitaire, bold; retro, cocktail): metal au18k-rose, cut emerald, head basket, W 10.5, bandW 7, bandT 2.5, e 3, wire 1.5, prongs 4\n  Why: A wide rose band that tapers to 3.5 mm carries a 10.5 mm stone like a 1940s tank ring. Heavy 1.5 mm claws and a euro base keep a big step cut upright. One alloy: a yellow head would be soldered on, which the kernel cannot check yet. Bad twin: Claws too fine for a 10 mm stone.\n## Cannot build: say so, offer the stand-in\n- French and U-cut pavé → build shared prong and say the setter will cut it\n- Half-bezel arc other than 110° → the arc is fixed at 110° a side: a wider or narrower grip is a maker note\n- Antique and fancy cuts → old European, rose, polki, tapered baguette, trapezoid and half-moon are not cuts here: name the stand-in\n- Alloys and finishes we cannot specify → 21k, enamel, per-region plating and hand engraving: pick the nearest alloy and note the rest\n## Watch for\n- A stone row running into the head\n- Fat claws that hide the stone\n- A \"lollipop\" head: a big head on a stick of a shank\n- Band and stone out of scale with each other\n- A dead under-gallery: bare claws or a solid block from the side\n## Ask (at most three)\n- Ring size?\n- Centre stone: shape, size or carat, natural or lab?\n- Metal, and active hands or a flush-fit wedding band beside it?",
         "type": "text"
        }
       ]
@@ -54,21 +54,21 @@
       "type": "tool_use",
       "name": "pieces_get",
       "input": {
-       "id": "pc_dpSYVRZuPwHPzzfo"
+       "id": "pc_GNC7SNizrFIeyonV"
       }
      },
      {
       "type": "tool_use",
       "name": "references_pins",
       "input": {
-       "pieceId": "pc_dpSYVRZuPwHPzzfo"
+       "pieceId": "pc_GNC7SNizrFIeyonV"
       }
      },
      {
       "type": "tool_use",
       "name": "design_evaluate",
       "input": {
-       "pieceId": "pc_dpSYVRZuPwHPzzfo",
+       "pieceId": "pc_GNC7SNizrFIeyonV",
        "detail": "production"
       }
      }
@@ -91,8 +91,8 @@
      "thinking-binding-controls-2026-08-01",
      "compact-2026-01-12"
     ],
-    "toolsHash": "dccdda23aee84c41",
-    "systemHash": "771bf008cef2b4a9",
+    "toolsHash": "a4c23150429c309c",
+    "systemHash": "678e3d55fabe26f6",
     "conversation": 0,
     "prefix": 2,
     "tail": [
@@ -102,7 +102,7 @@
        {
         "type": "thinking",
         "thinking": "CAD job on the chosen direction D. Read the design (node params), any pinned references, and evaluate it at production detail in one turn, so the questions I ask are about what the spec really leaves open.",
-        "signature": "fk1.eyJtIjoiY2xhdWRlLW9wdXMtNS01IiwicCI6IlVSakFsVXI2eDUxcTR2eENSeUF4cDJJZkVPeUFUTk1kRWVQeS1laG9TUWcifQ.A2i7I6NXvLQPVuCJPvANaQtbZHeZ4ZT9AM2v0RYyPGI"
+        "signature": "fk1.eyJtIjoiY2xhdWRlLW9wdXMtNS01IiwicCI6IjdRQzJNOTREZWZ4Z2xQM1h0bS02R3cxdzhRcnJxdDI5dU1UOTVIZE94anMifQ.LEtlQckbvQKxi2Lr57VW-jj0i-3tBWztr29JM-T0Y2Y"
        },
        {
         "text": "Reading the design and checking it at production detail first.",
@@ -110,28 +110,28 @@
         "citations": null
        },
        {
-        "id": "toolu_fake9_2_d82d705e",
+        "id": "toolu_fake9_2_6d624ce1",
         "name": "pieces_get",
         "type": "tool_use",
         "input": {
-         "id": "pc_dpSYVRZuPwHPzzfo"
+         "id": "pc_GNC7SNizrFIeyonV"
         }
        },
        {
-        "id": "toolu_fake9_3_c7e468cf",
+        "id": "toolu_fake9_3_1f3cf77b",
         "name": "references_pins",
         "type": "tool_use",
         "input": {
-         "pieceId": "pc_dpSYVRZuPwHPzzfo"
+         "pieceId": "pc_GNC7SNizrFIeyonV"
         }
        },
        {
-        "id": "toolu_fake9_4_9cc46ebf",
+        "id": "toolu_fake9_4_e0953dbb",
         "name": "design_evaluate",
         "type": "tool_use",
         "input": {
          "detail": "production",
-         "pieceId": "pc_dpSYVRZuPwHPzzfo"
+         "pieceId": "pc_GNC7SNizrFIeyonV"
         }
        }
       ]
@@ -143,11 +143,11 @@
         "type": "tool_result",
         "content": [
          {
-          "text": "{\"id\":\"pc_dpSYVRZuPwHPzzfo\",\"title\":\"Tenth anniversary ring\",\"kind\":\"ring\",\"stage\":\"design\",\"collectionId\":null,\"coverAssetId\":null,\"coverAuto\":true,\"facts\":{\"metal\":\"\",\"caratTotal\":0,\"metalMassG\":0,\"stoneCount\":0},\"createdBy\":\"usr_yhrJIhZsRHYRz__A\",\"createdAt\":\"2026-11-25T11:23:03.893Z\",\"updatedAt\":\"2026-11-25T11:23:07.622Z\",\"brief\":\"A ring for our tenth anniversary. About a carat, size 6. She works with her hands, so nothing that catches. Budget around $4,000.\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"court\",\"bandWidthMm\":2.2},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"minimal\"],\"title\":\"Bezel round on the slim band\",\"stones\":[{\"cut\":\"round\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"setting\":\"bezel\"}],\"summary\":\"A 1 ct round in a low 18k yellow bezel on a 2 mm court band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"design\":{\"kind\":\"ring\",\"nodes\":{\"band\":{\"id\":\"band\",\"kind\":\"ringShank\",\"name\":\"Band\",\"size\":{\"value\":6,\"system\":\"us\"},\"finish\":\"polished\",\"plating\":\"none\",\"profile\":\"court\",\"visible\":true,\"material\":\"au18k-yellow\",\"shoulder\":\"plain\",\"splitGap\":2,\"widthTop\":2.2,\"baseShape\":\"round\",\"widthBottom\":2.2,\"thicknessTop\":1.8,\"shoulderHeight\":3,\"thicknessBottom\":1.6},\"head\":{\"id\":\"head\",\"gem\":\"center\",\"kind\":\"setting\",\"name\":\"Head\",\"wall\":0.6,\"rails\":1,\"style\":\"bezel\",\"taper\":0.35,\"finish\":\"polished\",\"plating\":\"none\",\"visible\":true,\"material\":\"au18k-yellow\",\"prongTip\":\"round\",\"prongSpin\":45,\"prongCount\":4,\"prongDiameter\":1},\"center\":{\"id\":\"center\",\"lw\":1,\"cut\":\"round\",\"kind\":\"gem\",\"name\":\"Centre stone\",\"stone\":\"diamond\",\"width\":6.44,\"visible\":true,\"placement\":{\"spin\":0,\"type\":\"ringTop\",\"angle\":0,\"shank\":\"band\",\"elevation\":1}}},\"order\":[\"band\",\"center\",\"head\"],\"schemaVersion\":1},\"version\":1,\"boardIds\":[],\"origin\":null,\"directions\":[{\"id\":\"dir_pmidgrInS-tV4Jl-\",\"idea\":\"A 1 ct round sunk in a low full bezel on a 2 mm court band: nothing to catch at all.\",\"name\":\"Low bezel round\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"court\",\"bandWidthMm\":2},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"minimal\"],\"title\":\"Low bezel round\",\"stones\":[{\"cut\":\"round\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"setting\":\"bezel\"}],\"summary\":\"A 1 ct round in a low 18k yellow bezel on a 2 mm court band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"basis\":null,\"facts\":{\"metal\":\"au18k-yellow\",\"errors\":0,\"costUsd\":2354,\"boundsMm\":{\"x\":19.90679931640625,\"y\":7.639999866485596,\"z\":23.067400230407713},\"warnings\":0,\"caratTotal\":1.0019880749760002,\"metalMassG\":3.3334460361344154,\"stoneCount\":1},\"notes\":[],\"runId\":\"run__gzd7DYQrtQ-RwRI\",\"letter\":\"A\",\"origin\":\"assistant\",\"tradeOff\":\"The safest for working hands; the metal rim shows a little less of the stone.\",\"createdAt\":\"2026-11-25T11:23:06.557Z\",\"toolCallId\":\"toolu_fake3_2_2c07dcaa\",\"previewAssetIds\":[\"as_KpNhzlx273C-We7-\"]},{\"id\":\"dir_LcZHJND4IC2Q_taU\",\"idea\":\"A 1 ct oval held low in four rounded claws on a slim 2.2 mm band.\",\"name\":\"Oval in low claws\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"court\",\"bandWidthMm\":2.2},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"classic\"],\"title\":\"Oval in low claws\",\"stones\":[{\"cut\":\"oval\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"prongs\":4,\"setting\":\"prong\"}],\"summary\":\"A 1 ct oval in four low claws, 18k yellow, 2.2 mm band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"basis\":null,\"facts\":{\"metal\":\"au18k-yellow\",\"errors\":0,\"costUsd\":2285,\"boundsMm\":{\"x\":19.90679931640625,\"y\":8.036,\"z\":24.01766872406006},\"warnings\":0,\"caratTotal\":1.0013484672352,\"metalMassG\":2.9194857487717076,\"stoneCount\":1},\"notes\":[],\"runId\":\"run__gzd7DYQrtQ-RwRI\",\"letter\":\"B\",\"origin\":\"assistant\",\"tradeOff\":\"More light and a longer look on the finger; four claw tips to check now and then.\",\"createdAt\":\"2026-11-25T11:23:06.525Z\",\"toolCallId\":\"toolu_fake3_2_2c07dcaa\",\"previewAssetIds\":[\"as_-ti-Pl490Upql6Bo\"]},{\"id\":\"dir_e6ttlnC6DiRmOK-t\",\"idea\":\"A 1 ct emerald cut turned across the finger in a half bezel on a flat 2.4 mm band.\",\"name\":\"East-west emerald\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"flatCourt\",\"bandWidthMm\":2.4},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"modern\"],\"title\":\"East-west emerald\",\"stones\":[{\"cut\":\"emerald\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"setting\":\"halfBezel\"}],\"summary\":\"A 1 ct emerald cut, east-west, half bezel, flat 2.4 mm band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"basis\":null,\"facts\":{\"metal\":\"au18k-yellow\",\"errors\":0,\"costUsd\":2437,\"boundsMm\":{\"x\":19.90679931640625,\"y\":6.957999999999999,\"z\":23.637300230407714},\"warnings\":0,\"caratTotal\":1.0009642534527998,\"metalMassG\":4.005670283188849,\"stoneCount\":1},\"notes\":[],\"runId\":\"run__gzd7DYQrtQ-RwRI\",\"letter\":\"C\",\"origin\":\"assistant\",\"tradeOff\":\"The most distinctive and its corners are guarded; emerald cuts show inclusions, so the stone costs more to choose well.\",\"createdAt\":\"2026-11-25T11:23:06.863Z\",\"toolCallId\":\"toolu_fake3_2_2c07dcaa\",\"previewAssetIds\":[\"as_xtdfwhodGSLHdHG5\"]},{\"id\":\"dir_xB5emJYtMPcEojYg\",\"idea\":\"A's low bezel round on B's slimmer 2.2 mm court band.\",\"name\":\"Bezel round on the slim band\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"court\",\"bandWidthMm\":2.2},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"minimal\"],\"title\":\"Bezel round on the slim band\",\"stones\":[{\"cut\":\"round\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"setting\":\"bezel\"}],\"summary\":\"A 1 ct round in a low 18k yellow bezel on a 2 mm court band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"basis\":\"band of B, the rest of A\",\"facts\":{\"metal\":\"au18k-yellow\",\"errors\":0,\"costUsd\":2385,\"boundsMm\":{\"x\":19.90679931640625,\"y\":7.639999866485596,\"z\":23.067400230407713},\"warnings\":0,\"caratTotal\":1.0019880749760002,\"metalMassG\":3.564615455092954,\"stoneCount\":1},\"notes\":[],\"runId\":\"run_EfC3PFdENv9ejAUA\",\"letter\":\"D\",\"origin\":\"mix\",\"tradeOff\":\"Keeps the snag-free bezel; the band is a touch lighter and finer than A's.\",\"createdAt\":\"2026-11-25T11:23:07.393Z\",\"toolCallId\":\"toolu_fake5_1_8dc77d77\",\"previewAssetIds\":[\"as_Sukr0jf10zbLmbMm\"]}],\"chosenDirectionId\":\"dir_xB5emJYtMPcEojYg\",\"provenance\":null}",
+          "text": "{\"id\":\"pc_GNC7SNizrFIeyonV\",\"title\":\"Tenth anniversary ring\",\"kind\":\"ring\",\"stage\":\"design\",\"collectionId\":null,\"coverAssetId\":null,\"coverAuto\":true,\"facts\":{\"metal\":\"\",\"caratTotal\":0,\"metalMassG\":0,\"stoneCount\":0},\"createdBy\":\"usr_ravGKTyQR9DWMxMN\",\"createdAt\":\"2026-11-25T15:06:07.435Z\",\"updatedAt\":\"2026-11-25T15:06:10.887Z\",\"brief\":\"A ring for our tenth anniversary. About a carat, size 6. She works with her hands, so nothing that catches. Budget around $4,000.\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"court\",\"bandWidthMm\":2.2},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"minimal\"],\"title\":\"Bezel round on the slim band\",\"stones\":[{\"cut\":\"round\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"setting\":\"bezel\"}],\"summary\":\"A 1 ct round in a low 18k yellow bezel on a 2 mm court band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"design\":{\"kind\":\"ring\",\"nodes\":{\"band\":{\"id\":\"band\",\"kind\":\"ringShank\",\"name\":\"Band\",\"size\":{\"value\":6,\"system\":\"us\"},\"finish\":\"polished\",\"plating\":\"none\",\"profile\":\"court\",\"visible\":true,\"material\":\"au18k-yellow\",\"shoulder\":\"plain\",\"splitGap\":2,\"widthTop\":2.2,\"baseShape\":\"round\",\"widthBottom\":2.2,\"thicknessTop\":1.8,\"thicknessBottom\":1.6},\"head\":{\"id\":\"head\",\"gem\":\"center\",\"arcs\":\"auto\",\"kind\":\"setting\",\"name\":\"Head\",\"wall\":0.6,\"rails\":1,\"style\":\"bezel\",\"taper\":0.35,\"finish\":\"polished\",\"plating\":\"none\",\"visible\":true,\"material\":\"au18k-yellow\",\"prongTip\":\"round\",\"prongDiameter\":1},\"center\":{\"id\":\"center\",\"cut\":\"round\",\"kind\":\"gem\",\"name\":\"Centre stone\",\"stone\":\"diamond\",\"width\":6.44,\"visible\":true,\"placement\":{\"spin\":0,\"type\":\"ringTop\",\"shank\":\"band\",\"elevation\":1}}},\"order\":[\"band\",\"center\",\"head\"],\"schemaVersion\":2},\"version\":1,\"boardIds\":[],\"origin\":null,\"directions\":[{\"id\":\"dir_7Kna3DrMQ2r8o3__\",\"idea\":\"A 1 ct round sunk in a low full bezel on a 2 mm court band: nothing to catch at all.\",\"name\":\"Low bezel round\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"court\",\"bandWidthMm\":2},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"minimal\"],\"title\":\"Low bezel round\",\"stones\":[{\"cut\":\"round\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"setting\":\"bezel\"}],\"summary\":\"A 1 ct round in a low 18k yellow bezel on a 2 mm court band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"basis\":null,\"facts\":{\"metal\":\"au18k-yellow\",\"errors\":0,\"costUsd\":2354,\"boundsMm\":{\"x\":19.90679931640625,\"y\":7.639999866485596,\"z\":23.067400230407713},\"warnings\":0,\"caratTotal\":1.0019880749760002,\"metalMassG\":3.3324751908259347,\"stoneCount\":1},\"notes\":[],\"runId\":\"run_anrxRmWDDjIi6d4l\",\"letter\":\"A\",\"origin\":\"assistant\",\"tradeOff\":\"The safest for working hands; the metal rim shows a little less of the stone.\",\"createdAt\":\"2026-11-25T15:06:09.879Z\",\"toolCallId\":\"toolu_fake3_2_b74c00a4\",\"previewAssetIds\":[\"as_JuFcmdMSXUGeWkoM\"]},{\"id\":\"dir_donYcI8JHX8lL4jT\",\"idea\":\"A 1 ct oval held low in four rounded claws on a slim 2.2 mm band.\",\"name\":\"Oval in low claws\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"court\",\"bandWidthMm\":2.2},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"classic\"],\"title\":\"Oval in low claws\",\"stones\":[{\"cut\":\"oval\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"prongs\":4,\"setting\":\"prong\"}],\"summary\":\"A 1 ct oval in four low claws, 18k yellow, 2.2 mm band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"basis\":null,\"facts\":{\"metal\":\"au18k-yellow\",\"errors\":0,\"costUsd\":2289,\"boundsMm\":{\"x\":19.90679931640625,\"y\":8.036,\"z\":24.01854705810547},\"warnings\":0,\"caratTotal\":1.0013484672352,\"metalMassG\":2.9439956083826786,\"stoneCount\":1},\"notes\":[],\"runId\":\"run_anrxRmWDDjIi6d4l\",\"letter\":\"B\",\"origin\":\"assistant\",\"tradeOff\":\"More light and a longer look on the finger; four claw tips to check now and then.\",\"createdAt\":\"2026-11-25T15:06:09.874Z\",\"toolCallId\":\"toolu_fake3_2_b74c00a4\",\"previewAssetIds\":[\"as_TywAgwB2wDoR0xaq\"]},{\"id\":\"dir_sP_UGaB2OvmnIFhr\",\"idea\":\"A 1 ct emerald cut turned across the finger in a half bezel on a flat 2.4 mm band.\",\"name\":\"East-west emerald\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"flatCourt\",\"bandWidthMm\":2.4},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"modern\"],\"title\":\"East-west emerald\",\"stones\":[{\"cut\":\"emerald\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"setting\":\"halfBezel\"}],\"summary\":\"A 1 ct emerald cut, east-west, half bezel, flat 2.4 mm band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"basis\":null,\"facts\":{\"metal\":\"au18k-yellow\",\"errors\":1,\"costUsd\":2454,\"boundsMm\":{\"x\":19.90679931640625,\"y\":8.057999610900879,\"z\":23.637300230407714},\"warnings\":0,\"caratTotal\":1.0009642534527998,\"metalMassG\":4.125565173791715,\"stoneCount\":1},\"notes\":[\"“Head” does not touch “Band”, so it would cast loose. Move it until it overlaps.\"],\"runId\":\"run_anrxRmWDDjIi6d4l\",\"letter\":\"C\",\"origin\":\"assistant\",\"tradeOff\":\"The most distinctive and its corners are guarded; emerald cuts show inclusions, so the stone costs more to choose well.\",\"createdAt\":\"2026-11-25T15:06:10.250Z\",\"toolCallId\":\"toolu_fake3_2_b74c00a4\",\"previewAssetIds\":[\"as_rkaaNKWbNc0XZg5T\"]},{\"id\":\"dir_aU2UCqwEvA_1KEQf\",\"idea\":\"A's low bezel round on B's slimmer 2.2 mm court band.\",\"name\":\"Bezel round on the slim band\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"court\",\"bandWidthMm\":2.2},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"minimal\"],\"title\":\"Bezel round on the slim band\",\"stones\":[{\"cut\":\"round\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"setting\":\"bezel\"}],\"summary\":\"A 1 ct round in a low 18k yellow bezel on a 2 mm court band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"basis\":\"band of B, the rest of A\",\"facts\":{\"metal\":\"au18k-yellow\",\"errors\":0,\"costUsd\":2385,\"boundsMm\":{\"x\":19.90679931640625,\"y\":7.639999866485596,\"z\":23.067400230407713},\"warnings\":0,\"caratTotal\":1.0019880749760002,\"metalMassG\":3.563582991277378,\"stoneCount\":1},\"notes\":[],\"runId\":\"run_-CFR0WVhePoByoXI\",\"letter\":\"D\",\"origin\":\"mix\",\"tradeOff\":\"Keeps the snag-free bezel; the band is a touch lighter and finer than A's.\",\"createdAt\":\"2026-11-25T15:06:10.650Z\",\"toolCallId\":\"toolu_fake5_1_83710075\",\"previewAssetIds\":[\"as_m5T_kSwCWSzUUrVc\"]}],\"chosenDirectionId\":\"dir_aU2UCqwEvA_1KEQf\",\"provenance\":null}",
           "type": "text"
          }
         ],
-        "tool_use_id": "toolu_fake9_2_d82d705e"
+        "tool_use_id": "toolu_fake9_2_6d624ce1"
        },
        {
         "type": "tool_result",
@@ -157,13 +157,13 @@
           "type": "text"
          }
         ],
-        "tool_use_id": "toolu_fake9_3_c7e468cf"
+        "tool_use_id": "toolu_fake9_3_1f3cf77b"
        },
        {
         "type": "tool_result",
         "content": [
          {
-          "text": "{\"metalMassG\":3.564615455092954,\"metals\":[{\"material\":\"au18k-yellow\",\"volumeMm3\":229.97519065115833,\"massG\":3.564615455092954}],\"stoneCount\":1,\"caratTotal\":1.0019880749760002,\"lots\":[{\"cut\":\"round\",\"stone\":\"diamond\",\"width\":6.44,\"length\":6.44,\"count\":1,\"caratTotal\":1.0019880749760002,\"setting\":\"bezel\",\"role\":\"center\"}],\"boundsMm\":{\"x\":19.90679931640625,\"y\":7.639999866485596,\"z\":23.067400230407713},\"diagnostics\":[]}",
+          "text": "{\"metalMassG\":3.563582991277378,\"metals\":[{\"material\":\"au18k-yellow\",\"volumeMm3\":229.9085800824115,\"massG\":3.563582991277378}],\"stoneCount\":1,\"caratTotal\":1.0019880749760002,\"lots\":[{\"cut\":\"round\",\"stone\":\"diamond\",\"width\":6.44,\"length\":6.44,\"count\":1,\"caratTotal\":1.0019880749760002,\"setting\":\"bezel\",\"role\":\"center\"}],\"boundsMm\":{\"x\":19.90679931640625,\"y\":7.639999866485596,\"z\":23.067400230407713},\"diagnostics\":[]}",
           "type": "text"
          },
          {
@@ -175,7 +175,7 @@
           "type": "text"
          }
         ],
-        "tool_use_id": "toolu_fake9_4_9cc46ebf"
+        "tool_use_id": "toolu_fake9_4_e0953dbb"
        }
       ]
      }
@@ -257,8 +257,8 @@
      "thinking-binding-controls-2026-08-01",
      "compact-2026-01-12"
     ],
-    "toolsHash": "dccdda23aee84c41",
-    "systemHash": "771bf008cef2b4a9",
+    "toolsHash": "a4c23150429c309c",
+    "systemHash": "678e3d55fabe26f6",
     "conversation": 0,
     "prefix": 4,
     "tail": [
@@ -268,7 +268,7 @@
        {
         "type": "thinking",
         "thinking": "It evaluates clean: 3.56 g, 1.00 ct, no diagnostics, no canon findings. Size US 6, 18k yellow, the 6.44 mm round sits low (elevation 1) in a bezel with a 0.6 mm wall. The canon's bezel wall for a stone this size is 0.6 to 0.8, typical 0.7; 0.6 is at the floor, and she works with her hands, so a 0.7 wall is the sensible production choice. The spec leaves the finish open too. Ask both, defaults chosen for hard wear.",
-        "signature": "fk1.eyJtIjoiY2xhdWRlLW9wdXMtNS01IiwicCI6InB4YUhNcDNZQ0RNdDYyVDBkaDN5VHJoQ0NQRE9zOXgyTExiMmNEMVZlZ28ifQ.bWJ707eQ-ZxSQUwnL2nS9OX4LkzQ3_zRJbSyMbRqpEI"
+        "signature": "fk1.eyJtIjoiY2xhdWRlLW9wdXMtNS01IiwicCI6IktyMW0zRmxNV3FKVWZxVHVlWXV1YUFtQU02cmlabl9yc1FjZ0U2R2pGY1UifQ.LBunCfOtj35g2NaIzSkW3TPeUofYEQ9EVDgDJy6RASM"
        },
        {
         "text": "It checks clean at production detail: 3.6 g of 18k yellow, 1.00 ct, no warnings. Two things the spec leaves open before I add the production detail:",
@@ -276,7 +276,7 @@
         "citations": null
        },
        {
-        "id": "toolu_fake10_2_d82c11cf",
+        "id": "toolu_fake10_2_ffebbb1f",
         "name": "chat_ask",
         "type": "tool_use",
         "input": {
@@ -339,7 +339,7 @@
           "type": "text"
          }
         ],
-        "tool_use_id": "toolu_fake10_2_d82c11cf"
+        "tool_use_id": "toolu_fake10_2_ffebbb1f"
        }
       ]
      }
@@ -356,7 +356,7 @@
       "type": "tool_use",
       "name": "design_apply",
       "input": {
-       "pieceId": "pc_dpSYVRZuPwHPzzfo",
+       "pieceId": "pc_GNC7SNizrFIeyonV",
        "baseVersion": 1,
        "label": "Bezel wall to 0.7 mm for daily wear",
        "ops": [
@@ -389,8 +389,8 @@
      "thinking-binding-controls-2026-08-01",
      "compact-2026-01-12"
     ],
-    "toolsHash": "dccdda23aee84c41",
-    "systemHash": "771bf008cef2b4a9",
+    "toolsHash": "a4c23150429c309c",
+    "systemHash": "678e3d55fabe26f6",
     "conversation": 0,
     "prefix": 6,
     "tail": [
@@ -403,7 +403,7 @@
         "citations": null
        },
        {
-        "id": "toolu_fake11_1_2fa29885",
+        "id": "toolu_fake11_1_0c8c4ef4",
         "name": "design_apply",
         "type": "tool_use",
         "input": {
@@ -417,7 +417,7 @@
           }
          ],
          "label": "Bezel wall to 0.7 mm for daily wear",
-         "pieceId": "pc_dpSYVRZuPwHPzzfo",
+         "pieceId": "pc_GNC7SNizrFIeyonV",
          "baseVersion": 1
         }
        }
@@ -430,7 +430,7 @@
         "type": "tool_result",
         "content": [
          {
-          "text": "{\"version\":2,\"change\":{\"id\":\"chg_run_AV6AW7C5y7ed4uDy_toolu_fake11_1_2fa29885\",\"pieceId\":\"pc_dpSYVRZuPwHPzzfo\",\"seq\":2,\"ops\":[{\"t\":\"update\",\"id\":\"head\",\"patch\":{\"wall\":0.7}}],\"actor\":{\"type\":\"agent\",\"model\":\"claude-opus-5-5\",\"runId\":\"run_AV6AW7C5y7ed4uDy\",\"toolCallId\":\"toolu_fake11_1_2fa29885\"},\"label\":\"Bezel wall to 0.7 mm for daily wear\",\"at\":\"2026-11-25T11:23:08.341Z\"}}",
+          "text": "{\"version\":2,\"change\":{\"id\":\"chg_run_nPkFNQYPxfrxeLF9_toolu_fake11_1_0c8c4ef4\",\"pieceId\":\"pc_GNC7SNizrFIeyonV\",\"seq\":2,\"ops\":[{\"t\":\"update\",\"id\":\"head\",\"patch\":{\"wall\":0.7}}],\"actor\":{\"type\":\"agent\",\"model\":\"claude-opus-5-5\",\"runId\":\"run_nPkFNQYPxfrxeLF9\",\"toolCallId\":\"toolu_fake11_1_0c8c4ef4\"},\"label\":\"Bezel wall to 0.7 mm for daily wear\",\"at\":\"2026-11-25T15:06:11.500Z\"}}",
           "type": "text"
          },
          {
@@ -438,7 +438,7 @@
           "type": "text"
          }
         ],
-        "tool_use_id": "toolu_fake11_1_2fa29885"
+        "tool_use_id": "toolu_fake11_1_0c8c4ef4"
        }
       ]
      }
@@ -460,8 +460,8 @@
      "thinking-binding-controls-2026-08-01",
      "compact-2026-01-12"
     ],
-    "toolsHash": "dccdda23aee84c41",
-    "systemHash": "771bf008cef2b4a9",
+    "toolsHash": "a4c23150429c309c",
+    "systemHash": "678e3d55fabe26f6",
     "conversation": 0,
     "prefix": 8,
     "tail": [
@@ -478,7 +478,7 @@
       "role": "system",
       "content": [
        {
-        "text": "Context (the studio when the designer sent the message above).\nDate: 2026-11-25\nOpen piece: Tenth anniversary ring (id pc_dpSYVRZuPwHPzzfo; ring, solitaire; stage design; design version 3)\nNodes: band (ringShank \"Band\"), center (gem \"Centre stone\"), head (setting \"Head\")\nDirections: A \"Low bezel round\" (id dir_pmidgrInS-tV4Jl-), B \"Oval in low claws\" (id dir_LcZHJND4IC2Q_taU), C \"East-west emerald\" (id dir_e6ttlnC6DiRmOK-t), D \"Bezel round on the slim band\" (id dir_xB5emJYtMPcEojYg, chosen)\nSelection: nothing\nEdits by people since your last turn (build on them; do not undo them):\n- v3 My band, by hand (you)\nPlan: Pro plan: Blender renders unlimited; Rhino and STEP exports unlimited (resets 2026-12-01). Browser previews, captures and STL, 3MF, OBJ and GLB exports are never counted.\nImage generation: available with Test images (fake-image-1), about $0.010 an image; references.brief first, then references.generate.\n\n# Canon canon-1e0781375cebc5 · ring/solitaire/0c5ce1629f39ca\n## Rules (typical [band]; warnings give the reason)\n- ring.solitaire.bandWidth (ringShank.widthTop) 1.93 [1.5–2.9]: The band frames the stone: under 1.8 mm reads fragile and bends, over 2.4 mm on a 1 ct swamps it. Delicate needs W ≤ 6.5.\n- ring.solitaire.elevation (gem.placement.elevation) 2.3 [0.5–2.6]: Classic sits 0.2–0.8 mm above the band; low (0.8–1.2) only in a basket or bezel; above 4 mm it catches on everything.\n- ring.solitaire.tableHeight (tableHeight) 6.26 [4.46–8.19]: Height is what the hand feels: 6–7 mm for a classic 1 ct, 7 for everyday, 10.5 only for a cocktail ring.\n- ring.solitaire.widthBottom (ringShank.widthBottom) 2.4 [2.2–2.6]: Band width at the base\n- ring.solitaire.thicknessTop (ringShank.thicknessTop) 1.8 [1.7–1.9]: Band thickness under the head\n- bezel.wall (setting.wall) 0.7 [0.6–0.8]: The wall grows with the stone: 0.5–0.6 mm to 5 mm, 0.6–0.8 to 7, 0.7–1.0 above; +0.2 in 22k. Under 0.45 it will not cast.\n- ring.scale.headToFinger (headToFinger) 0.55 [0.3–0.8]: Head to finger\n- stones.oneHero (secondStone) 4.51 [0–5.47]: One stone must win in a blink: the second-largest at most 0.85 of the hero, or the eye cannot settle.\n- ring.solitaire.thicknessBottom (ringShank.thicknessBottom) 1.6 [1.5–1.8]: Band thickness at the base\n- ring.base.euro (euroBase) 0 [0–1]: Euro base for big heads\n- stones.softInPave (softestInPave) 10 [8–10]: Flush, channel, bar and pavé stones take the knocks face-on: only Mohs 8 and harder survive them.\n- metals.colours (metalColours) 1 [1–2]: Unity: one or two metal colours. Three reads as three pieces fighting.\n- metals.finishes (finishCount) 1 [1–2]: Unity: at most two finishes, used to separate planes; more is noise.\n- rows.coverage (gemRow.coverage) 160 [120–270]: Coverage of a part row\n- ring.scale.stoneToFinger (stoneToFinger) 0.42 [0.3–0.65]: Stone to finger\n- stones.meleeColour (meleeColourGap) 1 [0–2]: Melee colour against the centre\n- metals.tipFamily (tipFamilies) 1 [1–1]: One claw-tip family\n- iced.levels (levelStep) 1.2 [0.8–1.5]: Steps between levels\n- stones.whiteHead (colourlessInYellowHead) 0 [0–0]: White head for colourless stones\n## Style: Minimal\nReads right: Proportion and weight are the design: nothing hides a bad number. One finish, one metal, one stone or none. Low profiles and closed shapes: bezels, cigar bands, plain court.\nDo: Set low. Keep to one finish. Check every proportion twice: there is nowhere to hide.\nDon't: Halos or pavé shoulders. Two metals. Decoration that does not carry the stone.\n- ringShank.widthTop 1.9 [1.8–2]: or a 5–8 mm cigar band\n- setting.wall 0.6 [0.5–0.7]\n- setting.prongDiameter 1 [0.9–1.1]: four claws on 6.5 mm\n- gem.placement.elevation 1 [0.5–1.2]: low, in a basket or bezel\n## Exemplars\n- sol-minimal-bezel, Low bezel solitaire (solitaire, classic; minimal): metal au18k-yellow, cut round, head bezel, W 6.44, bandW 1.9, bandT 1.9, e 1, wall 0.6\n  Why: A closed 0.6 mm bezel set low: nothing to snag, one clean line. Band 1.9 mm, one metal, one finish: proportion is the whole design. Table under 5 mm off the finger. Bad twin: A wall too thin to close over the girdle.\n- sol-delicate-oval, Delicate oval solitaire (solitaire, delicate; delicate): metal au18k-yellow, cut oval, head basket, W 5.09, bandW 1.65, bandT 1.7, e 2.2, wire 0.95, prongs 4\n  Why: A 1.65 mm band is only right under a stone of 6.5 mm or less: here 5.1 mm. The narrow band is nearly as deep as it is wide, so the head cannot twist it. North-south oval at 1.4 L:W lengthens the finger. Bad twin: A heavy band that swamps a small oval.\n- sol-retro-cocktail, Two-tone aquamarine cocktail ring (solitaire, bold; retro, cocktail): metal au18k-rose, cut emerald, head basket, W 10.5, bandW 7, bandT 2.5, e 3, wire 1.5, prongs 4\n  Why: A wide rose band that tapers to 3.5 mm carries a 10.5 mm stone like a 1940s tank ring. Heavy 1.5 mm claws and a euro base keep a big step cut upright. One alloy: a yellow head would be soldered on, which the kernel cannot check yet. Bad twin: Claws too fine for a 10 mm stone.\n## Cannot build: say so, offer the stand-in\n- French and U-cut pavé → build shared prong and say the setter will cut it\n- Half-bezel arc other than 110° → the arc is fixed at 110° a side: a wider or narrower grip is a maker note\n- Antique and fancy cuts → old European, rose, polki, tapered baguette, trapezoid and half-moon are not cuts here: name the stand-in\n- Alloys and finishes we cannot specify → 21k, enamel, per-region plating and hand engraving: pick the nearest alloy and note the rest\n## Watch for\n- A stone row running into the head\n- Fat claws that hide the stone\n- A \"lollipop\" head: a big head on a stick of a shank\n- Band and stone out of scale with each other\n- A dead under-gallery: bare claws or a solid block from the side\n## Ask (at most three)\n- Ring size?\n- Centre stone: shape, size or carat, natural or lab?\n- Metal, and active hands or a flush-fit wedding band beside it?",
+        "text": "Context (the studio when the designer sent the message above).\nDate: 2026-11-25\nOpen piece: \"Tenth anniversary ring\" (id pc_GNC7SNizrFIeyonV; ring, solitaire; stage design; design version 3)\nNodes: band (ringShank \"Band\"), center (gem \"Centre stone\"), head (setting \"Head\")\nDirections: A \"Low bezel round\" (id dir_7Kna3DrMQ2r8o3__), B \"Oval in low claws\" (id dir_donYcI8JHX8lL4jT), C \"East-west emerald\" (id dir_sP_UGaB2OvmnIFhr), D \"Bezel round on the slim band\" (id dir_aU2UCqwEvA_1KEQf, chosen)\nSelection: nothing\nEdits by people since your last turn (build on them; do not undo them):\n- v3 \"My band, by hand\" (by \"the designer\")\nPlan: Pro plan: Blender renders unlimited; Rhino and STEP exports unlimited (resets 2026-12-01). Browser previews, captures and STL, 3MF, OBJ and GLB exports are never counted.\nImage generation: available with Test images (fake-image-1), about $0.010 an image; references.brief first, then references.generate.\n\n# Canon canon-08905d6a681c29 · ring/solitaire/1add489368e7ed\n## Rules (typical [band]; warnings give the reason)\n- ring.solitaire.bandWidth (ringShank.widthTop) 1.93 [1.5–2.9]: The band frames the stone: under 1.8 mm reads fragile and bends, over 2.4 mm on a 1 ct swamps it. Delicate needs W ≤ 6.5.\n- ring.solitaire.elevation (gem.placement.elevation) 2.3 [0.5–2.6]: Classic sits 0.2–0.8 mm above the band; low (0.8–1.2) only in a basket or bezel; above 4 mm it catches on everything.\n- ring.solitaire.tableHeight (tableHeight) 6.26 [4.46–8.19]: Height is what the hand feels: 6–7 mm for a classic 1 ct, 7 for everyday, 10.5 only for a cocktail ring.\n- ring.solitaire.widthBottom (ringShank.widthBottom) 2.4 [2.2–2.6]: Band width at the base\n- ring.solitaire.thicknessTop (ringShank.thicknessTop) 1.8 [1.7–1.9]: Band thickness under the head\n- bezel.wall (setting.wall) 0.7 [0.6–0.8]: The wall grows with the stone: 0.5–0.6 mm to 5 mm, 0.6–0.8 to 7, 0.7–1.0 above; +0.2 in 22k. Under 0.45 it will not cast.\n- ring.scale.headToFinger (headToFinger) 0.55 [0.3–0.8]: Head to finger\n- stones.oneHero (secondStone) 4.51 [0–5.47]: One stone must win in a blink: the second-largest at most 0.85 of the hero, or the eye cannot settle.\n- ring.solitaire.thicknessBottom (ringShank.thicknessBottom) 1.6 [1.5–1.8]: Band thickness at the base\n- ring.base.euro (euroBase) 0 [0–1]: Euro base for big heads\n- stones.softInPave (softestInPave) 10 [8–10]: Flush, channel, bar and pavé stones take the knocks face-on: only Mohs 8 and harder survive them.\n- metals.colours (metalColours) 1 [1–2]: Unity: one or two metal colours. Three reads as three pieces fighting.\n- metals.finishes (finishCount) 1 [1–2]: Unity: at most two finishes, used to separate planes; more is noise.\n- rows.coverage (gemRow.coverage) 160 [120–270]: Coverage of a part row\n- ring.scale.stoneToFinger (stoneToFinger) 0.42 [0.3–0.65]: Stone to finger\n- stones.meleeColour (meleeColourGap) 1 [0–2]: Melee colour against the centre\n- metals.tipFamily (tipFamilies) 1 [1–1]: One claw-tip family\n- iced.levels (levelStep) 1.2 [0.8–1.5]: Steps between levels\n- stones.whiteHead (colourlessInYellowHead) 0 [0–0]: White head for colourless stones\n## Style: Minimal\nReads right: Proportion and weight are the design: nothing hides a bad number. One finish, one metal, one stone or none. Low profiles and closed shapes: bezels, cigar bands, plain court.\nDo: Set low. Keep to one finish. Check every proportion twice: there is nowhere to hide.\nDon't: Halos or pavé shoulders. Two metals. Decoration that does not carry the stone.\n- ringShank.widthTop 1.9 [1.8–2]: or a 5–8 mm cigar band\n- setting.wall 0.6 [0.5–0.7]\n- setting.prongDiameter 1 [0.9–1.1]: four claws on 6.5 mm\n- gem.placement.elevation 1 [0.5–1.2]: low, in a basket or bezel\n## Exemplars\n- sol-minimal-bezel, Low bezel solitaire (solitaire, classic; minimal): metal au18k-yellow, cut round, head bezel, W 6.44, bandW 1.9, bandT 1.9, e 1, wall 0.6\n  Why: A closed 0.6 mm bezel set low: nothing to snag, one clean line. Band 1.9 mm, one metal, one finish: proportion is the whole design. Table under 5 mm off the finger. Bad twin: A wall too thin to close over the girdle.\n- sol-delicate-oval, Delicate oval solitaire (solitaire, delicate; delicate): metal au18k-yellow, cut oval, head basket, W 5.09, bandW 1.65, bandT 1.7, e 2.2, wire 0.95, prongs 4\n  Why: A 1.65 mm band is only right under a stone of 6.5 mm or less: here 5.1 mm. The narrow band is nearly as deep as it is wide, so the head cannot twist it. North-south oval at 1.4 L:W lengthens the finger. Bad twin: A heavy band that swamps a small oval.\n- sol-retro-cocktail, Two-tone aquamarine cocktail ring (solitaire, bold; retro, cocktail): metal au18k-rose, cut emerald, head basket, W 10.5, bandW 7, bandT 2.5, e 3, wire 1.5, prongs 4\n  Why: A wide rose band that tapers to 3.5 mm carries a 10.5 mm stone like a 1940s tank ring. Heavy 1.5 mm claws and a euro base keep a big step cut upright. One alloy: a yellow head would be soldered on, which the kernel cannot check yet. Bad twin: Claws too fine for a 10 mm stone.\n## Cannot build: say so, offer the stand-in\n- French and U-cut pavé → build shared prong and say the setter will cut it\n- Half-bezel arc other than 110° → the arc is fixed at 110° a side: a wider or narrower grip is a maker note\n- Antique and fancy cuts → old European, rose, polki, tapered baguette, trapezoid and half-moon are not cuts here: name the stand-in\n- Alloys and finishes we cannot specify → 21k, enamel, per-region plating and hand engraving: pick the nearest alloy and note the rest\n## Watch for\n- A stone row running into the head\n- Fat claws that hide the stone\n- A \"lollipop\" head: a big head on a stick of a shank\n- Band and stone out of scale with each other\n- A dead under-gallery: bare claws or a solid block from the side\n## Ask (at most three)\n- Ring size?\n- Centre stone: shape, size or carat, natural or lab?\n- Metal, and active hands or a flush-fit wedding band beside it?",
         "type": "text"
        }
       ]
@@ -500,14 +500,14 @@
       "type": "tool_use",
       "name": "pieces_get",
       "input": {
-       "id": "pc_dpSYVRZuPwHPzzfo"
+       "id": "pc_GNC7SNizrFIeyonV"
       }
      },
      {
       "type": "tool_use",
       "name": "design_evaluate",
       "input": {
-       "pieceId": "pc_dpSYVRZuPwHPzzfo",
+       "pieceId": "pc_GNC7SNizrFIeyonV",
        "detail": "production"
       }
      }
@@ -530,8 +530,8 @@
      "thinking-binding-controls-2026-08-01",
      "compact-2026-01-12"
     ],
-    "toolsHash": "dccdda23aee84c41",
-    "systemHash": "771bf008cef2b4a9",
+    "toolsHash": "a4c23150429c309c",
+    "systemHash": "678e3d55fabe26f6",
     "conversation": 0,
     "prefix": 10,
     "tail": [
@@ -541,7 +541,7 @@
        {
         "type": "thinking",
         "thinking": "Resumed after a hand edit: v3 'My band, by hand'. Keep it. Re-read the piece to see exactly what changed, and run the full production check in the same turn.",
-        "signature": "fk1.eyJtIjoiY2xhdWRlLW9wdXMtNS01IiwicCI6ImVvMDJGcWlHUC1keEI5dzhZME9aWGRYaWR1dHJhQWEzNGtKd3d2M0tVOW8ifQ.Y_ELB6JcMPSfFEOWciQxQs_5ZHunx1Z5uBTE9VJhGGU"
+        "signature": "fk1.eyJtIjoiY2xhdWRlLW9wdXMtNS01IiwicCI6ImdmOXpvT0xIRlI3UGJTLUhNUm5Eek5CRTRMU3ZITzVzblEwQ3Atb3Rjb3MifQ.lL4szzEryI1XG_YQLwQ8Vsn9FtGHZvLpeekR5Oli1b8"
        },
        {
         "text": "Picking up from your band edit; checking the piece as it is now.",
@@ -549,20 +549,20 @@
         "citations": null
        },
        {
-        "id": "toolu_fake13_2_5606aa64",
+        "id": "toolu_fake13_2_d3cedd11",
         "name": "pieces_get",
         "type": "tool_use",
         "input": {
-         "id": "pc_dpSYVRZuPwHPzzfo"
+         "id": "pc_GNC7SNizrFIeyonV"
         }
        },
        {
-        "id": "toolu_fake13_3_65ba639b",
+        "id": "toolu_fake13_3_62e1f927",
         "name": "design_evaluate",
         "type": "tool_use",
         "input": {
          "detail": "production",
-         "pieceId": "pc_dpSYVRZuPwHPzzfo"
+         "pieceId": "pc_GNC7SNizrFIeyonV"
         }
        }
       ]
@@ -574,17 +574,17 @@
         "type": "tool_result",
         "content": [
          {
-          "text": "{\"id\":\"pc_dpSYVRZuPwHPzzfo\",\"title\":\"Tenth anniversary ring\",\"kind\":\"ring\",\"stage\":\"design\",\"collectionId\":null,\"coverAssetId\":null,\"coverAuto\":true,\"facts\":{\"metal\":\"au18k-yellow\",\"caratTotal\":1.0019880749760002,\"metalMassG\":3.564615455092954,\"stoneCount\":1},\"createdBy\":\"usr_yhrJIhZsRHYRz__A\",\"createdAt\":\"2026-11-25T11:23:03.893Z\",\"updatedAt\":\"2026-11-25T11:23:08.501Z\",\"brief\":\"A ring for our tenth anniversary. About a carat, size 6. She works with her hands, so nothing that catches. Budget around $4,000.\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"court\",\"bandWidthMm\":2.2},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"minimal\"],\"title\":\"Bezel round on the slim band\",\"stones\":[{\"cut\":\"round\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"setting\":\"bezel\"}],\"summary\":\"A 1 ct round in a low 18k yellow bezel on a 2 mm court band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"design\":{\"kind\":\"ring\",\"nodes\":{\"band\":{\"id\":\"band\",\"kind\":\"ringShank\",\"name\":\"Band\",\"size\":{\"value\":6,\"system\":\"us\"},\"finish\":\"polished\",\"plating\":\"none\",\"profile\":\"court\",\"visible\":true,\"material\":\"au18k-yellow\",\"shoulder\":\"plain\",\"splitGap\":2,\"widthTop\":2.6,\"baseShape\":\"round\",\"widthBottom\":2.2,\"thicknessTop\":1.8,\"shoulderHeight\":3,\"thicknessBottom\":1.6},\"head\":{\"id\":\"head\",\"gem\":\"center\",\"kind\":\"setting\",\"name\":\"Head\",\"wall\":0.7,\"rails\":1,\"style\":\"bezel\",\"taper\":0.35,\"finish\":\"polished\",\"plating\":\"none\",\"visible\":true,\"material\":\"au18k-yellow\",\"prongTip\":\"round\",\"prongSpin\":45,\"prongCount\":4,\"prongDiameter\":1},\"center\":{\"id\":\"center\",\"lw\":1,\"cut\":\"round\",\"kind\":\"gem\",\"name\":\"Centre stone\",\"stone\":\"diamond\",\"width\":6.44,\"visible\":true,\"placement\":{\"spin\":0,\"type\":\"ringTop\",\"angle\":0,\"shank\":\"band\",\"elevation\":1}}},\"order\":[\"band\",\"center\",\"head\"],\"schemaVersion\":1},\"version\":3,\"boardIds\":[],\"origin\":null,\"directions\":[{\"id\":\"dir_pmidgrInS-tV4Jl-\",\"idea\":\"A 1 ct round sunk in a low full bezel on a 2 mm court band: nothing to catch at all.\",\"name\":\"Low bezel round\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"court\",\"bandWidthMm\":2},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"minimal\"],\"title\":\"Low bezel round\",\"stones\":[{\"cut\":\"round\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"setting\":\"bezel\"}],\"summary\":\"A 1 ct round in a low 18k yellow bezel on a 2 mm court band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"basis\":null,\"facts\":{\"metal\":\"au18k-yellow\",\"errors\":0,\"costUsd\":2354,\"boundsMm\":{\"x\":19.90679931640625,\"y\":7.639999866485596,\"z\":23.067400230407713},\"warnings\":0,\"caratTotal\":1.0019880749760002,\"metalMassG\":3.3334460361344154,\"stoneCount\":1},\"notes\":[],\"runId\":\"run__gzd7DYQrtQ-RwRI\",\"letter\":\"A\",\"origin\":\"assistant\",\"tradeOff\":\"The safest for working hands; the metal rim shows a little less of the stone.\",\"createdAt\":\"2026-11-25T11:23:06.557Z\",\"toolCallId\":\"toolu_fake3_2_2c07dcaa\",\"previewAssetIds\":[\"as_KpNhzlx273C-We7-\"]},{\"id\":\"dir_LcZHJND4IC2Q_taU\",\"idea\":\"A 1 ct oval held low in four rounded claws on a slim 2.2 mm band.\",\"name\":\"Oval in low claws\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"court\",\"bandWidthMm\":2.2},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"classic\"],\"title\":\"Oval in low claws\",\"stones\":[{\"cut\":\"oval\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"prongs\":4,\"setting\":\"prong\"}],\"summary\":\"A 1 ct oval in four low claws, 18k yellow, 2.2 mm band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"basis\":null,\"facts\":{\"metal\":\"au18k-yellow\",\"errors\":0,\"costUsd\":2285,\"boundsMm\":{\"x\":19.90679931640625,\"y\":8.036,\"z\":24.01766872406006},\"warnings\":0,\"caratTotal\":1.0013484672352,\"metalMassG\":2.9194857487717076,\"stoneCount\":1},\"notes\":[],\"runId\":\"run__gzd7DYQrtQ-RwRI\",\"letter\":\"B\",\"origin\":\"assistant\",\"tradeOff\":\"More light and a longer look on the finger; four claw tips to check now and then.\",\"createdAt\":\"2026-11-25T11:23:06.525Z\",\"toolCallId\":\"toolu_fake3_2_2c07dcaa\",\"previewAssetIds\":[\"as_-ti-Pl490Upql6Bo\"]},{\"id\":\"dir_e6ttlnC6DiRmOK-t\",\"idea\":\"A 1 ct emerald cut turned across the finger in a half bezel on a flat 2.4 mm band.\",\"name\":\"East-west emerald\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"flatCourt\",\"bandWidthMm\":2.4},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"modern\"],\"title\":\"East-west emerald\",\"stones\":[{\"cut\":\"emerald\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"setting\":\"halfBezel\"}],\"summary\":\"A 1 ct emerald cut, east-west, half bezel, flat 2.4 mm band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"basis\":null,\"facts\":{\"metal\":\"au18k-yellow\",\"errors\":0,\"costUsd\":2437,\"boundsMm\":{\"x\":19.90679931640625,\"y\":6.957999999999999,\"z\":23.637300230407714},\"warnings\":0,\"caratTotal\":1.0009642534527998,\"metalMassG\":4.005670283188849,\"stoneCount\":1},\"notes\":[],\"runId\":\"run__gzd7DYQrtQ-RwRI\",\"letter\":\"C\",\"origin\":\"assistant\",\"tradeOff\":\"The most distinctive and its corners are guarded; emerald cuts show inclusions, so the stone costs more to choose well.\",\"createdAt\":\"2026-11-25T11:23:06.863Z\",\"toolCallId\":\"toolu_fake3_2_2c07dcaa\",\"previewAssetIds\":[\"as_xtdfwhodGSLHdHG5\"]},{\"id\":\"dir_xB5emJYtMPcEojYg\",\"idea\":\"A's low bezel round on B's slimmer 2.2 mm court band.\",\"name\":\"Bezel round on the slim band\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"court\",\"bandWidthMm\":2.2},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"minimal\"],\"title\":\"Bezel round on the slim band\",\"stones\":[{\"cut\":\"round\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"setting\":\"bezel\"}],\"summary\":\"A 1 ct round in a low 18k yellow bezel on a 2 mm court band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"basis\":\"band of B, the rest of A\",\"facts\":{\"metal\":\"au18k-yellow\",\"errors\":0,\"costUsd\":2385,\"boundsMm\":{\"x\":19.90679931640625,\"y\":7.639999866485596,\"z\":23.067400230407713},\"warnings\":0,\"caratTotal\":1.0019880749760002,\"metalMassG\":3.564615455092954,\"stoneCount\":1},\"notes\":[],\"runId\":\"run_EfC3PFdENv9ejAUA\",\"letter\":\"D\",\"origin\":\"mix\",\"tradeOff\":\"Keeps the snag-free bezel; the band is a touch lighter and finer than A's.\",\"createdAt\":\"2026-11-25T11:23:07.393Z\",\"toolCallId\":\"toolu_fake5_1_8dc77d77\",\"previewAssetIds\":[\"as_Sukr0jf10zbLmbMm\"]}],\"chosenDirectionId\":\"dir_xB5emJYtMPcEojYg\",\"provenance\":null}",
+          "text": "{\"id\":\"pc_GNC7SNizrFIeyonV\",\"title\":\"Tenth anniversary ring\",\"kind\":\"ring\",\"stage\":\"design\",\"collectionId\":null,\"coverAssetId\":null,\"coverAuto\":true,\"facts\":{\"metal\":\"au18k-yellow\",\"caratTotal\":1.0019880749760002,\"metalMassG\":3.563582991277378,\"stoneCount\":1},\"createdBy\":\"usr_ravGKTyQR9DWMxMN\",\"createdAt\":\"2026-11-25T15:06:07.435Z\",\"updatedAt\":\"2026-11-25T15:06:11.658Z\",\"brief\":\"A ring for our tenth anniversary. About a carat, size 6. She works with her hands, so nothing that catches. Budget around $4,000.\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"court\",\"bandWidthMm\":2.2},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"minimal\"],\"title\":\"Bezel round on the slim band\",\"stones\":[{\"cut\":\"round\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"setting\":\"bezel\"}],\"summary\":\"A 1 ct round in a low 18k yellow bezel on a 2 mm court band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"design\":{\"kind\":\"ring\",\"nodes\":{\"band\":{\"id\":\"band\",\"kind\":\"ringShank\",\"name\":\"Band\",\"size\":{\"value\":6,\"system\":\"us\"},\"finish\":\"polished\",\"plating\":\"none\",\"profile\":\"court\",\"visible\":true,\"material\":\"au18k-yellow\",\"shoulder\":\"plain\",\"splitGap\":2,\"widthTop\":2.6,\"baseShape\":\"round\",\"widthBottom\":2.2,\"thicknessTop\":1.8,\"thicknessBottom\":1.6},\"head\":{\"id\":\"head\",\"gem\":\"center\",\"arcs\":\"auto\",\"kind\":\"setting\",\"name\":\"Head\",\"wall\":0.7,\"rails\":1,\"style\":\"bezel\",\"taper\":0.35,\"finish\":\"polished\",\"plating\":\"none\",\"visible\":true,\"material\":\"au18k-yellow\",\"prongTip\":\"round\",\"prongDiameter\":1},\"center\":{\"id\":\"center\",\"cut\":\"round\",\"kind\":\"gem\",\"name\":\"Centre stone\",\"stone\":\"diamond\",\"width\":6.44,\"visible\":true,\"placement\":{\"spin\":0,\"type\":\"ringTop\",\"shank\":\"band\",\"elevation\":1}}},\"order\":[\"band\",\"center\",\"head\"],\"schemaVersion\":2},\"version\":3,\"boardIds\":[],\"origin\":null,\"directions\":[{\"id\":\"dir_7Kna3DrMQ2r8o3__\",\"idea\":\"A 1 ct round sunk in a low full bezel on a 2 mm court band: nothing to catch at all.\",\"name\":\"Low bezel round\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"court\",\"bandWidthMm\":2},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"minimal\"],\"title\":\"Low bezel round\",\"stones\":[{\"cut\":\"round\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"setting\":\"bezel\"}],\"summary\":\"A 1 ct round in a low 18k yellow bezel on a 2 mm court band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"basis\":null,\"facts\":{\"metal\":\"au18k-yellow\",\"errors\":0,\"costUsd\":2354,\"boundsMm\":{\"x\":19.90679931640625,\"y\":7.639999866485596,\"z\":23.067400230407713},\"warnings\":0,\"caratTotal\":1.0019880749760002,\"metalMassG\":3.3324751908259347,\"stoneCount\":1},\"notes\":[],\"runId\":\"run_anrxRmWDDjIi6d4l\",\"letter\":\"A\",\"origin\":\"assistant\",\"tradeOff\":\"The safest for working hands; the metal rim shows a little less of the stone.\",\"createdAt\":\"2026-11-25T15:06:09.879Z\",\"toolCallId\":\"toolu_fake3_2_b74c00a4\",\"previewAssetIds\":[\"as_JuFcmdMSXUGeWkoM\"]},{\"id\":\"dir_donYcI8JHX8lL4jT\",\"idea\":\"A 1 ct oval held low in four rounded claws on a slim 2.2 mm band.\",\"name\":\"Oval in low claws\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"court\",\"bandWidthMm\":2.2},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"classic\"],\"title\":\"Oval in low claws\",\"stones\":[{\"cut\":\"oval\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"prongs\":4,\"setting\":\"prong\"}],\"summary\":\"A 1 ct oval in four low claws, 18k yellow, 2.2 mm band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"basis\":null,\"facts\":{\"metal\":\"au18k-yellow\",\"errors\":0,\"costUsd\":2289,\"boundsMm\":{\"x\":19.90679931640625,\"y\":8.036,\"z\":24.01854705810547},\"warnings\":0,\"caratTotal\":1.0013484672352,\"metalMassG\":2.9439956083826786,\"stoneCount\":1},\"notes\":[],\"runId\":\"run_anrxRmWDDjIi6d4l\",\"letter\":\"B\",\"origin\":\"assistant\",\"tradeOff\":\"More light and a longer look on the finger; four claw tips to check now and then.\",\"createdAt\":\"2026-11-25T15:06:09.874Z\",\"toolCallId\":\"toolu_fake3_2_b74c00a4\",\"previewAssetIds\":[\"as_TywAgwB2wDoR0xaq\"]},{\"id\":\"dir_sP_UGaB2OvmnIFhr\",\"idea\":\"A 1 ct emerald cut turned across the finger in a half bezel on a flat 2.4 mm band.\",\"name\":\"East-west emerald\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"flatCourt\",\"bandWidthMm\":2.4},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"modern\"],\"title\":\"East-west emerald\",\"stones\":[{\"cut\":\"emerald\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"setting\":\"halfBezel\"}],\"summary\":\"A 1 ct emerald cut, east-west, half bezel, flat 2.4 mm band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"basis\":null,\"facts\":{\"metal\":\"au18k-yellow\",\"errors\":1,\"costUsd\":2454,\"boundsMm\":{\"x\":19.90679931640625,\"y\":8.057999610900879,\"z\":23.637300230407714},\"warnings\":0,\"caratTotal\":1.0009642534527998,\"metalMassG\":4.125565173791715,\"stoneCount\":1},\"notes\":[\"“Head” does not touch “Band”, so it would cast loose. Move it until it overlaps.\"],\"runId\":\"run_anrxRmWDDjIi6d4l\",\"letter\":\"C\",\"origin\":\"assistant\",\"tradeOff\":\"The most distinctive and its corners are guarded; emerald cuts show inclusions, so the stone costs more to choose well.\",\"createdAt\":\"2026-11-25T15:06:10.250Z\",\"toolCallId\":\"toolu_fake3_2_b74c00a4\",\"previewAssetIds\":[\"as_rkaaNKWbNc0XZg5T\"]},{\"id\":\"dir_aU2UCqwEvA_1KEQf\",\"idea\":\"A's low bezel round on B's slimmer 2.2 mm court band.\",\"name\":\"Bezel round on the slim band\",\"spec\":{\"kind\":\"ring\",\"ring\":{\"size\":{\"value\":6,\"system\":\"us\"},\"profile\":\"court\",\"bandWidthMm\":2.2},\"metal\":{\"alloy\":\"au18k-yellow\",\"finish\":\"polished\",\"plating\":\"none\"},\"style\":[\"minimal\"],\"title\":\"Bezel round on the slim band\",\"stones\":[{\"cut\":\"round\",\"role\":\"center\",\"carat\":1,\"stone\":\"diamond\",\"setting\":\"bezel\"}],\"summary\":\"A 1 ct round in a low 18k yellow bezel on a 2 mm court band.\",\"archetype\":\"solitaire\",\"budgetUsd\":4000,\"openQuestions\":[]},\"basis\":\"band of B, the rest of A\",\"facts\":{\"metal\":\"au18k-yellow\",\"errors\":0,\"costUsd\":2385,\"boundsMm\":{\"x\":19.90679931640625,\"y\":7.639999866485596,\"z\":23.067400230407713},\"warnings\":0,\"caratTotal\":1.0019880749760002,\"metalMassG\":3.563582991277378,\"stoneCount\":1},\"notes\":[],\"runId\":\"run_-CFR0WVhePoByoXI\",\"letter\":\"D\",\"origin\":\"mix\",\"tradeOff\":\"Keeps the snag-free bezel; the band is a touch lighter and finer than A's.\",\"createdAt\":\"2026-11-25T15:06:10.650Z\",\"toolCallId\":\"toolu_fake5_1_83710075\",\"previewAssetIds\":[\"as_m5T_kSwCWSzUUrVc\"]}],\"chosenDirectionId\":\"dir_aU2UCqwEvA_1KEQf\",\"provenance\":null}",
           "type": "text"
          }
         ],
-        "tool_use_id": "toolu_fake13_2_5606aa64"
+        "tool_use_id": "toolu_fake13_2_d3cedd11"
        },
        {
         "type": "tool_result",
         "content": [
          {
-          "text": "{\"metalMassG\":3.933584715740624,\"metals\":[{\"material\":\"au18k-yellow\",\"volumeMm3\":253.77965908004026,\"massG\":3.933584715740624}],\"stoneCount\":1,\"caratTotal\":1.0019880749760002,\"lots\":[{\"cut\":\"round\",\"stone\":\"diamond\",\"width\":6.44,\"length\":6.44,\"count\":1,\"caratTotal\":1.0019880749760002,\"setting\":\"bezel\",\"role\":\"center\"}],\"boundsMm\":{\"x\":19.90679931640625,\"y\":7.840000152587891,\"z\":23.067400230407713},\"diagnostics\":[]}",
+          "text": "{\"metalMassG\":3.9324462103378375,\"metals\":[{\"material\":\"au18k-yellow\",\"volumeMm3\":253.70620711857018,\"massG\":3.9324462103378375}],\"stoneCount\":1,\"caratTotal\":1.0019880749760002,\"lots\":[{\"cut\":\"round\",\"stone\":\"diamond\",\"width\":6.44,\"length\":6.44,\"count\":1,\"caratTotal\":1.0019880749760002,\"setting\":\"bezel\",\"role\":\"center\"}],\"boundsMm\":{\"x\":19.90679931640625,\"y\":7.840000152587891,\"z\":23.067400230407713},\"diagnostics\":[]}",
           "type": "text"
          },
          {
@@ -596,7 +596,7 @@
           "type": "text"
          }
         ],
-        "tool_use_id": "toolu_fake13_3_65ba639b"
+        "tool_use_id": "toolu_fake13_3_62e1f927"
        }
       ]
      }
@@ -617,7 +617,7 @@
       "type": "tool_use",
       "name": "viewport_capture",
       "input": {
-       "pieceId": "pc_dpSYVRZuPwHPzzfo",
+       "pieceId": "pc_GNC7SNizrFIeyonV",
        "views": [
         "three-quarter",
         "side"
@@ -644,8 +644,8 @@
      "thinking-binding-controls-2026-08-01",
      "compact-2026-01-12"
     ],
-    "toolsHash": "dccdda23aee84c41",
-    "systemHash": "771bf008cef2b4a9",
+    "toolsHash": "a4c23150429c309c",
+    "systemHash": "678e3d55fabe26f6",
     "conversation": 0,
     "prefix": 12,
     "tail": [
@@ -655,7 +655,7 @@
        {
         "type": "thinking",
         "thinking": "Production check is clean: 3.93 g, 1.00 ct, no kernel diagnostics, no canon findings, about $2.4k. The hand edit took the band to 2.6 mm at the top, tapering to 2.2 at the base. That is inside the canon band (1.5 to 2.9) though above the 2.4 its note gives for a 1 ct; it is her call and stays. Look at it before reporting: a three-quarter and a side view.",
-        "signature": "fk1.eyJtIjoiY2xhdWRlLW9wdXMtNS01IiwicCI6InhIeVRpZ3NZWkZDa09kbjdjZDVtS0VoTEpFaUVId19ybGg5UmJlNlo4czgifQ.di_qKVEtcDKrGc-cucU6IUjA6ERxVd5HDDwHWb3I0ls"
+        "signature": "fk1.eyJtIjoiY2xhdWRlLW9wdXMtNS01IiwicCI6IndSZmR2eWctY29HWkE0UFVRMFlMdkw1X25NeFZESWxvcWVzSWlCa3JiaVUifQ.yHbmcmmahoBjruci6cWTnPHqL0bH7vIq69XP5F6lUg8"
        },
        {
         "text": "Every check passes. One look at the piece before I report.",
@@ -663,7 +663,7 @@
         "citations": null
        },
        {
-        "id": "toolu_fake14_2_77599d54",
+        "id": "toolu_fake14_2_b561cab2",
         "name": "viewport_capture",
         "type": "tool_use",
         "input": {
@@ -672,7 +672,7 @@
           "three-quarter",
           "side"
          ],
-         "pieceId": "pc_dpSYVRZuPwHPzzfo"
+         "pieceId": "pc_GNC7SNizrFIeyonV"
         }
        }
       ]
@@ -684,7 +684,7 @@
         "type": "tool_result",
         "content": [
          {
-          "text": "{\"version\":3,\"source\":\"server\",\"images\":[{\"view\":\"three-quarter\",\"assetId\":\"as_No00sCLaIeDD1tHH\"},{\"view\":\"side\",\"assetId\":\"as_8GdA0uKf22Nh7vSu\"}],\"summary\":{\"metalMassG\":4.021989012940109,\"metals\":[{\"material\":\"au18k-yellow\",\"volumeMm3\":259.4831621251683,\"massG\":4.021989012940109}],\"stoneCount\":1,\"caratTotal\":1.0019880749760002,\"lots\":[{\"cut\":\"round\",\"stone\":\"diamond\",\"width\":6.44,\"length\":6.44,\"count\":1,\"caratTotal\":1.0019880749760002,\"setting\":\"bezel\",\"role\":\"center\"}],\"boundsMm\":{\"x\":19.90679931640625,\"y\":7.840000152587891,\"z\":23.067400230407713},\"diagnostics\":[]}}",
+          "text": "{\"version\":3,\"source\":\"server\",\"images\":[{\"view\":\"three-quarter\",\"assetId\":\"as_6WI90sl5zGqXBLVD\"},{\"view\":\"side\",\"assetId\":\"as_VaTxmhpVzhazjWvk\"}],\"summary\":{\"metalMassG\":4.021972977510853,\"metals\":[{\"material\":\"au18k-yellow\",\"volumeMm3\":259.4821275813453,\"massG\":4.021972977510853}],\"stoneCount\":1,\"caratTotal\":1.0019880749760002,\"lots\":[{\"cut\":\"round\",\"stone\":\"diamond\",\"width\":6.44,\"length\":6.44,\"count\":1,\"caratTotal\":1.0019880749760002,\"setting\":\"bezel\",\"role\":\"center\"}],\"boundsMm\":{\"x\":19.90679931640625,\"y\":7.840000152587891,\"z\":23.067400230407713},\"diagnostics\":[]}}",
           "type": "text"
          },
          {
@@ -696,8 +696,8 @@
           "source": {
            "type": "base64",
            "media_type": "image/png",
-           "data": "sha256:c5ca673bb3b1ea7f",
-           "bytes": 30165,
+           "data": "sha256:bb6247b28b6dd0e4",
+           "bytes": 29874,
            "width": 768,
            "height": 768
           }
@@ -711,8 +711,8 @@
           "source": {
            "type": "base64",
            "media_type": "image/png",
-           "data": "sha256:407917ccf7d9cde2",
-           "bytes": 20387,
+           "data": "sha256:01fe2f11027d6a7c",
+           "bytes": 20218,
            "width": 768,
            "height": 768
           }
@@ -722,7 +722,7 @@
           "type": "text"
          }
         ],
-        "tool_use_id": "toolu_fake14_2_77599d54"
+        "tool_use_id": "toolu_fake14_2_b561cab2"
        }
       ]
      }

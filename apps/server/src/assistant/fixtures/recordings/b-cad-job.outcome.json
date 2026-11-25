@@ -61,12 +61,12 @@
             "baseShape": "round",
             "widthBottom": 2.2,
             "thicknessTop": 1.8,
-            "shoulderHeight": 3,
             "thicknessBottom": 1.6
           },
           "head": {
             "id": "head",
             "gem": "center",
+            "arcs": "auto",
             "kind": "setting",
             "name": "Head",
             "wall": 0.7,
@@ -78,13 +78,10 @@
             "visible": true,
             "material": "au18k-yellow",
             "prongTip": "round",
-            "prongSpin": 45,
-            "prongCount": 4,
             "prongDiameter": 1
           },
           "center": {
             "id": "center",
-            "lw": 1,
             "cut": "round",
             "kind": "gem",
             "name": "Centre stone",
@@ -94,7 +91,6 @@
             "placement": {
               "spin": 0,
               "type": "ringTop",
-              "angle": 0,
               "shank": "band",
               "elevation": 1
             }
@@ -105,7 +101,7 @@
           "center",
           "head"
         ],
-        "schemaVersion": 1
+        "schemaVersion": 2
       },
       "directions": [
         {
