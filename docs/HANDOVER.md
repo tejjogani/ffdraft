@@ -74,6 +74,14 @@ If a workflow died part-way, rerun its script from `docs/agents/workflows` with 
 3. Process the founder's father's files when they arrive (3DM, STL/STEP, photos, rate card): analyse them in a scratch folder, run import and photo-matching probes, and **never commit his files**; commit only measurements and findings.
 4. Then, in an order to agree: ideas boards with image concepts (needs an image-model key), cost and usage monitoring screens, publishing, the desktop app, the sourcing screen with the Diaex partner API, and the ERP-shaped steps in the ERP report (each gated on evidence from the step before).
 
+## 5b. Working with a second session (the founder's laptop, Fable 5.2)
+
+The founder can run a second Claude Code session on his own laptop with another account. It does deep research and writes plans, never product code, using `docs/agents/FABLE-RESEARCH-PROMPT.md`.
+
+- It pushes only to the branch **`claude/fable-research`**, and changes only `docs/research/`, `docs/plans/` and `docs/inbox/fable-research/`.
+- It keeps `docs/inbox/fable-research/STATUS.md` current: done (with paths), now, next, questions.
+- The build session watches that branch (a polling loop, plus a scheduled check every two hours that survives container restarts). When it moves, the build session merges those paths into `claude/busy-bardeen-o482lo`, reads STATUS.md, and folds the plans into the build queue. Plans from the laptop never overwrite existing plans; changes arrive as new files (for example `freeform-cad-additions.md`).
+
 ## 6. Decisions log
 
 | Date | Decision |
