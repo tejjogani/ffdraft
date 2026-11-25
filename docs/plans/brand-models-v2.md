@@ -1,6 +1,6 @@
 # Brand models and on-model imagery, version 2
 
-_25 November 2026, revised the same day after an adversarial review._ Build brief for reusable AI brand models and on-model pictures. It rests on [research 16](../research/16-ai-models-on-model.md), which corrects Part B of [research 04](../research/04-ideation-models.md). The spine: **a brand makes a model once; concept pictures ship first; then, if an early spike says go, the CAD is rendered on a simple proxy at the card's size, an image model paints the brand model around it, the true render is pasted back, and checks in code decide what the picture may be called.**
+_25 November 2026, revised the same day after an adversarial review, and again after the founder's decisions that day (no AI video, no Higgsfield; concept first; body views kept; scene renders count against the free renders; measurement spend approved as a cap of $100)._ Build brief for reusable AI brand models and on-model pictures. It rests on [research 16](../research/16-ai-models-on-model.md), which corrects Part B of [research 04](../research/04-ideation-models.md). The spine: **a brand makes a model once; concept pictures ship first; then, if an early spike says go, the CAD is rendered on a simple proxy at the card's size, an image model paints the brand model around it, the true render is pasted back, and checks in code decide what the picture may be called.**
 
 **Replaces in [`render-and-models.md`](./render-and-models.md):** the "Models" and "On model tab" paragraphs of §1; the `services/on-model.ts`, `providers/image/…` and `features/models` lines of §2; the last sentence of §4.5 and the C2PA sentence of §4.6; the §6 cuts for composite shots, proxies, pixel lock, extra views, on-model video, face picking and label presets; build steps 6 and 7. **Keeps:** the render studio (§1 items 1–7, §4.1–4.4, steps 1–5), the `BrandModel` and `ModelShot` contracts (extended), fail-closed export, text-only identity. It adds duties to [`publishing.md`](./publishing.md) without editing it (§4.9).
 
@@ -26,16 +26,16 @@ Labels: `[V]` opened at source by the research ("re-checked": opened again by me
 
 **As an AI job** ("On-model shots with AI"). The assistant looks at the piece, then asks three quick questions in one card, each with a default: **Which model?**, **Which shots?**, **What are the images for?** It shows the plan and estimate, then acts. Each image arrives with its fidelity result and label. The person can watch, pause or take over, then accept or redo each. Making and approving a model is always a person's act.
 
-**Motion**, on an accepted still: "Sparkle pass · 4 s · true piece · 2 renders" and "Gentle move · 5 s · AI concept · about $0.53 a try", silent.
+**Motion**, on an accepted still: "Sparkle pass · 4 s · true piece · 2 renders", silent. It is a render of the piece under a moving light, not a generated clip. There is no AI video (founder's decision, below).
 
 ## 2. Structure
 
 **Image providers live in `packages/ideation`** (settled): the place step 18 of the assistant build and the header of `apps/server/src/services.ts` name. `apps/server/src/providers/image/` (`render-and-models.md` §2) is dropped. Neither exists today. Step 18 builds the family, the image keys in Settings › AI and the Claude guardrail calls; this plan extends them and writes no second client.
 
-- **`packages/ideation`**: `ImageProvider.edit()`, model descriptors, a `data` policy; `VideoProvider`. Adapters `gemini`, `openai`, `higgsfield` (video), `fake`. Any URL a provider returns is fetched through `apps/server/src/net/safe-fetch.ts` with a per-provider host list and a size cap.
+- **`packages/ideation`**: `ImageProvider.edit()`, model descriptors, a `data` policy. Adapters `gemini`, `openai`, `fake`. No video provider and no Higgsfield adapter (founder's decision, below). Any URL a provider returns is fetched through `apps/server/src/net/safe-fetch.ts` with a per-provider host list and a size cap.
 - **`packages/render`** (no AI): `src/proxy/{finger,wrist,lobe,poses}.ts` build proxies from primitives; `placeOnProxy()` seats the piece; `onModelCamera()` frames it. `RenderScene.onModel` (§3) carries all of it. The Blender worker (`workers/render/pave_worker/*`; GPL, a separate program) builds props and passes. Today it has a beauty and a piece-only mask, and nothing for occlusion.
 - **`packages/onmodel`** (new, pure TypeScript on raw RGBA buffers): `eligibility.ts`, `vocabulary.ts`, `prompt.ts`, `register.ts`, `lock.ts`, `gate/*`, `safety/*`, `labels.ts`, `cost.ts`, `config.ts`.
-- **`apps/server/src/onmodel/`** (new; implements the `OnModelService` in `services.ts`): `service.ts`, `scene.ts`, `judge.ts` (on step 18's guardrail client, metered to `llm`), `moderation.ts`, `video.ts`, `pixels.worker.ts` (decodes with sharp under a pixel cap; all pixel work runs off the event loop). `imaging/disclosure.ts`: label, XMP, signature; shared with publishing.
+- **`apps/server/src/onmodel/`** (new; implements the `OnModelService` in `services.ts`): `service.ts`, `scene.ts`, `judge.ts` (on step 18's guardrail client, metered to `llm`), `moderation.ts`, `pixels.worker.ts` (decodes with sharp under a pixel cap; all pixel work runs off the event loop). `imaging/disclosure.ts`: label, XMP, signature; shared with publishing.
 - **`apps/studio/src/features`**: `models/*` replaces the 46-line placeholder; `render/onmodel/*` mounts in `RenderStudio.tsx`.
 
 **Two routes.** *Concept* (built first): `references → generate → verify → label`, as v1 planned. *Composite*:
@@ -65,7 +65,7 @@ Additive unless marked. One drizzle migration (next free number; `0015` is the l
 - `check` adds `gate: { thresholdsHash, calibrated }` and `safety: { ran: string[] }`; a finding adds `kind` (`scene | size | cover | register | pixel | overlap | gap | judge | safety | drift`), `value?`, `threshold?`.
 - `provenance` adds `sceneRenderId`, `plateAssetId`, `originalMarks: { c2pa, synthId }` (as received; not a claim about the composite), `digitalSourceType`, `dataRule`, `costUsd`.
 - `RenderScene.onModel: { placement, pose, framing, tone, base: 'piece' | 'placeholder', proxy: { kind, …dimensions in mm } } | null`. It sits in `requestedScene`, so `cacheKeyOf` (`engines/render/queue.ts`) hashes it. `RenderJob.purpose` adds `'onmodel-scene'`, for which the server forces `autoTune: false`; `RenderJob.passes: Record<string, id> | null`.
-- `Capabilities` adds `video: string[]` and `secondSafetyCheck: boolean`. `METERS` adds `'video'`. `AiJob.recipe?: 'on-model'`; `JOB_STAGES` stays three.
+- `Capabilities` adds `secondSafetyCheck: boolean`. No `video` capability and no `video` meter. `AiJob.recipe?: 'on-model'`; `JOB_STAGES` stays three.
 
 **`packages/render/src/types.ts`**: `ResolvedScene.props` and `output.passes`; `RESOLVED_SCENE_VERSION` 3. **Breaking** between server and worker, which ship together.
 
@@ -76,7 +76,7 @@ Additive unless marked. One drizzle migration (next free number; `0015` is the l
 - `shots.create` adds `shotKey`, `purpose`, `fidelity: 'auto' | 'concept'`. `shots.estimate` returns counts, a dollar range and minutes.
 - `shots.review`, `shots.retry`, `shots.recheck` (the judge only, on a stored image), `shots.animate` (always confirmed).
 - `shots.export { id, preset, trueSizeLine, visibleLabel, reason? }`. **Behaviour change:** today `label: false` returns the untouched original; now every export is a tagged, signed copy. For `claim: 'concept'` the visible label cannot be turned off by anyone, purpose `product` is refused, and `ads` needs a person's second confirmation that names the risk. For `composite`, `visibleLabel: false` needs a person and a reason.
-- `org.settings.onModel: { imageProvider, fallbackProvider, videoProvider, dataRules, maxUsdPerJob, maxUsdPerPieceDay, labelPreset }` (admin). Loosening a data rule needs a confirmation that quotes the provider's clause; it is audited.
+- `org.settings.onModel: { imageProvider, fallbackProvider, dataRules, maxUsdPerJob, maxUsdPerPieceDay, labelPreset }` (admin). Loosening a data rule needs a confirmation that quotes the provider's clause; it is audited.
 
 **`ImageProvider`** (`generate` is step 18's)
 ```ts
@@ -149,10 +149,8 @@ The numbers in 4 and 5 are the research's [E]; the rest are mine [E]; none is me
 | Sheet and plate | Google `gemini-3-pro-image`: 5 character and 6 object references, no mask upload | $0.134 per 1K/2K image; batch $0.067 [V, re-checked] |
 | Exploration | Google `gemini-nano-banana-2.1` | $0.0336 (1K), $0.0504 (2K) [V, re-checked] |
 | Fallback | OpenAI `gpt-image-2.6-sunburst`; its mask "may not follow its exact shape" [V, re-checked] | Token-priced; estimated as a range ($0.02–0.19 at a reseller [V]) and corrected from usage |
-| Motion | Google `gemini-omni-1.1-flash`: 3–10 s, first and last frame, audio by default with no documented off switch [V, re-checked] | about $0.10 a second at 720p [V, re-checked] |
-| Motion, second | Higgsfield DoP | $0.125–0.56 per 5 s [V] |
 
-**What the founder's keys reach.** Gemini: images and Omni video, not Veo (its Gemini API previews shut on 22 October 2026 [V, re-checked]; Veo needs a Google Cloud project). OpenAI: images only (Sora 2 and the Videos API shut on 24 September 2026, "no one-to-one replacement" [V, re-checked]). Higgsfield: video; step 3 probes which of its two APIs the key belongs to. A newer Omni model id appears in search results only [S]; step 13 reads the id and price first.
+**What the founder's keys are used for.** Gemini: images. OpenAI: images. Nothing else: generated video is out by the founder's decision, so Gemini's video model, Veo and Higgsfield are not used.
 
 **4.8 What is sent to whom.** A plate request carries an unreleased design.
 
@@ -160,7 +158,6 @@ The numbers in 4 and 5 are the research's [E]; the rest are mine [E]; none is me
 |---|---|---|
 | Google, paid Gemini API | No [V, re-checked: terms of 23 Mar 2026]; the image models are paid-only [V, re-checked]. Pavé cannot see a key's tier, so Settings says the rule assumes a billed project, for video above all | `all` |
 | OpenAI API | Not unless you opt in [V]; how moderation inputs are kept is not stated [V, re-checked] | `all` |
-| Higgsfield | May train on content; deletion stops future use only; enterprise excluded [V, re-checked] | `public-only` |
 
 *Decision:* the server checks the rule before any bytes leave, for plates, the judge and moderation alike. `public-only` needs a person's audited confirmation that the design is public; an agent cannot give it. No indemnity in the Gemini API terms; Google Cloud indemnifies through the Agent Platform; OpenAI's excludes Output [V].
 
@@ -178,20 +175,20 @@ Signing uses `@contentauth/c2pa-node` if its licence file allows (its README sta
 
 **For counsel, before step 8 is released to anyone but the founder:** is Pavé a "provider" under Article 50 (if so, a watermark of our own is needed), and is an invented model a "deepfake"; "conspicuous" in New York; the Jewelry Guides; California SB 1000; whether a hosted service has reporting or preservation duties that conflict with "never stored"; the consent form for any later real-likeness feature (signed consent, uses and term with AI named, pay, withdrawal, proof of age, photo hashes, who verified, representation).
 
-**4.10 Video.** The best closed models score about 58–63 of 100 on product consistency [V]. *Decision:* a generated clip is always concept: 3 to 5 seconds, a slow push-in, the accepted still as first and last frame, the audio track removed before storing. The judge sees three frames, safety first. The true-piece option is the sparkle pass: the piece under a moving light (the `rigRotation` track), each frame locked onto the still's plate. It is about 96 path-traced frames, so the composer gives minutes for this machine, and it counts as an animation (2 renders, `ANIMATION_RENDER_COST`).
+**4.10 Video.** *Decided by the founder, 25 November:* no AI-generated video. Moving pictures of a piece come from renders of the 3D object (Blender today, the product's own renderer later: turntables and camera moves, in the render plans). The evidence agrees: the best closed video models score about 58–63 of 100 on product consistency [V], so a generated clip cannot be relied on to show the piece as it is, and jewelry advertising must not mislead about the item (the FTC's Jewelry Guides, 16 CFR 23 [V for note 3 of 23.1, above]). The one moving picture on a model is the sparkle pass: the piece under a moving light (the `rigRotation` track), each frame locked onto the still's plate. It is about 96 path-traced frames, so the composer gives minutes for this machine, and it counts as an animation (2 renders, `ANIMATION_RENDER_COST`).
 
 **4.11 Cost and caps** [E on V list prices; every acceptance rate is a guess until measured].
 - A composite attempt is about $0.17 (plate $0.134, references $0.01, one judge call $0.03), or $0.22 with the edge pass. At a guessed 65% kept: **about $0.27 to $0.34 per accepted still; plan on $0.30 to $0.70.** Three attempts cost at most $0.67. Whether a blocked output is billed is not verified; estimates assume it is.
 - A model, judge included: hands only about $0.80; full sheet about $2.30; body views $0.33 more.
 - A 5-second clip: about $0.53 a try; **$1.50 to $2.10 per accepted clip** at a guessed 25–35% kept.
-- **Shown:** usage events (`image`, `llm`, `video`) carry the piece, the Render stage and the key `shot:<id>:<attempt>:<stage>`; the project's Renders section shows "On model · 6 images · $2.31"; model creation shows as "Brand models" in Settings › Usage (on step 17's attribution, plus a `feature` tag if it added none).
+- **Shown:** usage events (`image`, `llm`) carry the piece, the Render stage and the key `shot:<id>:<attempt>:<stage>`; the project's Renders section shows "On model · 6 images · $2.31"; model creation shows as "Brand models" in Settings › Usage (on step 17's attribution, plus a `feature` tag if it added none).
 - **Caps:** an estimate before any spend; three attempts a shot; twelve auto-approved shots and `maxUsdPerJob` ($10) per AI job; `maxUsdPerPieceDay` ($10) for by-hand use, because `assertBudget` does nothing until an organisation sets a budget; clips confirmed one by one.
 - A scene is one render job of about three path-traced passes; it claims one render, and the estimate gives its minutes. It is reused across attempts and across cards whose proxy inputs are equal.
 
 **Decisions that are the founder's**
 1. **Composite or concept first?** *Recommend:* models and concept shots first (steps 3–9); the composite track (10–12) only if spike A says go.
 2. **Measurement money:** up to $100 in all (spike A $10, the age set $30, spike B $60) and about two hours of labelling. *Recommend yes.*
-3. **Higgsfield and unreleased designs.** *Recommend `public-only`.*
+3. **Higgsfield.** *Decided, 25 November: not used at all.* It was only there for video, and there is no AI video.
 4. **Age brackets:** `18-24` off, and full sheets off if the age check misses its marks (hands-only models still ship). *Recommend yes.*
 5. **Body views with the Portrait and Figure concept shots,** or cut them. *Recommend keep,* behind the second safety check.
 6. **Signing:** sign by default with our own untrusted certificate now; conformance and a trusted certificate after counsel answers. *Recommend yes.*
@@ -221,7 +218,7 @@ Signing uses `@contentauth/c2pa-node` if its licence file allows (its README sta
 | Fit-to-photo; fine-tunes and vendor identities (LoRA, Soul ID) | A licensed hand model; identity drifts at volume |
 | A watermark of our own; a trusted C2PA certificate | Counsel says Pavé is a provider; decision 6 |
 | Face-embedding drift; a hand-landmark model (MediaPipe's repository is Apache-2.0 [V, reviewer]; its model file's terms unread) | The judge misses drift or bad hands |
-| A tracked composite video; Veo, Runway, Kling | Version 3; decision 7 |
+| AI-generated video of any kind (a gentle move on a still, a tracked composite, Omni, Veo, Higgsfield, Runway, Kling) | Cut by the founder, 25 November. Reopen only on his word |
 
 Credits: the Monk Skin Tone Scale is CC BY 4.0 [S]; the app's credits name it.
 
@@ -231,7 +228,7 @@ Tests first; each step ships alone. Efforts are builder-days [E], 47 in all. The
 
 1. **Proxies and the mannequin shot** (3). *Delivers:* `packages/render/src/proxy/*`, `RenderScene.onModel`, props in the browser engine, a Render-stage shot "On hand (mannequin)": a true-scale picture with no key. *Files:* also `three/stage.ts`, `features/render/shots.ts`, and `pave_worker/job.py` (it rejects unknown scene versions; accept 3). *Tests:* proxy goldens, the cache-key test, a ring without a shank refused. *Done means:* a ring whose shank says size 6 sits on a finger of that bore within 1%.
 2. **Spike A: go or no-go** (1; $10 cap). *Delivers:* a throwaway script (`packages/onmodel/scripts/spike-a.ts`; keys from the environment, never printed) that sends step 1's browser mannequin to both providers directly: about 40 plates, hands only (the script accepts no other view), both bases, judged by eye plus a crude overlap number. *Done means:* a one-page result. **Go** if one provider and base keeps the hand in place in at least half the plates [E]; otherwise the composite track stops and decision 1 is settled as concept only. *Depends on:* 1.
-3. **Provider `edit` and data rules** (3). *Delivers:* in `packages/ideation`, `edit()` on `gemini` and `openai`, the fake, safe fetching, `PROVIDER_DATA`, `PRICES`, the Higgsfield probe. *Tests:* snapshots, typed errors, rule refusals. *Done means:* one live plate per provider; no key printed or logged.
+3. **Provider `edit` and data rules** (3). *Delivers:* in `packages/ideation`, `edit()` on `gemini` and `openai`, the fake, safe fetching, `PROVIDER_DATA`, `PRICES`. *Tests:* snapshots, typed errors, rule refusals. *Done means:* one live plate per provider; no key printed or logged.
 4. **Safety gates and their measurement** (4; $30 cap). *Delivers:* `safety/*`, `judge.ts`, `moderation.ts`, the order of §4.5, failure handling, `safety_event`, cool-off, and the age set's results in `fixtures/safety/RESULTS.md`. *Tests:* the red team and bypass tests. *Done means:* the pass marks are met, or full sheets are switched off and the step says so. *Depends on:* 3.
 5. **Model card and sheet** (5). *Delivers:* schema, `portrait_candidate`, `keepPortrait`, `approve`, hands-only and full sheets, `handlers/models.ts`, `features/models/*`. *Tests:* harness, screenshots. *Done means:* the founder makes and approves a model in the browser. *Depends on:* 4.
 6. **The on-model service, concept route** (4). *Delivers:* `apps/server/src/onmodel/*`, `shots.estimate/create/retry/review/recheck`, metering, caps, fallback, resume, the Portrait and Figure shots. *Tests:* harness with fakes: pass, fail closed, block, unanswered check, kill and resume, no double spend. *Depends on:* 5.
@@ -241,4 +238,4 @@ Tests first; each step ships alone. Efforts are builder-days [E], 47 in all. The
 10. **Blender scene passes** (4; only on a go). *Delivers:* props and the passes of §2 in the worker, `RenderJob.passes`, wrist and lobe proxies. *Tests:* one CPU fixture render; passes align to the pixel; the proxy reflects in the metal yet is absent from the beauty pass. *Depends on:* 1, 2.
 11. **Lock and the deterministic gate** (4). *Delivers:* `register.ts`, `lock.ts`, `gate/*`, thresholds as config, the composite route in the service. *Tests:* the goldens. *Done means:* a fixture ring yields a locked image with findings and claim `concept`. *Depends on:* 6, 10.
 12. **Spike B and calibration** (5; $60 cap). *Delivers:* five pieces, three hands-only sheets (the script accepts no other view), about 260 plates (Gemini by batch at half price, about $16; OpenAI about $12 [E]; judge about $8), labelled by a person in about 90 minutes; the gate's set; `fixtures/set/RESULTS.md`; the `calibrated` rule; whether the edge and shadow passes earn their place. *Done means:* the pass marks are met and composites earn "AI model · Rendered piece"; if not, the label stays off and the step reports the gap. *Depends on:* 11.
-13. **Motion** (4). *Delivers:* the sparkle pass, then `VideoProvider` with Omni (read its id and price first), the gentle-move clip without audio, frame checks, the `video` meter. *Tests:* frame-lock goldens, the fake video provider, the Higgsfield rule. *Depends on:* 8; the sparkle pass also needs 12.
+13. **Motion** (2). *Delivers:* the sparkle pass only: the true piece rendered under a moving light, each frame locked onto the accepted still. No generated video. *Tests:* frame-lock goldens. *Depends on:* 8 and 12.
