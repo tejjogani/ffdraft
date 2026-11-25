@@ -136,7 +136,7 @@ function Panel({ context, stage }: { context: AssistantContext; stage: JobStage 
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
             <AiMark className="size-5" />
-            <p className="font-serif text-[22px] leading-7">How can I help?</p>
+            <p className="font-serif text-heading">How can I help?</p>
             <p className="text-sm text-fg-muted">
               Describe a piece or drop a photo of one; edit the CAD by asking; select a part and ask
               about it.

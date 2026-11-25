@@ -1,13 +1,16 @@
 /*
- * Pavé design tokens — the single source of the visual language.
+ * Pavé design tokens — the single source of the visual language (docs/design-language.md).
  *
  * Principles
  *  1. The jewelry is the colour. Chrome is warm-neutral and quiet; metal and stone carry hue.
  *  2. Hairlines over shadows, space over boxes. Shadows only lift things that float.
- *  3. Glass is for floating layers (menus, popovers, palettes, HUDs over the viewport) and the
- *     sidebar; never for content surfaces. Every glass surface has an opaque fallback.
+ *  3. Glass is for floating chrome only: toolbars and HUDs over the viewport, the sidebar, menus,
+ *     popovers, palettes, dialogs and floating windows. Never under stones, grades, prices or
+ *     tables. Two strengths: `glass` for chrome you glance at, `glass-strong` for surfaces you
+ *     read. Every glass surface has an opaque fallback (reduced transparency, no backdrop-filter).
  *  4. One ink accent for actions, one blue for selection/focus, one warm shimmer reserved for AI.
- *  5. 13 px UI on a 4 px grid; an editorial serif only for page titles and empty states.
+ *  5. 13 px UI on a 4 px grid; an editorial serif only for page titles, headings of empty states
+ *     and the assistant's greeting.
  */
 @import "tailwindcss";
 
@@ -53,6 +56,8 @@
   /* The stage behind 3D content: a soft photographic sweep, never pure white. */
   --stage-a: #f6f5f2;
   --stage-b: #e7e5e0;
+
+  --skeleton-sheen: rgba(255, 255, 255, 0.7);
 
   --shadow-sm: 0 1px 2px rgba(20, 18, 15, 0.05);
   --shadow-md: 0 0 0 1px rgba(20, 18, 15, 0.04), 0 2px 6px rgba(20, 18, 15, 0.05),
@@ -116,6 +121,8 @@
   --stage-a: #232322;
   --stage-b: #121211;
 
+  --skeleton-sheen: rgba(255, 255, 255, 0.05);
+
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 0 0 1px rgba(255, 255, 255, 0.05), 0 8px 24px rgba(0, 0, 0, 0.35);
   --shadow-pop: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 18px 48px rgba(0, 0, 0, 0.5);
@@ -149,6 +156,9 @@
   --color-glass-line: var(--glass-line);
 
   /* Type: 13 px UI base. `display` and `title` are set in the serif. */
+  /* Micro labels only: badges on pictures, step numbers. */
+  --text-3xs: 0.625rem;
+  --text-3xs--line-height: 0.875rem;
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
   --text-xs: 0.75rem;
@@ -161,6 +171,9 @@
   --text-lg--line-height: 1.5rem;
   --text-xl: 1.25rem;
   --text-xl--line-height: 1.75rem;
+  /* Serif: the heading of an empty state, a panel's greeting. */
+  --text-heading: 1.5rem;
+  --text-heading--line-height: 2rem;
   --text-title: 2rem;
   --text-title--line-height: 2.375rem;
   --text-display: 2.75rem;
@@ -258,7 +271,6 @@
 @utility glass-pane {
   background: var(--glass);
   backdrop-filter: blur(24px) saturate(170%);
-  -webkit-backdrop-filter: blur(24px) saturate(170%);
   @supports not (backdrop-filter: blur(1px)) {
     background: var(--bg-subtle);
   }
@@ -266,6 +278,42 @@
     background: var(--bg-subtle);
     backdrop-filter: none;
   }
+}
+
+/* The same glass for surfaces people read: dialogs, sheets, the palette, floating windows. More
+   fill and more blur, so the work behind becomes colour and light, never competing text. */
+@utility glass-strong {
+  background: var(--glass-strong);
+  backdrop-filter: blur(32px) saturate(180%);
+  border: 1px solid var(--glass-line);
+  @supports not (backdrop-filter: blur(1px)) {
+    background: var(--bg-subtle);
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    background: var(--bg-subtle);
+    backdrop-filter: none;
+  }
+}
+
+/* A solid floating chip: numbers that sit over the viewport (weights, carats, dimensions) are
+   read exactly, so they never sit on glass. */
+@utility chip-solid {
+  background: var(--bg);
+  box-shadow: var(--shadow-md);
+}
+
+/* Loading placeholder: a slow light sweep over the muted fill (still under reduced motion). */
+@utility skeleton {
+  background-color: var(--bg-muted);
+  background-image: linear-gradient(
+    100deg,
+    transparent 30%,
+    var(--skeleton-sheen) 50%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  background-repeat: no-repeat;
+  animation: skeleton-sweep 1.6s var(--ease-in-out) infinite;
 }
 
 /* The photographic sweep behind 3D viewports and render previews. */
@@ -278,9 +326,71 @@
   background-image: linear-gradient(120deg, var(--ai-a), var(--ai-b) 45%, var(--ai-c));
 }
 
+/* A row that scrolls sideways inside itself (tabs, chips on a phone): no scrollbar, and on narrow
+   screens the far edge fades so it is plain there is more. */
+@utility scroll-fade-x {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  @media (max-width: 767px) {
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+}
+
+/* The AI at work: the reserved shimmer slowly travelling along a 1 px border. Still (a plain
+   gradient) under reduced motion. Same rule as ai-gradient: a border or a mark, never a fill. */
+@utility ai-shimmer {
+  background-image: linear-gradient(
+    110deg,
+    var(--ai-a),
+    var(--ai-b) 25%,
+    var(--ai-c) 50%,
+    var(--ai-b) 75%,
+    var(--ai-a)
+  );
+  background-size: 200% 100%;
+  animation: ai-shimmer 3s linear infinite;
+}
+
 @utility tabular {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum", "cv11";
+}
+
+@keyframes ai-shimmer {
+  from {
+    background-position: 0% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes skeleton-sweep {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+/* A new render or picture arriving: a short focus pull from soft to sharp. */
+@keyframes reveal {
+  from {
+    opacity: 0;
+    filter: blur(8px) saturate(0.6);
+    transform: scale(1.015);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+    transform: none;
+  }
+}
+@utility reveal {
+  animation: reveal 520ms var(--ease-out) both;
 }
 
 @media (prefers-reduced-motion: reduce) {

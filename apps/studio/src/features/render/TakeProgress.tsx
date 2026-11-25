@@ -73,7 +73,7 @@ export function TakeProgress({
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium">{what}</p>
         {left !== null && (
-          <p className="truncate font-mono text-[11px] text-fg-subtle tabular">
+          <p className="truncate font-mono text-2xs text-fg-subtle tabular">
             {machineTime(left)} left
           </p>
         )}

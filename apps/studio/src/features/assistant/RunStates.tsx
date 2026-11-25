@@ -5,7 +5,7 @@
  */
 import { RUN_CAP_USD } from '@pave/agent/studio'
 import type { Run } from '@pave/schema'
-import { AiMark, Button, cn, Spinner } from '@pave/ui'
+import { AiMark, Button, cn } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
 import { CircleAlert, CircleStop, Undo2 } from 'lucide-react'
 import { usd } from '../../lib/format'
@@ -14,17 +14,22 @@ import { tokenCount } from './model'
 
 export function WorkingPill({ onStop, label }: { onStop: () => void; label?: string }) {
   return (
-    <div className="flex items-center gap-2 rounded-md bg-bg-subtle px-2.5 py-1.5 text-xs text-fg-muted shadow-[inset_0_0_0_1px_var(--line)]">
-      <Spinner className="size-3" label="Working" />
-      <span className="min-w-0 flex-1 truncate">{label ?? 'Assistant is working'}</span>
-      <button
-        type="button"
-        onClick={onStop}
-        className="inline-flex h-6 items-center gap-1 rounded-xs px-1.5 text-fg hover:bg-bg-hover"
-        title="Stop (Esc)"
-      >
-        <CircleStop className="size-3" aria-hidden /> Stop
-      </button>
+    // The shimmer travels along the border while the assistant works; the inside stays solid.
+    <div className="ai-shimmer rounded-md p-px">
+      <div className="flex items-center gap-2 rounded-[5px] bg-bg-subtle px-2.5 py-1.5 text-xs text-fg-muted">
+        <span role="status" aria-label="Working" className="flex">
+          <AiMark className="size-3 animate-pulse" />
+        </span>
+        <span className="min-w-0 flex-1 truncate">{label ?? 'Assistant is working'}</span>
+        <button
+          type="button"
+          onClick={onStop}
+          className="inline-flex h-6 items-center gap-1 rounded-xs px-1.5 text-fg hover:bg-bg-hover"
+          title="Stop (Esc)"
+        >
+          <CircleStop className="size-3" aria-hidden /> Stop
+        </button>
+      </div>
     </div>
   )
 }
@@ -140,7 +145,7 @@ export function RunFooter({
 }) {
   const tokens = run.tokens.input + run.tokens.output + run.tokens.cacheRead + run.tokens.cacheWrite
   return (
-    <div className="flex items-center gap-2 font-mono text-[11px] text-fg-subtle tabular">
+    <div className="flex items-center gap-2 font-mono text-2xs text-fg-subtle tabular">
       {run.status === 'canceled' && <span className="font-sans">Stopped ·</span>}
       <span>{tokenCount(tokens)} tokens</span>
       <span aria-hidden>·</span>

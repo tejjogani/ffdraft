@@ -110,8 +110,9 @@ export function StartJob({
         size="sm"
         variant="secondary"
         onClick={() => assistant.open({ context: { pieceId } })}
+        aria-label={recipe.button}
       >
-        <AiMark className="size-3" /> {recipe.button}
+        <AiMark className="size-3" /> <JobButtonText text={recipe.button} />
       </Button>
     )
 
@@ -123,8 +124,8 @@ export function StartJob({
       title={`${recipe.label} job`}
       className="w-[360px] bg-bg! p-0"
       trigger={
-        <Button size="sm" variant="secondary" disabled={disabled}>
-          <AiMark className="size-3" /> {recipe.button}
+        <Button size="sm" variant="secondary" disabled={disabled} aria-label={recipe.button}>
+          <AiMark className="size-3" /> <JobButtonText text={recipe.button} />
         </Button>
       }
     >
@@ -407,5 +408,15 @@ function ShotReferencePicker({
         })}
       </div>
     </div>
+  )
+}
+
+/** The job button's words: in full where there is room, "AI job" in a phone's header. */
+function JobButtonText({ text }: { text: string }) {
+  return (
+    <>
+      <span className="max-sm:hidden">{text}</span>
+      <span className="sm:hidden">AI job</span>
+    </>
   )
 }

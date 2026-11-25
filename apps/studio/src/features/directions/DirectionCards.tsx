@@ -136,13 +136,20 @@ function DirectionCard({
         chosen && 'shadow-[0_0_0_1.5px_var(--fg)]',
       )}
     >
-      <div className={cn('stage relative w-full', compact ? 'aspect-[3/2]' : 'aspect-[4/3]')}>
+      {/* The server draws previews on a light ground. In dark mode they sit on the card as a
+          mounted print (inset, rounded, a touch dimmer) instead of a glaring full-bleed panel. */}
+      <div
+        className={cn(
+          'stage relative w-full dark:p-1.5',
+          compact ? 'aspect-[3/2]' : 'aspect-[4/3]',
+        )}
+      >
         {preview ? (
           <img
             src={assetUrl(preview, compact ? 320 : 640)}
             alt={`Clay preview of direction ${d.letter}`}
             loading="lazy"
-            className="size-full object-contain"
+            className="reveal size-full object-contain dark:rounded-md dark:object-cover dark:brightness-[0.88]"
           />
         ) : (
           <div className="flex size-full items-center justify-center text-fg-faint">

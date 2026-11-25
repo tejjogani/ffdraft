@@ -60,17 +60,19 @@ export function StageStepper({ piece, className }: { piece: Piece; className?: s
               aria-label={`${i + 1}. ${stageLabel(stage)}${mark ? `, ${MARK_WORDS[mark]}` : ''}`}
               className={cn(
                 tabClass,
-                'gap-1.5 aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-0 aria-[current=page]:after:-bottom-px aria-[current=page]:after:h-px aria-[current=page]:after:bg-fg',
+                'gap-1.5 aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-0 aria-[current=page]:after:bottom-0 aria-[current=page]:after:h-px aria-[current=page]:after:bg-fg',
               )}
             >
               <span
                 aria-hidden
                 className={cn(
-                  'inline-flex size-4 items-center justify-center rounded-full font-mono text-[10px] tabular',
+                  'inline-flex size-4 items-center justify-center rounded-full font-mono text-3xs tabular',
+                  // Soft tints, not solid discs: the row is navigation, and a solid green or
+                  // blue disc per tab out-shouts the work.
                   mark === 'done'
-                    ? 'bg-ok text-white'
+                    ? 'bg-[color-mix(in_oklab,var(--ok)_16%,transparent)] text-ok'
                     : mark === 'review'
-                      ? 'bg-select text-white'
+                      ? 'bg-select-soft text-select'
                       : 'shadow-[inset_0_0_0_1px_var(--line-strong)] text-fg-subtle',
                 )}
               >

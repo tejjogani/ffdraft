@@ -6,7 +6,7 @@
  * to ask. Used by Settings, AI and by the dock when there is no key.
  */
 import type { CommandOutput } from '@pave/schema'
-import { Button, cn, Dialog, Input, Spinner, toast } from '@pave/ui'
+import { Button, cn, Dialog, Input, Skeleton, toast } from '@pave/ui'
 import { CircleAlert, CircleCheck, KeyRound } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 import { invalidateFor, queryClient, useRpc } from '../../lib/query'
@@ -37,7 +37,7 @@ export function KeyForm({ compact = false }: { compact?: boolean }) {
     return setup.isError ? (
       <p className="text-sm text-danger">{setup.error.message}</p>
     ) : (
-      <Spinner className="size-4" />
+      <Skeleton className="h-8 w-full max-w-md" />
     )
   const s = setup.data
 

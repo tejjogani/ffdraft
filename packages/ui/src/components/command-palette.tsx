@@ -108,7 +108,7 @@ export function CommandPalette({
         <Base.Popup
           aria-label="Command palette"
           className={cn(
-            'glass shadow-pop fixed top-[14vh] left-1/2 z-50 w-[min(620px,calc(100vw-32px))] -translate-x-1/2 overflow-hidden rounded-xl text-fg outline-none',
+            'glass-strong shadow-pop fixed top-[14vh] left-1/2 z-50 w-[min(620px,calc(100vw-32px))] -translate-x-1/2 overflow-hidden rounded-xl text-fg outline-none',
             'transition-[opacity,scale] duration-150 ease-out data-starting-style:scale-[0.98] data-starting-style:opacity-0',
             'data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-ending-style:duration-100',
           )}
@@ -158,7 +158,8 @@ export function CommandPalette({
                 </Command.Group>
               )}
             </Command.List>
-            <div className="flex h-9 items-center gap-4 border-t border-glass-line px-4 text-2xs text-fg-subtle">
+            {/* Keyboard hints: nothing to show on a touch screen. */}
+            <div className="flex h-9 items-center gap-4 border-t border-glass-line px-4 text-2xs text-fg-subtle pointer-coarse:hidden">
               <span className="flex items-center gap-1.5">
                 <Kbd shortcut="arrowup" />
                 <Kbd shortcut="arrowdown" /> navigate

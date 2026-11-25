@@ -241,7 +241,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
             )}
           </Menu>
           {!s.shots.some((x) => x.saved) && (
-            <p className="hidden px-2 pt-2 text-[11px] text-fg-subtle @5xl:block">
+            <p className="hidden px-2 pt-2 text-2xs text-fg-subtle @5xl:block">
               The standard set for a {s.piece.kind}. It is saved the first time you change or render
               a shot.
             </p>
@@ -301,7 +301,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               >
                 Render all
                 {all.data && !browser && (
-                  <span className="hidden font-mono text-[11px] text-fg-subtle @lg:inline">
+                  <span className="hidden font-mono text-2xs text-fg-subtle @lg:inline">
                     {machineTime(all.data.seconds)}
                   </span>
                 )}
@@ -336,7 +336,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                   {view.seconds ? ` · ${Math.round(view.seconds)} s` : ''}
                   {view.note && ` · ${view.note}`}
                   {view.sceneHash && (
-                    <span className="font-mono text-[11px] text-fg-subtle">
+                    <span className="font-mono text-2xs text-fg-subtle">
                       · scene {view.sceneHash.slice(0, 8)}
                     </span>
                   )}
@@ -373,7 +373,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
             ) : null}
             {/* An animated shot's scrubber sits where this caption would. */}
             {!view && !pair && shot && !shot.scene.animation && (
-              <span className="glass absolute bottom-3 left-3 rounded-md px-2 py-1 text-[11px] whitespace-nowrap text-fg-muted">
+              <span className="glass absolute bottom-3 left-3 rounded-md px-2 py-1 text-2xs whitespace-nowrap text-fg-muted">
                 Viewfinder ·{' '}
                 {browser ? 'takes draw in the browser' : 'takes render exactly this in Blender'}
               </span>
@@ -504,7 +504,7 @@ function ShotRow({
       </span>
       <span className="min-w-0">
         <span className="block truncate font-medium">{shot.title}</span>
-        <span className="block truncate text-[11px] text-fg-subtle">
+        <span className="block truncate text-2xs text-fg-subtle">
           {shot.scene.camera.preset} · {shot.scene.output.width}×{shot.scene.output.height}
         </span>
       </span>

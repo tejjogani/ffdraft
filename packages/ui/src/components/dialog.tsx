@@ -21,7 +21,7 @@ export interface DialogProps {
   className?: string
 }
 
-/** Centred modal on a frosted surface. */
+/** Centred modal on the strong frosted surface (it holds reading). */
 export function Dialog({
   open,
   onOpenChange,
@@ -39,7 +39,7 @@ export function Dialog({
         <Base.Backdrop className={backdrop} />
         <Base.Popup
           className={cn(
-            'glass shadow-pop fixed top-[18vh] left-1/2 z-50 w-[min(440px,calc(100vw-32px))] -translate-x-1/2 rounded-xl p-5 text-fg outline-none',
+            'glass-strong shadow-pop fixed top-[18vh] left-1/2 z-50 w-[min(440px,calc(100vw-32px))] -translate-x-1/2 rounded-xl p-5 text-fg outline-none',
             'transition-[opacity,scale] duration-180 ease-out data-starting-style:scale-[0.97] data-starting-style:opacity-0',
             'data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-ending-style:duration-120',
             className,
@@ -88,7 +88,7 @@ export function Sheet({
         <Base.Backdrop className={backdrop} />
         <Base.Popup
           className={cn(
-            'glass shadow-pop fixed top-2 bottom-2 z-50 flex w-[min(440px,calc(100vw-16px))] flex-col rounded-xl text-fg outline-none',
+            'glass-strong shadow-pop fixed top-2 bottom-2 z-50 flex w-[min(440px,calc(100vw-16px))] flex-col rounded-xl text-fg outline-none',
             'transition-[opacity,translate] duration-180 ease-out data-starting-style:opacity-0 data-ending-style:opacity-0',
             side === 'right'
               ? 'right-2 data-starting-style:translate-x-2 data-ending-style:translate-x-2'

@@ -94,7 +94,7 @@ export function QuestionsCard({
         ))}
       </div>
       <div className="flex items-center justify-between gap-2 border-t border-line px-4 py-2.5">
-        <p className="text-[11px] text-fg-subtle">Or type what you want instead.</p>
+        <p className="text-2xs text-fg-subtle">Or type what you want instead.</p>
         <Button size="sm" variant="primary" icon={Play} disabled={busy} onClick={() => onGo(picks)}>
           Go
         </Button>

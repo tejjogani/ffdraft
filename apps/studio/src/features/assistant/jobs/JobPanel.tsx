@@ -119,7 +119,8 @@ function JobDetail({ run }: { run: Run }) {
     }))
 
   return (
-    <div className="absolute top-full right-3 z-30 mt-2 flex max-h-[min(560px,70vh)] w-[380px] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-lg bg-bg shadow-lg ring-1 ring-line-strong">
+    // The plan floats over the page: the strong glass, as every floating reading surface.
+    <div className="glass-strong absolute top-full right-3 z-30 mt-2 flex max-h-[min(560px,70vh)] w-[380px] max-w-[calc(100vw-24px)] flex-col overflow-hidden rounded-lg shadow-pop">
       <div className="overflow-y-auto px-4 py-3">
         <p className="text-xs font-medium text-fg-subtle">Goal</p>
         <p className="mt-0.5 text-sm leading-6">{job.goal}</p>

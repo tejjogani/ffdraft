@@ -1,7 +1,8 @@
 import { cn, IconButton } from '@pave/ui'
 import { Link, type LinkProps } from '@tanstack/react-router'
-import { PanelLeft } from 'lucide-react'
+import { ChevronLeft, Menu as MenuIcon, PanelLeft } from 'lucide-react'
 import { Fragment, type ReactNode } from 'react'
+import { useNarrow } from '../lib/narrow'
 import { isDockedOpen, useAssistant } from '../stores/assistant'
 import { useUI } from '../stores/ui'
 
@@ -25,8 +26,13 @@ export function PageHeader({
   actions?: ReactNode
   className?: string
 }) {
-  const collapsed = useUI((s) => s.sidebarCollapsed)
+  const narrow = useNarrow()
+  // On a phone the sidebar is always a drawer, so the header always offers it.
+  const collapsed = useUI((s) => s.sidebarCollapsed) || narrow
   const toggle = useUI((s) => s.toggleSidebar)
+  // On a phone only the current page is named, with a way back to its parent: a full trail
+  // would truncate every crumb into nothing.
+  const parent = crumbs.length > 1 ? crumbs[crumbs.length - 2] : undefined
   // With the dock open, the window controls sit above the dock, not this header.
   const dockOpen = useAssistant(isDockedOpen)
   return (
@@ -40,27 +46,47 @@ export function PageHeader({
     >
       {collapsed && (
         <IconButton
-          icon={PanelLeft}
-          label="Show sidebar"
+          icon={narrow ? MenuIcon : PanelLeft}
+          label={narrow ? 'Open navigation' : 'Show sidebar'}
           shortcut="mod+\"
           onClick={toggle}
           className="app-no-drag"
         />
       )}
+      {narrow && parent?.link && (
+        <Link
+          {...parent.link}
+          aria-label={`Back to ${typeof parent.label === 'string' ? parent.label : 'the previous page'}`}
+          className="app-no-drag -ml-1 flex size-7 shrink-0 items-center justify-center rounded-sm text-fg-muted hover:bg-bg-hover hover:text-fg"
+        >
+          <ChevronLeft className="size-4" aria-hidden />
+        </Link>
+      )}
       <nav aria-label="Breadcrumb" className="app-no-drag flex min-w-0 items-center gap-1 text-sm">
         {crumbs.map((c, i) => (
           <Fragment key={i}>
-            {i > 0 && <span className="text-fg-faint select-none">/</span>}
+            {i > 0 && <span className="text-fg-faint select-none max-md:hidden">/</span>}
             {c.link ? (
               <Link
                 {...c.link}
-                className="flex min-w-0 items-center gap-1.5 rounded-xs px-1 py-0.5 text-fg-muted transition-colors hover:bg-bg-hover hover:text-fg"
+                className={cn(
+                  'flex min-w-0 items-center gap-1.5 rounded-xs px-1 py-0.5 text-fg-muted transition-colors hover:bg-bg-hover hover:text-fg',
+                  // Earlier crumbs give way first, so the current page keeps its name.
+                  'shrink-[2]',
+                  i < crumbs.length - 1 && 'max-md:hidden',
+                )}
               >
                 {c.icon}
                 <span className="truncate">{c.label}</span>
               </Link>
             ) : (
-              <span aria-current="page" className="flex min-w-0 items-center gap-1.5 px-1 text-fg">
+              <span
+                aria-current="page"
+                className={cn(
+                  'flex min-w-0 items-center gap-1.5 px-1 font-medium text-fg md:font-normal',
+                  i < crumbs.length - 1 && 'max-md:hidden',
+                )}
+              >
                 {c.icon}
                 <span className="truncate">{c.label}</span>
               </span>

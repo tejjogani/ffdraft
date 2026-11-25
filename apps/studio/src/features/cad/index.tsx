@@ -18,7 +18,7 @@ import {
   type Piece,
   type PieceSpecInput,
 } from '@pave/schema'
-import { AiMark, Button, cn, Dialog, IconButton, Sheet, Spinner, toast } from '@pave/ui'
+import { AiMark, Button, cn, Dialog, IconButton, Sheet, Skeleton, Spinner, toast } from '@pave/ui'
 import { useNavigate } from '@tanstack/react-router'
 import { PanelLeft, PanelRight, Plus } from 'lucide-react'
 import {
@@ -113,8 +113,19 @@ export function PieceDesign({ pieceId }: { pieceId: string }) {
   const piece = useRpc('pieces.get', { id: pieceId })
   if (piece.isPending)
     return (
-      <div className="stage absolute inset-0 flex items-center justify-center">
-        <Spinner />
+      // The workspace's own shape while the piece loads: toolbar and tree, then the model.
+      <div
+        className="stage absolute inset-0"
+        role="status"
+        aria-busy="true"
+        aria-label="Opening the design"
+      >
+        <Skeleton className="absolute top-3 left-1/2 h-9 w-72 -translate-x-1/2 rounded-lg" />
+        <div className="absolute top-3 left-3 flex w-52 flex-col gap-2 max-md:hidden">
+          <Skeleton className="h-5 w-24" />
+          <Skeleton className="h-5 w-40" />
+          <Skeleton className="h-5 w-32" />
+        </div>
       </div>
     )
   if (!piece.data) return null
@@ -673,7 +684,7 @@ function StageStatus({
   if (status === 'unavailable')
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-8 text-center">
-        <p className="font-serif text-[24px] leading-8 text-fg">The 3D view isn’t available here</p>
+        <p className="font-serif text-heading text-fg">The 3D view isn’t available here</p>
         <p className="max-w-sm text-sm text-fg-muted">
           You can keep editing by numbers in the list and the inspector; every change is saved.
           {error ? ` (${error})` : ''}

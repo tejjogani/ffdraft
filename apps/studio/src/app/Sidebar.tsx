@@ -95,23 +95,27 @@ function ActionRow({
 }
 
 /** The frosted sidebar: workspace, quick actions, navigation, collections, library & settings. */
-export function Sidebar() {
+export function Sidebar({ drawer = false }: { drawer?: boolean }) {
   const toggle = useUI((s) => s.toggleSidebar)
   return (
     <aside
       aria-label="Sidebar"
-      className="glass-pane flex h-full w-[248px] shrink-0 flex-col border-r border-glass-line"
+      className={cn(
+        'flex h-full shrink-0 flex-col border-r border-glass-line',
+        // Over the page on a phone it is read, not glanced at: the strong glass.
+        drawer ? 'glass-strong w-[min(280px,86vw)] border-y-0 border-l-0' : 'glass-pane w-[248px]',
+      )}
     >
       <div className="app-drag h-(--chrome-top) shrink-0" />
       <div className="flex items-center gap-1 px-2">
         <WorkspaceSwitcher />
         <IconButton
           icon={ChevronsLeft}
-          label="Hide sidebar"
+          label={drawer ? 'Close navigation' : 'Hide sidebar'}
           shortcut="mod+\"
           onClick={toggle}
           size="sm"
-          className="hover-reveal"
+          className={drawer ? undefined : 'hover-reveal'}
         />
       </div>
 
@@ -273,9 +277,7 @@ function Collections() {
 
 function CollectionIcon({ c }: { c: Collection }) {
   return c.icon ? (
-    <span className="flex size-4 items-center justify-center text-[13px] leading-none">
-      {c.icon}
-    </span>
+    <span className="flex size-4 items-center justify-center text-sm leading-none">{c.icon}</span>
   ) : (
     <Folder className="size-4 text-fg-subtle" aria-hidden />
   )
@@ -325,7 +327,7 @@ function CollectionRow({ collection: c }: { collection: Collection }) {
             }}
           >
             <span className="flex-1 truncate">{c.name}</span>
-            <span className="hover-reveal text-xs text-fg-subtle tabular group-focus-within:mr-6 group-hover:mr-6">
+            <span className="hover-reveal text-xs text-fg-subtle tabular group-focus-within:mr-6 group-hover:mr-6 pointer-coarse:mr-6">
               {c.pieceCount}
             </span>
           </Link>
@@ -371,7 +373,7 @@ function CollectionRow({ collection: c }: { collection: Collection }) {
               key={p.id}
               to="/pieces/$id"
               params={{ id: p.id }}
-              className={cn(row, 'h-6.5 pl-8 text-[12.5px]')}
+              className={cn(row, 'h-6.5 pl-8 text-xs')}
             >
               <span className="size-1 shrink-0 rounded-full bg-fg-faint" aria-hidden />
               <span className="truncate">{p.title || 'Untitled'}</span>

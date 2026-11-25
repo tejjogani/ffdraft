@@ -155,14 +155,11 @@ export function FloatingWindow({
       <section
         aria-label={label}
         data-floating-window={label}
-        style={{
-          background: 'var(--glass-strong)',
-          ...(phone ? {} : { left: shown.x, top: shown.y, width: shown.w, height: shown.h }),
-        }}
+        style={phone ? undefined : { left: shown.x, top: shown.y, width: shown.w, height: shown.h }}
         className={cn(
           // Frosted glass, but strong: a window holds reading, so the work behind it may only
           // tint it (the body adds a light wash; where blur is missing it still reads).
-          'glass fixed flex flex-col overflow-hidden text-fg shadow-pop',
+          'glass-strong fixed flex flex-col overflow-hidden text-fg shadow-pop',
           phone ? 'inset-0 rounded-none border-0' : 'rounded-xl',
           layer,
           className,
@@ -186,7 +183,8 @@ export function FloatingWindow({
           <div className="flex min-w-0 flex-1 items-center gap-2">{title}</div>
           {actions && <div className="flex shrink-0 items-center">{actions}</div>}
         </div>
-        <div className="min-h-0 flex-1 bg-bg/70">{children}</div>
+        {/* A light wash under the reading area: the title bar stays the frostiest part. */}
+        <div className="min-h-0 flex-1 bg-bg/40">{children}</div>
         {!phone &&
           HANDLES.map((h) => (
             <div

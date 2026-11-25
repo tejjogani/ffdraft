@@ -74,7 +74,7 @@ export function AiSettings() {
                         }
                       />
                       {setup.data.models.find((m) => m.id === t.model)?.needsRetention && (
-                        <p className="mt-1 text-[11px] leading-4 text-fg-subtle">
+                        <p className="mt-1 text-2xs leading-4 text-fg-subtle">
                           Needs 30-day data retention on your Anthropic organisation.
                         </p>
                       )}

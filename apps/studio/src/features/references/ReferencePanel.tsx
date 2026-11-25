@@ -25,6 +25,7 @@ import {
   Sheet,
   Skeleton,
   Spinner,
+  tabClass,
   toast,
 } from '@pave/ui'
 import { useNavigate } from '@tanstack/react-router'
@@ -158,19 +159,33 @@ export function ReferenceWindowBody({ piece }: { piece: Piece }) {
   const tab: ReferenceTab = stored === 'generated' && !generation ? 'references' : stored
   return (
     <div className="flex h-full min-h-0 flex-col" data-region="references">
-      <div className="shrink-0 px-3 pb-2">
-        <Segmented<ReferenceTab>
-          aria-label="Reference window"
-          value={tab}
-          onChange={setTab}
-          className="w-full"
-          options={[
-            { value: 'references', label: 'References' },
-            { value: 'sketch', label: 'Sketch' },
-            ...(generation ? [{ value: 'generated' as const, label: 'Generated' }] : []),
-          ]}
-        />
-      </div>
+      {/* The window's own tabs are a quiet underline row, so they never read as a second copy of
+          the segmented "where to look" control just below them. */}
+      <fieldset
+        aria-label="Reference window"
+        className="mx-3 mb-2 flex min-w-0 shrink-0 items-center gap-4 border-0 p-0 shadow-[inset_0_-1px_0_var(--line)]"
+      >
+        {(
+          [
+            ['references', 'References'],
+            ['sketch', 'Sketch'],
+            ...(generation ? [['generated', 'Generated'] as const] : []),
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={tab === value}
+            onClick={() => setTab(value)}
+            className={cn(
+              tabClass,
+              'h-8 aria-pressed:text-fg aria-pressed:after:absolute aria-pressed:after:inset-x-0 aria-pressed:after:bottom-0 aria-pressed:after:h-px aria-pressed:after:bg-fg',
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </fieldset>
       <div className="min-h-0 flex-1">
         {tab === 'references' && <ReferencesTab piece={piece} />}
         {tab === 'sketch' && <SketchPad piece={piece} />}
@@ -949,14 +964,7 @@ export function ReferenceDock({ piece, docked }: { piece: Piece; docked: boolean
   const count = pins.data?.references.length ?? 0
   if (!docked)
     return (
-      <Sheet
-        open={open}
-        onOpenChange={setOpen}
-        title="References"
-        side="right"
-        // Reading surface: the strong glass, as the floating window uses.
-        className="[background:var(--glass-strong)]!"
-      >
+      <Sheet open={open} onOpenChange={setOpen} title="References" side="right">
         <ReferenceWindowBody piece={piece} />
       </Sheet>
     )

@@ -59,20 +59,34 @@ export function UpgradePage() {
               key={p}
               aria-label={`${PLANS[p].label} plan`}
               className={cn(
-                'flex flex-col rounded-md bg-bg p-5 shadow-[inset_0_0_0_1px_var(--line)]',
-                p === 'pro' && 'shadow-[inset_0_0_0_1px_var(--line-strong)]',
+                'flex flex-col rounded-lg bg-bg p-5',
+                // Pro is the one to look at: an ink edge and the lift of the pop shadow.
+                p === 'pro'
+                  ? 'shadow-[inset_0_0_0_1px_var(--ink),var(--shadow-md)]'
+                  : 'shadow-[inset_0_0_0_1px_var(--line)]',
               )}
             >
               <div className="flex items-center gap-2">
                 <h2 className="font-serif text-xl">{PLANS[p].label}</h2>
                 {current === p && <Chip>Your plan</Chip>}
+                {p === 'pro' && (
+                  <span className="ml-auto text-2xs text-fg-subtle">Everything in Free, plus</span>
+                )}
               </div>
               <p className="mt-1 text-sm text-fg-muted">{PLANS[p].blurb}</p>
               <ul className="mt-5 flex flex-col divide-y divide-line border-y border-line">
                 {rows().map((r) => (
                   <li key={r.label} className="flex items-baseline justify-between gap-4 py-2.5">
                     <span className="text-sm">{r.label}</span>
-                    <span className="flex shrink-0 items-center gap-1 text-sm tabular text-fg-muted">
+                    <span
+                      className={cn(
+                        'flex shrink-0 items-center gap-1 text-sm tabular',
+                        // What Pro adds over Free reads in full ink; what both share stays quiet.
+                        p === 'pro' && r.values.pro !== r.values.free
+                          ? 'font-medium text-fg'
+                          : 'text-fg-muted',
+                      )}
+                    >
                       {(r.values[p] === 'Included' || r.values[p] === 'Unlimited') && (
                         <Check className="size-3.5 text-fg-subtle" aria-hidden />
                       )}
@@ -93,7 +107,7 @@ export function UpgradePage() {
 
         <section
           aria-label="Upgrading"
-          className="mt-6 rounded-md bg-bg-subtle p-4 text-sm shadow-[inset_0_0_0_1px_var(--line)]"
+          className="mt-6 rounded-lg bg-bg-subtle p-4 text-sm shadow-[inset_0_0_0_1px_var(--line)]"
         >
           <div className="font-medium">Payments are not part of this build yet</div>
           <p className="mt-1 text-fg-muted">

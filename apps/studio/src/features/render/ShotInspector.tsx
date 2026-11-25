@@ -118,7 +118,7 @@ export function ShotInspector({
               )}
             >
               <span className={cn('h-8 w-full rounded-sm', LOOK_SWATCH[l.look])} aria-hidden />
-              <span className="text-[11px] leading-tight font-medium">{l.label}</span>
+              <span className="text-2xs leading-tight font-medium">{l.label}</span>
             </button>
           ))}
         </div>
@@ -154,7 +154,7 @@ export function ShotInspector({
             options={ANGLES.map((a) => ({ value: a.value, label: a.label }))}
           />
           {scene.camera.preset === 'custom' && (
-            <p className="text-[11px] text-fg-muted">
+            <p className="text-2xs text-fg-muted">
               Custom view, framed in the viewfinder
               {scene.camera.basePreset
                 ? ` (from ${ANGLES.find((a) => a.value === scene.camera.basePreset)?.label})`
@@ -184,7 +184,7 @@ export function ShotInspector({
         <div className="flex items-center justify-between gap-2 text-xs">
           <span className="text-fg-muted">
             Lock camera
-            <span className="block text-[11px] text-fg-subtle">
+            <span className="block text-2xs text-fg-subtle">
               Keeps this framing: no orbiting, and the assistant cannot move it.
             </span>
           </span>
@@ -194,7 +194,7 @@ export function ShotInspector({
             aria-label="Lock camera"
           />
         </div>
-        <p className="text-[11px] text-fg-subtle">
+        <p className="text-2xs text-fg-subtle">
           Frame the shot in the viewfinder: drag to orbit, shift-drag to pan, scroll to come closer,
           alt-drag to roll.
         </p>
@@ -288,7 +288,7 @@ export function ShotInspector({
             <div className="flex items-center justify-between gap-2 text-xs">
               <span className="text-fg-muted">
                 Loop
-                <span className="block text-[11px] text-fg-subtle">
+                <span className="block text-2xs text-fg-subtle">
                   {scene.animation.type === 'turntable'
                     ? 'A full turn always loops without a jump.'
                     : 'Goes there and comes back, so it plays round.'}
@@ -301,7 +301,7 @@ export function ShotInspector({
                 aria-label="Loop"
               />
             </div>
-            <p className="text-[11px] text-fg-subtle">
+            <p className="text-2xs text-fg-subtle">
               {Math.max(2, Math.round(scene.animation.seconds * scene.animation.fps))} frames · MP4
               (H.264), with a poster and a small GIF. Scrub the motion in the viewfinder before
               rendering.

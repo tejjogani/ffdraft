@@ -71,7 +71,8 @@ export function TakeTile({
         aria-label={done ? `Show ${takeLabel(take)} large` : undefined}
       >
         {done ? (
-          <TakeMedia take={take} width={320} className="size-full object-cover" />
+          // A finished take arrives with a short focus pull: the render reveal.
+          <TakeMedia take={take} width={320} className="reveal size-full object-cover" />
         ) : isLive(take) ? (
           <div className="absolute inset-0 flex items-center px-3">
             <TakeProgress take={take} estimate={estimate} compact />
@@ -79,7 +80,7 @@ export function TakeTile({
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 p-3 text-center">
             <ImageIcon className="size-4 text-fg-faint" aria-hidden />
-            <p className="line-clamp-4 text-[11px] text-fg-muted">
+            <p className="line-clamp-4 text-2xs text-fg-muted">
               {take.status === 'canceled' ? 'Canceled' : (take.error ?? 'Failed')}
             </p>
           </div>
@@ -102,7 +103,7 @@ export function TakeTile({
           )}
         </div>
         {inSet && done && (
-          <span className="absolute right-1.5 bottom-1.5 rounded bg-ink px-1.5 py-0.5 text-[10px] font-medium text-ink-fg">
+          <span className="absolute right-1.5 bottom-1.5 rounded bg-ink px-1.5 py-0.5 text-3xs font-medium text-ink-fg">
             In the set
           </span>
         )}
@@ -187,7 +188,7 @@ export function TakeTile({
       </div>
       {done && take.sceneHash && (
         <p
-          className="flex items-center gap-1 border-t border-line px-2 py-1 font-mono text-[10px] text-fg-subtle"
+          className="flex items-center gap-1 border-t border-line px-2 py-1 font-mono text-3xs text-fg-subtle"
           title="Fingerprint of the exact scene this take rendered"
         >
           scene {take.sceneHash.slice(0, 8)}
@@ -200,7 +201,7 @@ export function TakeTile({
         <button
           type="button"
           onClick={() => actions.rerender(take)}
-          className="border-t border-line px-2 py-1 text-left text-[11px] text-warn hover:bg-bg-hover"
+          className="border-t border-line px-2 py-1 text-left text-2xs text-warn hover:bg-bg-hover"
         >
           Re-render with the current design
         </button>

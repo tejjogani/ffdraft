@@ -3,7 +3,7 @@ import { Swatch } from '@pave/ui'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { KindGlyph } from '../../components/KindGlyph'
 import { StageChip } from '../../components/StageChip'
-import { KIND_LABEL, metalLabel, metalSwatch } from '../../lib/domain'
+import { hasFacts, KIND_LABEL, metalLabel, metalSwatch } from '../../lib/domain'
 import { carats, grams, relativeTime } from '../../lib/format'
 
 const th = 'h-8 px-3 text-left text-xs font-normal text-fg-subtle whitespace-nowrap'
@@ -73,7 +73,7 @@ export function PieceTable({
                 )}
               </td>
               <td className={`${td} text-right font-mono text-xs text-fg-muted tabular`}>
-                {p.facts ? grams(p.facts.metalMassG) : '—'}
+                {hasFacts(p.facts) ? grams(p.facts.metalMassG) : '—'}
               </td>
               <td className={`${td} text-right font-mono text-xs text-fg-muted tabular`}>
                 {p.facts?.caratTotal ? carats(p.facts.caratTotal) : '—'}

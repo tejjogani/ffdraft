@@ -47,7 +47,7 @@ export function UsageSettings() {
         <>
           <div className="mb-8">
             <div className="text-xs text-fg-subtle">Total, last {days} days</div>
-            <div className="mt-1 font-mono text-[34px] leading-10 tracking-tight tabular">
+            <div className="mt-1 font-mono text-title tracking-tight tabular">
               {usd(usage.data.totalUsd)}
             </div>
           </div>

@@ -84,7 +84,8 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
         actions={
           <>
             <Button variant="ghost" size="sm" icon={FileUp} onClick={openPaveFile}>
-              Open Pavé file
+              {/* An icon alone in a phone's header; the name stays for screen readers. */}
+              <span className="max-sm:sr-only">Open Pavé file</span>
             </Button>
             <Button
               variant="primary"
@@ -249,7 +250,7 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
 
 function Grid({ children }: { children: React.ReactNode }) {
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(184px,1fr))] gap-x-5 gap-y-8">
+    <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-[repeat(auto-fill,minmax(184px,1fr))] sm:gap-x-5 sm:gap-y-8">
       {children}
     </div>
   )

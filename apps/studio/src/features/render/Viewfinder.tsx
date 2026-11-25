@@ -433,7 +433,7 @@ export function Viewfinder({
           )}
           {hash && !failed && evaluation && (
             <span
-              className="pointer-events-none absolute right-2 bottom-2 rounded-xs bg-bg/85 px-1.5 py-0.5 font-mono text-[10px] text-fg-muted"
+              className="pointer-events-none absolute right-2 bottom-2 rounded-xs bg-bg/85 px-1.5 py-0.5 font-mono text-3xs text-fg-muted"
               title="Fingerprint of the exact scene a take of this view renders. A take with the same fingerprint is this picture."
             >
               scene {hash.slice(0, 8)}
@@ -508,7 +508,7 @@ function MotionScrubber({
         onChange={(e) => onFrame(Number(e.target.value))}
         className="min-w-0 flex-1 accent-[var(--select)]"
       />
-      <span className="shrink-0 font-mono text-[10px] text-fg-muted tabular">
+      <span className="shrink-0 font-mono text-3xs text-fg-muted tabular">
         {(frame / fps).toFixed(1)} / {(frameCount / fps).toFixed(1)} s
       </span>
     </div>

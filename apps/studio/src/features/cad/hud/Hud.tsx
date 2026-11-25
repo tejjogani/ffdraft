@@ -41,17 +41,20 @@ export function Hud({
   const r = evaluation.report
   const metal = r.metals.toSorted((a, b) => b.massG - a.massG)[0]
   return (
-    <div className="glass shadow-md flex h-9 max-w-full min-w-0 items-center gap-3 rounded-lg pr-1.5 pl-3.5 text-xs whitespace-nowrap">
-      <span className="flex min-w-0 items-center gap-1.5">
+    <div className="chip-solid flex h-9 max-w-full min-w-0 items-center gap-3 rounded-lg pr-1.5 pl-3.5 text-xs whitespace-nowrap">
+      <span className="flex min-w-0 items-center gap-1.5 max-sm:shrink-0">
         <span
-          className="font-mono text-fg-subtle"
+          className="shrink-0 font-mono text-fg-subtle"
           title="Approximate until a production check: seats are not cut yet"
         >
           ≈
         </span>
-        <span className="font-mono text-fg tabular">{grams(r.metalMassG)}</span>
+        {/* The number never shrinks; the metal's name gives way (and on a phone, goes). */}
+        <span className="shrink-0 font-mono text-fg tabular">{grams(r.metalMassG)}</span>
         {metal && (
-          <span className="min-w-0 truncate text-fg-muted">{metalName(metal.material)}</span>
+          <span className="min-w-0 truncate text-fg-muted max-sm:hidden">
+            {metalName(metal.material)}
+          </span>
         )}
       </span>
       {r.stoneCount > 0 && (

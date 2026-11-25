@@ -225,7 +225,8 @@ export function SketchPad({ piece }: { piece: Piece }) {
           readOnly ? 'cursor-not-allowed' : tool === 'pen' ? 'cursor-crosshair' : 'cursor-cell',
         )}
       />
-      <div className="flex items-center gap-1.5">
+      {/* Wraps in a narrow panel rather than running off its edge. */}
+      <div className="flex flex-wrap items-center gap-1.5">
         <Button
           size="sm"
           variant="secondary"

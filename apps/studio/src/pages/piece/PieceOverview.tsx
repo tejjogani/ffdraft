@@ -63,7 +63,7 @@ export function Brief({ piece }: { piece: Piece }) {
         onBlur={() => brief !== piece.brief && update.mutate({ id: piece.id, brief })}
         placeholder="Write a brief — who it’s for, the feeling, the constraints…"
         aria-label="Brief"
-        className="text-[15px] leading-7 placeholder:text-fg-faint"
+        className="text-lg leading-7 placeholder:text-fg-faint"
       />
     </section>
   )

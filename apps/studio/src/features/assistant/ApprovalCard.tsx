@@ -121,7 +121,7 @@ export function ApprovalCard({
           Exactly what it will send
         </button>
         {details && (
-          <pre className="max-h-48 overflow-auto rounded-md bg-bg-muted p-2 font-mono text-[11px] leading-4">
+          <pre className="max-h-48 overflow-auto rounded-md bg-bg-muted p-2 font-mono text-2xs leading-4">
             {JSON.stringify(call.input, null, 2)}
           </pre>
         )}
