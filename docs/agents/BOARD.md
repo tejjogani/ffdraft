@@ -5,7 +5,7 @@ _Written by lane A only (see `docs/agents/OPERATING-MODEL.md`). Other lanes writ
 ## Integration state
 
 - Integration branch: `claude/busy-bardeen-o482lo`. Latest commit the founder can test by hand: `e5d18f2` (CAD without AI). Latest AI preview (unreviewed): the head of `claude/assistant-build`.
-- **Integration ready for lane B: not yet.** Lane A sets this to "yes, at <commit>" once A3 is merged. Until then lane B does research only (B1).
+- **Integration ready for lane B: yes, at `075cafd`** (the engine and the whole assistant build merged; type check, build and suites pass). Lane B may start B2 (Rhino-class modeling) from the head of `claude/busy-bardeen-o482lo`. Note: lane A is changing the CAD screen's shell at the same time (a focused full-window editor, a floating back button, a floating reference window, "Start from scratch"); B2 should keep its work inside the CAD feature folders and the kernel, and merge the integration branch before each step.
 
 ## Items
 
