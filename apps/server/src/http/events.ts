@@ -1,5 +1,6 @@
+import { roleAllows } from '@pave/schema'
 import { streamSSE } from 'hono/streaming'
-import { badRequest } from '../errors'
+import { badRequest, forbidden } from '../errors'
 import type { ServerEvent } from '../events'
 import type { App } from './types'
 
@@ -14,6 +15,8 @@ const CLIENT_ID = /^[A-Za-z0-9_-]{1,64}$/
 export function mountEvents(app: App) {
   app.get('/api/events', (c) => {
     const ctx = c.var.ctx
+    // The stream carries whole design changes: it needs the role every query needs.
+    if (!roleAllows(ctx.role, 'viewer')) throw forbidden('Live updates need the viewer role')
     const clientId = c.req.query('client') ?? null
     if (clientId !== null && !CLIENT_ID.test(clientId))
       throw badRequest('`client` must be 1–64 letters, digits, - or _')

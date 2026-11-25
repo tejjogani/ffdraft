@@ -75,6 +75,8 @@ export function mountAssets(app: App, runtime: Runtime) {
 
   app.get('/api/assets/:id', async (c) => {
     const ctx = c.var.ctx
+    // Reading follows the commands: a role that may run no query (guest) reads no files either.
+    if (!roleAllows(ctx.role, 'viewer')) throw forbidden('Reading files needs the viewer role')
     const asset = await getAssetRow(ctx, c.req.param('id'))
     const w = c.req.query('w')
     if (w !== undefined && asset.mime.startsWith('image/')) {
