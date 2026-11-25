@@ -96,6 +96,48 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 const parsed = (url: string): URL | null => (URL.canParse(url) ? new URL(url) : null)
 
+/** `localhost:8787` → `localhost`; `[::1]:8787` → `[::1]`. Null when it is not a host at all. */
+const hostName = (host: string): string | null =>
+  parsed(`http://${host}`)?.hostname.toLowerCase() ?? null
+
+const LOOPBACK_NAMES = new Set(['localhost', '127.0.0.1', '[::1]'])
+const WILDCARD_BINDS = new Set(['0.0.0.0', '::', '[::]', ''])
+
+/**
+ * Local mode has no sign-in: whoever reaches the server is the owner. A page on any website can
+ * have its own domain re-pointed at 127.0.0.1 (DNS rebinding); the browser then treats that page
+ * as same-origin with this server, so the Origin check below passes and the page can read and
+ * change the whole workspace. What such a request cannot do is carry the right Host: the browser
+ * still sends the attacker's name. So a local install answers only to names it knows: loopback,
+ * the public URL, the dev origins, the address it was told to listen on, and `PAVE_ALLOWED_HOSTS`.
+ */
+function refuseUnknownHosts(config: Config): MiddlewareHandler<Env> {
+  const known = new Set(LOOPBACK_NAMES)
+  for (const url of [config.publicUrl, ...config.corsOrigins]) {
+    const name = parsed(url)?.hostname.toLowerCase()
+    if (name) known.add(name)
+  }
+  if (!WILDCARD_BINDS.has(config.host)) {
+    const name = hostName(config.host.includes(':') ? `[${config.host}]` : config.host)
+    if (name) known.add(name)
+  }
+  for (const host of config.allowedHosts) {
+    const name = hostName(host)
+    if (name) known.add(name)
+  }
+  const answersTo = (name: string | null) =>
+    name !== null && (known.has(name) || name.endsWith('.localhost'))
+  return async (c, next) => {
+    const sentTo = new URL(c.req.url).hostname.toLowerCase()
+    const header = c.req.header('host')
+    if (!answersTo(sentTo) || (header !== undefined && !answersTo(hostName(header))))
+      throw forbidden(
+        `This Pavé does not answer to the name "${header ?? sentTo}". To open it at this address, add the name to PAVE_ALLOWED_HOSTS`,
+      )
+    await next()
+  }
+}
+
 /**
  * Refuses a write that a browser sent from a page of another website. A POST with no body, or a
  * multipart upload, needs no CORS preflight, and local mode has no session cookie whose SameSite
@@ -127,6 +169,7 @@ function buildRoutes(runtime: Runtime, routes: CreateAppOptions['routes']): App 
 
   if (config.logRequests) app.use('/api/*', logger())
   app.use('/api/*', cors({ origin: config.corsOrigins, credentials: true }))
+  if (config.auth === 'local') app.use('*', refuseUnknownHosts(config))
   app.use('/api/*', refuseForeignWrites(config))
 
   app.onError((err, c) => {

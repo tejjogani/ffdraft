@@ -155,6 +155,7 @@ turn it on, then restart Pavé. A value set in your terminal wins over the file.
 | `PAVE_AUTH` | `local` | `local`: no sign-in, one person. `accounts`: sign-in, organisations, invitations |
 | `BETTER_AUTH_SECRET` | — | Required with `accounts`: 32 or more random characters |
 | `PAVE_PUBLIC_URL` | `http://localhost:8787` | The address people reach Pavé at, when it is not your own computer |
+| `PAVE_ALLOWED_HOSTS` | — | Without accounts, Pavé answers only to `localhost`, `127.0.0.1`, the public URL and `HOST`. To open it by another name or address (another computer on your network, say), list the names here, separated by commas, without ports: `192.168.1.20,bench-mac.local` |
 | `DATABASE_URL` | — | A PostgreSQL 18 address. Without it Pavé uses its own built-in database in the data folder |
 | `PAVE_MAX_UPLOAD_MB` | `200` | Largest file that can be uploaded |
 | `PAVE_KERNEL_WORKERS` | processors − 1, at most 4 | How many geometry jobs run at once |

@@ -99,11 +99,6 @@ describe('http surface', () => {
       (await upload({ origin: 'http://127.0.0.1:9999' }, 'http://127.0.0.1:9999/api/assets'))
         .status,
     ).toBe(201)
-    // Behind a TLS proxy the scheme differs while the host is the same.
-    expect(
-      (await upload({ origin: 'https://studio.example' }, 'http://studio.example/api/assets'))
-        .status,
-    ).toBe(201)
     // Reads are not writes: CORS already keeps their answers from other sites.
     const read = await server.app.request('/api/rpc/collections.list', {
       method: 'OPTIONS',
@@ -115,15 +110,103 @@ describe('http surface', () => {
 
   // Needs a decision (which hosts a local install answers to), so it is recorded, not fixed.
   // A page whose domain is re-pointed at 127.0.0.1 (DNS rebinding) is same-origin with this
-  // server: the Origin check above passes and, with no sign-in, it can read and change
-  // everything. Refusing a Host that is not loopback, the public URL or HOST would stop it.
-  it.fails('refuses a request sent to a host name that is not this server (local mode)', async () => {
-    const res = await server.app.request('http://attacker.example:8787/api/rpc/pieces.list', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', origin: 'http://attacker.example:8787' },
-      body: '{}',
+  // server: the Origin check above passes and, with no sign-in, it could read and change
+  // everything. The Host it was sent to is what gives it away.
+  it('refuses a request sent to a host name that is not this server (local mode)', async () => {
+    const post = (url: string, headers: Record<string, string> = {}) =>
+      server.app.request(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...headers },
+        body: '{}',
+      })
+    const rebound = await post('http://attacker.example:8787/api/rpc/pieces.list', {
+      origin: 'http://attacker.example:8787',
     })
-    expect(res.status).toBeGreaterThanOrEqual(400)
+    expect(rebound.status).toBe(403)
+    expect(await rebound.json()).toMatchObject({ error: { code: 'forbidden' } })
+    // Reads and the studio's own files are refused too, not only writes.
+    expect((await server.app.request('http://attacker.example:8787/')).status).toBe(403)
+    // A Host header that disagrees with the address is judged as well.
+    expect(
+      (await post('http://localhost:8787/api/rpc/pieces.list', { host: 'attacker.example:8787' }))
+        .status,
+    ).toBe(403)
+    // A name that merely ends like loopback is not loopback.
+    expect((await post('http://localhost.attacker.example/api/rpc/pieces.list')).status).toBe(403)
+  })
+
+  it('answers to loopback names, whatever the port (local mode)', async () => {
+    for (const base of [
+      'http://localhost:8787',
+      'http://localhost:5173',
+      'http://127.0.0.1:8787',
+      'http://[::1]:8787',
+      'http://pave.localhost:8787',
+      'http://LOCALHOST:8787',
+    ]) {
+      const res = await server.app.request(`${base}/api/rpc/pieces.list`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      })
+      expect(res.status, base).toBe(200)
+    }
+  })
+
+  it('answers to the names it was given: PAVE_ALLOWED_HOSTS, the public URL and HOST', async () => {
+    const lan = await testServer({
+      config: {
+        host: '192.168.1.20',
+        publicUrl: 'http://studio.example:8787',
+        allowedHosts: ['bench-mac.local', '10.0.0.7'],
+      },
+    })
+    try {
+      const list = (base: string) =>
+        lan.app.request(`${base}/api/rpc/pieces.list`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        })
+      for (const base of [
+        'http://bench-mac.local:8787',
+        'http://10.0.0.7:8787',
+        'http://studio.example:8787',
+        'http://192.168.1.20:8787',
+        'http://localhost:8787',
+      ])
+        expect((await list(base)).status, base).toBe(200)
+      // Behind a TLS proxy the scheme differs while the host is the same: still this server.
+      const form = new FormData()
+      form.set('file', new File([new TextEncoder().encode('hello')], 'note.txt'))
+      const viaProxy = await lan.app.request('http://bench-mac.local/api/assets', {
+        method: 'POST',
+        body: form,
+        headers: { origin: 'https://bench-mac.local' },
+      })
+      expect(viaProxy.status).toBe(201)
+      const refused = await list('http://192.168.1.99:8787')
+      expect(refused.status).toBe(403)
+      expect(((await refused.json()) as { error: { message: string } }).error.message).toContain(
+        'PAVE_ALLOWED_HOSTS',
+      )
+    } finally {
+      await lan.dispose()
+    }
+  })
+
+  it('listening on every address adds no name by itself (local mode)', async () => {
+    const open = await testServer({ config: { host: '0.0.0.0' } })
+    try {
+      const res = await open.app.request('http://192.168.1.20:8787/api/rpc/pieces.list', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      })
+      expect(res.status).toBe(403)
+    } finally {
+      await open.dispose()
+    }
   })
 
   it('streams org events over SSE', async () => {
