@@ -143,6 +143,18 @@ describe('CSV', () => {
     expect(csvCell(true)).toBe('yes')
   })
 
+  it('neutralises a formula that starts like a negative number', () => {
+    // The classic DDE payload: a spreadsheet runs it as a formula, minus sign and digit or not.
+    expect(csvCell("-2+3+cmd|' /C calc'!A0")).toBe("'-2+3+cmd|' /C calc'!A0")
+    expect(csvCell('-1+HYPERLINK("http://x","y")')).toBe(`"'-1+HYPERLINK(""http://x"",""y"")"`)
+    expect(csvCell('+1+1')).toBe("'+1+1")
+    expect(csvCell('@SUM(A1)')).toBe("'@SUM(A1)")
+    expect(csvCell('\tx')).toBe("'\tx")
+    // Only a plain negative number is left as it is, so the column stays numeric.
+    for (const n of ['-0.5', '-12', '-3.', '-.25', '-1e-7', '-1.5E3']) expect(csvCell(n)).toBe(n)
+    expect(toCsv(['note'], [['-2+3+cmd|x']])).toBe("note\r\n'-2+3+cmd|x\r\n")
+  })
+
   it('writes UTF-8 with a BOM and CRLF rows for Excel', () => {
     const bytes = encodeCsv(
       toCsv(
