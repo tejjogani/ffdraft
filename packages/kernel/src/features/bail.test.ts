@@ -318,22 +318,31 @@ describe('bail', () => {
   )
 
   it('says when a solid pendant body is heavy, with a hollow for a sculpted one', async () => {
-    const crown = designFrom('pendant', [
-      {
-        id: 'body',
-        kind: 'meshBody',
-        source: { type: 'builtin', name: 'crown' },
-        height: 35,
-        flatBack: 0.35,
-      },
-      { id: 'bail', kind: 'bail', host: 'body', style: 'tube', opening: 6, width: 4 },
-    ])
-    const solid = await kernel.evaluate(crown)
+    const sculpt = (name: 'crown' | 'trophy', flatBack: number) =>
+      designFrom('pendant', [
+        { id: 'body', kind: 'meshBody', source: { type: 'builtin', name }, height: 35, flatBack },
+        { id: 'bail', kind: 'bail', host: 'body', style: 'tube', opening: 6, width: 4 },
+      ])
+    const trophy = sculpt('trophy', 0.5)
+    const solid = await kernel.evaluate(trophy)
     const heavy = solid.diagnostics.find((d) => d.code === 'body.heavy')!
     expect(heavy.level).toBe('warning')
     expect(heavy.value!).toBeGreaterThan(heavy.limit!)
-    const hollowed = await kernel.evaluate(applyOps(crown, heavy.fix!.ops).design)
+    const hollowed = await kernel.evaluate(applyOps(trophy, heavy.fix!.ops).design)
     expect(hollowed.diagnostics.map((d) => d.code)).not.toContain('body.heavy')
+    // Solid is decided from what was built: the crown's thin walls defeat the hollow, so it is
+    // still cast solid, said so, and the same hollow is not offered again.
+    const crown = sculpt('crown', 0.35)
+    const crownHeavy = (await kernel.evaluate(crown)).diagnostics.find(
+      (d) => d.code === 'body.heavy',
+    )!
+    const tried = await kernel.evaluate(applyOps(crown, crownHeavy.fix!.ops).design)
+    const codes = tried.diagnostics.map((d) => d.code)
+    if (codes.includes('mesh.hollowFailed')) {
+      const still = tried.diagnostics.find((d) => d.code === 'body.heavy')!
+      expect(still.message).toMatch(/hollow failed/)
+      expect(still.fix).toBeUndefined()
+    } else expect(codes).not.toContain('body.heavy')
     // Block letters 60 mm high: an outline body has no hollow yet, so no one-click fix, and
     // under 200 g only a note.
     const text = await kernel.evaluate(

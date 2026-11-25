@@ -89,13 +89,37 @@ const specOf = (b: MetalSpec): MetalSpec => ({
 export function distinctSolids(solids: readonly Solid[]): Solid[] {
   const seen = new Set<string>()
   return solids.filter((solid) => {
-    const { min, max } = solid.bounds()
-    const key =
-      [...min, ...max].map((v) => Math.round(v * 1e4)).join(',') +
-      `|${solid.volume().toPrecision(6)}`
+    const key = placeKey(solid)
     if (seen.has(key)) return false
     seen.add(key)
     return true
+  })
+}
+
+/** Equal for the same body in the same place (see `distinctSolids`). */
+function placeKey(solid: Solid): string {
+  const { min, max } = solid.bounds()
+  return (
+    [...min, ...max].map((v) => Math.round(v * 1e4)).join(',') + `|${solid.volume().toPrecision(6)}`
+  )
+}
+
+/**
+ * The metal each part adds to the piece at draft, where parts are per node and not fused: a
+ * body that sits exactly on a body of an earlier part (a polar pattern stacked on its source)
+ * adds none, as production's fuse finds. Without this the inspector showed twice the metal of
+ * a coincident pattern while `pattern.coincident` said its copies add none. Other overlaps
+ * between nodes are left to production, as before.
+ */
+export function draftVolumes(parts: readonly ScenePart[], quality: Quality): number[] {
+  const placed = new Set<string>()
+  return parts.map(({ part, sources }) => {
+    const solids = distinctSolids(sources.map((s) => s.body.solid))
+    const keys = solids.map(placeKey)
+    const kept = solids.filter((_, i) => !placed.has(keys[i]!))
+    for (const key of keys) placed.add(key)
+    if (kept.length === solids.length) return part.volumeMm3
+    return kept.length > 0 ? fusedVolume(kept, quality) : 0
   })
 }
 
@@ -169,8 +193,10 @@ function regionsOf(
   results: ReadonlyMap<string, NodeResult>,
 ): PartRegion[] | undefined {
   const regions = new Map<string, PartRegion>()
-  for (const { nodeId, body } of sources) {
+  for (const source of sources) {
+    const { body } = source
     if (body.finish === part.finish && body.plating === part.plating) continue
+    const nodeId = body.from ?? source.nodeId
     const result = results.get(nodeId)
     regions.set(nodeId, {
       nodeId,

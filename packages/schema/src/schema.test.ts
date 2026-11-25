@@ -104,6 +104,23 @@ describe('design', () => {
     const issues = validateDesign({ ...d, order: d.order.slice(1) })
     expect(issues.map((i) => i.nodeId)).toEqual([d.order[0]])
   })
+  it('reports order entries named like Object members, duplicates, and a "__proto__" id', () => {
+    const d = buildDesign(TEMPLATES[0]!.spec)
+    for (const id of ['constructor', 'toString', 'hasOwnProperty'])
+      expect(validateDesign({ ...d, order: [...d.order, id] }).map((i) => i.message)).toEqual([
+        `Order lists missing node "${id}"`,
+      ])
+    expect(
+      validateDesign({ ...d, order: [...d.order, d.order[0]!] }).map((i) => i.message),
+    ).toEqual([`Order lists "${d.order[0]}" more than once`])
+    const proto = JSON.parse(
+      JSON.stringify(d).replace(
+        '"nodes":{',
+        `"nodes":{"__proto__":${JSON.stringify(d.nodes.band)},`,
+      ),
+    )
+    expect(validateDesign(proto).map((i) => i.message)).toContain('"__proto__" cannot be a node id')
+  })
   it('rejects dangling references and guards removal', () => {
     const d = buildDesign(TEMPLATES[0]!.spec)
     expect(() => applyOps(d, [{ t: 'remove', id: 'band' }])).toThrow(/used by/)

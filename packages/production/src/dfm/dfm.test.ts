@@ -4,7 +4,7 @@ import { exportCad } from '../exports'
 import { TriangleBVH } from '../geometry/bvh'
 import { mergeTris } from '../geometry/mesh'
 import { evaluationOf, fixtureKernel, stoneAt, templateDesign } from '../testing/fixtures'
-import { box } from '../testing/shapes'
+import { box, cone } from '../testing/shapes'
 import type { BuildInput } from '../types'
 import { runDfm } from './checks'
 import { resolveProfile } from './profile'
@@ -61,6 +61,14 @@ describe('wall thickness', () => {
     const r = wallThickness(b, new TriangleBVH(b), { threshold: 0.8 })
     expect(r.regions).toEqual([])
     expect(r.minMm).toBeGreaterThan(0.8)
+  })
+
+  it('does not read a sharp rim as a wall', () => {
+    // A solid 10 mm spike stud: its 45° rim is an edge, which casts; it is not a 0.00 mm wall.
+    const spike = cone(5, 5)
+    const r = wallThickness(spike, new TriangleBVH(spike), { threshold: 0.8 })
+    expect(r.regions).toEqual([])
+    expect(r.minMm).toBeGreaterThanOrEqual(0.8)
   })
 
   it('is deterministic', () => {

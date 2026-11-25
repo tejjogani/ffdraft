@@ -63,7 +63,12 @@ export function heldChecks(scene: Scene): Diagnostic[] {
   }))
   const hit: ClosestHit = { d2: 0, x: 0, y: 0, z: 0, triangle: 0 }
   const loose = new Map<string, { count: number; first: SceneStone; gap: number }>()
+  // A chain's stones sit in boxes its own links build around them, so while designing there is
+  // nothing to find; checking them meant a search tree over the whole chain (180k triangles,
+  // 100 ms) on every edit of a tennis bracelet. The production evaluation still checks them.
+  const chainStones = scene.detail === 'draft'
   for (const stone of scene.stones) {
+    if (chainStones && scene.nodes.get(stone.instance.nodeId)?.node.kind === 'chain') continue
     const reach = REACH_SHARE * stone.stone.dims.width + REACH_MM
     const points = girdle(stone)
     const box: Bounds = {

@@ -110,6 +110,8 @@ describe('chain', () => {
         for (const l of links) l.delete()
       }
     },
+    // A rope's overlap check runs about 5 s on a loaded machine, past vitest's default.
+    30_000,
   )
 
   it('threads every link through its neighbour (pitch solver)', () => {

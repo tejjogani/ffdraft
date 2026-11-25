@@ -140,19 +140,30 @@ export function selectRegion(
     const facing = spec.type === 'all' || n[0] * dir[0] + n[1] * dir[1] + n[2] * dir[2] >= cosMax
     inside[t] = facing && (!field || field.covers(centroid, n)) ? 1 : 0
   }
-  // Specks take the label of their labelled neighbours (a few passes reach clusters of them).
+  // Specks take the label of their labelled neighbours (a few passes reach clusters of them):
+  // the label they share the most edge length with. A sliver of an extruded face's fan has two
+  // long edges inside the face and a short one on its outline; taking the first neighbour found
+  // could take the outline's wall, and the sliver's long edges then cut a false edge right
+  // across the field, which stones keep their margin from.
   const resolved = new Uint8Array(triangles).fill(1)
   for (const t of specks) resolved[t] = 0
+  const edgeLength = (h: number) => {
+    const a = indices[h]! * 3
+    const b = indices[h - (h % 3) + ((h + 1) % 3)]! * 3
+    return Math.hypot(p[b]! - p[a]!, p[b + 1]! - p[a + 1]!, p[b + 2]! - p[a + 2]!)
+  }
   for (let pass = 0; pass < 4; pass++)
     for (const t of specks) {
       if (resolved[t]) continue
+      const shared = [0, 0]
       for (let k = 0; k < 3; k++) {
         const o = twin[t * 3 + k]!
         if (o < 0 || !resolved[(o / 3) | 0]) continue
-        inside[t] = inside[(o / 3) | 0]!
-        resolved[t] = 1
-        break
+        shared[inside[(o / 3) | 0]!]! += edgeLength(t * 3 + k)
       }
+      if (shared[0] === 0 && shared[1] === 0) continue
+      inside[t] = shared[1]! > shared[0]! ? 1 : 0
+      resolved[t] = 1
     }
 
   // Boundary segments: open edges, label changes, and creases within the region.

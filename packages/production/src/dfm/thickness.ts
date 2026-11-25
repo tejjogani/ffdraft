@@ -3,7 +3,10 @@
  * inward normal and the distance to the first surface hit is the local wall. Samples are drawn
  * from a fixed-seed generator, so the report is reproducible. This is the method of the common
  * 3D-print checkers; it over-reads oblique walls slightly, which errs toward fewer false alarms.
+ * Each reading is `wallAt` from @pave/kernel, so a sharp edge (a cone's rim, an extruded
+ * letter's corner) is not read as a wall of a few hundredths of a millimetre.
  */
+import { shownMm, type Vec3, type WallRay, wallAt } from '@pave/kernel/walls'
 import type { TriangleBVH } from '../geometry/bvh'
 import type { Tris } from '../geometry/mesh'
 
@@ -93,6 +96,16 @@ export function wallThickness(
     opts.maxSamples ?? 20_000,
     Math.max(200, Math.round(area * (opts.density ?? 8))),
   )
+  const ray: WallRay = (o, d) =>
+    bvh.crossings(o[0], o[1], o[2], d[0], d[1], d[2]).map(({ t, tri }) => {
+      const normal: Vec3 = [
+        -normals[tri * 3]! * inward,
+        -normals[tri * 3 + 1]! * inward,
+        -normals[tri * 3 + 2]! * inward,
+      ]
+      const facing = normal[0] * d[0] + normal[1] * d[1] + normal[2] * d[2]
+      return { t, w: facing < 0 ? 1 : -1, normal }
+    })
   const rand = rng(0x9e3779b9)
   const readings: { t: number; at: [number, number, number] }[] = []
   let excluded = 0
@@ -122,21 +135,19 @@ export function wallThickness(
       excluded++
       continue
     }
-    const dx = normals[f * 3]! * inward
-    const dy = normals[f * 3 + 1]! * inward
-    const dz = normals[f * 3 + 2]! * inward
-    if (dx === 0 && dy === 0 && dz === 0) continue
-    // A reading must leave the metal: the struck face points along the ray. Entering hits come
-    // from folds and creases next to the sample, not from the opposite wall.
-    const exits = (tri: number) =>
-      tri !== f &&
-      (normals[tri * 3]! * dx + normals[tri * 3 + 1]! * dy + normals[tri * 3 + 2]! * dz) * -inward >
-        0
-    const hit = bvh.raycast(x, y, z, dx, dy, dz, 1e-4, Infinity, exits)
-    if (hit) readings.push({ t: hit.t, at: [x, y, z] })
+    // Outward normals, whichever way the mesh is wound; the shared probe reads the wall the
+    // kernel's own check reads (winding through overlapping shells, edges told from walls).
+    const outward: Vec3 = [
+      -normals[f * 3]! * inward,
+      -normals[f * 3 + 1]! * inward,
+      -normals[f * 3 + 2]! * inward,
+    ]
+    if (outward[0] === 0 && outward[1] === 0 && outward[2] === 0) continue
+    const t = wallAt(ray, [x, y, z], outward, opts.threshold)
+    if (Number.isFinite(t)) readings.push({ t, at: [x, y, z] })
   }
   readings.sort((u, v) => u.t - v.t)
-  const thin = readings.filter((r) => r.t < opts.threshold)
+  const thin = readings.filter((r) => shownMm(r.t) < opts.threshold)
   const radius = opts.regionRadius ?? 1
   const regions: ThinRegion[] = []
   for (const r of thin) {

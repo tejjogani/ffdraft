@@ -267,6 +267,8 @@ export async function buildNode(
       message: blocked
         ? `“${labelOf(node)}” was left out because ${reason}.`
         : `“${labelOf(node)}” could not be built: ${reason}`,
+      // The input that was unavailable, so the boundary can say why when it dropped that node.
+      ...(blocked ? { related: [error.inputId] } : {}),
     })
     const transient = blocked
       ? env.results.get(error.inputId)?.transient === true

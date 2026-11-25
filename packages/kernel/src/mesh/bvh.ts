@@ -234,7 +234,8 @@ export class TriangleBvh {
   /**
    * Every crossing of the ray o + t·d (t > 0), sorted by t, with the winding change it causes:
    * +1 entering through a front face, −1 leaving. Summed along a ray this is the winding
-   * number, which stays right where shells overlap (unlike parity).
+   * number, which stays right where shells overlap (unlike parity). `triangle` is the face
+   * struck, for callers that need its normal (the wall check).
    */
   crossings(
     ox: number,
@@ -243,8 +244,8 @@ export class TriangleBvh {
     dx: number,
     dy: number,
     dz: number,
-  ): { t: number; w: number }[] {
-    const out: { t: number; w: number }[] = []
+  ): { t: number; w: number; triangle: number }[] {
+    const out: { t: number; w: number; triangle: number }[] = []
     const p = this.mesh.positions
     const idx = this.mesh.indices
     this.traverseRay(
@@ -268,7 +269,7 @@ export class TriangleBvh {
         const vz = p[c + 2]! - p[a + 2]!
         const facing =
           dx * (uy * vz - uz * vy) + dy * (uz * vx - ux * vz) + dz * (ux * vy - uy * vx)
-        out.push({ t, w: facing < 0 ? 1 : -1 })
+        out.push({ t, w: facing < 0 ? 1 : -1, triangle: tri })
       },
     )
     return out.sort((x, y) => x.t - y.t)

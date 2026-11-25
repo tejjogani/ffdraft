@@ -305,6 +305,48 @@ describe('recipes', () => {
     }
   })
 
+  it('hides a bail only under a sculpt or a single letter, never under a word', () => {
+    const bail = (spec: PieceSpecInput) => buildDesign(spec).nodes.bail as NodeOf<'bail'>
+    const pave = [{ role: 'pave' as const, widthMm: 1.1 }]
+    // A word's top over its centre of mass is a lowercase letter or the dip between letters,
+    // far under the body's height: a slot sized from the height sat at the centre of mass.
+    for (const heightMm of [14, 20, 30]) {
+      for (const text of ['Tej', 'Amara', 'Isabella'])
+        expect(
+          bail(pendant({ archetype: 'namePendant', body: { heightMm, text }, stones: pave })).style,
+        ).not.toBe('hidden')
+      expect(
+        bail(
+          pendant({
+            archetype: 'icedPendant',
+            body: { heightMm, text: 'BOSS', iceLevel: 1 },
+            stones: pave,
+          }),
+        ).style,
+      ).not.toBe('hidden')
+    }
+    // One letter has metal across its top: hidden, when tall enough.
+    expect(
+      bail(pendant({ archetype: 'icedPendant', body: { heightMm: 32, text: 'A' }, stones: pave }))
+        .style,
+    ).toBe('hidden')
+    // A sculpt is hidden up to the size whose open back a strap still spans, then a tube.
+    const trophy = (heightMm: number) =>
+      bail(pendant({ archetype: 'icedPendant', body: { heightMm }, stones: pave })).style
+    expect([45, 100, 120].map(trophy)).toEqual(['hidden', 'hidden', 'hidden'])
+    expect([150, 200].map(trophy)).toEqual(['tube', 'tube'])
+  })
+
+  it('sets an iced name in block letters, which take stones', () => {
+    const body = (stones: PieceSpecInput['stones']) =>
+      buildDesign(
+        pendant({ archetype: 'namePendant', body: { heightMm: 14, text: 'Amara' }, stones }),
+      ).nodes.body as NodeOf<'vectorBody'>
+    const iced = body([{ role: 'pave', widthMm: 1.1 }])
+    expect(iced.source).toMatchObject({ type: 'text', font: 'block' })
+    expect(body([]).source).toMatchObject({ type: 'text', font: 'script' })
+  })
+
   it('agrees with the canon on a hidden bail’s opening', () => {
     // The canon's bail.opening floor for a hidden slot (fitted on the kernel's hole): flat links
     // 1.15 × w + 2, tennis 2.05 × w + 3.6, round 2.18 × w + 0.95.

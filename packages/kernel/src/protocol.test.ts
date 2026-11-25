@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { createKernelClient } from './client'
 import { Evaluator } from './evaluate/evaluate'
 import type { LocalKernel } from './kernel'
-import type { Port, Request, Response } from './protocol'
+import type { Locks, Port, Request, Response } from './protocol'
 import { loadRuntime } from './runtime/index'
 import { CORE_FEATURES } from './testing/core'
 import { serveKernel } from './workerHost'
@@ -188,6 +188,123 @@ describe('a Worker that fails', () => {
     await expect(client.evaluate(uncloneable)).rejects.toThrow()
     // The failed request left nothing behind: a normal one still resolves.
     expect((await client.evaluate(solitaire)).parts.length).toBeGreaterThan(0)
+    client.terminate()
+    local.dispose()
+  })
+})
+
+/**
+ * Web Locks as the platform implements them, in memory: one holder per name, the holder keeps
+ * it until its callback's promise settles, later requests queue (and can be aborted).
+ */
+function memoryLocks(): Locks {
+  const busy = new Set<string>()
+  const queues = new Map<string, (() => void)[]>()
+  const release = (name: string) => {
+    busy.delete(name)
+    queues.get(name)?.shift()?.()
+  }
+  return {
+    request: (name, { signal }, callback) =>
+      new Promise((resolve, reject) => {
+        const run = () => {
+          busy.add(name)
+          callback()
+            .then(resolve, reject)
+            .finally(() => release(name))
+        }
+        if (!busy.has(name)) return run()
+        const queue = queues.get(name) ?? []
+        queues.set(name, queue)
+        queue.push(run)
+        signal?.addEventListener('abort', () => {
+          const at = queue.indexOf(run)
+          if (at < 0) return
+          queue.splice(at, 1)
+          reject(new DOMException('Aborted', 'AbortError'))
+        })
+      }),
+  }
+}
+
+/** A Worker that starts, holds its lock, then never answers again; `kill()` ends it. */
+function mortalWorker(locks: Locks) {
+  let kill!: () => void
+  const killed = new Promise<void>((resolve) => {
+    kill = resolve
+  })
+  const listeners = new Map<string, ((event: unknown) => void)[]>()
+  const port: Port<Request, Response> & {
+    addEventListener(type: string, listener: (event: unknown) => void): void
+  } = {
+    onmessage: null,
+    addEventListener: (type, listener) =>
+      listeners.set(type, [...(listeners.get(type) ?? []), listener]),
+    postMessage: (m) => {
+      if (m.type !== 'ready' || !m.lock) return
+      // What the host does: take the lock (held until the Worker ends), then answer.
+      void locks.request(m.lock, {}, () => {
+        queueMicrotask(() =>
+          port.onmessage?.({
+            data: { type: 'ready', id: m.id, kinds: [], formats: [], locked: true },
+          }),
+        )
+        return killed
+      })
+    },
+  }
+  const raise = (type: string, event: unknown = {}) => {
+    for (const l of listeners.get(type) ?? []) l(event)
+  }
+  return { port, kill, raise }
+}
+
+describe('a Worker that dies after starting', () => {
+  it('rejects what is pending once its lock is released, and says so once', async () => {
+    const locks = memoryLocks()
+    const worker = mortalWorker(locks)
+    const crashes: Error[] = []
+    const client = createKernelClient({ port: worker.port, locks, onCrash: (e) => crashes.push(e) })
+    await client.ready()
+    const pending = client.evaluate(solitaire)
+    worker.kill()
+    await expect(pending).rejects.toMatchObject({ name: 'WorkerCrashedError' })
+    await expect(client.ready()).rejects.toMatchObject({ name: 'WorkerCrashedError' })
+    await expect(client.evaluate(solitaire)).rejects.toMatchObject({ name: 'WorkerCrashedError' })
+    expect(crashes).toHaveLength(1)
+  })
+
+  it('is not a crash when this client ends the Worker itself', async () => {
+    const locks = memoryLocks()
+    const worker = mortalWorker(locks)
+    const crashes: Error[] = []
+    const client = createKernelClient({ port: worker.port, locks, onCrash: (e) => crashes.push(e) })
+    await client.ready()
+    client.terminate()
+    worker.kill()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(crashes).toEqual([])
+  })
+
+  it('keeps working after an uncaught error in a Worker that is still running', async () => {
+    const { client: port, worker } = channel()
+    const listeners: ((event: unknown) => void)[] = []
+    const local = coreKernel()
+    serveKernel(local, worker)
+    const crashes: Error[] = []
+    // The same port object: the channel delivers to the `onmessage` the client sets on it.
+    const events = Object.assign(port, {
+      addEventListener: (type: string, l: (event: unknown) => void) => {
+        if (type === 'error') listeners.push(l)
+      },
+    })
+    const client = createKernelClient({ port: events, onCrash: (e) => crashes.push(e) })
+    await client.ready()
+    // A message the host does not understand: ignored there, and any stray error is not fatal.
+    worker.onmessage?.({ data: null as unknown as Request })
+    for (const l of listeners) l({ message: 'Uncaught TypeError: something else' })
+    expect((await client.evaluate(solitaire)).parts.length).toBeGreaterThan(0)
+    expect(crashes).toEqual([])
     client.terminate()
     local.dispose()
   })

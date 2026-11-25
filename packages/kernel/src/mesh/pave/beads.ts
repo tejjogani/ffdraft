@@ -1,15 +1,20 @@
 /**
  * Shared-bead layout (docs/research/06-freeform.md §5 step 6): one bead in every gap between
  * three mutually adjacent stones, at the point equidistant from their girdles — six per stone in
- * a honeycomb, each holding three stones. Stones on the edge of the field, which have fewer
- * neighbours, get extra beads on their open side until no gap around them exceeds 150°. A stone
- * in a single row (two neighbours in line) gets its beads square to the row, one each side.
+ * a honeycomb, each holding three stones. Two neighbours with no such bead on one side of them
+ * (a single row, the outer row of a field) share one in the gap between them on that side, so a
+ * stone in a row is held by four beads, two each side. Stones still open on one side get extra
+ * beads there until no gap around them exceeds 150°.
  *
- * No bead comes within EDGE_METAL of the field's edge: a bead squeezed into the gap between a
- * girdle and a raised border wall touches the wall and the floor and leaves a tunnel under it,
- * a handle in the casting that investment cannot fill; at a body's edge it would hang over it.
+ * Inside a raised border, a girdle within WALL_HOLD of the wall is held by it: the setter pushes
+ * the wall's edge over the stone, as in a bezel. The layout puts its outer row there.
+ *
+ * No bead comes within EDGE_METAL of the field's edge or of any host metal but the floor it
+ * stands on: a bead squeezed between a girdle and a wall, or reaching across to another part of
+ * a sculpted body, touches both and leaves a tunnel under it, a handle in the casting that
+ * investment cannot fill; at a body's edge it would hang over it.
  */
-import { add, cross, dot, perpendicular, scale, sub, type Vec3 } from '../../geometry/vec'
+import { add, cross, dot, normalize, perpendicular, scale, sub, type Vec3 } from '../../geometry/vec'
 import { RULES } from '../../rules'
 import { PointGrid } from '../grid'
 import type { PlacedStone } from './layout'
@@ -34,6 +39,31 @@ const ARC_STEP = Math.PI / 12
 export const EDGE_METAL = 0.1
 /** Two neighbours at least this far apart in angle make a stone part of a single row. */
 const IN_LINE = (150 * Math.PI) / 180
+/** A bead's centre stands this share of its diameter outside the girdle it holds. */
+const GRIP = 0.45
+/**
+ * A bead holds a stone when its edge comes within this of the girdle, mm: the setter pushes it
+ * onto the crown. A bead farther off is metal beside the stone, not a hold.
+ */
+const HOLD_SLACK = 0.1
+/** A bead's sphere is centred this share of its diameter above the surface (seats.ts). */
+export const BEAD_LIFT = 0.2
+/** A girdle this close to a raised border's wall is held by the wall, mm. */
+export const WALL_HOLD = 0.05
+/** Directions round a girdle probed for a wall. */
+const WALL_PROBES = 24
+
+export interface BeadOptions {
+  /** Distance from a surface point to the field's edge; beads keep EDGE_METAL inside it. */
+  edgeDistance?: (p: Vec3) => number
+  /** The field's edge is a raised border's wall, which holds a girdle within WALL_HOLD of it. */
+  walled?: boolean
+  /**
+   * Whether a sphere (centre, the surface normal under it, radius) is clear of host metal
+   * other than the floor below it. Absent: only the field's edge is checked.
+   */
+  clear?: (centre: Vec3, normal: Vec3, radius: number) => boolean
+}
 
 /** The open arcs between bead angles (sorted, radians), widest first; one full turn when none. */
 function openArcs(angles: readonly number[]): { from: number; width: number }[] {
@@ -50,9 +80,9 @@ export function layoutBeads(
   stones: readonly PlacedStone[],
   gap: number,
   snap: (q: Vec3) => { p: Vec3; n: Vec3 } | null,
-  /** Distance from a surface point to the field's edge; beads keep EDGE_METAL inside it. */
-  edgeDistance: (p: Vec3) => number = () => Number.POSITIVE_INFINITY,
+  options: BeadOptions = {},
 ): Bead[] {
+  const edgeDistance = options.edgeDistance ?? (() => Number.POSITIVE_INFINITY)
   const largest = Math.max(...stones.map((s) => s.diameter))
   const grid = new PointGrid(largest + gap)
   for (const s of stones) grid.add(...(s.position as [number, number, number]))
@@ -94,6 +124,8 @@ export function layoutBeads(
     const hit = snap(p)
     if (!hit || !free(hit.p, diameter, near)) return
     if (edgeDistance(hit.p) < diameter / 2 + EDGE_METAL) return
+    const centre = add(hit.p, scale(hit.n, BEAD_LIFT * diameter))
+    if (options.clear && !options.clear(centre, hit.n, diameter / 2 + EDGE_METAL)) return
     beadGrid.add(...(hit.p as [number, number, number]))
     for (const h of holds) owners[h]!.push(beads.length)
     beads.push({ position: hit.p, normal: hit.n, diameter })
@@ -117,11 +149,64 @@ export function layoutBeads(
         }
         p = scale(p, 1 / wsum)
         const mean = tri.reduce((sum, t) => sum + stones[t]!.diameter, 0) / 3
-        add3(p, RULES.beadDiameter(mean), tri, [
+        const diameter = RULES.beadDiameter(mean)
+        // Three neighbours spread wider than a honeycomb leave the middle too far from some
+        // girdle to hold it: their gaps get pair beads instead.
+        const reaches = tri.every((t) => {
+          const d = sub(p, stones[t]!.position)
+          return Math.hypot(d[0], d[1], d[2]) <= stones[t]!.diameter / 2 + diameter / 2 + HOLD_SLACK
+        })
+        if (!reaches) continue
+        add3(p, diameter, tri, [
           ...new Set([...ns, ...neighbours[j]!, ...neighbours[k]!, i]),
         ])
       }
     }
+  })
+
+  // Pair beads: two neighbours with no shared bead on one side of them share one in the gap
+  // between them on that side, where it is GRIP of a bead outside both girdles. In a row this
+  // holds every stone from both sides, four beads each; at a field's edge it closes the outer
+  // side of the outer row wherever there is metal for it.
+  stones.forEach((a, i) => {
+    for (const j of neighbours[i]!) {
+      if (j < i) continue
+      const b = stones[j]!
+      const n = normalize(add(a.normal, b.normal))
+      const between = sub(b.position, a.position)
+      const flat = sub(between, scale(n, dot(between, n)))
+      const len = Math.hypot(flat[0], flat[1], flat[2])
+      if (len < 1e-9) continue
+      const e1 = scale(flat, 1 / len)
+      const e2 = cross(n, e1)
+      const diameter = RULES.beadDiameter((a.diameter + b.diameter) / 2)
+      const ra = a.diameter / 2 + GRIP * diameter
+      const rb = b.diameter / 2 + GRIP * diameter
+      // The two circles of those radii round the girdles meet at the bead on either side.
+      const x = (ra * ra - rb * rb + len * len) / (2 * len)
+      const y2 = ra * ra - x * x
+      if (y2 <= 0) continue
+      const shared = owners[i]!.filter((k) => owners[j]!.includes(k))
+      for (const side of [1, -1]) {
+        if (shared.some((k) => side * dot(sub(beads[k]!.position, a.position), e2) > 0)) continue
+        const p = add(add(a.position, scale(e1, x)), scale(e2, side * Math.sqrt(y2)))
+        add3(p, diameter, [i, j], [...new Set([...neighbours[i]!, ...neighbours[j]!, i])])
+      }
+    }
+  })
+
+  // Directions round each girdle where a raised border's wall holds it.
+  const walls = stones.map((s) => {
+    if (!options.walled) return []
+    const u = perpendicular(s.normal)
+    const v = cross(s.normal, u)
+    const out: number[] = []
+    for (let k = 0; k < WALL_PROBES; k++) {
+      const angle = -Math.PI + ((k + 0.5) / WALL_PROBES) * 2 * Math.PI
+      const dir = add(scale(u, Math.cos(angle)), scale(v, Math.sin(angle)))
+      if (edgeDistance(add(s.position, scale(dir, s.diameter / 2))) <= WALL_HOLD) out.push(angle)
+    }
+    return out
   })
 
   // Edge beads where a stone's grip is open on one side. The middle of the widest open arc is
@@ -135,24 +220,27 @@ export function layoutBeads(
       return Math.atan2(dot(d, v), dot(d, u))
     }
     const diameter = RULES.beadDiameter(s.diameter)
-    const reach = s.diameter / 2 + diameter * 0.45
+    const reach = s.diameter / 2 + diameter * GRIP
     const tryAt = (angle: number): boolean => {
       const dir = add(scale(u, Math.cos(angle)), scale(v, Math.sin(angle)))
       const before = owners[i]!.length
       add3(add(s.position, scale(dir, reach)), diameter, [i], [...neighbours[i]!, i])
       return owners[i]!.length > before
     }
-    // In a single row the neighbours themselves close the grip along the row: one bead square
-    // to the row on each side holds the stone, and the search below finds nothing left open.
-    // Elsewhere neighbours do not count — a gap beside a neighbour is still open metal.
-    const closed: number[] = []
+    // A single row whose gaps took no pair bead (a band too narrow for one beside the gap):
+    // the neighbours close the grip along the row, and one bead square to the row on each side
+    // holds the stone. Elsewhere neighbours do not count — a gap beside one is still open metal.
+    // A wall counts once however many directions it holds.
+    const closed: number[] = [...walls[i]!]
+    let closers = walls[i]!.length > 0 ? 1 : 0
     const ns = neighbours[i]!
-    if (ns.length === 2 && owners[i]!.length === 0) {
+    if (ns.length === 2 && owners[i]!.length === 0 && walls[i]!.length === 0) {
       const a = angleOf(stones[ns[0]!]!.position)
       const b = angleOf(stones[ns[1]!]!.position)
       const apart = Math.abs(Math.atan2(Math.sin(b - a), Math.cos(b - a)))
       if (apart >= IN_LINE) {
         closed.push(a, b)
+        closers += 2
         // The bisectors of the two neighbour directions, on either side of the row.
         const mid = Math.atan2(
           Math.sin(a) + Math.sin(b + Math.PI),
@@ -169,10 +257,11 @@ export function layoutBeads(
         (a, b) => a - b,
       )
       const arcs = openArcs(angles)
-      if (angles.length >= 3 && arcs[0]!.width <= MAX_OPEN_ANGLE) break
+      const holds = owners[i]!.length + closers
+      if (holds >= 3 && arcs[0]!.width <= MAX_OPEN_ANGLE) break
       let placed = false
       for (const arc of arcs) {
-        if (arc.width <= MAX_OPEN_ANGLE && angles.length >= 3) break
+        if (arc.width <= MAX_OPEN_ANGLE && holds >= 3) break
         const half = arc.width / 2 - (angles.length > 0 ? keepOff : 0)
         for (let k = 0; !placed && k * ARC_STEP <= half; k++)
           for (const sign of k === 0 ? [1] : [1, -1])

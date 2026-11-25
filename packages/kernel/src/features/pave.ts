@@ -15,7 +15,7 @@ import {
   solidFromManifold,
 } from '../core'
 import { frameFromZ } from '../geometry/vec'
-import { layoutBeads } from '../mesh/pave/beads'
+import { layoutBeads, WALL_HOLD } from '../mesh/pave/beads'
 import {
   iceLevel,
   type Layout,
@@ -67,6 +67,11 @@ const TRIANGLE_BUDGET = 1_500_000
 const MAX_PAVE_STONES = 25_000
 /** Above this share of the open region too thin for the largest stone, thin metal is the story. */
 const THIN_SHARE = 0.3
+/**
+ * Girdle-to-wall distance the outer row is laid at inside a raised rim, mm. Rows land up to a
+ * construction slack (layout.ts SLACK) beyond it, still within WALL_HOLD.
+ */
+const WALL_SEAT = 0.02
 
 /**
  * What to say when the metal under the region is too thin for the stones asked for: how thick
@@ -259,13 +264,15 @@ export const pave = defineFeature('pave', (node, ctx) => {
   const smallest = sizes.at(-1)!
 
   // A seat needs its wall of metal wherever the region ends (the DFM seat-wall rule), whatever
-  // smaller margin was asked for. Inside a raised rim at least that wide the rim is the wall:
-  // stones go up to it with half a gap to spare, and only margin asked beyond the wall is kept.
+  // smaller margin was asked for. Inside a raised rim at least that wide the rim is the wall,
+  // and the setting: the outer row goes right up to it, close enough for the setter to push its
+  // edge over the girdles (beads.ts WALL_HOLD). A row left a little short of the wall has
+  // neither a wall nor room for a bead on that side. Only margin asked beyond the wall is kept.
   const rim = publishedField(host)?.field.rim ?? 0
-  const margin =
-    rim >= RULES.channelWall
-      ? Math.max(node.gap / 2, node.margin - RULES.channelWall)
-      : Math.max(node.margin, RULES.channelWall)
+  const walled = rim >= RULES.channelWall
+  const margin = walled
+    ? Math.max(WALL_SEAT, node.margin - RULES.channelWall)
+    : Math.max(node.margin, RULES.channelWall)
   const built = packed(node, host, sizes, margin, ctx)
   if (!built) {
     ctx.report({
@@ -369,12 +376,12 @@ export const pave = defineFeature('pave', (node, ctx) => {
   ]
   const additions: Addition[] = []
   if (node.beads) {
-    const beads = layoutBeads(
-      layout.stones,
-      node.gap,
-      (q) => surface.snapExact(q),
-      (p) => region.edgeDistance(p),
-    )
+    const beads = layoutBeads(layout.stones, node.gap, (q) => surface.snapExact(q), {
+      edgeDistance: (p) => region.edgeDistance(p),
+      // A wall only holds what it was laid against: a margin asked beyond it keeps stones off.
+      walled: walled && margin < WALL_HOLD,
+      clear: (c, n, radius) => surface.clearAround(c, n, radius),
+    })
     if (beads.length > 0)
       additions.push({
         solid: solidFromManifold(beadSolids(beads, ctx.quality)),

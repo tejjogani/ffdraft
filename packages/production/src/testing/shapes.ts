@@ -146,3 +146,25 @@ export function sphere(
     return { p: [c[0] + r * n[0], c[1] + r * n[1], c[2] + r * n[2]], n }
   })
 }
+
+/** Solid cone on z = 0 with its apex up: a spike stud. Closed, outward-wound. */
+export function cone(r: number, h: number, n = 96): MeshData {
+  // Vertices: base centre 0, apex 1, then the rim; normals are only used for display.
+  const positions = [0, 0, 0, 0, 0, h]
+  const normals = [0, 0, -1, 0, 0, 1]
+  const indices: number[] = []
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * 2 * Math.PI
+    positions.push(r * Math.cos(a), r * Math.sin(a), 0)
+    const k = Math.hypot(h, r)
+    normals.push((h / k) * Math.cos(a), (h / k) * Math.sin(a), r / k)
+    const p = 2 + i
+    const q = 2 + ((i + 1) % n)
+    indices.push(0, q, p, 1, p, q)
+  }
+  return {
+    positions: Float32Array.from(positions),
+    normals: Float32Array.from(normals),
+    indices: Uint32Array.from(indices),
+  }
+}

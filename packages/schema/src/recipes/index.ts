@@ -269,14 +269,17 @@ function pendant(spec: PieceSpec, notes: string[]): NodeInput[] {
       host = 'halo'
     }
   } else if (a === 'namePendant') {
+    // An iced name is set in block letters: a script's hairlines take no stone with its seat
+    // wall (1.1 mm melee came out as an empty field up to 20 mm high).
+    const iced = byRole(spec, 'pave') !== undefined && (b?.iceLevel ?? 1) > 0
     nodes.push({
       id: 'body',
       kind: 'vectorBody',
       name: 'Name',
       ...metal,
-      source: { type: 'text', text: b?.text ?? 'Amara', font: 'script' },
+      source: { type: 'text', text: b?.text ?? 'Amara', font: iced ? 'block' : 'script' },
       height: b?.heightMm ?? 9,
-      thickness: b?.thicknessMm ?? 1.4,
+      thickness: b?.thicknessMm ?? (iced ? 2.5 : 1.4),
       bevel: 'round',
       bevelSize: 0.25,
     })
@@ -368,9 +371,31 @@ function pendant(spec: PieceSpec, notes: string[]): NodeInput[] {
     return nodes
   }
   const iced = nodes.some((n) => n.kind === 'pave')
-  nodes.push(bailNode(spec, host, solitaire ? undefined : height, iced))
+  const body = nodes.find((n) => n.id === 'body')
+  nodes.push(bailNode(spec, host, solitaire ? undefined : height, iced, hiddenFits(body)))
   if (spec.chain) nodes.push(chainNode(spec, notes, 'bail'))
   return nodes
+}
+
+/**
+ * Tallest sculpted body a hidden bail is planned for, mm. A hidden loop on a scooped back is
+ * carried down the back to the metal below on a strap (the kernel's bail); past this the open
+ * back is too long to strap (a 150 mm trophy found no metal to land on: bail.weakJoint).
+ */
+const HIDDEN_MAX = 120
+
+/**
+ * Whether a hidden bail suits this body at all, before its size is checked. A sculpted body has
+ * metal across its top to hide a loop under. Text does only when it is one letter: across a
+ * word the top is the dip between letters or a lowercase letter, far under the body's height,
+ * so a slot sized from the height sat at the centre of mass (bail.hiddenLow on iced names and
+ * on BOSS, bail.unsupported on Tej).
+ */
+function hiddenFits(body: NodeInput | undefined): boolean {
+  if (!body) return false
+  if (body.kind === 'meshBody') return (body.height ?? 0) <= HIDDEN_MAX
+  if (body.kind !== 'vectorBody' || body.source?.type !== 'text') return false
+  return Array.from((body.source.text ?? '').trim()).length === 1
 }
 
 /** The largest pavé stone: the spec's, or 1.3 mm, which a 1.25 mm wall seats. */
@@ -389,9 +414,11 @@ const tennisDepth = (w: number) => Math.max(1.25 * w, w + 1.15)
  * measured on the kernel): in a ring or tube, round chain needs its width + 1.7, flat links
  * 1.15 × width + 2, box chain its diagonal, a tennis chain the diagonal of its deeper section.
  * A ring on fine round chain, a tube on everything heavier. Behind a paved body a hidden bail
- * keeps the top stones clear (canon `bail.chainStyle`), but only on a body tall enough to hide
- * it high up: a hidden slot whose hole falls out of the body's top third tips the piece
- * forward (the kernel's bail.hiddenLow), so a small iced piece, and any setting, gets a tube.
+ * keeps the top stones clear (canon `bail.chainStyle`), but only on a body that has metal across
+ * its top to hide it under (a sculpt, or a single letter: see hiddenFits) and is tall enough to
+ * hide it high up: a hidden slot whose hole falls out of the body's top third tips the piece
+ * forward (the kernel's bail.hiddenLow), so a small iced piece, a name, and any setting get a
+ * bail on top.
  * On a body, wire, width and opening grow with the piece, as the canon's `bail.wire` and
  * `bail.opening` rules do, so a heavy piece is not hung on a fine wire.
  */
@@ -400,6 +427,7 @@ function bailNode(
   host: string,
   bodyHeight: number | undefined,
   iced: boolean,
+  hiddenSuits: boolean,
 ): NodeInput {
   const style = spec.chain?.style ?? 'cable'
   const w = spec.chain?.widthMm ?? 1.2
@@ -416,7 +444,10 @@ function bailNode(
   // the top third; 0.3 of the height leaves room for a top that is lower across the slot than
   // at its highest point (a letter's apex).
   const hidden =
-    iced && bodyHeight !== undefined && 1.5 * wire + hiddenOpening / 2 <= 0.3 * bodyHeight
+    iced &&
+    hiddenSuits &&
+    bodyHeight !== undefined &&
+    1.5 * wire + hiddenOpening / 2 <= 0.3 * bodyHeight
   const need =
     style === 'tennis'
       ? Math.hypot(w + 1.5, w + 2.1) + 0.2
@@ -435,7 +466,9 @@ function bailNode(
     finish: spec.metal.finish,
     plating: spec.metal.plating,
     host,
-    style: hidden ? 'hidden' : round && w <= 2 ? 'ring' : 'tube',
+    // A round wire ring suits fine chain on a light piece; a big body (its bail's opening grows
+    // with it) wants a tube's broad band, not a 17 mm ring of wire.
+    style: hidden ? 'hidden' : round && w <= 2 && (bodyHeight ?? 0) <= 60 ? 'ring' : 'tube',
     opening: Number(opening.toFixed(2)),
     width: Number(Math.min(6, Math.max(2.5, 0.5 * opening)).toFixed(2)),
     wire: Number(wire.toFixed(2)),

@@ -181,6 +181,12 @@ export const metalOf = (node: MetalSpec): MetalSpec => ({
 /** One piece of metal. A node may return several overlapping bodies; they fuse at production. */
 export interface Body extends MetalSpec {
   solid: Solid
+  /**
+   * For a copy (a pattern or mirror of another node): the node whose body this is a copy of,
+   * with its finish and plating. A casting's regions name that node, which the designer
+   * finished, not the pattern ("all of Stud R except Post", not "except Pair").
+   */
+  from?: string
 }
 
 /** A placed gem. The evaluator derives the public `StoneInstance` (id, carat, matrix) from it. */

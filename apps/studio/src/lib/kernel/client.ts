@@ -14,6 +14,7 @@ import {
   type ExportOptions,
   type ExportResult,
   type KernelClient,
+  WorkerCrashedError,
 } from '@pave/kernel/client'
 import type { Design } from '@pave/schema'
 import { useSyncExternalStore } from 'react'
@@ -53,10 +54,10 @@ const setInfo = (next: Partial<KernelInfo>) => {
   for (const l of listeners) l()
 }
 
-const createClient = (): KernelClient =>
+const createClient = (onCrash: (error: Error) => void): KernelClient =>
   import.meta.env.DEV && new URLSearchParams(location.search).get('kernel') === 'none'
     ? failingClient()
-    : createKernelClient()
+    : createKernelClient({ onCrash })
 
 /** Development aid (`?kernel=none`): a kernel that never loads, to see the edit-by-numbers fallback. */
 function failingClient(): KernelClient {
@@ -75,8 +76,19 @@ let idleTimer: ReturnType<typeof setTimeout> | undefined
 
 function boot(w: Slot, primary: boolean): KernelClient {
   if (w.client) return w.client
-  const client = createClient()
+  let started = false
+  const client = createClient((e) => {
+    // A Worker that dies after it loaded is replaced once, like one that stops answering. One
+    // that never loads is reported as unavailable by ready() below.
+    if (started && w.client === client) crash(w, primary, e.message)
+  })
   w.client = client
+  client.ready().then(
+    () => {
+      started = true
+    },
+    () => {},
+  )
   if (primary) {
     setInfo({ status: 'booting' })
     client.ready().then(
@@ -104,7 +116,7 @@ function crash(w: Slot, primary: boolean, reason: string) {
 /** Wraps a worker so a request that never answers terminates and replaces it. */
 function guarded(w: Slot, detail: Detail): Evaluator {
   const primary = w === draft
-  return {
+  const evaluator: Evaluator = {
     async evaluate(design, options) {
       if (primary && info.status === 'crashed') throw new Error('The geometry engine stopped')
       const client = boot(w, primary)
@@ -120,11 +132,18 @@ function guarded(w: Slot, detail: Detail): Evaluator {
       })
       try {
         return await Promise.race([client.evaluate(design, { ...options, detail }), hung])
+      } catch (error) {
+        // The Worker died under this request and has been replaced: ask the new one, once. If
+        // that one dies too the slot is not replaced again and the error goes to the caller.
+        if (error instanceof WorkerCrashedError && w.client && w.client !== client)
+          return evaluator.evaluate(design, options)
+        throw error
       } finally {
         clearTimeout(timer)
       }
     },
   }
+  return evaluator
 }
 
 /** Requests running on the production worker; it is only stopped once none is. */

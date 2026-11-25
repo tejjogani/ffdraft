@@ -70,7 +70,11 @@ export function copyOutput(
   const s = uniformScaleOf(m)
   const setting = styles.get(result.id)
   return {
-    bodies: result.bodies.map((b) => ({ ...b, solid: b.solid.transformed(m) })),
+    bodies: result.bodies.map((b) => ({
+      ...b,
+      from: b.from ?? result.id,
+      solid: b.solid.transformed(m),
+    })),
     stones: result.stones.map((stone) => ({
       ...stone,
       frame: moveFrame(m, stone.frame),

@@ -7,7 +7,7 @@
  * body happens to be triangulated: an extruded letter's face is a few long slivers, an AI mesh a
  * million noisy triangles, and both are sampled at the same ~¼-stone spacing.
  */
-import { cross, dot, normalize, scale, sub, type Vec3 } from '../../geometry/vec'
+import { add, cross, dot, normalize, scale, sub, type Vec3 } from '../../geometry/vec'
 import type { IndexedTriangles } from '../../solid/meshing'
 import { TriangleBvh } from '../bvh'
 import { StaticPointGrid } from '../grid'
@@ -170,6 +170,30 @@ export class PaveSurface {
     const lift = this.spacing * 0.05
     const o: Vec3 = [p[0] + n[0] * lift, p[1] + n[1] * lift, p[2] + n[2] * lift]
     return this.bvh.firstHit(o[0], o[1], o[2], n[0], n[1], n[2], lift, reach).triangle < 0
+  }
+
+  /**
+   * Whether no host metal lies within `radius` of a point in the air above the surface (a
+   * bead's centre), looking along the normal n, square to it and between: rays straight up, at
+   * 45° and level, eight round. The floor under the point is below every ray, so only other
+   * metal counts: a wall beside it, another part of a sculpted body over or across from it.
+   */
+  clearAround(c: Vec3, n: Vec3, radius: number): boolean {
+    this.bvh ??= new TriangleBvh(this.host)
+    const u = tangentOf(n)
+    const v = cross(n, u)
+    const blocked = (d: Vec3) =>
+      this.bvh!.firstHit(c[0], c[1], c[2], d[0], d[1], d[2], 0, radius).triangle >= 0
+    if (blocked(n)) return false
+    for (const up of [Math.SQRT1_2, 0]) {
+      const level = Math.sqrt(1 - up * up)
+      for (let k = 0; k < 8; k++) {
+        const a = (k * Math.PI) / 4
+        const d = add(scale(n, up), add(scale(u, level * Math.cos(a)), scale(v, level * Math.sin(a))))
+        if (blocked(d)) return false
+      }
+    }
+    return true
   }
 
   /**

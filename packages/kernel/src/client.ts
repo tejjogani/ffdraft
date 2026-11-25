@@ -3,7 +3,14 @@
  * UI thread; geometry arrives as transferred typed arrays, and only the parts that changed.
  */
 import type { Design } from '@pave/schema'
-import { PartLedger, type Port, type Request, type Response } from './protocol'
+import {
+  type Locks,
+  PartLedger,
+  type Port,
+  platformLocks,
+  type Request,
+  type Response,
+} from './protocol'
 import type {
   AssetResolver,
   EvaluateOptions,
@@ -31,11 +38,14 @@ export interface KernelClientOptions {
    */
   port?: Port<Request, Response> & { terminate?(): void } & WorkerEvents
   /**
-   * Called once when the Worker fails (it could not load, threw, or a message could not be
-   * delivered). Everything pending has been rejected with a {@link WorkerCrashedError} and the
-   * client is unusable: start a new one.
+   * Called once when the Worker fails: it could not load or threw while starting, it died
+   * (killed, out of memory: learnt from a Web Lock it holds while it lives), or a message could
+   * not be delivered. Everything pending has been rejected with a {@link WorkerCrashedError}
+   * and the client is unusable: start a new one.
    */
   onCrash?(error: WorkerCrashedError): void
+  /** The Web Locks API; defaults to `navigator.locks`. Without one a dead Worker goes unseen. */
+  locks?: Locks
 }
 
 /**
@@ -76,6 +86,15 @@ export function createKernelClient(options: KernelClientOptions = {}): KernelCli
   let latest: number | null = null
   /** Why the client can no longer be used: terminated by its owner, or the Worker failed. */
   let dead: Error | null = null
+  /** The Worker has answered: it loaded, so a later uncaught error does not mean it is gone. */
+  let started = false
+  const locks = options.locks ?? platformLocks()
+  // One lock per Worker; the name only has to be unique within this origin.
+  const lockName = locks
+    ? `pave-kernel:${globalThis.crypto?.randomUUID?.() ?? `${Date.now()}:${Math.random()}`}`
+    : undefined
+  /** Cancels waiting on the Worker's lock (when this client ends the Worker itself). */
+  const watching = new AbortController()
 
   const rejectAll = (error: Error) => {
     for (const entry of pending.values()) entry.reject(error)
@@ -86,14 +105,18 @@ export function createKernelClient(options: KernelClientOptions = {}): KernelCli
     if (dead) return
     const error = new WorkerCrashedError(`The geometry engine stopped: ${what}`)
     dead = error
+    watching.abort()
     rejectAll(error)
     port.terminate?.()
     options.onCrash?.(error)
   }
-  // Without these, a Worker that fails to load or throws leaves every request (ready included)
-  // pending forever. A Worker killed from outside raises no event at all; callers still need a
-  // timeout for that case.
+  // Without these, a Worker that fails to load leaves every request (ready included) pending
+  // forever. Once it has started, an uncaught error is not the end of it: the Worker keeps
+  // running, the host answers every request it was given even when its handler fails, and a
+  // Worker that does die is seen through its lock (below). A Worker killed from outside raises
+  // no event; without Web Locks callers still need a timeout for that case.
   port.addEventListener?.('error', (event) => {
+    if (started) return
     const message = (event as { message?: unknown }).message
     crash(typeof message === 'string' && message ? message : 'the worker failed to start or threw')
   })
@@ -128,6 +151,7 @@ export function createKernelClient(options: KernelClientOptions = {}): KernelCli
   }
 
   port.onmessage = ({ data }) => {
+    started = true
     if (data.type === 'asset') {
       // Any pending request with a resolver can serve it; they all share the caller's resolver.
       const resolver = [...pending.values()].find((p) => p.assets)?.assets
@@ -154,6 +178,15 @@ export function createKernelClient(options: KernelClientOptions = {}): KernelCli
     } else if (data.type === 'ready') {
       kinds = data.kinds
       formats = data.formats
+      // The Worker holds the lock while it lives, so this is granted only when it has died.
+      if (data.locked && locks && lockName && !dead)
+        locks
+          .request(lockName, { signal: watching.signal }, async () =>
+            crash('the worker stopped unexpectedly'),
+          )
+          .catch(() => {
+            // Aborted: this client ended the Worker itself.
+          })
       entry?.resolve(undefined as never)
     } else if (data.type === 'exported') entry?.resolve(data.result as never)
     else entry?.reject(data.aborted ? abortError() : new Error(data.message))
@@ -162,7 +195,11 @@ export function createKernelClient(options: KernelClientOptions = {}): KernelCli
   const whenReady = (): Promise<void> => {
     // A dead client must not keep answering "ready" from before it died.
     if (dead) return Promise.reject(dead)
-    ready ??= call<void>((id) => ({ type: 'ready', id })).promise.catch((error) => {
+    ready ??= call<void>((id) => ({
+      type: 'ready',
+      id,
+      ...(lockName ? { lock: lockName } : {}),
+    })).promise.catch((error) => {
       ready = null
       throw error
     })
@@ -215,6 +252,7 @@ export function createKernelClient(options: KernelClientOptions = {}): KernelCli
     },
     terminate() {
       if (!dead) dead = new Error('The kernel client was terminated')
+      watching.abort()
       port.terminate?.()
       rejectAll(dead)
     },

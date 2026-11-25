@@ -15,6 +15,7 @@
 import type { Scene, Solid } from '../core'
 import type { Diagnostic } from '../types'
 import { treeOf } from './trees'
+import { shownMm, type Vec3, type WallRay, wallAt } from './wallProbe'
 
 /** Below this a wall does not fill in casting (the package's error threshold, 02-production §3). */
 const MIN_WALL_MM = 0.5
@@ -23,6 +24,24 @@ const DENSITY = 6
 const MAX_SAMPLES = 4000
 /** A finding needs two thin readings: one ray can graze a crease. */
 const MIN_READINGS = 2
+
+/** The outward unit normal of a triangle of an outward-wound mesh. */
+function normalOf(p: ArrayLike<number>, indices: ArrayLike<number>, triangle: number): Vec3 {
+  const a = indices[triangle * 3]! * 3
+  const b = indices[triangle * 3 + 1]! * 3
+  const c = indices[triangle * 3 + 2]! * 3
+  const ux = p[b]! - p[a]!
+  const uy = p[b + 1]! - p[a + 1]!
+  const uz = p[b + 2]! - p[a + 2]!
+  const vx = p[c]! - p[a]!
+  const vy = p[c + 1]! - p[a + 1]!
+  const vz = p[c + 2]! - p[a + 2]!
+  const nx = uy * vz - uz * vy
+  const ny = uz * vx - ux * vz
+  const nz = ux * vy - uy * vx
+  const l = Math.hypot(nx, ny, nz) || 1
+  return [nx / l, ny / l, nz / l]
+}
 
 /** mulberry32: tiny, fast, deterministic. */
 function random(seed: number): () => number {
@@ -77,6 +96,10 @@ export function wallChecks(scene: Scene): Diagnostic[] {
     }
     if (area <= 0) continue
     const tree = treeOf(mesh)
+    const ray: WallRay = (o, d) =>
+      tree
+        .crossings(o[0], o[1], o[2], d[0], d[1], d[2])
+        .map(({ t, w, triangle }) => ({ t, w, normal: normalOf(p, indices, triangle) }))
     const next = random(0x9e3779b9)
     const samples = Math.min(MAX_SAMPLES, Math.max(200, Math.round(area * DENSITY)))
     for (let s = 0; s < samples; s++) {
@@ -112,12 +135,9 @@ export function wallChecks(scene: Scene): Diagnostic[] {
       ]
       const length = Math.hypot(n[0]!, n[1]!, n[2]!)
       if (length === 0) continue
-      // The wall is where the ray first leaves the metal. Faces it enters on the way are folds
-      // and creases beside the sample, not the far side of the wall (they read 0.01 mm).
-      const exit = tree
-        .crossings(x, y, z, -n[0]! / length, -n[1]! / length, -n[2]! / length)
-        .find((hit) => hit.t > 1e-4 && hit.w < 0)
-      const t = exit?.t ?? Infinity
+      const t = shownMm(
+        wallAt(ray, [x, y, z], [n[0]! / length, n[1]! / length, n[2]! / length], MIN_WALL_MM),
+      )
       if (!(t < MIN_WALL_MM)) continue
       const entry = worst.get(nodeId)
       if (!entry) worst.set(nodeId, { t, at: [x, y, z], count: 1 })

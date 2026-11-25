@@ -1,9 +1,33 @@
 /** Serves a kernel over a message port: the Worker side of `createKernelClient()`. */
 import type { LocalKernel } from './kernel'
-import { PartLedger, type Port, type Request, type Response } from './protocol'
+import {
+  type Locks,
+  PartLedger,
+  type Port,
+  platformLocks,
+  type Request,
+  type Response,
+} from './protocol'
 import type { AssetResolver } from './types'
 
-export function serveKernel(kernel: LocalKernel, port: Port<Response, Request>): void {
+/** Takes `name` and holds it until this Worker ends. Resolves to whether it is held. */
+function holdLock(locks: Locks | undefined, name: string | undefined): Promise<boolean> {
+  if (!locks || !name) return Promise.resolve(false)
+  return new Promise((held) => {
+    locks
+      .request(name, {}, () => {
+        held(true)
+        return new Promise(() => {})
+      })
+      .catch(() => held(false))
+  })
+}
+
+export function serveKernel(
+  kernel: LocalKernel,
+  port: Port<Response, Request>,
+  locks: Locks | undefined = platformLocks(),
+): void {
   const ledger = new PartLedger()
   const running = new Map<number, AbortController>()
   const assets = new Map<number, { resolve(bytes: Uint8Array): void; reject(error: Error): void }>()
@@ -24,18 +48,22 @@ export function serveKernel(kernel: LocalKernel, port: Port<Response, Request>):
     })
 
   port.onmessage = ({ data }) => {
+    // Anything that is not one of our messages is ignored rather than thrown on: an uncaught
+    // error here is reported to the page as a Worker error.
+    if (typeof data !== 'object' || data === null) return
     switch (data.type) {
       case 'ready':
-        kernel.ready().then(
-          () =>
+        Promise.all([kernel.ready(), holdLock(locks, data.lock)])
+          .then(([, locked]) =>
             port.postMessage({
               type: 'ready',
               id: data.id,
               kinds: [...kernel.kinds],
               formats: [...kernel.formats],
+              locked,
             }),
-          (error) => fail(data.id, error),
-        )
+          )
+          .catch((error) => fail(data.id, error))
         break
       case 'evaluate': {
         const controller = new AbortController()
@@ -46,13 +74,12 @@ export function serveKernel(kernel: LocalKernel, port: Port<Response, Request>):
             signal: controller.signal,
             ...(data.assets ? { assets: resolveAsset } : {}),
           })
-          .then(
-            (evaluation) => {
-              const { wire, transfer } = ledger.encode(evaluation)
-              port.postMessage({ type: 'evaluated', id: data.id, evaluation: wire }, transfer)
-            },
-            (error) => fail(data.id, error, controller.signal),
-          )
+          .then((evaluation) => {
+            const { wire, transfer } = ledger.encode(evaluation)
+            port.postMessage({ type: 'evaluated', id: data.id, evaluation: wire }, transfer)
+          })
+          // After the result too: a result that cannot be posted must still answer the request.
+          .catch((error) => fail(data.id, error, controller.signal))
           .finally(() => running.delete(data.id))
         break
       }
@@ -65,13 +92,12 @@ export function serveKernel(kernel: LocalKernel, port: Port<Response, Request>):
             signal: controller.signal,
             ...(data.assets ? { assets: resolveAsset } : {}),
           })
-          .then(
-            (result) =>
-              port.postMessage({ type: 'exported', id: data.id, result }, [
-                result.bytes.buffer as ArrayBuffer,
-              ]),
-            (error) => fail(data.id, error, controller.signal),
+          .then((result) =>
+            port.postMessage({ type: 'exported', id: data.id, result }, [
+              result.bytes.buffer as ArrayBuffer,
+            ]),
           )
+          .catch((error) => fail(data.id, error, controller.signal))
           .finally(() => running.delete(data.id))
         break
       }

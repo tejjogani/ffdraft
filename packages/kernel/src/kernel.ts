@@ -1,5 +1,5 @@
 /** The in-process kernel: the evaluator plus the exporter registry, behind the public contract. */
-import { type Design, evaluationOrder, NodeSchema, resolveDesign } from '@pave/schema'
+import { type Design, evaluationOrder, type Node, NodeSchema, resolveDesign } from '@pave/schema'
 import type { Scene } from './core'
 import { Evaluator } from './evaluate/evaluate'
 import { EXPORTERS } from './export/index'
@@ -61,14 +61,22 @@ function errorNotes(scene: Scene): string[] {
   return notes
 }
 
-/** Nodes already checked against the schema, by identity: an edit replaces only what it touches. */
-const checked = new WeakMap<object, string | null>()
+/**
+ * Nodes already checked against the schema, by identity (an edit replaces only what it
+ * touches): why each is invalid, or the node with the schema's defaults filled in.
+ */
+const checked = new WeakMap<object, { problem: string | null; node: Node }>()
 
-/** Why a node is not a valid node of its kind, or null when it is. */
-function nodeProblem(node: unknown): string | null {
-  if (node === null || typeof node !== 'object') return 'it is not a node'
-  let problem = checked.get(node)
-  if (problem === undefined) {
+/**
+ * Why a node is not a valid node of its kind (null when it is), and the node to evaluate: the
+ * schema's parse when it parses, so a stored node that leaves out a defaulted field (`visible`,
+ * a finish) evaluates as the schema says rather than as hidden or unfinished.
+ */
+function nodeProblem(node: unknown): { problem: string | null; node: Node } {
+  if (node === null || typeof node !== 'object')
+    return { problem: 'it is not a node', node: node as Node }
+  let entry = checked.get(node)
+  if (entry === undefined) {
     const parsed = NodeSchema.safeParse(node)
     const kind = (node as { kind?: unknown }).kind
     // A value out of its range is left to the feature, which clamps it or falls back with a
@@ -77,7 +85,7 @@ function nodeProblem(node: unknown): string | null {
     const issues = parsed.success
       ? []
       : parsed.error.issues.filter((i) => i.code !== 'too_small' && i.code !== 'too_big')
-    problem =
+    const problem =
       issues.length === 0
         ? null
         : issues[0]!.path.join('.') === 'kind'
@@ -86,9 +94,10 @@ function nodeProblem(node: unknown): string | null {
               .slice(0, 3)
               .map((i) => `${i.path.join('.') || 'kind'}: ${i.message}`)
               .join('; ')
-    checked.set(node, problem)
+    entry = { problem, node: parsed.success ? (parsed.data as Node) : (node as Node) }
+    checked.set(node, entry)
   }
-  return problem
+  return entry
 }
 
 /**
@@ -109,11 +118,13 @@ function admit(input: unknown): { design: Design; issues: Diagnostic[] } {
   )
     throw new Error('This is not a Pavé design: it needs a map of nodes and an outliner order.')
   const issues: Diagnostic[] = []
-  const nodes: Design['nodes'] = {}
+  // Entries, not assignment: an id "__proto__" assigned into an object sets its prototype and
+  // the node is gone without a word.
+  const nodes: [string, Node][] = []
   for (const [id, node] of Object.entries(value.nodes)) {
-    const problem = nodeProblem(node)
+    const { problem, node: admitted } = nodeProblem(node)
     if (problem === null) {
-      nodes[id] = node
+      nodes.push([id, admitted])
       continue
     }
     const name = (node as { name?: unknown } | null)?.name
@@ -124,10 +135,13 @@ function admit(input: unknown): { design: Design; issues: Diagnostic[] } {
       message: `“${typeof name === 'string' ? name : id}” was left out: it is not a valid node (${problem}).`,
     })
   }
-  if (issues.length === 0) return { design: value as Design, issues }
   const dropped = new Set(issues.map((i) => i.nodeId))
   return {
-    design: { ...(value as Design), nodes, order: value.order.filter((id) => !dropped.has(id)) },
+    design: {
+      ...(value as Design),
+      nodes: Object.fromEntries(nodes),
+      order: value.order.filter((id) => !dropped.has(id)),
+    },
     issues,
   }
 }
@@ -156,7 +170,21 @@ export function createKernel(): LocalKernel {
   /** The boundary's findings join the evaluation's, in its order (errors first). */
   const withIssues = (scene: Scene, issues: readonly Diagnostic[]): Scene => {
     if (issues.length === 0) return scene
-    const all = [...issues, ...scene.evaluation.diagnostics]
+    // A node left out here is not in the design the evaluator saw, so a node that reads it is
+    // told it "does not exist". It does; it is invalid, and the designer is told that instead.
+    const invalid = new Map(issues.map((i) => [i.nodeId, i]))
+    const name = (id: string) => scene.nodes.get(id)?.node.name ?? id
+    const explained = scene.evaluation.diagnostics.map((d) => {
+      const input = d.code === 'feature.blocked' ? d.related?.[0] : undefined
+      const issue = input === undefined ? undefined : invalid.get(input)
+      if (!issue || !d.nodeId) return d
+      const label = /^“([^”]*)”/.exec(issue.message)?.[1] ?? input
+      return {
+        ...d,
+        message: `“${name(d.nodeId)}” was left out because “${label}” is not a valid node.`,
+      }
+    })
+    const all = [...issues, ...explained]
     all.sort((a, b) => LEVELS[a.level] - LEVELS[b.level])
     scene.evaluation.diagnostics = all
     return scene

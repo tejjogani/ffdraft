@@ -348,6 +348,34 @@ describe('edits that change no geometry', () => {
     own.dispose()
   })
 
+  it('a rename relabels the messages of that node only, as a fresh kernel would', async () => {
+    // Two loose balls share a name; renaming one must leave the other's messages alone.
+    const ball = (id: string, x: number): NodeInput => ({
+      id,
+      kind: 'primitive',
+      name: 'Ball',
+      shape: 'sphere',
+      size: [2, 2, 2],
+      transform: { position: [x, 0, 0], rotation: [0, 0, 0], scale: 1 },
+    })
+    const design = designFrom('other', [
+      { id: 'plate', kind: 'primitive', name: 'Plate', shape: 'box', size: [10, 10, 2] },
+      ball('b1', 20),
+      ball('b2', -20),
+    ])
+    const renamed = applyOps(design, [{ t: 'update', id: 'b2', patch: { name: 'Bead' } }]).design
+    const messages = (e: { diagnostics: { nodeId?: string; message: string }[] }) =>
+      e.diagnostics.map((d) => `${d.nodeId}: ${d.message}`).sort()
+    const warm = createKernel()
+    await warm.evaluate(design, { detail: 'production' })
+    const fresh = createKernel()
+    const expected = messages(await fresh.evaluate(renamed, { detail: 'production' }))
+    expect(expected.some((m) => m.startsWith('b1: “Ball”'))).toBe(true)
+    expect(messages(await warm.evaluate(renamed, { detail: 'production' }))).toEqual(expected)
+    warm.dispose()
+    fresh.dispose()
+  })
+
   it('the same nodes with their keys in another order rebuild nothing', async () => {
     const own = createKernel()
     const design = template('signet')
@@ -380,6 +408,20 @@ describe('copies that coincide', () => {
     const [one, pattern] = e.parts.map((p) => p.volumeMm3)
     expect(pattern).toBeCloseTo(one!, 3)
   })
+
+  it('weighs one ball at draft as at production, not the source and its copies', async () => {
+    const ball: NodeInput = { id: 'a', kind: 'primitive', shape: 'sphere', size: [10, 10, 10] }
+    const alone = await kernel.evaluate(designFrom('other', [ball]))
+    const stacked = designFrom('other', [
+      ball,
+      { id: 'p', kind: 'pattern', sources: ['a'], type: 'polar', axis: 'y', count: 8 } as NodeInput,
+    ])
+    const draft = await kernel.evaluate(stacked)
+    const production = await kernel.evaluate(stacked, { detail: 'production' })
+    expect(draft.report.metalMassG).toBeCloseTo(alone.report.metalMassG, 6)
+    // Production fuses rotated tessellations of the ball, which is within 2% of the exact one.
+    expect(Math.abs(production.report.metalMassG / draft.report.metalMassG - 1)).toBeLessThan(0.02)
+  })
 })
 
 describe('documents that are not valid designs', () => {
@@ -395,11 +437,85 @@ describe('documents that are not valid designs', () => {
     } as unknown as Design
     const e = await kernel.evaluate(bad)
     expect(e.diagnostics.find((d) => d.code === 'design.invalid')?.nodeId).toBe('band')
-    expect(e.diagnostics.find((d) => d.nodeId === 'g')?.code).toBe('feature.blocked')
+    const blocked = e.diagnostics.find((d) => d.nodeId === 'g')
+    expect(blocked?.code).toBe('feature.blocked')
+    // The band exists; it is invalid. Saying it "does not exist" sent designers looking for it.
+    expect(blocked?.message).toMatch(/because “band” is not a valid node/)
+  })
+
+  it('never take a prototype member for a node, and read a stored node with its defaults', async () => {
+    const base = designFrom('ring', [
+      { id: 'band', kind: 'ringShank' },
+      { id: 'g', kind: 'gem', placement: { type: 'ringTop', shank: 'band' } },
+      { id: 'head', kind: 'setting', gem: 'g' },
+    ])
+    for (const ref of ['toString', 'constructor']) {
+      const dangling = {
+        ...base,
+        nodes: { ...base.nodes, head: { ...base.nodes.head!, gem: ref } },
+      } as Design
+      const e = await kernel.evaluate(dangling)
+      expect(codes(e)).not.toContain('feature.unsupported')
+      expect(e.diagnostics.find((d) => d.nodeId === 'head')?.message).toMatch(
+        new RegExp(`node “${ref}” does not exist`),
+      )
+    }
+    // A node from storage (jsonb, an import) that leaves out a defaulted field such as
+    // `visible`, under an id that object assignment would swallow.
+    const { visible: _visible, ...stored } = base.nodes.band!
+    const raw = JSON.parse(
+      JSON.stringify({ ...base, nodes: { g: base.nodes.g, head: base.nodes.head } }).replace(
+        '"nodes":{',
+        `"nodes":{"__proto__":${JSON.stringify({ ...stored, id: '__proto__' })},`,
+      ),
+    ) as Design
+    raw.order = ['__proto__', 'g', 'head']
+    ;(raw.nodes.g as { placement: { shank: string } }).placement.shank = '__proto__'
+    const e = await kernel.evaluate(raw)
+    expect(e.parts.map((p) => p.nodeId)).toContain('__proto__')
   })
 })
 
 describe('selective finishing', () => {
+  it('a mirrored copy is finished like its source, and its regions name the source', async () => {
+    // A plated stud with a bare post, mirrored: each casting is "plated except Post".
+    const design = designFrom('earrings', [
+      {
+        id: 'stud',
+        kind: 'primitive',
+        name: 'Stud',
+        shape: 'sphere',
+        size: [6, 6, 6],
+        plating: 'rhodium',
+        transform: { position: [8, 0, 0], rotation: [0, 0, 0], scale: 1 },
+      },
+      {
+        id: 'post',
+        kind: 'primitive',
+        name: 'Post',
+        shape: 'box',
+        size: [0.8, 0.8, 6],
+        transform: { position: [8, 0, -4], rotation: [0, 0, 0], scale: 1 },
+      },
+      {
+        id: 'pair',
+        kind: 'pattern',
+        name: 'Pair',
+        sources: ['stud', 'post'],
+        type: 'mirror',
+        axis: 'x',
+      } as NodeInput,
+    ])
+    const { parts } = await kernel.evaluate(design, { detail: 'production' })
+    expect(parts).toHaveLength(2)
+    for (const part of parts) {
+      expect(part.plating).toBe('rhodium')
+      expect(part.regions?.map((r) => [r.nodeId, r.name, r.plating])).toEqual([
+        ['post', 'Post', 'none'],
+      ])
+    }
+  })
+
   it('a casting takes the finish most of its metal has, whichever node comes first', async () => {
     // A small plated stud first, then the large bare body it is fused to.
     const design = designFrom('other', [

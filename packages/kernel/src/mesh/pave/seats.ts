@@ -11,7 +11,7 @@ import { seatCutter, seatHole } from '../../gems/cutter'
 import { frameMatrix, WORLD } from '../../geometry/vec'
 import { RULES } from '../../rules'
 import { runtime } from '../../runtime/index'
-import type { Bead } from './beads'
+import { BEAD_LIFT, type Bead } from './beads'
 
 export interface SeatSpec {
   /** How far above the girdle the seat stays open (to clear the surface), mm. */
@@ -121,7 +121,7 @@ export function beadSolids(beads: readonly Bead[], quality: Quality): Manifold {
         unit = mf.Manifold.sphere(r, segments)
         units.set(key, unit)
       }
-      const lift = 0.2 * b.diameter
+      const lift = BEAD_LIFT * b.diameter
       placed.push(
         unit.translate([
           b.position[0] + b.normal[0] * lift,

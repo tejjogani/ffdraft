@@ -29,10 +29,13 @@ export function buildReport(
   design: Design,
   parts: readonly ScenePart[],
   stones: readonly SceneStone[],
+  /** The metal each part adds, when that is not its own volume (draft: see `draftVolumes`). */
+  adds: readonly number[] = parts.map((p) => p.part.volumeMm3),
 ): Report {
   const volumes = new Map<MetalId, number>()
-  for (const { part } of parts)
-    volumes.set(part.material, (volumes.get(part.material) ?? 0) + part.volumeMm3)
+  parts.forEach(({ part }, i) => {
+    volumes.set(part.material, (volumes.get(part.material) ?? 0) + adds[i]!)
+  })
   const metals = [...volumes].map(([material, volumeMm3]) => ({
     material,
     volumeMm3,

@@ -5,6 +5,7 @@
  * from this data, so a caster can see what was and was not verified.
  */
 import type { Diagnostic, Part, StoneInstance } from '@pave/kernel/types'
+import { shownMm } from '@pave/kernel/walls'
 import { METALS, type MetalFamily, metalMassG, resolveDesign } from '@pave/schema'
 import { type PackageContext, stampLocation } from '../context'
 import { TriangleBVH } from '../geometry/bvh'
@@ -285,7 +286,7 @@ export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmRepor
       const thin = r.regions.filter((g) => g.samples >= 2)
       if (thin.length > 0) {
         const g = thin.reduce((a, b) => (b.thicknessMm < a.thicknessMm ? b : a))
-        const severity: Severity = g.thicknessMm < P.wall.errorMm ? 'error' : 'warning'
+        const severity: Severity = shownMm(g.thicknessMm) < P.wall.errorMm ? 'error' : 'warning'
         f.push({
           source: 'pave',
           severity,
@@ -797,18 +798,43 @@ export function runDfm(ctx: PackageContext, stls: readonly StlCheck[]): DfmRepor
 }
 
 /**
- * Points in the metal that holds a stone: within a pavé stone's seat zone (girdle radius +
- * 0.35 mm), or around any other stone where its claws, bezel or basket rails are (girdle radius
- * + 1 mm). That metal is governed by the prong, bezel, seat, bead and border rules — a claw is
- * meant to be a slender wire — not by the structural wall rule.
+ * Points in the metal that holds a stone: within a pavé stone's seat zone, or around any other
+ * stone where its claws, bezel or basket rails are (girdle radius + 1 mm). That metal is
+ * governed by the prong, bezel, seat, bead and border rules — a claw is meant to be a slender
+ * wire — not by the structural wall rule. A pavé seat's zone is the kernel's (`dfm/walls.ts`):
+ * half the stone's diagonal + 0.5 mm, measured from the girdle centre. Pavé girdles sit up to a
+ * stone depth under the surface, so the girdle radius alone left the seat's lip outside the
+ * zone, and the lip read as a 0.17 mm wall on the stock iced initial. Below a pavé seat the
+ * zone goes on down the stone's axis as far as its drill hole can reach (one stone width under
+ * the culet, `mesh/pave/layout.ts`): the webs between neighbouring holes on the back of an iced
+ * piece are the seats' business (0.32 mm on the stock iced initial), not a wall.
  */
 function stoneZones(
   stones: readonly StoneInstance[],
 ): (x: number, y: number, z: number) => boolean {
   if (!stones.length) return () => false
+  const pave = (s: StoneInstance) => s.role === 'melee' || s.setting === 'pave'
   const reach = (s: StoneInstance) =>
-    s.dims.width / 2 + (s.role === 'melee' || s.setting === 'pave' ? 0.35 : 1)
-  const cell = stones.reduce((c, s) => Math.max(c, 2 * reach(s)), 2)
+    pave(s) ? Math.hypot(s.dims.width, s.dims.length, s.dims.depth) / 2 + 0.5 : s.dims.width / 2 + 1
+  // The hole column: from the girdle down by the stone and one more stone width, 0.5 mm wider
+  // than the seat all round.
+  const column = (s: StoneInstance) => (pave(s) ? s.dims.depth + s.dims.width + 0.5 : 0)
+  const within = (s: StoneInstance, x: number, y: number, z: number): boolean => {
+    const m = s.matrix
+    const dx = x - m[12]!
+    const dy = y - m[13]!
+    const dz = z - m[14]!
+    if (Math.hypot(dx, dy, dz) < reach(s)) return true
+    const depth = column(s)
+    if (depth === 0) return false
+    // The unit stone's +z (table up), scaled by its size in the matrix.
+    const scale = Math.hypot(m[8]!, m[9]!, m[10]!) || 1
+    const axial = (dx * m[8]! + dy * m[9]! + dz * m[10]!) / scale
+    if (axial > 0 || axial < -depth) return false
+    const lateral2 = dx * dx + dy * dy + dz * dz - axial * axial
+    return lateral2 < (s.dims.width / 2 + 0.5) ** 2
+  }
+  const cell = stones.reduce((c, s) => Math.max(c, 2 * reach(s), column(s)), 2)
   const grid = new Map<string, StoneInstance[]>()
   const key = (x: number, y: number, z: number) =>
     `${Math.floor(x / cell)},${Math.floor(y / cell)},${Math.floor(z / cell)}`
@@ -821,12 +847,7 @@ function stoneZones(
       for (let j = -1; j <= 1; j++)
         for (let k = -1; k <= 1; k++) {
           const list = grid.get(key(x + i * cell, y + j * cell, z + k * cell))
-          if (
-            list?.some(
-              (s) => Math.hypot(x - s.matrix[12]!, y - s.matrix[13]!, z - s.matrix[14]!) < reach(s),
-            )
-          )
-            return true
+          if (list?.some((s) => within(s, x, y, z))) return true
         }
     return false
   }

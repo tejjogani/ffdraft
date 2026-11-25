@@ -94,9 +94,19 @@ export function createContext(raw: BuildInput): PackageContext {
   const emptyParts = raw.evaluation.parts
     .filter((p) => p.mesh.indices.length === 0)
     .map((p) => p.id)
-  const input: BuildInput = { ...raw, evaluation: { ...raw.evaluation, parts } }
+  // One name per casting everywhere it is printed (BOM, dfm-report, drawings, file and object
+  // names): a mirrored pair is "Stud L" and "Stud R" on its parts too, not "Setting" and "Pair".
+  const groups = nameMirrored(castingGroups(parts), raw.design).map((g) =>
+    g.parts.every((p) => p.name === g.name)
+      ? g
+      : { ...g, parts: g.parts.map((p) => ({ ...p, name: g.name })) },
+  )
+  const renamed = new Map(groups.flatMap((g) => g.parts.map((p) => [p.id, p] as const)))
+  const input: BuildInput = {
+    ...raw,
+    evaluation: { ...raw.evaluation, parts: parts.map((p) => renamed.get(p.id) ?? p) },
+  }
   const { design, evaluation, options } = input
-  const groups = nameMirrored(castingGroups(parts), design)
   const drawn = withoutChains(evaluation, design, groups)
   const profile = resolveProfile(options.manufacturerProfile)
   const requirements = stoneRequirements(design, evaluation.report)

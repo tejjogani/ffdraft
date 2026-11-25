@@ -287,6 +287,8 @@ describe('a pair of studs in the BOM', () => {
     expect(bom.filter((l) => l.type === 'metal').map((l) => l.item)).toEqual(['Stud R', 'Stud L'])
     expect(bom.filter((l) => l.type === 'finding')).toEqual([])
     expect(bom.find((l) => l.item === 'Stud L')?.description).toMatch(/Post cast in/)
+    // The same names wherever a casting is printed: the dfm-report reads the parts.
+    expect(ctx.input.evaluation.parts.map((p) => p.name)).toEqual(['Stud R', 'Stud L'])
   })
 
   it('counts a bought finding once per copy a mirror makes of it', () => {

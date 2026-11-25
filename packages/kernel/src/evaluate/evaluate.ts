@@ -13,6 +13,7 @@ import {
   assembleDraft,
   assembleProduction,
   type DraftCache,
+  draftVolumes,
   withCurrentNames,
 } from './assemble'
 import { buildNode, disposeResult, failedResult, labelOf } from './build'
@@ -159,8 +160,11 @@ export class Evaluator {
     // evaluated as far as it makes sense and reported, never a TypeError from deep inside.
     const listed = design.order.filter((id) => Object.hasOwn(design.nodes, id))
     const unlisted = Object.keys(design.nodes).filter((id) => !design.order.includes(id))
-    const order = evaluationOrder({ ...design, order: [...listed, ...unlisted] })
-    if (!order) throw new Error('The design has nodes that reference each other in a cycle')
+    const sorted = evaluationOrder({ ...design, order: [...listed, ...unlisted] })
+    if (!sorted) throw new Error('The design has nodes that reference each other in a cycle')
+    // Only the design's own nodes: a reference to a missing "toString" must not evaluate
+    // Object.prototype.toString as a node.
+    const order = sorted.filter((id) => Object.hasOwn(design.nodes, id))
     const documentIssues: Diagnostic[] = [
       ...design.order
         .filter((id) => !Object.hasOwn(design.nodes, id))
@@ -181,8 +185,8 @@ export class Evaluator {
 
     const results = new Map<string, NodeResult>()
     const timings: Record<string, number> = {}
-    /** `“old label”` → `“new label”` for nodes renamed since their result was cached. */
-    const renames = new Map<string, string>()
+    /** Nodes renamed since their result was cached: id → the quoted old and new labels. */
+    const renames = new Map<string, { before: string; after: string }>()
     for (const id of order) {
       const node = design.nodes[id] as Node
       const hash = combineHashes([
@@ -210,17 +214,37 @@ export class Evaluator {
         // document after a copy. The cached result is kept and given the current node.
         const before = labelOf(result.node)
         const after = labelOf(node)
-        if (before !== after) renames.set(`“${before}”`, `“${after}”`)
+        if (before !== after) renames.set(id, { before: `“${before}”`, after: `“${after}”` })
         result = { ...result, node }
         cache.nodes.set(id, result)
       }
       results.set(id, result)
     }
     // Messages name nodes in curly quotes; cached ones (this node's, its dependents', the
-    // whole-piece checks') still carry the old name after a rename.
+    // whole-piece checks') still carry the old name after a rename. A message can only name the
+    // nodes it is about: its own node, the nodes that node reads, and its `related` ids. Only
+    // their renames apply, so a second node that shares the old name keeps it. Where one of
+    // those nodes still carries the old name, the quote is ambiguous and is left as it is.
+    const labels = (ids: Iterable<string>) =>
+      new Set([...ids].map((id) => `“${results.get(id)?.node.name ?? id}”`))
     const relabel = (list: readonly Diagnostic[]): Diagnostic[] =>
       list.map((d) => {
-        const message = d.message.replace(/“[^”]*”/g, (quoted) => renames.get(quoted) ?? quoted)
+        const own = d.nodeId ? results.get(d.nodeId)?.node : undefined
+        const about = new Set([
+          ...(d.nodeId ? [d.nodeId] : []),
+          ...(own ? nodeRefs(own) : []),
+          ...(d.related ?? []).filter((id) => results.has(id)),
+        ])
+        const swaps = new Map<string, string>()
+        for (const id of about) {
+          const rename = renames.get(id)
+          if (!rename) continue
+          const others = [...about].filter((other) => other !== id)
+          if (labels(others).has(rename.before)) continue
+          swaps.set(rename.before, rename.after)
+        }
+        if (swaps.size === 0) return d
+        const message = d.message.replace(/“[^”]*”/g, (quoted) => swaps.get(quoted) ?? quoted)
         return message === d.message ? d : { ...d, message }
       })
     if (renames.size > 0) {
@@ -260,7 +284,12 @@ export class Evaluator {
       parts: parts.map((p) => p.part),
       stones: stones.map((s) => s.instance),
       gemMeshes,
-      report: buildReport(design, parts, stones),
+      report: buildReport(
+        design,
+        parts,
+        stones,
+        detail === 'draft' ? draftVolumes(parts, quality) : undefined,
+      ),
       diagnostics,
       ms: 0,
       timings,

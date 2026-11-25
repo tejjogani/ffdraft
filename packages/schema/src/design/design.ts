@@ -268,14 +268,22 @@ export interface DesignIssue {
 /** Referential integrity and cycle checks. Geometry-level checks belong to the kernel. */
 export function validateDesign(design: Design): DesignIssue[] {
   const issues: DesignIssue[] = []
+  // Own properties only: an id such as "constructor" must not find Object.prototype's.
+  const nodeOf = (id: string) => (Object.hasOwn(design.nodes, id) ? design.nodes[id] : undefined)
+  const seen = new Set<string>()
   for (const id of design.order) {
-    const n = design.nodes[id]
+    if (seen.has(id)) {
+      issues.push({ level: 'error', nodeId: id, message: `Order lists "${id}" more than once` })
+      continue
+    }
+    seen.add(id)
+    const n = nodeOf(id)
     if (!n) {
       issues.push({ level: 'error', nodeId: id, message: `Order lists missing node "${id}"` })
       continue
     }
     for (const r of nodeRefs(n)) {
-      const target = design.nodes[r]
+      const target = nodeOf(r)
       if (!target)
         issues.push({
           level: 'error',
@@ -295,7 +303,10 @@ export function validateDesign(design: Design): DesignIssue[] {
   }
   const listed = new Set(design.order)
   for (const id of Object.keys(design.nodes))
-    if (!listed.has(id))
+    if (id === '__proto__')
+      // Parsing or copying the map by assignment drops such a node without a trace.
+      issues.push({ level: 'error', nodeId: id, message: '"__proto__" cannot be a node id' })
+    else if (!listed.has(id))
       issues.push({
         level: 'warning',
         nodeId: id,
@@ -315,8 +326,9 @@ export function evaluationOrder(design: Design): string[] | null {
     if (s === 2) return true
     if (s === 1) return false
     state.set(id, 1)
-    const n = design.nodes[id]
-    if (n) for (const r of nodeRefs(n)) if (design.nodes[r] && !visit(r)) return false
+    const n = Object.hasOwn(design.nodes, id) ? design.nodes[id] : undefined
+    if (n)
+      for (const r of nodeRefs(n)) if (Object.hasOwn(design.nodes, r) && !visit(r)) return false
     state.set(id, 2)
     out.push(id)
     return true

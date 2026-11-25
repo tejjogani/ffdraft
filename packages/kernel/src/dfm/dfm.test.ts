@@ -339,6 +339,37 @@ describe('walls too thin to cast', () => {
     }
   })
 
+  it('leaves solids with sharp or tangent rims and an overlapping bail alone', async () => {
+    // A spike stud (45° rim), a dome (its side meets the base tangent to vertical), and the
+    // hidden bail of a large iced pendant: a 2.2 mm wire loop whose shells overlap 0.001 mm.
+    const designs = [
+      designFrom('other', [
+        { id: 'spike', kind: 'revolve', name: 'Spike', profile: 'M 0 0 L 5 0 L 0 5 Z' },
+      ]),
+      designFrom('other', [
+        { id: 'dome', kind: 'revolve', name: 'Dome', profile: 'M 0 0 L 5 0 Q 5 4 0 5 Z' },
+      ]),
+      designFrom('pendant', [
+        { id: 'body', kind: 'primitive', shape: 'box', size: [30, 4, 60] },
+        {
+          id: 'bail',
+          kind: 'bail',
+          host: 'body',
+          style: 'hidden',
+          opening: 5,
+          width: 2.5,
+          wire: 2.2,
+        },
+      ]),
+    ]
+    for (const design of designs) {
+      const e = await kernel.evaluate(design, { detail: 'production' })
+      expect(e.diagnostics.filter((d) => d.code === 'wall.thin')).toEqual([])
+    }
+    const stl = await kernel.export(designs[0]!, 'stl')
+    expect(stl.notes.join(' ')).not.toMatch(/walls 0\.\d+ mm thin/)
+  })
+
   it('leaves a 2 mm plate and the stock solitaire alone', async () => {
     const plateDesign = designFrom('other', [plate])
     const solitaire = buildDesign(TEMPLATES.find((t) => t.id === 'solitaire')!.spec)

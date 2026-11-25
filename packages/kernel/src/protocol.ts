@@ -27,7 +27,12 @@ export type WireEvaluation = Omit<Evaluation, 'parts' | 'gemMeshes'> & {
 }
 
 export type Request =
-  | { type: 'ready'; id: number }
+  /**
+   * `lock` names a Web Lock the Worker takes and holds for as long as it lives. It is released
+   * when the Worker dies, however it dies (killed, out of memory), which is the only signal a
+   * dead Worker gives: the client waits on the same lock to learn of it.
+   */
+  | { type: 'ready'; id: number; lock?: string }
   | { type: 'evaluate'; id: number; design: Design; detail: Detail | undefined; assets: boolean }
   | {
       type: 'export'
@@ -41,11 +46,25 @@ export type Request =
   | { type: 'asset'; request: number; bytes?: Uint8Array; error?: string }
 
 export type Response =
-  | { type: 'ready'; id: number; kinds: string[]; formats: ExportFormat[] }
+  /** `locked`: the Worker holds the lock the request named (the client may wait on it). */
+  | { type: 'ready'; id: number; kinds: string[]; formats: ExportFormat[]; locked: boolean }
   | { type: 'evaluated'; id: number; evaluation: WireEvaluation }
   | { type: 'exported'; id: number; result: ExportResult }
   | { type: 'failed'; id: number; message: string; aborted: boolean }
   | { type: 'asset'; request: number; assetId: string }
+
+/** The slice of the Web Locks API (`navigator.locks`) both ends use. */
+export interface Locks {
+  request(
+    name: string,
+    options: { signal?: AbortSignal },
+    callback: () => Promise<unknown>,
+  ): Promise<unknown>
+}
+
+/** `navigator.locks` where the platform has it (browsers, Workers); Node has none. */
+export const platformLocks = (): Locks | undefined =>
+  (globalThis as { navigator?: { locks?: Locks } }).navigator?.locks
 
 /** The slice of a Worker / MessagePort both ends use. */
 export interface Port<Out, In> {

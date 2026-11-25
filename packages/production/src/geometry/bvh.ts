@@ -139,12 +139,68 @@ export class TriangleBVH {
     tMax = Infinity,
     accept?: (tri: number) => boolean,
   ): Hit | null {
-    if (this.order.length === 0) return null
+    let best = tMax
+    let bestTri = -1
+    this.traverse(
+      ox,
+      oy,
+      oz,
+      dx,
+      dy,
+      dz,
+      tMin,
+      () => best,
+      (tri, t) => {
+        if (t < best && (!accept || accept(tri))) {
+          best = t
+          bestTri = tri
+        }
+      },
+    )
+    return bestTri < 0 ? null : { t: best, tri: bestTri }
+  }
+
+  /** Every triangle the ray o + t·d crosses at t > tMin, unsorted: the wall check counts winding. */
+  crossings(
+    ox: number,
+    oy: number,
+    oz: number,
+    dx: number,
+    dy: number,
+    dz: number,
+    tMin = 0,
+  ): Hit[] {
+    const out: Hit[] = []
+    this.traverse(
+      ox,
+      oy,
+      oz,
+      dx,
+      dy,
+      dz,
+      tMin,
+      () => Infinity,
+      (tri, t) => out.push({ t, tri }),
+    )
+    return out
+  }
+
+  /** Visits each triangle the ray crosses at tMin < t, skipping boxes beyond `limit()`. */
+  private traverse(
+    ox: number,
+    oy: number,
+    oz: number,
+    dx: number,
+    dy: number,
+    dz: number,
+    tMin: number,
+    limit: () => number,
+    visit: (tri: number, t: number) => void,
+  ): void {
+    if (this.order.length === 0) return
     const ix = 1 / dx
     const iy = 1 / dy
     const iz = 1 / dz
-    let best = tMax
-    let bestTri = -1
     const stack = new Int32Array(128)
     let sp = 0
     stack[sp++] = 0
@@ -162,7 +218,7 @@ export class TriangleBVH {
       const tz1 = ((iz >= 0 ? b[o + 5]! : b[o + 2]!) - oz) * iz
       if (tz0 > t0) t0 = tz0
       if (tz1 < t1) t1 = tz1
-      if (t0 > t1 || t1 < tMin || t0 > best) continue
+      if (t0 > t1 || t1 < tMin || t0 > limit()) continue
       const count = this.node[nd * 2 + 1]!
       const first = this.node[nd * 2]!
       if (count === 0) {
@@ -173,13 +229,9 @@ export class TriangleBVH {
       for (let i = first; i < first + count; i++) {
         const tri = this.order[i]!
         const t = this.intersect(tri, ox, oy, oz, dx, dy, dz)
-        if (t > tMin && t < best && (!accept || accept(tri))) {
-          best = t
-          bestTri = tri
-        }
+        if (t > tMin) visit(tri, t)
       }
     }
-    return bestTri < 0 ? null : { t: best, tri: bestTri }
   }
 
   /** Möller–Trumbore; returns the ray parameter or NaN. Two-sided. */
