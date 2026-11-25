@@ -13,7 +13,7 @@ Not written yet. It lands here when the plans have been reviewed.
 
 ## Now
 
-Nine research subagents, one per topic, one file each:
+Ten research subagents, one per topic, one file each (topic 22 was added on the founder's word, 25 Nov: "ensure our Notion like beauty software has all the CAD features of rhino too"):
 
 | File | Topic | State |
 |---|---|---|
@@ -26,12 +26,26 @@ Nine research subagents, one per topic, one file each:
 | `docs/research/19-erp-and-pos-apis.md` | ERP, POS and accounting APIs | Running |
 | `docs/research/20-accounts-and-identity.md` | Accounts and identity | Running |
 | `docs/research/21-connectors-and-developer-api.md` | Connectors and developer API | Running |
+| `docs/research/22-rhino-full-parity.md` | Every Rhino 8 CAD capability against the plan and the product | Running |
 
 ## Next
 
-1. Six plans: `jewelry-renderer.md`, `brand-models-v2.md`, `pave-file-format.md`, `freeform-cad-additions.md`, `integrations-hub.md`, `accounts-and-developer-api.md` (all in `docs/plans/`).
+1. Six plans: `jewelry-renderer.md`, `brand-models-v2.md`, `pave-file-format.md`, `freeform-cad-additions.md` (from topics 13 and 22: the steps to full Rhino parity), `integrations-hub.md`, `accounts-and-developer-api.md` (all in `docs/plans/`).
 2. One adversarial review per plan by a fresh subagent, then fixes.
 3. The summary at the top of this file.
+
+## A second job from the founder: a bug-sweep team (not on this branch)
+
+The founder also asked (25 Nov) for an agent team to look for bugs, obvious misses and missing tests, fix them in a separate working tree, and raise pull requests. He chose the integration branch as the target. This is product code, so it is kept off this docs-only branch:
+
+| Branch | Area | State |
+|---|---|---|
+| `claude/bugsweep-server` | `apps/server` | Running |
+| `claude/bugsweep-studio` | `apps/studio`, `packages/ui` | Running |
+| `claude/bugsweep-packages` | production, render, match, canon, sourcing, installers | Running |
+| `claude/bugsweep-kernel` | `packages/kernel`, `packages/schema` | Queued (starts when the renderer spike frees the machine) |
+
+Each branch is based on `claude/busy-bardeen-o482lo` at `cb7dcd0` and becomes one pull request into it. The nine open majors lane A carries into A4 are left alone. **Request to lane A:** these are extra `claude/bugsweep-*` branches outside the board; the founder asked for them directly.
 
 ## Notes on how this session runs
 
