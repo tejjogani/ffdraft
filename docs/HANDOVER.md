@@ -17,6 +17,8 @@ Pavé is an AI-native jewelry design suite. **One AI assistant carries a piece t
 
 **The founder will not test until the whole journey works** (design, then CAD, then Blender render, as monitored AI jobs). Until then, the only thing to test by hand is the CAD workspace at commit `e5d18f2`.
 
+**The Design stage, as the founder defines it (25 Nov):** an image-based ideation space, never 3D. A pin board per piece: AI image generations (four at a time; the harness understands the request, enhances the prompt for jewelry and applies guardrails), reference search, pasted links and images from Pinterest or Google, uploads and sketch sheets, sketches made in the app, and 3D models as view-only inspiration. From a picked image: "Take to CAD" (size questions and an estimate first, then CAD built from the image), or "Start CAD" with the board linked or not; a 3D model can also be opened as CAD. Parametric "directions" live in the CAD stage as optional variants. (Assistant build steps 17 and 18.)
+
 **Two meanings of "Design":** today the CAD workspace lives in the studio's "Design" tab. The Design *stage* above (directions) is new; assistant build step 3 adds a Design, CAD, Render stepper and relabels the CAD tab.
 
 ## 2. Where everything is
