@@ -67,7 +67,7 @@ Ten research subagents, one per topic, one file each (topic 22 was added on the 
 | `docs/research/13-jewelry-cad-features.md` | Full jewelry CAD feature set | Done; plan `docs/plans/freeform-cad-additions.md` written, under review |
 | `docs/research/14-jewelry-rendering.md` | Rendering state of the art for jewelry | Done (some engine rows are working knowledge, marked [E]: the web-search budget ran out) |
 | `docs/research/15-own-renderer.md` | Our own renderer (priority) | Running |
-| `docs/research/16-ai-models-on-model.md` | AI human models, on-model imagery | Done; plan `docs/plans/brand-models-v2.md` written, under review |
+| `docs/research/16-ai-models-on-model.md` | AI human models, on-model imagery | Done; plan `docs/plans/brand-models-v2.md` reviewed (1 blocker, 10 majors, 9 minors) and fixed |
 | `docs/research/17-pave-file-format.md` | The native file format | Done; plan `docs/plans/pave-file-format.md` written, under review |
 | `docs/research/18-low-end-machines.md` | Low-end machines | Done |
 | `docs/research/19-erp-and-pos-apis.md` | ERP, POS and accounting APIs | Done; plan `docs/plans/integrations-hub.md` written, under review |
