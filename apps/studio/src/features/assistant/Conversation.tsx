@@ -32,6 +32,7 @@ import { QuestionsCard } from './QuestionsCard'
 import { RenderBatchApproval, TakeCard } from './RenderCalls'
 import { CapPill, RunError, RunFooter, Thinking, WorkingPill } from './RunStates'
 import { useRunStream } from './run-stream'
+import { ShotReferences } from './ShotReferences'
 import { QuietCalls, ToolChip } from './ToolChip'
 
 /** Node ids an edit's ops touch, for the CAD workspace's tint. */
@@ -221,6 +222,10 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
         return (
           <div key={item.key} className="flex flex-col gap-1.5">
             {quiet.length > 0 && <QuietCalls calls={quiet} />}
+            {/* A framing check that copied shot references shows each beside its capture. */}
+            {quiet.map((c) =>
+              c.name === 'scenes.capture' ? <ShotReferences key={c.toolCallId} call={c} /> : null,
+            )}
             {batch.length > 1 && (
               <RenderBatchApproval
                 calls={batch}

@@ -110,3 +110,49 @@ export function elapsed(ms: number): string {
 /** The job is still under way: working, waiting for a go-ahead, or waiting for its takes. */
 export const isWorking = (state: JobState): boolean =>
   state === 'running' || state === 'waiting' || state === 'rendering'
+
+/** What the collapsed assistant pill says about the conversation's latest run. */
+export interface PillSummary {
+  /** "CAD job", or "Assistant". */
+  title: string
+  /** Where it stands: the step under way, "Waiting for you", "Ready for review"; null when idle. */
+  detail: string | null
+  /** Share of the job's plan finished, 0..1; null for a plain conversation. */
+  progress: number | null
+  working: boolean
+}
+
+export function pillSummary(
+  run: (Pick<Run, 'status'> & { job: AiJob | null }) | null,
+): PillSummary {
+  if (!run) return { title: 'Assistant', detail: null, progress: null, working: false }
+  if (!run.job) {
+    const working = run.status === 'running' || run.status === 'waiting'
+    const detail =
+      run.status === 'running'
+        ? 'Working…'
+        : run.status === 'awaiting-approval'
+          ? 'Waiting for you'
+          : run.status === 'waiting'
+            ? 'Rendering…'
+            : null
+    return { title: 'Assistant', detail, progress: null, working }
+  }
+  const state = jobState(run)
+  const { current, finished, total } = planProgress(run.job)
+  const working = isWorking(state)
+  return {
+    title: `${stageLabel(run.job.stage)} job`,
+    detail: state === 'running' && current ? `${current.label}…` : JOB_STATE_LABEL[state],
+    progress: total ? finished / total : null,
+    working,
+  }
+}
+
+/** The stage a piece tab belongs to, from the path; null off a piece's stage tabs. */
+export function stageOfPath(path: string): JobStage | null {
+  if (/^\/pieces\/[^/]+\/directions/.test(path)) return 'design'
+  if (/^\/pieces\/[^/]+\/design/.test(path)) return 'cad'
+  if (/^\/pieces\/[^/]+\/render/.test(path)) return 'render'
+  return null
+}

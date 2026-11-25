@@ -54,8 +54,12 @@ Organisation
 
 The sidebar is navigation plus the collection tree. A piece page has tabs — Overview, Design
 (directions), CAD, Render, On model, Sourcing, Production, History. A stage is a status, not a gate: every tool is
-always available. The assistant lives in a dock that is aware of the open piece or board, and on
-the Home page as the starting point ("What are we making?").
+always available, and every AI action has a manual way that never asks for AI. The assistant is a
+window aware of the open piece, its stage and any board: snapped into the right-hand sidebar,
+pulled out as a floating frosted-glass window, or folded to a pill that shows a running job's
+progress (`apps/studio/src/app/AssistantDock.tsx`, geometry in `src/lib/float-window.ts`); where it
+was is remembered per browser, and opening another piece brings up that piece's conversation. It is
+also on the Home page as the starting point ("What are we making?").
 
 ## Packages
 
@@ -139,7 +143,13 @@ assistant works spec-first: it settles a small, readable `PieceSpec` with the de
 the first design from a recipe, then refines with ops and checks itself with `design.evaluate`
 and viewport captures. For an open brief it first proposes two to four design directions: built,
 evaluated and priced variants of the same piece, compared as cards, mixed by part and chosen by
-the designer, the chosen one becoming the piece's design. Runs, steps, tool calls, token usage and cost are stored and linked to the
+the designer, the chosen one becoming the piece's design. Every job asks before it acts, in its
+first step, as quick replies with defaults picked (`chat.ask`): the Design job about what the brief
+leaves open, the CAD job about what the spec leaves open, the Render job about purpose, shapes and
+animations; the answers are kept on the job (`AiJob.answers`) and shown under that step of its
+plan. A newly pinned picture can update an existing design as a CAD job ("Update the design to
+this picture"), undone in one step; pinned shot references are copied by the Render job into its
+cameras and shown beside each framing capture (`scenes.capture` `references`). Runs, steps, tool calls, token usage and cost are stored and linked to the
 design changes they produced; organisations control retention and whether their traces may be
 used for evaluation.
 
@@ -167,7 +177,10 @@ sees pinned pictures it may use (labelled, once per conversation) and only the d
 view-only ones; `references.read` and `match.fit` refuse view-only pictures for anyone. A pinned
 picture can be laid in the front, top or right view as an image plane (`references.place`): the
 viewer draws it before the piece in a scene of its own, so it never reaches a capture, a render
-or an export, and its moves have their own undo history.
+or an export, and its moves have their own undo history. The panel is a reference window: docked
+beside the work or floating over it, with tabs for References, a Sketch pad (a sketch is saved as
+the person's own pinned picture and can be laid in a view like any other) and, only when an image
+model is configured, Generated.
 
 ## Platform
 

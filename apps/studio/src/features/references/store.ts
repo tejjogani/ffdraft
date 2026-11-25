@@ -6,6 +6,7 @@
 import type { ImagePlane, ImagePlaneView } from '@pave/schema'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { Rect } from '../../lib/float-window'
 import {
   EMPTY_HISTORY,
   forget,
@@ -13,11 +14,20 @@ import {
   type PlaneHistory,
   record,
 } from '../../lib/plane-history'
+import type { SketchEntry } from './sketch'
 
 export type PanelSource = 'pinned' | 'search' | 'piece' | 'boards'
+/** The reference window's tabs; Generated shows only when an image model is configured. */
+export type ReferenceTab = 'references' | 'sketch' | 'generated'
+/** Docked beside the CAD (a column of the workbench) or floating over it as a glass window. */
+export type ReferenceLayout = 'docked' | 'floating'
 
 interface ReferencePanelState {
   open: boolean
+  layout: ReferenceLayout
+  /** The floating window's place and size, remembered; null until it first floats. */
+  rect: Rect | null
+  tab: ReferenceTab
   source: PanelSource
   query: string
   openOnly: boolean
@@ -30,6 +40,9 @@ interface ReferencePanelState {
   /** A plane's live position while it is dragged, before the change is saved. */
   preview: { refId: string; plane: ImagePlane } | null
   histories: Record<string, PlaneHistory>
+  /** The sketch on the pad, per piece, for this window's session (saving makes it a pin). */
+  sketches: Record<string, SketchEntry[]>
+  setSketch: (pieceId: string, entries: SketchEntry[]) => void
   /** "Lay this pin in that view", for the CAD view to carry out (it knows the piece's size). */
   placeRequest: { pieceId: string; refId: string; view: ImagePlaneView } | null
   /** The piece whose CAD view is on screen and takes place requests; null when none is. */
@@ -38,6 +51,9 @@ interface ReferencePanelState {
   setViewport: (pieceId: string | null) => void
   setOpen: (open: boolean) => void
   toggle: () => void
+  setLayout: (layout: ReferenceLayout, rect?: Rect) => void
+  setRect: (rect: Rect) => void
+  setTab: (tab: ReferenceTab) => void
   setSource: (source: PanelSource) => void
   setQuery: (query: string) => void
   setOpenOnly: (openOnly: boolean) => void
@@ -54,6 +70,9 @@ export const useReferencePanel = create<ReferencePanelState>()(
   persist(
     (set) => ({
       open: false,
+      layout: 'docked',
+      rect: null,
+      tab: 'references',
       source: 'pinned',
       query: '',
       openOnly: false,
@@ -62,12 +81,18 @@ export const useReferencePanel = create<ReferencePanelState>()(
       scaling: false,
       preview: null,
       histories: {},
+      sketches: {},
+      setSketch: (pieceId, entries) =>
+        set((s) => ({ sketches: { ...s.sketches, [pieceId]: entries } })),
       placeRequest: null,
       viewport: null,
       setPlaceRequest: (placeRequest) => set({ placeRequest }),
       setViewport: (viewport) => set({ viewport }),
       setOpen: (open) => set({ open }),
       toggle: () => set((s) => ({ open: !s.open })),
+      setLayout: (layout, rect) => set((s) => ({ layout, open: true, rect: rect ?? s.rect })),
+      setRect: (rect) => set({ rect }),
+      setTab: (tab) => set({ tab }),
       setSource: (source) => set({ source }),
       setQuery: (query) => set({ query }),
       setOpenOnly: (openOnly) => set({ openOnly }),
@@ -95,11 +120,25 @@ export const useReferencePanel = create<ReferencePanelState>()(
     }),
     {
       name: 'pave:references',
-      // Only conveniences survive a reload; the undo history is for this window's session.
-      partialize: (s) => ({ open: s.open, source: s.source, openOnly: s.openOnly }),
+      partialize: persistedReferences,
     },
   ),
 )
+
+/**
+ * Only conveniences survive a reload: open or not, docked or floating and where, the tab and
+ * source. The undo history is for this window's session.
+ */
+export function persistedReferences(s: ReferencePanelState) {
+  return {
+    open: s.open,
+    layout: s.layout,
+    rect: s.rect,
+    tab: s.tab,
+    source: s.source,
+    openOnly: s.openOnly,
+  }
+}
 
 /** The plane history of a piece, for components and commands. */
 export const historyOf = (pieceId: string): PlaneHistory =>

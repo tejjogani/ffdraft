@@ -10,6 +10,13 @@
 import type { AssistantTier } from '@pave/schema'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import type { Rect } from '../lib/float-window'
+
+/**
+ * Where the assistant lives while open: snapped into the right-hand sidebar (pushing the page
+ * aside), or a floating glass window over the work. Either can be collapsed to a small pill.
+ */
+export type AssistantLayout = 'docked' | 'floating'
 
 /** What a conversation is about; the assistant's tools default to it. Mirrors `Thread.context`. */
 export interface AssistantContext {
@@ -50,7 +57,13 @@ export interface AssistantRequest {
 
 interface AssistantState {
   isOpen: boolean
+  /** Docked width. */
   width: number
+  layout: AssistantLayout
+  /** Folded to a pill that shows a running job's progress; open again with a click or mod+j. */
+  collapsed: boolean
+  /** The floating window's place and size, remembered; null until it first floats. */
+  rect: Rect | null
   /** The conversation shown; null for a new one. */
   activeThreadId: string | null
   /** Thread list instead of the conversation. */
@@ -82,6 +95,10 @@ interface AssistantState {
   close: () => void
   toggle: () => void
   setWidth: (width: number) => void
+  /** Pull it out of the sidebar (at `rect`, or where it floated last) or snap it back in. */
+  setLayout: (layout: AssistantLayout, rect?: Rect) => void
+  setRect: (rect: Rect) => void
+  setCollapsed: (collapsed: boolean) => void
   setDraft: (draft: string) => void
   addAttachments: (a: Attachment[]) => void
   removeAttachment: (id: string) => void
@@ -106,6 +123,9 @@ export const useAssistant = create<AssistantState>()(
     (set, get) => ({
       isOpen: false,
       width: 380,
+      layout: 'docked',
+      collapsed: false,
+      rect: null,
       activeThreadId: null,
       showThreads: false,
       draft: '',
@@ -122,7 +142,11 @@ export const useAssistant = create<AssistantState>()(
       follow: null,
 
       open: (request) => {
-        const patch: Partial<AssistantState> = { isOpen: true, focusNonce: get().focusNonce + 1 }
+        const patch: Partial<AssistantState> = {
+          isOpen: true,
+          collapsed: false,
+          focusNonce: get().focusNonce + 1,
+        }
         if (request?.prompt !== undefined) patch.draft = request.prompt
         if (request?.attachments?.length)
           patch.attachments = request.attachments.map((id) => ({ id, name: 'Photo' }))
@@ -133,10 +157,21 @@ export const useAssistant = create<AssistantState>()(
         }
         set(patch)
       },
-      close: () => set({ isOpen: false }),
-      toggle: () => set((s) => ({ isOpen: !s.isOpen, focusNonce: s.focusNonce + 1 })),
+      close: () => set({ isOpen: false, collapsed: false }),
+      // A pill opens again; an open window closes; a closed one opens where it was.
+      toggle: () =>
+        set((s) =>
+          s.isOpen && s.collapsed
+            ? { collapsed: false, focusNonce: s.focusNonce + 1 }
+            : { isOpen: !s.isOpen, collapsed: false, focusNonce: s.focusNonce + 1 },
+        ),
       setWidth: (width) =>
         set({ width: Math.round(Math.min(DOCK_MAX, Math.max(DOCK_MIN, width))) }),
+      setLayout: (layout, rect) =>
+        set((s) => ({ layout, collapsed: false, rect: rect ?? s.rect, isOpen: true })),
+      setRect: (rect) => set({ rect }),
+      setCollapsed: (collapsed) =>
+        set((s) => ({ collapsed, focusNonce: collapsed ? s.focusNonce : s.focusNonce + 1 })),
       setDraft: (draft) => set({ draft }),
       addAttachments: (a) => set((s) => ({ attachments: [...s.attachments, ...a].slice(0, 8) })),
       removeAttachment: (id) =>
@@ -171,15 +206,30 @@ export const useAssistant = create<AssistantState>()(
     }),
     {
       name: 'pave:assistant',
-      partialize: (s) => ({
-        isOpen: s.isOpen,
-        width: s.width,
-        activeThreadId: s.activeThreadId,
-        tierByThread: s.tierByThread,
-      }),
+      partialize: persistedAssistant,
     },
   ),
 )
+
+/**
+ * What survives a reload: whether it was open, where it lived (docked or floating, its place
+ * and size, folded to a pill), the conversation and the tiers. Drafts and selections do not.
+ */
+export function persistedAssistant(s: AssistantState) {
+  return {
+    isOpen: s.isOpen,
+    width: s.width,
+    layout: s.layout,
+    collapsed: s.collapsed,
+    rect: s.rect,
+    activeThreadId: s.activeThreadId,
+    tierByThread: s.tierByThread,
+  }
+}
+
+/** The assistant takes a column of the page (so the page header leaves room for it). */
+export const isDockedOpen = (s: Pick<AssistantState, 'isOpen' | 'layout' | 'collapsed'>) =>
+  s.isOpen && s.layout === 'docked' && !s.collapsed
 
 /**
  * Opens the dock about a piece, with parts of it as a context chip and the composer focused:
@@ -199,6 +249,7 @@ export function openAssistant(input: {
   const s = useAssistant.getState()
   useAssistant.setState({
     isOpen: true,
+    collapsed: false,
     showThreads: false,
     dropPageContext: false,
     activeThreadId: input.threadId ?? (s.threadPieceId === input.pieceId ? s.activeThreadId : null),
@@ -215,10 +266,12 @@ export const assistant = {
   open: (request?: AssistantRequest) => useAssistant.getState().open(request),
   close: () => useAssistant.getState().close(),
   /**
-   * Opens with whatever the CAD workspace has selected as a context chip (mod+j), or closes.
+   * Opens with whatever the CAD workspace has selected as a context chip (mod+j), opens the
+   * pill again, or closes.
    */
   toggle: () => {
     const s = useAssistant.getState()
+    if (s.isOpen && s.collapsed) return s.setCollapsed(false)
     if (s.isOpen) return s.close()
     const live = s.liveSelection
     if (live?.nodeIds.length) openAssistant({ pieceId: live.pieceId, selection: live.nodeIds })

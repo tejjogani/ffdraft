@@ -12,9 +12,9 @@ import { useRpc } from '../lib/query'
 import { isUnauthorized } from '../lib/rpc'
 import { SessionContext } from '../lib/session'
 import { AuthScreen } from '../pages/auth/AuthScreen'
-import { useAssistant } from '../stores/assistant'
+import { isDockedOpen, useAssistant } from '../stores/assistant'
 import { useUI } from '../stores/ui'
-import { AssistantDock } from './AssistantDock'
+import { AssistantDock, AssistantWindow } from './AssistantDock'
 import { Palette } from './Palette'
 import { Sidebar } from './Sidebar'
 import { useGlobalCommands } from './useGlobalCommands'
@@ -63,7 +63,7 @@ function Shell() {
   // Without Blender, this window draws the person's (and their assistant's) preview takes.
   useBrowserTakes()
   const collapsed = useUI((s) => s.sidebarCollapsed)
-  const dockOpen = useAssistant((s) => s.isOpen)
+  const docked = useAssistant(isDockedOpen)
   return (
     // The muted backdrop is what the frosted sidebar sits on (on desktop, the window vibrancy).
     <div className="flex h-dvh overflow-hidden bg-bg-muted">
@@ -86,7 +86,9 @@ function Shell() {
           <Outlet />
         </Suspense>
       </main>
-      <AnimatePresence initial={false}>{dockOpen && <AssistantDock key="dock" />}</AnimatePresence>
+      <AnimatePresence initial={false}>{docked && <AssistantDock key="dock" />}</AnimatePresence>
+      {/* Floating or folded to a pill: over the work, not a column of it. */}
+      <AssistantWindow />
       <Palette />
       <PlanLimitCard />
     </div>

@@ -28,13 +28,29 @@ interface Starter {
   job?: JobStage
 }
 
-/** Three starters that fit where the person is. */
-function starters(page: AssistantContext, piece: { hasDesign: boolean; hasSpec: boolean } | null) {
+/** Three starters that fit where the person is: Home, a piece, and the piece's stage tab. */
+function starters(
+  page: AssistantContext,
+  piece: { hasDesign: boolean; hasSpec: boolean } | null,
+  stage: JobStage | null,
+) {
   if (!page.pieceId || !piece)
     return [
       { label: '1.5 ct oval, hidden halo, 18k yellow' },
       { label: 'Turn a logo into an iced pendant' },
       { label: 'Men’s signet with a family crest' },
+    ] satisfies Starter[]
+  if (stage === 'design')
+    return [
+      { label: 'Propose directions with AI', job: 'design' },
+      { label: 'Find references for this brief' },
+      { label: 'What does the brief leave open?' },
+    ] satisfies Starter[]
+  if (stage === 'render' && piece.hasDesign)
+    return [
+      { label: 'Render with AI', job: 'render' },
+      { label: 'Suggest a shot list for a product page' },
+      { label: 'Copy the framing of my pinned shot references' },
     ] satisfies Starter[]
   if (!piece.hasDesign)
     return [
@@ -53,13 +69,20 @@ function starters(page: AssistantContext, piece: { hasDesign: boolean; hasSpec: 
   ] satisfies Starter[]
 }
 
-export function AssistantPanel({ context }: { context: AssistantContext }) {
+export function AssistantPanel({
+  context,
+  stage = null,
+}: {
+  context: AssistantContext
+  /** The piece's stage tab the person is on, for the starters. */
+  stage?: JobStage | null
+}) {
   const { capabilities } = useSession()
   if (!capabilities.assistant) return <NoKey />
-  return <Panel context={context} />
+  return <Panel context={context} stage={stage} />
 }
 
-function Panel({ context }: { context: AssistantContext }) {
+function Panel({ context, stage }: { context: AssistantContext; stage: JobStage | null }) {
   const threadId = useAssistant((s) => s.activeThreadId)
   const showThreads = useAssistant((s) => s.showThreads)
   const draft = useAssistant((s) => s.draft)
@@ -124,6 +147,7 @@ function Panel({ context }: { context: AssistantContext }) {
                 piece.data
                   ? { hasDesign: piece.data.design.order.length > 0, hasSpec: !!piece.data.spec }
                   : null,
+                stage,
               ).map((s: Starter) => (
                 <button
                   key={s.label}

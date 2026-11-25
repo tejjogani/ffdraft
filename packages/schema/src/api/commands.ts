@@ -1051,13 +1051,22 @@ export const commands = {
   }),
   'scenes.capture': def({
     description:
-      "Look through saved shots' cameras before spending render time: a plain clay picture of each shot exactly as its camera frames it (its aspect ratio, lens and roll), drawn on the server, with the framing measured: how much of the frame the piece fills (for a macro, the centre stone) and whether anything is cut off or too small. Fix a shot that fails with scenes.update and capture it again.",
+      "Look through saved shots' cameras before spending render time: a plain clay picture of each shot exactly as its camera frames it (its aspect ratio, lens and roll), drawn on the server, with the framing measured: how much of the frame the piece fills (for a macro, the centre stone) and whether anything is cut off or too small. Fix a shot that fails with scenes.update and capture it again. When a shot copies a shot reference, name it in `references` so the reference is shown beside the capture.",
     kind: 'query',
     tool: true,
     input: z.object({
       ids: z.array(id).min(1).max(6),
       /** Long side of each picture, in pixels. */
       size: z.number().int().min(192).max(768).default(384),
+      /**
+       * The shot reference each shot copies (an image asset the designer pinned or attached):
+       * it is shown beside that shot's capture, to the designer and to you, so the two can be
+       * compared before rendering.
+       */
+      references: z
+        .array(z.object({ id, assetId: id }))
+        .max(6)
+        .optional(),
     }),
     output: z.object({
       version: z.number().int(),
@@ -1072,6 +1081,8 @@ export const commands = {
           ok: z.boolean(),
           /** What is wrong and how to fix it, in plain words; null when the framing is good. */
           problem: z.string().nullable(),
+          /** The shot reference this shot copies, when one was named. */
+          referenceAssetId: id.nullable(),
         }),
       ),
     }),
@@ -1455,7 +1466,7 @@ export const commands = {
   }),
   'chat.ask': def({
     description:
-      'Ask the designer one to three short questions as quick replies, and wait for their answer: each with two to six options and the good default already picked (`defaults`), so one press of Go answers with no typing. Ask only what changes the work and cannot be read from the piece (what the images are for, aspect ratios, which animations); never more than three. Write `intro` as one plain sentence saying what you saw and what you are about to do. The result is what they picked; if they type a message instead, that message is the answer.',
+      'Ask the designer one to three short questions as quick replies, and wait for their answer: each with two to six options and the good default already picked (`defaults`), so one press of Go answers with no typing. Ask only what changes the work and cannot be read from the piece or the brief (for directions: the budget, the metal, who wears it; for CAD: the ring size, the centre stone, the setting the spec leaves open; for renders: what the images are for, aspect ratios, which animations); never more than three. Write `intro` as one plain sentence saying what you saw and what you are about to do. The result is what they picked; if they type a message instead, that message is the answer.',
     kind: 'query',
     tool: { confirm: true },
     input: z.object({

@@ -1,9 +1,13 @@
 /**
- * The reference panel beside CAD and the Render tab: find references (the keyless museum
- * collections, the piece's own photos and moodboards, the organisation's boards, a pasted link,
- * a dropped or pasted picture), pin them to the piece, order them, and drag a pinned picture onto
- * the CAD view as an image plane. Every result and pin says where it comes from and what its
- * rights allow. Docked as a flat column on wide screens; a sheet over the work on narrow ones.
+ * The reference window beside CAD and the Render tab. Its References tab finds references (the
+ * keyless museum collections, the piece's own photos and moodboards, the organisation's boards,
+ * a pasted link, a dropped or pasted picture), pins them to the piece, orders them, and drags a
+ * pinned picture onto the CAD view as an image plane; every result and pin says where it comes
+ * from and what its rights allow. Its Sketch tab is a sketch pad whose sketch becomes a pinned
+ * reference; Generated shows only when an image model is configured.
+ *
+ * Docked as a flat column beside the work, or pulled out as a floating glass window the person
+ * can move, resize, close and dock again (remembered per browser); a sheet on narrow screens.
  */
 import type { ImagePlaneView, Piece, Reference, SearchResult } from '@pave/schema'
 import {
@@ -34,21 +38,31 @@ import {
   Images,
   Link2,
   MoreHorizontal,
+  PanelRight,
   PanelRightClose,
+  PictureInPicture2,
   Pin,
   PinOff,
   RotateCw,
   Search,
+  Sparkles,
+  X,
 } from 'lucide-react'
 import { type DragEvent, type ReactNode, useMemo, useRef, useState } from 'react'
+import { FloatingWindow } from '../../components/FloatingWindow'
 import { assetUrl, uploadAsset } from '../../lib/assets'
+import { defaultRect } from '../../lib/float-window'
 import { VIEW_LABEL } from '../../lib/image-planes'
 import { useRpc } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { activeOrg, useSession } from '../../lib/session'
+import { useAssistant } from '../../stores/assistant'
+import { useSend } from '../assistant/actions'
 import { movePin, pin, removeFromView, unpin } from './actions'
+import { GeneratedTab } from './GeneratedTab'
 import { ProvenanceButton, type ProvenanceFacts, providerLabel, RightsChip } from './Provenance'
-import { type PanelSource, PIN_DRAG_TYPE, useReferencePanel } from './store'
+import { SketchPad } from './SketchPad'
+import { type PanelSource, PIN_DRAG_TYPE, type ReferenceTab, useReferencePanel } from './store'
 
 const MUSEUMS = ['met', 'aic', 'cleveland'] as const
 const VIEWS: ImagePlaneView[] = ['front', 'top', 'right']
@@ -56,6 +70,45 @@ const VIEWS: ImagePlaneView[] = ['front', 'top', 'right']
 /** Docked beside the work from this container width; a sheet below it. */
 export const DOCK_PANEL_PX = 900
 export const PANEL_PX = 320
+/** The floating window's first size and its smallest. */
+const FLOAT_SIZE = { w: 360, h: 600 }
+const FLOAT_LIMITS = { minW: 300, minH: 360 }
+/** The goal of the CAD job that updates the design to a newly pinned picture. */
+/** The goal of the Render job that copies pinned shot references. */
+export const SHOT_GOAL =
+  'Shoot the piece like the attached shot references: read each one’s angle, framing, lens, light and any motion, place one shot per reference copying them, show each reference beside its framing capture, then render and hand the set over.'
+
+/**
+ * A pinned picture handed to an AI job: the CAD job updates the design to it, the Render job
+ * copies it as a shot reference. Both go through the job's plan (so they can be paused,
+ * inspected and undone), and the assistant opens on the job's conversation.
+ */
+function useReferenceJob(piece: Piece) {
+  const { send, pending } = useSend({ pieceId: piece.id })
+  const start = async (stage: 'cad' | 'render', assetId: string) => {
+    try {
+      await send(
+        stage === 'cad'
+          ? 'Update the design to this new reference image'
+          : 'Shoot it like this reference',
+        {
+          job: { stage, goal: stage === 'cad' ? UPDATE_GOAL : SHOT_GOAL },
+          threadId: null,
+          pieceId: piece.id,
+          bare: true,
+          attachments: [assetId],
+        },
+      )
+      useAssistant.setState({ isOpen: true, collapsed: false })
+    } catch (e) {
+      toast.error('Couldn’t start the job', (e as Error).message)
+    }
+  }
+  return { start, pending }
+}
+
+export const UPDATE_GOAL =
+  'Update the design to the attached reference picture: read it, compare it with the design as it is, change only what differs (one undoable edit per change), keep my own edits, fit and compare, and say what changed and what still differs.'
 
 const resultFacts = (r: SearchResult): ProvenanceFacts => ({
   title: r.title,
@@ -92,16 +145,49 @@ function linkName(url: string | null | undefined): string {
 const pictureOf = (r: Reference, width = 320) =>
   r.assetId ? assetUrl(r.assetId, width) : r.thumbUrl
 
-/** The panel's contents; the caller docks it or puts it in a sheet. */
-export function ReferencePanelBody({
-  piece,
-  onClose,
-  inSheet,
-}: {
-  piece: Piece
-  onClose?: () => void
-  inSheet?: boolean
-}) {
+/**
+ * The window's contents under its tabs: References, Sketch, and Generated when an image model is
+ * configured (otherwise one line says image generation needs one). The caller docks it, floats
+ * it or puts it in a sheet.
+ */
+export function ReferenceWindowBody({ piece }: { piece: Piece }) {
+  const stored = useReferencePanel((s) => s.tab)
+  const setTab = useReferencePanel((s) => s.setTab)
+  const { capabilities } = useSession()
+  const generation = capabilities.imageGeneration.length > 0
+  const tab: ReferenceTab = stored === 'generated' && !generation ? 'references' : stored
+  return (
+    <div className="flex h-full min-h-0 flex-col" data-region="references">
+      <div className="shrink-0 px-3 pb-2">
+        <Segmented<ReferenceTab>
+          aria-label="Reference window"
+          value={tab}
+          onChange={setTab}
+          className="w-full"
+          options={[
+            { value: 'references', label: 'References' },
+            { value: 'sketch', label: 'Sketch' },
+            ...(generation ? [{ value: 'generated' as const, label: 'Generated' }] : []),
+          ]}
+        />
+      </div>
+      <div className="min-h-0 flex-1">
+        {tab === 'references' && <ReferencesTab piece={piece} />}
+        {tab === 'sketch' && <SketchPad piece={piece} />}
+        {tab === 'generated' && <GeneratedTab piece={piece} />}
+      </div>
+      {!generation && (
+        <p className="flex shrink-0 items-center gap-1.5 border-t border-line px-3 py-2 text-2xs text-fg-subtle">
+          <Sparkles className="size-3 shrink-0" aria-hidden />
+          Generating images needs an image model, which this build does not include.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/** Find, pin and order references. */
+function ReferencesTab({ piece }: { piece: Piece }) {
   const source = useReferencePanel((s) => s.source)
   const setSource = useReferencePanel((s) => s.setSource)
   const pins = useRpc('references.pins', { pieceId: piece.id })
@@ -111,22 +197,10 @@ export function ReferencePanelBody({
   const readOnly = role === 'viewer' || role === 'guest'
 
   return (
-    <div className="flex h-full min-h-0 flex-col" data-region="references">
-      {!inSheet && (
-        <div className="flex h-11 shrink-0 items-center justify-between pr-2 pl-4">
-          <h2 className="text-xs font-medium text-fg-muted">References</h2>
-          {onClose && (
-            <IconButton
-              icon={PanelRightClose}
-              label="Hide references"
-              size="sm"
-              onClick={onClose}
-            />
-          )}
-        </div>
-      )}
+    <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 px-3 pb-2">
         <Segmented<PanelSource>
+          size="sm"
           aria-label="Where to look"
           value={source}
           onChange={setSource}
@@ -221,6 +295,10 @@ function PinTile({
   const [capturing, setCapturing] = useState(false)
   const picture = pictureOf(r)
   const placeable = !!r.assetId && !readOnly
+  const { capabilities } = useSession()
+  const job = useReferenceJob(piece)
+  // A view-only picture is never sent to AI; a link without its picture has nothing to send.
+  const forAi = capabilities.assistant && !readOnly && !!r.assetId && r.rights !== 'viewOnly'
 
   const place = (view: ImagePlaneView) => {
     // The CAD view lays it (it knows the piece's size); from another tab, CAD opens first.
@@ -303,6 +381,24 @@ function PinTile({
                 <MenuItem icon={EyeOff} onClick={() => void removeFromView(piece.id, r)}>
                   Take out of the view
                 </MenuItem>
+              )}
+              {forAi && (
+                <MenuGroup label="With AI">
+                  <MenuItem
+                    icon={Sparkles}
+                    disabled={job.pending || piece.design.order.length === 0}
+                    onClick={() => void job.start('cad', r.assetId!)}
+                  >
+                    Update the design to this picture
+                  </MenuItem>
+                  <MenuItem
+                    icon={Camera}
+                    disabled={job.pending || piece.design.order.length === 0}
+                    onClick={() => void job.start('render', r.assetId!)}
+                  >
+                    Shoot like this reference
+                  </MenuItem>
+                </MenuGroup>
               )}
               {r.type === 'link' && !r.assetId && (
                 <MenuItem icon={Camera} onClick={() => void capture()}>
@@ -838,20 +934,71 @@ function PinButton({
 // ── Docking ───────────────────────────────────────────────────────────────────────────────────
 
 /**
- * The panel beside a workspace tab: a flat column when there is room, else a sheet. Collapsed,
- * it leaves a slim rail with the pin count.
+ * The reference window beside a workspace tab. Docked: a flat column when there is room
+ * (collapsed, a slim rail with the pin count). Floating: a glass window over the work that can
+ * be moved, resized, closed and dragged back to the right edge to dock. Narrow screens: a sheet.
  */
 export function ReferenceDock({ piece, docked }: { piece: Piece; docked: boolean }) {
   const open = useReferencePanel((s) => s.open)
   const setOpen = useReferencePanel((s) => s.setOpen)
+  const layout = useReferencePanel((s) => s.layout)
+  const rect = useReferencePanel((s) => s.rect)
+  const setRect = useReferencePanel((s) => s.setRect)
+  const setLayout = useReferencePanel((s) => s.setLayout)
   const pins = useRpc('references.pins', { pieceId: piece.id })
   const count = pins.data?.references.length ?? 0
   if (!docked)
     return (
-      <Sheet open={open} onOpenChange={setOpen} title="References" side="right">
-        <ReferencePanelBody piece={piece} inSheet />
+      <Sheet
+        open={open}
+        onOpenChange={setOpen}
+        title="References"
+        side="right"
+        // Reading surface: the strong glass, as the floating window uses.
+        className="[background:var(--glass-strong)]!"
+      >
+        <ReferenceWindowBody piece={piece} />
       </Sheet>
     )
+  if (layout === 'floating')
+    return open ? (
+      <FloatingWindow
+        label="References"
+        layer="z-30"
+        rect={rect}
+        defaultSize={FLOAT_SIZE}
+        limits={FLOAT_LIMITS}
+        onRect={setRect}
+        onSnap={() => setLayout('docked')}
+        snapHint="Release to dock it beside the CAD"
+        snapWidth={PANEL_PX}
+        title={
+          <>
+            <Images className="size-3.5 text-fg-muted" aria-hidden />
+            <span className="truncate text-sm font-medium">References</span>
+            {count > 0 && <span className="text-xs text-fg-subtle">{count} pinned</span>}
+          </>
+        }
+        actions={
+          <>
+            <IconButton
+              icon={PanelRight}
+              label="Dock beside the CAD"
+              size="sm"
+              onClick={() => setLayout('docked')}
+            />
+            <IconButton
+              icon={X}
+              label="Close references"
+              size="sm"
+              onClick={() => setOpen(false)}
+            />
+          </>
+        }
+      >
+        <ReferenceWindowBody piece={piece} />
+      </FloatingWindow>
+    ) : null
   if (!open)
     return (
       <aside
@@ -878,9 +1025,38 @@ export function ReferenceDock({ piece, docked }: { piece: Piece; docked: boolean
     <aside
       aria-label="References"
       style={{ width: PANEL_PX }}
-      className="shrink-0 border-l border-line bg-bg"
+      className="flex shrink-0 flex-col border-l border-line bg-bg"
     >
-      <ReferencePanelBody piece={piece} onClose={() => setOpen(false)} />
+      <div className="flex h-11 shrink-0 items-center justify-between pr-2 pl-4">
+        <h2 className="text-xs font-medium text-fg-muted">References</h2>
+        <span className="flex items-center">
+          <IconButton
+            icon={PictureInPicture2}
+            label="Pop out as a floating window"
+            size="sm"
+            onClick={() =>
+              setLayout(
+                'floating',
+                rect ??
+                  defaultRect(
+                    { w: window.innerWidth, h: window.innerHeight },
+                    FLOAT_SIZE,
+                    FLOAT_LIMITS,
+                  ),
+              )
+            }
+          />
+          <IconButton
+            icon={PanelRightClose}
+            label="Hide references"
+            size="sm"
+            onClick={() => setOpen(false)}
+          />
+        </span>
+      </div>
+      <div className="min-h-0 flex-1">
+        <ReferenceWindowBody piece={piece} />
+      </div>
     </aside>
   )
 }

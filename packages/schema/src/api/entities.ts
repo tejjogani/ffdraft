@@ -971,8 +971,26 @@ export const AiJobSchema = z.object({
   review: z.enum(['pending', 'accepted']).nullable(),
   /** Why a paused job stopped: a person paused it, took over, or edited the piece by hand. */
   pausedBy: z.enum(['pause', 'takeover', 'edit']).nullable(),
+  /**
+   * What the person answered to the job's quick questions (chat.ask), under the step that asked,
+   * so the plan shows what was settled and a resumed job does not ask again. Absent on jobs
+   * stored before questions were recorded.
+   */
+  answers: z
+    .array(
+      z.object({
+        stepId: z.string(),
+        id: z.string(),
+        question: z.string(),
+        answer: z.string(),
+        /** True when the person left the assistant's default as it was. */
+        default: z.boolean(),
+      }),
+    )
+    .optional(),
 })
 export type AiJob = z.infer<typeof AiJobSchema>
+export type JobAnswer = NonNullable<AiJob['answers']>[number]
 
 export const RunSchema = z.object({
   id,

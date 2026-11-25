@@ -27,6 +27,10 @@ import { TierPicker } from '../TierPicker'
 import { isWorking, jobState } from './status'
 import { useStageJob } from './useJob'
 
+/** Added to the Render job's goal when shot references go with it. */
+const SHOT_REFS_GOAL =
+  ' Copy the attached shot references: read each one’s angle, framing, lens, light and any motion, place one shot per reference, and show each beside its framing capture before rendering.'
+
 /** The CAD job's goal when it starts from a photo. */
 const PHOTO_GOAL =
   'Rebuild the piece in the attached photo: read it, build it through the canon, fit it to the photo, and say what still differs and what was assumed.'
@@ -52,6 +56,8 @@ export function StartJob({
   const [tier, setTier] = useState<AssistantTier | null>(null)
   const [photo, setPhoto] = useState<Pick<Asset, 'id' | 'url' | 'name'> | null>(null)
   const [uploading, setUploading] = useState(false)
+  /** Pinned pictures the Render job copies as shot references (asset ids). */
+  const [shotRefs, setShotRefs] = useState<string[]>([])
   const file = useRef<HTMLInputElement>(null)
   const { send, pending } = useSend({ pieceId })
 
@@ -78,13 +84,17 @@ export function StartJob({
   const working = current ? isWorking(jobState(current)) : false
 
   const start = async () => {
+    const refs = stage === 'render' ? shotRefs : []
+    // The goal stays the plan's (it has a length limit); the references' instruction is the
+    // person's note that goes with the job's message.
+    const said = refs.length ? SHOT_REFS_GOAL.trim() : goal.trim() || recipe.goal
     try {
-      await send(goal.trim() || recipe.goal, {
+      await send(said, {
         job: { stage, goal: goal.trim() || undefined },
         threadId: null,
         pieceId,
         bare: true,
-        ...(photo ? { attachments: [photo.id] } : {}),
+        ...(photo ? { attachments: [photo.id] } : refs.length ? { attachments: refs } : {}),
         ...(tier ? { tier } : {}),
       })
       setOpen(false)
@@ -182,6 +192,9 @@ export function StartJob({
               if (goal === recipe.goal) setGoal(PHOTO_GOAL)
             }}
           />
+        )}
+        {stage === 'render' && (
+          <ShotReferencePicker pieceId={pieceId} value={shotRefs} onChange={setShotRefs} />
         )}
         {stage === 'render' && (
           <RenderPlan
@@ -341,6 +354,57 @@ function PinnedPhotos({
             <img src={assetUrl(r.assetId!, 120)} alt="" className="size-full object-cover" />
           </button>
         ))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Pinned pictures offered as shot references for the Render job (never a view-only one): the
+ * assistant reads their angle, framing, lens and light, and copies them shot by shot.
+ */
+function ShotReferencePicker({
+  pieceId,
+  value,
+  onChange,
+}: {
+  pieceId: string
+  value: string[]
+  onChange: (assetIds: string[]) => void
+}) {
+  const pins = useRpc('references.pins', { pieceId })
+  const usable = (pins.data?.references ?? []).filter(
+    (r) => r.assetId && r.rights !== 'viewOnly' && (r.type === 'image' || r.type === 'generated'),
+  )
+  if (!usable.length) return null
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs text-fg-subtle">
+        Shot references to copy{value.length ? ` (${value.length} picked)` : ' (optional)'}:
+      </span>
+      <div className="flex flex-wrap gap-1.5">
+        {usable.slice(0, 8).map((r) => {
+          const on = value.includes(r.assetId!)
+          return (
+            <button
+              key={r.id}
+              type="button"
+              aria-pressed={on}
+              aria-label={`Shot reference: ${r.title || 'pinned picture'}`}
+              onClick={() =>
+                onChange(
+                  on ? value.filter((v) => v !== r.assetId) : [...value, r.assetId!].slice(0, 4),
+                )
+              }
+              className={cn(
+                'size-11 overflow-hidden rounded-md shadow-[0_0_0_1px_var(--line)]',
+                on && 'shadow-[0_0_0_2px_var(--select)]',
+              )}
+            >
+              <img src={assetUrl(r.assetId!, 120)} alt="" className="size-full object-cover" />
+            </button>
+          )
+        })}
       </div>
     </div>
   )

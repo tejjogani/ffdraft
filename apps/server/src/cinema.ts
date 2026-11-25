@@ -17,11 +17,14 @@ import {
   shotVocabulary,
 } from '@pave/render'
 import type { CommandOutput, CommandParsedInput, Piece, RenderScene } from '@pave/schema'
+import { inArray } from 'drizzle-orm'
 import { putAsset } from './assets/assets'
 import type { Ctx } from './context'
+import * as t from './db/schema'
 import { badRequest } from './errors'
 import { getPiece, getScene } from './lookups'
 import { pngOf } from './photos'
+import { assertSendable } from './references/rights'
 import { serviceContext } from './service-context'
 
 /** The kernel's subject for a piece (bounds, support points, stones), or null without one. */
@@ -111,6 +114,7 @@ export async function captureShots(
   input: CommandParsedInput<'scenes.capture'>,
   signal?: AbortSignal,
 ): Promise<CommandOutput<'scenes.capture'>> {
+  const refs = await shotReferences(ctx, input)
   const saved = await Promise.all(input.ids.map((id) => getScene(ctx, id)))
   const pieceIds = new Set(saved.map((s) => s.pieceId))
   const pieceId = saved[0]?.pieceId
@@ -169,9 +173,36 @@ export async function captureShots(
       framing: s.check?.framing.label ?? 'not measured (no kernel)',
       ok: s.check?.ok ?? true,
       problem: s.check?.problem ?? null,
+      referenceAssetId: refs.get(s.saved.id) ?? null,
     })
   }
   return { version: piece.version, shots: out }
+}
+
+/**
+ * The shot reference named for each shot, checked: the shot is one being captured, the picture
+ * is this organisation's, and it may be shown to a model (the loop puts it beside the capture
+ * for the assistant to compare; a view-only picture never leaves).
+ */
+async function shotReferences(
+  ctx: Ctx,
+  input: CommandParsedInput<'scenes.capture'>,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>()
+  for (const r of input.references ?? []) {
+    if (!input.ids.includes(r.id))
+      throw badRequest(`Reference for ${r.id}: that shot is not one of the shots being captured`)
+    out.set(r.id, r.assetId)
+  }
+  const assetIds = [...new Set(out.values())]
+  if (!assetIds.length) return out
+  const found = await ctx.repo.assets.many({ where: inArray(t.asset.id, assetIds) })
+  const missing = assetIds.find((id) => !found.some((a) => a.id === id))
+  if (missing) throw badRequest(`Shot reference ${missing} is not a picture in this studio`)
+  const notImage = found.find((a) => !a.mime.startsWith('image/'))
+  if (notImage) throw badRequest(`Shot reference ${notImage.id} is not a picture`)
+  await assertSendable(ctx, assetIds, (id) => `Shot reference ${id}`)
+  return out
 }
 
 /**

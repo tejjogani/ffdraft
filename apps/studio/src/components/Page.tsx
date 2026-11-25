@@ -2,7 +2,7 @@ import { cn, IconButton } from '@pave/ui'
 import { Link, type LinkProps } from '@tanstack/react-router'
 import { PanelLeft } from 'lucide-react'
 import { Fragment, type ReactNode } from 'react'
-import { useAssistant } from '../stores/assistant'
+import { isDockedOpen, useAssistant } from '../stores/assistant'
 import { useUI } from '../stores/ui'
 
 export interface Crumb {
@@ -28,7 +28,7 @@ export function PageHeader({
   const collapsed = useUI((s) => s.sidebarCollapsed)
   const toggle = useUI((s) => s.toggleSidebar)
   // With the dock open, the window controls sit above the dock, not this header.
-  const dockOpen = useAssistant((s) => s.isOpen)
+  const dockOpen = useAssistant(isDockedOpen)
   return (
     <header
       className={cn(

@@ -93,6 +93,11 @@ export async function pin(pieceId: string, items: PinItems): Promise<Reference[]
   }
 }
 
+/** Fetches the piece's pins again now (a new pin must be there before it is laid in a view). */
+export async function refreshPins(pieceId: string): Promise<void> {
+  await queryClient.refetchQueries({ queryKey: pinsKey(pieceId) })
+}
+
 export async function unpin(pieceId: string, ref: Reference): Promise<void> {
   useReferencePanel.getState().forgetRef(pieceId, ref.id)
   queryClient.setQueryData<Pins>(pinsKey(pieceId), (old) =>

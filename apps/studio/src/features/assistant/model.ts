@@ -28,6 +28,8 @@ export interface CallItem {
   assetIds: string[]
   /** What went wrong, from the tool's result. */
   errorText?: string
+  /** What a finished call returned (the result's JSON), for cards built from it. */
+  output?: unknown
   /** Quiet calls (reads and looks) collapse into one line. */
   quiet: boolean
   /** Past tense when done, present while running. */
@@ -76,6 +78,17 @@ function resultText(b: Block): string {
   return ''
 }
 
+/** A result's first text block is the tool's output as JSON (shapeResult); notes follow it. */
+function outputOf(b: Block): unknown {
+  const first = Array.isArray(b.content) ? (b.content[0] as Block | undefined) : undefined
+  if (typeof first?.text !== 'string') return undefined
+  try {
+    return JSON.parse(first.text)
+  } catch {
+    return undefined
+  }
+}
+
 const NOTE = /^\(No answer to that message: (.*)\)$/s
 
 /** Stored messages plus those the live run has stored since they were fetched, in thread order. */
@@ -104,12 +117,16 @@ export function ownBlocks(blocks: readonly Block[]): Block[] {
 
 export function conversationItems(stored: readonly Message[], live: RunView | null): Item[] {
   const messages = mergeMessages(stored, live)
-  const results = new Map<string, { isError: boolean; text: string }>()
+  const results = new Map<string, { isError: boolean; text: string; output?: unknown }>()
   for (const m of messages)
     if (m.role === 'user')
       for (const b of m.content as Block[])
         if (b.type === 'tool_result')
-          results.set(String(b.tool_use_id), { isError: b.is_error === true, text: resultText(b) })
+          results.set(String(b.tool_use_id), {
+            isError: b.is_error === true,
+            text: resultText(b),
+            output: b.is_error === true ? undefined : outputOf(b),
+          })
 
   const items: Item[] = []
   for (const m of messages) {
@@ -156,6 +173,7 @@ export function conversationItems(stored: readonly Message[], live: RunView | nu
           estimate: live$?.estimate,
           assetIds: live$?.assetIds ?? [],
           errorText: stored$?.isError ? stored$.text : undefined,
+          ...(stored$?.output !== undefined ? { output: stored$.output } : {}),
           quiet,
           label: text,
         }

@@ -11,7 +11,7 @@
  *
  * Pure: the server applies these to the run record; the studio only shows the result.
  */
-import type { AiJob, JobStage, PlanStepState, Run } from '@pave/schema'
+import type { AiJob, JobAnswer, JobStage, PlanStepState, QuickAnswers, Run } from '@pave/schema'
 import type { AgentToolName } from './tools'
 
 export interface JobStep {
@@ -50,9 +50,11 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
     steps: [
       {
         id: 'brief',
-        label: 'Read the brief, photos and references',
+        label: 'Read the brief and references; ask what the brief leaves open',
         tools: [
           'pieces.get',
+          'references.pins',
+          'chat.ask',
           'boards.list',
           'boards.get',
           'references.search',
@@ -83,9 +85,11 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
     steps: [
       {
         id: 'brief',
-        label: 'Read the brief, the chosen direction and any photo',
+        label: 'Read the brief, the direction and any photo; ask what the spec leaves open',
         tools: [
           'pieces.get',
+          'references.pins',
+          'chat.ask',
           'boards.get',
           'references.search',
           'references.read',
@@ -123,8 +127,8 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
     steps: [
       {
         id: 'look',
-        label: 'Look at the piece and ask what the images are for',
-        tools: ['pieces.get', 'scenes.list', 'scenes.suggest', 'chat.ask'],
+        label: 'Look at the piece and any shot references; ask what the images are for',
+        tools: ['pieces.get', 'references.pins', 'scenes.list', 'scenes.suggest', 'chat.ask'],
       },
       {
         id: 'setup',
@@ -283,6 +287,35 @@ export function continueJob(
   }
 }
 
+/**
+ * The person answered the job's quick questions: the answers are kept under the step that
+ * asked (the step chat.ask belongs to), replacing an earlier answer to the same question, so the
+ * plan shows what was settled. Returns null when the job has no step that asks.
+ */
+export function recordAnswers(job: AiJob, answers: QuickAnswers): AiJob | null {
+  const at = stepOfTool(job.stage, 'chat.ask')
+  const stepId = at === -1 ? undefined : job.plan[at]?.id
+  if (!stepId || !answers.answers.length) return null
+  const fresh: JobAnswer[] = answers.answers.map((a) => ({
+    stepId,
+    id: a.id,
+    question: a.question,
+    answer: a.chosen.map((c) => c.label).join(', '),
+    default: a.default,
+  }))
+  const kept = (job.answers ?? []).filter(
+    (a) => !(a.stepId === stepId && fresh.some((f) => f.id === a.id)),
+  )
+  return { ...job, answers: [...kept, ...fresh] }
+}
+
+/** The answers as one line the model reads, or '' when there are none. */
+export function answersLine(job: AiJob): string {
+  const answers = job.answers ?? []
+  if (!answers.length) return ''
+  return `Already answered (do not ask again): ${answers.map((a) => `${a.question} ${a.answer}`).join('; ')}.`
+}
+
 /** The message a job sends the assistant as the person's turn. */
 export function jobMessage(
   job: AiJob,
@@ -299,9 +332,9 @@ export function jobMessage(
         left.length
           ? `Still to do: ${left.map((s) => s.label).join('; ')}.`
           : 'Check the result once more.'
-      }`
+      }${answersLine(job) ? ` ${answersLine(job)}` : ''}`
     }
     case 'redo':
-      return `Redo this step of the ${recipe.label} job, and what follows from it: ${kind.step}. Start from the piece as it is now and keep my changes.`
+      return `Redo this step of the ${recipe.label} job, and what follows from it: ${kind.step}. Start from the piece as it is now and keep my changes.${answersLine(job) ? ` ${answersLine(job)}` : ''}`
   }
 }

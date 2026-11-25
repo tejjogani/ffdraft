@@ -33,6 +33,7 @@ import {
   jobApproves,
   MAX_RETAKES,
   parseToolCall,
+  recordAnswers,
   repeatedFailure,
   runCap,
   type ShapeImage,
@@ -298,9 +299,14 @@ export function publishRun(ctx: Ctx, run: Run): void {
  * chained per run: each reads the plan the previous one wrote.
  */
 function moveJob(host: RunHost, command: string): Promise<void> {
+  return changeJob(host, (job) => advanceJob(job, command))
+}
+
+/** Any change to the run's job record, chained like the plan's moves (null changes nothing). */
+function changeJob(host: RunHost, change: (job: AiJob) => AiJob | null): Promise<void> {
   const next = host.jobChain.then(async () => {
     const run = await host.ctx.repo.runs.first(eq(t.agentRun.id, host.runId))
-    const moved = run?.job ? advanceJob(run.job, command) : null
+    const moved = run?.job ? change(run.job) : null
     if (!moved) return
     await setJob(host.ctx, host.runId, moved)
     host.emit({ type: 'job.updated', job: moved })
@@ -1032,6 +1038,8 @@ async function answerOf(host: RunHost, job: Job): Promise<CommandRun> {
     )
     .join(' · ')
   const note = step?.approval?.note ? ` Their note: ${step.approval.note}` : ''
+  // In a job, the answers join its plan, so the person sees what was settled under the step.
+  await changeJob(host, (j) => recordAnswers(j, value))
   return {
     value,
     notes: [`The designer answered: ${said}.${note} Say in one line what you will do, then do it.`],
@@ -1223,6 +1231,12 @@ async function shotImages(ctx: Ctx, value: CommandOutput<'scenes.capture'>): Pro
   const out: ShapeImage[] = []
   for (const shot of value.shots) {
     if (!shot.assetId) continue
+    // The shot reference goes just before the capture, so the pair reads side by side.
+    if (shot.referenceAssetId) {
+      const ref = await readAsset(ctx, shot.referenceAssetId)
+      const picture = await modelImage(ref.bytes, ref.asset.mime)
+      if (picture) out.push({ label: `Shot reference for “${shot.title}”`, ...picture })
+    }
     const { asset, bytes } = await readAsset(ctx, shot.assetId)
     const resized = await modelImage(bytes, asset.mime)
     if (!resized) continue
