@@ -79,6 +79,8 @@ export function createProduction(pool: KernelPool, options: { concurrency?: numb
             renders,
             options: {
               quantity: request.quantity,
+              // Rows queued before the option existed had them; so do they still.
+              includeCad: request.cadFiles !== false,
               ...(request.notes === undefined ? {} : { notes: request.notes }),
               ...(request.rates === undefined ? {} : { rates: request.rates }),
               // The row's creation time, so a build resumed after a restart is byte-identical.

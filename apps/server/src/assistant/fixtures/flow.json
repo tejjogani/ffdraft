@@ -1,0 +1,262 @@
+{
+  "runs": [
+    [
+      {
+        "paceMs": 20,
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "A solitaire with a 1 ct round in four claws. The spec has no ring size and the metal is only the template's. Ask both once, defaults picked, then build."
+          },
+          {
+            "type": "text",
+            "text": "A four-claw solitaire around a 1 ct round. The spec leaves the size and the metal open, so two quick questions before I build."
+          },
+          {
+            "type": "tool_use",
+            "name": "chat_ask",
+            "input": {
+              "intro": "A four-claw solitaire around a 1 ct round; the spec leaves the size and the metal open.",
+              "questions": [
+                {
+                  "id": "size",
+                  "question": "Ring size?",
+                  "options": [
+                    {
+                      "id": "us5",
+                      "label": "US 5"
+                    },
+                    {
+                      "id": "us6",
+                      "label": "US 6"
+                    },
+                    {
+                      "id": "us7",
+                      "label": "US 7"
+                    }
+                  ],
+                  "defaults": [
+                    "us6"
+                  ]
+                },
+                {
+                  "id": "metal",
+                  "question": "Metal?",
+                  "options": [
+                    {
+                      "id": "pt",
+                      "label": "Platinum"
+                    },
+                    {
+                      "id": "yg",
+                      "label": "18k yellow"
+                    },
+                    {
+                      "id": "wg",
+                      "label": "18k white"
+                    }
+                  ],
+                  "defaults": [
+                    "pt"
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 170,
+        "content": [
+          {
+            "type": "text",
+            "text": "Doing it: US 6 in platinum, as you answered. A 1 ct round on a 2 mm band reads a little thin at this size, so I am widening the band to 2.2 mm where it carries the head, keeping the court profile and the four claws exactly as they are. Then I will run every production check and fix what it finds."
+          },
+          {
+            "type": "tool_use",
+            "name": "design_apply",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "ops": [
+                {
+                  "t": "update",
+                  "id": "band",
+                  "patch": {
+                    "widthTop": 2.2,
+                    "widthBottom": 2.2
+                  }
+                }
+              ],
+              "label": "Band to 2.2 mm for a 1 ct head"
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 150,
+        "content": [
+          {
+            "type": "text",
+            "text": "The band is wider now and still sits well under the head. Running the production checks next: claw wire, seats, walls a caster can fill, and the weight, carats and rough cost."
+          },
+          {
+            "type": "tool_use",
+            "name": "design_evaluate",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "detail": "production"
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Done. **US 6 in platinum**, band 2.2 mm under the head, four round claws on the 1 ct round. The production checks pass. Size and metal are in the job’s plan, as you answered them."
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "text",
+            "text": "Reading the new reference you pinned, then I will compare it with the design as it is."
+          },
+          {
+            "type": "tool_use",
+            "name": "references_read",
+            "input": {
+              "assetIds": [
+                "{{attachment}}"
+              ],
+              "note": "Update the existing design to this reference."
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"observations\": \"A round brilliant in six slim claws on a plain court band in white metal, seen from the front and above. The band is a little wider than a classic solitaire\\u2019s; the gallery under the stone is hidden.\", \"kind\": {\"value\": \"ring\", \"visible\": \"yes\"}, \"view\": \"threeQuarter\", \"archetype\": {\"value\": \"solitaire\", \"visible\": \"yes\"}, \"stones\": [{\"role\": \"center\", \"cut\": \"round\", \"arrangement\": \"single\", \"setting\": \"prong\", \"prongs\": 6, \"countVisible\": 1, \"widthToCentre\": 1, \"visible\": \"yes\"}], \"band\": {\"profile\": \"court\", \"shoulder\": \"plain\", \"widthToStone\": 0.4, \"taperTopToBottom\": 1, \"visible\": \"yes\"}, \"body\": null, \"metal\": {\"colour\": \"white\", \"finish\": \"polished\", \"visible\": \"yes\"}, \"notVisible\": [\"the inside of the band\", \"the gallery under the stone\"], \"unsure\": [{\"field\": \"band.profile\", \"why\": \"a photo along the finger would show whether it is court or flat\"}], \"plainBackground\": true}"
+          }
+        ]
+      },
+      {
+        "paceMs": 40,
+        "content": [
+          {
+            "type": "text",
+            "text": "The new reference shows the same solitaire with **six claws** instead of four; the band and the stone already match. Changing only the claws, as one step you can undo."
+          },
+          {
+            "type": "tool_use",
+            "name": "design_apply",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "ops": [
+                {
+                  "t": "update",
+                  "id": "head",
+                  "patch": {
+                    "prongCount": 6
+                  }
+                }
+              ],
+              "label": "Six claws, as in the new reference"
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Updated to the new reference: six claws, everything else kept, including your band. **Undo all** under this message takes it back in one step."
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "paceMs": 20,
+        "content": [
+          {
+            "type": "text",
+            "text": "Looking at the ring and at your shot reference first."
+          },
+          {
+            "type": "tool_use",
+            "name": "scenes_suggest",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "aspect": "1:1"
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 30,
+        "content": [
+          {
+            "type": "text",
+            "text": "Your reference is an **eye-level profile on white**: the camera level with the gallery, the ring centred and filling about two thirds of a square frame, a long lens (flat perspective) and soft even light. Placing that shot from the profile camera."
+          },
+          {
+            "type": "tool_use",
+            "name": "scenes_create",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "title": "Profile, as your reference",
+              "scene": {
+                "look": "catalog-white",
+                "camera": "{{suggest:profile}}",
+                "output": {
+                  "width": 2000,
+                  "height": 2000,
+                  "quality": "preview"
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 20,
+        "content": [
+          {
+            "type": "text",
+            "text": "Checking the framing against your reference before any render time is spent."
+          },
+          {
+            "type": "tool_use",
+            "name": "scenes_capture",
+            "input": {
+              "ids": [
+                "{{shot1}}"
+              ],
+              "references": [
+                {
+                  "id": "{{shot1}}",
+                  "assetId": "{{attachment}}"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Side by side, the framing reads like your reference: eye level, centred, about two thirds of the frame. I could not copy the hand-held softness of the background; the white sweep is the nearest look. Say **Render** when you want the take."
+          }
+        ]
+      }
+    ]
+  ]
+}

@@ -1,8 +1,18 @@
-import { Button, Chip, Textarea, toast } from '@pave/ui'
-import { ArrowUp, ImagePlus, X } from 'lucide-react'
-import { type FormEvent, useRef, useState } from 'react'
-import { uploadAsset } from '../../lib/assets'
-import { assistant } from '../../stores/assistant'
+/**
+ * The home page's composer: the dock's own composer, large. Sending starts a conversation and
+ * opens the dock on it. Without a Claude API key it still makes a piece: the words become the
+ * piece's brief (templates are below).
+ */
+import type { AssistantTier } from '@pave/schema'
+import { toast } from '@pave/ui'
+import { useNavigate } from '@tanstack/react-router'
+import { useState } from 'react'
+import { useSend } from '../../features/assistant/actions'
+import { Composer as SharedComposer } from '../../features/assistant/Composer'
+import { TierPicker } from '../../features/assistant/TierPicker'
+import { rpc } from '../../lib/rpc'
+import { useSession } from '../../lib/session'
+import { type Attachment, useAssistant } from '../../stores/assistant'
 
 const SUGGESTIONS = [
   '1.5 ct oval, hidden halo, 18k yellow',
@@ -10,126 +20,85 @@ const SUGGESTIONS = [
   'Men’s signet with family crest',
 ]
 
-interface Attachment {
-  id: string
-  name: string
-}
-
-/** The home page's large composer. Submitting hands the prompt to the assistant dock. */
 export function Composer() {
+  const { capabilities } = useSession()
+  const navigate = useNavigate()
   const [prompt, setPrompt] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
-  const [uploading, setUploading] = useState(false)
-  const fileInput = useRef<HTMLInputElement>(null)
+  const [tier, setTier] = useState<AssistantTier | null>(null)
+  const [busy, setBusy] = useState(false)
+  const { send } = useSend({})
 
-  const send = (text: string) => {
+  const submit = async (text: string) => {
     if (!text.trim()) return
-    assistant.open({ prompt: text.trim(), attachments: attachments.map((a) => a.id) })
-    setPrompt('')
-    setAttachments([])
-  }
-
-  const onSubmit = (e: FormEvent) => {
-    e.preventDefault()
-    send(prompt)
-  }
-
-  const attach = async (files: FileList | null) => {
-    if (!files?.length) return
-    setUploading(true)
+    setBusy(true)
     try {
-      const uploaded = await Promise.all([...files].map(uploadAsset))
-      setAttachments((a) => [...a, ...uploaded.map((u) => ({ id: u.id, name: u.name }))])
+      if (capabilities.assistant) {
+        // The dock's state carries the photos and tier of a new conversation.
+        useAssistant.setState({
+          attachments,
+          draftTier: tier,
+          selection: null,
+          dropPageContext: true,
+        })
+        const out = await send(text.trim(), { threadId: null })
+        useAssistant.setState({
+          follow: { threadId: out.thread.id, path: window.location.pathname },
+        })
+        useAssistant.getState().open()
+      } else {
+        const piece = await rpc.call('pieces.create', {
+          title: text.trim().slice(0, 80),
+          brief: text.trim(),
+        })
+        await navigate({ to: '/pieces/$id', params: { id: piece.id } })
+      }
+      setPrompt('')
+      setAttachments([])
     } catch (e) {
-      toast.error('Couldn’t attach that file', e instanceof Error ? e.message : undefined)
+      toast.error('Couldn’t send that', e instanceof Error ? e.message : undefined)
     } finally {
-      setUploading(false)
+      setBusy(false)
     }
   }
 
   return (
     <div>
-      <form
-        onSubmit={onSubmit}
-        className="rounded-[13px] bg-line-strong p-px shadow-sm transition-[background] duration-180 focus-within:ai-gradient"
-      >
-        <div className="rounded-lg bg-bg">
-          <Textarea
-            bare
-            minRows={3}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                e.preventDefault()
-                send(prompt)
-              }
-            }}
-            placeholder="What are we making?"
-            aria-label="Describe a piece for the assistant"
-            className="px-4 pt-4 text-base leading-6"
-          />
-          {attachments.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 px-4 pt-1">
-              {attachments.map((a) => (
-                <Chip key={a.id} outline className="pr-0.5">
-                  <span className="max-w-40 truncate">{a.name}</span>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${a.name}`}
-                    onClick={() => setAttachments((list) => list.filter((x) => x.id !== a.id))}
-                    className="inline-flex size-4 items-center justify-center rounded-xs hover:bg-bg-hover"
-                  >
-                    <X aria-hidden />
-                  </button>
-                </Chip>
-              ))}
-            </div>
-          )}
-          <div className="flex items-center justify-between p-2 pl-2.5">
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/*"
-              multiple
-              hidden
-              onChange={(e) => {
-                void attach(e.target.files)
-                e.target.value = ''
-              }}
-            />
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={ImagePlus}
-              disabled={uploading}
-              onClick={() => fileInput.current?.click()}
-            >
-              {uploading ? 'Attaching…' : 'Add reference'}
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              square
-              icon={ArrowUp}
-              aria-label="Send to assistant"
-              disabled={!prompt.trim()}
-            />
-          </div>
-        </div>
-      </form>
+      <SharedComposer
+        variant="home"
+        value={prompt}
+        onChange={setPrompt}
+        attachments={attachments}
+        onAttach={(a) => setAttachments((list) => [...list, ...a].slice(0, 8))}
+        onRemoveAttachment={(id) => setAttachments((list) => list.filter((x) => x.id !== id))}
+        onSubmit={() => void submit(prompt)}
+        sending={busy}
+        placeholder="What are we making? Describe it, or drop a photo of a piece."
+        label="Describe a piece for the assistant"
+        submitLabel={
+          capabilities.assistant ? 'Send to assistant' : 'Create a piece from this brief'
+        }
+        tools={capabilities.assistant ? <TierPicker value={tier} onChange={setTier} /> : undefined}
+      />
       <div className="mt-3 flex flex-wrap gap-1.5">
         {SUGGESTIONS.map((s) => (
           <button
             key={s}
             type="button"
-            onClick={() => send(s)}
+            disabled={busy}
+            onClick={() => void submit(s)}
             className="h-7 rounded-sm px-2.5 text-xs text-fg-muted shadow-[inset_0_0_0_1px_var(--line)] transition-colors duration-120 hover:bg-bg-hover hover:text-fg"
           >
             {s}
           </button>
         ))}
       </div>
+      {!capabilities.assistant && (
+        <p className="mt-3 text-xs text-fg-subtle">
+          The assistant is off until a Claude API key is added in Settings, AI; meanwhile this makes
+          a piece with your words as its brief.
+        </p>
+      )}
     </div>
   )
 }

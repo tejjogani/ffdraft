@@ -1,0 +1,166 @@
+{
+  "journey": "d-photo",
+  "pieces": [
+    {
+      "title": "Six-claw solitaire",
+      "kind": "ring",
+      "stage": "design",
+      "version": 3,
+      "spec": {
+        "kind": "ring",
+        "ring": {
+          "size": {
+            "value": 6,
+            "system": "us"
+          },
+          "profile": "court",
+          "shoulder": "plain",
+          "bandWidthMm": 2.45
+        },
+        "metal": {
+          "alloy": "au18k-white",
+          "finish": "polished",
+          "plating": "none"
+        },
+        "notes": "Not visible in the photo: the inside of the band; the gallery and basket under the stone; the back of the band.",
+        "style": [],
+        "title": "Six-claw solitaire",
+        "stones": [
+          {
+            "cut": "round",
+            "role": "center",
+            "carat": 1,
+            "stone": "diamond",
+            "prongs": 6,
+            "setting": "prong"
+          }
+        ],
+        "summary": "A 1 ct round in six slim claws on a plain 2.45 mm court band, 18k white gold, rebuilt from a photo.",
+        "archetype": "solitaire",
+        "openQuestions": [
+          "metal.finish: the surface reads matte grey in this light; it may be polished white gold or platinum",
+          "band.profile: a view along the finger would show whether the inside is comfort-fit"
+        ]
+      },
+      "design": {
+        "kind": "ring",
+        "nodes": {
+          "band": {
+            "id": "band",
+            "kind": "ringShank",
+            "name": "Band",
+            "size": {
+              "value": 6,
+              "system": "us"
+            },
+            "finish": "polished",
+            "plating": "none",
+            "profile": "court",
+            "visible": true,
+            "material": "au18k-white",
+            "shoulder": "plain",
+            "splitGap": 2,
+            "widthTop": 2.6852,
+            "baseShape": "round",
+            "widthBottom": 2.6852,
+            "thicknessTop": 2.3392,
+            "shoulderHeight": 3,
+            "thicknessBottom": 1.5
+          },
+          "head": {
+            "id": "head",
+            "gem": "center",
+            "kind": "setting",
+            "name": "Head",
+            "wall": 0.55,
+            "rails": 1,
+            "style": "prong",
+            "taper": 0.35,
+            "finish": "polished",
+            "plating": "none",
+            "visible": true,
+            "material": "au18k-white",
+            "prongTip": "round",
+            "prongSpin": 30,
+            "prongCount": 6,
+            "prongDiameter": 0.97
+          },
+          "center": {
+            "id": "center",
+            "lw": 1,
+            "cut": "round",
+            "kind": "gem",
+            "name": "Centre stone",
+            "stone": "diamond",
+            "width": 7.444640000000001,
+            "visible": true,
+            "placement": {
+              "spin": 0,
+              "type": "ringTop",
+              "angle": 0,
+              "shank": "band",
+              "elevation": 2.6
+            }
+          }
+        },
+        "order": [
+          "band",
+          "center",
+          "head"
+        ],
+        "schemaVersion": 1
+      },
+      "directions": [],
+      "changes": [
+        {
+          "actor": "agent",
+          "label": "Brace the taller claws with a rail",
+          "ops": 1
+        },
+        {
+          "actor": "agent",
+          "label": "Raise the stone and square the claws, as in the photo",
+          "ops": 2
+        },
+        {
+          "actor": "agent",
+          "label": "Fit to the photo",
+          "ops": 3
+        }
+      ],
+      "takes": []
+    }
+  ],
+  "runs": [
+    {
+      "status": "done",
+      "model": "claude-opus-5-5",
+      "tier": "standard",
+      "costUsd": 0.297034,
+      "tokens": {
+        "input": 1492,
+        "output": 1981,
+        "cacheRead": 257558,
+        "cacheWrite": 39987
+      },
+      "job": null,
+      "steps": [
+        "model:claude-opus-5-5:done",
+        "tool:references.read:done",
+        "model:claude-opus-5-5:done",
+        "tool:pieces.create:done",
+        "model:claude-opus-5-5:done",
+        "tool:match.fit:done",
+        "model:claude-opus-5-5:done",
+        "tool:design.apply:done",
+        "model:claude-opus-5-5:done",
+        "tool:viewport.capture:done",
+        "model:claude-opus-5-5:done",
+        "tool:design.apply:done",
+        "model:claude-opus-5-5:done",
+        "tool:design.apply:done",
+        "model:claude-opus-5-5:done"
+      ]
+    }
+  ]
+}

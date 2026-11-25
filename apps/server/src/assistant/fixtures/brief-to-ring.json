@@ -1,0 +1,135 @@
+{
+  "runs": [
+    [
+      {
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "A halo engagement ring: settle the spec, then build."
+          },
+          {
+            "type": "text",
+            "text": "Let me start a piece for this."
+          },
+          {
+            "type": "tool_use",
+            "name": "pieces_create",
+            "input": {
+              "title": "Halo engagement ring",
+              "kind": "ring"
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Here is the spec I propose."
+          },
+          {
+            "type": "tool_use",
+            "name": "pieces_setSpec",
+            "input": {
+              "id": "{{pieceId}}",
+              "spec": {
+                "kind": "ring",
+                "archetype": "halo",
+                "title": "Cushion halo",
+                "summary": "A 1.2 ct cushion framed by a single pavé halo.",
+                "style": ["glamorous"],
+                "metal": {
+                  "alloy": "au18k-white",
+                  "plating": "rhodium"
+                },
+                "ring": {
+                  "size": {
+                    "system": "us",
+                    "value": 6
+                  }
+                },
+                "stones": [
+                  {
+                    "role": "center",
+                    "cut": "cushion",
+                    "carat": 1.2
+                  },
+                  {
+                    "role": "halo",
+                    "widthMm": 1.3
+                  },
+                  {
+                    "role": "accent",
+                    "widthMm": 1.3,
+                    "setting": "pave"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "pieces_buildFromSpec",
+            "input": {
+              "id": "{{pieceId}}"
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Built. The centre stone sits in a halo of melee on a plain band. Want a thinner band or a different metal?"
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "pieces_get",
+            "input": {
+              "id": "{{pieceId}}"
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "design_apply",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "label": "Name the centre stone",
+              "ops": [
+                {
+                  "t": "update",
+                  "id": "center",
+                  "patch": {
+                    "name": "Centre stone"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Done: I named the centre stone. You can undo it from the chip."
+          }
+        ]
+      }
+    ]
+  ]
+}

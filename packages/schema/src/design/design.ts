@@ -122,7 +122,7 @@ const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON
  * after the update, not from the patch: parsing can drop or fill fields the patch never named
  * (switching a variant drops the old variant's fields), and only the stored values restore them.
  */
-function diffPatch(
+export function diffPatch(
   from: Record<string, unknown>,
   to: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -255,6 +255,65 @@ export function applyOps(input: Design, ops: readonly Op[]): { design: Design; i
   const issues = validateDesign(next).filter((i) => i.level === 'error')
   if (issues.length) throw new OpError(issues.map((i) => i.message).join('; '), ops[0]!)
   return { design: next, inverse }
+}
+
+// ── Documents from outside ───────────────────────────────────────────────────────────────────
+
+/**
+ * Steps for documents older than any {@link DesignSchema} parses, keyed by the version each
+ * starts from. Version 0 is a document written before `schemaVersion` existed; its nodes already
+ * had version 1's shape. From version 1 on the document parses, and `migrateDesign`
+ * (design/mount.ts) brings it to {@link DESIGN_VERSION} with the meaning its values had. Fields
+ * a node gained since are not a version: parsing fills in their defaults.
+ */
+const RAW_MIGRATIONS: Record<number, (doc: Record<string, unknown>) => Record<string, unknown>> = {
+  0: (doc) => ({ ...doc, schemaVersion: 1 }),
+}
+const FIRST_PARSED_VERSION = 1
+
+/** A design document this build cannot read: not a design, or made by a newer Pavé. */
+export class DesignVersionError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'DesignVersionError'
+  }
+}
+
+/**
+ * Reads a design document that comes from outside the database (a .pave file): brings it from
+ * any earlier version up to {@link DESIGN_VERSION} and validates it. A document from a newer
+ * version is refused rather than guessed at, since its meaning may have changed.
+ */
+export function parseDesignDocument(raw: unknown): Design {
+  if (!isObject(raw)) throw new DesignVersionError('The design document is not an object')
+  let doc = raw
+  let version = doc.schemaVersion === undefined ? 0 : doc.schemaVersion
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 0)
+    throw new DesignVersionError(`The design document has an unreadable version (${version})`)
+  if (version > DESIGN_VERSION)
+    throw new DesignVersionError(
+      `This design was made by a newer version of Pavé (design version ${version}; this one reads up to ${DESIGN_VERSION}). Update Pavé to open it.`,
+    )
+  for (; version < FIRST_PARSED_VERSION; version++) doc = RAW_MIGRATIONS[version]!(doc)
+  const parsed = DesignSchema.safeParse(doc)
+  if (!parsed.success)
+    throw new DesignVersionError(
+      `The design document is not valid: ${z.prettifyError(parsed.error)}`,
+    )
+  // Checked before the version step: it resolves follow rules, which needs a sound document.
+  const errors = validateDesign(parsed.data).filter((i) => i.level === 'error')
+  // applyOps keeps these by construction; a document from outside must show it keeps them too.
+  const { nodes, order } = parsed.data
+  if (new Set(order).size !== order.length || order.length !== Object.keys(nodes).length)
+    errors.push({ level: 'error', message: 'The outliner order must list every node exactly once' })
+  for (const [key, node] of Object.entries(nodes))
+    if (node.id !== key)
+      errors.push({ level: 'error', message: `Node "${key}" is stored under another id` })
+  if (errors.length)
+    throw new DesignVersionError(
+      `The design document is not valid: ${errors.map((e) => e.message).join('; ')}`,
+    )
+  return migrateDesign(parsed.data)
 }
 
 // ── Integrity ────────────────────────────────────────────────────────────────────────────────

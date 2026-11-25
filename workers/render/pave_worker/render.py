@@ -17,18 +17,17 @@ from pathlib import Path
 import bpy
 import numpy as np
 
+from .devices import backend_order
 from .imageio import read_png, write_png
 from .job import Background, ColorSettings, Output
 
 Progress = Callable[[float], None]
 
 _VIEW = {"agx": "AgX", "neutral": "Khronos PBR Neutral"}
-_GPU_BACKENDS = ("OPTIX", "CUDA", "HIP", "ONEAPI", "METAL")
-
-
 def select_device() -> str:
     """Best available Cycles device: a GPU backend if one has devices, else CPU.
 
+    On a Mac that is Metal on the Apple GPU (see devices.py for the order elsewhere).
     `PAVE_CYCLES_DEVICE=CPU` (or a backend name) overrides the probe.
     """
     scene = bpy.context.scene
@@ -37,7 +36,7 @@ def select_device() -> str:
         scene.cycles.device = "CPU"
         return "CPU"
     prefs = bpy.context.preferences.addons["cycles"].preferences
-    for backend in (forced,) if forced else _GPU_BACKENDS:
+    for backend in backend_order(sys.platform, forced):
         try:
             prefs.compute_device_type = backend
         except TypeError:  # backend not compiled into this build
@@ -77,8 +76,15 @@ def configure(output: Output, color: ColorSettings, animated: bool) -> None:
     c.caustics_refractive = True
     c.use_denoising = output["denoise"]
     c.denoiser = "OPENIMAGEDENOISE"
+    # A fixed seed makes a take reproducible: the same scene gives the same pixels on the same
+    # machine (measured with packages/render/scripts/repeat-check.ts, whatever the thread count).
     c.seed = output["seed"]
     c.use_animated_seed = animated
+    threads = os.environ.get("PAVE_RENDER_THREADS", "")
+    if threads.isdigit() and int(threads) > 0:
+        # Leaves cores free for other work; it changes the time a take takes, not its pixels.
+        scene.render.threads_mode = "FIXED"
+        scene.render.threads = int(threads)
     view = scene.view_settings
     view.view_transform = _VIEW[color["view"]]
     view.look = "None"

@@ -77,6 +77,8 @@ export class OutlineMaterial extends ShaderMaterial {
 export interface ViewportPalette {
   ink: string
   select: string
+  /** The AI colour, for parts the assistant just edited. */
+  ai: string
   clayMetal: string
   clayStone: string
   /** X-ray metal: darker than clay, so a faint, see-through version still reads on the stage. */
@@ -93,6 +95,7 @@ export function readPalette(el: Element): ViewportPalette {
   return {
     ink: v('--fg', '#1c1b1a'),
     select: v('--select', '#2b6ce6'),
+    ai: v('--ai-a', '#c8a45a'),
     danger: v('--danger', '#cf4436'),
     clayMetal: dark ? '#b9b4ab' : '#d9d4cb',
     clayStone: dark ? '#c9d0db' : '#dfe5ee',
@@ -112,6 +115,8 @@ export interface ModeMaterials {
   selected: OutlineMaterial
   hovered: OutlineMaterial
   tint: MeshBasicMaterial
+  /** The assistant's just-edited parts. */
+  aiTint: MeshBasicMaterial
   /** Crease edges in technical mode. */
   edges: LineBasicMaterial
   dispose(): void
@@ -161,8 +166,17 @@ export function createModeMaterials(p: ViewportPalette): ModeMaterials {
     polygonOffsetFactor: -1,
     polygonOffsetUnits: -1,
   })
+  const aiTint = new MeshBasicMaterial({
+    color: p.ai,
+    transparent: true,
+    opacity: 0.32,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
+  })
   const edges = new LineBasicMaterial({ color: p.ink })
-  const all: Material[] = [edges]
+  const all: Material[] = [edges, aiTint]
   const silhouette = new OutlineMaterial(p.ink, 0.9)
   const selected = new OutlineMaterial(p.select, 1.6)
   const hovered = new OutlineMaterial(p.select, 1.2, 0.45)
@@ -178,6 +192,7 @@ export function createModeMaterials(p: ViewportPalette): ModeMaterials {
     selected,
     hovered,
     tint,
+    aiTint,
     edges,
     dispose: () => {
       for (const m of all) m.dispose()

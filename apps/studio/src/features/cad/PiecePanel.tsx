@@ -1,8 +1,8 @@
 /**
  * The inspector with nothing selected: the piece itself — its type, what it weighs and what
- * stones it carries — and how to get going.
+ * stones it carries — and how to get going. Its figures are the readout's (see hud/figures):
+ * exact once the production check has run on this version, marked "≈" until then.
  */
-import type { Evaluation } from '@pave/kernel'
 import {
   type Design,
   GEM_CUTS,
@@ -17,22 +17,24 @@ import { MousePointerClick } from 'lucide-react'
 import type { DesignSession } from '../../lib/design-session/store'
 import { KIND_LABEL } from '../../lib/domain'
 import { carats, grams, mm, plural } from '../../lib/format'
+import type { PieceFigures } from './hud/figures'
 import { setPieceKind } from './ops'
 
 export function PiecePanel({
   piece,
   design,
-  evaluation,
+  figures,
   session,
   readOnly,
 }: {
   piece: Piece
   design: Design
-  evaluation: Evaluation | null
+  figures: PieceFigures | null
   session: DesignSession | null
   readOnly: boolean
 }) {
-  const r = evaluation?.report
+  const r = figures?.report
+  const approx = figures?.exact ? '' : '≈ '
   const size = r ? ([0, 1, 2] as const).map((i) => r.bounds.max[i] - r.bounds.min[i]) : null
   return (
     <div className="flex h-full flex-col">
@@ -65,7 +67,8 @@ export function PiecePanel({
                   key={m.material}
                   label={m.material in METALS ? METALS[m.material as MetalId].label : m.material}
                 >
-                  ≈ <Num>{grams(m.massG)}</Num>
+                  {approx}
+                  <Num>{grams(m.massG)}</Num>
                 </Fact>
               ))}
               <Fact label="Size">

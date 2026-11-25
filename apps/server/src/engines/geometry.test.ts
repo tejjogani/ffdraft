@@ -1,6 +1,7 @@
 /** The kernel through the server: evaluation, cached facts, exports and tenancy. */
 import type { EvaluationSummary } from '@pave/schema'
 import rhino3dm from 'rhino3dm'
+import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { assetBytes, engineServer, until } from '../test/engines'
 import { BOOT_TIMEOUT, type Client, client, signUp, type TestServer } from '../test/harness'
@@ -90,6 +91,34 @@ describe('geometry engine', () => {
     expect(draft.metalMassG).toBeGreaterThan(production.metalMassG + 0.1)
     expect((await api.call('pieces.get', { id: piece.id })).facts).toEqual(cached.facts)
   })
+
+  // A pendant's chain is left out of its pictures; a chain that is the whole piece is not.
+  it.each(['halo', 'cuban'])(
+    'draws a clay cover of a built %s, in its metal, when it has none',
+    async (templateId) => {
+      const piece = await api.call('pieces.create', { templateId })
+      const covered = await until(
+        () => api.call('pieces.get', { id: piece.id }),
+        (p) => p.coverAssetId !== null,
+      )
+      const bytes = await assetBytes(api, { url: `/api/assets/${covered.coverAssetId}` })
+      const { data, info } = await sharp(bytes).raw().toBuffer({ resolveWithObject: true })
+      expect([info.width, info.height]).toEqual([768, 768])
+      // The piece fills the middle: its pixels differ from the plain ground in the corner.
+      const at = (x: number, y: number) => {
+        const i = (y * info.width + x) * info.channels
+        return [data[i]!, data[i + 1]!, data[i + 2]!]
+      }
+      const ground = at(4, 4)
+      let drawn = 0
+      for (let y = 0; y < info.height; y += 8)
+        for (let x = 0; x < info.width; x += 8)
+          if (at(x, y).some((c, k) => Math.abs(c - ground[k]!) > 24)) drawn++
+      const samples = (info.width / 8) * (info.height / 8)
+      expect(drawn / samples).toBeGreaterThan(0.015)
+      expect(drawn / samples).toBeLessThan(0.7)
+    },
+  )
 
   it('refuses to export or produce a piece with nothing in it, as a conflict', async () => {
     const empty = await api.call('pieces.create', { title: 'Nothing yet' })

@@ -10,6 +10,8 @@
  */
 import type { Bounds, Evaluation, Part } from '@pave/kernel'
 import {
+  boundsCenter,
+  boundsRadius,
   CAMERA_PRESETS,
   type CameraPreset,
   cameraBasis,
@@ -28,7 +30,7 @@ import {
   toThreePoint,
   zUpGroup,
 } from '@pave/render/three'
-import { RenderSceneSchema } from '@pave/schema'
+import { type ImagePlaneView, RenderSceneSchema } from '@pave/schema'
 import CameraControls from 'camera-controls'
 import {
   Box3,
@@ -57,7 +59,19 @@ import {
   WebGLRenderer,
 } from 'three'
 import { acceleratedRaycast, computeBoundsTree } from 'three-mesh-bvh'
+import { VIEW_ANGLES } from '../../lib/image-planes'
+import { usePerformance } from '../../stores/performance'
+import {
+  AdaptiveQuality,
+  type Learned,
+  type PerformanceMode,
+  type Quality,
+  type QualityState,
+  qualityState,
+  sameQuality,
+} from './adaptive'
 import { viewportScene } from './environment'
+import { ImagePlaneLayer, type ImagePlaneSpec } from './image-planes'
 import {
   contactShadowTexture,
   createModeMaterials,
@@ -65,7 +79,7 @@ import {
   type OutlineMaterial,
   readPalette,
 } from './materials'
-import { type GpuTier, gpuTier, type QualityPolicy, qualityFor } from './quality'
+import { type GpuTier, gemQualityFor, gpuTier, type QualityPolicy, qualityFor } from './quality'
 
 CameraControls.install({
   THREE: { Vector2, Vector3, Vector4, Quaternion, Matrix4, Spherical, Box3, Sphere, Raycaster },
@@ -89,7 +103,20 @@ export interface ViewerState {
   hover: ViewerPick | null
   hidden: readonly string[]
   xray: boolean
+  /** Nodes an assistant just edited, tinted once in the AI colour (cleared by the caller). */
+  aiTint?: readonly string[]
 }
+
+/**
+ * What the last viewer of this page learned about the machine's frame times, so the next piece
+ * opened starts at the right level instead of learning it again on its first orbit.
+ */
+let learned: Learned | null = null
+
+/** Evaluations closer together than this are a scrub: drawn light, refined when it stops. */
+const SCRUB_GAP_MS = 600
+/** How long after the last scrubbed evaluation the picture is refined. */
+const SCRUB_SETTLE_MS = 250
 
 export interface CaptureOptions {
   /** Show this evaluation first (the caller waited for it), so the pictures match its version. */
@@ -136,6 +163,22 @@ export class Viewer {
   readonly controls: CameraControls
   readonly tier: GpuTier
   private readonly policy: QualityPolicy
+  /** Frame times decide how sharp a moving picture is (see ./adaptive). */
+  private readonly adaptive: AdaptiveQuality
+  /** The quality last applied to the renderer and the gems. */
+  private applied: Quality | null = null
+  private scrubbing = false
+  /** Clay stand-ins for metals and stones are on (a very slow machine, while moving). */
+  private standIn = false
+  private scrubTimer: ReturnType<typeof setTimeout> | undefined
+  private lastEvaluationAt = -Infinity
+  /** The frame was requested by the previous one (a continuous move), so its interval is a frame time. */
+  private chained = false
+  private lastTick = 0
+  private stillProbe = 0
+  private readonly qualityListeners = new Set<() => void>()
+  private qualitySnapshot: QualityState
+  private readonly unsubscribePerformance: () => void
   private materials: ModeMaterials
   private readonly overlay: Group = zUpGroup('cad-overlay')
   private readonly decor: Group = zUpGroup('cad-decor')
@@ -144,6 +187,7 @@ export class Viewer {
   private evaluation: Evaluation | null = null
   private environment: PaveEnvironment | null = null
   private envRadius = 0
+  private envSize = 0
   private lastGood = new Map<string, Part[]>()
   private readonly geometries = new Map<string, CachedGeometry>()
   private generation = 0
@@ -169,6 +213,8 @@ export class Viewer {
   /** Nodes the default framing is about (e.g. a pendant without its chain); empty = everything. */
   private frameFocus: readonly string[] = []
   private shadowAllowed = false
+  /** Reference pictures to model over; drawn before the piece and never captured. */
+  private readonly planes: ImagePlaneLayer
 
   constructor(
     readonly canvas: HTMLCanvasElement,
@@ -183,7 +229,18 @@ export class Viewer {
     this.renderer.setClearColor(0x000000, 0)
     this.tier = gpuTier(this.renderer.getContext())
     this.policy = qualityFor(this.tier)
+    this.adaptive = new AdaptiveQuality(this.adaptiveConfig(usePerformance.getState().mode))
+    this.adaptive.adopt(learned)
+    this.qualitySnapshot = qualityState(this.adaptive, false)
+    this.unsubscribePerformance = usePerformance.subscribe((s) => {
+      if (s.mode === this.adaptive.mode) return
+      this.adaptive.configure(this.adaptiveConfig(s.mode))
+      this.applyQuality()
+      this.invalidate()
+    })
     this.materials = createModeMaterials(readPalette(themeRoot))
+    this.planes = new ImagePlaneLayer(this.invalidate)
+    this.planes.setSelectColor(readPalette(themeRoot).select)
     this.controls = new CameraControls(this.camera, canvas)
     this.controls.dollyToCursor = true
     this.controls.smoothTime = 0.12
@@ -222,17 +279,47 @@ export class Viewer {
 
   private readonly tick = (): void => {
     this.frame = 0
+    const now = performance.now()
+    // Only the interval between two frames of one continuous move says what a frame costs; a
+    // frame after a pause in the drag would read as a very slow one.
+    if (this.chained && this.isLight() && this.adaptive.observe(now - this.lastTick)) {
+      learned = this.adaptive.learned()
+      this.applyQuality()
+    }
+    this.chained = false
+    this.lastTick = now
     this.timer.update()
     const moving = this.controls.update(this.timer.getDelta())
     this.draw()
-    if (moving) this.invalidate()
+    if (moving) {
+      this.invalidate()
+      this.chained = true
+    }
   }
 
   private draw(): void {
     const start = performance.now()
-    this.renderer.render(this.scene, this.camera)
+    if (this.planes.isEmpty) this.renderer.render(this.scene, this.camera)
+    else {
+      // Pictures first, then the piece over them with a fresh depth buffer: the piece is never
+      // hidden behind a reference, whatever the angle.
+      this.renderer.render(this.planes.scene, this.camera)
+      this.renderer.autoClear = false
+      this.renderer.clearDepth()
+      this.renderer.render(this.scene, this.camera)
+      this.renderer.autoClear = true
+    }
     this.frameTimes.push(performance.now() - start)
     if (this.frameTimes.length > 60) this.frameTimes.shift()
+    // A still frame is timed to the next animation frame, which waits for the GPU to finish it.
+    // One callback per still frame, and none at all while nothing is drawn.
+    if (!this.isLight() && !this.stillProbe)
+      this.stillProbe = requestAnimationFrame(() => {
+        this.stillProbe = 0
+        if (this.disposed) return
+        this.adaptive.observeStill(performance.now() - start)
+        learned = this.adaptive.learned()
+      })
     for (const l of this.renderListeners) l()
   }
 
@@ -279,37 +366,88 @@ export class Viewer {
     this.invalidate()
     if (this.moving) return
     this.moving = true
-    this.applyGemQuality()
+    this.applyQuality()
   }
 
   private readonly stopMoving = (): void => {
     clearTimeout(this.restTimer)
-    // Refine the gems once the camera has settled for a moment.
+    // Refine once the camera has settled for a moment.
     this.restTimer = setTimeout(() => {
       this.moving = false
-      this.applyGemQuality()
+      this.applyQuality()
       this.invalidate()
     }, 150)
   }
 
-  private applyGemQuality(): void {
+  /** Whether the picture is drawn light now: the camera moves or a slider scrubs. */
+  private isLight(): boolean {
+    return this.moving || this.scrubbing
+  }
+
+  private adaptiveConfig(mode: PerformanceMode) {
+    return { mode, deviceDpr: window.devicePixelRatio || 1, tierMaxDpr: this.policy.maxDpr }
+  }
+
+  private quality(): Quality {
+    return this.isLight() ? this.adaptive.moving() : this.adaptive.still()
+  }
+
+  /**
+   * Applies the pixel ratio and effects for the current state. A new pixel ratio reallocates
+   * the drawing buffer, so it is only set when it changed; the frame that follows draws at it.
+   */
+  private applyQuality(): void {
+    const q = this.quality()
+    if (!this.applied || this.applied.dpr !== q.dpr) {
+      this.renderer.setPixelRatio(q.dpr)
+      this.renderer.setSize(this.width, this.height, false)
+    }
+    this.applied = q
+    this.applyGemQuality()
+    const standIn = this.wantsStandIn()
+    if (standIn !== this.standIn) {
+      this.standIn = standIn
+      this.applyMaterials()
+    }
+    const next = qualityState(this.adaptive, this.isLight())
+    const changed = !sameQuality(this.qualitySnapshot, next)
+    this.qualitySnapshot = next
+    if (changed) for (const l of this.qualityListeners) l()
+  }
+
+  /** What the viewport draws now; stable between changes (for useSyncExternalStore). */
+  get qualityState(): QualityState {
+    return this.qualitySnapshot
+  }
+
+  /** Calls `listener` when the drawn quality changes; returns the unsubscribe. */
+  onQuality(listener: () => void): () => void {
+    this.qualityListeners.add(listener)
+    return () => this.qualityListeners.delete(listener)
+  }
+
+  private applyGemQuality(effects = this.quality().effects, light = this.isLight()): void {
     const model = this.built?.model
     if (!model || !this.evaluation) return
     const melee = this.evaluation.stones.filter((s) => s.role === 'melee' || s.role === 'accent')
-    const set = this.moving ? this.policy.moving : this.policy.rest
+    const set = gemQualityFor(this.policy, effects, light)
     model.setGemQuality('hero', set.hero)
     model.setGemQuality(
       'melee',
-      melee.length > this.policy.meleeBudget ? this.policy.moving.melee : set.melee,
+      melee.length > this.policy.meleeBudget
+        ? gemQualityFor(this.policy, effects, true).melee
+        : set.melee,
     )
   }
 
   setSize(width: number, height: number): void {
     this.width = Math.max(1, width)
     this.height = Math.max(1, height)
-    const dpr = Math.min(window.devicePixelRatio || 1, this.policy.maxDpr)
-    this.renderer.setPixelRatio(dpr)
-    this.renderer.setSize(this.width, this.height, false)
+    // The window may have moved to a screen of another density.
+    this.adaptive.configure(this.adaptiveConfig(this.adaptive.mode))
+    // A forced resize: the canvas's CSS size changed even when the pixel ratio did not.
+    this.applied = null
+    this.applyQuality()
     this.camera.aspect = this.width / this.height
     this.applyInset()
     this.updateFov(this.camera.aspect)
@@ -329,6 +467,7 @@ export class Viewer {
   refreshTheme(): void {
     this.materials.dispose()
     this.materials = createModeMaterials(readPalette(this.themeRoot))
+    this.planes.setSelectColor(readPalette(this.themeRoot).select)
     this.setSize(this.width, this.height)
     this.applyLook()
   }
@@ -349,7 +488,20 @@ export class Viewer {
       if (!failed.has(nodeId) && !byNode.has(nodeId)) this.lastGood.delete(nodeId)
     for (const [nodeId, parts] of byNode) this.lastGood.set(nodeId, parts)
 
+    // A burst of evaluations is a slider being scrubbed: draw it light like a moving camera,
+    // and refine once the burst stops. A single edit draws at full quality straight away.
+    // On a machine where a full frame is slow, every edit is drawn light first, so the change
+    // shows at once and sharpens a moment later.
+    const now = performance.now()
+    if (
+      this.evaluation &&
+      (now - this.lastEvaluationAt < SCRUB_GAP_MS || this.adaptive.stillIsSlow())
+    )
+      this.scrub()
+    this.lastEvaluationAt = now
+
     this.evaluation = evaluation
+    this.planes.setBounds(evaluation.report.bounds)
     const resolved = viewportScene(
       resolveScene(
         RenderSceneSchema.parse({ look: 'studio-soft', output: { width: 1024, height: 1024 } }),
@@ -359,14 +511,18 @@ export class Viewer {
     configureRenderer(this.renderer, resolved)
     this.renderer.shadowMap.enabled = false
     const radius = resolved.subject.radius
-    if (!this.environment || Math.abs(radius - this.envRadius) / this.envRadius > 0.3) {
+    // The studio reflection is rebuilt only when the piece's size changes a lot, or the still
+    // picture's effects ask for another resolution (a slow machine gets the smaller one).
+    const envSize = this.tier === 'software' || this.adaptive.still().effects !== 'full' ? 128 : 256
+    if (
+      !this.environment ||
+      envSize !== this.envSize ||
+      Math.abs(radius - this.envRadius) / this.envRadius > 0.3
+    ) {
       this.environment?.dispose()
-      this.environment = createEnvironment(
-        this.renderer,
-        resolved,
-        this.tier === 'software' ? 128 : 256,
-      )
+      this.environment = createEnvironment(this.renderer, resolved, envSize)
       this.envRadius = radius
+      this.envSize = envSize
       this.scene.environment = this.environment.texture
     }
 
@@ -409,6 +565,18 @@ export class Viewer {
       this.framedOnce = true
       this.view(this.defaultView(), false)
     }
+  }
+
+  private scrub(): void {
+    clearTimeout(this.scrubTimer)
+    this.scrubTimer = setTimeout(() => {
+      this.scrubbing = false
+      this.applyQuality()
+      this.invalidate()
+    }, SCRUB_SETTLE_MS)
+    if (this.scrubbing) return
+    this.scrubbing = true
+    this.applyQuality()
   }
 
   /**
@@ -494,26 +662,11 @@ export class Viewer {
     const m = this.materials
     const hiddenSet = new Set(hidden)
 
-    for (const mesh of b.metals) {
-      const nodeId = mesh.userData.nodeId as string
-      mesh.visible = !hiddenSet.has(nodeId)
-      mesh.material =
-        xray && display !== 'technical'
-          ? m.xray
-          : display === 'clay'
-            ? m.clayMetal
-            : display === 'technical'
-              ? m.paper
-              : b.originals.get(mesh)!
-    }
+    this.standIn = this.wantsStandIn()
+    this.applyMaterials()
+    for (const mesh of b.metals) mesh.visible = !hiddenSet.has(mesh.userData.nodeId as string)
     const zero = new Matrix4().makeScale(0, 0, 0).elements
     for (const gems of b.gems) {
-      gems.material =
-        display === 'clay'
-          ? m.clayStone
-          : display === 'technical'
-            ? m.paper
-            : b.originals.get(gems)!
       const ids = gems.userData.stoneIds as string[]
       const original = b.matrices.get(gems)!
       const arr = gems.instanceMatrix.array as Float32Array
@@ -529,10 +682,43 @@ export class Viewer {
     this.addGhosts()
 
     const selected = new Set(selection)
-    this.outline(b, (id) => selected.has(id), stone, m.selected, true)
+    const aiTint = new Set(this.state.aiTint ?? [])
+    if (aiTint.size)
+      this.outline(b, (id) => aiTint.has(id) && !selected.has(id), null, null, m.aiTint)
+    this.outline(b, (id) => selected.has(id), stone, m.selected, m.tint)
     if (hover && !selected.has(hover.nodeId))
-      this.outline(b, (id) => id === hover.nodeId, hover.stoneId ?? null, m.hovered, false)
+      this.outline(b, (id) => id === hover.nodeId, hover.stoneId ?? null, m.hovered, null)
     this.invalidate()
+  }
+
+  /** The rendered look is too heavy to move on this machine: clay while it moves (see ./adaptive). */
+  private wantsStandIn(): boolean {
+    const { display, xray } = this.state
+    return display === 'rendered' && !xray && this.isLight() && this.quality().effects === 'minimal'
+  }
+
+  /** Metal and stone materials for the display mode, x-ray and stand-ins; overlays untouched. */
+  private applyMaterials(): void {
+    const b = this.built
+    if (!b) return
+    const { display, xray } = this.state
+    const m = this.materials
+    const clay = display === 'clay' || this.standIn
+    for (const mesh of b.metals)
+      mesh.material =
+        xray && display !== 'technical'
+          ? m.xray
+          : clay
+            ? m.clayMetal
+            : display === 'technical'
+              ? m.paper
+              : b.originals.get(mesh)!
+    for (const gems of b.gems)
+      gems.material = clay
+        ? m.clayStone
+        : display === 'technical'
+          ? m.paper
+          : b.originals.get(gems)!
   }
 
   private clearOverlay(): void {
@@ -550,15 +736,15 @@ export class Viewer {
     b: Built,
     match: (nodeId: string) => boolean,
     stone: string | null,
-    material: OutlineMaterial,
-    tint: boolean,
+    material: OutlineMaterial | null,
+    tint: MeshBasicMaterial | null,
   ): void {
     const hidden = new Set(this.state.hidden)
     for (const mesh of b.metals) {
       const id = mesh.userData.nodeId as string
       if (!match(id) || hidden.has(id)) continue
-      this.overlay.add(new Mesh(mesh.geometry, material))
-      if (tint) this.overlay.add(new Mesh(mesh.geometry, this.materials.tint))
+      if (material) this.overlay.add(new Mesh(mesh.geometry, material))
+      if (tint) this.overlay.add(new Mesh(mesh.geometry, tint))
     }
     for (const gems of b.gems) {
       const ids = gems.userData.stoneIds as string[]
@@ -568,17 +754,15 @@ export class Viewer {
           stone ? id === stone : match(stoneNode(id)) && !hidden.has(stoneNode(id)),
         )
       if (!picked.length) continue
-      const batch = new InstancedMesh(gems.geometry, material, picked.length)
-      const tinted = tint
-        ? new InstancedMesh(gems.geometry, this.materials.tint, picked.length)
-        : null
+      const batch = material ? new InstancedMesh(gems.geometry, material, picked.length) : null
+      const tinted = tint ? new InstancedMesh(gems.geometry, tint, picked.length) : null
       const mat = new Matrix4()
       picked.forEach(([, i], k) => {
         gems.getMatrixAt(i, mat)
-        batch.setMatrixAt(k, mat)
+        batch?.setMatrixAt(k, mat)
         tinted?.setMatrixAt(k, mat)
       })
-      this.overlay.add(batch)
+      if (batch) this.overlay.add(batch)
       if (tinted) this.overlay.add(tinted)
     }
   }
@@ -807,6 +991,26 @@ export class Viewer {
     this.look(p.azimuth, p.elevation, this.pointsFor(), p.fill, animate)
   }
 
+  /**
+   * The camera as a render shot stores it ("Render this view"): Z-up position and target in
+   * mm, this view's lens, and the piece's bounds centre and radius it is framed against.
+   */
+  shotCamera(): {
+    position: Vec3
+    target: Vec3
+    focalLength: number
+    framedOn: { center: Vec3; radius: number } | null
+  } {
+    const toZUp = (v: Vector3): Vec3 => [v.x, -v.z, v.y]
+    const bounds = this.evaluation?.report.bounds
+    return {
+      position: toZUp(this.controls.getPosition(new Vector3())),
+      target: toZUp(this.controls.getTarget(new Vector3())),
+      focalLength: FOCAL_MM,
+      framedOn: bounds ? { center: boundsCenter(bounds), radius: boundsRadius(bounds) } : null,
+    }
+  }
+
   /** The camera's current orbit angles in the Z-up convention of `cameraBasis`. */
   private orbitAngles(): { azimuth: number; elevation: number } {
     const pos = this.controls.getPosition(new Vector3())
@@ -831,6 +1035,32 @@ export class Viewer {
   zoom(factor: number): void {
     void this.controls.zoom(factor, !reducedMotion())
     this.invalidate()
+  }
+
+  /** Looks straight at an image plane's view (front, top or right), framing the piece. */
+  alignView(view: ImagePlaneView, animate = true): void {
+    const { azimuth, elevation } = VIEW_ANGLES[view]
+    this.look(azimuth, elevation, this.pointsFor(), 0.66, animate)
+  }
+
+  // ── Image planes ─────────────────────────────────────────────────────────────────────────
+
+  setImagePlanes(specs: readonly ImagePlaneSpec[]): void {
+    this.planes.set(specs)
+  }
+
+  private ndc(x: number, y: number): Vector2 {
+    return new Vector2((x / this.width) * 2 - 1, -(y / this.height) * 2 + 1)
+  }
+
+  /** The image plane under a point in CSS pixels, or null. */
+  pickPlane(x: number, y: number): string | null {
+    return this.planes.pick(this.ndc(x, y), this.camera)
+  }
+
+  /** Where a point in CSS pixels falls on a view's picture plane, in that view's mm. */
+  pointOnPlane(view: ImagePlaneView, x: number, y: number): [number, number] | null {
+    return this.planes.pointOn(view, this.ndc(x, y), this.camera)
   }
 
   // ── Picking ──────────────────────────────────────────────────────────────────────────────
@@ -878,7 +1108,6 @@ export class Viewer {
       far: this.camera.far,
       width: this.width,
       height: this.height,
-      dpr: this.renderer.getPixelRatio(),
       insetRight: this.insetRight,
     }
     if (opts.evaluation) this.setEvaluation(opts.evaluation)
@@ -894,7 +1123,8 @@ export class Viewer {
       for (const m of [this.materials.silhouette, this.materials.selected, this.materials.hovered])
         m.setResolution(opts.size, opts.size)
       this.safeFraction = 1
-      // A picture of the piece shows all of it: hiding in the view is a working aid only.
+      // A picture of the piece shows all of it: hiding in the view is a working aid only, and the
+      // glow on parts the assistant just edited is a cue for the person, not part of the piece.
       this.state = {
         ...this.state,
         display: opts.mode,
@@ -903,10 +1133,13 @@ export class Viewer {
         hover: null,
         hidden: [],
         xray: false,
+        aiTint: [],
       }
-      this.applyLook()
+      // A picture is never light: full effects and the real materials, whatever is moving.
       this.moving = false
-      this.applyGemQuality()
+      this.scrubbing = false
+      this.applyLook()
+      this.applyGemQuality('full', false)
       const pts = this.pointsFor(opts.focusNodeIds)
       for (const view of opts.views) {
         const angle = typeof view === 'string' ? CAMERA_PRESETS[view] : { ...view, fill: 0.66 }
@@ -928,8 +1161,8 @@ export class Viewer {
       this.state = saved.state
       this.camera.near = saved.near
       this.camera.far = saved.far
-      this.renderer.setPixelRatio(saved.dpr)
       this.insetRight = saved.insetRight
+      // setSize puts back the pixel ratio the current quality asks for.
       this.setSize(saved.width, saved.height)
       void this.controls.setLookAt(
         saved.position.x,
@@ -1021,12 +1254,17 @@ export class Viewer {
     cancelAnimationFrame(this.frame)
     clearTimeout(this.restTimer)
     clearTimeout(this.indexTimer)
+    clearTimeout(this.scrubTimer)
+    cancelAnimationFrame(this.stillProbe)
+    this.unsubscribePerformance()
+    this.qualityListeners.clear()
     this.clearOverlay()
     if (this.built) this.release(this.built)
     for (const { geometry } of this.geometries.values()) geometry.dispose()
     this.geometries.clear()
     this.lastGood.clear()
     this.environment?.dispose()
+    this.planes.dispose()
     this.materials.dispose()
     this.shadow.geometry.dispose()
     const shadowMaterial = this.shadow.material as MeshBasicMaterial

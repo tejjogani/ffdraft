@@ -1,0 +1,1 @@
+ALTER TABLE "render_scene" ADD COLUMN "take_id" text;

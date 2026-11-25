@@ -9,6 +9,7 @@
 import { parentPort, workerData } from 'node:worker_threads'
 import { createKernel, type LocalKernel } from '@pave/kernel'
 import type { AssetResolver, Kernel } from '@pave/kernel/types'
+import { fitToPhoto, shade, viewCamera } from '@pave/match'
 import { buildProductionPackage } from '@pave/production/node'
 import { subjectOf } from '@pave/render'
 import type { Design } from '@pave/schema'
@@ -121,6 +122,15 @@ async function run(
       })
       return { result: { glb, subject: subjectOf(evaluation) }, transfer: [glb.buffer] }
     }
+    case 'subject': {
+      // The production evaluation, as for a take, so framing matches what Blender frames.
+      const evaluation = await kernel.evaluate(task.design, {
+        detail: 'production',
+        assets,
+        signal,
+      })
+      return { result: subjectOf(evaluation), transfer: [] }
+    }
     case 'package': {
       const evaluation = await kernel.evaluate(task.design, {
         detail: 'production',
@@ -144,6 +154,51 @@ async function run(
         result: { zip, manifest: built.manifest, root: built.root, timings: built.timings },
         transfer: [zip.buffer],
       }
+    }
+    case 'picture': {
+      const evaluation = await kernel.evaluate(task.design, { detail: 'draft', assets, signal })
+      // A pendant's chain would shrink the pendant to a speck, so it is left out, unless the
+      // chain is the whole piece (a Cuban link, a tennis bracelet).
+      const chains = Object.entries(task.design.nodes)
+        .filter(([, n]) => (n as { kind: string }).kind === 'chain')
+        .map(([id]) => id)
+      const hide = chains.length < task.design.order.length ? chains : []
+      // Rasterising is synchronous; check between views so a cancel lands between pictures.
+      const images: Uint8Array<ArrayBuffer>[] = []
+      const jobs = task.shots
+        ? task.shots.map((s) => ({ camera: s.camera, size: { width: s.width, height: s.height } }))
+        : task.views.map((view) => ({
+            camera: viewCamera(evaluation, view, { hide }),
+            size: { width: task.size, height: task.size },
+          }))
+      for (const { camera, size } of jobs) {
+        signal.throwIfAborted()
+        images.push(
+          own(
+            shade(evaluation, camera, size, {
+              focus: task.focus,
+              hide,
+              ...(task.metal ? { metal: task.metal } : {}),
+            }),
+          ),
+        )
+      }
+      return {
+        result: { images, summary: summarize(evaluation) },
+        transfer: images.map((i) => i.buffer),
+      }
+    }
+    case 'photoFit': {
+      const out = await fitToPhoto({
+        design: task.design,
+        ...task.fit,
+        evaluate: (design, s) =>
+          kernel.evaluate(design, { detail: 'draft', assets, signal: s ?? signal }),
+        signal,
+      })
+      // The fitted design is the input plus the ops; leave it behind rather than copy it back.
+      const { design: _design, ...result } = out.result
+      return { result: { ...out, result }, transfer: [] }
     }
   }
 }

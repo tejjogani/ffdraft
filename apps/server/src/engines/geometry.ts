@@ -40,6 +40,25 @@ export function createGeometry(pool: KernelPool): GeometryService {
       return { glb: { bytes: glb, name: 'piece.glb', mime: 'model/gltf-binary' }, subject }
     },
 
+    subject: (design, sctx, call) => pool.run({ kind: 'subject', design }, poolOptions(sctx, call)),
+
+    picture: (design, { views, size, focus, shots, metal, ...call }, sctx) =>
+      pool.run(
+        {
+          kind: 'picture',
+          design,
+          views,
+          size,
+          focus,
+          ...(shots ? { shots } : {}),
+          ...(metal ? { metal } : {}),
+        },
+        poolOptions(sctx, call),
+      ),
+
+    fitPhoto: (design, { fit, ...call }, sctx) =>
+      pool.run({ kind: 'photoFit', design, fit }, poolOptions(sctx, call)),
+
     dispose: () => pool.dispose(),
   }
 }

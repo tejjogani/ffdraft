@@ -1,0 +1,113 @@
+{
+  "journey": "f-key",
+  "setup": {
+    "configured": true,
+    "key": {
+      "source": "settings",
+      "last4": "0000",
+      "editable": true,
+      "updatedAt": "2026-11-25T07:57:07.018Z"
+    },
+    "scripted": false,
+    "defaultTier": {
+      "tier": "standard",
+      "source": "default"
+    },
+    "tiers": [
+      {
+        "tier": "power",
+        "label": "Power",
+        "blurb": "Most capable, for hard pieces and photo matching. Slowest and dearest.",
+        "model": "claude-fable-5-2",
+        "modelLabel": "Claude Fable 5.2",
+        "source": "default",
+        "price": {
+          "input": 8,
+          "output": 40,
+          "cacheRead": 0.2,
+          "cacheWrite": 10
+        },
+        "typicalRunUsd": 1.257
+      },
+      {
+        "tier": "standard",
+        "label": "Standard",
+        "blurb": "Strong designer for everyday work.",
+        "model": "claude-opus-5-5",
+        "modelLabel": "Claude Opus 5.5",
+        "source": "default",
+        "price": {
+          "input": 4,
+          "output": 20,
+          "cacheRead": 0.2,
+          "cacheWrite": 5
+        },
+        "typicalRunUsd": 0.6495000000000001
+      },
+      {
+        "tier": "light",
+        "label": "Light",
+        "blurb": "Quick answers and small edits, at a fraction of the cost.",
+        "model": "claude-sonnet-5-5",
+        "modelLabel": "Claude Sonnet 5.5",
+        "source": "default",
+        "price": {
+          "input": 2,
+          "output": 10,
+          "cacheRead": 0.1,
+          "cacheWrite": 2.5
+        },
+        "typicalRunUsd": 0.32475000000000004
+      }
+    ],
+    "models": [
+      {
+        "id": "claude-fable-5-2",
+        "label": "Claude Fable 5.2",
+        "price": {
+          "input": 8,
+          "output": 40,
+          "cacheRead": 0.2,
+          "cacheWrite": 10
+        },
+        "needsRetention": true
+      },
+      {
+        "id": "claude-opus-5-5",
+        "label": "Claude Opus 5.5",
+        "price": {
+          "input": 4,
+          "output": 20,
+          "cacheRead": 0.2,
+          "cacheWrite": 5
+        },
+        "needsRetention": false
+      },
+      {
+        "id": "claude-sonnet-5-5",
+        "label": "Claude Sonnet 5.5",
+        "price": {
+          "input": 2,
+          "output": 10,
+          "cacheRead": 0.1,
+          "cacheWrite": 2.5
+        },
+        "needsRetention": false
+      },
+      {
+        "id": "claude-haiku-5-5",
+        "label": "Claude Haiku 5.5",
+        "price": {
+          "input": 0.1,
+          "output": 0.5,
+          "cacheRead": 0.01,
+          "cacheWrite": 0.125
+        },
+        "needsRetention": false
+      }
+    ],
+    "envOverrides": [],
+    "warnings": [],
+    "monthSpendUsd": 0
+  }
+}

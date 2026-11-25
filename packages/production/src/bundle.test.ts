@@ -29,6 +29,16 @@ async function build(which: 'ring' | 'pendant', options: Partial<BuildInput['opt
 }
 
 describe('production package', () => {
+  it('leaves out the Rhino and STEP files when asked, and says so', async () => {
+    const pkg = await build('ring', { includeCad: false })
+    const paths = pkg.files.map((f) => f.path)
+    expect(paths).toContain('cad/SOL-01_Ring_pt950_US6.stl')
+    expect(paths).toContain('cad/SOL-01.3mf')
+    expect(paths.some((p) => p.endsWith('.3dm') || p.endsWith('.step'))).toBe(false)
+    expect(pkg.manifest.files.some((f) => /\.(3dm|step)$/.test(f.path))).toBe(false)
+    expect(JSON.stringify(pkg.manifest)).toContain('built without the Rhino and STEP files')
+  })
+
   it('contains the research bundle layout with matching hashes', async () => {
     const pkg = await build('ring')
     expect(pkg.root).toBe('SOL-01_r2_production')

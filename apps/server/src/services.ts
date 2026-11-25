@@ -24,6 +24,7 @@
  *    run to its service's `resume` (render, image-to-3D, on-model, assistant). A job whose
  *    service cannot resume it is failed as interrupted; browser renders are left to their window.
  */
+import type { ImageProvider } from '@pave/ideation'
 import type {
   Actor,
   Asset,
@@ -36,8 +37,11 @@ import type {
   EvaluationSummary,
   FinishId,
   GemMaterialId,
+  ImageProviderId,
+  ImageQuality,
   JobKind,
   JobStatus,
+  KeyedImageProvider,
   MeshJob,
   MetalId,
   ModelShot,
@@ -51,9 +55,11 @@ import type {
   Run,
   SearchResult,
   Thread,
+  View,
 } from '@pave/schema'
 import type { NewAsset } from './assets/assets'
-import type { Invoke } from './context'
+import type { ClaudeCall, Invoke } from './context'
+import type { PhotoFitResult, PhotoFitTask, PictureShot } from './engines/kernel/protocol'
 import { NotConfiguredError } from './errors'
 import type { NewUsage } from './usage'
 
@@ -175,6 +181,36 @@ export interface GeometryService extends Service {
     sctx: ServiceContext,
     opts?: GeometryCall,
   ): Promise<{ glb: FileData; subject: RenderSubject }>
+  /**
+   * The subject summary renders are framed by (bounds and support points of the production
+   * evaluation), without writing a GLB. Optional: without it the assistant is told the camera
+   * but not how much of the frame the piece fills.
+   */
+  subject?(design: Design, sctx: ServiceContext, opts?: GeometryCall): Promise<RenderSubject>
+  /**
+   * Shaded clay pictures of the design (RGBA bytes, `size`×`size`, one per view) from the
+   * software rasteriser, for when no studio window can draw it. Optional: engines without it
+   * leave the assistant without pictures when no window is open.
+   */
+  picture?(
+    design: Design,
+    opts: {
+      views: View[]
+      size: number
+      focus: string[]
+      /** Instead of `views`: pictures through these cameras at their own sizes. */
+      shots?: PictureShot[]
+      /** The metal's colour (RGB, 0–255) instead of the rasteriser's warm grey: covers. */
+      metal?: [number, number, number]
+    } & GeometryCall,
+    sctx: ServiceContext,
+  ): Promise<{ images: Uint8Array[]; summary: EvaluationSummary }>
+  /** Fits the design's outline numbers to a photo's matte (`match.fit`). Optional, as above. */
+  fitPhoto?(
+    design: Design,
+    opts: { fit: PhotoFitTask } & GeometryCall,
+    sctx: ServiceContext,
+  ): Promise<PhotoFitResult>
 }
 
 export interface SearchService extends Service {
@@ -193,24 +229,59 @@ export interface SearchService extends Service {
   ): Promise<SearchResult | null>
 }
 
-export type ImageGenRequest = Omit<CommandParsedInput<'references.estimate'>, 'referenceIds'> & {
-  references: Reference[]
+/** The provider, model, quality and key one generation uses. The key goes to the adapter only. */
+export interface ResolvedImageProvider {
+  provider: ImageProvider
+  model: string
+  quality: ImageQuality
+  apiKey: string
 }
 
+/**
+ * Image generation on the design board, over the provider family in `packages/ideation`.
+ * Registered while some organisation has a provider key (or the test provider stands in); the
+ * pipeline around it (Claude's brief and check, storing, metering) is `src/imagegen/pipeline.ts`.
+ */
 export interface ImageGenService extends Service {
+  /** Providers this organisation can generate with now, in Settings order. */
+  available(orgId: string): ImageProviderId[]
   /**
-   * What `generate` would cost for this request (`references.estimate`); the same figure is
-   * checked against the org's budget before generating.
+   * The provider a request uses (`want`, else the organisation's default), with its model,
+   * quality and key; {@link NotConfiguredError} without a usable key.
    */
-  estimate(request: ImageGenRequest, sctx: ServiceContext): Promise<Estimate>
-  /**
-   * `references` are already filtered to items whose rights allow generative use; read their
-   * pixels with `sctx.readAsset(reference.assetId)`. `roles` say what each one is for.
-   */
-  generate(
-    request: ImageGenRequest,
+  resolve(sctx: ServiceContext, want: ImageProviderId | null): Promise<ResolvedImageProvider>
+  /** The price per image of a provider (or the default) without opening its key. */
+  price(
     sctx: ServiceContext,
-  ): Promise<{ model: string; images: FileData[]; seed?: number | null }>
+    want: ImageProviderId | null,
+  ): Promise<{ provider: ImageProvider; model: string; perImageUsd: number }>
+}
+
+/**
+ * Image generation's setup (provider keys, default provider, quality, models) for
+ * `images.setup.get`, `images.key.*` and `images.settings.update`. Always registered, so a key
+ * can be entered in the app; the role checks are the commands' own.
+ */
+export interface ImageSetupService extends Service {
+  get(sctx: ServiceContext, opts: { admin: boolean }): Promise<CommandOutput<'images.setup.get'>>
+  setKey(
+    provider: KeyedImageProvider,
+    apiKey: string,
+    sctx: ServiceContext,
+  ): Promise<CommandOutput<'images.setup.get'>>
+  testKey(
+    provider: KeyedImageProvider,
+    apiKey: string | null,
+    sctx: ServiceContext,
+  ): Promise<CommandOutput<'images.key.test'>>
+  removeKey(
+    provider: KeyedImageProvider,
+    sctx: ServiceContext,
+  ): Promise<CommandOutput<'images.setup.get'>>
+  update(
+    input: CommandParsedInput<'images.settings.update'>,
+    sctx: ServiceContext,
+  ): Promise<CommandOutput<'images.setup.get'>>
 }
 
 /** Fetches pictures from the web on the server's behalf. */
@@ -225,7 +296,15 @@ export interface CaptureService extends Service {
 export type RenderJobPatch = Partial<
   Pick<
     RenderJob,
-    'status' | 'progress' | 'assetIds' | 'error' | 'scene' | 'critique' | 'seconds' | 'device'
+    | 'status'
+    | 'progress'
+    | 'assetIds'
+    | 'error'
+    | 'scene'
+    | 'critique'
+    | 'seconds'
+    | 'device'
+    | 'sceneHash'
   >
 > & {
   /** sha256 of piece, source version, requested scene, engine and runner version. */
@@ -362,14 +441,52 @@ export interface AssistantService extends Service {
   /** The run belongs to the caller, who is a person. */
   decide(input: CommandParsedInput<'runs.decide'>, sctx: ServiceContext): Promise<Run>
   cancel(runId: string, sctx: ServiceContext): Promise<Run>
+  /** AI jobs: pause one where it is (a person paused it, took over, or edited the piece). */
+  pause(runId: string, reason: 'pause' | 'takeover' | 'edit', sctx: ServiceContext): Promise<Run>
+  /** AI jobs: carry one on in a new run that replans from the piece as it is now. */
+  resumeJob(
+    input: CommandParsedInput<'runs.resume'>,
+    sctx: ServiceContext,
+  ): Promise<{ thread: Thread; run: Run }>
+  /** AI jobs: accept a finished job's outputs. */
+  accept(runId: string, sctx: ServiceContext): Promise<Run>
   /** Completes a pending client-tool request; the first answer wins. */
   respond(input: CommandParsedInput<'client.respond'>, sctx: ServiceContext): Promise<void>
+  /** `references.read` outside a run, on the organisation's default tier. */
+  readPhotos?(
+    input: CommandParsedInput<'references.read'>,
+    sctx: ServiceContext,
+  ): Promise<CommandOutput<'references.read'>>
+  /**
+   * A Claude client on the organisation's default tier, for a command's own structured call
+   * outside a run (an image brief, the check of generated images); {@link NotConfiguredError}
+   * without a key.
+   */
+  claude?(sctx: ServiceContext, purpose: string): Promise<ClaudeCall>
+  /**
+   * Whether this organisation can use the assistant now (it has a key). The service is shared by
+   * every organisation of the server, so `session.get` asks this for the caller's one.
+   */
+  available?(orgId: string): Promise<boolean>
   /**
    * Called at boot for each run left `running` or `awaiting-approval`, as the run's user: fail
    * the running ones as `interrupted` and keep waiting on approvals. Without it, running runs
    * are failed as interrupted and waiting ones stay waiting.
    */
   resume?(run: Run, sctx: ServiceContext): Promise<void>
+}
+
+/**
+ * The assistant's setup (its Claude API key and tiers), for `assistant.setup.get` and
+ * `assistant.key.*`. Registered whether or not there is a key, so a key can be entered in the app;
+ * the role checks are the commands' own (owners and admins change the key).
+ */
+export interface AssistantSetupService extends Service {
+  get(sctx: ServiceContext, opts: { admin: boolean }): Promise<CommandOutput<'assistant.setup.get'>>
+  setKey(apiKey: string, sctx: ServiceContext): Promise<CommandOutput<'assistant.setup.get'>>
+  /** The key given, or else the one in use. */
+  testKey(apiKey: string | null, sctx: ServiceContext): Promise<CommandOutput<'assistant.key.test'>>
+  removeKey(sctx: ServiceContext): Promise<CommandOutput<'assistant.setup.get'>>
 }
 
 export type MeshJobPatch = Partial<
@@ -444,12 +561,14 @@ export interface Services {
   geometry: GeometryService
   search: SearchService
   imageGen: ImageGenService
+  imageSetup: ImageSetupService
   capture: CaptureService
   renderQueue: RenderQueue
   renderEngine: RenderEngineService
   onModel: OnModelService
   production: ProductionService
   assistant: AssistantService
+  assistantSetup: AssistantSetupService
   mesh3d: Mesh3DService
   freeform: FreeformService
   vision: VisionService
@@ -462,13 +581,17 @@ const NOT_CONFIGURED: Record<ServiceName, string> = {
   geometry:
     'No geometry kernel is configured on this server, so CAD cannot be evaluated or exported.',
   search: 'No image search providers are configured on this server.',
-  imageGen: 'No image generation provider is configured on this server.',
+  imageGen:
+    'Generating images needs an image provider’s API key (Google Gemini, OpenAI or Higgsfield). An owner or admin can add one in Settings, AI.',
+  imageSetup: 'This server cannot generate images, so there are no image keys to set up.',
   capture: 'This server cannot fetch images from the web.',
   renderQueue: 'No render queue is configured on this server.',
   renderEngine: 'This server cannot look for a render engine.',
   onModel: 'No on-model imaging provider is configured on this server.',
   production: 'No production packager is configured on this server.',
-  assistant: 'The assistant is not configured on this server.',
+  assistant:
+    'The assistant needs a Claude API key. An owner or admin can add one in Settings, AI (or set ANTHROPIC_API_KEY in apps/server/.env).',
+  assistantSetup: 'This server has no assistant, so there is no key to set up.',
   mesh3d: 'No image-to-3D provider is configured on this server.',
   freeform: 'Picture-to-jewelry analysis is not available on this server.',
   vision: 'No vision model is configured on this server.',
@@ -486,7 +609,18 @@ const DEFAULTS: Services = {
     renderInput: missing('geometry'),
   },
   search: { search: missing('search'), resolve: missing('search') },
-  imageGen: { estimate: missing('imageGen'), generate: missing('imageGen') },
+  imageGen: {
+    available: () => [],
+    resolve: missing('imageGen'),
+    price: missing('imageGen'),
+  },
+  imageSetup: {
+    get: missing('imageSetup'),
+    setKey: missing('imageSetup'),
+    testKey: missing('imageSetup'),
+    removeKey: missing('imageSetup'),
+    update: missing('imageSetup'),
+  },
   capture: { capture: missing('capture') },
   renderQueue: { submit: missing('renderQueue'), cancel: missing('renderQueue') },
   renderEngine: { status: missing('renderEngine'), configure: missing('renderEngine') },
@@ -503,7 +637,16 @@ const DEFAULTS: Services = {
     send: missing('assistant'),
     decide: missing('assistant'),
     cancel: missing('assistant'),
+    pause: missing('assistant'),
+    resumeJob: missing('assistant'),
+    accept: missing('assistant'),
     respond: missing('assistant'),
+  },
+  assistantSetup: {
+    get: missing('assistantSetup'),
+    setKey: missing('assistantSetup'),
+    testKey: missing('assistantSetup'),
+    removeKey: missing('assistantSetup'),
   },
   mesh3d: { estimate: missing('mesh3d'), submit: missing('mesh3d'), cancel: missing('mesh3d') },
   freeform: { analyze: missing('freeform') },
@@ -546,6 +689,15 @@ export class ServiceRegistry {
   register<K extends ServiceName>(name: K, impl: Services[K]): void {
     this.#impls[name] = impl
     this.#registered.add(name)
+  }
+
+  /**
+   * Puts the refusing default back, e.g. the assistant once its last API key is removed. Disposal
+   * stays with the caller, which may register the same implementation again later.
+   */
+  unregister(name: ServiceName): void {
+    ;(this.#impls as Record<ServiceName, unknown>)[name] = DEFAULTS[name]
+    this.#registered.delete(name)
   }
 
   get<K extends ServiceName>(name: K): Services[K] {

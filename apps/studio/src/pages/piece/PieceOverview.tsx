@@ -4,11 +4,13 @@ import { Link } from '@tanstack/react-router'
 import { ImageIcon, Lightbulb, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { SectionTitle } from '../../components/Page'
+import { SpecCard } from '../../components/SpecCard'
+import { ProjectSections } from '../../features/projects/ProjectSections'
+import { takeMedia } from '../../features/render/shots'
 import { assetUrl } from '../../lib/assets'
-import { plural, relativeTime } from '../../lib/format'
+import { dateTime, plural, relativeTime } from '../../lib/format'
 import { useUpdatePiece } from '../../lib/pieces'
 import { useRpc, useRpcMutation } from '../../lib/query'
-import { SpecCard } from './SpecCard'
 
 export function PieceOverview({ pieceId }: { pieceId: string }) {
   const piece = useRpc('pieces.get', { id: pieceId })
@@ -22,14 +24,34 @@ export function PieceOverview({ pieceId }: { pieceId: string }) {
   return (
     <div className="flex flex-col gap-10">
       <Brief piece={piece.data} />
+      <ProjectSections piece={piece.data} />
       <SpecCard piece={piece.data} />
       <Moodboards pieceId={pieceId} />
       <LatestRenders pieceId={pieceId} />
+      {piece.data.provenance && <FileProvenance provenance={piece.data.provenance} />}
     </div>
   )
 }
 
-function Brief({ piece }: { piece: Piece }) {
+/** Where a piece opened from a .pave file came from: the saves it travelled through. */
+function FileProvenance({ provenance }: { provenance: NonNullable<Piece['provenance']> }) {
+  const last = provenance.files[provenance.files.length - 1]!
+  return (
+    <section aria-label="Where this piece came from">
+      <SectionTitle>Where it came from</SectionTitle>
+      <p className="text-sm text-fg-muted">
+        Opened from <span className="text-fg">{provenance.fileName}</span>{' '}
+        {relativeTime(provenance.openedAt)}, saved{' '}
+        {provenance.elsewhere ? 'by another organisation or install' : 'here'} with Pavé{' '}
+        {last.appVersion} on {dateTime(last.savedAt)}. First made {dateTime(provenance.createdAt)}
+        {provenance.files.length > 1 ? `; saved to a file ${provenance.files.length} times` : ''}.
+        Its history keeps who made each change.
+      </p>
+    </section>
+  )
+}
+
+export function Brief({ piece }: { piece: Piece }) {
   const update = useUpdatePiece()
   const [brief, setBrief] = useState(piece.brief)
   useEffect(() => setBrief(piece.brief), [piece.brief])
@@ -43,13 +65,13 @@ function Brief({ piece }: { piece: Piece }) {
         onBlur={() => brief !== piece.brief && update.mutate({ id: piece.id, brief })}
         placeholder="Write a brief — who it’s for, the feeling, the constraints…"
         aria-label="Brief"
-        className="text-[15px] leading-7 placeholder:text-fg-faint"
+        className="text-lg leading-7 placeholder:text-fg-faint"
       />
     </section>
   )
 }
 
-function Moodboards({ pieceId }: { pieceId: string }) {
+export function Moodboards({ pieceId }: { pieceId: string }) {
   const boards = useRpc('boards.list', { pieceId })
   const create = useRpcMutation('boards.create')
   return (
@@ -108,7 +130,7 @@ function Moodboards({ pieceId }: { pieceId: string }) {
 
 function LatestRenders({ pieceId }: { pieceId: string }) {
   const renders = useRpc('renders.list', { pieceId, limit: 8 })
-  const done = renders.data?.filter((r) => r.status === 'done' && r.assetIds[0]) ?? []
+  const done = renders.data?.filter((r) => r.status === 'done' && takeMedia(r).still) ?? []
   return (
     <section>
       <SectionTitle
@@ -135,7 +157,7 @@ function LatestRenders({ pieceId }: { pieceId: string }) {
           {done.map((r) => (
             <img
               key={r.id}
-              src={assetUrl(r.assetIds[0]!, 320)}
+              src={assetUrl(takeMedia(r).still ?? r.assetIds[0]!, 320)}
               alt={r.title}
               loading="lazy"
               className="stage aspect-square w-36 shrink-0 rounded-lg object-cover shadow-[0_0_0_1px_var(--line)]"

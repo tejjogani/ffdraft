@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { extname, join } from 'node:path'
-import { RESOLVED_SCENE_VERSION } from '@pave/render'
+import { canonicalJson, RESOLVED_SCENE_VERSION } from '@pave/render'
 import type { Piece, RenderJob, RenderScene } from '@pave/schema'
 import { AppError } from '../../errors'
 import type {
@@ -67,21 +67,9 @@ interface Entry {
   workDir?: string
 }
 
-/** JSON with sorted keys, so equal scenes hash equally whatever order their keys arrived in. */
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
-  if (value && typeof value === 'object')
-    return `{${Object.entries(value)
-      .filter(([, v]) => v !== undefined)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`)
-      .join(',')}}`
-  return JSON.stringify(value)
-}
-
 /** Same piece version, request, engine and runner → the same pixels. */
 export function cacheKeyOf(job: RenderJob, blenderVersion: string | null): string {
-  const key = canonical([
+  const key = canonicalJson([
     job.pieceId,
     job.sourceVersion,
     job.requestedScene,
@@ -203,6 +191,7 @@ export function createRenderQueue(o: RenderQueueOptions) {
           critique: cached.critique,
           seconds: 0,
           device: cached.device,
+          sceneHash: cached.sceneHash,
           cacheKey,
         })
         return
@@ -225,6 +214,7 @@ export function createRenderQueue(o: RenderQueueOptions) {
         autoTune: job.autoTune,
         glb: glb.bytes,
         subject,
+        design: { pieceId: job.pieceId, version: job.sourceVersion },
         workDir,
         runtime: o.blender.runtime(),
         signal,
@@ -267,6 +257,7 @@ export function createRenderQueue(o: RenderQueueOptions) {
         critique: result.critique,
         seconds: Math.round(result.seconds * 100) / 100,
         device: result.device,
+        sceneHash: result.sceneHash,
       })
     } catch (err) {
       // Canceled: the handler marks it. Shutting down: it stays live for boot recovery.

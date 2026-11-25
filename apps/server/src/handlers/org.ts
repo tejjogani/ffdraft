@@ -13,8 +13,19 @@ const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000
 async function readSettings(ctx: Ctx) {
   await ctx.repo.settings.insertIfAbsent({})
   const row = await ctx.repo.settings.first()
-  const { traceRetentionDays, allowEvalUse, assistantModel, monthlyBudgetUsd } = row!
-  return { traceRetentionDays, allowEvalUse, assistantModel, monthlyBudgetUsd }
+  const { traceRetentionDays, allowEvalUse, assistantTier, assistantModels, monthlyBudgetUsd } =
+    row!
+  return {
+    traceRetentionDays,
+    allowEvalUse,
+    assistantTier,
+    assistantModels: {
+      power: assistantModels.power ?? null,
+      standard: assistantModels.standard ?? null,
+      light: assistantModels.light ?? null,
+    },
+    monthlyBudgetUsd,
+  }
 }
 
 export const org: HandlerGroup<'org'> = {
@@ -71,11 +82,17 @@ export const org: HandlerGroup<'org'> = {
 
   'org.settings.get': readSettings,
 
-  'org.settings.update': async (ctx, input) => {
+  'org.settings.update': async (ctx, { assistantModels, ...input }) => {
     await ctx.repo.settings.insertIfAbsent({})
+    // Tiers not named keep their model. Read-then-write without a lock: two admins saving
+    // different tiers at the same instant is the only race, and the later save wins whole.
+    const models = assistantModels
+      ? { ...(await ctx.repo.settings.first())!.assistantModels, ...assistantModels }
+      : undefined
     // Drizzle leaves columns whose value is `undefined` untouched, which is exactly a partial update.
     await ctx.repo.settings.update(eq(t.orgSettings.orgId, ctx.orgId), {
       ...input,
+      assistantModels: models,
       updatedAt: new Date(),
     })
     return { ok: true }

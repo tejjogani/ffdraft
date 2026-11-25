@@ -1,8 +1,10 @@
 import {
   buildDesign,
   type Design,
+  emptyBuildReason,
   emptyDesign,
   originNeedsAttestation,
+  PAVE_MIME,
   type Piece,
   type PieceKind,
   type PieceOrigin,
@@ -16,13 +18,18 @@ import {
 } from '@pave/schema'
 import { and, desc, eq, ilike, inArray, isNull, type SQL } from 'drizzle-orm'
 import type { z } from 'zod'
-import { getAssetRow } from '../assets/assets'
+import { assetBytes, getAssetRow, putAsset } from '../assets/assets'
 import { type Ctx, publish } from '../context'
 import * as t from '../db/schema'
 import { commitChange, refreshFacts, replaceDesignOps } from '../design'
+import { chooseDirection, proposeDirections, removeDirection, toDirection } from '../directions'
 import { badRequest, conflict, forbidden } from '../errors'
+import { estimateSpec, openAsCad, takeToCad } from '../ideas'
 import { createId } from '../ids'
 import { ensure, ensureAll, getCollection, getPiece } from '../lookups'
+import { openPieceFile } from '../pavefile/open'
+import { savePieceFile } from '../pavefile/save'
+import { recordRenderFeedback, takeAgent } from '../render-feedback'
 import type { HandlerGroup } from './types'
 
 type PieceRow = typeof t.piece.$inferSelect
@@ -54,6 +61,9 @@ export async function toPiece(ctx: Ctx, r: PieceRow): Promise<Piece> {
     version: r.version,
     boardIds: boards.map((b) => b.id),
     origin: r.origin ?? null,
+    directions: (r.directions ?? []).map(toDirection),
+    chosenDirectionId: r.chosenDirectionId ?? null,
+    provenance: r.provenance ?? null,
   }
 }
 
@@ -155,6 +165,25 @@ async function insertPiece(
   return toPiece(ctx, row)
 }
 
+/** A person made one of the assistant's takes the piece's cover: the strongest "kept". */
+async function noteCover(ctx: Ctx, pieceId: string, assetId: string): Promise<void> {
+  if (ctx.actor.type !== 'user') return
+  const takes = await ctx.repo.renders.many({
+    where: and(eq(t.renderJob.pieceId, pieceId), eq(t.renderJob.status, 'done')),
+    orderBy: desc(t.renderJob.createdAt),
+    limit: 200,
+  })
+  const take = takes.find((r) => r.assetIds.includes(assetId))
+  const agent = take && takeAgent(take)
+  if (agent)
+    await recordRenderFeedback(ctx, {
+      agent,
+      kind: 'kept',
+      target: `render:${take.id}`,
+      detail: `Set the take “${take.title}”, which the assistant rendered, as the piece’s cover.`,
+    })
+}
+
 export const pieces: HandlerGroup<'pieces'> = {
   'pieces.list': async (ctx, input) => {
     const where: SQL[] = []
@@ -203,6 +232,8 @@ export const pieces: HandlerGroup<'pieces'> = {
       updatedAt: new Date(),
     })
     publish(ctx, { type: 'piece.updated', pieceId: id })
+    if (patch.coverAssetId && patch.coverAssetId !== current.coverAssetId)
+      await noteCover(ctx, id, patch.coverAssetId)
     return toPieceSummary(row!)
   },
 
@@ -232,6 +263,8 @@ export const pieces: HandlerGroup<'pieces'> = {
     const piece = await getPiece(ctx, id)
     const [row] = await ctx.repo.pieces.update(eq(t.piece.id, id), {
       spec,
+      // The spec says what the piece is: a ring respecified as a pendant becomes a pendant.
+      kind: spec.kind,
       stage: advance(piece.stage, 'spec'),
       updatedAt: new Date(),
     })
@@ -243,7 +276,11 @@ export const pieces: HandlerGroup<'pieces'> = {
     const piece = await getPiece(ctx, id)
     if (!piece.spec)
       throw conflict('This piece has no saved spec yet; save one with pieces.setSpec first')
-    const ops = replaceDesignOps(piece.design, buildDesign(piece.spec))
+    const built = buildDesign(piece.spec)
+    // An empty build is a failure, not a success with nothing in it: the design stays as it was.
+    const empty = emptyBuildReason(piece.spec, built)
+    if (empty) throw conflict(empty)
+    const ops = replaceDesignOps(piece.design, built)
     const { version } =
       ops.length === 0
         ? { version: piece.version }
@@ -274,6 +311,31 @@ export const pieces: HandlerGroup<'pieces'> = {
       origin: source.origin,
     })
   },
+
+  // A .pave file is free both ways: nothing here claims from the plan's allowance.
+  'pieces.saveFile': async (ctx, { id }) => {
+    const file = await savePieceFile(ctx, id)
+    const asset = await putAsset(ctx, {
+      bytes: file.bytes,
+      name: file.name,
+      mime: PAVE_MIME,
+      kind: 'archive',
+    })
+    return { asset, notes: file.notes }
+  },
+
+  'pieces.openFile': async (ctx, { assetId, collectionId }) => {
+    const row = await getAssetRow(ctx, assetId)
+    return openPieceFile(ctx, await assetBytes(ctx, row), row.name, { collectionId })
+  },
+
+  'pieces.estimate': (ctx, input) => estimateSpec(ctx, input),
+  'pieces.takeToCad': (ctx, input) => takeToCad(ctx, input),
+  'pieces.openAsCad': (ctx, input) => openAsCad(ctx, input),
+
+  'pieces.proposeDirections': (ctx, input) => proposeDirections(ctx, input),
+  'pieces.chooseDirection': (ctx, input) => chooseDirection(ctx, input),
+  'pieces.removeDirection': (ctx, input) => removeDirection(ctx, input),
 
   'pieces.delete': async (ctx, { id }) => {
     await getPiece(ctx, id)

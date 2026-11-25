@@ -1,0 +1,257 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the frozen system prompt > has a stable hash (snapshot) that covers the prompt and the tools 1`] = `
+{
+  "chars": [
+    7082,
+    37671,
+    10638,
+    12458,
+  ],
+  "hash": "prompt-1a7ea15ae5d5db",
+}
+`;
+
+exports[`the node reference > is stable (snapshot) 1`] = `
+"# Node reference
+Generated from the node schemas: what design.apply accepts. A design is a flat map of nodes that refer to each other by id. Space: millimetres, Z up. A ring is centred on the origin with the finger along Y and the head at +Z; flat pieces stand in the XZ plane facing −Y. Angles are degrees. A field left out takes the default after "=". Nested objects merge on update (JSON merge patch); lists and values replace; null deletes a field.
+Every node has: id (unique string you choose, e.g. "head" or "row-left"), kind, name (optional label), visible = true, transform (optional, rarely needed: position [x, y, z] mm, rotation [x, y, z]°, scale).
+Shared value lists:
+- <metal>: au24k-yellow, au22k-yellow, au18k-yellow, au18k-white, au18k-rose, au14k-yellow, au14k-white, au14k-rose, au10k-yellow, au10k-white, au9k-yellow, pt950, pt900, pd950, ag925-sterling, ag999-fine, ti-grade5, brass
+- <finish>: polished, satin, brushed, matte, hammered
+- <plating>: none, rhodium, black-rhodium, yellow-vermeil, rose-vermeil
+- <cut>: round, oval, princess, emerald, asscher, cushion, radiant, marquise, pear, heart, baguette, trillion, cabochon
+- <stone>: diamond, diamond-lab, diamond-yellow, diamond-pink, diamond-black, moissanite, cz, sapphire-blue, sapphire-pink, sapphire-yellow, sapphire-white, ruby, emerald, aquamarine, morganite, amethyst, citrine, topaz, tourmaline, garnet, peridot, tanzanite, spinel, alexandrite, opal, pearl, onyx, turquoise
+- ring size systems: us, uk, eu, jp, mm
+- body nodes (solids that host stones, bails, findings, engravings and booleans): ringShank, setting, halo, vectorBody, meshBody, relief, revolve, pipe, primitive, boolean, bail
+- <quality> (what to buy; the stone list and sourcing read it):
+  - origin: natural | lab | any = "any"
+  - colors: list of string (0–12 items)
+  - clarities: list of string (0–12 items)
+  - certified: boolean
+- <sourcing> (a real stone linked by the sourcing workflow; do not write it yourself):
+  - provider (required): string
+  - sku (required): string
+  - url: string
+  - priceUsd: number
+  - measured: object
+    - length (required): number
+    - width (required): number
+    - depth (required): number
+  - certificate: string
+## ringShank: Ring band. A ring shank / band sized to a finger.
+- material: <metal> = "au18k-yellow"
+- finish: <finish> = "polished"
+- plating: <plating> = "none"
+- size: object = {"system":"us","value":6}
+  - system (required): us | uk | eu | jp | mm
+  - value (required): number 0–80
+- profile: court | dShape | flat | flatCourt | knifeEdge = "court". Cross-section. court = rounded inside and out (comfort fit); dShape = flat inside, domed outside; flatCourt = flat outside, rounded inside.
+- widthTop: number 1–14 mm = 2.2
+- widthBottom: number 1–14 mm = 2.2
+- thicknessTop: number 0.9–5 mm = 1.8
+- thicknessBottom: number 0.9–5 mm = 1.6
+- shoulder: plain | cathedral | split = "plain". cathedral = arches rising to the head; split = band divides in two near the head.
+- shoulderHeight: number 0.5–8 mm = 3. only when shoulder is cathedral
+- splitGap: number 0.5–6 mm = 2. only when shoulder is split
+- baseShape: round | euro = "round". euro = squared-off base that resists spinning.
+## gem: Stone. A single gemstone.
+- cut: <cut> = "round"
+- stone: <stone> = "diamond"
+- quality: <quality>, optional
+- sourcing: <sourcing>, optional
+- width: number 0.6–40 mm = 6.5. Girdle width (diameter for rounds). 6.5 mm round ≈ 1 ct diamond.
+- lw: number 0.8–5 = 1. Ignored for round; clamped to what the cut allows.
+- placement: one of = {"type":"free"}
+  - type "ringTop":
+    - shank (required): id of a ringShank node
+    - angle: number -180–180° = 0. 0 = top of the ring; positive toward +X.
+    - elevation: number 0–8 mm = 1.2. Gap between the finger and the lowest point of the stone.
+    - spin: number -180–180° = 0. Turn about the stone’s own axis.
+  - type "surface":
+    - host (required): id of a body node
+    - point: [x, y, z] = [0,0,0]
+    - normal: [x, y, z] = [0,-1,0]
+    - inset: number -2–5 mm = 0. How far the girdle sits below the surface.
+    - spin: number -180–180° = 0
+  - type "free":
+## setting: Setting. The head that holds one stone.
+- material: <metal> = "au18k-yellow"
+- finish: <finish> = "polished"
+- plating: <plating> = "none"
+- gem (required): id of a gem node
+- style: prong | basket | bezel | halfBezel | flush = "prong". prong = claws only; basket = claws joined by gallery rails; bezel = full metal rim; halfBezel = two arcs; flush = stone sunk into the host.
+- prongCount: integer 3–8 = 4. only when style is prong or basket
+- prongDiameter: number 0.5–2.5 mm = 1. only when style is prong or basket
+- prongTip: round | claw | tab | double = "round". only when style is prong or basket
+- prongSpin: number -90–90° = 45. only when style is prong or basket. 45 puts four prongs on the corners; 0 on the compass points.
+- taper: number 0–0.8 = 0.35. only when style is prong or basket. How strongly the head narrows toward its base.
+- rails: integer 0–2 = 1. only when style is basket
+- wall: number 0.3–2 mm = 0.55. only when style is bezel or halfBezel
+## halo: Halo. A ring of small stones following the outline of a centre stone.
+- material: <metal> = "au18k-yellow"
+- finish: <finish> = "polished"
+- plating: <plating> = "none"
+- cut: <cut> = "round"
+- stone: <stone> = "diamond"
+- quality: <quality>, optional
+- sourcing: <sourcing>, optional
+- around (required): id of a gem node
+- stoneWidth: number 0.8–3.5 mm = 1.3
+- rows: integer 1–3 = 1
+- offset: number 0.05–1.5 mm = 0.25
+- gap: number 0.05–0.6 mm = 0.15
+- drop: number -1–3 mm = 0.4. How far the halo sits below the centre stone’s girdle.
+## gemRow: Stone row. Stones set along a ring band: pavé shoulders, channel, eternity.
+- cut: <cut> = "round"
+- stone: <stone> = "diamond"
+- quality: <quality>, optional
+- sourcing: <sourcing>, optional
+- host (required): id of a ringShank node
+- setting: pave | channel | sharedProng | bar | flush = "pave"
+- stoneWidth: number 0.8–6 mm = 1.5
+- graduateTo: number 0.8–6 mm = 1.5. Stone size at the ends of the row; equal to Stone size for no graduation.
+- coverage: number 10–360° = 150. Arc of the band that carries stones. 180 = half eternity, 360 = full eternity.
+- center: number -180–180° = 0
+- skipCenter: number 0–180° = 0. Arc left clear around the centre (for a head).
+- rows: integer 1–5 = 1
+- gap: number 0.05–1 mm = 0.15
+## pave: Pavé. Automatically packs graded stones over a surface.
+- cut: <cut> = "round"
+- stone: <stone> = "diamond"
+- quality: <quality>, optional
+- sourcing: <sourcing>, optional
+- host (required): id of a body node
+- region: one of = {"type":"facing","direction":[0,-1,0],"maxAngle":75}. Which part of the body is covered.
+  - type "all":
+  - type "facing":
+    - direction: [x, y, z] = [0,-1,0]
+    - maxAngle: number 5–180° = 75
+- sizeMax: number 0.8–4 mm = 1.8
+- sizeMin: number 0.8–4 mm = 1
+- gap: number 0.05–0.6 mm = 0.2
+- margin: number 0–2 mm = 0.35
+- coverage: number 0.05–1 = 1. Fraction of the region to fill. 1 = fully iced out.
+- beads: boolean = true. Raise bead prongs between stones.
+- seed: integer 0–9999 = 1
+## vectorBody: Outline body. Text, a logo path or a shape, extruded into a solid: name pendants, charms, tags.
+- material: <metal> = "au18k-yellow"
+- finish: <finish> = "polished"
+- plating: <plating> = "none"
+- source: one of = {"type":"shape","shape":"heart"}
+  - type "text":
+    - text: string = "Pavé"
+    - font: sans | serif | script | block = "sans"
+  - type "svg":
+    - d (required): string
+  - type "shape":
+    - shape: circle | oval | heart | star | cross | shield | hexagon | teardrop | tag = "heart"
+- height: number 3–150 mm = 22. Overall height of the outline.
+- thickness: number 0.6–20 mm = 2
+- bevel: flat | chamfer | round | pillow = "round". pillow inflates the whole face into a soft dome.
+- bevelSize: number 0–5 mm = 0.4
+- border: number 0–3 mm = 0. Adds a polished rim around the edge — the frame for a pavé field.
+## meshBody: Sculpted body. An imported, scanned or AI-generated mesh made castable: scaled, flat-backed, hollowed.
+- material: <metal> = "au18k-yellow"
+- finish: <finish> = "polished"
+- plating: <plating> = "none"
+- source (required): one of
+  - type "asset":
+    - assetId (required): string
+  - type "builtin":
+    - name: trophy | crown | dice = "trophy"
+- height: number 3–200 mm = 40. The mesh is scaled to this overall height.
+- flatBack: number 0–0.9 = 0. Slices this fraction off the back so the piece lies flat.
+- hollow: number 0–5 mm = 0. 0 keeps the body solid.
+- smooth: integer 0–8 = 0
+- detail: number 0.02–1 = 1. Mesh simplification.
+## relief: Relief. A coin, medallion or signet face raised from an image.
+- material: <metal> = "au18k-yellow"
+- finish: <finish> = "polished"
+- plating: <plating> = "none"
+- assetId: string
+- outline: round | oval | cushion | rect | shield = "round"
+- width: number 4–100 mm = 18
+- height: number 4–100 mm = 18
+- baseThickness: number 0.5–6 mm = 1.2
+- depth: number 0.1–6 mm = 0.8
+- rim: number 0–4 mm = 0.8
+- invert: boolean = false
+## revolve: Revolve. A lathe form: domes, beads, cups, bezels.
+- material: <metal> = "au18k-yellow"
+- finish: <finish> = "polished"
+- plating: <plating> = "none"
+- profile (required): string. SVG path in mm in the (radius, height) half-plane; revolved about Z.
+- angle: number 1–360° = 360
+## pipe: Wire. A wire swept along a curve: vines, bypass bands, hoops, bangles.
+- material: <metal> = "au18k-yellow"
+- finish: <finish> = "polished"
+- plating: <plating> = "none"
+- points (required): list of [x, y, z] (2–400 items). A smooth curve is fitted through these.
+- closed: boolean = false
+- section: round | square | halfRound = "round"
+- width: number 0.4–20 mm = 1.5
+- thickness: number 0.4–20 mm = 1.5
+- taper: number 0–1 = 0. Fraction by which the wire thins at its ends.
+## primitive: Primitive
+- material: <metal> = "au18k-yellow"
+- finish: <finish> = "polished"
+- plating: <plating> = "none"
+- shape: box | cylinder | sphere | torus | cone = "box"
+- size: [x, y, z] = [5,5,5]. Bounding size in mm.
+- tube: number 0.2–20 mm = 1. only when shape is torus
+- fillet: number 0–5 mm = 0
+## boolean: Combine. Union, subtract or intersect bodies. Inputs are consumed.
+- op: union | subtract | intersect = "subtract"
+- target (required): id of a body node
+- tools (required): list of id of a body node (1–32 items)
+## bail: Bail. The loop a pendant hangs from. Auto-places at the top of its host.
+- material: <metal> = "au18k-yellow"
+- finish: <finish> = "polished"
+- plating: <plating> = "none"
+- host: id of a body node
+- style: loop | tube | ring | hidden = "loop". ring = plain jump ring; hidden = slot behind the top of the piece.
+- opening: number 1.5–20 mm = 4.5. Clear inner height — must pass the chain end.
+- width: number 0.8–15 mm = 3
+- wire: number 0.5–4 mm = 1.1
+## chain: Chain. Cable, curb/Cuban, rope, box or tennis chain.
+- material: <metal> = "au18k-yellow"
+- finish: <finish> = "polished"
+- plating: <plating> = "none"
+- cut: <cut> = "round"
+- stone: <stone> = "diamond"
+- quality: <quality>, optional
+- sourcing: <sourcing>, optional
+- style: cable | curb | cuban | figaro | rope | box | tennis = "cable"
+- length: number 100–900 mm = 457
+- linkWidth: number 0.8–25 mm = 3
+- wire: number 0.3–6 mm = 0.8
+- through: id of a bail node
+- layout: drape | straight = "drape"
+## finding: Finding. Posts, backs, jump rings, clasps.
+- material: <metal> = "au18k-yellow"
+- finish: <finish> = "polished"
+- plating: <plating> = "none"
+- type: earringPost | butterfly | jumpRing | lobsterClasp = "earringPost"
+- host: id of a body node
+- length: number 2–20 mm = 10
+- wire: number 0.5–2 mm = 0.8
+## engraving: Engraving
+- host (required): id of a body node
+- text: string = "forever"
+- font: sans | serif | script | block = "sans"
+- size: number 0.6–20 mm = 1.4
+- depth: number 0.05–2 mm = 0.25
+- mode: engrave | emboss = "engrave"
+- where: insideBand | outsideBand | front | back = "insideBand"
+- angle: number -180–180° = 180. Around the band; 180 = base of the ring.
+## pattern: Pattern. Repeats nodes around an axis, along a line, or mirrors them.
+- sources (required): list of string (1–64 items)
+- type: polar | linear | mirror = "polar"
+- axis: x | y | z = "z"
+- count: integer 2–200 = 6. only when type is polar or linear
+- angle: number 1–360° = 360. only when type is polar
+- spacing: number 0.1–200 mm = 5. only when type is linear
+## group: Group
+- children (required): list of string (0–500 items)"
+`;
