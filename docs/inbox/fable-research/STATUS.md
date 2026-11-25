@@ -15,6 +15,7 @@ Not written yet. It lands here when the plans have been reviewed.
 - Research 21, connectors and developer access: `docs/research/21-connectors-and-developer-api.md`. One first-party connector interface and one sync engine, nothing bought; the ERP report's connector order holds, with one correction on The Edge (below).
 - Research 13, the jewelry CAD feature set: `docs/research/13-jewelry-cad-features.md`. The market moved in 2026: Rhino 9 is on sale with an AI assistant; RhinoArtisan 7 ships an MCP server and live diamond prices; Drakon 2 has a copilot; one browser product (Diatech Make, Dubai) calls itself AI-native jewelry CAD and is free with an account. The freeform plan's gaps are in the jewelry and workshop layers: scoop and azure cutters, hand control inside automatic stone layouts, the tech sheet as a screen, more cuts and heads, matching bands, shrink scaling and a sprue, re-sizing foreign files, an own-parts library. SubD should become a named later step.
 - Research 18, low-end machines: `docs/research/18-low-end-machines.md`. The Air is a fine CAD machine and a poor render machine: its GPU scores about 302 to 354 on Blender Open Data against 2,285 for an RTX 3060. A one-minute still is fine; a 5-second turntable is an estimated 1 to 7 hours locally, or roughly 15 to 55 cents on a rented GPU. 8 GB of memory is the real limit. Render.com has no GPU.
+- Research 20, accounts and identity: `docs/research/20-accounts-and-identity.md`. Keep Better Auth (the only option that runs in-process, so the same code serves an offline laptop and hosted; no licence cost). Local installs get a profile, not a login. Connecting to hosted is a device link plus a one-time claim, with a signed entitlement lease of about two weeks.
 
 ## Requests and findings for lane A (from the research so far)
 
@@ -23,6 +24,11 @@ Three items in the first `.pave` version on `claude/assistant-build` (details in
 1. The "saved here" organisation fingerprint is a fixed value that can be copied from any file of that organisation, so a crafted file can carry a forged rights attestation.
 2. `thumbUrl` survives opening a file, so a stranger's file can make the studio fetch a URL of the sender's choosing.
 3. `save.ts` does not enforce `PAVE_LIMITS`, so a long-lived piece can be saved into a file that will not open.
+
+Two security gaps in the server, to fix before the founder installs a build that stores his key (research 20):
+
+4. The local server has no Host or Origin check (`apps/server/src/app.ts`, around lines 95 to 128). A DNS-rebinding page or any local program can call it and spend the stored Claude key. The bug-sweep branch `claude/bugsweep-server` has a related fix ("refuse writes sent by a page of another website"); check that it covers the Host header too.
+5. Accounts mode accepts unverified emails, and the auth library links a social sign-in to an existing account by email. That allows a pre-registration takeover once Google or Microsoft sign-in is switched on. Also, one auth secret both signs sessions and derives the key that seals customers' AI keys.
 
 Also: `docs/pave-file.md` says adding an entry or a field is not a breaking change, but the reader refuses unknown entries, rejects new enum values and checks names before the version. A newer file gets the wrong error instead of "update Pavé". `geometry/exact.step` inside the file hands the paid STEP export to anyone who unzips it, and open never reads it.
 
@@ -35,6 +41,7 @@ Corrections to earlier research:
 - RhinoGold is discontinued; RhinoArtisan is a separate product from another company, not its new name. MatrixGold is at 4.0, Rhino at 9, 3Design at V13.
 - `freeform-cad.md` lists Make2D and shrinkage compensation as cut or later, while `production/drawing` and `shrinkagePct` already exist.
 - `03-rendering.md` says Open Image Denoise runs on the CPU; it has run on the GPU since Blender 4.1. A comment in the render worker's `devices.py` about Metal on Intel Macs is wrong since Blender 4.3.
+- `docs/ARCHITECTURE.md` (lines 177 to 182) still describes "Continue with Diaex" as a sign-in through OpenID. The contract links an organisation by plain OAuth. The `guest` role can currently call no command at all.
 - The light-machine work exists only on `claude/assistant-build`. Its `e2e/light.ts` always uses a software renderer, so it cannot measure a real machine. Nothing budgets memory across the browser tab, the WASM kernels, the server pool and Blender; the browser kernel worker is never recycled.
 
 ## Now
@@ -50,7 +57,7 @@ Ten research subagents, one per topic, one file each (topic 22 was added on the 
 | `docs/research/17-pave-file-format.md` | The native file format | Done; plan being written |
 | `docs/research/18-low-end-machines.md` | Low-end machines | Done |
 | `docs/research/19-erp-and-pos-apis.md` | ERP, POS and accounting APIs | Running |
-| `docs/research/20-accounts-and-identity.md` | Accounts and identity | Running |
+| `docs/research/20-accounts-and-identity.md` | Accounts and identity | Done; plan being written |
 | `docs/research/21-connectors-and-developer-api.md` | Connectors and developer API | Done |
 | `docs/research/22-rhino-full-parity.md` | Every Rhino 8 CAD capability against the plan and the product | Running |
 
@@ -106,6 +113,13 @@ From research 13 (CAD features):
 13. Does the product answer RhinoArtisan's live diamond pricing and MCP server at launch?
 14. Is SubD worth a later multi-week step, or is "import a sculpt and make it castable" enough for year one?
 15. A browser rival is called Diatech Make (Dubai). The name is close to the diamond marketplace's. Please confirm it is unrelated.
+
+From research 20 (accounts):
+21. Is local-only use account-free for good, or will a free hosted account be needed to unlock the monthly free renders and exports?
+22. Local allowances cannot be enforced on a machine the user owns. Accept them as honest-customer limits, or require the network for paid exports?
+23. Offline lease: 14 or 30 days?
+24. Which legal entity registers the Google, Microsoft and Apple sign-in apps? (Same as the open `LICENSE` holder question.)
+25. Which roles cost a seat?
 
 From research 18 (machines):
 16. Which Air exactly (13 or 15 inch, 8 or 16 GB, 8 or 10 GPU cores, macOS version)? Is 8 GB a supported target?
