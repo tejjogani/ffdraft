@@ -83,6 +83,10 @@ const STRAP_SHARES = [0.85, 0.5]
  */
 const JOINT_WIRES = 1
 
+/** Clear depth of a hidden slot, front to back: its own, or 0.6 of its opening on older designs. */
+export const hiddenDepth = (node: Pick<BailNode, 'opening' | 'depth'>) =>
+  node.depth ?? 0.6 * node.opening
+
 const sinkFor = (wire: number) => Math.max(SINK, SINK_PER_WIRE * wire)
 
 /** Band of the given section carried round a path in the YZ plane; `x` is the band's width axis. */
@@ -150,9 +154,10 @@ function build(
     case 'hidden': {
       // A closed flat loop standing off the back of the piece: its back run lies in the host's
       // back (so the joint is a full lap and the slot is closed for the chain check), its front
-      // run stands behind. The slot is `opening` high and 0.6 of that deep, clear: a chain lies
-      // flat behind a piece, and every millimetre of stand-off holds the piece off the chest.
-      const depth = 0.6 * opening + wire
+      // run stands behind. The slot is `opening` high and `depth` deep, clear (0.6 of the height
+      // when unset): a chain lies flat behind a piece, so its depth, not its width, sets how far
+      // the slot stands off, and every millimetre of stand-off holds the piece off the chest.
+      const depth = hiddenDepth(node) + wire
       const height = opening + wire
       const place = stand.hidden(height)
       const { x, zc } = place

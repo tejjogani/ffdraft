@@ -220,6 +220,20 @@ describe('recipes', () => {
     }
   })
 
+  it('starts a custom ring from its band, with the centre stone when the brief names one', () => {
+    // The ring recipe reads `custom` itself (a band, and a head only for a named centre), so a
+    // custom ring must reach it; a custom pendant still starts empty.
+    const ring = (stones: PieceSpecInput['stones']) =>
+      planDesign({ kind: 'ring', archetype: 'custom', title: 't', summary: 's', stones })
+    const bare = ring([])
+    expect(bare.design.order.map((id) => bare.design.nodes[id]!.kind)).toEqual(['ringShank'])
+    const toi = ring([{ role: 'center', cut: 'pear', widthMm: 6 }])
+    expect(toi.design.nodes.center?.kind).toBe('gem')
+    expect(toi.design.nodes.head?.kind).toBe('setting')
+    expect(toi.notes.join(' ')).not.toMatch(/no recipe/)
+    expect(buildDesign(pendant({ archetype: 'custom' })).order).toEqual([])
+  })
+
   it('sets a tennis line from its accent stones', () => {
     const d = buildDesign({
       kind: 'bracelet',

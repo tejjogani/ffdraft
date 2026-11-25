@@ -366,6 +366,19 @@ describe('bail', () => {
     expect(light.diagnostics.map((d) => d.code)).not.toContain('body.heavy')
   }, 60_000)
 
+  it('gives a hidden slot its own depth: short enough to stay above an A’s counter', async () => {
+    // A 3 mm tennis line is 3.0 high and 3.7 deep. With the slot's depth tied to 0.6 of its
+    // height, passing that depth took a 10 mm slot that showed through the A from the front.
+    const design = applyOps(template('iced-initial'), [
+      { t: 'update', id: 'bail', patch: { opening: 5.5, depth: 6 } },
+    ]).design
+    const e = await kernel.evaluate(design, { detail: 'production' })
+    const codes = e.diagnostics.filter((d) => d.level !== 'info').map((d) => d.code)
+    expect(codes).not.toContain('bail.small')
+    expect(codes).not.toContain('bail.showsThrough')
+    expect(codes).not.toContain('chain.clash')
+  }, 60_000)
+
   it('hangs a hidden bail from the top rim of a scooped-out back', async () => {
     // The trophy hollowed with an open back: no back plate, but the cup's rim runs along the top.
     const e = await kernel.evaluate(

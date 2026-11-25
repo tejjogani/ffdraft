@@ -739,8 +739,9 @@ export function planDesign(input: PieceSpecInput): RecipeResult {
       `There is no recipe for a ${kind} built as ${a}, so the design starts empty; pick an archetype made for a ${kind} (${RECIPES[kind].join(', ')}).`,
     )
     nodes = []
-  } else if (a === 'custom') nodes = []
-  else if (kind === 'ring') nodes = ring(spec, notes)
+  } else if (kind === 'ring') nodes = ring(spec, notes)
+  // Only the ring recipe has a custom form (a band to build on); other custom pieces start empty.
+  else if (a === 'custom') nodes = []
   else if (a === 'studs' || kind === 'earrings') nodes = studs(spec)
   else if (a === 'tennis' || a === 'cuban' || kind === 'chain' || kind === 'bracelet')
     nodes = [chainNode(spec, notes)]

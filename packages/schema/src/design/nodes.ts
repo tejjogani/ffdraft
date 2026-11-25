@@ -557,6 +557,22 @@ export const Bail = z
     opening: mm('Opening', 1.5, 20, 4.5, {
       description: 'Clear inner height — must pass the chain end.',
     }),
+    // A chain lies flat behind a piece: its width wants the slot's height, its depth (a tennis
+    // line is deeper than wide) the slot's depth. Tied to the height, the slot of a 3 mm tennis
+    // line stood 10 mm tall and showed through the counter of an A.
+    depth: z
+      .number()
+      .min(1)
+      .max(12)
+      .optional()
+      .meta({
+        title: 'Slot depth',
+        unit: 'mm',
+        step: 0.05,
+        when: { style: ['hidden'] },
+        description:
+          'Clear depth of a hidden slot, front to back: must pass the chain’s depth. Auto: 0.6 × the opening.',
+      }),
     width: mm('Width', 0.8, 15, 3),
     wire: mm('Wire', 0.5, 4, 1.1),
   })

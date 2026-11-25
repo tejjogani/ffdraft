@@ -28,13 +28,25 @@ import type { Camera, Evaluate, FitInput, FitParam, FitResult, Prepared, Stats }
 export const OBSERVE_THRESHOLD = 0.0015
 export const NUDGE = 0.1
 /**
- * A change whose loss rise is under `HIDE_FRACTION` of the residual is taken to be hidden by it.
- * With a quadratic loss, the change that could hide is nudge · √(HIDE_FRACTION · residual / rise).
- * Calibrated on the synthetic benchmark only; unverified on photos.
+ * A change whose loss rise is under `HIDE_FRACTION` of the residual is taken to be hidden by it
+ * (see `hiddenChange`). Calibrated on the synthetic benchmark only; unverified on photos.
  */
 export const HIDE_FRACTION = 0.5
 /** A number whose hidden change exceeds min(this, a quarter of its band) is weak. Field units (mm). */
 export const TOLERANCE = 0.5
+
+/**
+ * How far a number could move while its loss rise stays under `HIDE_FRACTION · noise`, from one
+ * probe: a nudge of `nudged` that raised the loss by `rise`. Within the probe a quadratic well is
+ * assumed (√q of the nudge). Beyond it the probe says nothing about curvature: a convex loss is
+ * only guaranteed to keep rising linearly, so the bound grows with q itself. Extrapolating the
+ * quadratic there let a few aliased claw pixels on a top view vouch for a head height 1.65 mm off.
+ */
+export function hiddenChange(nudged: number, rise: number, noise: number): number {
+  if (!(rise > 0)) return Infinity
+  const q = (HIDE_FRACTION * noise) / rise
+  return nudged * Math.max(Math.sqrt(q), q)
+}
 
 function changedFraction(a: Uint8Array, b: Uint8Array): number {
   let changed = 0
@@ -119,7 +131,7 @@ export async function observability(r: FitResult, i: FitInput): Promise<FitResul
       }
       if (!Number.isFinite(rise)) continue
       st.sensitivity = rise
-      st.uncertainty = rise > 0 ? nudged * Math.sqrt((HIDE_FRACTION * noise) / rise) : Infinity
+      st.uncertainty = hiddenChange(nudged, rise, noise)
       const tolerance = Math.min(TOLERANCE, 0.25 * (p.max - p.min))
       const status =
         changed < OBSERVE_THRESHOLD ? 'assumed' : st.uncertainty > tolerance ? 'weak' : null
