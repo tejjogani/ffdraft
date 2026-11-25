@@ -1,7 +1,7 @@
 /**
  * The selected shot as a viewfinder: drawn live from the same resolved scene Blender renders,
  * and framed by hand. Orbit, pan, come closer and roll with mouse, trackpad, touch or keys
- * (see viewfinder.ts; the wheel reads mouse and trackpad as the CAD view does); each gesture is saved as one change to the shot (a custom camera:
+ * (see viewfinder-gestures.ts; the wheel reads mouse and trackpad as the CAD view does); each gesture is saved as one change to the shot (a custom camera:
  * position, target, lens and roll), which Undo takes back. While a gesture runs only the camera
  * moves; on release the whole scene is resolved again, so the picture then is exactly the take.
  *
@@ -37,7 +37,7 @@ import {
   type Touch2,
   touchOf,
   wheel,
-} from './viewfinder'
+} from './viewfinder-gestures'
 
 /** A wheel or key burst is one change: saved once nothing has moved for this long. */
 const SETTLE_MS = 450
