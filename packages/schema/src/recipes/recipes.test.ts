@@ -322,15 +322,15 @@ describe('recipes', () => {
         ).style,
       ).toBe('tube')
     // The slot's hole lands well inside the body's top third, where bail.hiddenLow is quiet.
-    for (const t of ['iced-trophy', 'iced-initial']) {
-      const spec = TEMPLATES.find((x) => x.id === t)!.spec
-      const b = bail(spec)
-      expect(b.style).toBe('hidden')
-      expect(1.5 * b.wire + b.opening / 2).toBeLessThanOrEqual(0.3 * spec.body!.heightMm)
-    }
+    const trophy = TEMPLATES.find((x) => x.id === 'iced-trophy')!.spec
+    const b = bail(trophy)
+    expect(b.style).toBe('hidden')
+    expect(1.5 * b.wire + b.opening / 2).toBeLessThanOrEqual(0.3 * trophy.body!.heightMm)
+    // The iced initial's A would show the slot through its counter: a tube on top.
+    expect(bail(TEMPLATES.find((x) => x.id === 'iced-initial')!.spec).style).toBe('tube')
   })
 
-  it('hides a bail only under a sculpt or a single letter, never under a word', () => {
+  it('hides a bail only under a sculpt, never under a letter or a word', () => {
     const bail = (spec: PieceSpecInput) => buildDesign(spec).nodes.bail as NodeOf<'bail'>
     const pave = [{ role: 'pave' as const, widthMm: 1.1 }]
     // A word's top over its centre of mass is a lowercase letter or the dip between letters,
@@ -350,11 +350,13 @@ describe('recipes', () => {
         ).style,
       ).not.toBe('hidden')
     }
-    // One letter has metal across its top: hidden, when tall enough.
-    expect(
-      bail(pendant({ archetype: 'icedPendant', body: { heightMm: 32, text: 'A' }, stones: pave }))
-        .style,
-    ).toBe('hidden')
+    // One letter is open where a slot hangs, at its counter (A, O, R) or between its strokes
+    // (M, V, W): behind a 32 mm block letter the kernel saw the slot from the front on all but T.
+    for (const text of ['A', 'M', 'O'])
+      expect(
+        bail(pendant({ archetype: 'icedPendant', body: { heightMm: 32, text }, stones: pave }))
+          .style,
+      ).not.toBe('hidden')
     // A sculpt is hidden from the size whose neck takes a strap up to the size whose open back
     // a strap still spans; outside that, a bail on top.
     const trophy = (heightMm: number) =>

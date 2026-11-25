@@ -324,13 +324,17 @@ const CHOICES: Partial<Record<RecipeParam, Choice>> = {
   'bail.style': {
     // The kernel's loop hole is a narrow teardrop (twice the link to pass a chain): a ring on
     // fine round chain, a tube on everything heavier (09 §2 "Bail and chain"), and behind a
-    // flooded front a hidden bail, which leaves its top stones clear.
+    // flooded sculpt or plate a hidden bail, which leaves its top stones clear.
     ruleId: 'bail.chainStyle',
     pick: (f, n, { design }) => {
       if (n.kind !== 'bail' || f.chainW === undefined) return undefined
-      // A bail on top covers the top stones of a flooded front: hang it behind instead.
+      const host = n.host ? design.nodes[n.host] : undefined
       const iced = Object.values(design.nodes).some((p) => p?.kind === 'pave' && p.host === n.host)
-      if (iced) return 'hidden'
+      // A letter is open where a slot hangs: its counter (A, O, R) or the gaps between its
+      // strokes (M, V, W). Behind a 32 mm block letter the kernel saw the slot from the front on
+      // all but T, so a letter hangs from a bail on top, which clears its top stones too.
+      const text = host?.kind === 'vectorBody' && host.source.type === 'text'
+      if (iced && !text) return 'hidden'
       return f.chainW <= 2 && !f.flatLink && !f.tennis ? 'ring' : 'tube'
     },
   },

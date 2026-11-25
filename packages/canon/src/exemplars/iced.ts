@@ -38,7 +38,7 @@ export const ICED = [
     why: [
       'Micro tier: 1.0 mm melee reads as ice at 32 mm.',
       'A 0.85 mm polished rim draws the letter.',
-      'A hidden bail behind the ice, its slot sized for the 3.4 mm tennis links as the kernel measures it.',
+      'A tube bail on top, sized for the 3.4 mm tennis links: a hidden slot would show through the A’s counter.',
     ],
     antiTwin: {
       ops: [{ t: 'update', id: 'ice', patch: { sizeMax: 1.6 } }],

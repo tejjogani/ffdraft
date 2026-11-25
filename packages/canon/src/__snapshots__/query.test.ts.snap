@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`canonFor > renders stable, compact prompt text 1`] = `
-"# Canon canon-1ad1af4f8ce4b3 · ring/halo/0e1e868e5c73a7
+"# Canon canon-0c328ef9254504 · ring/halo/09106731a108e2
 ## Rules (typical [band]; warnings give the reason)
 - halo.clawWire (setting.prongDiameter) 0.8 [0.8–1.1]: Claws inside a halo
 - halo.outline (haloOutline) 1.5 [1.4–1.6]: A single halo should take the face to 1.4–1.6× the centre; past 1.7× it reads as a tyre, not a frame.
@@ -59,7 +59,7 @@ exports[`canonFor > renders stable, compact prompt text 1`] = `
 `;
 
 exports[`canonFor > renders stable, compact prompt text 2`] = `
-"# Canon canon-1ad1af4f8ce4b3 · pendant/icedPendant/181efeaa597c71
+"# Canon canon-0c328ef9254504 · pendant/icedPendant/1f9edaba260808
 ## Rules (typical [band]; warnings give the reason)
 - iced.thickness (vectorBody.thickness) 3.26 [2.5–4.07]: Iced pieces need depth for seats and presence: about 1.5 + 0.055 × height, 3.2 mm at 30, 5.6 at 75.
 - iced.sizeMax (pave.sizeMax) 1 [0.8–1.3]: The largest stone is the bulk of the ice: 2 % of the height, 1.0–1.2 on a micro piece, 1.5–2.0 on XL. Big melee looks coarse.
@@ -79,6 +79,7 @@ exports[`canonFor > renders stable, compact prompt text 2`] = `
 - chain.cubanToPendant (chain.linkWidth) 3.84 [2.56–5.12]: Cuban width for the pendant
 - chain.massToPendant (chainToPendantMass) 1 [0.5–1.5]: Chain weight against the pendant
 - iced.margin (pave.margin) 0.4 [0.4–0.5]: Margin inside a rim
+- bail.heightRatio (bailRatio) 0.18 [0.15–0.22]: Bail to pendant
 - chain.cuban.wire (chain.wire) 1.04 [0.88–1.2]: Cuban wire
 - iced.envelope (bodyHeight) 51 [0–70]: Caster envelope
 - chain.mensLength (chain.length) 559 [508–762]: Men's chain length
@@ -95,7 +96,7 @@ Don't: Leave a hip-hop piece at default scale (22 mm). Partial ice levels on a f
 - vectorBody.border clamp(0.85·paveMax, 0.6, 3) [0.6–3]
 - chain.linkWidth 0.12·H [0.08·H–0.16·H]: Cuban or curb
 ## Exemplars
-- iced-micro-initial, Iced initial on a tennis chain (icedPendant, delicate; iced out, hip hop): metal au14k-white, H 32, T 3.25, paveMax 1, border 0.85, chainW 3.4, opening 10.85
+- iced-micro-initial, Iced initial on a tennis chain (icedPendant, delicate; iced out, hip hop): metal au14k-white, H 32, T 3.25, paveMax 1, border 0.85, chainW 3.4, opening 7.85
   Why: Micro tier: 1.0 mm melee reads as ice at 32 mm. A 0.85 mm polished rim draws the letter. A hidden bail behind the ice, its slot sized for the 3.4 mm tennis links as the kernel measures it. Bad twin: Coarse stones on a small piece.
 - iced-sculpted-trophy, Flooded trophy sculpt (icedPendant, classic; iced out, hip hop): metal au14k-yellow, H 45, paveMax 1, chainW 6, opening 9.2
   Why: Hollowed to a 1.5 mm wall and sliced half flat: about 50 g of body, not a 136 g solid lump. Every face flooded with 1.0 mm stones kept 0.6 mm in from each edge. A 6 mm Cuban carries 45 mm on a hidden bail behind the ice. Bad twin: A half-iced field with bare edges.
@@ -121,7 +122,7 @@ Don't: Leave a hip-hop piece at default scale (22 mm). Partial ice levels on a f
 `;
 
 exports[`canonFor > renders stable, compact prompt text 3`] = `
-"Canon canon-1ad1af4f8ce4b3 · ring/solitaire/14869b871fe9d8
+"Canon canon-0c328ef9254504 · ring/solitaire/153ba814877fa7
 Rules: ring.solitaire.bandWidth, ring.solitaire.narrowBandDepth, ring.solitaire.elevation, ring.solitaire.tableHeight, ring.head.prongWire, ring.head.basketRails, ring.head.pointsCovered, ring.solitaire.widthBottom, ring.solitaire.thicknessTop, ring.head.clawSymmetry, ring.head.prongCoverage, ring.head.taper, ring.scale.headToFinger, stones.oneHero, ring.solitaire.thicknessBottom, ring.head.prongCountRound, ring.head.clawPosition, ring.base.euro, stones.softInPave, metals.colours, metals.finishes, rows.coverage, ring.scale.stoneToFinger, stones.meleeColour, metals.tipFamily, iced.levels, stones.whiteHead
 Styles: none
 Exemplars: sol-classic-round, sol-minimal-bezel, sol-edwardian-six-claw"

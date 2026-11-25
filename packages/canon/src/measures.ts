@@ -420,10 +420,14 @@ export const MEASURES: Record<string, Measure> = {
 
   pendantDepth: ({ summary, facts, design }) => {
     // Pendants face −Y and the chain drapes in XZ, so the summary's Y extent is the body depth,
-    // plus a hidden bail standing off the back (kernel bail: 0.45 × opening, 1.2 at least, + wire).
+    // plus a hidden bail standing off the back. The kernel's slot is 0.6 × opening deep, clear,
+    // its front run a wire thick, and its back run stands proud of the back by its rounded edge
+    // (0.3 of the thinner of wire and width); the old 0.45 read a 45 mm trophy 2 mm too deep.
     if (!summary || facts.H === undefined) return undefined
     const hidden = ofKind(design, 'bail').find((b) => b.style === 'hidden' && b.visible)
-    const off = hidden ? Math.max(0.45 * hidden.opening, 1.2) + hidden.wire : 0
+    const off = hidden
+      ? 0.6 * hidden.opening + hidden.wire + 0.3 * Math.min(hidden.wire, hidden.width)
+      : 0
     return { value: summary.boundsMm.y - off }
   },
 

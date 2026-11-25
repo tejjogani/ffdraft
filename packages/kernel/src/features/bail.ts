@@ -83,10 +83,6 @@ const STRAP_SHARES = [0.85, 0.5]
  */
 const JOINT_WIRES = 1
 
-/** Clear depth of a hidden slot, front to back: its own, or 0.6 of its opening on older designs. */
-export const hiddenDepth = (node: Pick<BailNode, 'opening' | 'depth'>) =>
-  node.depth ?? 0.6 * node.opening
-
 const sinkFor = (wire: number) => Math.max(SINK, SINK_PER_WIRE * wire)
 
 /** Band of the given section carried round a path in the YZ plane; `x` is the band's width axis. */
@@ -154,10 +150,9 @@ function build(
     case 'hidden': {
       // A closed flat loop standing off the back of the piece: its back run lies in the host's
       // back (so the joint is a full lap and the slot is closed for the chain check), its front
-      // run stands behind. The slot is `opening` high and `depth` deep, clear (0.6 of the height
-      // when unset): a chain lies flat behind a piece, so its depth, not its width, sets how far
-      // the slot stands off, and every millimetre of stand-off holds the piece off the chest.
-      const depth = hiddenDepth(node) + wire
+      // run stands behind. The slot is `opening` high and 0.6 of that deep, clear: a chain lies
+      // flat behind a piece, and every millimetre of stand-off holds the piece off the chest.
+      const depth = 0.6 * opening + wire
       const height = opening + wire
       const place = stand.hidden(height)
       const { x, zc } = place
@@ -863,14 +858,16 @@ function jointVolume(solids: readonly Solid[], host: readonly Solid[]): number {
 }
 
 /**
- * Share of a hidden bail seen from the front through the host (a letter's counter, a pierced
- * plate): rays straight back across the bail's outline that meet its metal before the host's.
+ * Share of a hidden bail seen from the front through an opening (a letter's counter, a pierced
+ * plate): rays straight back across the bail's outline that meet its metal before any of the
+ * piece's (`cover`: every body of the piece, not only the bail's host, since a plug standing in
+ * a pierced plate hides the bail as well as the plate does).
  */
-function seenThrough(solids: readonly Solid[], host: readonly Solid[]): number {
+export function seenThrough(solids: readonly Solid[], cover: readonly Solid[]): number {
   const box = unionBounds(solids.map((s) => s.bounds()))
-  const all = unionBounds([...solids, ...host].map((s) => s.bounds()))
+  const all = unionBounds([...solids, ...cover].map((s) => s.bounds()))
   const bailMeshes = solids.map((s) => s.manifold(QUALITY.draft))
-  const hostMeshes = host.map((s) => s.manifold(QUALITY.draft))
+  const hostMeshes = cover.map((s) => s.manifold(QUALITY.draft))
   const front = all.min[1] - 1
   const back = all.max[1] + 1
   const N = 12
@@ -910,23 +907,8 @@ export const bail = defineFeature('bail', (node, ctx) => {
       })
     }
   }
-  if (host && supported && node.style === 'hidden') {
-    // A hidden bail that shows through a hole in the piece (the counter of an A) is not hidden.
-    const seen = seenThrough(
-      solids,
-      host.bodies.map((b) => b.solid),
-    )
-    if (seen > 0.02)
-      ctx.report({
-        level: 'warning',
-        code: 'bail.showsThrough',
-        message:
-          'The hidden bail shows from the front through an opening in the piece. Make the bail’s opening smaller, or use a bail on top.',
-        at: [...opening],
-        value: seen,
-        limit: 0.02,
-      })
-  }
+  // Whether a hidden bail shows through an opening is judged against the whole piece, which
+  // only the scene has (dfm/bails.ts).
   // How much of the loop is cast into the piece. Over an open back held at the ends of its back
   // run only (a small scooped trophy whose neck is too thin for a strap) it was a fifth of a
   // wire's length of the run, with nothing said.

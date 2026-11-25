@@ -7,6 +7,7 @@
 import type { Scene } from '../core'
 import { isRuntimeFault } from '../runtime/index'
 import type { Diagnostic } from '../types'
+import { bailChecks } from './bails'
 import { chainChecks } from './chains'
 import { connectivityChecks } from './connectivity'
 import { copyChecks } from './copies'
@@ -24,6 +25,7 @@ export { DEFAULT_PROFILE, type DfmProfile, profileWith } from './profile'
 const CHECKS: Record<string, (scene: Scene, profile: DfmProfile) => Diagnostic[]> = {
   sizes: sizeChecks,
   chains: chainChecks,
+  bails: bailChecks,
   groups: groupChecks,
   connectivity: connectivityChecks,
   cuts: cutChecks,

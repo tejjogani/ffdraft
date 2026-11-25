@@ -15,7 +15,7 @@ import { FLAG_PHRASES } from './words'
  * Bump by hand when code changes what the canon says without changing its data: measures,
  * facts, the suggestion passes, lint fixes, slice ranking, prompt layout.
  */
-export const ENGINE_REV = 2
+export const ENGINE_REV = 3
 
 /** cyrb53: a small, fast, well-distributed 53-bit string hash, isomorphic and deterministic. */
 export function hash(s: string): string {

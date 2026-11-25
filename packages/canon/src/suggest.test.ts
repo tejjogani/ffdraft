@@ -2,6 +2,7 @@ import {
   applyOps,
   buildDesign,
   type Design,
+  type NodeOf,
   type PieceSpecInput,
   PieceSpecSchema,
   TEMPLATES,
@@ -129,7 +130,8 @@ describe('lintDesign on bad designs', () => {
       archetype: 'icedPendant',
       title: 'test',
       summary: '',
-      body: { heightMm: 50, text: 'A' },
+      // A sculpt: a letter now hangs from a bail on top (a hidden slot shows through it).
+      body: { heightMm: 50 },
       chain: { style: 'cuban', lengthMm: 559, widthMm: 8 },
     }
     const { design } = suggestDesign(spec)
@@ -382,10 +384,41 @@ describe('iced sculpts and bails', () => {
     expect(lintDesign(design, undefined, { spec: iced() })).toEqual([])
   })
 
+  it('reads a pendant’s depth without its hidden bail, as the kernel builds the slot', () => {
+    // The kernel's slot stands 0.6 × opening + wire off the back, plus its rounded edge
+    // (0.3 × the thinner of wire and width). Read at 0.45 × opening, the 45 mm iced trophy
+    // template's 13.4 mm body came out at 16.2 mm, past the 15.75 lint.
+    const spec = TEMPLATES.find((t) => t.id === 'iced-trophy')!.spec
+    const { design } = suggestDesign(spec)
+    const b = design.nodes.bail as NodeOf<'bail'>
+    expect(b.style).toBe('hidden')
+    const off = 0.6 * b.opening + b.wire + 0.3 * Math.min(b.wire, b.width)
+    const body = 13.4
+    const f = lintDesign(design, summary(40, body + off + 4), { spec }).find(
+      (x) => x.ruleId === 'iced.depth',
+    )
+    expect(f?.value).toBeCloseTo(body + 4, 6)
+    expect(lintDesign(design, summary(40, body + off), { spec }).map((x) => x.ruleId)).not.toContain(
+      'iced.depth',
+    )
+  })
+
+  it('hangs an iced letter from a bail on top: a hidden slot shows through its counters and gaps', () => {
+    // On the kernel a hidden slot behind a 32 mm block letter on a 3 mm tennis line showed from
+    // the front through A, B, O, P, R, D, Q, 8, M, H, K, V, W (0.19 to 0.69 of it); only T hid it.
+    const spec = TEMPLATES.find((t) => t.id === 'iced-initial')!.spec
+    const { design } = suggestDesign(spec)
+    expect(design.nodes.bail).toMatchObject({ style: 'tube' })
+    expect(lintDesign(design, undefined, { spec })).toEqual([])
+    // A sculpt still hangs behind its ice.
+    expect(suggestDesign(iced()).design.nodes.bail).toMatchObject({ style: 'hidden' })
+  })
+
   it('flags a solid lump and a pendant that stands off the chest', () => {
     const { design } = suggestDesign(iced())
     // A 60 mm sculpt at 322 g with the 8 mm Cuban (about 92 g) left on: about 230 g of body.
-    const ids = lintDesign(design, summary(322, 30), { spec: iced() }).map((f) => f.ruleId)
+    // 32 mm deep overall, less the hidden slot's 9.1 mm: a 22.9 mm body, past the 21 mm lint.
+    const ids = lintDesign(design, summary(322, 32), { spec: iced() }).map((f) => f.ruleId)
     expect(ids).toEqual(expect.arrayContaining(['iced.mass', 'iced.depth']))
     expect(lintDesign(design, summary(150, 15), { spec: iced() })).toEqual([])
   })

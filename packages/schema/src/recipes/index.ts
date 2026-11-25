@@ -403,17 +403,15 @@ const HIDDEN_MIN = 25
 
 /**
  * Whether a hidden bail suits this body at all, before its size is checked. A sculpted body has
- * metal across its top to hide a loop under. Text does only when it is one letter: across a
- * word the top is the dip between letters or a lowercase letter, far under the body's height,
- * so a slot sized from the height sat at the centre of mass (bail.hiddenLow on iced names and
- * on BOSS, bail.unsupported on Tej).
+ * metal across its top to hide a loop under. Text never does: across a word the top is the dip
+ * between letters or a lowercase letter, so a slot sized from the height sat at the centre of
+ * mass (bail.hiddenLow on iced names and on BOSS, bail.unsupported on Tej); and one letter is
+ * open where the slot hangs, at its counter (A, O, R) or between its strokes (M, V, W), so the
+ * slot shows from the front (bail.showsThrough on all but T of 15 block letters at 32 mm).
  */
 function hiddenFits(body: NodeInput | undefined): boolean {
-  if (!body) return false
-  if (body.kind === 'meshBody')
-    return (body.height ?? 0) >= HIDDEN_MIN && (body.height ?? 0) <= HIDDEN_MAX
-  if (body.kind !== 'vectorBody' || body.source?.type !== 'text') return false
-  return Array.from((body.source.text ?? '').trim()).length === 1
+  if (body?.kind !== 'meshBody') return false
+  return (body.height ?? 0) >= HIDDEN_MIN && (body.height ?? 0) <= HIDDEN_MAX
 }
 
 /** The largest pavé stone: the spec's, or 1.3 mm, which a 1.25 mm wall seats. */
@@ -433,10 +431,10 @@ const tennisDepth = (w: number) => Math.max(1.25 * w, w + 1.15)
  * 1.15 × width + 2, box chain its diagonal, a tennis chain the diagonal of its deeper section.
  * A ring on fine round chain, a tube on everything heavier. Behind a paved body a hidden bail
  * keeps the top stones clear (canon `bail.chainStyle`), but only on a body that has metal across
- * its top to hide it under (a sculpt, or a single letter: see hiddenFits) and is tall enough to
- * hide it high up: a hidden slot whose hole falls out of the body's top third tips the piece
- * forward (the kernel's bail.hiddenLow), so a small iced piece, a name, and any setting get a
- * bail on top.
+ * its top to hide it under (a sculpt: see hiddenFits) and is tall enough to hide it high up:
+ * a hidden slot whose hole falls out of the body's top third tips the piece forward (the
+ * kernel's bail.hiddenLow), so a small iced piece, a letter, a name and any setting get a bail
+ * on top.
  * On a body, wire, width and opening grow with the piece, as the canon's `bail.wire` and
  * `bail.opening` rules do, so a heavy piece is not hung on a fine wire.
  */

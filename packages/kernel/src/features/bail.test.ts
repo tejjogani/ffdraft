@@ -45,7 +45,8 @@ describe('bail', () => {
 
   // Recipe pendants beyond the templates: a halo pendant (its bail on the halo, not the head),
   // a solitaire with a pavé role (never a hidden bail), an iced letter on a 2 mm tennis line
-  // (the hidden slot takes its depth), and a small iced trophy whose scoop is shallow.
+  // (a tube on top: a hidden slot would show through the letter), and a small iced trophy whose
+  // scoop is shallow.
   const recipe = (archetype: string, chain: [string, number], extra: object) =>
     buildDesign({
       kind: 'pendant',
@@ -366,17 +367,46 @@ describe('bail', () => {
     expect(light.diagnostics.map((d) => d.code)).not.toContain('body.heavy')
   }, 60_000)
 
-  it('gives a hidden slot its own depth: short enough to stay above an A’s counter', async () => {
-    // A 3 mm tennis line is 3.0 high and 3.7 deep. With the slot's depth tied to 0.6 of its
-    // height, passing that depth took a 10 mm slot that showed through the A from the front.
-    const design = applyOps(template('iced-initial'), [
-      { t: 'update', id: 'bail', patch: { opening: 5.5, depth: 6 } },
-    ]).design
-    const e = await kernel.evaluate(design, { detail: 'production' })
-    const codes = e.diagnostics.filter((d) => d.level !== 'info').map((d) => d.code)
-    expect(codes).not.toContain('bail.small')
-    expect(codes).not.toContain('bail.showsThrough')
-    expect(codes).not.toContain('chain.clash')
+  it('counts every body in front of a hidden bail, not only its host, as hiding it', async () => {
+    // A pierced plate with a plug standing in the hole (a two-level initial): the bail hangs on
+    // the plate, and the plug covers it. Read against the plate alone, the hole looked open.
+    const plugged = (plug: boolean) =>
+      designFrom('pendant', [
+        {
+          id: 'base',
+          kind: 'vectorBody',
+          source: { type: 'shape', shape: 'shield' },
+          height: 40,
+          thickness: 3,
+        },
+        {
+          id: 'cutter',
+          kind: 'vectorBody',
+          source: { type: 'shape', shape: 'circle' },
+          height: 12,
+          thickness: 8,
+          transform: { position: [0, 2, 8], rotation: [0, 0, 0], scale: 0.98 },
+        },
+        { id: 'field', kind: 'boolean', op: 'subtract', target: 'base', tools: ['cutter'] },
+        ...(plug
+          ? [
+              {
+                id: 'plug',
+                kind: 'vectorBody',
+                source: { type: 'shape', shape: 'circle' },
+                height: 12,
+                thickness: 3,
+                transform: { position: [0, 0, 8], rotation: [0, 0, 0], scale: 1 },
+              } as NodeInput,
+            ]
+          : []),
+        { id: 'bail', kind: 'bail', host: 'field', style: 'hidden', opening: 6, width: 4, wire: 1.4 },
+      ])
+    const codes = async (plug: boolean) =>
+      (await kernel.evaluate(plugged(plug))).diagnostics.map((d) => d.code)
+    expect(await codes(true)).not.toContain('bail.showsThrough')
+    // Without the plug the hole is open and the bail shows.
+    expect(await codes(false)).toContain('bail.showsThrough')
   }, 60_000)
 
   it('hangs a hidden bail from the top rim of a scooped-out back', async () => {
