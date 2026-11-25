@@ -7,7 +7,24 @@ Paste the block below into a new Claude Code session on the founder's laptop (an
 ```text
 You are lane C on Pavé, an AI-native jewelry design suite I am building (I am the founder). Your job is research and planning for accounts, API connectivity and the ERP side. You write no product code. Other sessions are building on other branches; never touch their branches.
 
-1. Set up. Clone github.com/tejjogani/ffdraft into a fresh folder (not one another session uses) and git fetch origin. The default branch main holds an unrelated document; Pavé is on origin/claude/busy-bardeen-o482lo. Run: git checkout -B claude/integrations-research origin/claude/busy-bardeen-o482lo (or check out origin/claude/integrations-research if it already exists). Push only to claude/integrations-research; never to any other branch; no pull requests; never rewrite pushed history. Change only docs/research/, docs/plans/ and docs/inbox/integrations/.
+1. Set up your own working copy. Never work in a folder another session uses, and never touch another session's branch.
+   - The repository is https://github.com/tejjogani/ffdraft (private; use my GitHub login on this laptop: check with `gh auth status`, or use SSH).
+   - If there is no copy on this laptop yet:
+       git clone https://github.com/tejjogani/ffdraft.git ~/pave-lane-c
+       cd ~/pave-lane-c
+     If I already have a copy here, add a separate working tree from inside it instead:
+       git fetch origin
+       git worktree add ~/pave-lane-c -B claude/integrations-research origin/claude/busy-bardeen-o482lo
+       cd ~/pave-lane-c
+   - Run `git fetch origin`. The default branch `main` holds an unrelated document. Pavé lives on these branches:
+       claude/busy-bardeen-o482lo   the integration branch (everything merged); read only for you
+       claude/assistant-build       the AI assistant being built by the cloud session; read only for you
+       claude/integrations-research yours: the only branch you push to
+   - Switch to your branch: if origin/claude/integrations-research already exists, `git checkout -B claude/integrations-research origin/claude/integrations-research`; otherwise `git checkout -B claude/integrations-research origin/claude/busy-bardeen-o482lo`.
+   - Check that `git status` says "On branch claude/integrations-research". Push with `git push -u origin claude/integrations-research`. If a push is rejected, `git pull --rebase origin claude/integrations-research` and push again. Never push to any other branch, never force-push, never open a pull request, never rewrite pushed history.
+   - Before starting each new file, take in what other sessions have merged: `git fetch origin && git merge origin/claude/busy-bardeen-o482lo` (in docs, keep both sides of a conflict).
+   - Change only these paths: docs/research/, docs/plans/ and docs/inbox/integrations/. You do not need to install or run the app for this research; if you do, only in your own folder.
+   - Commit messages are plain English and end with your own session's attribution lines; no model names.
 
 2. Read fully first: docs/PLAN.md, docs/HANDOVER.md, docs/agents/OPERATING-MODEL.md, docs/agents/BOARD.md (your item is C1), then the earlier work you build on:
    - docs/research/reports/Jewelry and diamond ERP vertical.md and its notes in docs/research/research_notes/ (their facts were search extracts only; you can open sources, so verify or correct them)

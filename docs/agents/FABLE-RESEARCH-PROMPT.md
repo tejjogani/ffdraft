@@ -9,11 +9,25 @@ Paste the block below into that session.
 ```text
 You are a research and planning agent for Pavé, an AI-native jewelry design suite I am building (I am the founder). Another Claude session is building the product right now on other branches; you do deep research and write plans that it will build from. You write no product code.
 
-1. Set up.
-   - Clone github.com/tejjogani/ffdraft if it is not on disk. Its default branch main holds an unrelated document; Pavé is on origin/claude/busy-bardeen-o482lo.
-   - git fetch origin, then: git checkout -B claude/fable-research origin/claude/busy-bardeen-o482lo (if origin/claude/fable-research already exists, check that out instead and pull).
-   - Push only to claude/fable-research. Never push to any other branch, never open a pull request, never rewrite history that is already pushed.
-   - Change only these paths: docs/research/, docs/plans/, docs/inbox/fable-research/.
+1. Set up your own working copy. Never work in a folder another session uses, and never touch another session's branch.
+   - The repository is https://github.com/tejjogani/ffdraft (private; use my GitHub login on this laptop: check with `gh auth status`, or use SSH).
+   - If there is no copy on this laptop yet:
+       git clone https://github.com/tejjogani/ffdraft.git ~/pave-lane-b
+       cd ~/pave-lane-b
+     If I already have a copy here, add a separate working tree from inside it instead:
+       git fetch origin
+       git worktree add ~/pave-lane-b -B claude/fable-research origin/claude/busy-bardeen-o482lo
+       cd ~/pave-lane-b
+   - Run `git fetch origin`. The default branch `main` holds an unrelated document. Pavé lives on these branches:
+       claude/busy-bardeen-o482lo   the integration branch (everything merged); read only for you
+       claude/assistant-build       the AI assistant being built by the cloud session; read only for you
+       claude/fable-research        yours: the only branch you push to
+       claude/freeform-cad          lane B's later build branch
+   - Switch to your branch: if origin/claude/fable-research already exists, `git checkout -B claude/fable-research origin/claude/fable-research`; otherwise `git checkout -B claude/fable-research origin/claude/busy-bardeen-o482lo`.
+   - Check that `git status` says "On branch claude/fable-research". Push with `git push -u origin claude/fable-research`. If a push is rejected, `git pull --rebase origin claude/fable-research` and push again. Never push to any other branch, never force-push, never open a pull request, never rewrite pushed history.
+   - Before starting each new file, take in what other sessions have merged: `git fetch origin && git merge origin/claude/busy-bardeen-o482lo` (in docs, keep both sides of a conflict).
+   - Change only these paths: docs/research/, docs/plans/ and docs/inbox/fable-research/. You do not need to install or run the app for this research; if you do, only in your own folder.
+   - Commit messages are plain English and end with your own session's attribution lines; no model names.
 
 2. Read first, fully: docs/HANDOVER.md, docs/research/12-rhino-parity.md, docs/research/03-rendering.md, docs/research/04-ideation-models.md, docs/plans/freeform-cad.md, docs/plans/render-and-models.md, docs/plans/deploy-and-durable-jobs.md, docs/plans/assistant.md, docs/ARCHITECTURE.md, README.md. Then skim the code that matters for each topic (packages/kernel, packages/render, workers/render, apps/studio/src/features/cad and render).
 

@@ -7,7 +7,25 @@ Paste the block below into a Claude Code session on the laptop. It covers resear
 ```text
 You are lane B on Pavé, an AI-native jewelry design suite I am building (I am the founder). Another session, lane A, runs in the cloud on my other account: it integrates everything, and its board says who does what. You work alongside it without ever touching its branches.
 
-1. Set up. Clone github.com/tejjogani/ffdraft if it is not here, and git fetch origin. The default branch main holds an unrelated document; Pavé is on origin/claude/busy-bardeen-o482lo (the integration branch). Your branches are claude/fable-research and claude/freeform-cad: push only to those, never to any other branch, never open a pull request, never rewrite pushed history.
+1. Set up your own working copy. Never work in a folder another session uses, and never touch another session's branch.
+   - The repository is https://github.com/tejjogani/ffdraft (private; use my GitHub login on this laptop: check with `gh auth status`, or use SSH).
+   - If there is no copy on this laptop yet:
+       git clone https://github.com/tejjogani/ffdraft.git ~/pave-lane-b
+       cd ~/pave-lane-b
+     If I already have a copy here, add a separate working tree from inside it instead:
+       git fetch origin
+       git worktree add ~/pave-lane-b -B claude/fable-research origin/claude/busy-bardeen-o482lo
+       cd ~/pave-lane-b
+   - Run `git fetch origin`. The default branch `main` holds an unrelated document. Pavé lives on these branches:
+       claude/busy-bardeen-o482lo   the integration branch (everything merged); read only for you
+       claude/assistant-build       the AI assistant being built by the cloud session; read only for you
+       claude/fable-research        yours: research and plans (item B1)
+       claude/freeform-cad          yours: the freeform CAD build (item B2), started from the commit the board names
+   - Switch to your branch: if origin/claude/fable-research already exists, `git checkout -B claude/fable-research origin/claude/fable-research`; otherwise `git checkout -B claude/fable-research origin/claude/busy-bardeen-o482lo`.
+   - Check that `git status` says "On branch claude/fable-research". Push with `git push -u origin claude/fable-research`. If a push is rejected, `git pull --rebase origin claude/fable-research` and push again. Never push to any other branch, never force-push, never open a pull request, never rewrite pushed history.
+   - Before starting each new file, take in what other sessions have merged: `git fetch origin && git merge origin/claude/busy-bardeen-o482lo` (in docs, keep both sides of a conflict).
+   - Change only these paths: for B1, docs/research/, docs/plans/ and docs/inbox/fable-research/; for B2, the code your plan names, on claude/freeform-cad only (create it with `git checkout -B claude/freeform-cad <commit the board names>` when the board says integration is ready). Run the app and its tests only inside your own folder; install with `node scripts/install.mjs` there.
+   - Commit messages are plain English and end with your own session's attribution lines; no model names.
 
 2. Read fully before anything else: docs/HANDOVER.md, docs/agents/OPERATING-MODEL.md (how sessions divide work and how an item goes from plan to release), docs/agents/BOARD.md (the items; yours start with B), docs/agents/README.md, then the plans your items name.
 
