@@ -86,6 +86,149 @@ describe('http surface', () => {
     expect(empty.status).toBe(200)
   })
 
+  it('refuses a command body no valid input could need', async () => {
+    const send = (body: string) =>
+      server.app.request('/api/rpc/pieces.list', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+      })
+    const huge = await send(JSON.stringify({ q: 'ring', pad: 'x'.repeat(64 * 1024 * 1024) }))
+    expect(huge.status).toBe(413)
+    expect(await huge.json()).toMatchObject({ error: { code: 'payload_too_large' } })
+    // A large but plausible body (a design with long paths) is still read.
+    expect((await send(JSON.stringify({ q: 'ring', pad: 'x'.repeat(1024 * 1024) }))).status).toBe(
+      200,
+    )
+  })
+
+  // Local mode has no sign-in, so a browser on any website can reach it. A POST with no body, or
+  // a multipart upload, needs no CORS preflight: only the Origin header tells them apart.
+  it('refuses writes sent by a page of another website', async () => {
+    const api = client(server)
+    const upload = (headers: Record<string, string>, url = '/api/assets') => {
+      const form = new FormData()
+      form.set('file', new File([new TextEncoder().encode('hello')], 'note.txt'))
+      return server.app.request(url, { method: 'POST', body: form, headers })
+    }
+    const pieces = async () => (await api.call('pieces.list', {})).length
+    const before = await pieces()
+
+    const command = await server.app.request('/api/rpc/pieces.create', {
+      method: 'POST',
+      headers: { origin: 'https://evil.example', 'content-type': 'text/plain' },
+    })
+    expect(command.status).toBe(403)
+    expect(await command.json()).toMatchObject({ error: { code: 'forbidden' } })
+    expect(await pieces()).toBe(before)
+    expect((await upload({ origin: 'https://evil.example' })).status).toBe(403)
+    expect((await upload({ origin: 'null' })).status).toBe(403)
+
+    // The studio served by this server, the configured dev origin, the public URL, and callers
+    // that are not browsers (no Origin at all) are let through.
+    expect((await upload({})).status).toBe(201)
+    expect((await upload({ origin: 'http://localhost:5173' })).status).toBe(201)
+    expect((await upload({ origin: 'http://localhost:8787' })).status).toBe(201)
+    expect(
+      (await upload({ origin: 'http://127.0.0.1:9999' }, 'http://127.0.0.1:9999/api/assets'))
+        .status,
+    ).toBe(201)
+    // Reads are not writes: CORS already keeps their answers from other sites.
+    const read = await server.app.request('/api/rpc/collections.list', {
+      method: 'OPTIONS',
+      headers: { origin: 'https://evil.example', 'access-control-request-method': 'POST' },
+    })
+    expect(read.status).toBeLessThan(400)
+    expect(read.headers.get('access-control-allow-origin')).toBeNull()
+  })
+
+  it('a name that only looks like this computer is refused (local mode)', async () => {
+    const post = (url: string) =>
+      server.app.request(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      })
+    const refused = await post('http://localhost.attacker.example/api/rpc/pieces.list')
+    expect(refused.status).toBe(403)
+    expect(await refused.json()).toMatchObject({ error: { code: 'forbidden' } })
+    expect((await post('http://127.0.0.1.attacker.example/api/rpc/pieces.list')).status).toBe(403)
+  })
+
+  it('answers to loopback names, whatever the port (local mode)', async () => {
+    for (const base of [
+      'http://localhost:8787',
+      'http://localhost:5173',
+      'http://127.0.0.1:8787',
+      'http://[::1]:8787',
+      'http://pave.localhost:8787',
+      'http://LOCALHOST:8787',
+    ]) {
+      const res = await server.app.request(`${base}/api/rpc/pieces.list`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      })
+      expect(res.status, base).toBe(200)
+    }
+  })
+
+  it('answers to the names it was given: PAVE_ALLOWED_HOSTS, the public URL and HOST', async () => {
+    const lan = await testServer({
+      config: {
+        host: '192.168.1.20',
+        publicUrl: 'http://studio.example:8787',
+        allowedHosts: ['bench-mac.local', '10.0.0.7'],
+      },
+    })
+    try {
+      const list = (base: string) =>
+        lan.app.request(`${base}/api/rpc/pieces.list`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        })
+      for (const base of [
+        'http://bench-mac.local:8787',
+        'http://10.0.0.7:8787',
+        'http://studio.example:8787',
+        'http://192.168.1.20:8787',
+        'http://localhost:8787',
+      ])
+        expect((await list(base)).status, base).toBe(200)
+      // Behind a TLS proxy the scheme differs while the host is the same: still this server.
+      const form = new FormData()
+      form.set('file', new File([new TextEncoder().encode('hello')], 'note.txt'))
+      const viaProxy = await lan.app.request('http://bench-mac.local/api/assets', {
+        method: 'POST',
+        body: form,
+        headers: { origin: 'https://bench-mac.local' },
+      })
+      expect(viaProxy.status).toBe(201)
+      const refused = await list('http://192.168.1.99:8787')
+      expect(refused.status).toBe(403)
+      expect(((await refused.json()) as { error: { message: string } }).error.message).toContain(
+        'PAVE_ALLOWED_HOSTS',
+      )
+    } finally {
+      await lan.dispose()
+    }
+  })
+
+  it('listening on every address adds no name by itself (local mode)', async () => {
+    const open = await testServer({ config: { host: '0.0.0.0' } })
+    try {
+      const res = await open.app.request('http://192.168.1.20:8787/api/rpc/pieces.list', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      })
+      expect(res.status).toBe(403)
+    } finally {
+      await open.dispose()
+    }
+  })
+
   it('streams org events over SSE', async () => {
     const api = client(server)
     const abort = new AbortController()

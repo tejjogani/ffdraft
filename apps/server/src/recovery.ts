@@ -236,8 +236,20 @@ async function resumeOne(ctx: Ctx, item: Unfinished): Promise<void> {
       const assistant = services.optional('assistant')
       const row = await ctx.repo.runs.first(eq(t.agentRun.id, item.id))
       if (!row) return
-      if (assistant?.resume) return assistant.resume(toRun(row), sctx)
-      if (row.status === 'running')
+      // A runtime that cannot take the run up again leaves it as no runtime would: a run still
+      // cut off mid-step is failed, and one awaiting approval keeps waiting.
+      const resumed = assistant?.resume
+        ? await assistant.resume(toRun(row), sctx).then(
+            () => true,
+            (err: unknown) => {
+              console.error(`Resuming run ${item.id} failed:`, err)
+              return false
+            },
+          )
+        : false
+      if (resumed) return
+      const now = assistant?.resume ? await ctx.repo.runs.first(eq(t.agentRun.id, item.id)) : row
+      if (now?.status === 'running')
         await finishRun(ctx, row.id, {
           status: 'failed',
           errorCode: 'interrupted',

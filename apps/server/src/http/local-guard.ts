@@ -28,11 +28,15 @@ const originOf = (url: string): string | null => {
   }
 }
 
+/** An address to listen on that names no one host: it adds no name the server answers to. */
+const EVERY_ADDRESS = new Set(['0.0.0.0', '::', '[::]', ''])
+
 export function localGuard(
-  config: Pick<Config, 'publicUrl' | 'corsOrigins'>,
+  config: Pick<Config, 'publicUrl' | 'corsOrigins' | 'host' | 'allowedHosts'>,
 ): MiddlewareHandler<Env> {
-  // The names this server may be addressed by: this computer, plus the public URL and dev
-  // origins the operator configured (for example a LAN address in PAVE_PUBLIC_URL).
+  // The names this server may be addressed by: this computer, plus what the operator
+  // configured: the public URL, the dev origins, the one address in HOST, and the explicit
+  // list in PAVE_ALLOWED_HOSTS (a LAN address, a machine name).
   const hosts = new Set(LOOPBACK)
   const origins = new Set<string>()
   for (const url of [config.publicUrl, ...config.corsOrigins]) {
@@ -41,6 +45,18 @@ export function localGuard(
     const origin = originOf(url)
     if (origin) origins.add(origin)
   }
+  const named = EVERY_ADDRESS.has(config.host)
+    ? config.allowedHosts
+    : [config.host, ...config.allowedHosts]
+  for (const name of named) {
+    const host = hostnameOf(
+      `http://${name.includes(':') && !name.startsWith('[') ? `[${name}]` : name}`,
+    )
+    if (host) hosts.add(host)
+  }
+  /** `anything.localhost` is this computer by definition; `localhost.example` is not. */
+  const mine = (host: string | null): host is string =>
+    host !== null && (hosts.has(host) || host.endsWith('.localhost'))
   const refuse = (message: string) =>
     new Response(JSON.stringify({ error: { code: 'forbidden', message } }), {
       status: 403,
@@ -49,15 +65,16 @@ export function localGuard(
 
   return async (c, next) => {
     const host = hostnameOf(c.req.url)
-    if (!host || !hosts.has(host))
+    if (!mine(host))
       return refuse(
-        'This Pavé server answers only on this computer (localhost). To use it from another address, set PAVE_PUBLIC_URL.',
+        'This Pavé server answers only on this computer (localhost). To use it from another address, set PAVE_PUBLIC_URL or add the name to PAVE_ALLOWED_HOSTS.',
       )
     const safe = c.req.method === 'GET' || c.req.method === 'HEAD' || c.req.method === 'OPTIONS'
     const origin = c.req.header('origin')
     if (!safe && origin && !origins.has(origin)) {
-      const from = hostnameOf(origin)
-      if (!from || !LOOPBACK.has(from)) return refuse('Changes from another site are not accepted.')
+      // A page served under one of this server's own names, whatever the scheme or port (a
+      // TLS proxy in front, another port on this computer), is not another site.
+      if (!mine(hostnameOf(origin))) return refuse('Changes from another site are not accepted.')
     }
     await next()
   }

@@ -491,7 +491,8 @@ turn it on, then restart Pavé. A value set in your terminal wins over the file.
 | `PAVE_SEED` | `1` | `0` skips the welcome workspace on a fresh data folder |
 | `PAVE_AUTH` | `local` | `local`: no sign-in, one person. `accounts`: sign-in, organisations, invitations |
 | `BETTER_AUTH_SECRET` | — | Required with `accounts`: 32 or more random characters |
-| `PAVE_PUBLIC_URL` | `http://localhost:8787` | The address people reach Pavé at, when it is not your own computer. Without sign-in (local mode) the server answers only requests addressed to localhost, 127.0.0.1, [::1] or this address, which stops other websites from reaching it |
+| `PAVE_PUBLIC_URL` | `http://localhost:8787` | The address people reach Pavé at, when it is not your own computer. Without sign-in (local mode) the server answers only requests addressed to localhost, 127.0.0.1, [::1], this address, `HOST` or a name in `PAVE_ALLOWED_HOSTS`, which stops other websites from reaching it |
+| `PAVE_ALLOWED_HOSTS` | — | More names or addresses a server without sign-in answers to (another computer on your network, say), separated by commas, without ports: `192.168.1.20,bench-mac.local` |
 | `DATABASE_URL` | — | A PostgreSQL 18 address. Without it Pavé uses its own built-in database in the data folder |
 | `PAVE_MAX_UPLOAD_MB` | `200` | Largest file that can be uploaded |
 | `PAVE_KERNEL_WORKERS` | from the computer: 2 on 8 GB, 3 on 16 GB, at most 4, and one processor left free | How many geometry jobs run at once |
