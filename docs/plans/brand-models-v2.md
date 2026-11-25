@@ -156,7 +156,7 @@ The numbers in 4 and 5 are the research's [E]; the rest are mine [E]; none is me
 
 | Provider | Trains on what you send | Default rule |
 |---|---|---|
-| Google, paid Gemini API | No [V, re-checked: terms of 23 Mar 2026]; the image models are paid-only [V, re-checked]. Pavé cannot see a key's tier, so Settings says the rule assumes a billed project, for video above all | `all` |
+| Google, paid Gemini API | No [V, re-checked: terms of 23 Mar 2026]; the image models are paid-only [V, re-checked]. Pavé cannot see a key's tier, so Settings says the rule assumes a billed project | `all` |
 | OpenAI API | Not unless you opt in [V]; how moderation inputs are kept is not stated [V, re-checked] | `all` |
 
 *Decision:* the server checks the rule before any bytes leave, for plates, the judge and moderation alike. `public-only` needs a person's audited confirmation that the design is public; an agent cannot give it. No indemnity in the Gemini API terms; Google Cloud indemnifies through the Agent Platform; OpenAI's excludes Output [V].
