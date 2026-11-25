@@ -232,8 +232,13 @@ export const pieces: HandlerGroup<'pieces'> = {
       updatedAt: new Date(),
     })
     publish(ctx, { type: 'piece.updated', pieceId: id })
-    if (patch.coverAssetId && patch.coverAssetId !== current.coverAssetId)
-      await noteCover(ctx, id, patch.coverAssetId)
+    // A person's choice of cover: a new one, or the one the server put there on its own (the
+    // first finished take) now chosen by hand, which keeps it.
+    const chosen =
+      patch.coverAssetId &&
+      patch.coverAuto !== true &&
+      (patch.coverAssetId !== current.coverAssetId || current.coverAuto)
+    if (chosen) await noteCover(ctx, id, patch.coverAssetId!)
     return toPieceSummary(row!)
   },
 
