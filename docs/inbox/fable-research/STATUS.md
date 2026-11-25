@@ -78,7 +78,7 @@ The founder also asked (25 Nov) for an agent team to look for bugs, obvious miss
 | Branch | Area | State |
 |---|---|---|
 | `claude/bugsweep-server` | `apps/server` | Running |
-| `claude/bugsweep-studio` | `apps/studio`, `packages/ui` | Running |
+| `claude/bugsweep-studio` | `apps/studio`, `packages/ui` | Done: 14 defects fixed in 11 commits, 65 tests; see `BUGSWEEP.md` |
 | `claude/bugsweep-packages` | production, render, match, canon, sourcing, installers | Done: 7 fixes, 11 tests; see `BUGSWEEP.md` |
 | `claude/bugsweep-kernel` | `packages/kernel`, `packages/schema` | Queued (starts when the renderer spike frees the machine) |
 
