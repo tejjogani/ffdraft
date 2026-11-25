@@ -13,7 +13,8 @@
  * the prompt cache, and no thinking block may be dropped when it is passed back. Tokens and cost
  * are reported per run. The server is the real one (database in memory, kernel workers, Blender
  * if installed, the assistant with its real Claude client); only the person is played by this
- * file, approving whatever a run asks for.
+ * file, approving whatever a run asks for and answering the questions each AI job asks first
+ * (the defaults, but stills only, so the render stays one quick take).
  *
  * The key reaches the assistant through the environment it is built with and is never printed:
  * nothing here reads it, and run errors are the server's own sentences.
@@ -134,6 +135,43 @@ export function checkRun(detail: Pick<Detail, 'run' | 'steps'>): {
   return { failures, notes, modelCalls: models.length }
 }
 
+/**
+ * How the smoke test answers a `chat.ask`, as a designer pressing Go would: every question keeps
+ * the defaults the model picked, except that a question offering stills only gets that answer.
+ * The Render job's questions offer a 360° turntable by default, and an animation is hundreds of
+ * frames on a processor; the smoke test checks one quick take, not an evening of rendering.
+ * Returns the picks for `runs.decide` (a question left out takes its defaults) and one line for
+ * the log.
+ */
+export function smokeAnswers(input: unknown): {
+  answers: Record<string, string[]>
+  line: string
+} {
+  const questions = (input as { questions?: unknown })?.questions
+  const answers: Record<string, string[]> = {}
+  const words: string[] = []
+  for (const q of Array.isArray(questions) ? questions : []) {
+    const { id, question, options } = (q ?? {}) as {
+      id?: unknown
+      question?: unknown
+      options?: unknown
+    }
+    if (typeof id !== 'string' || !Array.isArray(options)) continue
+    const stills = (options as { id?: unknown; label?: unknown }[]).find(
+      (o) => o.id === 'none' || (typeof o.label === 'string' && /\bstills?\b/i.test(o.label)),
+    )
+    if (stills && typeof stills.id === 'string') {
+      answers[id] = [stills.id]
+      words.push(`${typeof question === 'string' ? question : id} → ${String(stills.label)}`)
+    }
+  }
+  const asked = Array.isArray(questions) ? questions.length : 0
+  const line = words.length
+    ? `answered ${asked} question${asked === 1 ? '' : 's'} with the defaults, except ${words.join('; ')} (the smoke test keeps renders to quick stills)`
+    : `answered ${asked} question${asked === 1 ? '' : 's'} with the defaults, as one press of Go`
+  return { answers, line }
+}
+
 /** One line for a finished tool step, in the studio's own chip words. */
 export function stepLine(s: Step): string {
   let words = s.name
@@ -239,6 +277,18 @@ export async function follow(
         if (s.status !== 'awaiting-approval' || !s.toolCallId || approved.has(s.toolCallId))
           continue
         approved.add(s.toolCallId)
+        if (s.name === 'chat.ask') {
+          // The questions every AI job asks first wait like an approval; Go answers them.
+          const { answers, line } = smokeAnswers(s.input)
+          opts.log(`    · ${line}`)
+          await api.call('runs.decide', {
+            runId,
+            toolCallId: s.toolCallId,
+            decision: 'approve',
+            answers,
+          })
+          continue
+        }
         opts.log(`    · approved ${s.name} (the smoke test approves what a run asks for)`)
         await api.call('runs.decide', { runId, toolCallId: s.toolCallId, decision: 'approve' })
       }
@@ -500,7 +550,7 @@ export async function runSmoke(opts: SmokeOptions): Promise<SmokeReport> {
       else
         await journey(r, async () => {
           const done = await run(r, {
-            text: 'Render one Hero shot at Draft quality, 640 px square, then tell me in a few sentences what you see in the take and one thing you would change.',
+            text: 'Render one Hero shot at Draft quality, 640 px square, as a still (no animations), then tell me in a few sentences what you see in the take and one thing you would change.',
             pieceId: id,
             ...(threadId ? { threadId } : {}),
             job: {

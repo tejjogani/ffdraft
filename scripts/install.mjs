@@ -131,7 +131,7 @@ note(
 )
 
 /**
- * Where the assistant's key comes from, without ever printing it: the terminal, then
+ * Where the assistant's key comes from, without ever printing it; true when there is one: the terminal, then
  * apps/server/.env (the server reads them in that order), then a key saved in Settings, AI, which
  * the server notes (yes or no only) in assistant-key.json under its data folder.
  */
@@ -151,7 +151,7 @@ function reportKey() {
         'it does not look like a Claude API key (those start with sk-ant-); check it was copied whole',
       )
     info('check it against Claude with: pnpm agent:smoke (spends a few dollars)')
-    return
+    return true
   }
   // `pnpm start` runs the server from apps/server, so a relative PAVE_DATA_DIR is resolved there.
   const dataSetting = process.env.PAVE_DATA_DIR || fileEnv.PAVE_DATA_DIR
@@ -168,11 +168,12 @@ function reportKey() {
     info(
       `no key${saved === null ? ' found' : ''}: the assistant is off. Paste one in Settings, AI, or put ANTHROPIC_API_KEY in apps/server/.env (README: "Use the assistant with your Claude API key")`,
     )
+  return saved === true
 }
 
 // ── 6. The assistant's key (optional) ────────────────────────────────────────────────────────
 step('6. The assistant (your Claude API key, optional)')
-reportKey()
+const hasKey = reportKey()
 
 // ── 7. Blender renderer (optional) ───────────────────────────────────────────────────────────
 step('7. Photoreal renderer (optional)')
@@ -292,7 +293,7 @@ Pavé is ready.
 
   Your work is kept in the .data folder here. Back that folder up; delete it to start over.
   Settings:        apps/server/.env
-  The assistant:   paste your Claude API key in Settings, AI (see README.md)
+  The assistant:   ${hasKey ? 'a key is set; open it with Ctrl+J (⌘J on a Mac)' : 'paste your Claude API key in Settings, AI (see README.md)'}
   More:            README.md
 `)
 

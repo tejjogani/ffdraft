@@ -36,7 +36,7 @@ watch, pause, take over or stop.
 | **CAD** tab: feature list, inspector, live weight, carats and stone count, manufacturability checks, undo and redo | Works; being tested and fixed, so expect rough edges |
 | **Render** tab: shots, looks, framing a shot by hand in the viewfinder, animations (turntable, orbit, push-in, macro sweep, sparkle pass) as MP4 with a GIF, Blender takes, browser previews without Blender | Works; Blender is optional (animations need it) |
 | The assistant: chat in the dock, AI jobs for each stage, a design from a written brief or from a photo, edits by chat, questions about a selected part | Works with your own Claude API key ([below](#use-the-assistant-with-your-claude-api-key)). Built and tested against recorded stand-ins for Claude, not yet against Claude itself: run `pnpm agent:smoke` once with your key to check it |
-| Reference panel beside CAD: museum search, pins with their rights, pictures laid in a view as image planes | Works. The museum search was tested with recorded answers only |
+| Reference window beside CAD: museum search, pins with their rights, a sketch pad, pictures laid in a view as image planes | Works. The museum search was tested with recorded answers only. Generating images needs an image model, which this build does not include |
 | Exports: STL, 3MF, OBJ, GLB, STEP, 3DM | Works |
 | The Pavé file (`.pave`): save a piece with its history, references and shots, and open it on another computer | Works; always free ([the format](docs/pave-file.md)) |
 | Plans: Free and Pro, with monthly counts of Blender renders and Rhino/STEP exports | Counting works; there is no payment yet |
@@ -171,7 +171,9 @@ pieces are not touched) and checks each step:
 4. one low-quality Blender render and the assistant's critique of it (skipped, with a line
    saying so, if Blender is not installed).
 
-It checks that every run finished, every design evaluates, the conversation is read back from
+It plays the designer: it approves what a run asks for and answers the questions each AI job
+asks first with the answers already picked, except that it always picks stills only, so the
+render stays one quick take. It checks that every run finished, every design evaluates, the conversation is read back from
 Claude's prompt cache (which makes later turns cheaper), and no reasoning was lost between
 turns, and it prints the tokens and dollars of each run. It takes 10 to 30 minutes and costs a
 few dollars on Standard. It reads the key from your terminal or `apps/server/.env` (not a key
@@ -190,6 +192,17 @@ stage of a piece also has its own AI button in the piece's header, which shows t
 anything starts. While a job works, a bar under the stage tabs shows its steps, the changes it
 made (each can be undone), the time and the cost, with **Pause**, **Take over** and **Stop**.
 Changing the piece by hand pauses the job; **Resume** carries on from the piece as it is.
+
+Every job first asks at most three quick questions in the assistant's panel, with good answers
+already picked, so **Go** alone is enough (or type what you want instead): for directions the
+budget, the metal or who wears it; for CAD the ring size, the centre stone or the setting the
+spec leaves open; for renders what the images are for. Your answers show under that step of the
+job's plan, and a resumed job does not ask again.
+
+The assistant's panel sits in the right-hand sidebar. **Pop out as a floating window** makes it a
+window you can drag and resize over the work (drag it to the right edge to dock it again), and
+**Collapse to a pill** shrinks it to a small pill that shows a running job's step. Pavé remembers
+which you chose. On a phone it fills the screen and collapses to the pill.
 
 1. **Design.** On Home, describe the piece in the box ("What are we making?"), or create a
    piece, write its brief on the **Design** tab and press **Propose directions with AI**. You
@@ -217,7 +230,13 @@ Changing the piece by hand pauses the job; **Resume** carries on from the piece 
 
 From a **photo**: drop a picture of a piece into the assistant's message box (or attach it to
 **Make the CAD with AI**) and ask it to make the piece. It reads the photo, builds the design,
-fits it to the photo's outline when the background is plain, and says what it assumed.
+fits it to the photo's outline when the background is plain, and says what it assumed. To move
+an existing design toward a new picture, pin the picture in the reference window and choose
+**With AI → Update the design to this picture** in the pin's menu: it edits the design you have
+rather than starting again, and **Undo all** takes the whole job back in one step. **Shoot like
+this reference** (same menu), or picking pinned pictures in the Render job's start panel, gives
+the Render job shots to copy: it sets the camera from each and shows the reference beside its
+framing check.
 
 Three briefs to start with:
 
@@ -342,7 +361,8 @@ If you already have Blender 5.3 installed, skip this and set `PAVE_BLENDER` in
 `apps/server/.env` to the Blender program instead; the Render tab's engine dialog can also point
 Pavé at it. Restart Pavé after installing.
 
-Renders run on your processor unless Blender finds a supported graphics card. On a shared
+Renders run on your processor unless Blender finds a supported graphics card; on a Mac it uses
+the Apple graphics chip (Metal). On a shared
 four-core machine without one, a 640-pixel draft took 35 to 60 seconds; the Render tab learns
 this computer's speed from its own finished takes and shows an estimate before each render.
 
@@ -366,7 +386,9 @@ frame and a small looping GIF; it plays in the filmstrip on hover and with contr
 
 ## References beside CAD
 
-The **References** button beside the CAD and Render tabs opens a panel with four sources:
+The **References** button beside the CAD and Render tabs opens the reference window. It docks
+beside the model or floats (on a narrow screen it is a sheet), and has three tabs: **References**,
+**Sketch** and **Generated**. The References tab has four sources:
 
 - **Search** the open collections of The Met, the Art Institute of Chicago and the Cleveland
   Museum of Art, with no key;
@@ -384,6 +406,11 @@ image plane (on a phone or with the keyboard, use the pin's menu). The view turn
 Fade it, lock it, drag it, and scale it to size by clicking two points and typing the real
 distance between them, or picking a known stone size. Image planes never appear in captures,
 renders or exports, and their moves have their own undo.
+
+**Sketch** is a sketch pad (pen, eraser, undo, clear). **Save as reference** pins the sketch as
+your own picture; **Save and lay in a view** also puts it in the Front, Top or Right view as an
+image plane, to model over. Unsaved strokes last only while the window is open. **Generated**
+appears only when an image model is set up, which this build does not include.
 
 ## Where your work is kept
 

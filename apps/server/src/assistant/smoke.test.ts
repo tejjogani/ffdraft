@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { APIError } from '@anthropic-ai/sdk'
 import type { PieceSpecInput, Run, Step } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
-import { checkRun, runSmoke } from './smoke'
+import { checkRun, runSmoke, smokeAnswers } from './smoke'
 import { TestModel, text, tool } from './testing'
 
 const run = (over: Partial<Run> = {}): Run => ({
@@ -52,6 +52,73 @@ const modelStep = (index: number, cacheRead: number, output: unknown = {}): Step
   stopReason: 'end_turn',
   changeIds: [],
   startedAt: new Date(0).toISOString(),
+})
+
+describe('smokeAnswers', () => {
+  const question = (id: string, options: [string, string][], defaults: string[]) => ({
+    id,
+    question: `${id}?`,
+    options: options.map(([oid, label]) => ({ id: oid, label })),
+    multiple: true,
+    defaults,
+  })
+
+  it('keeps every default, as one press of Go', () => {
+    const r = smokeAnswers({
+      intro: 'x',
+      questions: [
+        question(
+          'purpose',
+          [
+            ['product', 'Product page'],
+            ['social', 'Social'],
+          ],
+          ['product'],
+        ),
+      ],
+    })
+    expect(r.answers).toEqual({})
+    expect(r.line).toBe('answered 1 question with the defaults, as one press of Go')
+  })
+
+  it('answers stills only where it is offered, so the smoke render stays one quick take', () => {
+    const r = smokeAnswers({
+      intro: 'x',
+      questions: [
+        question(
+          'aspects',
+          [
+            ['1x1', '1:1'],
+            ['4x5', '4:5'],
+          ],
+          ['1x1'],
+        ),
+        question(
+          'motion',
+          [
+            ['none', 'Stills only'],
+            ['turntable', '360° turntable, 6 s'],
+          ],
+          ['turntable'],
+        ),
+        question(
+          'anim',
+          [
+            ['spin', 'Turntable'],
+            ['still', 'A still'],
+          ],
+          ['spin'],
+        ),
+      ],
+    })
+    expect(r.answers).toEqual({ motion: ['none'], anim: ['still'] })
+    expect(r.line).toContain('motion? → Stills only')
+  })
+
+  it('reads nothing it does not understand', () => {
+    expect(smokeAnswers(null).answers).toEqual({})
+    expect(smokeAnswers({ questions: 'x' }).line).toContain('answered 0 questions')
+  })
 })
 
 describe('checkRun', () => {
@@ -109,8 +176,28 @@ describe('the journeys, with scripted turns for Claude', () => {
     const model = new TestModel()
     const cached = { usage: { cache_read_input_tokens: 20_000, output_tokens: 50 } }
     model.push(
-      // a. The Design job.
+      // a. The Design job: it reads the piece, asks first (as every job does), then proposes.
       ({ pieceId }) => ({ content: [tool('pieces_get', { id: pieceId })] }),
+      {
+        ...cached,
+        content: [
+          tool('chat_ask', {
+            intro: 'A ring for working hands; one thing before I propose directions.',
+            questions: [
+              {
+                id: 'metal',
+                question: 'Which metal?',
+                options: [
+                  { id: 'yellow', label: '18k yellow gold' },
+                  { id: 'platinum', label: 'Platinum' },
+                ],
+                multiple: false,
+                defaults: ['yellow'],
+              },
+            ],
+          }),
+        ],
+      },
       ({ pieceId }) => ({
         ...cached,
         content: [
@@ -175,6 +262,10 @@ describe('the journeys, with scripted turns for Claude', () => {
     expect(edit!.failures, JSON.stringify(edit)).toEqual([])
     expect(edit!.notes.join('\n')).toMatch(/design version \d+ → \d+/)
     expect(lines.join('\n')).toContain('approved pieces.buildFromSpec')
+    // The job's question was answered with its default, as one press of Go, and the model read it.
+    expect(lines.join('\n')).toContain('answered 1 question with the defaults, as one press of Go')
+    const asked = model.requests[2]!.messages.at(-1)
+    expect(JSON.stringify(asked)).toContain('18k yellow gold')
     expect(report.skipped.join()).toContain('Blender was not found')
     expect(report.ok).toBe(true)
     // Every request asked for the tier's model, with the key the run was given.

@@ -186,8 +186,9 @@ each tier a model from a fixed allow-list. The server notes only whether a key i
 (`<PAVE_DATA_DIR>/assistant-key.json`, yes or no) so the installer's `--check` can report it.
 `pnpm agent:smoke` (`apps/server/src/smoke-cli.ts`, journeys in `src/assistant/smoke.ts`) is the
 live check for a person with a key: the real server with its database in memory runs a brief to
-directions, a photo to a design, a chat edit and a Blender render with the model's critique, and
-checks that each run finished, each design evaluates, the prompt cache is read and no replayed
+directions, a photo to a design, a chat edit and a Blender render with the model's critique,
+playing the designer (it approves what a run asks for and answers each job's `chat.ask` with the
+defaults, but stills only, so the render is one quick take), and checks that each run finished, each design evaluates, the prompt cache is read and no replayed
 thinking block is dropped. Its harness is tested without a key, with scripted turns.
 
 ## References beside CAD
