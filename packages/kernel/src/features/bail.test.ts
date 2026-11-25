@@ -446,9 +446,23 @@ describe('bail', () => {
   }, 60_000)
 
   it('says how far off level a name hangs when its bail cannot stand over the centre of mass', async () => {
-    // "Tej": the nearest metal that carries the bail is 1.5 mm right of the centre of mass.
-    const tej = await kernel.evaluate(name('Tej'))
-    const off = tej.diagnostics.find((d) => d.code === 'bail.offLevel')
+    // Two block letters standing apart: nothing over the centre of mass, the nearest metal is
+    // 1.75 mm to one side. (Tej was the case here until its bail learned to stand on the thin
+    // top of its T over the centre of mass: bail-fit.test.ts.)
+    const apart = await kernel.evaluate(
+      designFrom('pendant', [
+        {
+          id: 'body',
+          kind: 'vectorBody',
+          source: { type: 'text', text: 'I I', font: 'block' },
+          height: 9,
+          thickness: 1.4,
+          join: 'off',
+        },
+        { id: 'bail', kind: 'bail', host: 'body', style: 'ring', opening: 3.2, width: 2.5 },
+      ]),
+    )
+    const off = apart.diagnostics.find((d) => d.code === 'bail.offLevel')
     expect(off?.level).toBe('warning')
     expect(off!.value!).toBeGreaterThan(off!.limit!)
     expect(off!.message).toMatch(/hangs turned about \d+°/)

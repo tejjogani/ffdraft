@@ -137,7 +137,9 @@ function sectionHull(surface: Float32Array, z: number): Vec2[] {
         surface[a + 1]! + (surface[b + 1]! - surface[a + 1]!) * k,
       ])
     }
-  return points.length >= 3 ? convexHull(points) : points
+  // Neighbouring triangles share their edges: each crossing is found twice.
+  const unique = [...new Map(points.map((q) => [`${q[0].toFixed(3)},${q[1].toFixed(3)}`, q])).values()]
+  return unique.length >= 3 ? convexHull(unique) : unique
 }
 
 /** Signed distance from a point to a convex counter-clockwise polygon (negative inside). */
@@ -189,9 +191,23 @@ function clawObstacle(
   const levels = [-0.05, 0, small.girdleTop, ...[0.25, 0.5, 0.75, 1].map((f) => f * small.table)]
   const sections = levels.flatMap((dz) => {
     const hull = sectionHull(claw.surface!, girdleZ + dz)
-    return hull.length ? [{ hull, half: (size / 2) * small.scaleAt(dz) }] : []
+    if (!hull.length) return []
+    const c: Vec2 = [
+      hull.reduce((t, q) => t + q[0], 0) / hull.length,
+      hull.reduce((t, q) => t + q[1], 0) / hull.length,
+    ]
+    const radius = Math.max(...hull.map((q) => Math.hypot(q[0] - c[0], q[1] - c[1])))
+    return [{ hull, c, radius, half: (size / 2) * small.scaleAt(dz) }]
   })
-  return (p) => Math.min(...sections.map(({ hull, half }) => clear(convexDistance(hull, p), half)))
+  // Callers only ask whether a stone clears: far from the claw a bound from its circumscribed
+  // circle answers that without walking the hull.
+  return (p) =>
+    Math.min(
+      ...sections.map(({ hull, c, radius, half }) => {
+        const far = clear(Math.hypot(p[0] - c[0], p[1] - c[1]) - radius, half)
+        return far > 0 ? far : clear(convexDistance(hull, p), half)
+      }),
+    )
 }
 
 /** A closed path in the stone's plane, resampled about every `step` mm. */
@@ -207,6 +223,26 @@ function outwardAt(path: readonly Vec2[], i: number): Vec2 {
   const b = path[(i + 1) % path.length]!
   const l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1
   return [(b[1] - a[1]) / l, -(b[0] - a[0]) / l]
+}
+
+const scale2 = ([x, y]: Vec2, k: number): Vec2 => [x * k, y * k]
+
+/** How far a ray from `q` along unit `m` travels before it meets a closed polygon (∞: never). */
+function rayToPolygon(polygon: readonly Vec2[], q: Vec2, m: Vec2): number {
+  let t = Infinity
+  polygon.forEach((a, i) => {
+    const b = polygon[(i + 1) % polygon.length]!
+    const ex = b[0] - a[0]
+    const ey = b[1] - a[1]
+    const den = m[0] * ey - m[1] * ex
+    if (Math.abs(den) < 1e-12) return
+    const ax = a[0] - q[0]
+    const ay = a[1] - q[1]
+    const along = (ax * ey - ay * ex) / den
+    const at = (ax * m[1] - ay * m[0]) / den
+    if (along > 0 && at >= 0 && at <= 1) t = Math.min(t, along)
+  })
+  return t
 }
 
 /** Convex hull of points, counter-clockwise (Andrew's monotone chain). */
@@ -401,6 +437,7 @@ function rowCentres(
   size: number,
   gap: number,
   obstacles: readonly Obstacle[],
+  seatable: (p: Vec2) => boolean,
 ): Vec3[] {
   const pitch = size + gap
   const { total, at } = arcs(path)
@@ -470,7 +507,8 @@ function rowCentres(
 
   function lay(seat: boolean): { s: number; p: Vec3 }[] {
     const clefts = corners.map((c) => {
-      const seated = seat && !crosses(c)
+      const [x, y] = plan.at(c)
+      const seated = seat && !crosses(c) && seatable([x, y])
       const apart = (h: number) =>
         seated
           ? Math.min(distance(at(c - h), at(c)), distance(at(c + h), at(c))) >= pitch
@@ -744,7 +782,14 @@ export const halo = defineFeature('halo', (node, ctx) => {
     role: 'accent',
     setting: 'pave',
   })
-  const obstacle = (c: ClawPlace) => clawObstacle(shape, c, small, girdleZ)
+  // One per claw: building one slices the claw's surface.
+  const built = new Map<ClawPlace, Obstacle>()
+  const obstacle = (c: ClawPlace): Obstacle => {
+    const own = claws.find((k) => k.phi === c.phi) ?? c
+    let o = built.get(own)
+    if (!o) built.set(own, (o = clawObstacle(shape, own, small, girdleZ)))
+    return o
+  }
   const innerPath = shape.offsetPath(inner + size / 2)
   const pushFor = (onPoint: readonly ClawPlace[]) =>
     pointPush(
@@ -754,11 +799,12 @@ export const halo = defineFeature('halo', (node, ctx) => {
       obstacle,
     )
   const stepOut = legacy ? [] : claws.filter((c) => c.point)
-  const sides = sidePush(shape, claws, pushFor(stepOut))
+  const allOut = pushFor(stepOut)
+  const sides = sidePush(shape, claws, allOut)
   const onPoints = stepOut.filter((c) => sides(c) <= MAX_SIDE_PUSH)
   const notched = legacy ? [] : claws.filter((c) => !onPoints.includes(c))
   const obstacles = notched.map(obstacle)
-  const push = pushFor(onPoints)
+  const push = onPoints.length === stepOut.length ? allOut : pushFor(onPoints)
   const pushed = (flat: readonly Vec2[]): Vec2[] =>
     onPoints.length === 0
       ? [...flat]
@@ -768,6 +814,15 @@ export const halo = defineFeature('halo', (node, ctx) => {
           return [q[0] + m[0] * k, q[1] + m[1] * k]
         })
 
+  // The ring's inner edge stops short of the pavilion. The pavilion narrows downward, so its
+  // silhouette at the ring's top (or the girdle itself, if the top is level with it) is what the
+  // inner edge clears. A stone in a cleft's V has the pavilion on three sides: it sits there only
+  // where the ring can still give it its seat wall.
+  const silhouette = shape
+    .polygon(8)
+    .phis.map((phi) => shape.silhouette(phi, Math.min(surfaceZ, shape.girdleBottom)))
+  const seatable = (p: Vec2) =>
+    polygonDistance(silhouette, p) - PAVILION_CLEARANCE >= size / 2 + RULES.channelWall + 0.02
   const stones: Stone[] = []
   const cuts: Cut[] = []
   const additions: Addition[] = []
@@ -778,7 +833,7 @@ export const halo = defineFeature('halo', (node, ctx) => {
     const path = flat.map(([x, y]) => shape.toWorld([x, y, girdleZ]))
     const centres = legacy
       ? legacyCentres(shape, path, size, pitch)
-      : rowCentres(shape, flat, path, size, node.gap, obstacles)
+      : rowCentres(shape, flat, path, size, node.gap, obstacles, seatable)
     const count = centres.length
     if (count < 3)
       throw new Error('the stones are too large to form a ring around the centre stone')
@@ -826,19 +881,21 @@ export const halo = defineFeature('halo', (node, ctx) => {
   const zMid = (surfaceZ + girdleZ - depth) / 2
   // How far each section reaches inward from the ring's path. The inner row needs its seat
   // wall inside it, which takes the ring under the centre's girdle; it stops short of the
-  // pavilion where it would meet it. The pavilion narrows downward, so its silhouette at the
-  // ring's top (or the girdle itself, if the top is level with it) is what the inner edge clears.
-  const silhouette = shape
-    .polygon(8)
-    .phis.map((phi) => shape.silhouette(phi, Math.min(surfaceZ, shape.girdleBottom)))
+  // pavilion where it would meet it (`silhouette`, above).
   const sections = frames.map((f, i) => {
     const q = stations[i]!
-    // Across a cleft's bridge the stones beside the cleft still follow the unbridged row, which
-    // dips inside the bridge, so the ring reaches in by that dip as well to keep their seat wall.
-    const dip = legacy ? 0 : polygonDistance(middleFlat, q)
+    // Across a cleft's bridge the stones round the cleft still follow the unbridged row, which
+    // dips inside the bridge (one may sit in the V itself), so there the ring fills the V up to
+    // the centre's pavilion, as a setter fills it, to keep their seat walls.
+    // There the nearest point of the pavilion is a lobe beside the section, not the V ahead of
+    // it, so the reach is measured along the section.
+    const bridged = !legacy && polygonDistance(middleFlat, q) > 0.01
+    const ahead = bridged
+      ? rayToPolygon(silhouette, q, scale2(outwardAt(stations, i), -1))
+      : polygonDistance(silhouette, q)
     const inside = legacy
       ? width / 2
-      : clamp(polygonDistance(silhouette, q) - PAVILION_CLEARANCE, corner + 0.05, width / 2 + dip)
+      : clamp(ahead - PAVILION_CLEARANCE, corner + 0.05, bridged ? width + size : width / 2)
     const outside = width / 2 + push(q)
     // Loop x points outward from the stone (the path runs counter-clockwise, x = tangent × up).
     const loop = roundedRectLoop(inside + outside, thickness, corner)

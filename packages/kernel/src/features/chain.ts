@@ -28,7 +28,14 @@ import {
   translation,
 } from '../geometry/vec'
 import { trianglesFromManifold } from '../solid/solid'
-import { boxClasp, boxMin, type Clasp, lobsterClasp, lobsterMin, toward } from './chain/clasp'
+import {
+  type Clasp,
+  hingedBoxClasp,
+  hingedBoxMin,
+  lobsterClasp,
+  lobsterMin,
+  toward,
+} from './chain/clasp'
 import { type ChainPath, drapePath, linkFrames, straightPath } from './chain/drape'
 import {
   type Instance,
@@ -47,6 +54,8 @@ type ChainNode = NodeOf<'chain'>
 interface ChainPlan extends LinkSet {
   /** Stone carried by each link, in link-local space (tennis). */
   stone?: Omit<Stone, 'frame'> & { frame: Frame }
+  /** The tennis link, whose hinge a box clasp carries onto the end links. */
+  tennis?: TennisLink
 }
 
 /** Air between the chain and the bail it rests in. */
@@ -111,6 +120,7 @@ function planFor(node: ChainNode, ctx: BuildContext): ChainPlan {
     minBend: link.minBend,
     linkLength: link.length,
     wire: link.prong,
+    tennis: link,
     stone: {
       cut: node.cut,
       stone: node.stone,
@@ -196,21 +206,20 @@ function pathPolyline(path: ChainPath, place: Mat4): Vec3[] {
 /**
  * Where the clasp goes on a closed drape: in place of the fewest links at the back of the loop
  * (opposite its low point, where a clasp sits on the neck) that leave it room. Returns the
- * indices of the links it replaces, the clasp sized to the gap they leave, and its frame (x
- * along the chord from the farthest metal of the last link before it to the nearest of the
- * first after it, z toward the chain's face).
+ * indices of the links it replaces, the clasp sized to the gap they leave, its frame (for a
+ * lobster, x along the chord from the farthest metal of the last link before it to the nearest
+ * of the first after it, z toward the chain's face) and its two ends.
  */
 function claspAt(
   node: ChainNode,
   plan: ChainPlan,
   path: ChainPath,
   centres: readonly number[],
-): { dropped: Set<number>; clasp: Clasp; key: string; frame: Frame } | null {
+): { dropped: Set<number>; clasp: Clasp; key: string; frame: Frame; ends: [Frame, Frame] } | null {
   if (node.clasp === 'none' || !path.closed || centres.length < 4) return null
   const top = path.length / 2
-  const tennis = node.style === 'tennis'
-  // How far a link's metal reaches ahead of its centre and behind it: half its length for wire
-  // links, more for a tennis link, whose hinge tongue reaches under the next box.
+  if (plan.tennis) return hingedClaspAt(node, plan, plan.tennis, path, centres)
+  // How far a link's metal reaches ahead of its centre and behind it.
   let ahead = plan.linkLength / 2
   let behind = -plan.linkLength / 2
   for (const t of plan.templates) {
@@ -220,7 +229,7 @@ function claspAt(
       behind = Math.min(behind, p[i]!)
     }
   }
-  const least = tennis ? boxMin(2 * plan.half.y) : lobsterMin(node.linkWidth, plan.wire)
+  const least = lobsterMin(node.linkWidth, plan.wire)
   // Links nearest the top first; the nearest m form one run.
   const order = centres.map((s, i) => ({ i, d: Math.abs(s - top) })).sort((a, b) => a.d - b.d)
   for (let m = 1; m <= centres.length - 2; m++) {
@@ -233,35 +242,80 @@ function claspAt(
     const a0 = path.at(sa + ahead).point
     const b0 = path.at(sb + behind).point
     const x = toward(a0, b0)
-    // On a tight curve (a bracelet's) the end links and the straight clasp meet at an angle, and
-    // their corners reach across the gap by their width where they meet times its sine: each end
-    // stands off by that much (a box clasp touched the next box at the back of a 180 mm line).
-    // A box clasp meets a box across its whole width; a lobster's round eye and its ring meet
-    // round link ends, which clear by the clasp's own clearance.
-    const standOff = (s: number) => {
-      const t = toward(
-        path.at(s - plan.linkLength / 2).point,
-        path.at(s + plan.linkLength / 2).point,
-      )
-      const cos = Math.min(1, Math.abs(t[0] * x[0] + t[1] * x[1] + t[2] * x[2]))
-      return tennis ? 2 * plan.half.y * Math.sqrt(1 - cos * cos) : 0
-    }
-    const a = addScaled(a0, x, standOff(sa))
-    const b = addScaled(b0, x, -standOff(sb))
+    // A lobster's round eye and its ring meet round link ends, which clear by the clasp's own
+    // clearance even where the straight clasp meets them at an angle on a tight curve.
+    const a = a0
+    const b = b0
     const span = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])
     if (span < least) continue
     const f = path.face
     const along = f[0] * x[0] + f[1] * x[1] + f[2] * x[2]
     const z = toward([0, 0, 0], [f[0] - along * x[0], f[1] - along * x[1], f[2] - along * x[2]])
     const frame: Frame = { origin: a, x, y: cross(z, x), z }
-    const clasp = tennis
-      ? boxClasp(2 * plan.half.y, 1.6 * plan.half.z, span)
-      : lobsterClasp(node.linkWidth, plan.wire, span)
+    const clasp = lobsterClasp(node.linkWidth, plan.wire, span)
     // Everything the clasp's shape depends on (its frame only places it).
-    const key = tennis
-      ? `box|${2 * plan.half.y}|${1.6 * plan.half.z}|${span}`
-      : `lobster|${node.linkWidth}|${plan.wire}|${span}`
-    return { dropped: new Set(run), clasp, key, frame }
+    const key = `lobster|${node.linkWidth}|${plan.wire}|${span}`
+    const ends: [Frame, Frame] = [frame, { ...frame, origin: addScaled(a, x, span) }]
+    return { dropped: new Set(run), clasp, key, frame, ends }
+  }
+  return null
+}
+
+/**
+ * The box clasp of a tennis line, in place of the fewest links at the back of the loop whose
+ * places hold it, hinged onto the links either side as they would be onto those links
+ * (`hingedBoxClasp`). Its parts are built in chain space along the line's curve, so its frame
+ * is the chain's own; its ends are where the first replaced link's box began and the last's ended.
+ */
+function hingedClaspAt(
+  node: ChainNode,
+  plan: ChainPlan,
+  link: TennisLink,
+  path: ChainPath,
+  centres: readonly number[],
+): { dropped: Set<number>; clasp: Clasp; key: string; frame: Frame; ends: [Frame, Frame] } | null {
+  const top = path.length / 2
+  const width = 2 * plan.half.y
+  // As tall as a box clasp of the line's depth, up from the plates' underside, but no taller
+  // than the stones: the hinge hangs under it as under a link.
+  const height = Math.min(1.6 * plan.half.z, link.box.crown - link.box.bottom)
+  const least = hingedBoxMin(link, width)
+  const halfSpan = Math.min(...plan.pitches) / 2
+  const frameAt = (s: number) => linkFrames(path, [s], halfSpan)[0]!
+  const centred = plan.period[0]!.orient
+  const order = centres.map((s, i) => ({ i, d: Math.abs(s - top) })).sort((a, b) => a.d - b.d)
+  for (let m = 1; m <= centres.length - 2; m++) {
+    const run = order.slice(0, m).map((o) => o.i)
+    const first = Math.min(...run)
+    const last = Math.max(...run)
+    if (first === 0 || last === centres.length - 1) return null
+    if (centres[last]! - centres[first]! < least - 1e-9) continue
+    const clasp = hingedBoxClasp(
+      link,
+      frameAt,
+      centred,
+      centres[first]!,
+      centres[last]!,
+      width,
+      height,
+    )
+    // Everything the clasp's shape depends on: the link, the line's curve, and where it stands.
+    const key = `hinged|${link.box.lx}|${link.box.ly}|${node.wire}|${node.cut}|${path.length}|${path.minRadius}|${centres[first]}|${centres[last]}|${width}|${height}`
+    const end = (s: number): Frame => {
+      const m = frameAt(s)
+      return transformFrame(m, {
+        origin: [0, 0, 0],
+        x: [1, 0, 0],
+        y: [0, 1, 0],
+        z: [0, 0, 1],
+      })
+    }
+    const ends: [Frame, Frame] = [
+      end(centres[first]! - link.box.lx / 2),
+      end(centres[last]! + link.box.lx / 2),
+    ]
+    const frame: Frame = { origin: [0, 0, 0], x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] }
+    return { dropped: new Set(run), clasp, key, frame, ends }
   }
   return null
 }
@@ -375,13 +429,7 @@ export const chain = defineFeature('chain', (node, ctx) => {
     })
 
   const ends = clasp
-    ? {
-        end0: transformFrame(place, clasp.frame),
-        end1: transformFrame(place, {
-          ...clasp.frame,
-          origin: addScaled(clasp.frame.origin, clasp.frame.x, clasp.clasp.span),
-        }),
-      }
+    ? { end0: transformFrame(place, clasp.ends[0]), end1: transformFrame(place, clasp.ends[1]) }
     : undefined
   const data: ChainData = {
     links: n - (clasp?.dropped.size ?? 0),

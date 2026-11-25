@@ -45,7 +45,20 @@ export interface TennisLink {
    * height a link turns about against its neighbour round a wrist (the plates' underside).
    */
   hinge: { ahead: WireLoop[]; behind: WireLoop[]; flat: boolean; pivot: number }
+  /**
+   * One side of the hinge's metal, link-local: `ahead` reaches under the next link, `behind`
+   * takes the previous one's. A clasp carries them to hinge onto the end links as a link does.
+   */
+  hingeParts(side: HingeSide, own: <T extends Deletable>(m: T) => T, quality: Quality): Manifold[]
+  /**
+   * The box under the stone (link-local): its length and width, the plate's underside and
+   * thickness, the stone's top, and how far in from the front edge the `ahead` parts meet the
+   * plate (a clasp piece carrying them needs plate metal that far back).
+   */
+  box: { lx: number; ly: number; bottom: number; wall: number; crown: number; attach: number }
 }
+
+export type HingeSide = 'ahead' | 'behind'
 
 /** The link is too narrow for any hinge: its posts would land in the light hole. */
 export class NoRoomForHinge extends Error {
@@ -205,7 +218,7 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
         parts.push(own(cylinderBetween(mf, base, end, prong / 2, seg(prong / 2))))
         parts.push(own(own(mf.Manifold.sphere(prong * 0.5, seg(prong / 2))).translate(tip)))
       }
-      parts.push(...hinge.parts(own, quality))
+      parts.push(...hinge.parts(own, quality, 'ahead'), ...hinge.parts(own, quality, 'behind'))
       // Collapse the slivers where wires cross the box's faces at a glancing angle: below a
       // micron they round to zero-area facets once written as float32 (STL, 3MF). Simplifying
       // leaves a few edges a little longer than that, which still collapse once the link is
@@ -236,6 +249,8 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
     middle: (crown + lowest) / 2,
     prong,
     hinge: { ahead: hinge.ahead, behind: hinge.behind, flat: hinge.flat, pivot: hinge.pivot },
+    hingeParts: (side, own, quality) => hinge.parts(own, quality, side),
+    box: { lx, ly, bottom, wall, crown, attach: lx / 2 - hinge.attach },
   }
 }
 
@@ -261,8 +276,10 @@ interface Hinge {
   lowest: number
   /** Height the link turns about against its neighbour round a wrist. */
   pivot: number
-  /** The hinge's metal; `own` takes each temporary for deletion when the link is built. */
-  parts(own: <T extends Deletable>(m: T) => T, quality: Quality): Manifold[]
+  /** One side of the hinge's metal; `own` takes each temporary for deletion. */
+  parts(own: <T extends Deletable>(m: T) => T, quality: Quality, side: HingeSide): Manifold[]
+  /** The least x at which the `ahead` parts meet the plate, less a wire's radius. */
+  attach: number
   ahead: WireLoop[]
   behind: WireLoop[]
   flat: boolean
@@ -380,23 +397,25 @@ function flatHinge(b: Box): (Hinge & { minBend: number }) | null {
       minBend: pitch / sideTurn,
       flat: true,
       pivot: b.bottom,
-      parts: (own, quality) => {
+      attach: post - ring / 2,
+      parts: (own, quality, part) => {
         const { manifold: mf } = runtime()
-        return [
-          own(
-            sweptWire(
-              sampleCurve(tongue, () => [0, 0, 1], 48, true),
-              ring / 2,
-              quality,
-            ),
-          ),
-          ...sides.map((side) =>
+        if (part === 'behind')
+          return sides.map((side) =>
             own(
               sweptWire(
                 sampleCurve(staplePoint(side), () => [1, 0, 0], 24, false),
                 ring / 2,
                 quality,
               ),
+            ),
+          )
+        return [
+          own(
+            sweptWire(
+              sampleCurve(tongue, () => [0, 0, 1], 48, true),
+              ring / 2,
+              quality,
             ),
           ),
           // The posts start a quarter wire inside the tongue, not on its centre line: a post cap
@@ -454,7 +473,8 @@ function ringHinge(b: Box): Hinge | null {
     lowest: ringZ - R - ring / 2,
     flat: false,
     pivot: b.bottom,
-    parts: (own, quality) => {
+    attach: back - ring / 2,
+    parts: (own, quality, part) => {
       const { manifold: mf } = runtime()
       const seg = segmentsFor(ring / 2, quality.chord, 10, 40)
       const loop = (normal: 'y' | 'z', x: number) =>
@@ -470,13 +490,9 @@ function ringHinge(b: Box): Hinge | null {
       // Posts start a quarter wire inside their ring, not on its centre line, for the same
       // reason as the tongue's.
       const into = ring / 4
-      return [
-        loop('y', front),
-        loop('z', back),
-        post(front, 0, ringZ + R - into),
-        post(back, R, ringZ - into),
-        post(back, -R, ringZ - into),
-      ]
+      // Ahead, the flat ring the next link's upright ring threads; behind, that upright ring.
+      if (part === 'behind') return [loop('y', front), post(front, 0, ringZ + R - into)]
+      return [loop('z', back), post(back, R, ringZ - into), post(back, -R, ringZ - into)]
     },
     ahead: [{ points: polyline(point('z', back), 48, false), radius: ring / 2 }],
     behind: [{ points: polyline(point('y', front), 48, false), radius: ring / 2 }],

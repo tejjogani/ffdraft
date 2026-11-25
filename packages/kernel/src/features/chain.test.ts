@@ -213,6 +213,144 @@ describe('chain', () => {
     120_000,
   )
 
+  it.each([
+    [3.4, 0.88, 180],
+    [3, 0.9, 508],
+    [2, 0.6, 400],
+  ])(
+    'hinges a %d mm tennis line\'s box clasp onto its end links: neither piece pulls off its link',
+    async (linkWidth, wire, length) => {
+      // Loose, the end link's tongue stood out into the gap with nothing to pass through, and
+      // each clasp piece stood beside its link, held by nothing until a jeweler soldered it.
+      const scene = await kernel.scene(
+        designFrom('chain', [
+          { id: 'c', kind: 'chain', style: 'tennis', linkWidth, wire, length, clasp: 'box' },
+        ]),
+      )
+      const result = scene.nodes.get('c')!
+      const { end0, end1 } = result.frames
+      const o = end0!.origin
+      const d = [0, 1, 2].map((k) => end1!.origin[k]! - o[k]!)
+      const span = Math.hypot(...d)
+      const x = d.map((v) => v / span)
+      const shells = result.bodies[0]!.solid.manifold(scene.quality).decompose()
+      try {
+        // Each shell's reach along the clasp's chord, for those near it.
+        const reach = shells
+          .map((m) => {
+            const { min, max } = m.boundingBox()
+            const c = [0, 1, 2].map((k) => (min[k]! + max[k]!) / 2 - o[k]!)
+            const along = c[0]! * x[0]! + c[1]! * x[1]! + c[2]! * x[2]!
+            const off = Math.hypot(...c.map((v, k) => v - along * x[k]!))
+            const ends = [0, 1, 2].map((k) => [min[k]!, max[k]!])
+            const corners = ends[0]!.flatMap((a) =>
+              ends[1]!.flatMap((b) =>
+                ends[2]!.map(
+                  (z) => (a - o[0]!) * x[0]! + (b - o[1]!) * x[1]! + (z - o[2]!) * x[2]!,
+                ),
+              ),
+            )
+            return { m, along, off, lo: Math.min(...corners), hi: Math.max(...corners) }
+          })
+          .filter((r) => r.off < 2 * linkWidth && r.along > -3 * linkWidth)
+          .filter((r) => r.along < span + 3 * linkWidth)
+        const pieces = reach.filter((r) => r.along > 0 && r.along < span)
+        const box = pieces.reduce((a, b) => (b.lo < a.lo ? b : a))
+        const plate = pieces.reduce((a, b) => (b.hi > a.hi ? b : a))
+        expect(box).not.toBe(plate)
+        const before = reach.filter((r) => r.along < 0).reduce((a, b) => (b.along > a.along ? b : a))
+        const after = reach
+          .filter((r) => r.along > span)
+          .reduce((a, b) => (b.along < a.along ? b : a))
+        /** Whether `piece`, pulled `sign` along the chord up to 2 mm, runs into `link`. */
+        const caught = (piece: Manifold, link: Manifold, sign: number) => {
+          for (let t = 0.05; t <= 2; t += 0.05) {
+            const moved = piece.translate(x.map((v) => sign * t * v) as never)
+            const shared = moved.intersect(link)
+            const hit = shared.volume() > 1e-6
+            for (const m of [moved, shared]) m.delete()
+            if (hit) return true
+          }
+          return false
+        }
+        expect(caught(box.m, before.m, 1), 'the box pulled off the link before it').toBe(true)
+        expect(caught(plate.m, after.m, -1), 'the end piece pulled off the link after it').toBe(
+          true,
+        )
+      } finally {
+        for (const m of shells) m.delete()
+      }
+    },
+    120_000,
+  )
+
+  it.each<[string, NodeInput]>([
+    [
+      'cable 1.2 mm',
+      { id: 'c', kind: 'chain', style: 'cable', linkWidth: 1.2, wire: 0.3, length: 457 },
+    ],
+    [
+      'Cuban 10 mm',
+      { id: 'c', kind: 'chain', style: 'cuban', linkWidth: 10, wire: 2.6, length: 559 },
+    ],
+    ['curb 4 mm', { id: 'c', kind: 'chain', style: 'curb', linkWidth: 4, wire: 0.88, length: 457 }],
+  ])(
+    'joins a %s chain\'s lobster and its ring to the end links: neither pulls off',
+    async (_, node) => {
+      // The lobster's eye stood 0.1 mm beside the last link, threaded through nothing, and the
+      // ring it catches beside the first link on the other side.
+      const scene = await kernel.scene(designFrom('chain', [{ ...node, clasp: 'lobster' }]))
+      const result = scene.nodes.get('c')!
+      expect((result.data as ChainData).clasp?.style).toBe('lobster')
+      const { end0, end1 } = result.frames
+      const o = end0!.origin
+      const d = [0, 1, 2].map((k) => end1!.origin[k]! - o[k]!)
+      const span = Math.hypot(...d)
+      const x = d.map((v) => v / span)
+      const at = (t: number) => [0, 1, 2].map((k) => o[k]! + t * x[k]!)
+      const holds = (m: Manifold, p: number[]) => {
+        const { min, max } = m.boundingBox()
+        return [0, 1, 2].every((k) => p[k]! >= min[k]! && p[k]! <= max[k]!)
+      }
+      const shells = result.bodies[0]!.solid.manifold(scene.quality).decompose()
+      try {
+        const lobster = shells.find((m) => holds(m, at(0.3)))!
+        const ring = shells.find((m) => m !== lobster && holds(m, at(span - 0.3)))!
+        expect(lobster).toBeDefined()
+        expect(ring).toBeDefined()
+        // The links near the clasp, which a piece pulled off along the chord would run into.
+        const reach = 3 * (node as { linkWidth: number }).linkWidth + 5
+        const near = shells.filter((m) => {
+          if (m === lobster || m === ring) return false
+          const { min, max } = m.boundingBox()
+          const c = [0, 1, 2].map((k) => (min[k]! + max[k]!) / 2 - o[k]!)
+          const along = c[0]! * x[0]! + c[1]! * x[1]! + c[2]! * x[2]!
+          return along > -reach && along < span + reach && Math.hypot(...c) < span + reach
+        })
+        /** Whether `piece`, pulled `sign` along the chord up to 3 mm, runs into a link. */
+        const caught = (piece: Manifold, sign: number) => {
+          for (let t = 0.05; t <= 3; t += 0.05) {
+            const moved = piece.translate(x.map((v) => sign * t * v) as never)
+            const hit = near.some((link) => {
+              const shared = moved.intersect(link)
+              const v = shared.volume()
+              shared.delete()
+              return v > 1e-6
+            })
+            moved.delete()
+            if (hit) return true
+          }
+          return false
+        }
+        expect(caught(lobster, 1), 'the lobster pulled off its link').toBe(true)
+        expect(caught(ring, -1), 'the ring pulled off its link').toBe(true)
+      } finally {
+        for (const m of shells) m.delete()
+      }
+    },
+    120_000,
+  )
+
   it('threads every link through its neighbour (pitch solver)', () => {
     for (const style of WIRE_STYLES) {
       const chain = wireChain(style, 3, 0.7)

@@ -12,6 +12,7 @@ import {
   QUALITY,
   runtime,
   type Solid,
+  solidFromManifold,
   type Stone,
 } from '../core'
 import { circleLoop, type Loop, roundedRectLoop } from '../geometry/loop'
@@ -20,6 +21,7 @@ import { placeLoop, sweepSolid } from '../geometry/sweep'
 import type { Frame, Vec3 } from '../geometry/vec'
 import { type IndexedTriangles, meshVolume, unionBounds } from '../solid/meshing'
 import type { Bounds } from '../types'
+import { underlineDepth } from './vectorBody'
 
 type BailNode = NodeOf<'bail'>
 
@@ -83,7 +85,26 @@ const STRAP_SHARES = [0.85, 0.5]
  */
 const JOINT_WIRES = 1
 
+/**
+ * Metal kept under a foot sunk shallower than its full sink, mm. Over a script name's centre of
+ * mass the top is often a joining hairline 0.45 mm deep, under the 0.55 mm a 1.1 mm wire sinks:
+ * the foot walked 1.5 mm to deeper metal and the piece hung 10° off level. A ring's joint is the
+ * wire's chord, 0.99 of its width at the least sink against 1.0 at the full one, so a level hang
+ * is worth the shallower sink.
+ */
+const THIN_SKIN = 0.1
+
 const sinkFor = (wire: number) => Math.max(SINK, SINK_PER_WIRE * wire)
+
+/**
+ * Height of a bail's opening centre above where it stands (its foot plus any lift), for a foot
+ * sunk `sink` deep: the centreline's lowest point is `sink` into the metal for every style.
+ */
+function openingRise(node: BailNode, sink: number): number {
+  const ring = node.opening + node.wire
+  if (node.style === 'loop') return -sink + (ring / 2) * (1 - Math.cos(LOOP_SPREAD.at))
+  return -sink + ring / 2
+}
 
 /** Band of the given section carried round a path in the YZ plane; `x` is the band's width axis. */
 function band(path: Vec3[], closed: boolean, section: (i: number) => Loop): Solid {
@@ -104,7 +125,7 @@ function build(
 ): { solids: Solid[]; opening: Vec3; supported: boolean; topOnly?: boolean } {
   const { opening, width, wire } = node
   const [x, y, foot] = stand.top
-  const SINK = sinkFor(wire)
+  const SINK = stand.sink
   // Where the bail proper starts: raised over neighbouring metal that stands taller than its
   // foot (a script capital, a heart's lobes) so the chain clears it, on a stem down to the foot.
   const z = foot + stand.lift
@@ -125,8 +146,7 @@ function build(
       : []
   switch (node.style) {
     case 'ring': {
-      // The centreline's lowest point is `SINK` into the metal, as for every style.
-      const centre: Vec3 = [x, y, z - SINK + (opening + wire) / 2]
+      const centre: Vec3 = [x, y, z + openingRise(node, SINK)]
       return {
         solids: [
           band(circle(centre, (opening + wire) / 2, 32), true, () => circleLoop(wire / 2)),
@@ -137,7 +157,7 @@ function build(
       }
     }
     case 'tube': {
-      const centre: Vec3 = [x, y, z - SINK + (opening + wire) / 2]
+      const centre: Vec3 = [x, y, z + openingRise(node, SINK)]
       return {
         solids: [
           band(circle(centre, (opening + wire) / 2, 32), true, () => flat(width)),
@@ -240,7 +260,7 @@ function build(
       return {
         solids: [band(path, false, section), ...stem(flat(width * 0.55))],
         // The chain threads the loop where it is widest.
-        opening: [x, y, z - SINK + (h / 2) * (1 - Math.cos(LOOP_SPREAD.at))],
+        opening: [x, y, z + openingRise(node, SINK)],
         supported: stand.supported,
       }
     }
@@ -268,6 +288,8 @@ interface Stand {
   top: Vec3
   /** How far the bail rises on a stem above its foot to clear taller metal beside it, mm. */
   lift: number
+  /** How deep the foot is sunk into the metal under it, mm. */
+  sink: number
   /** False when no metal was found under the foot (the bail then stands on the highest point). */
   supported: boolean
   /** Metal either side of the foot's centre across the host's thickness (y), mm. */
@@ -321,6 +343,21 @@ function centroid({ positions: p, indices }: IndexedTriangles): Vec3 {
   return [x!, y!, z!]
 }
 
+/** Centre of mass of solids by volume, or the middle of their bounds when they have none. */
+function centreOfMass(solids: readonly Solid[], bounds: Bounds): Vec3 {
+  let mass = 0
+  const sum = [0, 0, 0]
+  for (const s of solids) {
+    const t = s.triangles(QUALITY.draft)
+    const v = meshVolume(t)
+    const c = centroid(t)
+    mass += v
+    for (let k = 0; k < 3; k++) sum[k]! += v * c[k]!
+  }
+  const [x, y, z] = sum.map((v, k) => (mass > 0 ? v / mass : (bounds.min[k]! + bounds.max[k]!) / 2))
+  return [x!, y!, z!]
+}
+
 /** Every hit of a ray through the meshes, as distances along it. */
 function hits(meshes: readonly Manifold[], from: Vec3, to: Vec3): number[] {
   const length = Math.hypot(to[0] - from[0], to[1] - from[1], to[2] - from[2])
@@ -346,20 +383,7 @@ function standPoint(
   stones: readonly Stone[],
 ): Stand {
   const meshes = solids.map((s) => s.manifold(QUALITY.draft))
-  const tris = solids.map((s) => s.triangles(QUALITY.draft))
-  // Centre of mass of all the host's bodies, by volume.
-  let mass = 0
-  const sum = [0, 0, 0]
-  for (const t of tris) {
-    const v = meshVolume(t)
-    const c = centroid(t)
-    mass += v
-    for (let k = 0; k < 3; k++) sum[k]! += v * c[k]!
-  }
-  const [cx, cy, cz] = sum.map((v, k) =>
-    mass > 0 ? v / mass : (bounds.min[k]! + bounds.max[k]!) / 2,
-  )
-  const com: Vec3 = [cx!, cy!, cz!]
+  const com = centreOfMass(solids, bounds)
   const above = bounds.max[2] + 1
   const below = bounds.min[2] - 1
   // Half the foot's length along x: a loop stands on its narrowed band, a tube on all of it.
@@ -387,8 +411,11 @@ function standPoint(
       run: Math.min(centre.run, ...sides.map((c) => c!.run)),
     }
   }
-  /** The metal carrying a foot centred at x: its top, the middle of its thickness, its depth. */
-  const footAt = (x: number): { at: Vec3; run: number; thick: number } | null => {
+  /**
+   * The metal carrying a foot centred at x: its top, the middle of its thickness, its depth.
+   * `enough` is the depth of metal that carries the foot (a shallower sink takes less).
+   */
+  const footAt = (x: number, enough = need): { at: Vec3; run: number; thick: number } | null => {
     const columns = ys.map((y) => ({ y, c: columnAt(x, y) }))
     let best: { y: number; z: number; run: number } | null = null
     for (const { y, c } of columns) if (c && (!best || c.z > best.z)) best = { y, ...c }
@@ -406,7 +433,7 @@ function standPoint(
       const c = carry(x, y)
       if (!c) continue
       const candidate = { at: [x, y, c.z] as Vec3, run: c.run, off: Math.abs(y - mid) }
-      if (beats(candidate, found)) found = candidate
+      if (beats(candidate, found, enough)) found = candidate
     }
     if (!found) return null
     // The metal's faces lie between the outermost samples that found it and the next ones.
@@ -424,10 +451,11 @@ function standPoint(
   function beats(
     a: { at: Vec3; run: number; off: number },
     b: { at: Vec3; run: number; off: number } | null,
+    enough: number,
   ): boolean {
     if (!b) return true
-    const carried = a.run >= need
-    if (carried !== b.run >= need) return carried
+    const carried = a.run >= enough
+    if (carried !== b.run >= enough) return carried
     if (!carried) return a.run > b.run
     if (Math.abs(a.at[2] - b.at[2]) > FOOT_TIE) return a.at[2] > b.at[2]
     return a.off < b.off
@@ -436,15 +464,40 @@ function standPoint(
   // Nearest the centre of mass first: hanging level matters more than standing on the very top.
   let top: Vec3 | null = null
   let thick = node.wire
+  let sink = need
+  let walked = 0
   for (let d = 0; d <= span / 2 && !top; d += STEP)
     for (const x of d > 0 ? [com[0] + d, com[0] - d] : [com[0]]) {
       const foot = footAt(x)
       if (foot && foot.run >= need) {
         top = foot.at
         thick = foot.thick
+        walked = d
         break
       }
     }
+  /** Whether a foot at `at` sunk `deep` hangs the piece within HANG_TILT, before any lift. */
+  const level = (at: Vec3, deep: number) => {
+    const lever = at[2] + openingRise(node, deep) + node.opening / 2 - com[2]
+    return lever > 0 && Math.abs(at[0] - com[0]) <= Math.tan((HANG_TILT * Math.PI) / 180) * lever
+  }
+  // Where the full sink found metal only so far off the centre of mass that the piece hangs
+  // turned, a nearer foot on shallower metal that hangs it level is taken, sunk to THIN_SKIN
+  // above that metal's underside (no less than SINK). A hidden loop does not stand on the top.
+  if (top && node.style !== 'hidden' && !level(top, need))
+    thin: for (let d = 0; d < walked; d += STEP)
+      for (const x of d > 0 ? [com[0] + d, com[0] - d] : [com[0]]) {
+        // Carried by the shallow metal, the foot keeps to the middle of the plate: chosen by
+        // depth alone it stood a third of the way to the front of a 1.4 mm name.
+        const foot = footAt(x, SINK + THIN_SKIN)
+        if (!foot || foot.run < SINK + THIN_SKIN) continue
+        const deep = Math.min(need, foot.run - THIN_SKIN)
+        if (!level(foot.at, deep)) continue
+        top = foot.at
+        thick = foot.thick
+        sink = deep
+        break thin
+      }
   // Nothing anywhere carries the foot: stand on the highest point so the problem is visible.
   let supported = true
   if (!top) {
@@ -479,6 +532,7 @@ function standPoint(
         if (over - foot.at[2] > node.wire / 2) continue
         top = foot.at
         thick = foot.thick
+        sink = need
         clear = over
         break search
       }
@@ -486,7 +540,7 @@ function standPoint(
   // A rise smaller than the foot's own sink is taken up by the sink: a stem that short would
   // be a sliver of metal under the casting's wall limit.
   const rise = clear - top[2]
-  let lift = node.style === 'hidden' || rise < sinkFor(node.wire) ? 0 : rise
+  let lift = node.style === 'hidden' || rise < sink ? 0 : rise
   // A ring or tube sinks into the host, but its arc widens as it rises: on a plate thinner than
   // that arc's chord at the plate's top, the sunk arc stood out of both faces (1.1 mm proud each
   // side of a 1.4 mm name; over the top stones of an iced 45 mm KING, buried 59 % in metal). It
@@ -504,7 +558,7 @@ function standPoint(
       top[2],
       ...[-1, -0.5, 0.5, 1].map((f) => columnAt(top![0] + f * band, top![1])?.z ?? -Infinity),
     )
-    const raise = high - top[2] + sinkFor(node.wire) + node.wire / 2 - fits
+    const raise = high - top[2] + sink + node.wire / 2 - fits
     if (raise > 0) lift = Math.max(lift, raise)
   }
   // Stones set in the host's top (a halo's top stones, tables to the front): the foot and the
@@ -512,7 +566,7 @@ function standPoint(
   // jeweler hangs a halo, the foot moves behind the stones' girdle plane, onto the back of the
   // rim, and the band rises on a stem until its lowest metal clears the stones' tops.
   // The bail's lowest metal is at its foot, whatever its lift: a stem stands there.
-  const footLow = top[2] - need - node.wire / 2
+  const footLow = top[2] - sink - node.wire / 2
   const under = node.style === 'hidden' || !supported ? null : stonesUnder(stones, top[0], footLow)
   if (under) {
     const front = node.wire / 2 + (node.style === 'loop' ? LEG_SPREAD * node.wire : 0)
@@ -523,7 +577,7 @@ function standPoint(
       for (let k = 0; k <= 16; k++) {
         const y = want + ((from[1] - want) * k) / 16
         const c = carry(from[0], y)
-        if (c && c.run >= need) {
+        if (c && c.run >= sink) {
           // The foot may now overhang the back of the rim: a loop's legs meet at its centre.
           thick = node.wire / 2
           top = [from[0], y, c.z]
@@ -531,12 +585,13 @@ function standPoint(
         }
       }
     }
-    const rise = under.top + STONE_CLEAR + need + node.wire / 2 - top[2]
-    if (rise > 0) lift = Math.max(lift, rise, need)
+    const rise = under.top + STONE_CLEAR + sink + node.wire / 2 - top[2]
+    if (rise > 0) lift = Math.max(lift, rise, sink)
   }
   return {
     top,
     lift,
+    sink,
     supported,
     thick,
     com,
@@ -763,12 +818,64 @@ function standOn(
     : {
         top: [0, 0, 0],
         lift: 0,
+        sink: sinkFor(node.wire),
         supported: true,
         thick: node.wire,
         com: [0, 0, 0],
         hidden: (h) => ({ x: 0, zc: -node.wire - h / 2, back: 0, supported: true }),
       }
   return { stand, bounds }
+}
+
+/** How far a bail standing so hangs the piece turned from level, degrees, or null if it flips. */
+function hangTilt(node: BailNode, stand: Stand): number | null {
+  const pivot = stand.top[2] + stand.lift + openingRise(node, stand.sink) + node.opening / 2
+  const lever = pivot - stand.com[2]
+  if (lever <= 0) return null
+  return (Math.atan2(Math.abs(stand.top[0] - stand.com[0]), lever) * 180) / Math.PI
+}
+
+/**
+ * Whether standing a text body's letters on its bar (join: underline) would hang the piece
+ * level. The bail stands again on the letters with the bar under them: the bar pulls the centre
+ * of mass down, and between letters it may be the metal the bail stands on. On Ava, Zoe and Tej
+ * the bar was offered and the piece still hung 7 to 9° off, the bail staying where it was.
+ */
+function barLevels(
+  node: BailNode,
+  solids: readonly Solid[],
+  bounds: Bounds,
+  stones: readonly Stone[],
+  height: number,
+): boolean {
+  const { manifold: mf } = runtime()
+  const depth = underlineDepth(height)
+  const { min, max } = bounds
+  // The bar runs under the full width, overlapping the letters' feet by half its depth; only
+  // its part outside the letters is new metal (the bevel on its edges is left out).
+  const box = mf.Manifold.cube([max[0] - min[0], max[1] - min[1], depth]).translate([
+    min[0],
+    min[1],
+    min[2] - depth / 2,
+  ])
+  const piece = mf.Manifold.union(solids.map((s) => s.manifold(QUALITY.draft)))
+  const added = box.subtract(piece)
+  box.delete()
+  piece.delete()
+  if (added.isEmpty()) {
+    added.delete()
+    return false
+  }
+  const bar = solidFromManifold(added)
+  try {
+    const barred = [...solids, bar]
+    const stand = standPoint(barred, unionBounds(barred.map((s) => s.bounds())), node, stones)
+    if (!stand.supported) return false
+    const tilt = hangTilt(node, stand)
+    return tilt !== null && tilt <= HANG_TILT
+  } finally {
+    bar.dispose()
+  }
 }
 
 /**
@@ -962,10 +1069,24 @@ export const bail = defineFeature('bail', (node, ctx) => {
     const dx = opening[0] - stand.com[0]
     const tilt = (Math.atan2(Math.abs(dx), lever) * 180) / Math.PI
     // On text, standing the letters on a bar (join: underline) lowers the centre of mass under
-    // the bail, which levels a short name hung from a letter beside it (Jo, Noah, Layla).
+    // the bail, which levels a short name hung from a letter beside it (Layla). It is offered
+    // only where it does: where the bail stays as far off, the button promised a level hang and
+    // the warning stayed.
     const body = host?.node
     const bar =
-      body?.kind === 'vectorBody' && body.source.type === 'text' && body.join !== 'underline'
+      lever > 0 &&
+      tilt > HANG_TILT &&
+      node.style !== 'hidden' &&
+      body?.kind === 'vectorBody' &&
+      body.source.type === 'text' &&
+      body.join !== 'underline' &&
+      barLevels(
+        node,
+        host!.bodies.map((b) => b.solid),
+        bounds,
+        host!.stones,
+        body.height,
+      )
         ? {
             fix: {
               label: 'Stand the letters on a bar',

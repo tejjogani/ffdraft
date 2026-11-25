@@ -39,6 +39,8 @@ const OUTLINE_TOLERANCE = 0.005
 /** The bar a name stands on (join: underline): this share of the height, and at least this deep, mm. */
 const UNDERLINE_SHARE = 0.08
 const UNDERLINE_MIN = 0.8
+/** Depth of the bar a name of this height stands on, mm (the bail weighs it before offering it). */
+export const underlineDepth = (height: number) => Math.max(UNDERLINE_MIN, UNDERLINE_SHARE * height)
 /** Widest outline accepted (mm): a belt buckle or a large plaque, not an SVG drawn at the wrong scale. */
 const MAX_WIDTH = 250
 /** A domed field stays flatter than this radius, so ~2 mm melee still fit it (R/3 rule). */
@@ -252,7 +254,7 @@ export const vectorBody = defineFeature('vectorBody', async (node, ctx) => {
     // then dots, accents and letters that still stand apart are tied on. Joining changes how
     // the name reads, so it is reported, with the way to turn it off.
     if (node.join === 'underline')
-      outline = own(underline(outline, Math.max(UNDERLINE_MIN, UNDERLINE_SHARE * node.height)))
+      outline = own(underline(outline, underlineDepth(node.height)))
     // Only an i or a j has a dot to set down onto its stem; every other mark is an accent.
     const tittles = /[ij]/.test(node.source.text)
     const joined = joinIslands(outline, TIE_WIDTH, SEGMENTS, tittles)

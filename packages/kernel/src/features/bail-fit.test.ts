@@ -267,18 +267,71 @@ describe('bail fit', () => {
     expect(weak?.fix?.ops).toEqual([{ t: 'update', id: 'bail', patch: { style: 'tube' } }])
   }, 60_000)
 
+  // Over the centre of mass of a script name the top is often a hairline joining stroke, a
+  // little shallower than a full sink: the bail walked 1.25 to 1.5 mm to deeper metal and the
+  // piece hung 7 to 10° off level, and the bar offered as the fix moved the centre of mass but
+  // not the bail (Ava, Zoe, Tej). A shallower sink over the centre of mass hangs it level.
+  for (const text of ['Ava', 'Zoe', 'Tej', 'Jo'])
+    it(`hangs the script name ${text} level from metal over its centre of mass`, async () => {
+      const design = buildDesign({
+        ...T,
+        kind: 'pendant',
+        archetype: 'namePendant',
+        body: { heightMm: 9, text },
+        chain: { style: 'cable', lengthMm: 406, widthMm: 1.2 },
+      } as PieceSpecInput)
+      // At production, where the parts are cast as one and a loose bail would be its own part.
+      const scene = await kernel.scene(design, { detail: 'production' })
+      const codes = scene.evaluation.diagnostics.map((d) => d.code)
+      expect(codes).not.toContain('bail.offLevel')
+      // Still one casting, the bail sunk into the name, not standing on air beside it.
+      expect(codes).not.toContain('metal.disconnected')
+      expect(codes).not.toContain('bail.unsupported')
+      expect(scene.evaluation.parts.filter((p) => p.nodeId !== 'chain')).toHaveLength(1)
+    }, 60_000)
+
   it('levels a short name by standing its letters on a bar', async () => {
-    const jo = buildDesign({
+    // Layla's centre of mass is over a hairline too thin for any foot; the nearest metal is
+    // 0.75 mm off, a little past level. The bar brings the centre of mass down under it.
+    const layla = buildDesign({
       ...T,
       kind: 'pendant',
       archetype: 'namePendant',
-      body: { heightMm: 9, text: 'Jo' },
+      body: { heightMm: 9, text: 'Layla' },
       chain: { style: 'cable', lengthMm: 406, widthMm: 1.2 },
     } as PieceSpecInput)
-    const off = (await kernel.evaluate(jo)).diagnostics.find((d) => d.code === 'bail.offLevel')!
+    const off = (await kernel.evaluate(layla)).diagnostics.find((d) => d.code === 'bail.offLevel')!
     expect(off.fix?.ops).toEqual([{ t: 'update', id: 'body', patch: { join: 'underline' } }])
-    const barred = await kernel.evaluate(applyOps(jo, off.fix!.ops).design)
+    const barred = await kernel.evaluate(applyOps(layla, off.fix!.ops).design)
     expect(barred.diagnostics.map((d) => d.code)).not.toContain('bail.offLevel')
+  }, 60_000)
+
+  it('does not offer the bar where the piece would still hang off level on it', async () => {
+    // A teardrop loop on Layla stands on both ends of its foot, which the hairline over the
+    // centre of mass cannot carry with or without the bar: 14° off, and 12° on the bar.
+    const layla = (join: 'auto' | 'underline') =>
+      designFrom('pendant', [
+        {
+          id: 'body',
+          kind: 'vectorBody',
+          source: { type: 'text', text: 'Layla', font: 'script' },
+          height: 9,
+          thickness: 1.4,
+          bevel: 'round',
+          bevelSize: 0.25,
+          join,
+        },
+        { id: 'bail', kind: 'bail', host: 'body', style: 'loop', opening: 3.2, width: 4 },
+      ])
+    const off = (await kernel.evaluate(layla('auto'))).diagnostics.find(
+      (d) => d.code === 'bail.offLevel',
+    )!
+    expect(off.level).toBe('warning')
+    expect(off.fix).toBeUndefined()
+    expect(off.message).not.toMatch(/bar/)
+    // And the bar would not have done it: the prediction matches what the kernel then builds.
+    const barred = await kernel.evaluate(layla('underline'))
+    expect(barred.diagnostics.map((d) => d.code)).toContain('bail.offLevel')
   }, 60_000)
 
   // The recipe's bail across iced names and text (the top over a word's centre of mass is a

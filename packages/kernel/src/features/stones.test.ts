@@ -291,12 +291,15 @@ describe('halo and rows', () => {
     expect(Math.min(...layout.toGirdle)).toBeCloseTo(node.offset, 1)
     // Every claw stands in a notch between two halo stones; elsewhere the stones run evenly.
     expect(layout.notches).toBe(4)
-    expect(Math.min(...layout.plain)).toBeGreaterThan(0.1)
+    // A run may take one stone more, drawn together to no less than the kernel's 0.05 mm, when
+    // that is nearer the asked gap than spreading: the 1.1 mm template's long runs take five.
+    expect(Math.min(...layout.plain)).toBeGreaterThanOrEqual(0.05)
     expect(Math.max(...layout.plain)).toBeLessThanOrEqual(0.4)
     // Face across the halo: the centre, the gap, the stones and the 0.45 mm border each side.
     const expected = centre.dims.width + 2 * (node.offset + node.stoneWidth + 0.45)
     expect(layout.face).toBeCloseTo(expected, 1)
-    expect(layout.face / centre.dims.width).toBeLessThan(1.7)
+    // Canon `halo.outline`: 1.4–1.6× the centre.
+    expect(layout.face / centre.dims.width).toBeLessThanOrEqual(1.6)
     const bad = e.diagnostics.filter(
       (x) =>
         x.nodeId === 'halo' && ['stone.inMetal', 'seat.wall', 'stone.overlap'].includes(x.code),
@@ -397,7 +400,8 @@ describe('halo and rows', () => {
   }, 60_000)
 
   it('a halo saved before claw clearance keeps its stones, and is offered the clear layout', async () => {
-    const v1 = { ...template('halo'), schemaVersion: 1 } as Design
+    // A piece saved then, with the 1.3 mm melee the template had.
+    const v1 = { ...update(template('halo'), 'halo', { stoneWidth: 1.3 }), schemaVersion: 1 } as Design
     const old = await kernel.scene(v1)
     const fix = old.evaluation.diagnostics.find((x) => x.code === 'halo.claws')!
     expect(fix.fix?.ops).toEqual([{ t: 'update', id: 'halo', patch: { clearClaws: true } }])
