@@ -1,5 +1,9 @@
 [
   {
+    "name": "Spec as the source of truth (lane A, A7)",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_a9861f4a-9a2/journal.jsonl"
+  },
+  {
     "name": "Release verification (lane A, A3)",
     "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_9296cd32-437/journal.jsonl",
     "branch": "claude/busy-bardeen-o482lo"
