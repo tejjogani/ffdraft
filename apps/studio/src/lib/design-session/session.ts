@@ -144,6 +144,19 @@ export function createDesignSession(
     if (!next) return
     inflight = next.id
     store.setState(core.markSent(store.getState(), next.id))
+    const retryLater = () => {
+      offlineAttempts++
+      // The timer must exist before `update` re-enters `pump`, or that would resend now.
+      clearTimeout(retryTimer)
+      retryTimer = setTimeout(
+        () => {
+          retryTimer = undefined
+          pump()
+        },
+        backoff(offlineAttempts - 1),
+      )
+      update((s) => s)
+    }
     deps.transport
       .apply({
         pieceId,
@@ -153,28 +166,19 @@ export function createDesignSession(
         ...(next.reverts ? { reverts: next.reverts } : {}),
       })
       .then(
-        ({ change }) => {
+        (answer) => {
           inflight = null
+          // An answer without the stored change says nothing about whether it was committed:
+          // ask again under the same id (a committed change is replayed, not applied twice).
+          const change = (answer as { change?: StoredChange } | null | undefined)?.change
+          if (typeof change?.seq !== 'number') return retryLater()
           offlineAttempts = 0
           update((s) => core.receive(s, change))
         },
         async (error: unknown) => {
           inflight = null
           const kind = deps.classify(error)
-          if (kind === 'retry') {
-            offlineAttempts++
-            // The timer must exist before `update` re-enters `pump`, or that would resend now.
-            clearTimeout(retryTimer)
-            retryTimer = setTimeout(
-              () => {
-                retryTimer = undefined
-                pump()
-              },
-              backoff(offlineAttempts - 1),
-            )
-            update((s) => s)
-            return
-          }
+          if (kind === 'retry') return retryLater()
           offlineAttempts = 0
           if (kind === 'conflict' && !conflicted.has(next.id)) {
             // Catch up, then send it once more on top of the latest state (resync pumps when

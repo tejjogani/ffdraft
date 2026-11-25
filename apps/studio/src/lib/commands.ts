@@ -37,6 +37,8 @@ export interface Command {
 }
 
 const registry = new Map<string, Command>()
+/** Every live registration of an id, oldest first; the newest is the one in `registry`. */
+const stacks = new Map<string, Command[]>()
 const listeners = new Set<() => void>()
 let snapshot: Command[] = []
 
@@ -47,16 +49,25 @@ function changed() {
 
 /** Registers commands; later registrations with the same id win until they unregister. */
 export function registerCommands(commands: Command[]): () => void {
-  const previous = commands.map((c) => registry.get(c.id))
-  for (const c of commands) registry.set(c.id, c)
+  for (const c of commands) {
+    stacks.set(c.id, [...(stacks.get(c.id) ?? []), c])
+    registry.set(c.id, c)
+  }
   changed()
   return () => {
-    commands.forEach((c, i) => {
-      if (registry.get(c.id) !== c) return
-      const prev = previous[i]
-      if (prev) registry.set(c.id, prev)
-      else registry.delete(c.id)
-    })
+    for (const c of commands) {
+      // Whatever order screens leave in, an id falls back to the newest registration still
+      // alive, never to one that has unregistered.
+      const rest = (stacks.get(c.id) ?? []).filter((x) => x !== c)
+      const top = rest.at(-1)
+      if (top) {
+        stacks.set(c.id, rest)
+        registry.set(c.id, top)
+      } else {
+        stacks.delete(c.id)
+        registry.delete(c.id)
+      }
+    }
     changed()
   }
 }

@@ -22,7 +22,8 @@ export interface StoneSpec {
   lw?: number
 }
 
-const round = (v: number, step: number) => Math.round(v / step) * step
+/** The nearest multiple of `step`, as the decimal it reads as (3.26, not 3.2600000000000002). */
+const round = (v: number, step: number) => Number((Math.round(v / step) * step).toFixed(6))
 
 /** Estimated carat of one stone of girdle width `width`. */
 export const caratOf = (s: StoneSpec, width: number): number =>

@@ -22,7 +22,6 @@ import {
   AiMark,
   Button,
   type ContextMenuHandle,
-  cn,
   Dialog,
   IconButton,
   Sheet,
@@ -44,7 +43,6 @@ import {
 import { QualityIndicator } from '../../components/stage/QualityIndicator'
 import { Stage } from '../../components/stage/Stage'
 import type { Viewer, ViewerState } from '../../components/stage/viewer'
-import { assetUrl } from '../../lib/assets'
 import { runCommand } from '../../lib/commands'
 import { canRedo, canUndo } from '../../lib/design-session/core'
 import { useDesignSession, useSessionState } from '../../lib/design-session/store'
@@ -82,6 +80,7 @@ import { useWorkspace } from './state/workspace'
 import { Dimensions } from './viewport/Dimensions'
 import { dockArea } from './viewport/dock-area'
 import { Marker, type MarkerSpot } from './viewport/Marker'
+import { StageStatus } from './viewport/StageStatus'
 import { FileToolbar, ViewToolbar } from './viewport/Toolbar'
 import { ViewportMenu } from './viewport/ViewportMenu'
 
@@ -223,7 +222,10 @@ function Workspace({ piece }: { piece: Piece }) {
   const undoable = useSessionState(session, canUndo) ?? false
   const redoable = useSessionState(session, canRedo) ?? false
   const version = useSessionState(session, (s) => s.version) ?? piece.version
-  const { evaluation, status } = usePieceEvaluation(pieceId)
+  // A feature that left the design (an undo, a teammate's or the assistant's delete) is no longer
+  // selected: commands and the inspector would otherwise act on something that is not there.
+  useEffect(() => ws().retain((id) => Object.hasOwn(view.nodes, id)), [view])
+  const { evaluation, status, error: failure, retry } = usePieceEvaluation(pieceId)
   const check = useProductionCheck(
     pieceId,
     settled,
@@ -304,14 +306,16 @@ function Workspace({ piece }: { piece: Piece }) {
 
   // ── Actions ──────────────────────────────────────────────────────────────────────────────
   const requestDelete = useCallback(
-    (ids: string[]) => {
+    (selected: string[]) => {
+      // The selection can outlive a feature (an undo, someone else's delete).
+      const ids = selected.filter((id) => Object.hasOwn(view.nodes, id))
       if (!ids.length) return
       const dependents = [...new Set(ids.flatMap((id) => dependentsOf(view, id)))].filter(
         (d) => !ids.includes(d),
       )
       if (dependents.length) setConfirm({ ids, dependents })
       else {
-        session?.commit(remove(ids))
+        session?.commit(remove(view, ids))
         ws().select([])
       }
     },
@@ -667,7 +671,9 @@ function Workspace({ piece }: { piece: Piece }) {
               status={status}
               coverAssetId={piece.coverAssetId}
               error={kernel.error}
+              failure={failure}
               hasEvaluation={!!evaluation}
+              onRetry={retry}
             />
           )}
           {!empty && (
@@ -756,7 +762,7 @@ function Workspace({ piece }: { piece: Piece }) {
             <Button
               variant="danger"
               onClick={() => {
-                if (confirm) session?.commit(remove(confirm.ids))
+                if (confirm) session?.commit(remove(view, confirm.ids))
                 ws().select([])
                 setConfirm(null)
               }}
@@ -779,44 +785,6 @@ function Sweep() {
       <span className="absolute top-4 left-1/2 hidden -translate-x-1/2 motion-reduce:block">
         <AiMark className="size-4" />
       </span>
-    </div>
-  )
-}
-
-function StageStatus({
-  status,
-  coverAssetId,
-  error,
-  hasEvaluation,
-}: {
-  status: string
-  coverAssetId: string | null
-  error?: string
-  hasEvaluation: boolean
-}) {
-  if (status === 'unavailable')
-    return (
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-8 text-center">
-        <p className="font-serif text-heading text-fg">The 3D view isn’t available here</p>
-        <p className="max-w-sm text-sm text-fg-muted">
-          You can keep editing by numbers in the list and the inspector; every change is saved.
-          {error ? ` (${error})` : ''}
-        </p>
-      </div>
-    )
-  if (hasEvaluation) return null
-  return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
-      {coverAssetId && (
-        <img
-          src={assetUrl(coverAssetId, 480)}
-          alt=""
-          className="max-h-[40%] max-w-[40%] object-contain opacity-60"
-        />
-      )}
-      <p className={cn('flex items-center gap-2 text-sm text-fg-muted')}>
-        <Spinner className="size-3.5" /> Preparing the workbench…
-      </p>
     </div>
   )
 }

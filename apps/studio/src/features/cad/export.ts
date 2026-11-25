@@ -8,7 +8,7 @@
 import type { ExportFormat } from '@pave/kernel'
 import { type Design, exportCounts, originNeedsAttestation, type Piece } from '@pave/schema'
 import { toast } from '@pave/ui'
-import { assetUrl } from '../../lib/assets'
+import { downloadAsset } from '../../lib/assets'
 import { plural } from '../../lib/format'
 import { exportDesign } from '../../lib/kernel/client'
 import { invalidateFor, queryClient } from '../../lib/query'
@@ -64,7 +64,8 @@ export async function runExport(
         format,
       })
       invalidateFor(queryClient, 'plan')
-      blob = await (await fetch(assetUrl(asset.id))).blob()
+      // Checked: an error answer must never be saved as the exported file.
+      blob = await downloadAsset(asset.id)
       notes = serverNotes
     }
     if (exportCounts(format)) {

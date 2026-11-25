@@ -10,13 +10,21 @@ const DEVICE = /^(con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³])$/i
 const MAX = 120
 
 export function safeFileName(name: string, extension: string): string {
-  let base = name.normalize('NFC').replace(FORBIDDEN, ' ').replace(/\s+/g, ' ').trim()
+  let base = name
+    .normalize('NFC')
+    .replace(FORBIDDEN, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[. ]+$/, '')
+  // Windows reads everything before the first dot as the name: "CON.v2.stl" is still CON.
+  const stem = base.split('.', 1)[0]!.trimEnd()
+  if (DEVICE.test(stem)) base = `${stem}_${base.slice(stem.length)}`
   base = base
-    .replace(/[. ]+$/, '')
     .slice(0, MAX - extension.length - 1)
+    // The cut may land inside a character written as two code units (an emoji).
+    .replace(/[\ud800-\udbff]$/, '')
     .replace(/[. ]+$/, '')
-  if (!base || DEVICE.test(base)) base = base ? `${base}_` : 'Untitled'
-  return `${base}.${extension}`
+  return `${base || 'Untitled'}.${extension}`
 }
 
 interface SavePicker {

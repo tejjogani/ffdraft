@@ -64,9 +64,16 @@ export function dependentsOf(design: Design, id: string): string[] {
   return design.order.filter((x) => out.has(x))
 }
 
-/** Removes nodes and everything that depends on them. */
-export const remove = (ids: readonly string[]): Op[] =>
-  ids.map((id) => ({ t: 'remove', id, cascade: true }))
+/**
+ * Removes nodes and everything that depends on them. An id that is not in the design (a stale
+ * selection) is skipped, and so is a node that another listed node's removal already takes with
+ * it: removing it a second time would refuse the whole change.
+ */
+export function remove(design: Design, ids: readonly string[]): Op[] {
+  const present = [...new Set(ids)].filter((id) => Object.hasOwn(design.nodes, id))
+  const taken = new Set(present.flatMap((id) => dependentsOf(design, id)))
+  return present.filter((id) => !taken.has(id)).map((id) => ({ t: 'remove', id, cascade: true }))
+}
 
 type Fields = Record<string, unknown>
 const METAL_KEYS = ['material', 'finish', 'plating'] as const
@@ -76,7 +83,8 @@ const HEAD_CLEARANCE_MM = 0.75
 const LINK_PER_OPENING = 0.34
 const WIRE_PER_LINK = 0.33
 
-const round = (v: number, step: number) => Math.round(v / step) * step
+/** The nearest multiple of `step`, as the decimal it reads as (1.4, not 1.4000000000000001). */
+const round = (v: number, step: number) => Number((Math.round(v / step) * step).toFixed(6))
 
 /**
  * Defaults a new feature takes from what it joins, where the schema's own defaults cannot
