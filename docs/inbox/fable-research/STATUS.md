@@ -16,6 +16,7 @@ Not written yet. It lands here when the plans have been reviewed.
 - Research 13, the jewelry CAD feature set: `docs/research/13-jewelry-cad-features.md`. The market moved in 2026: Rhino 9 is on sale with an AI assistant; RhinoArtisan 7 ships an MCP server and live diamond prices; Drakon 2 has a copilot; one browser product (Diatech Make, Dubai) calls itself AI-native jewelry CAD and is free with an account. The freeform plan's gaps are in the jewelry and workshop layers: scoop and azure cutters, hand control inside automatic stone layouts, the tech sheet as a screen, more cuts and heads, matching bands, shrink scaling and a sprue, re-sizing foreign files, an own-parts library. SubD should become a named later step.
 - Research 18, low-end machines: `docs/research/18-low-end-machines.md`. The Air is a fine CAD machine and a poor render machine: its GPU scores about 302 to 354 on Blender Open Data against 2,285 for an RTX 3060. A one-minute still is fine; a 5-second turntable is an estimated 1 to 7 hours locally, or roughly 15 to 55 cents on a rented GPU. 8 GB of memory is the real limit. Render.com has no GPU.
 - Research 20, accounts and identity: `docs/research/20-accounts-and-identity.md`. Keep Better Auth (the only option that runs in-process, so the same code serves an offline laptop and hosted; no licence cost). Local installs get a profile, not a login. Connecting to hosted is a device link plus a one-time claim, with a signed entitlement lease of about two weeks.
+- Research 19, ERP, POS and accounting APIs: `docs/research/19-erp-and-pos-apis.md`. Tally is the better first live target (XML on port 9000, JSON from release 7.0, and a local install can post to it directly; the port has no authentication). The Edge has no API. Shopify does not feed The Edge or Jewel360: both push to Shopify and take no new stock from it. Shopify's and Xero's terms forbid using API data to train or improve AI.
 
 ## Requests and findings for lane A (from the research so far)
 
@@ -35,6 +36,7 @@ Also: `docs/pave-file.md` says adding an entry or a field is not a breaking chan
 Corrections to earlier research:
 
 - The Edge's "Item Data Import" only updates existing items. New items come in through "Receive Invoice, Import Invoice", whose blank template is downloadable only inside the program. The Edge connector is therefore two files; the create file needs one customer's template.
+- `10-market.md` line 90 and `08-channels.md` line 95 treat Shopify as a route into The Edge and Jewel360. It is not: both systems only push to Shopify.
 - The server uses PGlite (embedded Postgres), not SQLite. Queues are ordinary tables in both local and hosted modes.
 - Etsy now lists webhook events for commercial and personal apps (`08-channels.md` flagged this as a contradiction).
 - `01-cad.md` says STEP AP214; `step.ts` writes AP242.
@@ -56,9 +58,9 @@ Ten research subagents, one per topic, one file each (topic 22 was added on the 
 | `docs/research/16-ai-models-on-model.md` | AI human models, on-model imagery | Running |
 | `docs/research/17-pave-file-format.md` | The native file format | Done; plan being written |
 | `docs/research/18-low-end-machines.md` | Low-end machines | Done |
-| `docs/research/19-erp-and-pos-apis.md` | ERP, POS and accounting APIs | Running |
+| `docs/research/19-erp-and-pos-apis.md` | ERP, POS and accounting APIs | Done; plan being written |
 | `docs/research/20-accounts-and-identity.md` | Accounts and identity | Done; plan being written |
-| `docs/research/21-connectors-and-developer-api.md` | Connectors and developer API | Done |
+| `docs/research/21-connectors-and-developer-api.md` | Connectors and developer API | Done; plans being written |
 | `docs/research/22-rhino-full-parity.md` | Every Rhino 8 CAD capability against the plan and the product | Running |
 
 ## Next
@@ -106,6 +108,12 @@ From research 21 (connectors):
 8. Add a stock-unit record for tagged one-of-a-kind pieces? It changes the publishing plan's "variants are never stored" rule.
 9. Is a small hosted webhook relay acceptable before full hosting, and who runs it?
 10. Fold `channels` and `sourcing` into one connector package now, or keep them apart?
+
+From research 19 (ERP and POS):
+26. Which Tally release and jewellery package does the pilot workshop run?
+27. Do you accept a rule that data read back from Shopify or Xero never feeds model improvement? Counsel should read those clauses.
+28. Is stock and order read-back wanted before a customer pays for it?
+29. Should "invoice export to QuickBooks/Xero" in `10-market.md` be dropped, given "never build the books"?
 
 From research 13 (CAD features):
 11. Who is the first paying user: a custom jeweler who sends files to a bureau, or a manufacturer casting in-house? It decides whether shrink scaling and a sprue belong in the first release.
