@@ -14,6 +14,8 @@ Pavé is an AI-native jewelry design suite for the trade: a free, open CAD (as B
 | **CAD** | Rhino-class modeling from scratch (planned), the parametric jewelry features, a reference image in the view to trace, a 3D model opened as CAD, exports | **Take to CAD**: size questions and an estimate (weight, carats, cost) first, then the CAD built from the picked image; edits by chat, stone replacement, "Ask AI" on any right-click; optional "Try variants" |
 | **Render** | A viewfinder: frame it and Blender renders exactly that view; looks, lights, motion | The cinematographer: recognises the piece, asks what the images are for, which formats and animations, accepts reference shots, places its own cameras, checks framing, renders stills and animations, critiques and re-renders; every human change is recorded so it improves |
 
+**Projects and folders.** Each piece is a project with three clear sections (the Design board, CAD, Renders), each showing what it holds and what it has cost (AI spend per stage, renders against the allowance, paid exports), with a project total. A folder (for a client, a brand or a collection) holds many projects and shows their totals.
+
 Files: STL is free; the native Pavé file (`.pave`) is free; Rhino (.3dm) and STEP exports are paid, with 5 free a month. Blender renders: 5 free a month on Free; Pro unlimited. AI uses the person's own Claude key (Power, Standard, Light tiers: Fable 5.2, Opus 5.5, Sonnet 5.5 or Haiku 5.5) and, for design images, an image-model key. Pricing will be revisited ("free CAD, charge for the intelligence").
 
 Machines: runs locally on a laptop (a 2023 MacBook Air must stay smooth); later hosted on Render (like Diaex) with GPU rendering on render nodes.
@@ -39,7 +41,7 @@ Machines: runs locally on a laptop (a 2023 MacBook Air must stay smooth); later 
 | 8–12 | Viewfinder and exact renders; reference window; AI cinematographer and animations; one flow (floating chat and reference windows, questions at every stage, shot references); the `.pave` file | Done |
 | 13–15 | Premium design pass; light machines; live-key check (`pnpm agent:smoke`) and setup instructions | Done |
 | 16 | A strict fake of Claude's API and Claude-in-the-loop recordings of the whole journey, as replay tests | Running |
-| 17 | The Design stage as an image-based pin board; Take to CAD with size questions and an estimate; Start CAD linked or not; open a 3D model as CAD; directions move to CAD as variants | Next |
+| 17 | Projects with Design, CAD and Renders sections and their costs, inside folders; the Design stage as an image-based pin board; Take to CAD with size questions and an estimate; Start CAD linked or not; open a 3D model as CAD; directions move to CAD as variants | Next |
 | 18 | AI image generations (Gemini, OpenAI, Higgsfield) with prompt enhancement and guardrails; a live check with the founder's OpenAI key | Next |
 | Review | Four fresh reviewers: Claude API correctness, security and cost, the founder's first hour in a browser, premium design; then up to two fix rounds | After 18 |
 | A3 | Merge with the engine work into `claude/busy-bardeen-o482lo`; connect "Ask AI" to the assistant; full checks and a fresh-clone install; one commit for the founder to install and try | After review |
