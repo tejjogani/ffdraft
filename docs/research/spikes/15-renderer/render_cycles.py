@@ -152,7 +152,11 @@ if want != "CPU":
             c.device = "GPU"
             device_used = want + ": " + ", ".join(d.name for d in found)
     except TypeError:
-        pass   # backend not in this build: stay on the CPU
+        pass   # backend not in this build
+    if device_used == "CPU":
+        # Never fall back silently: a CPU time recorded as a GPU time would spoil the comparison.
+        raise SystemExit(f"SPIKE_CYCLES_DEVICE={want} was asked for, but this build of Cycles "
+                         f"found no such device. Nothing was rendered.")
 c.samples = spp
 c.use_adaptive_sampling = False
 c.max_bounces = c.transmission_bounces = c.glossy_bounces = depth
