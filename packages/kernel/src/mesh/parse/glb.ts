@@ -53,6 +53,8 @@ export const isGlb = (bytes: Uint8Array): boolean =>
   bytes.length >= 12 && new DataView(bytes.buffer, bytes.byteOffset, 4).getUint32(0, true) === MAGIC
 
 const COMPONENTS: Record<string, number> = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 }
+/** Most numbers one accessor may hold (1 GB of doubles): far past any mesh this kernel can use. */
+const MAX_VALUES = 2 ** 27
 const BYTES: Record<number, number> = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 }
 
 export function parseGlb(bytes: Uint8Array): IndexedTriangles {
@@ -62,6 +64,8 @@ export function parseGlb(bytes: Uint8Array): IndexedTriangles {
   for (let at = 12; at + 8 <= bytes.length; ) {
     const length = view.getUint32(at, true)
     const type = view.getUint32(at + 4, true)
+    if (at + 8 + length > bytes.length)
+      throw new Error('The GLB file ends early: export or download it again.')
     const data = bytes.subarray(at + 8, at + 8 + length)
     if (type === CHUNK_JSON) json = JSON.parse(decodeText(data)) as Gltf
     else if (type === CHUNK_BIN && !bin) bin = data
@@ -84,12 +88,24 @@ export function parseGlb(bytes: Uint8Array): IndexedTriangles {
     const size = BYTES[accessor.componentType]
     if (!size)
       throw new Error(`The GLB file uses unsupported component type ${accessor.componentType}`)
-    const out = new Float64Array(accessor.count * components)
+    const { count } = accessor
+    if (!Number.isInteger(count) || count < 0 || count * components > MAX_VALUES)
+      throw new Error(`The GLB file has an accessor with an unusable count (${count})`)
+    const out = new Float64Array(count * components)
     if (accessor.bufferView === undefined) return out // all zeros, per spec
     const bv = gltf.bufferViews?.[accessor.bufferView]
     if (bv?.buffer !== 0 || !buffer) throw new Error('The GLB file refers to an external buffer')
     const stride = bv.byteStride ?? size * components
-    const base = buffer.byteOffset + (bv.byteOffset ?? 0) + (accessor.byteOffset ?? 0)
+    const start = (bv.byteOffset ?? 0) + (accessor.byteOffset ?? 0)
+    // The data must lie inside the binary chunk. The chunk is a view into the caller's buffer
+    // (a small upload shares Node's Buffer pool with other requests), so an offset past its end
+    // would otherwise read whatever lies behind the file and return it as geometry.
+    const end = count === 0 ? start : start + (count - 1) * stride + components * size
+    if (!(start >= 0 && stride >= 0 && end <= buffer.byteLength))
+      throw new Error(
+        'The GLB file refers to data beyond its binary chunk: it is damaged or was cut short.',
+      )
+    const base = buffer.byteOffset + start
     const dv = new DataView(buffer.buffer)
     const scale = accessor.normalized ? normaliser(accessor.componentType) : 1
     for (let i = 0; i < accessor.count; i++)
@@ -130,6 +146,9 @@ export function parseGlb(bytes: Uint8Array): IndexedTriangles {
           primitive.indices !== undefined
             ? Array.from(read(primitive.indices))
             : range(p.length / 3)
+        const vertices = p.length / 3
+        if (list.some((i) => !(i >= 0 && i < vertices)))
+          throw new Error('The GLB file has a triangle that refers to a missing vertex')
         const flip = isMirror(matrix)
         for (const [a, b, c] of triangles(list, mode))
           indices.push(base + a, base + (flip ? c : b), base + (flip ? b : c))
