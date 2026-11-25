@@ -281,6 +281,21 @@ export interface RenderWithBlenderOptions extends Omit<RuntimeOptions, 'env' | '
   timeoutMs?: number
 }
 
+/**
+ * The worker's `{"progress": 0.42}` lines. Blender and its add-ons write to the same stdout, so
+ * a line that only looks like one is skipped: throwing here would be an uncaught exception in
+ * the stream handler, not a failed render.
+ */
+function progressOf(line: string): number | null {
+  if (!line.startsWith('{"progress"')) return null
+  try {
+    const value = (JSON.parse(line) as { progress?: unknown }).progress
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  } catch {
+    return null
+  }
+}
+
 export async function renderWithBlender(
   options: RenderWithBlenderOptions,
 ): Promise<BlenderRenderResult> {
@@ -303,9 +318,8 @@ export async function renderWithBlender(
       signal: options.signal,
       timeoutMs: options.timeoutMs ?? 2 * 60 * 60 * 1000,
       onLine: (line) => {
-        if (!line.startsWith('{"progress"')) return
-        const value = (JSON.parse(line) as { progress: number }).progress
-        options.onProgress?.(value)
+        const value = progressOf(line)
+        if (value !== null) options.onProgress?.(value)
       },
     },
   )

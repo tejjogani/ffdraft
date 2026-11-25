@@ -36,6 +36,21 @@ describe('sourcing', () => {
     expect(diaex.searchUrl(reqs[2]!)).toBeNull()
   })
 
+  it('searches lab-grown stock for a lab-grown diamond, whatever an old quality note says', () => {
+    // The stone was changed from a natural to a lab-grown diamond; its quality still says natural.
+    const centre = design.nodes.center!
+    if (centre.kind !== 'gem') throw new Error('the template has a centre gem')
+    const swapped = {
+      ...design,
+      nodes: { ...design.nodes, center: { ...centre, stone: 'diamond-lab' as const, quality: { origin: 'natural' as const } } },
+    }
+    const lab = { ...report, lots: [{ ...report.lots[0]!, stone: 'diamond-lab' as const }] }
+    const [r] = stoneRequirements(swapped, lab)
+    expect(r!.origin).toBe('lab')
+    const f = JSON.parse(new URL(createDiaexProvider().searchUrl(r!)!).searchParams.get('f')!)
+    expect(f.stone_types).toEqual(['CVD', 'HPHT'])
+  })
+
   it('adds a casting allowance to metal', () => {
     const [m] = metalRequirements(report)
     expect(m!.orderGrams).toBeCloseTo(m!.netGrams * 1.12)

@@ -320,7 +320,11 @@ export interface StoneRow {
 }
 
 export function stoneRows(ctx: PackageContext): StoneRow[] {
-  return ctx.lots.map(({ key, lot, requirement: r, depth, origin, suppliedBy, sourcing }) => ({
+  // A lot can hold stones bought apart (two side stones, each with its own certificate): list
+  // every supplier record, not only the first.
+  const all = (values: (string | undefined)[]) =>
+    [...new Set(values.filter((v): v is string => !!v))].join('; ')
+  return ctx.lots.map(({ key, lot, requirement: r, depth, origin, suppliedBy, sourced }) => ({
     lot: key,
     role: lot.role,
     type: GEM_MATERIALS[lot.stone].label,
@@ -338,10 +342,10 @@ export function stoneRows(ctx: PackageContext): StoneRow[] {
     clarity: r.quality.clarities?.join('/') ?? '',
     certified: r.quality.certified,
     suppliedBy,
-    sourcingProvider: sourcing?.provider ?? '',
-    sourcingSku: sourcing?.sku ?? '',
-    sourcingUrl: sourcing?.url ?? '',
-    certificate: sourcing?.certificate ?? '',
+    sourcingProvider: all(sourced.map((s) => s.sourcing.provider)),
+    sourcingSku: all(sourced.map((s) => s.sourcing.sku)),
+    sourcingUrl: all(sourced.map((s) => s.sourcing.url)),
+    certificate: all(sourced.map((s) => s.sourcing.certificate)),
     tolMinusMm: r.seat.tolMinus,
     tolPlusMm: r.seat.tolPlus,
     nodeIds: lot.nodeIds.join(' '),

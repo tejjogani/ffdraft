@@ -96,8 +96,9 @@ The installer takes a few minutes the first time. It:
 3. downloads the dependencies;
 4. builds the application;
 5. creates `apps/server/.env`, a settings file where every line is optional;
-6. says whether the assistant has a Claude API key and whether the Blender renderer is installed;
-7. starts Pavé once on a spare port with a throwaway data folder, checks that it answers, and
+6. says whether the assistant has a Claude API key (never the key itself);
+7. says whether the optional Blender renderer is installed (and installs it with `--render`);
+8. starts Pavé once on a spare port with a throwaway data folder, checks that it answers, and
    stops it.
 
 It installs nothing outside this folder apart from pnpm, deletes nothing, and can be run again
@@ -108,7 +109,7 @@ at any time.
 | `--start` | Start Pavé as soon as the install finishes |
 | `--render` | Also install the Blender renderer (see [below](#photoreal-renders-with-blender-optional)) |
 | `--check` | Change nothing; report what is ready and what is not, including whether a Claude API key is set (never the key itself) |
-| `--no-smoke` | Skip the start-up check in step 6 |
+| `--no-smoke` | Skip the start-up check in step 8 |
 
 The same installer without the wrapper, on any system: `node scripts/install.mjs`.
 

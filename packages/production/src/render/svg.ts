@@ -12,11 +12,31 @@ const n = (v: number) => {
   return Object.is(r, -0) ? '0' : String(r)
 }
 
-export const escapeXml = (s: string) =>
-  s.replace(
-    /[<>&"']/g,
-    (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' })[c]!,
-  )
+/**
+ * XML 1.0 has no way to carry most control characters, U+FFFE or U+FFFF, not even as character
+ * references: one of them in a title makes the whole drawing unreadable. Tab and line breaks
+ * are legal and kept.
+ */
+const xmlChar = (code: number) =>
+  code === 0x09 || code === 0x0a || code === 0x0d || (code >= 0x20 && code < 0xfffe)
+
+const ENTITY: Record<string, string> = {
+  '<': '&lt;',
+  '>': '&gt;',
+  '&': '&amp;',
+  '"': '&quot;',
+  "'": '&apos;',
+}
+
+export function escapeXml(s: string): string {
+  let out = ''
+  // By UTF-16 unit: surrogate halves pass through, so characters beyond the BMP survive.
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]!
+    if (xmlChar(s.charCodeAt(i))) out += ENTITY[ch] ?? ch
+  }
+  return out
+}
 
 function pathData(lines: readonly ArrayLike<number>[], closed?: boolean): string {
   const parts: string[] = []

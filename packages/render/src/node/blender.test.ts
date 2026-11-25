@@ -148,3 +148,48 @@ describe.skipIf(process.platform === 'win32')('cancelling a render', () => {
     }
   }, 40_000)
 })
+
+// What the runner makes of a worker's output and exit, against stand-in workers, so it runs
+// without Blender. POSIX only: it relies on a shebang.
+describe.skipIf(process.platform === 'win32')('reading a worker', () => {
+  const run = async (body: string, onProgress?: (p: number) => void) => {
+    const { writeFile, chmod } = await import('node:fs/promises')
+    const dir = await mkdtemp(join(tmpdir(), 'pave-render-read-'))
+    dirs.push(dir)
+    const script = join(dir, 'fake-worker')
+    await writeFile(script, `#!/usr/bin/env python3\nimport json, sys\n${body}\n`)
+    await chmod(script, 0o755)
+    return renderWithBlender({
+      resolved: {} as never,
+      glb: new Uint8Array(),
+      outDir: join(dir, 'out'),
+      pythonPath: script,
+      ...(onProgress ? { onProgress } : {}),
+    })
+  }
+
+  it('forwards progress and survives a line that only looks like progress', async () => {
+    // Blender and its add-ons print to the same stdout. A garbled line must not throw inside
+    // the stream handler: that is an uncaught exception in the server, and it used to drop
+    // every progress line after it.
+    const seen: number[] = []
+    const result = await run(
+      [
+        `print('{"progress": 0.1}', flush=True)`,
+        `print('{"progress": oops', flush=True)`,
+        `print('{"progress": "half"}', flush=True)`,
+        `print('{"progress": 1}', flush=True)`,
+        `open('result.json', 'w').write(json.dumps({'device': 'CPU', 'seconds': 1}))`,
+      ].join('\n'),
+      (p) => seen.push(p),
+    )
+    expect(seen).toEqual([0.1, 1])
+    expect(result).toMatchObject({ device: 'CPU' })
+  })
+
+  it('reports the exit code and the end of stderr when the worker fails', async () => {
+    await expect(
+      run(`sys.stderr.write('Traceback\\nValueError: no camera\\n')\nsys.exit(3)`),
+    ).rejects.toThrow(/Blender render failed \(exit 3\):[\s\S]*ValueError: no camera/)
+  })
+})
