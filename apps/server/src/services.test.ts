@@ -264,4 +264,20 @@ describe('registered engines', () => {
     expect(list.map((p) => p.revision)).toEqual([2, 1])
     expect(list[1]).toMatchObject({ status: 'done', manifest: { quantity: 3 } })
   })
+
+  // A double click, or two people at once: both read the same last revision.
+  it('number packages asked for at the same moment one after another', async () => {
+    const piece = await api.call('pieces.create', { templateId: 'cuban' })
+    const made = await Promise.all(
+      Array.from({ length: 4 }, () => api.call('production.create', { pieceId: piece.id })),
+    )
+    expect(made.map((p) => p.revision).sort()).toEqual([1, 2, 3, 4])
+    const list = await api.call('production.list', { pieceId: piece.id })
+    expect(list.map((p) => [p.revision, p.status])).toEqual([
+      [4, 'done'],
+      [3, 'done'],
+      [2, 'done'],
+      [1, 'done'],
+    ])
+  })
 })
