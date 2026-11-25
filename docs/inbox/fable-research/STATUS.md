@@ -1,6 +1,6 @@
 # Lane B and C research: status
 
-_Branch `claude/fable-research`. Items B1 and C1 from the board, run as one session from `docs/agents/LAPTOP-RESEARCH-PROMPT.md`, plus two things the founder added on the day. Updated 25 November 2026. **State: all research, plans, reviews and fixes are done; the founder's first decisions are recorded below. Nothing is pushed yet** (see "How this session ran")._
+_Branch `claude/fable-research`. Items B1 and C1 from the board, run as one session from `docs/agents/LAPTOP-RESEARCH-PROMPT.md`, plus two things the founder added on the day. Updated 25 November 2026. **State: all research, plans, reviews and fixes are done and pushed; the founder's decisions are recorded below; five pull requests are open into the integration branch** (see "Pull requests")._
 
 ## Summary for the founder
 
@@ -77,6 +77,23 @@ Each plan's section 4 ends with its full list and my recommendation for each. Th
 - Effort figures in every plan are estimates by the agents who wrote them. Nothing was built.
 - Several vendor pages would not open (Intuit, parts of Xero, SAP, Lightspeed, JewelCAD). Those rows are marked.
 
+## Pull requests open into `claude/busy-bardeen-o482lo` (25 November, 11:50 Pacific)
+
+For lane A to review and merge. Each branch has the integration head merged in and was re-checked after that merge.
+
+| # | Branch | What | Checked after the merge |
+|---|---|---|---|
+| [1](https://github.com/tejjogani/ffdraft/pull/1) | `claude/bugsweep-macos-build` | **The studio does not build on a Mac.** `Viewfinder.tsx` sits beside `viewfinder.ts`; on a file system that ignores letter case the import finds the wrong file. The founder hit it at step 4 of his first install. The helper file is renamed, and a test now fails on any such pair. | Studio type check and build; the new test fails on the old names |
+| [2](https://github.com/tejjogani/ffdraft/pull/2) | `claude/bugsweep-server` | Guest access, unstorable text, orphaned jobs, the request size cap, package revisions, boot recovery, and `PAVE_ALLOWED_HOSTS` added to lane A's own local guard | Server type check; 352 server tests outside the engines |
+| [3](https://github.com/tejjogani/ffdraft/pull/3) | `claude/bugsweep-packages` | Stone pricing, CSV formulas, SVG, render progress, the installer | Production type check; 139 tests |
+| [4](https://github.com/tejjogani/ffdraft/pull/4) | `claude/bugsweep-kernel` | Two export memory leaks, GLB import bounds, worker recovery, export names | Kernel and schema type checks; 248 tests |
+| [5](https://github.com/tejjogani/ffdraft/pull/5) | `claude/bugsweep-studio` | Delete and selection, unreadable server answers, export downloads, the viewport error state, formatting | Studio type check and build; 309 studio and UI tests |
+
+**What changed when the assistant build was merged into the integration branch, and what it means for the findings below:**
+- Lane A added its own guard for a server without sign-in (`apps/server/src/http/local-guard.ts`): it refuses unknown host names and writes from other sites. So the two guards on the server bug-sweep branch were removed in its favour; the branch now only adds the founder's allow-list to it.
+- Lane A moved Rhino and STEP writing to the server (`exportCounts` in `apps/studio/src/features/cad/export.ts`). So the finding "the paid exports are not protected today" is answered on the integration head, and the founder's wish to move them to the server is already met.
+- Three bug-sweep branches conflicted with the merge (8 files) and one fix needed rework: the stone-price fix against the refactored cost estimate. All are resolved on the branches.
+
 ## Decisions the founder has taken (25 November, 09:47 Pacific)
 
 Recorded from his reply in chat. Where his reply was short, the reading taken is stated, so he can correct it.
@@ -149,7 +166,7 @@ Research files are in `docs/research/`, plans in `docs/plans/`, reviews in `docs
 
 **The Edge's licence agreement** (updated 23 July 2026, opened at source by two agents) bars interfacing other software with it without written permission and bars passing "downloads" to third parties. Nothing named for The Edge should ship, and no customer should be asked for its in-program import template, until the vendor gives permission or counsel says a file imported through its own wizard is not "interfacing".
 
-**The paid exports are not protected today:** STEP and Rhino files are written in the browser after only a server "claim" (`apps/studio/src/features/cad/export.ts`), so the allowance can be skipped, even when hosted. Moving that writing to the server is not owned by any plan yet.
+**The paid exports** were written in the browser after only a server "claim" at the commit this research read. The integration head now has the server make Rhino and STEP files, so this is answered.
 
 Three items in the first `.pave` version on `claude/assistant-build` (details in research 17, section 2.3, rows 9 to 11):
 
@@ -199,12 +216,12 @@ You asked on 25 November for an agent team to look for bugs, obvious misses and 
 | `claude/bugsweep-packages` | production, render, match, canon, sourcing, installers | 7 fixes, 11 tests |
 | `claude/bugsweep-kernel` | `packages/kernel`, `packages/schema` | 9 fixes (two export memory leaks), 31 tests |
 
-Each branch is based on `claude/busy-bardeen-o482lo` at `cb7dcd0` and is meant to become one pull request into it. The nine open majors lane A carries into A4 were left alone. Findings, checks run, what needs a decision, and a pull request title and description for each branch are in `BUGSWEEP.md`. **Request to lane A:** these are extra `claude/bugsweep-*` branches outside the board; the founder asked for them directly. **The pull requests are not raised yet**: nothing could be pushed.
+Each branch is based on `claude/busy-bardeen-o482lo` at `cb7dcd0` and is meant to become one pull request into it. The nine open majors lane A carries into A4 were left alone. Findings, checks run, what needs a decision, and a pull request title and description for each branch are in `BUGSWEEP.md`. **Request to lane A:** these are extra `claude/bugsweep-*` branches outside the board; the founder asked for them directly. The pull requests are open: see "Pull requests" near the top.
 
 ## How this session ran
 
 - It ran in a cloud workspace linked to the founder's laptop, not on macOS itself. That is why no Metal timing exists.
-- **Pushing was refused** for this session: the repository is readable here but not authorised for push. All work is in local commits on `claude/fable-research` and the four `claude/bugsweep-*` branches. It reaches GitHub when the founder authorises the repository for the session, or pushes the git bundles from his laptop.
+- Pushing was refused for most of the day, so the other session could not see this work until 11:45 Pacific on 25 November, when the founder asked for the push and the repository was authorised for the session. `claude/fable-research` and five `claude/bugsweep-*` branches are on GitHub now.
 - The integration branch was merged in at `bd29afc` (status and board commits only).
 - The board gives C1 its own branch and status file; this session followed the newer laptop prompt and kept B1 and C1 together here.
 

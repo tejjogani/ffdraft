@@ -4,6 +4,24 @@ _Asked for by the founder on 25 November 2026: "spawn an agent team look for bug
 
 Each branch is meant to become one pull request into `claude/busy-bardeen-o482lo`. Lane A decides what to merge.
 
+## 0. State on 25 November, 11:50 Pacific: pushed, merged with the integration head, pull requests open
+
+| Pull request | Branch | Checked after merging the integration head |
+|---|---|---|
+| [#1](https://github.com/tejjogani/ffdraft/pull/1) | `claude/bugsweep-macos-build` (new: the studio did not build on a Mac) | Studio type check and build; its new test |
+| [#2](https://github.com/tejjogani/ffdraft/pull/2) | `claude/bugsweep-server` | Server type check; 352 server tests outside the engines |
+| [#3](https://github.com/tejjogani/ffdraft/pull/3) | `claude/bugsweep-packages` | Production type check; 139 tests |
+| [#4](https://github.com/tejjogani/ffdraft/pull/4) | `claude/bugsweep-kernel` | Kernel and schema type checks; 248 tests |
+| [#5](https://github.com/tejjogani/ffdraft/pull/5) | `claude/bugsweep-studio` | Studio type check and build; 309 studio and UI tests |
+
+The sections below describe each branch as it was first written, against `cb7dcd0`. Three things changed when the integration head (with the assistant build) was merged in:
+
+- **Server, findings 2 and 8.** The integration branch has its own guard for a server without sign-in (`http/local-guard.ts`). The branch's two guards were removed in its favour. What the branch adds to that guard: `PAVE_ALLOWED_HOSTS`, the one address in `HOST`, `.localhost` names, and treating a page under one of the server's own names as its own site whatever the scheme or port.
+- **Packages, the stone-price fix.** The cost estimate was refactored so a quick estimate shares the formula. The production package now works out each node's stones and hands them to the shared formula.
+- **Studio, the export fix.** The integration branch has the server make Rhino and STEP files; the checked download now protects that path too.
+
+The pull request descriptions on GitHub are the current ones; section 6 below is the earlier draft.
+
 ## 1. Packages and the install path: `claude/bugsweep-packages` (7 commits, done)
 
 Checks run: `packages/production` 57 tests passed; `packages/render` and `packages/sourcing` 36 passed, 2 skipped (no Blender on the machine); `pnpm -s typecheck` clean; the formatter clean on the changed production, render and installer files. Eleven tests added.
