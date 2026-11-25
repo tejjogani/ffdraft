@@ -219,9 +219,16 @@ v1 writes every change with user ids and exact times; stone nodes hold supplier,
 
 ### 4.6 Learning from edits, and consent
 
-The founder's model: the file is free because Pavé learns from how people edit. `05-platform.md` decided opt-in, off by default. **These conflict and the founder decides (decision 2).** What this plan fixes either way:
+**Decided by the founder, 25 November 2026:** learning from traces is not opt-in. It is part of using the software, on from the start, as the product's stated bargain ("this is how we make the models better"). This replaces the opt-in decision in `05-platform.md` and the recommendation in decision 2 below. One point is still his to settle: whether a paid plan can switch learning off. The product he compares it with works that way: its privacy mode is open to every user and is on by default for teams and enterprises [V] ([data use overview](https://cursor.com/data-use), [privacy help](https://cursor.com/help/security-and-privacy/privacy), read 25 November 2026).
 
-- **Nothing ships now.** No switch, no upload, and files say `learning: unknown`. Consent asked before a pipeline exists, for a purpose defined later, would not be specific or informed.
+What the decision needs before any trace leaves a machine, and what this plan fixes either way:
+
+- **Said up front, from the first release.** The condition is shown at install and at sign-up in plain words, and is in the terms from day one. Adding it later through a change of terms is what the FTC warned about (below).
+- **About the work, not the person.** Traces carry the organisation, the operations and the results. Names, emails, client details, prices from suppliers and free text are stripped or kept out, with the redaction table of 4.3 as the tool. This matters most in India, where consent for personal data must be "unconditional" (below): a condition of use can rest on the contract with the business only if the traces are not personal data. Counsel confirms.
+- **What is never taken as a condition of use:** messages with suppliers and other people (the other side has agreed to nothing), whole-screen pictures (they catch client names, prices and other people's pictures), reference pictures the user does not own, and anything read back from a system whose terms forbid AI use (the wall in `integrations-hub.md`).
+
+
+- **Nothing uploads until a pipeline exists.** A local install has nowhere to send traces today; upload needs the hosted service and a registered install (`accounts-and-developer-api.md`). Until then files say `learning: unknown`. The wording shown to people is written before the first release all the same, so nobody is told later.
 - **Not the existing switch.** `org_settings.allow_eval_use` was offered as "anonymised traces … for evaluating and improving the assistant" (`PrivacySettings.tsx:56-66`). Learning from the full edit history of designs is wider. It gets its own setting, set by an owner for the organisation and labelled so, stored with the wording version, who and when.
 - **The words, when asked,** must name designs and edit histories, not only personal data: for this trade the designs are the secret.
 - **In a file,** `allowed` is a hint. A history from a file is eligible only if the file is signed by a known key, `historyVerified` is true, the opener's own setting is on, and the saver's **current** setting, looked up on the service, still says yes. Withdrawal cannot reach a file already sent; the lookup is what honours it.
@@ -269,7 +276,7 @@ Dependencies: `meshoptimizer`, `fflate`, `fast-check`, MIT [V-rev]; `esbuild` fo
 ### Decisions that are the founder's
 
 1. **Exact geometry.** You asked for exact geometry in the file. We recommend leaving it out, and leaving it out does not by itself protect the paid export (4.4). (a) **None (recommended):** no free STEP by renaming; cost: no archival exact shape, only the shape check. (b) **Exact geometry in Working copies:** an archival shape and an exact comparison; cost: the paid export sits in every such file, and saving waits for the exact build. (c) **A cache later**, after measuring open time. Separately: who moves the STEP and Rhino writers to the server.
-2. **Learning and consent.** A condition of the free plan, or opt-in for each organisation? Recommended: opt-in, off, a new setting, asked only once a pipeline and its wording exist. A free-plan condition needs a lawyer for India and the United States before any sign-up text, and must be announced, not slipped into terms.
+2. **Learning and consent.** *Decided, 25 November: not opt-in; learning is part of using the software (4.6).* Still his: whether a paid plan can switch it off (recommended: yes, as the paid private tier). Counsel for India and the United States reads the sign-up words before the first outside release.
 3. **Open or closed spec.** Recommended: the envelope now, the design schema after freeform.
 4. **The name: a founder action.** Nobody has checked whether `.pave` or the name clashes with another product's extension or trade mark: the research rules forbid searching the word. A person (and counsel) must do a trade-mark and file-extension search **before step 17 and before any release outside the company**. The media type and macOS identifier need the legal name and domain.
 5. **The default copy and what Share strips** (3.5). Recommended: Share first.

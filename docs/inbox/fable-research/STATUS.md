@@ -53,13 +53,13 @@ Each plan's section 4 ends with its full list and my recommendation for each. Th
 | 3 | A rented Mac and Windows GPU machine for the renderer build, about €150 to €170 a month | Yes: without them no builder can run the renderer on a real GPU |
 | 4 | Are renders on the user's own GPU free or counted? | Free for good; paid means Blender-grade takes and render-node jobs |
 | 5 | Exact geometry inside the `.pave` file. You asked for it; the plan recommends none, because it hands out the paid export | None in the file **Decided: none in the file.** |
-| 6 | Learning from edits: a condition of the free plan, or opt-in per organisation (an earlier decision said opt-in) | Opt-in until hosting exists; a free-plan condition needs counsel first |
-| 7 | Publish the file's envelope spec, or keep it closed | Publish the envelope now, the design schema later |
+| 6 | Learning from edits: a condition of the free plan, or opt-in per organisation (an earlier decision said opt-in) | Opt-in until hosting exists; a free-plan condition needs counsel first **Decided: not opt-in. Learning from traces is part of using the software. Open: whether a paid plan can switch it off.** |
+| 7 | Publish the file's envelope spec, or keep it closed | Publish the envelope now, the design schema later **Reading taken from "a closed system, but open to anyone to join": closed for now. Not confirmed.** |
 | 8 | Allow open surfaces as objects (reverses "bodies are closed" to "metal is closed") | Yes, as a separate surface class **Taken as yes: it is the CAD standard.** |
 | 9 | SubD: castable-mesh grade first, exact NURBS conversion only if a spike passes; accept it may never ship | Yes **Decided: yes. Keep trying for exact conversion.** |
-| 10 | The Edge: ask the vendor for permission, get counsel's view, drop it, or ship only a generic file the jeweler maps | Ask the vendor and counsel; ship the generic file meanwhile |
+| 10 | The Edge: ask the vendor for permission, get counsel's view, drop it, or ship only a generic file the jeweler maps | Ask the vendor and counsel; ship the generic file meanwhile **Deferred: integrations come after CAD and sourcing.** |
 | 11 | Data read back from Shopify or Xero never reaches a model, a trace or a saved file | Yes |
-| 12 | Stop connectors after Shopify one-way until a customer pays for stock read-back | Yes |
+| 12 | Stop connectors after Shopify one-way until a customer pays for stock read-back | Yes **Consistent with his direction: integrations are later.** |
 | 13 | On-model pictures: concept first, composite after a measured go | Concept first **Decided: concept first, composite on a go.** |
 | 14 | May unreleased designs go to Higgsfield (it may train on content unless enterprise)? | Public designs only **Decided: Higgsfield is not used at all. No AI video; moving pictures come from renders.** |
 | 15 | Up to $100 of measurement spend on your image keys, about two hours of labelling | Yes **Decided: yes, as a cap.** |
@@ -80,6 +80,13 @@ Each plan's section 4 ends with its full list and my recommendation for each. Th
 ## Decisions the founder has taken (25 November, 09:47 Pacific)
 
 Recorded from his reply in chat. Where his reply was short, the reading taken is stated, so he can correct it.
+
+**Direction and priorities** (third reply, 10:53)
+- The edge is the vertical stack: the CAD, the traces of how people design, source and export, and stone sourcing through the diamond marketplace. A closed system that anyone can join.
+- **First:** get the CAD right, and sourcing stones through the marketplace. He expects to pitch the product to the marketplace's first 100 to 200 sign-ups as a replacement for Rhino. **For lane A:** this moves the sourcing screen with the partner API up, next to the freeform CAD work. The board lists it as "later, after Diaex v1".
+- **Later:** an API that feeds Shopify, Etsy and others, and a one-stop shop with hosted sites and ERP. `integrations-hub.md` stays as written but is not near-term; its step 1 (the item file) is the only part cheap enough to do early.
+- **Learning from traces is not opt-in.** It is part of downloading the software: "this is how we make the models better". This replaces the earlier opt-in decision in `05-platform.md`. `pave-file-format.md` section 4.6 is changed to match and lists what must be true before any trace leaves a machine: said up front from the first release; about the work, not the person; and never supplier messages, whole-screen pictures, pictures the user does not own, or data read back from systems that forbid AI use. Open: whether a paid plan can switch learning off.
+- **Gaps this opens, for a plan nobody has written yet:** no trace upload exists (a local install sends nothing today, and `org_settings.allow_eval_use` defaults to off and was worded more narrowly); there is no plan for the trace pipeline itself (what is captured, where it goes, how long it is kept, how a business gets its data removed).
 
 **Freeform CAD and Rhino parity** (`docs/plans/freeform-cad-additions.md`)
 - Our own OpenCascade build: accepted.
