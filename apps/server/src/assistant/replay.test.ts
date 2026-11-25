@@ -239,11 +239,12 @@ async function outcome(pieceIds: string[], before: string[]) {
 /**
  * Text that may differ between the recording and a replay: timings, dates, the machine and the
  * capture's source (a studio window when recorded, the server here), the fit's search (it stops on
- * a time budget), and take facts (real Blender then, the stand-in now).
+ * a time budget, so a slower or busier machine reports "budget" where the recording says
+ * "converged"), and take facts (real Blender then, the stand-in now).
  */
 const VOLATILE_WORDS = new Set(
   (
-    'studio server CPU GPU blender browser seconds stopped budget evaluations overlap reason source ' +
+    'studio server CPU GPU blender browser seconds stopped budget converged evaluations overlap reason source ' +
     'No Pav window could do viewport capture These pictures were drawn on the instead plain shaded clay ' +
     'metal grey stones pale blue materials or labels open screen in this can run Auto tune measured draft ' +
     'and changed nothing Numeric checks take framing exposure noise issues warning clipped of piece is ' +
