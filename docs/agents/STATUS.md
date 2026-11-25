@@ -1,38 +1,77 @@
 # Live status of agents and tasks
 
-_Generated 25 Nov 2026 18:39 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 25 Nov 2026 23:46 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+
+## Studio experience: focused editor, project card menu, minimal assistant with a character (lane A, A11)
+
+| Agent | State | Outcome |
+|---|---|---|
+| build:editor | running or interrupted |  |
+
+## Render realism: every look tested in Blender, black acrylic, the render skill (lane A, A12)
+
+| Agent | State | Outcome |
+|---|---|---|
+| fix:release | running or interrupted |  |
+
+## CAD viewport: speed, full rotation, Rhino navigation (lane A, A13)
+
+| Agent | State | Outcome |
+|---|---|---|
+| build:viewport | running or interrupted |  |
+
+## Studio focus: settings readability, CAD editor, delete (lane A, A8)
+
+| Agent | State | Outcome |
+|---|---|---|
+| build:settings | done | commit 7c8e8db. Step 1 is done and committed on ui/focus (not pushed): every settings page now reads as title, bold section headings, then rows, and no control changed what it does. **What made the old pages hard to read** (full list i… |
+| build:editor | running or interrupted |  |
+| review:taste | running or interrupted |  |
 
 ## Spec as the source of truth (lane A, A7)
 
 | Agent | State | Outcome |
 |---|---|---|
-| plan | running or interrupted |  |
+| plan | done | Plan written and committed (not pushed): /home/user/ffdraft-spec/docs/plans/spec-truth.md (181 lines), commit 47e834a on spec/truth. No code was changed; two throwaway probes ran (gem table, 14 templates) and were delet… |
+| build:engine | running or interrupted |  |
+| review:cheat | running or interrupted |  |
+| review:gems | running or interrupted |  |
+| review:founder | running or interrupted |  |
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 61ce861 Agents: lessons from running many agents at once; trial, Diaex connection and release check on the status page
+Branch `claude/busy-bardeen-o482lo`, head: afe5e03 Bring in the laptop's jewelry render skill
 
 | Agent | State | Outcome |
 |---|---|---|
-| verify:1 | running or interrupted |  |
+| verify:1 | done | 2 major, 9 minor. No blocker found: the founder's journey works end to end on the merged branch, with 2 majors and a set of minors. Verified on a fresh clone at d29e6c2 (the hea… |
+| fix:1 | running or interrupted |  |
+| verify:2 | running or interrupted |  |
 
 ## Trial on five real pieces (lane A)
 
 | Agent | State | Outcome |
 |---|---|---|
 | setup | done | The trial install is ready and the HOWTO is proven, but I stopped another session's Pavé server by mistake while cleaning up. That comes first. ## Incident: my cleanup killed another session's server - **What I did:** a… |
-| trial:solitaire | running or interrupted |  |
-| trial:halo | running or interrupted |  |
+| trial:solitaire | done | # Solitaire trial: six-claw round solitaire from a photo The trial ran end to end: a real photo went to the design board, Take to CAD built the ring, three chat rounds closed part of the gap, the STL is one clean solid,… |
+| trial:halo | done | # Halo ring trial: result The trial ran end to end: photo → design board → Take to CAD → built CAD → edits → STL → Blender hero shot. The CAD is a recognisable cousin of the reference, not a replica: **3 out of 5**. Eve… |
+| trial:signet | running or interrupted |  |
+| trial:pendant | running or interrupted |  |
+| trial:eternity | running or interrupted |  |
+| report | running or interrupted |  |
 
-## Diaex connection (lane A)
+## Diaex sign-in and access gate (lane A)
 
 | Agent | State | Outcome |
 |---|---|---|
-| build | running or interrupted |  |
+| build | done | ## Diaex connection and access gate: report **Answer to the founder's question ("at what point can we test?")**: Pavé's side is ready to test now. Sign-in is proven only against Pavé's stand-in for Diaex; no call has re… |
+| review | done | 1 blocker, 2 major, 9 minor. FAIL as an access lock; the sign-in itself is sound and ready to test. The request Pavé sends and every reply it reads match Diaex's code on its remote main, a… |
+| fix | running or interrupted |  |
+| verify | running or interrupted |  |
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 61ce861 Agents: lessons from running many agents at once; trial, Diaex connection and release check on the status page
+Branch `claude/busy-bardeen-o482lo`, head: afe5e03 Bring in the laptop's jewelry render skill
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -74,7 +113,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 61ce861 Agents: lessons from running many agents at once; trial, Diaex connection and release check on the status page
+Branch `claude/busy-bardeen-o482lo`, head: afe5e03 Bring in the laptop's jewelry render skill
 
 | Agent | State | Outcome |
 |---|---|---|

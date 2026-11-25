@@ -1,5 +1,17 @@
 [
   {
+    "name": "Studio experience: focused editor, project card menu, minimal assistant with a character (lane A, A11)",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_762741be-a41/journal.jsonl"
+  },
+  {
+    "name": "Render realism: every look tested in Blender, black acrylic, the render skill (lane A, A12)",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_60ffa2a3-a9f/journal.jsonl"
+  },
+  {
+    "name": "CAD viewport: speed, full rotation, Rhino navigation (lane A, A13)",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_0ef7f535-797/journal.jsonl"
+  },
+  {
     "name": "Studio focus: settings readability, CAD editor, delete (lane A, A8)",
     "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_0cd65989-929/journal.jsonl"
   },
