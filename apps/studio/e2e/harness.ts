@@ -250,12 +250,12 @@ try {
     })
     state.directionsPiece = piece.id
     save()
-    await page.goto(`${BASE}/pieces/${piece.id}/directions`)
-    await page.getByText('No directions yet').waitFor()
-    await page.getByRole('button', { name: 'Propose directions with AI' }).click()
-    await page.getByRole('button', { name: 'Start job' }).waitFor()
+    // Variants are "Try variants" in the CAD stage (step 17): a message, not a job.
+    await page.goto(`${BASE}/pieces/${piece.id}/design`)
+    await page.getByRole('button', { name: 'Try variants' }).first().click()
+    await page.getByRole('dialog', { name: 'Variants' }).getByText('No variants yet.').waitFor()
     await shot('job-plan')
-    await page.getByRole('button', { name: 'Start job' }).click()
+    await page.getByRole('button', { name: 'Propose variants with AI' }).click()
     await openDock()
     const card = (l: string) =>
       page

@@ -15,7 +15,9 @@
  * of the conversation (the shots a run created, in creation order). `"{{suggest:<key>}}"` (a
  * JSON string) becomes the camera object the latest `scenes.suggest` placed for that shot, and
  * `"{{questions}}"` its default questions, so a fixture "places" cameras as a model would: from
- * the numbers the server measured on this very piece.
+ * the numbers the server measured on this very piece. `"{{readQuestions}}"` and `"{{readSpec}}"`
+ * are the spec questions and the spec draft of the latest `references.read`, so a fixture asks
+ * and builds from the picture it just read (Take to CAD).
  *
  * Two extras for watching the studio (screenshots, demos), neither part of the API:
  *  - `"paceMs": 40` streams the turn's text a word at a time, waiting that long between events;
@@ -127,6 +129,7 @@ function fill(
   attachment: string | null,
   named: { takes: string[]; scenes: string[]; shots: string[] },
   suggestion: Suggestion | null,
+  read: PhotoReadOut | null = null,
 ): ScriptedTurn {
   const json = JSON.stringify(turn)
     .replaceAll('{{pieceId}}', pieceId ?? 'no-piece')
@@ -140,6 +143,8 @@ function fill(
       JSON.stringify(suggestion?.cameras[key] ?? { preset: 'hero', focalLength: 90 }),
     )
     .replaceAll('"{{questions}}"', JSON.stringify(suggestion?.questions ?? []))
+    .replaceAll('"{{readQuestions}}"', JSON.stringify(read?.questions ?? []))
+    .replaceAll('"{{readSpec}}"', JSON.stringify(read?.specDraft ?? null))
   const { paceMs: _pace, error, ...filled } = JSON.parse(json) as FixtureTurn
   return {
     ...filled,
@@ -188,6 +193,33 @@ function allShots(params: Parameters<ModelClient['stream']>[0]): string[] {
 interface Suggestion {
   cameras: Record<string, unknown>
   questions: unknown[]
+}
+
+interface PhotoReadOut {
+  questions: unknown[]
+  specDraft: unknown
+}
+
+/** The spec questions and draft of the latest `references.read` result in the conversation. */
+function latestRead(params: Parameters<ModelClient['stream']>[0]): PhotoReadOut | null {
+  for (let i = params.messages.length - 1; i >= 0; i--) {
+    const m = params.messages[i]!
+    if (m.role !== 'user' || !Array.isArray(m.content)) continue
+    for (const block of m.content as { type: string; content?: unknown }[]) {
+      if (block.type !== 'tool_result' || !Array.isArray(block.content)) continue
+      for (const part of block.content as { type: string; text?: string }[]) {
+        if (part.type !== 'text' || !part.text?.startsWith('{')) continue
+        try {
+          const out = JSON.parse(part.text) as Partial<PhotoReadOut>
+          if (out.specDraft && Array.isArray(out.questions))
+            return { questions: out.questions, specDraft: out.specDraft }
+        } catch {
+          // Not JSON: another tool's text.
+        }
+      }
+    }
+  }
+  return null
 }
 
 /** The cameras and questions of the latest `scenes.suggest` result in the conversation. */
@@ -243,6 +275,7 @@ export function scriptedFactory(fixture: Fixture): ModelFactory {
                   latestAttachment(params),
                   { ...latestNamed(params), shots: allShots(params) },
                   latestSuggestion(params),
+                  latestRead(params),
                 ),
               ]
             : [],

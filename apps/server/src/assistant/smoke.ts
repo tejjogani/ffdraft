@@ -2,9 +2,11 @@
  * The live smoke test's journeys (`pnpm agent:smoke`, entry point `src/smoke-cli.ts`): the
  * founder's three stages, run by Claude on a real server in this process.
  *
- *   a. Design: a written brief becomes directions (an AI job); a person picks one, which becomes
- *      the piece's built design.
- *   b. Photo: a kernel-drawn photo of a ring becomes a parametric design.
+ *   a. Variants: from a written brief, "Try variants" in the CAD stage proposes built variants; a
+ *      person picks one, which becomes the piece's built design.
+ *   b. Photo: a kernel-drawn photo of a ring, put on the piece's design board and taken to CAD:
+ *      the CAD job reads it, asks the five specs (answered with the defaults), estimates, and
+ *      builds a parametric design with the photo laid in its view.
  *   c. Edit: one change asked for by chat on the design from (a).
  *   d. Render: a Render job makes one low-sample Blender take and the model looks at it (skipped
  *      with a clear line when Blender is not found).
@@ -23,6 +25,7 @@ import { copyFile, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type AgentToolName, describeCall } from '@pave/agent'
+import { TAKE_TO_CAD_GOAL, VARIANTS_PROMPT } from '@pave/agent/studio'
 import {
   type AssistantTier,
   applyOps,
@@ -388,6 +391,8 @@ export async function runSmoke(opts: SmokeOptions): Promise<SmokeReport> {
       pieceId?: string
       attachments?: string[]
       job?: { stage: 'design' | 'cad' | 'render'; goal?: string }
+      /** The stage tab the message is sent from (its spend counts there). */
+      stage?: 'design' | 'cad' | 'render'
     },
   ): Promise<{ detail: Detail; threadId: string } | null> {
     log(`\n${r.title}`)
@@ -397,7 +402,11 @@ export async function runSmoke(opts: SmokeOptions): Promise<SmokeReport> {
         ...(input.threadId ? { threadId: input.threadId } : {}),
         attachments: input.attachments ?? [],
         referenceIds: [],
-        context: { ...(input.pieceId ? { pieceId: input.pieceId } : {}), selection: [] },
+        context: {
+          ...(input.pieceId ? { pieceId: input.pieceId } : {}),
+          selection: [],
+          ...(input.stage ? { stage: input.stage } : {}),
+        },
         tier: opts.tier,
         ...(input.job ? { job: input.job } : {}),
         clientId: 'smoke',
@@ -447,15 +456,18 @@ export async function runSmoke(opts: SmokeOptions): Promise<SmokeReport> {
     let pieceId: string | null = null
     let threadId: string | null = null
 
-    // a. Design: brief → directions (an AI job) → a person picks one → a built design.
+    // a. Variants: brief → "Try variants" in CAD → a person picks one → a built design.
     if (only.has('design')) {
-      const r = blank('design', 'a. Design: a brief becomes directions, and one becomes the design')
+      const r = blank(
+        'design',
+        'a. Variants: a brief becomes built variants, and one becomes the design',
+      )
       await journey(r, async () => {
         const piece = await s.api.call('pieces.create', { title: 'Smoke test ring', brief: BRIEF })
         const done = await run(r, {
-          text: 'Propose directions for this brief.',
+          text: VARIANTS_PROMPT,
           pieceId: piece.id,
-          job: { stage: 'design' },
+          stage: 'cad',
         })
         if (done) {
           threadId = done.threadId
@@ -473,7 +485,7 @@ export async function runSmoke(opts: SmokeOptions): Promise<SmokeReport> {
             )
           const first = after.directions[0]
           if (first) {
-            // The person's step of the Design job: they choose, then accept the job's outputs.
+            // The person chooses one; a job (if the model started one) is accepted.
             await s.api.call('pieces.chooseDirection', { pieceId: piece.id, directionId: first.id })
             if (done.detail.run.job?.review === 'pending')
               await s.api.call('runs.accept', { runId: done.detail.run.id })
@@ -487,13 +499,34 @@ export async function runSmoke(opts: SmokeOptions): Promise<SmokeReport> {
 
     // b. Photo: a kernel-drawn photo of a six-claw solitaire → a parametric design.
     if (only.has('photo')) {
-      const r = blank('photo', 'b. Photo: a photo of a ring becomes a parametric design')
+      const r = blank(
+        'photo',
+        'b. Photo: a photo on the design board, taken to CAD, becomes a parametric design',
+      )
       await journey(r, async () => {
         const photo = await ringPhoto(s)
-        const done = await run(r, {
-          text: 'Make this ring as a parametric design.',
-          attachments: [photo],
+        // As the studio does it: the photo goes on the piece's design board, then to CAD.
+        const target = await s.api.call('pieces.create', { title: 'Smoke test photo ring' })
+        const board = await s.api.call('boards.forPiece', { pieceId: target.id })
+        const [ref] = await s.api.call('references.save', {
+          boardId: board.id,
+          items: [{ assetId: photo, title: 'A ring I like' }],
         })
+        await s.api.call('pieces.takeToCad', { pieceId: target.id, referenceId: ref!.id })
+        const done = await run(r, {
+          text: TAKE_TO_CAD_GOAL,
+          attachments: [photo],
+          pieceId: target.id,
+          stage: 'design',
+          job: { stage: 'cad', goal: TAKE_TO_CAD_GOAL },
+        })
+        const pin = (await s.api.call('references.pins', { pieceId: target.id })).references[0]
+        if (done)
+          r.notes.push(
+            pin?.plane
+              ? `the photo lies in the ${pin.plane.view} view, ${pin.plane.width.toFixed(1)} mm wide`
+              : 'the photo was not laid in a view (the run did not build from the spec)',
+          )
         const made = done?.detail.run.pieceId
         if (done && !made) r.failures.push('the run did not make or open a piece')
         if (made) {

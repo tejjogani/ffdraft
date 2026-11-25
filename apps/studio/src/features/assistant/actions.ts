@@ -50,6 +50,7 @@ export function useSend(page: AssistantContext) {
         ...(pieceId ? { pieceId } : {}),
         ...(usePage && page.boardId ? { boardId: page.boardId } : {}),
         selection: opts.bare ? [] : (s.selection?.nodeIds ?? []),
+        ...(pieceId && page.stage ? { stage: page.stage } : {}),
       },
       ...(tier ? { tier } : {}),
       ...(opts.job ? { job: opts.job } : {}),

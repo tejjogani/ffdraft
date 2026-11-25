@@ -1,17 +1,29 @@
-import { PIECE_KINDS, type PieceKind, type PieceSummary, STAGES, type Stage } from '@pave/schema'
+import {
+  type Collection,
+  type FolderTotal,
+  MAX_FOLDER_DEPTH,
+  PIECE_KINDS,
+  type PieceKind,
+  type PieceSummary,
+  type ProjectCost,
+  STAGES,
+  type Stage,
+} from '@pave/schema'
 import { Badge, Button, EmptyState, InlineError, Segmented, Select, Skeleton } from '@pave/ui'
-import { useNavigate, useSearch } from '@tanstack/react-router'
-import { FileUp, Folder, LayoutGrid, Plus, Rows3 } from 'lucide-react'
+import { Link, useNavigate, useSearch } from '@tanstack/react-router'
+import { FileUp, Folder, FolderPlus, LayoutGrid, Plus, Rows3 } from 'lucide-react'
 import { useMemo } from 'react'
 import { KindGlyph } from '../../components/KindGlyph'
 import { Column, PageHeader, PageTitle } from '../../components/Page'
 import { PieceCard, PieceCardSkeleton } from '../../components/PieceCard'
 import { StageIcon } from '../../components/StageChip'
 import { useOpenPaveFile } from '../../features/pavefile'
+import { usd } from '../../features/projects/cost'
+import { StageProgress } from '../../features/projects/ProjectSections'
 import { KIND_LABEL, STAGE_LABEL } from '../../lib/domain'
 import { plural } from '../../lib/format'
 import { useCreatePiece } from '../../lib/pieces'
-import { useRpc } from '../../lib/query'
+import { useRpc, useRpcMutation } from '../../lib/query'
 import { PieceTable } from './PieceTable'
 
 export interface PiecesSearch {
@@ -31,7 +43,11 @@ const SORTS: Record<
   title: (a, b) => a.title.localeCompare(b.title),
 }
 
-/** All pieces, or one collection's: gallery ⇄ table, filter, group by stage, sort. */
+/**
+ * All projects (pieces), or one folder's: gallery ⇄ table, filter, group by stage, sort. Each
+ * project shows its stage progress and what it has cost; a folder shows its sub-folders with
+ * their totals and its own total (sub-folders included).
+ */
 export function PiecesPage({ collectionId }: { collectionId?: string }) {
   const search = useSearch({ strict: false }) as PiecesSearch
   const navigate = useNavigate()
@@ -46,6 +62,17 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
   const collections = useRpc('collections.list', {})
   const collection = collections.data?.find((c) => c.id === collectionId)
   const pieces = useRpc('pieces.list', { collectionId, stage, limit: 200 })
+  const summary = useRpc('projects.summary', collectionId ? { collectionId } : {})
+  const costs = useMemo(
+    () => new Map((summary.data?.projects ?? []).map((c) => [c.pieceId, c])),
+    [summary.data],
+  )
+  const subfolders = (collections.data ?? []).filter(
+    (c) => collectionId && c.parentId === collectionId,
+  )
+  const parent = collections.data?.find((c) => c.id === collection?.parentId)
+  const folderTotal = summary.data?.folders.find((f) => f.collectionId === collectionId)
+  const allTotal = (summary.data?.projects ?? []).reduce((n, p) => n + p.totalUsd, 0)
   const create = useCreatePiece()
   const openPaveFile = useOpenPaveFile()
 
@@ -60,7 +87,7 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
         ).filter(([, l]) => l.length)
       : [[null, visible]]
 
-  const title = collectionId ? (collection?.name ?? 'Collection') : 'Pieces'
+  const title = collectionId ? (collection?.name ?? 'Folder') : 'Projects'
   const filtered = !!(stage || kind)
 
   return (
@@ -69,7 +96,15 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
         crumbs={
           collectionId
             ? [
-                { label: 'Pieces', link: { to: '/pieces' } },
+                { label: 'Projects', link: { to: '/pieces' } },
+                ...(parent
+                  ? [
+                      {
+                        label: parent.name,
+                        link: { to: '/collections/$id', params: { id: parent.id } },
+                      },
+                    ]
+                  : []),
                 {
                   label: title,
                   icon: collection?.icon ? (
@@ -79,7 +114,7 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
                   ),
                 },
               ]
-            : [{ label: 'Pieces' }]
+            : [{ label: 'Projects' }]
         }
         actions={
           <>
@@ -87,6 +122,7 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
               {/* An icon alone in a phone's header; the name stays for screen readers. */}
               <span className="max-sm:sr-only">Open Pavé file</span>
             </Button>
+            {collection && !collection.parentId && <NewSubfolder parent={collection} />}
             <Button
               variant="primary"
               size="sm"
@@ -103,10 +139,17 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
           title={title}
           description={
             pieces.data
-              ? plural(visible.length, 'piece') + (filtered ? ' matching filters' : '')
+              ? plural(visible.length, 'project') +
+                (filtered ? ' matching filters' : '') +
+                (summary.data
+                  ? ` · ${usd(collectionId ? (folderTotal?.totalUsd ?? 0) : allTotal)} spent${collectionId && subfolders.length ? ', its folders included' : ''}`
+                  : '')
               : ' '
           }
         />
+        {subfolders.length > 0 && (
+          <Subfolders folders={subfolders} totals={summary.data?.folders ?? []} />
+        )}
         <div className="mb-6 flex flex-wrap items-center gap-1.5 border-b border-line pb-3">
           <Select
             variant="bare"
@@ -196,7 +239,13 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
           <EmptyState
             visual={<KindGlyph kind="ring" className="w-16" />}
             title={
-              filtered ? 'Nothing matches' : collectionId ? 'An empty collection' : 'No pieces yet'
+              filtered
+                ? 'Nothing matches'
+                : collectionId
+                  ? subfolders.length
+                    ? 'No projects directly in this folder'
+                    : 'An empty folder'
+                  : 'No projects yet'
             }
             description={
               filtered
@@ -233,11 +282,15 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
                 {view === 'gallery' ? (
                   <Grid>
                     {list.map((p) => (
-                      <PieceCard key={p.id} piece={p} />
+                      <PieceCard
+                        key={p.id}
+                        piece={p}
+                        meta={<ProjectMeta piece={p} cost={costs.get(p.id)} />}
+                      />
                     ))}
                   </Grid>
                 ) : (
-                  <PieceTable pieces={list} collections={collections.data ?? []} />
+                  <PieceTable pieces={list} collections={collections.data ?? []} costs={costs} />
                 )}
               </section>
             ))}
@@ -245,6 +298,74 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
         )}
       </Column>
     </>
+  )
+}
+
+/** Under a project's card: its three stages and what it has cost. */
+function ProjectMeta({ piece, cost }: { piece: PieceSummary; cost: ProjectCost | undefined }) {
+  return (
+    <div className="flex items-center justify-between gap-2 text-xs text-fg-subtle">
+      <StageProgress piece={piece} cost={cost} />
+      <span className="font-mono tabular" data-project-cost>
+        {cost ? usd(cost.totalUsd) : '—'}
+      </span>
+    </div>
+  )
+}
+
+/** A folder's own folders, each with its totals (its projects, what they cost, the plan's counts). */
+function Subfolders({ folders, totals }: { folders: Collection[]; totals: FolderTotal[] }) {
+  return (
+    <section aria-label="Folders" className="mb-8">
+      <h2 className="mb-3 text-sm font-medium">Folders</h2>
+      <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {folders.map((f) => {
+          const t = totals.find((x) => x.collectionId === f.id)
+          return (
+            <li key={f.id}>
+              <Link
+                to="/collections/$id"
+                params={{ id: f.id }}
+                className="flex flex-col gap-2 rounded-lg bg-bg p-3 shadow-[0_0_0_1px_var(--line)] hover:shadow-[0_0_0_1px_var(--line-strong)]"
+              >
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  <Folder className="size-4 text-fg-subtle" aria-hidden />
+                  <span className="truncate">{f.name}</span>
+                </span>
+                <span className="text-xs text-fg-subtle" data-folder-total>
+                  {plural(t?.pieceCount ?? 0, 'project')} · {usd(t?.totalUsd ?? 0)}
+                  {t?.rendersUsed ? ` · ${plural(t.rendersUsed, 'render')}` : ''}
+                  {t?.exportsUsed ? ` · ${plural(t.exportsUsed, 'export')}` : ''}
+                </span>
+              </Link>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
+  )
+}
+
+/** A folder inside a top-level folder (two levels at most). */
+function NewSubfolder({ parent }: { parent: Collection }) {
+  const navigate = useNavigate()
+  const create = useRpcMutation('collections.create', {
+    onSuccess: (c) => void navigate({ to: '/collections/$id', params: { id: c.id } }),
+  })
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      icon={FolderPlus}
+      disabled={create.isPending}
+      aria-label={`New folder in ${parent.name} (folders go ${MAX_FOLDER_DEPTH} levels deep)`}
+      onClick={() => {
+        const name = window.prompt('Folder name')?.trim()
+        if (name) create.mutate({ name, parentId: parent.id })
+      }}
+    >
+      <span className="max-sm:sr-only">New folder</span>
+    </Button>
   )
 }
 

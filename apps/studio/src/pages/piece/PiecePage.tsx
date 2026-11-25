@@ -27,6 +27,7 @@ import { StagePicker } from '../../components/StageChip'
 import { JobPanel } from '../../features/assistant/jobs/JobPanel'
 import { StageStepper } from '../../features/assistant/jobs/StageStepper'
 import { StartJob } from '../../features/assistant/jobs/StartJob'
+import { TryVariants } from '../../features/directions/TryVariants'
 import { savePaveFile } from '../../features/pavefile'
 import { DOCK_PANEL_PX, ReferenceDock } from '../../features/references/ReferencePanel'
 import { useReferencePanel } from '../../features/references/store'
@@ -133,6 +134,7 @@ export function PiecePage({ id }: { id: string }) {
             ))}
             {bleed && p && (
               <div className="ml-auto flex items-center gap-1 pl-3">
+                {stage === 'cad' && <TryVariants piece={p} />}
                 <ReferencesToggle />
                 <PieceStage piece={p} labelled />
               </div>

@@ -6,6 +6,7 @@
  */
 import type {
   AiJob,
+  JobStage,
   AssistantTier,
   Feedback,
   Message,
@@ -66,6 +67,7 @@ export const toRun = (r: typeof t.agentRun.$inferSelect): Run => ({
   error: r.error,
   errorCode: r.errorCode,
   job: r.job ?? null,
+  stage: r.stage ?? null,
 })
 
 export const toStep = (r: typeof t.agentStep.$inferSelect): Step => ({
@@ -140,6 +142,8 @@ export async function startRun(
     origin?: Run['origin']
     /** An AI job's stage, goal and plan. */
     job?: AiJob | null
+    /** The stage its spend counts against; a job's own stage wins. */
+    stage?: JobStage | null
   },
 ): Promise<Run> {
   await ensure(getThread, ctx, input.threadId)
@@ -157,6 +161,7 @@ export async function startRun(
     parentRunId: input.parentRunId ?? null,
     baseSeq: input.baseSeq ?? null,
     job: input.job ?? null,
+    stage: input.job?.stage ?? input.stage ?? null,
   })
   return toRun(row)
 }

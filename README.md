@@ -24,15 +24,17 @@ This page is how to run it on your own computer. How it is built is in
 
 ## What works today
 
-Pavé is under construction. A piece moves through three stages, **Design** (directions),
-**CAD** and **Render**, and each can be done by hand or handed to the assistant as an AI job you
-watch, pause, take over or stop.
+Pavé is under construction. A piece is a project in three stages, **Design** (its design board:
+pictures, sketches, notes and models, no 3D), **CAD** and **Render**, and each can be done by hand
+or handed to the assistant as an AI job you watch, pause, take over or stop. Projects live in
+folders (a folder can hold folders, one level deep), and each shows what every stage has cost.
 
 | Area | State |
 | --- | --- |
-| Workspace: home, collections, pieces, library of metals, stones, cuts and ring sizes | Works |
+| Workspace: home, projects in folders (with what each stage cost), library of metals, stones, cuts and ring sizes | Works |
 | Templates: 14 starting points, from a solitaire to an iced-out trophy pendant | Works |
-| **Design** tab: the brief, and directions to compare, mix and choose (by hand from templates, or proposed by the assistant) | Works |
+| **Design** tab: the project's design board (uploads, sketch sheets, sketches, pasted Pinterest or Google links, notes, 3D models as inspiration, museum search), **Take to CAD**, **Start CAD**, **Open as CAD** | Works. Generating concept images needs an image model, which this build does not include; Google and Pinterest search need their keys (paste links meanwhile) |
+| **Try variants** in CAD: built alternatives of the current CAD to compare, mix and choose | Works |
 | **CAD** tab: feature list, inspector, live weight, carats and stone count, manufacturability checks, undo and redo | Works; being tested and fixed, so expect rough edges |
 | **Render** tab: shots, looks, framing a shot by hand in the viewfinder, animations (turntable, orbit, push-in, macro sweep, sparkle pass) as MP4 with a GIF, Blender takes, browser previews without Blender | Works; Blender is optional (animations need it) |
 | The assistant: chat in the dock, AI jobs for each stage, a design from a written brief or from a photo, edits by chat, questions about a selected part | Works with your own Claude API key ([below](#use-the-assistant-with-your-claude-api-key)). Built and tested against recorded stand-ins for Claude, not yet against Claude itself: run `pnpm agent:smoke` once with your key to check it |
@@ -42,7 +44,8 @@ watch, pause, take over or stop.
 | Plans: Free and Pro, with monthly counts of Blender renders and Rhino/STEP exports | Counting works; there is no payment yet |
 | Production package: spec sheet, drawings, files, stone list, cost estimate, checks, as a zip | Works [from a script](#using-it-from-scripts); its screen is not built yet |
 | Connecting Claude Code to Pavé over MCP | Planned, not built |
-| Ideas pages, brand models, on-model shots, sourcing, publishing | Not built yet. Their pages are placeholders |
+| **Ideas**: design boards on their own, linked to a project or not | Works |
+| Brand models, on-model shots, sourcing, publishing | Not built yet. Their pages are placeholders |
 | Desktop app | Not built yet. Pavé runs in your browser from a local server |
 
 ## Install
@@ -165,8 +168,11 @@ pnpm agent:smoke
 This runs the whole journey against Claude on a throwaway copy of Pavé in memory (your own
 pieces are not touched) and checks each step:
 
-1. a written brief becomes directions (a Design job), and one of them becomes the built design;
-2. a photo of a ring (drawn by Pavé's own geometry engine) becomes a parametric design;
+1. a written brief becomes built variants (**Try variants** in CAD), and one of them becomes the
+   built design;
+2. a photo of a ring (drawn by Pavé's own geometry engine) goes on the design board and is taken
+   to CAD: the CAD job asks the specs, estimates and builds a parametric design, with the photo
+   laid in its view;
 3. one change asked for in words;
 4. one low-quality Blender render and the assistant's critique of it (skipped, with a line
    saying so, if Blender is not installed).
@@ -194,9 +200,10 @@ made (each can be undone), the time and the cost, with **Pause**, **Take over** 
 Changing the piece by hand pauses the job; **Resume** carries on from the piece as it is.
 
 Every job first asks at most three quick questions in the assistant's panel, with good answers
-already picked, so **Go** alone is enough (or type what you want instead): for directions the
-budget, the metal or who wears it; for CAD the ring size, the centre stone or the setting the
-spec leaves open; for renders what the images are for. Your answers show under that step of the
+already picked, so **Go** alone is enough (or type what you want instead): for the design board
+the mood, the metal or who wears it; for CAD the ring size, the centre stone or the setting the
+spec leaves open (from a picture, always five: what it is, its size, the centre stone, the metal
+and the budget, each defaulting to what the picture shows); for renders what the images are for. Your answers show under that step of the
 job's plan, and a resumed job does not ask again.
 
 The assistant's panel sits in the right-hand sidebar. **Pop out as a floating window** makes it a
@@ -204,12 +211,17 @@ window you can drag and resize over the work (drag it to the right edge to dock 
 **Collapse to a pill** shrinks it to a small pill that shows a running job's step. Pavé remembers
 which you chose. On a phone it fills the screen and collapses to the pill.
 
-1. **Design.** On Home, describe the piece in the box ("What are we making?"), or create a
-   piece, write its brief on the **Design** tab and press **Propose directions with AI**. You
-   get two to four directions, each built, weighed and roughly priced, with its trade-off.
-   Compare them, **Mix…** parts of two (head, band, metal, style), and **Choose** one: it becomes
-   the piece's design and the piece moves to CAD.
-2. **CAD.** Press **Make the CAD with AI** to have the assistant take the chosen direction to
+1. **Design.** Create a piece and open its **Design** tab: **Start the design board**, then drop
+   or paste what the piece should be (a photo of the trophy to put on a pendant, a pendant you
+   like, a scanned sketch sheet, a Pinterest link, a 3D model), sketch on the board, or **Search
+   references** in the open museum collections. **Gather ideas with AI** has the assistant read
+   the brief and the board, ask what is open, pin references and sharpen the brief. Then select a
+   picture and press **Take to CAD**: the CAD job asks the five specs (Go accepts what the
+   picture shows), shows an estimate (metal weight, carats, rough cost) on the spec card, and
+   builds the CAD from the picture with **Build it**, laying the picture in its view as an image
+   plane. Or **Start CAD**, blank or from a template; a 3D model on the board opens with **Open
+   as CAD**. Boards also live on their own under **Ideas**, linked to a project or not.
+2. **CAD.** Press **Make the CAD with AI** to have the assistant take the design to
    production detail: it runs every check and fixes or explains each warning, then reports
    weight, carats and cost. Then keep editing both ways: drag a value in the inspector, or ask
    in words ("make the band 0.3 mm wider", "swap the centre stone for a 1.5 ct oval and keep the
@@ -311,8 +323,9 @@ cost, and the changes it made.
    **Open Pavé file** on the Pieces page, or drop it on the window.
 6. **+** above the feature list adds a stone, a setting, a halo, a row of stones, pavé, a bail,
    a chain, text, an imported mesh and more.
-7. The **Design** tab holds the brief and the directions. **Add from a template** adds a
-   direction by hand; choosing one replaces the design as one change you can undo.
+7. The **Design** tab holds the design board, the brief and the spec. In CAD, **Try variants**
+   shows built alternatives of the CAD: **Add from a template** adds one by hand; choosing one
+   replaces the design as one change you can undo.
 8. The **Render** tab draws the selected shot live. Pick a look (Studio white, Black acrylic,
    Soft gradient…), an angle and a size, then **Render** (or **Render all** for the whole set).
 

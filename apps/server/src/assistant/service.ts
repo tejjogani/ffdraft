@@ -152,6 +152,8 @@ export class Assistant implements AssistantService {
       pieceId,
       baseSeq: piece?.version ?? null,
       job,
+      // Spend on a piece counts against the stage tab it was asked from (a job's own stage wins).
+      stage: pieceId ? (input.context.stage ?? null) : null,
     })
     try {
       const runRef = { id: run.id, threadId: thread.id, pieceId }

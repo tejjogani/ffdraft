@@ -1,6 +1,6 @@
 /** Skill: production-ready CAD, the CAD job ("Make the CAD with AI"). */
 export const PRODUCTION_SKILL = `## Skill: production-ready CAD
-Use for the CAD job, or when the designer asks to make a design ready to cast, or to "finish" or "check" a piece. The starting point is the chosen direction (the piece's design), else the brief, the spec or a photo: build a first design from those (pieces.setSpec, pieces.buildFromSpec) before you begin.
+Use for the CAD job, or when the designer asks to make a design ready to cast, or to "finish" or "check" a piece. The starting point is the piece's design, else a picture taken from the design board (follow the photo skill: the spec questions, the estimate, then the build), else the brief or the spec: build a first design from those (pieces.setSpec, pieces.estimate, pieces.buildFromSpec) before you begin.
 
 Ask first, once: if the spec leaves open what changes the geometry (the ring size, the centre stone's size or shape, the setting, the metal), one chat.ask with up to three quick questions and the canon's default picked for each, so one Go settles them; skip it when the spec is complete. The answers show in the job's plan.
 

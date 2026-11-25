@@ -5,7 +5,7 @@
  "recordedAt": "2026-11-25T09:22:00.594Z",
  "exchanges": [
   {
-   "n": 1,
+   "n": 16,
    "request": {
     "model": "claude-opus-5-5",
     "structured": false,
@@ -14,8 +14,8 @@
      "thinking-binding-controls-2026-08-01",
      "compact-2026-01-12"
     ],
-    "toolsHash": "fdff2d57d508166b",
-    "systemHash": "f1c3000415b81a23",
+    "toolsHash": "daca932b7278448d",
+    "systemHash": "5d8f0a9003b3b578",
     "conversation": 0,
     "prefix": 0,
     "tail": [
@@ -32,7 +32,7 @@
       "role": "system",
       "content": [
        {
-        "text": "Context (the studio when the designer sent the message above).\nDate: 2026-11-25\nOpen piece: Tenth anniversary ring (id pc_lR8esiRn4az4P9mY; ring, solitaire; stage design; design version 3)\nNodes: band (ringShank \"Band\"), center (gem \"Centre stone\"), head (setting \"Head\")\nDirections: A \"Low bezel round\" (id dir_mPxsJafzGRueX6t5), B \"Oval in low claws\" (id dir_933HhULTdehXuBQ6), C \"East-west emerald\" (id dir_DDZDetYL7mIlpSE-), D \"Bezel round on the slim band\" (id dir_NIEmJVbEJlalRxNd, chosen)\nSelection: nothing\nPlan: Pro plan: Blender renders unlimited; Rhino and STEP exports unlimited (resets 2026-12-01). Browser previews, captures and STL, 3MF, OBJ and GLB exports are never counted.\n\n# Canon canon-1552896f6a7bfb · ring/solitaire/049b3b28cc97a7\n## Rules (typical [band]; warnings give the reason)\n- ring.solitaire.bandWidth (ringShank.widthTop) 1.93 [1.5–2.9]: The band frames the stone: under 1.8 mm reads fragile and bends, over 2.4 mm on a 1 ct swamps it. Delicate needs W ≤ 6.5.\n- ring.solitaire.elevation (gem.placement.elevation) 2.3 [0.5–2.6]: Classic sits 0.2–0.8 mm above the band; low (0.8–1.2) only in a basket or bezel; above 4 mm it catches on everything.\n- ring.solitaire.tableHeight (tableHeight) 6.26 [4.46–8.19]: Height is what the hand feels: 6–7 mm for a classic 1 ct, 7 for everyday, 10.5 only for a cocktail ring.\n- ring.solitaire.widthBottom (ringShank.widthBottom) 2.4 [2.2–2.6]: Band width at the base\n- ring.solitaire.thicknessTop (ringShank.thicknessTop) 1.8 [1.7–1.9]: Band thickness under the head\n- bezel.wall (setting.wall) 0.7 [0.6–0.8]: The wall grows with the stone: 0.5–0.6 mm to 5 mm, 0.6–0.8 to 7, 0.7–1.0 above; +0.2 in 22k. Under 0.45 it will not cast.\n- ring.scale.headToFinger (headToFinger) 0.55 [0.3–0.8]: Head to finger\n- stones.oneHero (secondStone) 4.51 [0–5.47]: One stone must win in a blink: the second-largest at most 0.85 of the hero, or the eye cannot settle.\n- ring.solitaire.thicknessBottom (ringShank.thicknessBottom) 1.6 [1.5–1.8]: Band thickness at the base\n- ring.base.euro (euroBase) 0 [0–1]: Euro base for big heads\n- stones.softInPave (softestInPave) 10 [8–10]: Flush, channel, bar and pavé stones take the knocks face-on: only Mohs 8 and harder survive them.\n- metals.colours (metalColours) 1 [1–2]: Unity: one or two metal colours. Three reads as three pieces fighting.\n- metals.finishes (finishCount) 1 [1–2]: Unity: at most two finishes, used to separate planes; more is noise.\n- rows.coverage (gemRow.coverage) 160 [120–270]: Coverage of a part row\n- ring.scale.stoneToFinger (stoneToFinger) 0.42 [0.3–0.65]: Stone to finger\n- stones.meleeColour (meleeColourGap) 1 [0–2]: Melee colour against the centre\n- metals.tipFamily (tipFamilies) 1 [1–1]: One claw-tip family\n- iced.levels (levelStep) 1.2 [0.8–1.5]: Steps between levels\n- stones.whiteHead (colourlessInYellowHead) 0 [0–0]: White head for colourless stones\n## Style: Minimal\nReads right: Proportion and weight are the design: nothing hides a bad number. One finish, one metal, one stone or none. Low profiles and closed shapes: bezels, cigar bands, plain court.\nDo: Set low. Keep to one finish. Check every proportion twice: there is nowhere to hide.\nDon't: Halos or pavé shoulders. Two metals. Decoration that does not carry the stone.\n- ringShank.widthTop 1.9 [1.8–2]: or a 5–8 mm cigar band\n- setting.wall 0.6 [0.5–0.7]\n- setting.prongDiameter 1 [0.9–1.1]: four claws on 6.5 mm\n- gem.placement.elevation 1 [0.5–1.2]: low, in a basket or bezel\n## Exemplars\n- sol-minimal-bezel, Low bezel solitaire (solitaire, classic; minimal): metal au18k-yellow, cut round, head bezel, W 6.44, bandW 1.9, bandT 1.9, e 1, wall 0.6\n  Why: A closed 0.6 mm bezel set low: nothing to snag, one clean line. Band 1.9 mm, one metal, one finish: proportion is the whole design. Table under 5 mm off the finger. Bad twin: A wall too thin to close over the girdle.\n- sol-delicate-oval, Delicate oval solitaire (solitaire, delicate; delicate): metal au18k-yellow, cut oval, head basket, W 5.09, bandW 1.65, bandT 1.7, e 2.2, wire 0.95, prongs 4\n  Why: A 1.65 mm band is only right under a stone of 6.5 mm or less: here 5.1 mm. The narrow band is nearly as deep as it is wide, so the head cannot twist it. North-south oval at 1.4 L:W lengthens the finger. Bad twin: A heavy band that swamps a small oval.\n- sol-retro-cocktail, Two-tone aquamarine cocktail ring (solitaire, bold; retro, cocktail): metal au18k-rose, cut emerald, head basket, W 10.5, bandW 7, bandT 2.5, e 3, wire 1.5, prongs 4\n  Why: A wide rose band that tapers to 3.5 mm carries a 10.5 mm stone like a 1940s tank ring. Heavy 1.5 mm claws and a euro base keep a big step cut upright. One alloy: a yellow head would be soldered on, which the kernel cannot check yet. Bad twin: Claws too fine for a 10 mm stone.\n## Cannot build: say so, offer the stand-in\n- French and U-cut pavé → build shared prong and say the setter will cut it\n- Half-bezel arc other than 110° → the arc is fixed at 110° a side: a wider or narrower grip is a maker note\n- Antique and fancy cuts → old European, rose, polki, tapered baguette, trapezoid and half-moon are not cuts here: name the stand-in\n- Alloys and finishes we cannot specify → 21k, enamel, per-region plating and hand engraving: pick the nearest alloy and note the rest\n## Watch for\n- A stone row running into the head\n- Fat claws that hide the stone\n- A \"lollipop\" head: a big head on a stick of a shank\n- Band and stone out of scale with each other\n- A dead under-gallery: bare claws or a solid block from the side\n## Ask (at most three)\n- Ring size?\n- Centre stone: shape, size or carat, natural or lab?\n- Metal, and active hands or a flush-fit wedding band beside it?",
+        "text": "Context (the studio when the designer sent the message above).\nDate: 2026-11-25\nOpen piece: Tenth anniversary ring (id pc_80wSoZXCvB1x8s1d; ring, solitaire; stage design; design version 3)\nNodes: band (ringShank \"Band\"), center (gem \"Centre stone\"), head (setting \"Head\")\nDirections: A \"Low bezel round\" (id dir_vB_89atrcCI4cO3j), B \"Oval in low claws\" (id dir_L9_geYkA3FKWtzPp), C \"East-west emerald\" (id dir_uXdwa_CbbzMekmXm), D \"Bezel round on the slim band\" (id dir_K5Q2pl8I057j87FV, chosen)\nSelection: nothing\nPlan: Pro plan: Blender renders unlimited; Rhino and STEP exports unlimited (resets 2026-12-01). Browser previews, captures and STL, 3MF, OBJ and GLB exports are never counted.\n\n# Canon canon-1e0781375cebc5 · ring/solitaire/0c5ce1629f39ca\n## Rules (typical [band]; warnings give the reason)\n- ring.solitaire.bandWidth (ringShank.widthTop) 1.93 [1.5–2.9]: The band frames the stone: under 1.8 mm reads fragile and bends, over 2.4 mm on a 1 ct swamps it. Delicate needs W ≤ 6.5.\n- ring.solitaire.elevation (gem.placement.elevation) 2.3 [0.5–2.6]: Classic sits 0.2–0.8 mm above the band; low (0.8–1.2) only in a basket or bezel; above 4 mm it catches on everything.\n- ring.solitaire.tableHeight (tableHeight) 6.26 [4.46–8.19]: Height is what the hand feels: 6–7 mm for a classic 1 ct, 7 for everyday, 10.5 only for a cocktail ring.\n- ring.solitaire.widthBottom (ringShank.widthBottom) 2.4 [2.2–2.6]: Band width at the base\n- ring.solitaire.thicknessTop (ringShank.thicknessTop) 1.8 [1.7–1.9]: Band thickness under the head\n- bezel.wall (setting.wall) 0.7 [0.6–0.8]: The wall grows with the stone: 0.5–0.6 mm to 5 mm, 0.6–0.8 to 7, 0.7–1.0 above; +0.2 in 22k. Under 0.45 it will not cast.\n- ring.scale.headToFinger (headToFinger) 0.55 [0.3–0.8]: Head to finger\n- stones.oneHero (secondStone) 4.51 [0–5.47]: One stone must win in a blink: the second-largest at most 0.85 of the hero, or the eye cannot settle.\n- ring.solitaire.thicknessBottom (ringShank.thicknessBottom) 1.6 [1.5–1.8]: Band thickness at the base\n- ring.base.euro (euroBase) 0 [0–1]: Euro base for big heads\n- stones.softInPave (softestInPave) 10 [8–10]: Flush, channel, bar and pavé stones take the knocks face-on: only Mohs 8 and harder survive them.\n- metals.colours (metalColours) 1 [1–2]: Unity: one or two metal colours. Three reads as three pieces fighting.\n- metals.finishes (finishCount) 1 [1–2]: Unity: at most two finishes, used to separate planes; more is noise.\n- rows.coverage (gemRow.coverage) 160 [120–270]: Coverage of a part row\n- ring.scale.stoneToFinger (stoneToFinger) 0.42 [0.3–0.65]: Stone to finger\n- stones.meleeColour (meleeColourGap) 1 [0–2]: Melee colour against the centre\n- metals.tipFamily (tipFamilies) 1 [1–1]: One claw-tip family\n- iced.levels (levelStep) 1.2 [0.8–1.5]: Steps between levels\n- stones.whiteHead (colourlessInYellowHead) 0 [0–0]: White head for colourless stones\n## Style: Minimal\nReads right: Proportion and weight are the design: nothing hides a bad number. One finish, one metal, one stone or none. Low profiles and closed shapes: bezels, cigar bands, plain court.\nDo: Set low. Keep to one finish. Check every proportion twice: there is nowhere to hide.\nDon't: Halos or pavé shoulders. Two metals. Decoration that does not carry the stone.\n- ringShank.widthTop 1.9 [1.8–2]: or a 5–8 mm cigar band\n- setting.wall 0.6 [0.5–0.7]\n- setting.prongDiameter 1 [0.9–1.1]: four claws on 6.5 mm\n- gem.placement.elevation 1 [0.5–1.2]: low, in a basket or bezel\n## Exemplars\n- sol-minimal-bezel, Low bezel solitaire (solitaire, classic; minimal): metal au18k-yellow, cut round, head bezel, W 6.44, bandW 1.9, bandT 1.9, e 1, wall 0.6\n  Why: A closed 0.6 mm bezel set low: nothing to snag, one clean line. Band 1.9 mm, one metal, one finish: proportion is the whole design. Table under 5 mm off the finger. Bad twin: A wall too thin to close over the girdle.\n- sol-delicate-oval, Delicate oval solitaire (solitaire, delicate; delicate): metal au18k-yellow, cut oval, head basket, W 5.09, bandW 1.65, bandT 1.7, e 2.2, wire 0.95, prongs 4\n  Why: A 1.65 mm band is only right under a stone of 6.5 mm or less: here 5.1 mm. The narrow band is nearly as deep as it is wide, so the head cannot twist it. North-south oval at 1.4 L:W lengthens the finger. Bad twin: A heavy band that swamps a small oval.\n- sol-retro-cocktail, Two-tone aquamarine cocktail ring (solitaire, bold; retro, cocktail): metal au18k-rose, cut emerald, head basket, W 10.5, bandW 7, bandT 2.5, e 3, wire 1.5, prongs 4\n  Why: A wide rose band that tapers to 3.5 mm carries a 10.5 mm stone like a 1940s tank ring. Heavy 1.5 mm claws and a euro base keep a big step cut upright. One alloy: a yellow head would be soldered on, which the kernel cannot check yet. Bad twin: Claws too fine for a 10 mm stone.\n## Cannot build: say so, offer the stand-in\n- French and U-cut pavé → build shared prong and say the setter will cut it\n- Half-bezel arc other than 110° → the arc is fixed at 110° a side: a wider or narrower grip is a maker note\n- Antique and fancy cuts → old European, rose, polki, tapered baguette, trapezoid and half-moon are not cuts here: name the stand-in\n- Alloys and finishes we cannot specify → 21k, enamel, per-region plating and hand engraving: pick the nearest alloy and note the rest\n## Watch for\n- A stone row running into the head\n- Fat claws that hide the stone\n- A \"lollipop\" head: a big head on a stick of a shank\n- Band and stone out of scale with each other\n- A dead under-gallery: bare claws or a solid block from the side\n## Ask (at most three)\n- Ring size?\n- Centre stone: shape, size or carat, natural or lab?\n- Metal, and active hands or a flush-fit wedding band beside it?",
         "type": "text"
        }
       ]
@@ -50,7 +50,7 @@
       "type": "tool_use",
       "name": "design_apply",
       "input": {
-       "pieceId": "pc_lR8esiRn4az4P9mY",
+       "pieceId": "pc_80wSoZXCvB1x8s1d",
        "baseVersion": 3,
        "label": "Band 2.2 mm wide",
        "ops": [
@@ -74,7 +74,7 @@
    }
   },
   {
-   "n": 2,
+   "n": 17,
    "request": {
     "model": "claude-opus-5-5",
     "structured": false,
@@ -83,8 +83,8 @@
      "thinking-binding-controls-2026-08-01",
      "compact-2026-01-12"
     ],
-    "toolsHash": "fdff2d57d508166b",
-    "systemHash": "f1c3000415b81a23",
+    "toolsHash": "daca932b7278448d",
+    "systemHash": "5d8f0a9003b3b578",
     "conversation": 0,
     "prefix": 2,
     "tail": [
@@ -94,10 +94,10 @@
        {
         "type": "thinking",
         "thinking": "The band is 2.6 mm at the top and 2.2 at the base (her earlier hand edit). 2.2 mm wide all round means setting widthTop to 2.2; widthBottom is already 2.2. One update, nothing else touched.",
-        "signature": "fk1.eyJtIjoiY2xhdWRlLW9wdXMtNS01IiwicCI6Ikh0Nlp0Z0x1RkhkaUtsOHVKT3R2RUNQZEc4d3NWLTZ3TU5rZk90ZzhwTmcifQ.017IDHFyIuWREgd5_7c7CrsXVIGskzMejXoKbPRDA6I"
+        "signature": "fk1.eyJtIjoiY2xhdWRlLW9wdXMtNS01IiwicCI6IjBwbTlXYjhCLWI5c0hCT21kX25WeWhfaUU1YnhzcnZkNUZWcE1hU0h6UlUifQ.FwIvw4Sf99fd659r8jrIjxyR0DGbcyxOGxtMhPR7ygM"
        },
        {
-        "id": "toolu_fake1_1_ba20275c",
+        "id": "toolu_fake16_1_4e23486c",
         "name": "design_apply",
         "type": "tool_use",
         "input": {
@@ -111,7 +111,7 @@
           }
          ],
          "label": "Band 2.2 mm wide",
-         "pieceId": "pc_lR8esiRn4az4P9mY",
+         "pieceId": "pc_80wSoZXCvB1x8s1d",
          "baseVersion": 3
         }
        }
@@ -124,7 +124,7 @@
         "type": "tool_result",
         "content": [
          {
-          "text": "{\"version\":4,\"change\":{\"id\":\"chg_run_uspyHpX-GAVCIaPM_toolu_fake1_1_ba20275c\",\"pieceId\":\"pc_lR8esiRn4az4P9mY\",\"seq\":4,\"ops\":[{\"t\":\"update\",\"id\":\"band\",\"patch\":{\"widthTop\":2.2}}],\"actor\":{\"type\":\"agent\",\"model\":\"claude-opus-5-5\",\"runId\":\"run_uspyHpX-GAVCIaPM\",\"toolCallId\":\"toolu_fake1_1_ba20275c\"},\"label\":\"Band 2.2 mm wide\",\"at\":\"2026-11-25T08:25:26.118Z\"}}",
+          "text": "{\"version\":4,\"change\":{\"id\":\"chg_run_2CJu94x1tOu1ggMH_toolu_fake16_1_4e23486c\",\"pieceId\":\"pc_80wSoZXCvB1x8s1d\",\"seq\":4,\"ops\":[{\"t\":\"update\",\"id\":\"band\",\"patch\":{\"widthTop\":2.2}}],\"actor\":{\"type\":\"agent\",\"model\":\"claude-opus-5-5\",\"runId\":\"run_2CJu94x1tOu1ggMH\",\"toolCallId\":\"toolu_fake16_1_4e23486c\"},\"label\":\"Band 2.2 mm wide\",\"at\":\"2026-11-25T10:07:12.233Z\"}}",
           "type": "text"
          },
          {
@@ -132,7 +132,7 @@
           "type": "text"
          }
         ],
-        "tool_use_id": "toolu_fake1_1_ba20275c"
+        "tool_use_id": "toolu_fake16_1_4e23486c"
        }
       ]
      }
@@ -155,7 +155,7 @@
    }
   },
   {
-   "n": 3,
+   "n": 18,
    "request": {
     "model": "claude-opus-5-5",
     "structured": false,
@@ -164,8 +164,8 @@
      "thinking-binding-controls-2026-08-01",
      "compact-2026-01-12"
     ],
-    "toolsHash": "fdff2d57d508166b",
-    "systemHash": "f1c3000415b81a23",
+    "toolsHash": "daca932b7278448d",
+    "systemHash": "5d8f0a9003b3b578",
     "conversation": 0,
     "prefix": 4,
     "tail": [
@@ -192,7 +192,7 @@
       "role": "system",
       "content": [
        {
-        "text": "Context (the studio when the designer sent the message above).\nDate: 2026-11-25\nOpen piece: Tenth anniversary ring (id pc_lR8esiRn4az4P9mY; ring, solitaire; stage design; design version 4)\nNodes: band (ringShank \"Band\"), center (gem \"Centre stone\"), head (setting \"Head\")\nDirections: A \"Low bezel round\" (id dir_mPxsJafzGRueX6t5), B \"Oval in low claws\" (id dir_933HhULTdehXuBQ6), C \"East-west emerald\" (id dir_DDZDetYL7mIlpSE-), D \"Bezel round on the slim band\" (id dir_NIEmJVbEJlalRxNd, chosen)\nSelection: center (gem \"Centre stone\")\nPlan: Pro plan: Blender renders unlimited; Rhino and STEP exports unlimited (resets 2026-12-01). Browser previews, captures and STL, 3MF, OBJ and GLB exports are never counted.\n\n# Canon canon-1552896f6a7bfb · ring/solitaire/1b817fcc662ea5\n## Rules (typical [band]; warnings give the reason)\n- ring.solitaire.bandWidth (ringShank.widthTop) 1.93 [1.5–2.9]: The band frames the stone: under 1.8 mm reads fragile and bends, over 2.4 mm on a 1 ct swamps it. Delicate needs W ≤ 6.5.\n- ring.solitaire.elevation (gem.placement.elevation) 2.3 [0.5–2.6]: Classic sits 0.2–0.8 mm above the band; low (0.8–1.2) only in a basket or bezel; above 4 mm it catches on everything.\n- ring.solitaire.tableHeight (tableHeight) 6.26 [4.46–8.19]: Height is what the hand feels: 6–7 mm for a classic 1 ct, 7 for everyday, 10.5 only for a cocktail ring.\n- ring.solitaire.widthBottom (ringShank.widthBottom) 2 [1.8–2.2]: Band width at the base\n- ring.solitaire.thicknessTop (ringShank.thicknessTop) 1.8 [1.7–1.9]: Band thickness under the head\n- bezel.wall (setting.wall) 0.7 [0.6–0.8]: The wall grows with the stone: 0.5–0.6 mm to 5 mm, 0.6–0.8 to 7, 0.7–1.0 above; +0.2 in 22k. Under 0.45 it will not cast.\n- ring.scale.headToFinger (headToFinger) 0.55 [0.3–0.8]: Head to finger\n- stones.oneHero (secondStone) 4.51 [0–5.47]: One stone must win in a blink: the second-largest at most 0.85 of the hero, or the eye cannot settle.\n- ring.solitaire.thicknessBottom (ringShank.thicknessBottom) 1.6 [1.5–1.8]: Band thickness at the base\n- ring.base.euro (euroBase) 0 [0–1]: Euro base for big heads\n- stones.softInPave (softestInPave) 10 [8–10]: Flush, channel, bar and pavé stones take the knocks face-on: only Mohs 8 and harder survive them.\n- metals.colours (metalColours) 1 [1–2]: Unity: one or two metal colours. Three reads as three pieces fighting.\n- metals.finishes (finishCount) 1 [1–2]: Unity: at most two finishes, used to separate planes; more is noise.\n- rows.coverage (gemRow.coverage) 160 [120–270]: Coverage of a part row\n- ring.scale.stoneToFinger (stoneToFinger) 0.42 [0.3–0.65]: Stone to finger\n- stones.meleeColour (meleeColourGap) 1 [0–2]: Melee colour against the centre\n- metals.tipFamily (tipFamilies) 1 [1–1]: One claw-tip family\n- iced.levels (levelStep) 1.2 [0.8–1.5]: Steps between levels\n- stones.whiteHead (colourlessInYellowHead) 0 [0–0]: White head for colourless stones\n## Style: Minimal\nReads right: Proportion and weight are the design: nothing hides a bad number. One finish, one metal, one stone or none. Low profiles and closed shapes: bezels, cigar bands, plain court.\nDo: Set low. Keep to one finish. Check every proportion twice: there is nowhere to hide.\nDon't: Halos or pavé shoulders. Two metals. Decoration that does not carry the stone.\n- ringShank.widthTop 1.9 [1.8–2]: or a 5–8 mm cigar band\n- setting.wall 0.6 [0.5–0.7]\n- setting.prongDiameter 1 [0.9–1.1]: four claws on 6.5 mm\n- gem.placement.elevation 1 [0.5–1.2]: low, in a basket or bezel\n## Exemplars\n- sol-minimal-bezel, Low bezel solitaire (solitaire, classic; minimal): metal au18k-yellow, cut round, head bezel, W 6.44, bandW 1.9, bandT 1.9, e 1, wall 0.6\n  Why: A closed 0.6 mm bezel set low: nothing to snag, one clean line. Band 1.9 mm, one metal, one finish: proportion is the whole design. Table under 5 mm off the finger. Bad twin: A wall too thin to close over the girdle.\n- sol-delicate-oval, Delicate oval solitaire (solitaire, delicate; delicate): metal au18k-yellow, cut oval, head basket, W 5.09, bandW 1.65, bandT 1.7, e 2.2, wire 0.95, prongs 4\n  Why: A 1.65 mm band is only right under a stone of 6.5 mm or less: here 5.1 mm. The narrow band is nearly as deep as it is wide, so the head cannot twist it. North-south oval at 1.4 L:W lengthens the finger. Bad twin: A heavy band that swamps a small oval.\n- sol-retro-cocktail, Two-tone aquamarine cocktail ring (solitaire, bold; retro, cocktail): metal au18k-rose, cut emerald, head basket, W 10.5, bandW 7, bandT 2.5, e 3, wire 1.5, prongs 4\n  Why: A wide rose band that tapers to 3.5 mm carries a 10.5 mm stone like a 1940s tank ring. Heavy 1.5 mm claws and a euro base keep a big step cut upright. One alloy: a yellow head would be soldered on, which the kernel cannot check yet. Bad twin: Claws too fine for a 10 mm stone.\n## Cannot build: say so, offer the stand-in\n- French and U-cut pavé → build shared prong and say the setter will cut it\n- Half-bezel arc other than 110° → the arc is fixed at 110° a side: a wider or narrower grip is a maker note\n- Antique and fancy cuts → old European, rose, polki, tapered baguette, trapezoid and half-moon are not cuts here: name the stand-in\n- Alloys and finishes we cannot specify → 21k, enamel, per-region plating and hand engraving: pick the nearest alloy and note the rest\n## Watch for\n- A stone row running into the head\n- Fat claws that hide the stone\n- A \"lollipop\" head: a big head on a stick of a shank\n- Band and stone out of scale with each other\n- A dead under-gallery: bare claws or a solid block from the side\n## Ask (at most three)\n- Ring size?\n- Centre stone: shape, size or carat, natural or lab?\n- Metal, and active hands or a flush-fit wedding band beside it?",
+        "text": "Context (the studio when the designer sent the message above).\nDate: 2026-11-25\nOpen piece: Tenth anniversary ring (id pc_80wSoZXCvB1x8s1d; ring, solitaire; stage design; design version 4)\nNodes: band (ringShank \"Band\"), center (gem \"Centre stone\"), head (setting \"Head\")\nDirections: A \"Low bezel round\" (id dir_vB_89atrcCI4cO3j), B \"Oval in low claws\" (id dir_L9_geYkA3FKWtzPp), C \"East-west emerald\" (id dir_uXdwa_CbbzMekmXm), D \"Bezel round on the slim band\" (id dir_K5Q2pl8I057j87FV, chosen)\nSelection: center (gem \"Centre stone\")\nPlan: Pro plan: Blender renders unlimited; Rhino and STEP exports unlimited (resets 2026-12-01). Browser previews, captures and STL, 3MF, OBJ and GLB exports are never counted.\n\n# Canon canon-1e0781375cebc5 · ring/solitaire/0046d2982f30c2\n## Rules (typical [band]; warnings give the reason)\n- ring.solitaire.bandWidth (ringShank.widthTop) 1.93 [1.5–2.9]: The band frames the stone: under 1.8 mm reads fragile and bends, over 2.4 mm on a 1 ct swamps it. Delicate needs W ≤ 6.5.\n- ring.solitaire.elevation (gem.placement.elevation) 2.3 [0.5–2.6]: Classic sits 0.2–0.8 mm above the band; low (0.8–1.2) only in a basket or bezel; above 4 mm it catches on everything.\n- ring.solitaire.tableHeight (tableHeight) 6.26 [4.46–8.19]: Height is what the hand feels: 6–7 mm for a classic 1 ct, 7 for everyday, 10.5 only for a cocktail ring.\n- ring.solitaire.widthBottom (ringShank.widthBottom) 2 [1.8–2.2]: Band width at the base\n- ring.solitaire.thicknessTop (ringShank.thicknessTop) 1.8 [1.7–1.9]: Band thickness under the head\n- bezel.wall (setting.wall) 0.7 [0.6–0.8]: The wall grows with the stone: 0.5–0.6 mm to 5 mm, 0.6–0.8 to 7, 0.7–1.0 above; +0.2 in 22k. Under 0.45 it will not cast.\n- ring.scale.headToFinger (headToFinger) 0.55 [0.3–0.8]: Head to finger\n- stones.oneHero (secondStone) 4.51 [0–5.47]: One stone must win in a blink: the second-largest at most 0.85 of the hero, or the eye cannot settle.\n- ring.solitaire.thicknessBottom (ringShank.thicknessBottom) 1.6 [1.5–1.8]: Band thickness at the base\n- ring.base.euro (euroBase) 0 [0–1]: Euro base for big heads\n- stones.softInPave (softestInPave) 10 [8–10]: Flush, channel, bar and pavé stones take the knocks face-on: only Mohs 8 and harder survive them.\n- metals.colours (metalColours) 1 [1–2]: Unity: one or two metal colours. Three reads as three pieces fighting.\n- metals.finishes (finishCount) 1 [1–2]: Unity: at most two finishes, used to separate planes; more is noise.\n- rows.coverage (gemRow.coverage) 160 [120–270]: Coverage of a part row\n- ring.scale.stoneToFinger (stoneToFinger) 0.42 [0.3–0.65]: Stone to finger\n- stones.meleeColour (meleeColourGap) 1 [0–2]: Melee colour against the centre\n- metals.tipFamily (tipFamilies) 1 [1–1]: One claw-tip family\n- iced.levels (levelStep) 1.2 [0.8–1.5]: Steps between levels\n- stones.whiteHead (colourlessInYellowHead) 0 [0–0]: White head for colourless stones\n## Style: Minimal\nReads right: Proportion and weight are the design: nothing hides a bad number. One finish, one metal, one stone or none. Low profiles and closed shapes: bezels, cigar bands, plain court.\nDo: Set low. Keep to one finish. Check every proportion twice: there is nowhere to hide.\nDon't: Halos or pavé shoulders. Two metals. Decoration that does not carry the stone.\n- ringShank.widthTop 1.9 [1.8–2]: or a 5–8 mm cigar band\n- setting.wall 0.6 [0.5–0.7]\n- setting.prongDiameter 1 [0.9–1.1]: four claws on 6.5 mm\n- gem.placement.elevation 1 [0.5–1.2]: low, in a basket or bezel\n## Exemplars\n- sol-minimal-bezel, Low bezel solitaire (solitaire, classic; minimal): metal au18k-yellow, cut round, head bezel, W 6.44, bandW 1.9, bandT 1.9, e 1, wall 0.6\n  Why: A closed 0.6 mm bezel set low: nothing to snag, one clean line. Band 1.9 mm, one metal, one finish: proportion is the whole design. Table under 5 mm off the finger. Bad twin: A wall too thin to close over the girdle.\n- sol-delicate-oval, Delicate oval solitaire (solitaire, delicate; delicate): metal au18k-yellow, cut oval, head basket, W 5.09, bandW 1.65, bandT 1.7, e 2.2, wire 0.95, prongs 4\n  Why: A 1.65 mm band is only right under a stone of 6.5 mm or less: here 5.1 mm. The narrow band is nearly as deep as it is wide, so the head cannot twist it. North-south oval at 1.4 L:W lengthens the finger. Bad twin: A heavy band that swamps a small oval.\n- sol-retro-cocktail, Two-tone aquamarine cocktail ring (solitaire, bold; retro, cocktail): metal au18k-rose, cut emerald, head basket, W 10.5, bandW 7, bandT 2.5, e 3, wire 1.5, prongs 4\n  Why: A wide rose band that tapers to 3.5 mm carries a 10.5 mm stone like a 1940s tank ring. Heavy 1.5 mm claws and a euro base keep a big step cut upright. One alloy: a yellow head would be soldered on, which the kernel cannot check yet. Bad twin: Claws too fine for a 10 mm stone.\n## Cannot build: say so, offer the stand-in\n- French and U-cut pavé → build shared prong and say the setter will cut it\n- Half-bezel arc other than 110° → the arc is fixed at 110° a side: a wider or narrower grip is a maker note\n- Antique and fancy cuts → old European, rose, polki, tapered baguette, trapezoid and half-moon are not cuts here: name the stand-in\n- Alloys and finishes we cannot specify → 21k, enamel, per-region plating and hand engraving: pick the nearest alloy and note the rest\n## Watch for\n- A stone row running into the head\n- Fat claws that hide the stone\n- A \"lollipop\" head: a big head on a stick of a shank\n- Band and stone out of scale with each other\n- A dead under-gallery: bare claws or a solid block from the side\n## Ask (at most three)\n- Ring size?\n- Centre stone: shape, size or carat, natural or lab?\n- Metal, and active hands or a flush-fit wedding band beside it?",
         "type": "text"
        }
       ]
@@ -214,7 +214,7 @@
       "type": "tool_use",
       "name": "viewport_capture",
       "input": {
-       "pieceId": "pc_lR8esiRn4az4P9mY",
+       "pieceId": "pc_80wSoZXCvB1x8s1d",
        "views": [
         "macro",
         "side"
@@ -236,7 +236,7 @@
    }
   },
   {
-   "n": 4,
+   "n": 19,
    "request": {
     "model": "claude-opus-5-5",
     "structured": false,
@@ -245,8 +245,8 @@
      "thinking-binding-controls-2026-08-01",
      "compact-2026-01-12"
     ],
-    "toolsHash": "fdff2d57d508166b",
-    "systemHash": "f1c3000415b81a23",
+    "toolsHash": "daca932b7278448d",
+    "systemHash": "5d8f0a9003b3b578",
     "conversation": 0,
     "prefix": 7,
     "tail": [
@@ -256,7 +256,7 @@
        {
         "type": "thinking",
         "thinking": "She has the centre stone selected and asks about safety for hard wear and how it is held. From the design: a natural diamond, 6.44 mm round, about 1.00 ct, in a full bezel (setting style bezel) with a 0.7 mm wall, sitting low (elevation 1 mm). Look closely at the head before answering: a macro of the stone and its bezel, and a side view for the height.",
-        "signature": "fk1.eyJtIjoiY2xhdWRlLW9wdXMtNS01IiwicCI6Ikhvb09VeE9Bc2NiM1h1Wl9YMWp6OWxhTFVwdkFZWFVtQnlrRVNQREVzamsifQ.7lwe-i4Pm7JfrrRsvJ4QMsmyHssEOB3xCoXMu-SwRZs"
+        "signature": "fk1.eyJtIjoiY2xhdWRlLW9wdXMtNS01IiwicCI6IlBCQ1lpa1Q3Q01fbWM2RC03Rzh1TWNza3Vlc2JCOEZWREdlVGt0TEw1QmsifQ.2NBLItjgy6EmBvK8nYatIPLsIJbC2hKkZhwwdEbhfyE"
        },
        {
         "text": "Let me look closely at the stone and its setting.",
@@ -264,7 +264,7 @@
         "citations": null
        },
        {
-        "id": "toolu_fake3_2_8cd2e6b5",
+        "id": "toolu_fake18_2_a840ff5b",
         "name": "viewport_capture",
         "type": "tool_use",
         "input": {
@@ -273,7 +273,7 @@
           "macro",
           "side"
          ],
-         "pieceId": "pc_lR8esiRn4az4P9mY",
+         "pieceId": "pc_80wSoZXCvB1x8s1d",
          "focusNodeIds": [
           "center",
           "head"
@@ -289,7 +289,7 @@
         "type": "tool_result",
         "content": [
          {
-          "text": "{\"version\":4,\"source\":\"studio\",\"images\":[{\"view\":\"macro\",\"assetId\":\"as_27Dc5bnZ13x7TMev\"},{\"view\":\"side\",\"assetId\":\"as_nrXMG_CzQN03kRTl\"}],\"summary\":{\"metalMassG\":3.776805718729952,\"metals\":[{\"material\":\"au18k-yellow\",\"volumeMm3\":243.66488507935173,\"massG\":3.776805718729952}],\"stoneCount\":1,\"caratTotal\":1.0019880749760002,\"lots\":[{\"cut\":\"round\",\"stone\":\"diamond\",\"width\":6.44,\"length\":6.44,\"count\":1,\"caratTotal\":1.0019880749760002,\"setting\":\"bezel\",\"role\":\"center\"}],\"boundsMm\":{\"x\":19.90679931640625,\"y\":7.840000152587891,\"z\":23.067400230407713},\"diagnostics\":[]}}",
+          "text": "{\"version\":4,\"source\":\"server\",\"images\":[{\"view\":\"macro\",\"assetId\":\"as__fv-YsXaZ8fKEIMo\"},{\"view\":\"side\",\"assetId\":\"as_eAINpEDFXAvD4taB\"}],\"summary\":{\"metalMassG\":3.776805718729953,\"metals\":[{\"material\":\"au18k-yellow\",\"volumeMm3\":243.6648850793518,\"massG\":3.776805718729953}],\"stoneCount\":1,\"caratTotal\":1.0019880749760002,\"lots\":[{\"cut\":\"round\",\"stone\":\"diamond\",\"width\":6.44,\"length\":6.44,\"count\":1,\"caratTotal\":1.0019880749760002,\"setting\":\"bezel\",\"role\":\"center\"}],\"boundsMm\":{\"x\":19.90679931640625,\"y\":7.840000152587891,\"z\":23.067400230407713},\"diagnostics\":[]}}",
           "type": "text"
          },
          {
@@ -301,8 +301,8 @@
           "source": {
            "type": "base64",
            "media_type": "image/png",
-           "data": "sha256:f5006561b6df0886",
-           "bytes": 121092,
+           "data": "sha256:e58de5ec01010138",
+           "bytes": 30161,
            "width": 768,
            "height": 768
           }
@@ -316,14 +316,18 @@
           "source": {
            "type": "base64",
            "media_type": "image/png",
-           "data": "sha256:7f8089a007ae3912",
-           "bytes": 102480,
+           "data": "sha256:9a44332550c47e43",
+           "bytes": 20066,
            "width": 768,
            "height": 768
           }
+         },
+         {
+          "text": "viewport.capture needs an open Pavé window, and the designer has none open right now. Go on without it, or ask them to open Pavé. These pictures were drawn on the server instead: plain shaded clay (metal grey, stones pale blue), no materials or labels.",
+          "type": "text"
          }
         ],
-        "tool_use_id": "toolu_fake3_2_8cd2e6b5"
+        "tool_use_id": "toolu_fake18_2_a840ff5b"
        }
       ]
      }

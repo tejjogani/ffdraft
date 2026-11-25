@@ -27,8 +27,9 @@ function markOf(
     if (state === 'paused') return 'paused'
   }
   const done =
+    // The Design stage holds its board: done once a board is linked or a spec settled.
     stage === 'design'
-      ? !!piece.spec
+      ? piece.boardIds.length > 0 || !!piece.spec
       : stage === 'cad'
         ? piece.design.order.length > 0
         : renders > 0

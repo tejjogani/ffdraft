@@ -35,11 +35,22 @@ export type Org = z.infer<typeof OrgSchema>
 export const MemberSchema = z.object({ user: UserSchema, role: z.enum(ROLES), joinedAt: iso })
 export type Member = z.infer<typeof MemberSchema>
 
+/**
+ * How deep folders nest: a folder (a client, a season) and folders inside it (its collections).
+ * Two levels keep the breadcrumb, the move menu and the totals one glance deep; deeper trees
+ * belong to tags or search, not to more clicks.
+ */
+export const MAX_FOLDER_DEPTH = 2
+
+/** A folder of projects (shown as "Folders"; stored as collections). */
 export const CollectionSchema = z.object({
   id,
   name: z.string(),
   icon: z.string().nullable(),
   position: z.number(),
+  /** The folder it sits in; null at the top. At most MAX_FOLDER_DEPTH levels. */
+  parentId: id.nullable(),
+  /** Projects directly in this folder (not in its sub-folders). */
   pieceCount: z.number(),
 })
 export type Collection = z.infer<typeof CollectionSchema>
@@ -283,10 +294,14 @@ export const GenerationInputSchema = z.object({
 })
 export type GenerationInput = z.infer<typeof GenerationInputSchema>
 
+export const REFERENCE_TYPES = ['image', 'generated', 'note', 'link', 'swatch', 'model'] as const
+export type ReferenceType = (typeof REFERENCE_TYPES)[number]
+
 export const ReferenceSchema = z.object({
   id,
   boardId: id,
-  type: z.enum(['image', 'generated', 'note', 'link', 'swatch']),
+  /** `model` is a 3D file (STL, OBJ, GLB, 3MF, PLY) kept on a board as inspiration, view-only in 3D. */
+  type: z.enum(REFERENCE_TYPES),
   assetId: id.nullable(),
   /** Remote thumbnail for unsaved search results. */
   thumbUrl: z.string().nullable(),
@@ -1042,6 +1057,11 @@ export const RunSchema = z.object({
   errorCode: z.enum(RUN_ERROR_CODES).nullable(),
   /** Set when the run is an AI job (started from a stage, or continuing one). */
   job: AiJobSchema.nullable(),
+  /**
+   * The stage its spend is counted against: the job's stage, else the stage tab the message was
+   * sent from; null for a run about no piece's stage (Home, MCP).
+   */
+  stage: z.enum(JOB_STAGES).nullable(),
 })
 export type Run = z.infer<typeof RunSchema>
 
@@ -1241,9 +1261,65 @@ export const UsageEventSchema = z.object({
   userId: id.nullable(),
   runId: id.nullable(),
   pieceId: id.nullable(),
+  /** The project stage it was spent on (Design, CAD or Render); null when it was about none. */
+  stage: z.enum(JOB_STAGES).nullable(),
   at: iso,
 })
 export type UsageEvent = z.infer<typeof UsageEventSchema>
+
+// ── Projects: what each stage of a piece holds and has cost ─────────────────────────────────
+
+/** One stage of a project, as its section on the project page and its column in lists. */
+export const StageCostSchema = z.object({
+  /** Claude runs counted against this stage, in USD. */
+  aiUsd: z.number(),
+  /** Paid image generations (Design only), in USD. */
+  imageUsd: z.number(),
+  /** Blender takes counted against the plan's render allowance (Render only). */
+  rendersUsed: z.number().int(),
+  /** Rhino and STEP exports counted against the plan's export allowance (CAD only). */
+  exportsUsed: z.number().int(),
+  /** What the stage holds: board items (Design), design changes (CAD), takes (Render). */
+  items: z.number().int(),
+})
+export type StageCost = z.infer<typeof StageCostSchema>
+
+export const ProjectCostSchema = z.object({
+  pieceId: id,
+  design: StageCostSchema,
+  cad: StageCostSchema,
+  render: StageCostSchema,
+  /** Spend on the project no stage claims (a chat about it from Home): counted in the total. */
+  otherUsd: z.number(),
+  /** Everything paid for this project, in USD: AI and image generations. Renders and exports are counts. */
+  totalUsd: z.number(),
+})
+export type ProjectCost = z.infer<typeof ProjectCostSchema>
+
+/** A folder's totals, its sub-folders' projects included. */
+export const FolderTotalSchema = z.object({
+  collectionId: id,
+  pieceCount: z.number().int(),
+  totalUsd: z.number(),
+  rendersUsed: z.number().int(),
+  exportsUsed: z.number().int(),
+})
+export type FolderTotal = z.infer<typeof FolderTotalSchema>
+
+/** What `pieces.estimate` says a spec would weigh and cost before anything is built. */
+export const SpecEstimateSchema = z.object({
+  metalMassG: z.number(),
+  caratTotal: z.number(),
+  stoneCount: z.number().int(),
+  /** The main metal (an alloy id). */
+  metal: z.string(),
+  boundsMm: z.object({ x: z.number(), y: z.number(), z: z.number() }),
+  /** Rough cost to make at the production estimate's placeholder rates; null when it cannot price it. */
+  costUsd: z.number().nullable(),
+  /** Kernel warnings and the canon's findings about the spec, in plain words. */
+  notes: z.array(z.string()),
+})
+export type SpecEstimate = z.infer<typeof SpecEstimateSchema>
 
 /** Which optional capabilities this deployment has credentials for. */
 export const CapabilitiesSchema = z.object({

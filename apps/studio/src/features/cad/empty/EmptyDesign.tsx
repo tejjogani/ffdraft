@@ -232,6 +232,11 @@ function ImportDoor({
   const [over, setOver] = useState(false)
   const take = async (file: File) => {
     const kind = classifyImport(file.name)
+    if (/\.(step|stp)$/i.test(file.name))
+      return toast({
+        title: 'STEP can’t be opened as CAD yet',
+        description: 'That is planned. Export it as STL, OBJ, GLB, 3MF or PLY and open that.',
+      })
     if (!kind)
       return toast.error(
         'That file type isn’t supported',

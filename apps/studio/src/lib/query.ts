@@ -31,12 +31,21 @@ export const rpcQuery = <N extends QueryName>(name: N, input: CommandInput<N>) =
 const DOMAIN_QUERIES: Record<string, QueryName[]> = {
   session: ['session.get'],
   org: ['session.get', 'org.members', 'org.settings.get', 'assistant.setup.get'],
-  collections: ['collections.list', 'pieces.list'],
-  pieces: ['pieces.list', 'pieces.get', 'collections.list', 'design.history', 'design.evaluate'],
+  collections: ['collections.list', 'pieces.list', 'projects.summary'],
+  pieces: [
+    'pieces.list',
+    'pieces.get',
+    'collections.list',
+    'design.history',
+    'design.evaluate',
+    'pieces.estimate',
+    'projects.summary',
+  ],
   // A design change makes earlier takes stale (computed by the server).
   design: ['pieces.get', 'pieces.list', 'design.history', 'design.evaluate', 'renders.list'],
-  boards: ['boards.list', 'boards.get', 'pieces.get', 'references.pins'],
-  references: ['boards.get', 'boards.list', 'references.pins'],
+  boards: ['boards.list', 'boards.get', 'pieces.get', 'references.pins', 'projects.summary'],
+  references: ['boards.get', 'boards.list', 'references.pins', 'projects.summary'],
+  projects: ['projects.summary'],
   renders: [
     'renders.list',
     'renders.get',
@@ -45,17 +54,18 @@ const DOMAIN_QUERIES: Record<string, QueryName[]> = {
     'scenes.history',
     'renders.estimate',
     'plan.get',
+    'projects.summary',
   ],
   scenes: ['scenes.list', 'scenes.history', 'renders.estimate'],
   models: ['models.list'],
   shots: ['shots.list'],
-  production: ['production.list', 'plan.get'],
-  plan: ['plan.get'],
+  production: ['production.list', 'plan.get', 'projects.summary'],
+  plan: ['plan.get', 'projects.summary'],
   threads: ['threads.list', 'threads.get'],
-  runs: ['threads.list', 'threads.get', 'traces.runs', 'traces.run'],
+  runs: ['threads.list', 'threads.get', 'traces.runs', 'traces.run', 'projects.summary'],
   assistant: ['assistant.setup.get', 'session.get'],
   traces: ['traces.runs', 'traces.run'],
-  usage: ['usage.summary'],
+  usage: ['usage.summary', 'projects.summary'],
 }
 
 /** Refresh everything a command (or a server event named like one) may have changed. */

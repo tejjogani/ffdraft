@@ -48,10 +48,23 @@ function nextTitle(titles: readonly string[]): string {
   return `Sketch ${used.length ? Math.max(...used) + 1 : 1}`
 }
 
-export function SketchPad({ piece }: { piece: Piece }) {
-  const entries = useReferencePanel((s) => s.sketches[piece.id] ?? NO_SKETCH)
+/**
+ * Where a sketch is saved. Beside CAD it is pinned to the piece; on a design board it is saved
+ * to that board (`board`), with no image-plane menu: the board is not a CAD view.
+ */
+export interface SketchTarget {
+  /** Keys the unsaved strokes (per board), apart from each piece's pad beside CAD. */
+  key: string
+  /** Titles already used, for the next "Sketch n". */
+  titles: readonly string[]
+  save: (file: File, title: string) => Promise<void>
+}
+
+export function SketchPad({ piece, board }: { piece: Pick<Piece, 'id'>; board?: SketchTarget }) {
+  const key = board?.key ?? piece.id
+  const entries = useReferencePanel((s) => s.sketches[key] ?? NO_SKETCH)
   const setSketch = useReferencePanel((s) => s.setSketch)
-  const pins = useRpc('references.pins', { pieceId: piece.id })
+  const pins = useRpc('references.pins', { pieceId: piece.id }, { enabled: !board })
   const auth = useSession()
   const role = activeOrg(auth)?.role ?? 'viewer'
   const readOnly = role === 'viewer' || role === 'guest'
@@ -68,7 +81,7 @@ export function SketchPad({ piece }: { piece: Piece }) {
     if (ctx) drawSketch(ctx, entries)
   }, [entries])
 
-  const set = (next: SketchEntry[]) => setSketch(piece.id, next)
+  const set = (next: SketchEntry[]) => setSketch(key, next)
   const point = (e: PointerEvent<HTMLCanvasElement>) => {
     const r = e.currentTarget.getBoundingClientRect()
     return toSheet(e.clientX - r.left, e.clientY - r.top, r.width, r.height)
@@ -121,10 +134,16 @@ export function SketchPad({ piece }: { piece: Piece }) {
     try {
       const blob = await new Promise<Blob | null>((ok) => el.toBlob(ok, 'image/png'))
       if (!blob) throw new Error('The sketch could not be turned into a picture')
-      const title = nextTitle((pins.data?.references ?? []).map((r) => r.title))
+      const title = nextTitle(board?.titles ?? (pins.data?.references ?? []).map((r) => r.title))
       const file = new File([blob], `${title.toLowerCase().replace(' ', '-')}.png`, {
         type: 'image/png',
       })
+      if (board) {
+        await board.save(file, title)
+        set(clearSketch(entries))
+        toast.success(`${title} saved to the design board`)
+        return
+      }
       const asset = await uploadAsset(file)
       // The person's own drawing: rights "own", so it may be laid in a view and read by AI.
       const out = await pin(piece.id, [
@@ -234,26 +253,29 @@ export function SketchPad({ piece }: { piece: Piece }) {
           onClick={() => void save(null)}
         >
           {saving ? <Spinner className="size-3.5" label="Saving" /> : <Save className="size-3.5" />}
-          Save as reference
+          {board ? 'Save to the board' : 'Save as reference'}
         </Button>
-        <Menu
-          align="end"
-          trigger={
-            <Button size="sm" variant="ghost" disabled={blank || saving || readOnly}>
-              <Images className="size-3.5" /> Save and lay in a view
-            </Button>
-          }
-        >
-          {VIEWS.map((v) => (
-            <MenuItem key={v} icon={Images} onClick={() => void save(v)}>
-              {VIEW_LABEL[v]} view
-            </MenuItem>
-          ))}
-        </Menu>
+        {!board && (
+          <Menu
+            align="end"
+            trigger={
+              <Button size="sm" variant="ghost" disabled={blank || saving || readOnly}>
+                <Images className="size-3.5" /> Save and lay in a view
+              </Button>
+            }
+          >
+            {VIEWS.map((v) => (
+              <MenuItem key={v} icon={Images} onClick={() => void save(v)}>
+                {VIEW_LABEL[v]} view
+              </MenuItem>
+            ))}
+          </Menu>
+        )}
       </div>
       <p className="text-xs leading-5 text-fg-subtle">
-        A saved sketch is pinned to this piece as your own picture. Lay it in the front, top or
-        right view to model over it, and scale it by two points like any picture.
+        {board
+          ? 'A saved sketch goes on the design board as your own picture: take it to CAD like any picture.'
+          : 'A saved sketch is pinned to this piece as your own picture. Lay it in the front, top or right view to model over it, and scale it by two points like any picture.'}
       </p>
     </div>
   )

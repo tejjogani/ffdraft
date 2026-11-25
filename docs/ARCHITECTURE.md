@@ -45,15 +45,15 @@ can an outside agent do" are one list with one set of permissions, metering and 
 
 ```
 Organisation
- ├─ Collections ─▶ Pieces            a piece is a page: brief, spec, design, renders,
+ ├─ Folders (collections, 2 levels) ─▶ Projects (pieces): a design board, CAD, renders,
  ├─ Boards (ideas) ─▶ References       on-model shots, stones, production packages, history
  ├─ Brand models
  ├─ Library        metals, stones, cuts, ring sizes, templates
  └─ Settings       members, AI, plan, usage, traces, privacy, integrations
 ```
 
-The sidebar is navigation plus the collection tree. A piece page has tabs — Overview, Design
-(directions), CAD, Render, On model, Sourcing, Production, History. A stage is a status, not a gate: every tool is
+The sidebar is navigation plus the folder tree. A piece page has tabs — Overview, Design
+(the design board), CAD, Render, On model, Sourcing, Production, History. A stage is a status, not a gate: every tool is
 always available, and every AI action has a manual way that never asks for AI. The assistant is a
 window aware of the open piece, its stage and any board: snapped into the right-hand sidebar,
 pulled out as a floating frosted-glass window, or folded to a pill that shows a running job's
@@ -199,6 +199,34 @@ thinking blocks to their conversation and models the prompt cache. `scripts/test
 the suite on each tier's model. The founder's journeys were recorded with Claude playing the model
 (`apps/studio/e2e/harness.ts` against the fake in agent mode) and are replayed through the real
 loop by `replay.test.ts`.
+
+## The design board, projects and folders
+
+The Design stage is image-based: a piece's design board is the moodboard linked to it
+(`board.piece_id`; `boards.forPiece` makes it once, its id derived from the piece so two windows
+make one). It holds uploads (photos, scanned sketch sheets), sketches made in the app, pasted
+links (Pinterest, Google, a shop: view-only, their picture captured only on request through the
+safe fetch), notes, museum results and 3D models kept as inspiration (`Reference.type: 'model'`,
+shown view-only by three.js loaders in `features/ideate/ModelViewer.tsx`). Boards also live on
+their own in Ideas and can be linked, unlinked or started as CAD at any time
+(`apps/studio/src/features/ideate`). The ways out of the board are in `apps/server/src/ideas.ts`:
+**Take to CAD** (`pieces.takeToCad`) pins a picture beside CAD and the studio starts a CAD job
+with it; the job calls `references.read`, whose result carries five spec questions with the
+picture's answers as defaults (`packages/agent/src/spec-questions.ts`), asks them with
+`chat.ask`, estimates the spec (`pieces.estimate`: the canon's build, evaluated and priced) and
+builds; after `pieces.buildFromSpec` the loop lays the pinned picture in the matching CAD view,
+scaled by its cut-out to the build (`assistant/take-plane.ts`). **Open as CAD**
+(`pieces.openAsCad`) adds STL, OBJ, GLB, 3MF or PLY as a `meshBody` (STEP is refused as planned).
+Built parametric alternatives (directions) are now **Try variants** in the CAD stage, off the
+main path.
+
+A project is a piece presented as its three stages with their costs, and a folder is a
+collection that may sit in one other folder (two levels: the breadcrumb, the move menu and the
+totals stay one glance deep). Every usage row carries its piece and stage (`usage_event.stage`:
+a run's spend counts against its job's stage, else the stage tab the message came from,
+`agent_run.stage`; image generations against Design; render machine time against Render), and
+the plan's claims carry their piece. `apps/server/src/projects.ts` adds them up per project and
+stage (`projects.summary`) and per folder, sub-folders included.
 
 ## References beside CAD
 

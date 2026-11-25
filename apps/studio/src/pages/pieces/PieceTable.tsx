@@ -1,9 +1,11 @@
-import type { Collection, PieceSummary } from '@pave/schema'
+import type { Collection, PieceSummary, ProjectCost } from '@pave/schema'
 import { Swatch } from '@pave/ui'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { KindGlyph } from '../../components/KindGlyph'
 import { StageChip } from '../../components/StageChip'
 import { hasFacts, KIND_LABEL, metalLabel, metalSwatch } from '../../lib/domain'
+import { usd } from '../../features/projects/cost'
+import { StageProgress } from '../../features/projects/ProjectSections'
 import { carats, grams, relativeTime } from '../../lib/format'
 
 const th = 'h-8 px-3 text-left text-xs font-normal text-fg-subtle whitespace-nowrap'
@@ -13,9 +15,12 @@ const td = 'h-10 px-3 whitespace-nowrap'
 export function PieceTable({
   pieces,
   collections,
+  costs,
 }: {
   pieces: PieceSummary[]
   collections: Collection[]
+  /** Each project's costs, by piece id (projects.summary). */
+  costs?: ReadonlyMap<string, ProjectCost>
 }) {
   const navigate = useNavigate()
   const collectionName = (id: string | null) => collections.find((c) => c.id === id)?.name
@@ -26,11 +31,13 @@ export function PieceTable({
           <tr className="border-b border-line">
             <th className={th}>Title</th>
             <th className={th}>Stage</th>
+            <th className={th}>Progress</th>
+            <th className={`${th} text-right`}>Cost</th>
             <th className={th}>Kind</th>
             <th className={th}>Metal</th>
             <th className={`${th} text-right`}>Weight</th>
             <th className={`${th} text-right`}>Carat</th>
-            <th className={th}>Collection</th>
+            <th className={th}>Folder</th>
             <th className={`${th} text-right`}>Edited</th>
           </tr>
         </thead>
@@ -56,6 +63,12 @@ export function PieceTable({
               </td>
               <td className={td}>
                 <StageChip stage={p.stage} />
+              </td>
+              <td className={td}>
+                <StageProgress piece={p} cost={costs?.get(p.id)} />
+              </td>
+              <td className={`${td} text-right font-mono text-xs text-fg-muted tabular`}>
+                {costs?.get(p.id) ? usd(costs.get(p.id)!.totalUsd) : '—'}
               </td>
               <td className={`${td} text-fg-muted`}>{KIND_LABEL[p.kind]}</td>
               <td className={`${td} text-fg-muted`}>

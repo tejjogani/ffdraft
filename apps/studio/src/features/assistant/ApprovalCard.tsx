@@ -10,6 +10,7 @@ import type { Piece } from '@pave/schema'
 import { AiMark, Button, cn, Textarea } from '@pave/ui'
 import { ChevronRight, Hammer } from 'lucide-react'
 import { useState } from 'react'
+import { SpecEstimate } from './SpecEstimate'
 import { SpecCard } from '../../components/SpecCard'
 import { usd } from '../../lib/format'
 import type { CallItem } from './model'
@@ -77,20 +78,23 @@ export function ApprovalCard({
           variant="inline"
           footer={
             decline ?? (
-              <div className="flex items-center justify-between gap-2 border-t border-line px-4 py-3">
-                <Button size="sm" variant="ghost" onClick={() => setChanging(true)}>
-                  Change something…
-                </Button>
-                <Button
-                  size="sm"
-                  variant="primary"
-                  icon={Hammer}
-                  disabled={busy}
-                  onClick={() => onDecide('approve')}
-                >
-                  Build it
-                </Button>
-              </div>
+              <>
+                <SpecEstimate pieceId={piece.id} spec={piece.spec} />
+                <div className="flex items-center justify-between gap-2 border-t border-line px-4 py-3">
+                  <Button size="sm" variant="ghost" onClick={() => setChanging(true)}>
+                    Change something…
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    icon={Hammer}
+                    disabled={busy}
+                    onClick={() => onDecide('approve')}
+                  >
+                    Build it
+                  </Button>
+                </div>
+              </>
             )
           }
         />

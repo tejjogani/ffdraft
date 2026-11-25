@@ -2,10 +2,11 @@
 
 exports[`tool schemas > is sorted and stable (snapshot) 1`] = `
 {
-  "hash": "09f2058991dcc0",
+  "hash": "0d4ba37bd42dd5",
   "tools": [
     "boards_create mutation",
     "boards_delete mutation confirm strict",
+    "boards_forPiece mutation strict",
     "boards_get query strict",
     "boards_list query",
     "chat_ask query confirm",
@@ -30,6 +31,7 @@ exports[`tool schemas > is sorted and stable (snapshot) 1`] = `
     "pieces_create mutation",
     "pieces_delete mutation confirm strict",
     "pieces_duplicate mutation",
+    "pieces_estimate query",
     "pieces_get query strict",
     "pieces_list query",
     "pieces_proposeDirections mutation",
@@ -37,6 +39,7 @@ exports[`tool schemas > is sorted and stable (snapshot) 1`] = `
     "pieces_update mutation",
     "production_create mutation",
     "production_list query strict",
+    "projects_summary query",
     "references_estimate query",
     "references_generate mutation confirm",
     "references_lineage query strict",

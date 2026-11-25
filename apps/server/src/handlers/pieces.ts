@@ -23,6 +23,7 @@ import * as t from '../db/schema'
 import { commitChange, refreshFacts, replaceDesignOps } from '../design'
 import { chooseDirection, proposeDirections, removeDirection, toDirection } from '../directions'
 import { badRequest, conflict, forbidden } from '../errors'
+import { estimateSpec, openAsCad, takeToCad } from '../ideas'
 import { createId } from '../ids'
 import { ensure, ensureAll, getCollection, getPiece } from '../lookups'
 import { openPieceFile } from '../pavefile/open'
@@ -320,6 +321,10 @@ export const pieces: HandlerGroup<'pieces'> = {
     const row = await getAssetRow(ctx, assetId)
     return openPieceFile(ctx, await assetBytes(ctx, row), row.name, { collectionId })
   },
+
+  'pieces.estimate': (ctx, input) => estimateSpec(ctx, input),
+  'pieces.takeToCad': (ctx, input) => takeToCad(ctx, input),
+  'pieces.openAsCad': (ctx, input) => openAsCad(ctx, input),
 
   'pieces.proposeDirections': (ctx, input) => proposeDirections(ctx, input),
   'pieces.chooseDirection': (ctx, input) => chooseDirection(ctx, input),

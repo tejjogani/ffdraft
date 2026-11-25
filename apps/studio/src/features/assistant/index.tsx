@@ -42,8 +42,8 @@ function starters(
     ] satisfies Starter[]
   if (stage === 'design')
     return [
-      { label: 'Propose directions with AI', job: 'design' },
-      { label: 'Find references for this brief' },
+      { label: 'Gather ideas with AI', job: 'design' },
+      { label: 'Find museum references for this brief' },
       { label: 'What does the brief leave open?' },
     ] satisfies Starter[]
   if (stage === 'render' && piece.hasDesign)
@@ -60,7 +60,7 @@ function starters(
           ? 'What would you change in the spec?'
           : 'Write the spec from the brief',
       },
-      { label: 'Propose directions with AI', job: 'design' },
+      { label: 'Gather ideas with AI', job: 'design' },
     ] satisfies Starter[]
   return [
     { label: 'Check it for production' },
@@ -91,7 +91,7 @@ function Panel({ context, stage }: { context: AssistantContext; stage: JobStage 
   const tierByThread = useAssistant((s) => s.tierByThread)
   const draftTier = useAssistant((s) => s.draftTier)
   const st = useAssistant.getState
-  const { send, pending, error, clearError } = useSend(context)
+  const { send, pending, error, clearError } = useSend({ ...context, stage })
   const actions = useRunActions()
 
   const thread = useRpc('threads.get', { id: threadId ?? '' }, { enabled: !!threadId })

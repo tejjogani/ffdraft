@@ -7,7 +7,7 @@
  * Public API for anything that hands work to the assistant (Ask AI on a part, a stage button,
  * an open question on the spec): {@link openAssistant}, and `assistant.open/close/toggle`.
  */
-import type { AssistantTier } from '@pave/schema'
+import type { AssistantTier, JobStage } from '@pave/schema'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { Rect } from '../lib/float-window'
@@ -22,6 +22,8 @@ export type AssistantLayout = 'docked' | 'floating'
 export interface AssistantContext {
   pieceId?: string | null
   boardId?: string | null
+  /** The piece's stage tab the person is on: a message's spend counts against it. */
+  stage?: JobStage | null
 }
 
 /** A photo attached in the composer, uploaded already. */

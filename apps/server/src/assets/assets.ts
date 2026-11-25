@@ -35,6 +35,7 @@ const EXTENSIONS: Record<string, { kind: AssetKind; mime: string }> = {
   '.gltf': { kind: 'mesh', mime: 'model/gltf+json' },
   '.obj': { kind: 'mesh', mime: 'model/obj' },
   '.3mf': { kind: 'mesh', mime: 'model/3mf' },
+  '.ply': { kind: 'mesh', mime: 'model/ply' },
   '.mp4': { kind: 'video', mime: 'video/mp4' },
   '.webm': { kind: 'video', mime: 'video/webm' },
   '.mov': { kind: 'video', mime: 'video/quicktime' },

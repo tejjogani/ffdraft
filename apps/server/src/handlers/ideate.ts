@@ -10,6 +10,7 @@ import { getAssetRow, putAsset } from '../assets/assets'
 import { actorRunId, type Ctx, publish } from '../context'
 import * as t from '../db/schema'
 import { badRequest, conflict, forbidden, NotConfiguredError, notFound } from '../errors'
+import { designBoardFor } from '../ideas'
 import { createId } from '../ids'
 import { ensure, ensureAll, getBoard, getPiece, getReference } from '../lookups'
 import { ensurePinBoard, pinBoardOf } from '../references/pins'
@@ -236,7 +237,13 @@ async function referenceFromItem(ctx: Ctx, item: SaveItem): Promise<NewReference
     return {
       ...text,
       title: item.title ?? asset.name,
-      type: asset.kind === 'image' || asset.kind === 'render' ? 'image' : 'link',
+      // A 3D file is kept as a model the board shows in a small viewer; other files as links.
+      type:
+        asset.kind === 'image' || asset.kind === 'render'
+          ? 'image'
+          : asset.kind === 'mesh'
+            ? 'model'
+            : 'link',
       assetId: asset.id,
       source: source({ provider: 'upload', url: null, capturedAt: asset.createdAt.toISOString() }),
       rights: item.rights ?? 'own',
@@ -397,6 +404,8 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
     })
     return { board: await toBoard(ctx, board), references: refs.map(toReference) }
   },
+
+  'boards.forPiece': async (ctx, { pieceId }) => toBoard(ctx, await designBoardFor(ctx, pieceId)),
 
   'boards.create': async (ctx, input) => {
     await ensure(getPiece, ctx, input.pieceId)
@@ -690,10 +699,17 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
   },
 
   'references.generate': async (ctx, { boardId, ...input }) => {
-    await getBoard(ctx, boardId)
+    const board = await getBoard(ctx, boardId)
     const request = await generationRequest(ctx, input)
     const imageGen = ctx.services.get('imageGen')
-    const sctx = serviceContext(ctx)
+    const base = serviceContext(ctx)
+    // A generation on a piece's design board is Design work on that project (the stage comes
+    // from the image meter; the piece from the board).
+    const sctx = {
+      ...base,
+      recordUsage: (event: Parameters<typeof base.recordUsage>[0]) =>
+        base.recordUsage({ pieceId: board.pieceId ?? board.pinsFor, stage: 'design', ...event }),
+    }
     // The figure the person confirmed is the one checked against the budget.
     await assertBudget(ctx, (await imageGen.estimate(request, sctx)).usd)
 

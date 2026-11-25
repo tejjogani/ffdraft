@@ -139,7 +139,7 @@ export function Sidebar({ drawer = false }: { drawer?: boolean }) {
           Ideas
         </NavLink>
         <NavLink to="/pieces" icon={Gem}>
-          Pieces
+          Projects
         </NavLink>
         <NavLink to="/renders" icon={Image}>
           Renders
@@ -234,26 +234,36 @@ function Collections() {
   const [adding, setAdding] = useState(false)
   const create = useRpcMutation('collections.create')
   const collections = [...(data ?? [])].sort((a, b) => a.position - b.position)
+  // Folders nest one level: each top-level folder, then the folders inside it.
+  const top = collections.filter(
+    (c) => !c.parentId || !collections.some((x) => x.id === c.parentId),
+  )
+  const inside = (id: string) => collections.filter((c) => c.parentId === id)
   return (
     <section aria-label="Collections" className="mt-5 flex min-h-0 flex-col px-2">
       <div className="group flex h-7 items-center justify-between pr-1 pl-2">
-        <h2 className="text-xs font-medium text-fg-subtle">Collections</h2>
+        <h2 className="text-xs font-medium text-fg-subtle">Folders</h2>
         <IconButton
           icon={Plus}
-          label="New collection"
+          label="New folder"
           size="sm"
           className="hover-reveal"
           onClick={() => setAdding(true)}
         />
       </div>
       <div className="-mx-2 min-h-0 overflow-y-auto px-2">
-        {collections.map((c) => (
-          <CollectionRow key={c.id} collection={c} />
+        {top.map((c) => (
+          <div key={c.id}>
+            <CollectionRow collection={c} />
+            {inside(c.id).map((child) => (
+              <CollectionRow key={child.id} collection={child} depth={1} />
+            ))}
+          </div>
         ))}
         {adding && (
           <InlineName
             initial=""
-            placeholder="Collection name"
+            placeholder="Folder name"
             onDone={(name) => {
               setAdding(false)
               if (name) create.mutate({ name })
@@ -267,7 +277,7 @@ function Collections() {
             className={cn(row, 'text-fg-subtle')}
           >
             <Plus className="size-4" aria-hidden />
-            New collection
+            New folder
           </button>
         )}
       </div>
@@ -283,12 +293,14 @@ function CollectionIcon({ c }: { c: Collection }) {
   )
 }
 
-function CollectionRow({ collection: c }: { collection: Collection }) {
+function CollectionRow({ collection: c, depth = 0 }: { collection: Collection; depth?: 0 | 1 }) {
   const expanded = useUI((s) => s.expandedCollections.includes(c.id))
   const toggle = useUI((s) => s.toggleCollection)
   const [renaming, setRenaming] = useState(false)
+  const [adding, setAdding] = useState(false)
   const update = useRpcMutation('collections.update')
   const remove = useRpcMutation('collections.delete')
+  const create = useRpcMutation('collections.create')
   const pieces = useRpc('pieces.list', { collectionId: c.id }, { enabled: expanded })
 
   if (renaming)
@@ -307,8 +319,13 @@ function CollectionRow({ collection: c }: { collection: Collection }) {
       <MenuItem icon={Pencil} onClick={() => setRenaming(true)}>
         Rename
       </MenuItem>
+      {depth === 0 && (
+        <MenuItem icon={Plus} onClick={() => setAdding(true)}>
+          New folder inside
+        </MenuItem>
+      )}
       <MenuItem icon={Trash2} danger onClick={() => remove.mutate({ id: c.id })}>
-        Delete collection
+        Delete folder
       </MenuItem>
     </>
   )
@@ -320,7 +337,7 @@ function CollectionRow({ collection: c }: { collection: Collection }) {
           <Link
             to="/collections/$id"
             params={{ id: c.id }}
-            className={cn(row, 'pl-8')}
+            className={cn(row, depth ? 'pl-12' : 'pl-8')}
             onDoubleClick={(e) => {
               e.preventDefault()
               setRenaming(true)
@@ -337,7 +354,10 @@ function CollectionRow({ collection: c }: { collection: Collection }) {
             aria-label={expanded ? `Collapse ${c.name}` : `Expand ${c.name}`}
             aria-expanded={expanded}
             onClick={() => toggle(c.id)}
-            className="absolute top-1.5 left-2 flex size-4 items-center justify-center rounded-xs text-fg-subtle hover:bg-bg-active"
+            className={cn(
+              'absolute top-1.5 flex size-4 items-center justify-center rounded-xs text-fg-subtle hover:bg-bg-active',
+              depth ? 'left-6' : 'left-2',
+            )}
           >
             <span className="group-hover:hidden">
               <CollectionIcon c={c} />
@@ -366,6 +386,18 @@ function CollectionRow({ collection: c }: { collection: Collection }) {
           </Menu>
         </div>
       </ContextMenu>
+      {adding && (
+        <div className="pl-6">
+          <InlineName
+            initial=""
+            placeholder="Folder name"
+            onDone={(name) => {
+              setAdding(false)
+              if (name) create.mutate({ name, parentId: c.id })
+            }}
+          />
+        </div>
+      )}
       {expanded && (
         <div className="flex flex-col gap-px">
           {pieces.data?.map((p) => (
@@ -380,7 +412,7 @@ function CollectionRow({ collection: c }: { collection: Collection }) {
             </Link>
           ))}
           {pieces.data?.length === 0 && (
-            <div className="h-6.5 pl-8 text-xs leading-6.5 text-fg-subtle">No pieces yet</div>
+            <div className="h-6.5 pl-8 text-xs leading-6.5 text-fg-subtle">No projects yet</div>
           )}
         </div>
       )}
@@ -406,7 +438,7 @@ function InlineName({
         autoFocus
         value={value}
         placeholder={placeholder}
-        aria-label="Collection name"
+        aria-label="Folder name"
         onChange={(e) => setValue(e.target.value)}
         onBlur={() => onDone(value.trim() || null)}
         onKeyDown={(e) => {

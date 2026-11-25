@@ -151,16 +151,7 @@
         "cacheRead": 99997,
         "cacheWrite": 35593
       },
-      "job": {
-        "stage": "design",
-        "review": "pending",
-        "pausedBy": null,
-        "plan": [
-          "brief:done",
-          "directions:done",
-          "choose:pending"
-        ]
-      },
+      "job": null,
       "steps": [
         "model:claude-opus-5-5:done",
         "tool:pieces.get:done",
@@ -183,16 +174,7 @@
         "cacheRead": 72126,
         "cacheWrite": 1492
       },
-      "job": {
-        "stage": "design",
-        "review": "pending",
-        "pausedBy": null,
-        "plan": [
-          "brief:done",
-          "directions:done",
-          "choose:pending"
-        ]
-      },
+      "job": null,
       "steps": [
         "model:claude-opus-5-5:done",
         "tool:pieces.proposeDirections:done",
@@ -210,16 +192,7 @@
         "cacheRead": 74993,
         "cacheWrite": 1290
       },
-      "job": {
-        "stage": "design",
-        "review": "pending",
-        "pausedBy": null,
-        "plan": [
-          "brief:done",
-          "directions:done",
-          "choose:done"
-        ]
-      },
+      "job": null,
       "steps": [
         "model:claude-opus-5-5:done",
         "tool:pieces.chooseDirection:done",

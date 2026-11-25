@@ -30,7 +30,12 @@ const VIEWS_LABEL = (views: readonly unknown[]) =>
   views.map((v) => (typeof v === 'string' ? v : 'an angle')).join(', ')
 
 export const TOOL_CHIPS = {
-  'collections.list': { quiet: true, running: 'Listing collections', done: 'Listed collections' },
+  'collections.list': { quiet: true, running: 'Listing folders', done: 'Listed folders' },
+  'projects.summary': {
+    quiet: true,
+    running: 'Adding up what the projects cost',
+    done: 'Added up what the projects cost',
+  },
   'collections.create': {
     running: 'Creating a collection',
     done: (i) => `Created the collection “${i.name}”`,
@@ -49,6 +54,11 @@ export const TOOL_CHIPS = {
   'pieces.buildFromSpec': {
     running: 'Building the design',
     done: 'Built the design from the spec',
+  },
+  'pieces.estimate': {
+    quiet: true,
+    running: 'Estimating weight and cost',
+    done: 'Estimated weight and cost',
   },
   'pieces.duplicate': { running: 'Duplicating the piece', done: 'Duplicated the piece' },
   'pieces.proposeDirections': {
@@ -80,6 +90,11 @@ export const TOOL_CHIPS = {
   },
   'boards.list': { quiet: true, running: 'Listing boards', done: 'Listed boards' },
   'boards.get': { quiet: true, running: 'Reading the board', done: 'Read the board' },
+  'boards.forPiece': {
+    quiet: true,
+    running: 'Opening the design board',
+    done: 'Opened the design board',
+  },
   'boards.create': { running: 'Creating a board', done: (i) => `Created the board “${i.title}”` },
   'boards.delete': { running: 'Deleting the board', done: 'Deleted the board' },
   'references.search': {

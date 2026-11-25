@@ -143,8 +143,9 @@ function linkName(url: string | null | undefined): string {
   }
 }
 
+// A 3D model from a design board has no picture: its tile shows no image rather than a broken one.
 const pictureOf = (r: Reference, width = 320) =>
-  r.assetId ? assetUrl(r.assetId, width) : r.thumbUrl
+  r.type === 'model' ? null : r.assetId ? assetUrl(r.assetId, width) : r.thumbUrl
 
 /**
  * The window's contents under its tabs: References, Sketch, and Generated when an image model is

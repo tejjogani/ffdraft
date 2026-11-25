@@ -96,6 +96,7 @@ import { captureOnServer } from './capture'
 import type { RunHost } from './host'
 import { modelImage } from './images'
 import { readPhotos } from './read'
+import { lastReadOf, placeTakePlane } from './take-plane'
 import { expireBrowserTake, takeResult, waitFor } from './takes'
 
 export type StepOutcome = 'continue' | 'suspended' | 'finished'
@@ -446,6 +447,7 @@ async function callModel(host: RunHost, messages: MessageRow[], run: Run): Promi
     idempotencyKey: `${runId}:${idx}:llm`,
     runId,
     pieceId: host.pieceId,
+    stage: host.stage,
   })
   await addUsage(ctx, runId, usage)
   host.emit({ type: 'usage', tokens: usage.tokens, costUsd: usage.costUsd })
@@ -1096,7 +1098,12 @@ async function readInRun(host: RunHost, job: Job, ctx: Ctx): Promise<CommandRun>
     model: host.model as AssistantModelId,
     input: job.input as CommandParsedInput<'references.read'>,
     signal: host.signal,
-    usage: { key: `${host.runId}:${job.call.id}:read`, runId: host.runId, pieceId: host.pieceId },
+    usage: {
+      key: `${host.runId}:${job.call.id}:read`,
+      runId: host.runId,
+      pieceId: host.pieceId,
+      stage: host.stage,
+    },
   })
   await addUsage(host.ctx, host.runId, { tokens, costUsd })
   host.emit({ type: 'usage', tokens, costUsd })
@@ -1122,8 +1129,22 @@ async function afterCommand(
     typeof out?.version === 'number'
   )
     host.seen.set(input.pieceId as string, out.version)
-  if (command === 'pieces.buildFromSpec' && typeof out?.version === 'number')
+  if (command === 'pieces.buildFromSpec' && typeof out?.version === 'number') {
     host.seen.set(input.id as string, out.version)
+    // Take to CAD: the picture the build came from lies in its view, scaled to the build.
+    // The read is found in the run's steps: an approval between the read and the build ends
+    // the session that made the read, so nothing in memory survives until here.
+    const read = await lastReadOf(host.ctx, host.runId)
+    if (read) {
+      try {
+        const note = await placeTakePlane(host.ctx, input.id as string, read, host.signal)
+        if (note) notes.push(note)
+      } catch (err) {
+        if (host.signal.aborted) throw err
+        console.error('Placing the picture in its view failed:', err)
+      }
+    }
+  }
 
   if (command === 'pieces.create') await bindPiece(host, (out as { id: string }).id)
   if ((command === 'pieces.setSpec' || command === 'pieces.create') && input.spec) {

@@ -59,7 +59,15 @@ export function applyRunEvent(runId: string, event: RunEvent): RunView {
   if (event.type === 'run.finished') {
     close(e)
     // What the run did is now in the stored conversation, the history and the job records.
-    for (const domain of ['threads', 'traces', 'design', 'pieces', 'usage'])
+    for (const domain of [
+      'threads',
+      'traces',
+      'design',
+      'pieces',
+      'usage',
+      'references',
+      'projects',
+    ])
       invalidateFor(queryClient, domain)
   }
   return next

@@ -45,34 +45,38 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
   design: {
     stage: 'design',
     label: 'Design',
-    button: 'Propose directions with AI',
-    goal: 'Propose two to four distinct directions from the brief, each built and checked, for me to choose from.',
+    button: 'Gather ideas with AI',
+    goal: 'Read the brief and the design board, ask what the brief leaves open, find references that answer it and pin the best to the board, and sharpen the brief, so I can pick a picture to take to CAD.',
     steps: [
       {
         id: 'brief',
-        label: 'Read the brief and references; ask what the brief leaves open',
+        label: 'Read the brief and the design board; ask what the brief leaves open',
         tools: [
           'pieces.get',
+          'boards.forPiece',
+          'boards.get',
+          'boards.list',
           'references.pins',
           'chat.ask',
-          'boards.list',
-          'boards.get',
+        ],
+      },
+      {
+        id: 'gather',
+        label: 'Find references, pin the best to the board, sharpen the brief',
+        tools: [
           'references.search',
+          'references.save',
           'references.similar',
           'references.lineage',
           'references.read',
           'freeform.analyze',
+          'pieces.update',
         ],
       },
       {
-        id: 'directions',
-        label: 'Build two to four directions and check each',
-        tools: ['pieces.proposeDirections'],
-      },
-      {
-        id: 'choose',
-        label: 'You choose one; it goes to CAD',
-        tools: ['pieces.chooseDirection', 'pieces.setSpec', 'pieces.update'],
+        id: 'pick',
+        label: 'You pick a picture or sketch and take it to CAD',
+        tools: [],
         byPerson: true,
       },
     ],
@@ -81,15 +85,16 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
     stage: 'cad',
     label: 'CAD',
     button: 'Make the CAD with AI',
-    goal: 'Make production-ready CAD from the chosen direction (or the brief, spec or photo): production detail, every check run and each warning fixed or explained, the size set, stones and seats checked, weight, carats and cost confirmed, and a short report.',
+    goal: 'Make production-ready CAD from the design (or a picture from the board, the brief or the spec): production detail, every check run and each warning fixed or explained, the size set, stones and seats checked, weight, carats and cost confirmed, and a short report.',
     steps: [
       {
         id: 'brief',
-        label: 'Read the brief, the direction and any photo; ask what the spec leaves open',
+        label: 'Read the brief, the board and any picture; ask for the specs',
         tools: [
           'pieces.get',
           'references.pins',
           'chat.ask',
+          'boards.forPiece',
           'boards.get',
           'references.search',
           'references.read',
@@ -99,8 +104,14 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
       },
       {
         id: 'spec',
-        label: 'Settle the spec and the size',
-        tools: ['pieces.create', 'pieces.setSpec', 'pieces.update', 'pieces.chooseDirection'],
+        label: 'Settle the spec and the size; show the estimate',
+        tools: [
+          'pieces.create',
+          'pieces.setSpec',
+          'pieces.estimate',
+          'pieces.update',
+          'pieces.chooseDirection',
+        ],
       },
       {
         id: 'build',
@@ -157,6 +168,17 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
     approved: { tools: ['renders.create'], limit: 16 },
   },
 }
+
+/**
+ * What "Try variants" in the CAD stage asks the assistant (not a job: variants are a side path
+ * off the main one, and the variants skill takes it from there).
+ */
+export const VARIANTS_PROMPT =
+  'Try variants of the current CAD: two to four alternatives, each taking one or two big decisions differently, built and checked, for me to compare.'
+
+/** The goal of the CAD job "Take to CAD" starts from a design board's picture (a job goal: at most 300 characters). */
+export const TAKE_TO_CAD_GOAL =
+  'Make the CAD from this picture: ask me the specs first, show the estimate, then build it with the picture in its view.'
 
 /** A Render job re-renders one shot at most this many times before leaving it to the person. */
 export const MAX_RETAKES = 2

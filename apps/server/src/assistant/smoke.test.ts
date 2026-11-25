@@ -11,7 +11,7 @@ import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { APIError } from '@anthropic-ai/sdk'
-import type { PieceSpecInput, Run, Step } from '@pave/schema'
+import { type PieceSpecInput, type Run, type Step, TEMPLATES } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
 import { checkRun, runSmoke, smokeAnswers } from './smoke'
 import { TestModel, text, tool } from './testing'
@@ -32,6 +32,7 @@ const run = (over: Partial<Run> = {}): Run => ({
   error: null,
   errorCode: null,
   job: null,
+  stage: null,
   ...over,
 })
 
@@ -176,7 +177,7 @@ describe('the journeys, with scripted turns for Claude', () => {
     const model = await new TestModel().start()
     const cached = { usage: { cache_read_input_tokens: 20_000, output_tokens: 50 } }
     model.push(
-      // a. The Design job: it reads the piece, asks first (as every job does), then proposes.
+      // a. Try variants: it reads the piece, asks first, then proposes variants of the CAD.
       ({ pieceId }) => ({ content: [tool('pieces_get', { id: pieceId })] }),
       {
         ...cached,
@@ -279,18 +280,22 @@ const keyInEnvFile =
   existsSync(envFile) && /^\s*ANTHROPIC_API_KEY\s*=\s*\S/m.test(readFileSync(envFile, 'utf8'))
 
 describe('the photo journey, with scripted turns for Claude', () => {
-  it('draws the photo with the kernel, attaches it, and checks the piece the run made', async () => {
+  it('draws the photo with the kernel, takes it from the design board to CAD, and checks the piece', async () => {
     const model = await new TestModel().start()
     let attached = ''
     model.push(
-      ({ params }) => {
-        // The photo reaches the model as an image block in the user turn.
+      ({ params, pieceId }) => {
+        // The photo reaches the model as an image block in the user turn, and the piece it was
+        // taken to CAD from is the run's piece.
         const user = params.messages.findLast((m) => m.role === 'user')!
         attached = JSON.stringify(user.content)
-        return {
-          content: [tool('pieces_create', { title: 'From the photo', templateId: 'solitaire' })],
-        }
+        const spec = TEMPLATES.find((t) => t.id === 'solitaire')!.spec
+        return { content: [tool('pieces_setSpec', { id: pieceId, spec })] }
       },
+      ({ pieceId }) => ({
+        usage: { cache_read_input_tokens: 20_000 },
+        content: [tool('pieces_buildFromSpec', { id: pieceId })],
+      }),
       {
         usage: { cache_read_input_tokens: 20_000 },
         content: [text('Built from the photo; the claw count is assumed.')],

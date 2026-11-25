@@ -1,9 +1,11 @@
 /**
- * The Design stage and the design-to-CAD job on the real loop and the real kernel: a brief
- * becomes three built directions, a mix of two, a pick and a chat edit on the chosen one; then
- * the CAD job finds a seeded manufacturability warning, is paused by a person's edit, resumed,
- * fixes the warning and is accepted. Directions made by hand (templates) are covered too.
+ * Variants of the CAD (the optional side path in the CAD stage, which used to be the Design
+ * stage) and the CAD job, on the real loop and the real kernel: "Try variants" turns a brief into
+ * three built variants, a mix of two, a pick and a chat edit on the chosen one; then the CAD job
+ * finds a seeded manufacturability warning, is paused by a person's edit, resumed, fixes the
+ * warning and is accepted. Variants made by hand (templates) are covered too.
  */
+import { VARIANTS_PROMPT } from '@pave/agent/studio'
 import { ScriptAbortError } from '@pave/agent'
 import type { PieceSpecInput } from '@pave/schema'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -106,7 +108,7 @@ const lastResults = () => {
   return JSON.stringify(last.content)
 }
 
-describe('the Design stage', () => {
+describe('variants in the CAD stage, then the CAD job', () => {
   let pieceId = ''
   let threadId = ''
 
@@ -120,16 +122,15 @@ describe('the Design stage', () => {
       pieceId = piece.id
       expect(piece.directions).toEqual([])
 
-      // 1. The Design job: read the brief, build three directions, ask the designer to choose.
+      // 1. Try variants: read the brief, build three variants, ask the designer to choose.
       s.model.push(
         { content: [tool('pieces_get', { id: piece.id })] },
         { content: [tool('pieces_proposeDirections', { pieceId: piece.id, directions: THREE })] },
         { content: [text('Three directions: A protects, B looks biggest, C tells a story.')] },
       )
       const first = await api.call('threads.send', {
-        text: 'Give me some directions',
-        job: { stage: 'design' },
-        context: { pieceId: piece.id },
+        text: VARIANTS_PROMPT,
+        context: { pieceId: piece.id, stage: 'cad' },
         clientId: 'w1',
         clientMessageId: cm(),
       })
@@ -137,8 +138,9 @@ describe('the Design stage', () => {
       await settled(s.parts, first.run.id, SLOW)
       const run1 = (await api.call('traces.run', { id: first.run.id })).run
       expect(run1.status).toBe('done')
-      expect(states(run1.job)).toEqual(['done', 'done', 'pending'])
-      expect(run1.job?.review).toBe('pending')
+      // Variants are a side path: a message, not a job, its spend counted against CAD.
+      expect(run1.job).toBeNull()
+      expect(run1.stage).toBe('cad')
 
       const proposed = await api.call('pieces.get', { id: piece.id })
       expect(proposed.directions.map((d) => [d.letter, d.name, d.origin])).toEqual([
@@ -198,8 +200,7 @@ describe('the Design stage', () => {
         clientId: 'w1',
         clientMessageId: cm(),
       })
-      // A message while the job waits for review carries the job on.
-      expect(mixRun.run.job).toMatchObject({ stage: 'design', continues: first.run.id })
+      expect(mixRun.run.job).toBeNull()
       await settled(s.parts, mixRun.run.id, SLOW)
       const d = await directionOf(piece.id, 'D')
       expect(d).toMatchObject({ origin: 'mix', basis: 'band and metal of B, the rest of A' })
@@ -223,7 +224,7 @@ describe('the Design stage', () => {
       })
       await settled(s.parts, pick.run.id, SLOW)
       const picked = (await api.call('traces.run', { id: pick.run.id })).run
-      expect(states(picked.job)).toEqual(['done', 'done', 'done'])
+      expect(picked.status).toBe('done')
       const chosen = await api.call('pieces.get', { id: piece.id })
       expect(chosen.chosenDirectionId).toBe(d.id)
       expect(chosen.stage).toBe('design')

@@ -5,6 +5,7 @@ import { ImageIcon, Lightbulb, Plus } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { SectionTitle } from '../../components/Page'
 import { SpecCard } from '../../components/SpecCard'
+import { ProjectSections } from '../../features/projects/ProjectSections'
 import { takeMedia } from '../../features/render/shots'
 import { assetUrl } from '../../lib/assets'
 import { dateTime, plural, relativeTime } from '../../lib/format'
@@ -23,6 +24,7 @@ export function PieceOverview({ pieceId }: { pieceId: string }) {
   return (
     <div className="flex flex-col gap-10">
       <Brief piece={piece.data} />
+      <ProjectSections piece={piece.data} />
       <SpecCard piece={piece.data} />
       <Moodboards pieceId={pieceId} />
       <LatestRenders pieceId={pieceId} />

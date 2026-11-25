@@ -58,6 +58,7 @@ const run = (over: Partial<Run> = {}): Run => ({
   error: null,
   errorCode: null,
   job: null,
+  stage: null,
   ...over,
 })
 

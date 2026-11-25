@@ -1,9 +1,9 @@
 import { readdirSync } from 'node:fs'
 import { RateLimitError } from '@anthropic-ai/sdk'
-import { parseToolCall } from '@pave/agent'
+import { parseToolCall, specQuestions } from '@pave/agent'
 import { mapError } from '@pave/agent/anthropic'
 import { cinemaQuestions } from '@pave/render'
-import { PhotoReadSchema } from '@pave/schema'
+import { PhotoReadSchema, PieceSpecSchema } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
 import { FIXTURES_DIR, scriptedFactory, scriptedFromEnv } from './scripted'
 
@@ -13,6 +13,16 @@ const run = (pieceId: string | null = 'p1') => ({
   model: 'claude-opus-5-5',
   apiKey: null,
   pieceId: () => pieceId,
+})
+
+// What `references.read` gives a fixture's placeholders: a spec draft and its spec questions.
+const READ_SPEC = PieceSpecSchema.parse({
+  kind: 'ring',
+  archetype: 'solitaire',
+  title: 'Solitaire',
+  summary: 'A round solitaire.',
+  ring: { size: { system: 'us', value: 6 } },
+  stones: [{ role: 'center', cut: 'round', carat: 1 }],
 })
 
 // What `scenes.suggest` gives a fixture's placeholders: a placed camera and the default questions.
@@ -59,7 +69,9 @@ describe('scripted fixtures', () => {
                 .replaceAll('{{pieceId}}', 'p_1')
                 .replaceAll('{{attachment}}', 'as_1')
                 .replace(/"\{\{suggest:[a-z-]+\}\}"/g, JSON.stringify(PLACED))
-                .replaceAll('"{{questions}}"', JSON.stringify(QUESTIONS)),
+                .replaceAll('"{{questions}}"', JSON.stringify(QUESTIONS))
+                .replaceAll('"{{readQuestions}}"', JSON.stringify(specQuestions(READ_SPEC)))
+                .replaceAll('"{{readSpec}}"', JSON.stringify(READ_SPEC)),
             )
             const parsed = parseToolCall(block.name, input)
             expect(parsed.ok, `${name}: ${block.name} ${parsed.ok ? '' : parsed.error}`).toBe(true)

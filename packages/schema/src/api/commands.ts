@@ -24,6 +24,7 @@ import {
   CanvasPlacementSchema,
   CapabilitiesSchema,
   CollectionSchema,
+  FolderTotalSchema,
   FeedbackSchema,
   GENERATION_ROLES,
   GenerationInputSchema,
@@ -42,6 +43,7 @@ import {
   PieceOriginInputSchema,
   PieceSchema,
   PieceSummarySchema,
+  ProjectCostSchema,
   ProductionPackageSchema,
   QuickAnswersSchema,
   QuickQuestionSchema,
@@ -57,6 +59,7 @@ import {
   SavedSceneSchema,
   SceneChangeSchema,
   SearchResultSchema,
+  SpecEstimateSchema,
   STAGES,
   StepSchema,
   StoredChangeSchema,
@@ -325,7 +328,8 @@ export const commands = {
 
   // ── Collections & pieces ──────────────────────────────────────────────────────────────────
   'collections.list': def({
-    description: 'List collections (groups of pieces, e.g. a season or a client).',
+    description:
+      'List folders (collections: groups of projects, e.g. a client or a season). A folder may sit in another folder (`parentId`), two levels at most.',
     kind: 'query',
     tool: true,
     input: none,
@@ -335,22 +339,30 @@ export const commands = {
     description: 'Create a collection.',
     kind: 'mutation',
     tool: true,
-    input: z.object({ name: z.string().min(1).max(80), icon: z.string().max(8).optional() }),
+    input: z.object({
+      name: z.string().min(1).max(80),
+      icon: z.string().max(8).optional(),
+      /** The folder to put it in; it must be a top-level folder (two levels at most). */
+      parentId: id.nullable().optional(),
+    }),
     output: CollectionSchema,
   }),
   'collections.update': def({
-    description: 'Rename, re-icon or reorder a collection.',
+    description:
+      'Rename, re-icon, reorder or move a folder. A folder that holds folders stays at the top level.',
     kind: 'mutation',
     input: z.object({
       id,
       name: z.string().min(1).max(80).optional(),
       icon: z.string().max(8).nullable().optional(),
       position: z.number().optional(),
+      parentId: id.nullable().optional(),
     }),
     output: CollectionSchema,
   }),
   'collections.delete': def({
-    description: 'Delete a collection. Its pieces are kept and become unfiled.',
+    description:
+      'Delete a folder. Its projects are kept and become unfiled; its sub-folders move up to the top level.',
     kind: 'mutation',
     input: z.object({ id }),
     output: ok,
@@ -433,6 +445,34 @@ export const commands = {
     tool: { confirm: true },
     input: z.object({ id }),
     output: z.object({ version: z.number().int(), design: DesignSchema }),
+  }),
+  'pieces.estimate': def({
+    description:
+      'What a spec would weigh and cost before anything is built: Pavé builds it with the canon’s proportions, evaluates it and prices it (metal weight, total carats, stone count, outside size, rough cost to make at placeholder rates, and any warnings). Without `spec` it estimates the piece’s saved spec. Show this to the designer before pieces.buildFromSpec.',
+    kind: 'query',
+    tool: true,
+    input: z.object({ id, spec: PieceSpecSchema.optional() }),
+    output: SpecEstimateSchema,
+  }),
+  // People's actions on the design board; the assistant takes over through a CAD job.
+  'pieces.takeToCad': def({
+    description:
+      'Take a picture or sketch from a design board to CAD: it is pinned beside the piece’s CAD (copied with its provenance and rights), ready for the CAD job to read and build from and to lie in a view as an image plane. View-only pictures cannot be sent to AI and are refused.',
+    kind: 'mutation',
+    input: z.object({ pieceId: id, referenceId: id }),
+    output: z.object({ pin: ReferenceSchema, assetId: id }),
+  }),
+  'pieces.openAsCad': def({
+    description:
+      'Open a 3D model (an uploaded STL, OBJ, GLB, 3MF or PLY asset) as CAD: a sculpted body added to the piece’s design as one change that can be undone, or a new piece when no `pieceId` is given. STEP files cannot be opened yet (planned).',
+    kind: 'mutation',
+    input: z.object({
+      assetId: id,
+      pieceId: id.optional(),
+      title: z.string().max(120).optional(),
+      collectionId: id.nullable().optional(),
+    }),
+    output: z.object({ piece: PieceSchema, nodeId: z.string() }),
   }),
   'pieces.duplicate': def({
     description: 'Duplicate a piece (design and spec) as a starting point for a variation.',
@@ -607,6 +647,14 @@ export const commands = {
     tool: true,
     input: z.object({ id }),
     output: z.object({ board: BoardSchema, references: z.array(ReferenceSchema) }),
+  }),
+  'boards.forPiece': def({
+    description:
+      'The piece’s design board (the moodboard linked to it, shown on its Design stage), created when it has none. Save references, sketches and pictures for the piece here.',
+    kind: 'mutation',
+    tool: true,
+    input: z.object({ pieceId: id }),
+    output: BoardSchema,
   }),
   'boards.create': def({
     description: 'Create a moodboard, optionally attached to a piece.',
@@ -860,7 +908,7 @@ export const commands = {
   }),
   'references.read': def({
     description:
-      'Read one to four photos of one piece (uploaded image assets): its kind, the camera angle, the archetype, each group of stones (cut, arrangement, setting, claws), the band profile and proportions as ratios, the metal, and what the photos hide, each part marked visible, partly or not. Call it first when the designer wants a design from a photo; build from `specDraft` through pieces.setSpec. It is a separate Claude call on the conversation’s tier and costs a little.',
+      'Read one to four photos of one piece (uploaded image assets): its kind, the camera angle, the archetype, each group of stones (cut, arrangement, setting, claws), the band profile and proportions as ratios, the metal, and what the photos hide, each part marked visible, partly or not. Call it first when the designer wants a design from a photo or a picture from the design board; ask its `questions` with chat.ask, then build from `specDraft` (changed by the answers) through pieces.setSpec. It is a separate Claude call on the conversation’s tier and costs a little.',
     kind: 'mutation',
     tool: true,
     input: z.object({
@@ -880,6 +928,11 @@ export const commands = {
       assumed: z.array(z.string()),
       /** Whether a cut-out of the piece can be made from the first photo (match.fit needs one). */
       cutout: z.object({ ok: z.boolean(), reason: z.string() }),
+      /**
+       * The spec questions to ask before building (kind, size, centre stone, metal, budget), each
+       * with the read's answer as its default: pass them to chat.ask as they are.
+       */
+      questions: z.array(QuickQuestionSchema),
       model: z.string(),
     }),
   }),
@@ -1422,6 +1475,8 @@ export const commands = {
           boardId: id.optional(),
           sceneId: id.optional(),
           selection: z.array(id).max(200).default([]),
+          /** The stage tab the message was sent from: the run's spend counts against it. */
+          stage: z.enum(JOB_STAGES).optional(),
         })
         .default({ selection: [] }),
       /** The model tier for this run (the composer's picker); omitted = the organisation's default. */
@@ -1485,12 +1540,13 @@ export const commands = {
   }),
   'chat.ask': def({
     description:
-      'Ask the designer one to three short questions as quick replies, and wait for their answer: each with two to six options and the good default already picked (`defaults`), so one press of Go answers with no typing. Ask only what changes the work and cannot be read from the piece or the brief (for directions: the budget, the metal, who wears it; for CAD: the ring size, the centre stone, the setting the spec leaves open; for renders: what the images are for, aspect ratios, which animations); never more than three. Write `intro` as one plain sentence saying what you saw and what you are about to do. The result is what they picked; if they type a message instead, that message is the answer.',
+      'Ask the designer one to three short questions as quick replies, and wait for their answer: each with two to six options and the good default already picked (`defaults`), so one press of Go answers with no typing. Ask only what changes the work and cannot be read from the piece or the brief (for directions: the budget, the metal, who wears it; for CAD: the ring size, the centre stone, the setting the spec leaves open; for renders: what the images are for, aspect ratios, which animations); never more than three, except before building from a picture, when you pass the five spec questions references.read returns, as they are. Write `intro` as one plain sentence saying what you saw and what you are about to do. The result is what they picked; if they type a message instead, that message is the answer.',
     kind: 'query',
     tool: { confirm: true },
     input: z.object({
       intro: z.string().min(1).max(300),
-      questions: z.array(QuickQuestionSchema).min(1).max(3),
+      /** Three at most, except the five spec questions references.read returns. */
+      questions: z.array(QuickQuestionSchema).min(1).max(5),
     }),
     output: QuickAnswersSchema,
   }),
@@ -1594,6 +1650,20 @@ export const commands = {
   }),
 
   // ── Usage ─────────────────────────────────────────────────────────────────────────────────
+  'projects.summary': def({
+    description:
+      'What each project (piece) has cost, stage by stage: Claude runs and image generations in USD, Blender renders and Rhino/STEP exports counted against the plan, and what each stage holds. With `collectionId`, the projects in that folder and its sub-folders; with `pieceIds`, those projects. Also each folder’s totals.',
+    kind: 'query',
+    tool: true,
+    input: z.object({
+      collectionId: id.nullable().optional(),
+      pieceIds: z.array(id).max(200).optional(),
+    }),
+    output: z.object({
+      projects: z.array(ProjectCostSchema),
+      folders: z.array(FolderTotalSchema),
+    }),
+  }),
   'usage.summary': def({
     description: 'Metered usage and cost for the organisation over a period, by meter and by day.',
     kind: 'query',

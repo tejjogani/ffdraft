@@ -15,6 +15,7 @@ import type {
   Design,
   Feedback,
   JOB_STATUS,
+  JobStage,
   METERS,
   MeshJob,
   Message,
@@ -35,6 +36,7 @@ import type {
   StoredDirection,
 } from '@pave/schema'
 import {
+  type AnyPgColumn,
   bigint,
   boolean,
   doublePrecision,
@@ -100,6 +102,10 @@ export const collection = pgTable(
     name: text('name').notNull(),
     icon: text('icon'),
     position: doublePrecision('position').notNull(),
+    /** The folder this one sits in (two levels at most, checked by the handler). */
+    parentId: text('parent_id').references((): AnyPgColumn => collection.id, {
+      onDelete: 'set null',
+    }),
     createdAt: at('created_at'),
     updatedAt: at('updated_at'),
   },
@@ -506,6 +512,8 @@ export const agentRun = pgTable(
     errorCode: text('error_code').$type<NonNullable<Run['errorCode']>>(),
     /** Set when the run is an AI job: its stage, goal, plan and review. */
     job: jsonb('job').$type<AiJob>(),
+    /** The project stage its spend counts against (the job's, else the tab it was sent from). */
+    stage: text('stage').$type<JobStage>(),
     startedAt: at('started_at'),
     endedAt: timestamp('ended_at', { withTimezone: true }),
   },
@@ -610,11 +618,14 @@ export const usageEvent = pgTable(
     userId: text('user_id'),
     runId: text('run_id'),
     pieceId: text('piece_id'),
+    /** The project stage it was spent on, so a project's page shows what each stage cost. */
+    stage: text('stage').$type<JobStage>(),
     occurredAt: at('occurred_at'),
   },
   (t) => [
     uniqueIndex('usage_event_idempotency_idx').on(t.orgId, t.idempotencyKey),
     index('usage_event_org_time_idx').on(t.orgId, t.occurredAt),
+    index('usage_event_piece_idx').on(t.orgId, t.pieceId),
   ],
 )
 

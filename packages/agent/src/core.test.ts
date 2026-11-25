@@ -25,6 +25,7 @@ const run = (status: Run['status']): Run => ({
   error: null,
   errorCode: null,
   job: null,
+  stage: null,
 })
 
 const message = (id: string, role: Message['role']): Message => ({

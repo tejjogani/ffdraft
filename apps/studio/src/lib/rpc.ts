@@ -74,6 +74,8 @@ export const QUERY_NAMES = [
   'collections.list',
   'pieces.list',
   'pieces.get',
+  'pieces.estimate',
+  'projects.summary',
   'design.history',
   'design.evaluate',
   'boards.list',

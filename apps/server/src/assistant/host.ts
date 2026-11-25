@@ -6,7 +6,7 @@
  */
 import type { ModelClient } from '@pave/agent'
 import type { RequestFeatures, RunEventBody } from '@pave/agent/anthropic'
-import type { Actor } from '@pave/schema'
+import type { Actor, JobStage } from '@pave/schema'
 import { eq } from 'drizzle-orm'
 import type { Ctx } from '../context'
 import * as t from '../db/schema'
@@ -52,6 +52,8 @@ export class RunHost {
   readonly signal: AbortSignal
   readonly deps: AssistantDeps
   pieceId: string | null
+  /** The project stage the run's spend counts against (see Run.stage). */
+  readonly stage: JobStage | null
   /** Optional request features; switched off for the rest of the session if the API rejects them. */
   features: Partial<RequestFeatures> = {}
   /** Re-issues spent in this session (a tool call cut off at max_tokens, a dropped stream). */
@@ -77,6 +79,7 @@ export class RunHost {
     this.threadId = init.threadId
     this.model = init.run.model
     this.pieceId = init.run.pieceId
+    this.stage = init.run.job?.stage ?? init.run.stage ?? null
     this.client = init.client
     this.signal = init.signal
   }

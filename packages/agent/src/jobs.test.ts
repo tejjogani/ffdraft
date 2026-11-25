@@ -99,25 +99,22 @@ describe('AI job plans', () => {
     )
   })
 
-  it('leaves the person’s step (choosing a direction) to them, unless the assistant is asked', () => {
+  it('leaves the person’s step (taking a picture to CAD) to them', () => {
     let job = newJob('design')
     job = advanceJob(job, 'pieces.get') ?? job
-    job = advanceJob(job, 'pieces.proposeDirections')!
-    const proposed = endJob(job, 'done')
-    expect(states(proposed)).toEqual(['done', 'done', 'pending'])
-    expect(proposed.review).toBe('pending')
+    job = advanceJob(job, 'references.save')!
+    const gathered = endJob(job, 'done')
+    expect(states(gathered)).toEqual(['done', 'done', 'pending'])
+    expect(gathered.review).toBe('pending')
 
-    // A mix asked for by chat: the directions step runs again; the choice is still theirs.
-    let mix = continueJob(proposed, 'run_2').job
-    expect(states(mix)).toEqual(['done', 'done', 'pending'])
-    mix = advanceJob(mix, 'pieces.proposeDirections')!
-    expect(states(mix)).toEqual(['done', 'running', 'pending'])
-    expect(states(endJob(mix, 'done'))).toEqual(['done', 'done', 'pending'])
-
-    // "Go with D": the assistant takes the step.
-    let pick = continueJob(endJob(mix, 'done'), 'run_3').job
-    pick = advanceJob(pick, 'pieces.chooseDirection')!
-    expect(states(endJob(pick, 'done'))).toEqual(['done', 'done', 'done'])
+    // More references asked for by chat: the gather step runs again; the pick is still theirs.
+    let more = continueJob(gathered, 'run_2').job
+    expect(states(more)).toEqual(['done', 'done', 'pending'])
+    more = advanceJob(more, 'references.search')!
+    expect(states(more)).toEqual(['done', 'running', 'pending'])
+    expect(states(endJob(more, 'done'))).toEqual(['done', 'done', 'pending'])
+    // No tool takes the pick: Take to CAD is a person's action on the board.
+    expect(JOB_RECIPES.design.steps.find((s) => s.id === 'pick')!.tools).toEqual([])
   })
 
   it('lets a Render job render its plan’s takes without asking, up to its limit, and nothing else', () => {

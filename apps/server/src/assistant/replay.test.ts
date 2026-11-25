@@ -15,10 +15,11 @@
  * result text (timings, the capture's source), which shows as drift and is checked against a list
  * of what may differ.
  */
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { JOB_RECIPES } from '@pave/agent/studio'
+import { JOB_RECIPES, VARIANTS_PROMPT } from '@pave/agent/studio'
 import {
+  Recorder,
   type Recording,
   type ReplayReport,
   type ReplaySource,
@@ -35,12 +36,33 @@ import { type AssistantServer, assistantServer, settled } from './testing'
 const DIR = join(import.meta.dirname, 'fixtures', 'recordings')
 const load = <T>(name: string): T => JSON.parse(readFileSync(join(DIR, name), 'utf8')) as T
 
+/**
+ * PAVE_REFRESH_RECORDINGS=1 rewrites the recordings' request side from this run, keeping every
+ * recorded reply (Claude's side) as it was, only with this run's ids. Use it when the harness's
+ * own side changes on purpose (a job's plan, a tool's result, the stages), then read the diff of
+ * the recordings and outcomes, and run the replay again without it: it must pass unchanged.
+ */
+const REFRESH = process.env.PAVE_REFRESH_RECORDINGS === '1'
+let recorder: Recorder | null = null
+
 /** Plays the current journey's recording; the journeys run one after another. */
 let current: ReplaySource | null = null
 const source = {
-  next: (req: SourceRequest) => {
+  next: async (req: SourceRequest) => {
     if (!current) throw new Error('no recording is being replayed')
-    return current.next(req)
+    const betas = (req.headers['anthropic-beta'] ?? '')
+      .split(',')
+      .map((b) => b.trim())
+      .filter(Boolean)
+    try {
+      const reply = await current.next(req)
+      recorder?.add(req.n, req.body, betas, reply)
+      return reply
+    } catch (err) {
+      // A call the recorded client abandoned is abandoned in the refreshed recording too.
+      recorder?.add(req.n, req.body, betas, null)
+      throw err
+    }
   },
 }
 
@@ -277,11 +299,25 @@ const recordedOutcome = (name: string) =>
 async function replay(name: string, journey: () => Promise<string[]>) {
   const rec = load<Recording>(`${name}.json`)
   current = replaySource(rec)
+  recorder = REFRESH ? new Recorder() : null
   const before = (await runs()).map((r) => r.id)
   const pieceIds = await journey()
   for (const r of await runs())
     if (s.parts.driver.isLive(r.id)) await settled(s.parts, r.id, 60_000)
   expect(current.remaining, `${name}: recorded turns left unplayed`).toBe(0)
+  if (REFRESH && recorder) {
+    const got = await outcome(pieceIds, before)
+    writeFileSync(
+      join(DIR, `${name}.json`),
+      `${JSON.stringify({ ...recorder.recording(rec.journey, rec.description), recordedAt: rec.recordedAt }, null, 1)}\n`,
+    )
+    writeFileSync(
+      join(DIR, `${name}.outcome.json`),
+      `${JSON.stringify({ journey: name, ...got }, null, 2)}\n`,
+    )
+    expect(s.model.problems(), `${name}: the fake API refused a request`).toEqual([])
+    return { got, report: current.report }
+  }
   expectFaithful(current.report, name)
   const got = await outcome(pieceIds, before)
   const want = recordedOutcome(name)
@@ -291,7 +327,7 @@ async function replay(name: string, journey: () => Promise<string[]>) {
 }
 
 describe('the recorded journeys replay through the real loop', () => {
-  it('a. a brief becomes directions, a mix and a pick', async () => {
+  it('a. variants of the CAD from a brief: proposed, mixed and one picked', async () => {
     await replay('a-directions', async () => {
       const piece = await api.call('pieces.create', {
         title: 'Tenth anniversary ring',
@@ -299,9 +335,11 @@ describe('the recorded journeys replay through the real loop', () => {
           'A ring for our tenth anniversary. About a carat, size 6. She works with her hands, so nothing that catches. Budget around $4,000.',
       } as never)
       state.piece = piece.id
-      const goal = JOB_RECIPES.design.goal
-      const first = await send(goal, { job: { stage: 'design', goal } })
-      await play('three directions', stopped)
+      // "Try variants" in the CAD stage: a message, not a job (variants are a side path).
+      const first = await send(VARIANTS_PROMPT, {
+        context: { pieceId: piece.id, selection: [], stage: 'cad' },
+      })
+      await play('three variants', stopped)
       await send('Put the head of A on the band of B', { threadId: first.thread.id })
       await play('the mix', stopped)
       await send('Go with D', { threadId: first.thread.id })

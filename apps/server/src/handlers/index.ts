@@ -10,6 +10,7 @@ import { org } from './org'
 import { pieces } from './pieces'
 import { plan } from './plan'
 import { production } from './production'
+import { projects } from './projects'
 import { render } from './render'
 import { session } from './session'
 import type { Handlers } from './types'
@@ -31,4 +32,5 @@ export const handlers: Handlers = {
   ...assistant,
   ...usage,
   ...plan,
+  ...projects,
 }

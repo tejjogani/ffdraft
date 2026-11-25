@@ -116,7 +116,7 @@ function resolve(ctx: Ctx, item: Item, existing: readonly StoredDirection[]): Re
 }
 
 /** The canon's design for a spec; the plain recipe when the canon cannot read it. */
-function designFor(spec: PieceSpec): { design: Design; notes: string[] } {
+export function designFor(spec: PieceSpec): { design: Design; notes: string[] } {
   const recipe = planDesign(spec)
   try {
     return { design: suggestDesign(spec, { correct: false }).design, notes: recipe.notes }
@@ -125,7 +125,7 @@ function designFor(spec: PieceSpec): { design: Design; notes: string[] } {
   }
 }
 
-function factsOf(summary: EvaluationSummary): DirectionFacts {
+export function factsOf(summary: EvaluationSummary): DirectionFacts {
   let costUsd: number | null = null
   try {
     const cost = roughCost(summary).perPiece.cost

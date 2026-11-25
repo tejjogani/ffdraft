@@ -5,13 +5,14 @@
  * checked against the monthly budget first. The answer is validated before anything uses it;
  * then the code, not the model, turns it into a spec draft and says whether a cut-out works.
  */
-import type { ModelClient } from '@pave/agent'
+import { type ModelClient, specQuestions } from '@pave/agent'
 import { mapError, messageUsage } from '@pave/agent/anthropic'
 import { buildReadRequest, parseReadMessage, ReadError, specFromRead } from '@pave/agent/photo'
 import {
   type AssistantModelId,
   type CommandOutput,
   type CommandParsedInput,
+  type JobStage,
   PieceSpecSchema,
   type Tokens,
 } from '@pave/schema'
@@ -30,7 +31,7 @@ export interface ReadCall {
   input: CommandParsedInput<'references.read'>
   signal?: AbortSignal
   /** The ledger's idempotency key and attribution. */
-  usage: { key: string; runId: string | null; pieceId: string | null }
+  usage: { key: string; runId: string | null; pieceId: string | null; stage?: JobStage | null }
 }
 
 export async function readPhotos(
@@ -78,6 +79,7 @@ export async function readPhotos(
     idempotencyKey: call.usage.key,
     runId: call.usage.runId,
     pieceId: call.usage.pieceId,
+    stage: call.usage.stage ?? null,
   })
 
   let read: ReturnType<typeof parseReadMessage>
@@ -88,6 +90,7 @@ export async function readPhotos(
     throw err
   }
   const { spec, assumed } = specFromRead(read)
+  const specDraft = PieceSpecSchema.parse(spec)
   let cutout: { ok: boolean; reason: string }
   try {
     const matte = await photoMatte(ctx, input.assetIds[0]!)
@@ -98,9 +101,10 @@ export async function readPhotos(
   return {
     output: {
       read,
-      specDraft: PieceSpecSchema.parse(spec),
+      specDraft,
       assumed,
       cutout,
+      questions: specQuestions(specDraft),
       model: message.model,
     },
     tokens: usage.tokens,

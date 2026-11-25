@@ -33,7 +33,7 @@ describe('the collapsed assistant pill', () => {
     job.plan[1]!.state = 'running'
     expect(pillSummary(run('running', job))).toEqual({
       title: 'CAD job',
-      detail: 'Settle the spec and the size…',
+      detail: 'Settle the spec and the size; show the estimate…',
       progress: 1 / 5,
       working: true,
     })

@@ -7,6 +7,7 @@ import { toolDefs } from '../tools'
 import { CORE_PROMPT, DESIGN_KNOWLEDGE } from './core'
 import { NODE_REFERENCE } from './node-reference'
 import { ASK_SKILL } from './skills/ask'
+import { BOARD_SKILL } from './skills/board'
 import { CINEMA_SKILL } from './skills/cinema'
 import { DIRECTIONS_SKILL } from './skills/directions'
 import { EDITING_SKILL } from './skills/editing'
@@ -19,6 +20,7 @@ import { STONE_SKILL } from './skills/stone'
 export const SKILLS = [
   '# Skills',
   SPEC_SKILL,
+  BOARD_SKILL,
   DIRECTIONS_SKILL,
   EDITING_SKILL,
   STONE_SKILL,
