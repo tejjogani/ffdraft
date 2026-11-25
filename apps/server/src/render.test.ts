@@ -322,6 +322,41 @@ describe('saved shots and takes', () => {
       error: expect.stringContaining('Interrupted'),
     })
   })
+
+  // Every other kind of work is failed when its service cannot take it up again; a run was not.
+  it('fails a run its assistant could not take up again, and keeps one that awaits approval', async () => {
+    const running = await traces.startRun(ctx, { model: 'm' })
+    const waiting = await traces.startRun(ctx, { model: 'm' })
+    await traces.finishRun(ctx, waiting.id, { status: 'awaiting-approval' })
+    const refuse = async () => {
+      throw new Error('not used')
+    }
+    const resume = vi.fn<NonNullable<Services['assistant']['resume']>>(async () => {
+      throw new Error('the model key is gone')
+    })
+    server.runtime.services.register('assistant', {
+      send: refuse,
+      decide: refuse,
+      cancel: refuse,
+      respond: refuse,
+      resume,
+    })
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await server.runtime.recover()
+    } finally {
+      logged.mockRestore()
+    }
+    expect(resume.mock.calls.map(([run]) => run.id)).toEqual(
+      expect.arrayContaining([running.id, waiting.id]),
+    )
+    const runs = await api.call('traces.runs', {})
+    expect(runs.find((r) => r.id === running.id)).toMatchObject({
+      status: 'failed',
+      errorCode: 'interrupted',
+    })
+    expect(runs.find((r) => r.id === waiting.id)?.status).toBe('awaiting-approval')
+  })
 })
 
 describe('brand models and on-model images', () => {
