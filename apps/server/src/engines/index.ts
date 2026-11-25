@@ -24,6 +24,12 @@ export interface EnginesConfig {
   renderWorkRoot?: string
   /** Where the Blender choice is saved; null keeps it in memory. */
   engineFile: string | null
+  /**
+   * Where `PAVE_PYTHON` and `PAVE_BLENDER` are read when no Blender was chosen: the server's
+   * environment (default, the process's own), so a server built from another environment (the
+   * smoke test's) finds the Blender that environment names, not the one this machine has.
+   */
+  blenderEnv?: NodeJS.ProcessEnv
 }
 
 const EnvSchema = z.object({
@@ -52,6 +58,7 @@ export function enginesConfigFromEnv(env: NodeJS.ProcessEnv, config: Config): En
       ? {}
       : { renderConcurrency: e.PAVE_RENDER_CONCURRENCY }),
     engineFile: config.dataDir === null ? null : join(config.dataDir, 'engine.json'),
+    blenderEnv: env,
   }
 }
 
@@ -62,7 +69,10 @@ export function createEngines(
   const pool = new KernelPool(config.pool)
   const { dataDir } = runtime.config
   const workRoot = config.renderWorkRoot ?? (dataDir && join(dataDir, 'render-work'))
-  const blender = new BlenderSetup({ file: config.engineFile })
+  const blender = new BlenderSetup({
+    file: config.engineFile,
+    ...(config.blenderEnv ? { env: config.blenderEnv } : {}),
+  })
   const renderEngine: RenderEngineService = {
     status: async () => {
       await blender.ready
