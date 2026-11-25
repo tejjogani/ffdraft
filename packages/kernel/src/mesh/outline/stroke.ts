@@ -145,6 +145,9 @@ export function joinIslands(
         for (const constrained of [true, false]) {
           for (const k of left) {
             for (const j of joined) {
+              // Nothing ties to a mark: a bar from the next letter to an accent reads as part of
+              // the letter, and the accent hangs from its own letter only.
+              if (isMark[j]) continue
               const lo = Math.max(spans[k]![0], spans[j]![0]) + r
               const hi = Math.min(spans[k]![1], spans[j]![1]) - r
               if (constrained && !isMark[k] && lo > hi) continue
@@ -186,9 +189,13 @@ export function joinIslands(
           rings[k] = rings[k]!.map((ring) => ring.map(([x, y]) => [x + dx, y + dy] as const))
         } else if (isMark[k]) {
           const letter = spans[best.to]![1] - spans[best.to]![0]
-          const s = sprue(rings[k]!, rings[best.to]!, boxes[k]!, width, SPRUE_REACH * letter)
+          const reach = SPRUE_REACH * letter
+          let s = sprue(rings[k]!, rings[best.to]!, boxes[k]!, width, reach)
+          // A sloping script sets its dots beside the letter's arm rather than over it: then the
+          // sprue runs along the link down to the arm, as narrow and no longer.
+          if (!s && best.d <= reach) s = slopedSprue(pieces[k]!, boxes[k]!, best.a, best.b, width)
           if (!s) {
-            // No metal straight under the accent: it stays loose, where the font put it.
+            // No metal within reach under the accent: it stays loose, where the font put it.
             joined.delete(k)
             parts.push(pieces[k]!)
             continue
@@ -267,6 +274,42 @@ const SPRUE_STEP = 0.05
 /** A sprue reaches the sprue's width into the accent and the letter, at most this far, mm. */
 const SPRUE_GRIP = 0.05
 
+/** A sprue's width: SPRUE_SHARE of its accent's, at most the tie width, at least the casting minimum. */
+function sprueWidth(
+  box: { min: readonly number[]; max: readonly number[] },
+  width: number,
+): number {
+  return Math.min(width, Math.max(MIN_STROKE, SPRUE_SHARE * (box.max[0]! - box.min[0]!)))
+}
+
+/**
+ * A narrow sprue from a on an accent down to b on its letter, along the link between them.
+ * Above the accent's lowest point it keeps only what lies inside the accent, so its end never
+ * shows beside the accent's corner.
+ */
+function slopedSprue(
+  mark: CrossSection,
+  box: { min: readonly number[]; max: readonly number[] },
+  a: [number, number],
+  b: [number, number],
+  width: number,
+): CrossSection {
+  const { manifold: mf } = runtime()
+  const bar = tie(a, b, sprueWidth(box, width) / 2)
+  const span = 2 * (Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + width) + 1
+  const below = mf.CrossSection.square([2 * span, span]).translate([
+    a[0] - span,
+    box.min[1]! - span,
+  ])
+  const under = mf.CrossSection.intersection(bar, below)
+  const inside = mf.CrossSection.intersection(bar, mark)
+  try {
+    return mf.CrossSection.union([under, inside])
+  } finally {
+    for (const c of [bar, below, under, inside]) c.delete()
+  }
+}
+
 /**
  * A narrow vertical sprue from an accent (rings, bounds) straight down to the letter under it,
  * inside the accent's own column: SPRUE_SHARE of its width, at most the tie width and at least
@@ -281,7 +324,7 @@ function sprue(
   width: number,
   reach: number,
 ): CrossSection | null {
-  const w = Math.min(width, Math.max(MIN_STROKE, SPRUE_SHARE * (box.max[0]! - box.min[0]!)))
+  const w = sprueWidth(box, width)
   const r = w / 2
   let best: { x: number; bottom: number; top: number } | null = null
   for (let x = box.min[0]! + r; x <= box.max[0]! - r + 1e-9; x += SPRUE_STEP) {

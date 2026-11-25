@@ -517,8 +517,9 @@ describe('pave', () => {
     for (const s of stones) {
       const [x, , z] = transformPoint(toLocal, centre(s))
       expect(field.inside(x, z)).toBe(true)
-      // The rim is the seat wall: stones keep half a gap from it, not the 0.4 mm of an open edge.
-      expect(field.distance(x, z)).toBeGreaterThanOrEqual(s.dims.width / 2 + 0.1 - 0.02)
+      // The rim is the seat wall: the outer row goes right up to it, the wall holding the
+      // girdles as a bezel does (mesh/pave/beads.ts WALL_HOLD), and never into it.
+      expect(field.distance(x, z)).toBeGreaterThanOrEqual(s.dims.width / 2 - 0.01)
     }
     // Honeycomb: most stones are the largest size, with six neighbours inside the field.
     const largest = stones.filter((s) => s.dims.width === 1.5).length

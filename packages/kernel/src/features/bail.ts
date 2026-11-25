@@ -31,6 +31,8 @@ const SINK_PER_WIRE = 0.5
 const STEP = 0.25
 /** Samples across the host's thickness when looking for the metal under the foot. */
 const ACROSS = 9
+/** Tops this close in height are level for choosing where across the plate a foot stands, mm. */
+const FOOT_TIE = 0.05
 /**
  * Farthest a hidden loop may stand off the centre of mass, as the angle the piece would hang
  * turned by, degrees. Past it the piece hangs visibly crooked, and a bail on top is the answer.
@@ -413,7 +415,12 @@ function standPoint(
     const y = found.at[1]
     return { ...found, thick: Math.min(y - lo, hi - y) + pitch / 2 }
   }
-  /** One foot beats another: carried beats not; then higher; then nearer the plate's middle. */
+  /**
+   * One foot beats another: carried beats not; then higher; then nearer the plate's middle.
+   * Heights within FOOT_TIE count as level: a tessellated top differs by hundredths across the
+   * plate, and the highest sample stood a tube a third of the way to one face of a 1.6 mm disc,
+   * its stem standing out of that face.
+   */
   function beats(
     a: { at: Vec3; run: number; off: number },
     b: { at: Vec3; run: number; off: number } | null,
@@ -422,7 +429,7 @@ function standPoint(
     const carried = a.run >= need
     if (carried !== b.run >= need) return carried
     if (!carried) return a.run > b.run
-    if (Math.abs(a.at[2] - b.at[2]) > 1e-6) return a.at[2] > b.at[2]
+    if (Math.abs(a.at[2] - b.at[2]) > FOOT_TIE) return a.at[2] > b.at[2]
     return a.off < b.off
   }
   const span = bounds.max[0] - bounds.min[0]
@@ -480,12 +487,33 @@ function standPoint(
   // be a sliver of metal under the casting's wall limit.
   const rise = clear - top[2]
   let lift = node.style === 'hidden' || rise < sinkFor(node.wire) ? 0 : rise
+  // A ring or tube sinks into the host, but its arc widens as it rises: on a plate thinner than
+  // that arc's chord at the plate's top, the sunk arc stood out of both faces (1.1 mm proud each
+  // side of a 1.4 mm name; over the top stones of an iced 45 mm KING, buried 59 % in metal). It
+  // is raised until its arc is no wider than the metal under it where it meets the top, and
+  // stands on a stem sunk in its place.
+  if (supported && (node.style === 'ring' || node.style === 'tube')) {
+    const outer = node.opening / 2 + node.wire
+    const across = Math.min(outer, thick)
+    // How deep the arc's outer face may go into the top before it is wider than the metal.
+    const fits = outer - Math.sqrt(outer * outer - across * across)
+    // The foot stands on the lowest metal under its width; a rounded top (a disc's) is higher
+    // under the middle of the band, where the arc meets it first.
+    const band = node.style === 'ring' ? node.wire / 2 : half
+    const high = Math.max(
+      top[2],
+      ...[-1, -0.5, 0.5, 1].map((f) => columnAt(top![0] + f * band, top![1])?.z ?? -Infinity),
+    )
+    const raise = high - top[2] + sinkFor(node.wire) + node.wire / 2 - fits
+    if (raise > 0) lift = Math.max(lift, raise)
+  }
   // Stones set in the host's top (a halo's top stones, tables to the front): the foot and the
   // bottom of the band would sit across their crowns, where no setter can reach them. As a bench
   // jeweler hangs a halo, the foot moves behind the stones' girdle plane, onto the back of the
   // rim, and the band rises on a stem until its lowest metal clears the stones' tops.
-  const bandLow = top[2] + lift - need - node.wire / 2
-  const under = node.style === 'hidden' || !supported ? null : stonesUnder(stones, top[0], bandLow)
+  // The bail's lowest metal is at its foot, whatever its lift: a stem stands there.
+  const footLow = top[2] - need - node.wire / 2
+  const under = node.style === 'hidden' || !supported ? null : stonesUnder(stones, top[0], footLow)
   if (under) {
     const front = node.wire / 2 + (node.style === 'loop' ? LEG_SPREAD * node.wire : 0)
     const want = under.girdle + under.side * (STONE_MARGIN + front)

@@ -211,13 +211,13 @@ function ring(spec: PieceSpec, notes: string[]): NodeInput[] {
   return nodes
 }
 
-/** Default letter height of an engraving, the least that engraves cleanly, and advance per letter per mm of height. */
 /**
  * Shortest iced name whose block letters take pavé, mm: at 10 mm Tej and Isabella took no
  * 1.1 mm stone at all and Amara two; from 14 mm every name is set (sparsely at 14).
  */
 const ICED_NAME_MIN = 14
 
+/** Default letter height of an engraving, the least that engraves cleanly, and advance per letter per mm of height. */
 const ENGRAVING_SIZE = 1.4
 const ENGRAVING_MIN = 0.6
 const ENGRAVING_ADVANCE = 0.7

@@ -14,7 +14,16 @@
  * a sculpted body, touches both and leaves a tunnel under it, a handle in the casting that
  * investment cannot fill; at a body's edge it would hang over it.
  */
-import { add, cross, dot, normalize, perpendicular, scale, sub, type Vec3 } from '../../geometry/vec'
+import {
+  add,
+  cross,
+  dot,
+  normalize,
+  perpendicular,
+  scale,
+  sub,
+  type Vec3,
+} from '../../geometry/vec'
 import { RULES } from '../../rules'
 import { PointGrid } from '../grid'
 import type { PlacedStone } from './layout'
@@ -104,31 +113,44 @@ export function layoutBeads(
   })
 
   const beads: Bead[] = []
+  /** Each bead's sphere centre, lifted off the surface as seats.ts raises it. */
+  const centres: Vec3[] = []
   const beadGrid = new PointGrid(0.6)
   const owners: number[][] = stones.map(() => [])
-  const free = (p: Vec3, diameter: number, near: readonly number[]): boolean => {
+  const lifted = (hit: { p: Vec3; n: Vec3 }, diameter: number) =>
+    add(hit.p, scale(hit.n, BEAD_LIFT * diameter))
+  /**
+   * Whether a bead standing at surface point p (sphere centre c) stays off every girdle and
+   * keeps CLEARANCE from every other bead's sphere. Spheres are compared, not the points they
+   * stand on: in an inside corner two beads stand on faces at right angles, their points far
+   * enough apart but their spheres leaning together, and two spheres that touch over a gap in
+   * the metal below them leave a tunnel under the join, a handle in the casting.
+   */
+  const free = (p: Vec3, c: Vec3, diameter: number, near: readonly number[]): boolean => {
     for (const j of near) {
       const s = stones[j]!
       const d = Math.hypot(p[0] - s.position[0], p[1] - s.position[1], p[2] - s.position[2])
       if (d < s.diameter / 2 + CLEARANCE) return false
     }
     let ok = true
-    beadGrid.near(p[0], p[1], p[2], diameter + CLEARANCE + 0.5, (b) => {
-      const o = beads[b]!
-      const d = Math.hypot(p[0] - o.position[0], p[1] - o.position[1], p[2] - o.position[2])
-      if (d < (diameter + o.diameter) / 2 + CLEARANCE) ok = false
+    beadGrid.near(c[0], c[1], c[2], diameter + CLEARANCE + 0.5, (b) => {
+      const o = centres[b]!
+      const d = Math.hypot(c[0] - o[0], c[1] - o[1], c[2] - o[2])
+      if (d < (diameter + beads[b]!.diameter) / 2 + CLEARANCE) ok = false
     })
     return ok
   }
   const add3 = (p: Vec3, diameter: number, holds: readonly number[], near: readonly number[]) => {
     const hit = snap(p)
-    if (!hit || !free(hit.p, diameter, near)) return
+    if (!hit) return
+    const centre = lifted(hit, diameter)
+    if (!free(hit.p, centre, diameter, near)) return
     if (edgeDistance(hit.p) < diameter / 2 + EDGE_METAL) return
-    const centre = add(hit.p, scale(hit.n, BEAD_LIFT * diameter))
     if (options.clear && !options.clear(centre, hit.n, diameter / 2 + EDGE_METAL)) return
-    beadGrid.add(...(hit.p as [number, number, number]))
+    beadGrid.add(...(centre as [number, number, number]))
     for (const h of holds) owners[h]!.push(beads.length)
     beads.push({ position: hit.p, normal: hit.n, diameter })
+    centres.push(centre)
   }
 
   // Interstitial beads: one per triangle of mutually adjacent stones.
@@ -157,9 +179,7 @@ export function layoutBeads(
           return Math.hypot(d[0], d[1], d[2]) <= stones[t]!.diameter / 2 + diameter / 2 + HOLD_SLACK
         })
         if (!reaches) continue
-        add3(p, diameter, tri, [
-          ...new Set([...ns, ...neighbours[j]!, ...neighbours[k]!, i]),
-        ])
+        add3(p, diameter, tri, [...new Set([...ns, ...neighbours[j]!, ...neighbours[k]!, i])])
       }
     }
   })

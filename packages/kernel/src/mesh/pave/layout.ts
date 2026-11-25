@@ -13,7 +13,8 @@
  *     to two placed neighbours (gap included) in their tangent plane, then snapped back onto the
  *     surface. On a flat field of one size this *is* a honeycomb; on curved ones the lattice
  *     bends with the surface.
- *  4. Voids left where fronts and rows meet are filled largest size first.
+ *  4. Voids left where fronts and rows meet are filled largest size first: from samples, then
+ *     at every spot tangent to two placed stones, which finds the voids too tight for a sample.
  *  5. The ice level keeps stones in the order ice spreads from the heart of the region through
  *     neighbouring stones, so lowering it shrinks the iced patch instead of thinning it out —
  *     and never moves a stone.
@@ -263,7 +264,10 @@ class Packer {
       this.grow(seed, first)
       first = false
     }
-    for (const size of this.sizes) this.fillVoids(size)
+    for (const size of this.sizes) {
+      this.fillVoids(size)
+      this.fillGaps(size)
+    }
     this.mergeStraySizes()
     this.trimHoles()
     const full = this.stones.reduce(
@@ -1224,6 +1228,67 @@ class Packer {
       if (snug) this.place(snug.p, snug.n, size, snug.sample)
       else if (this.fits(p, n, size)) this.place(p, n, size, i)
     }
+  }
+
+  /**
+   * Stones of diameter `size` tangent to two placed neighbours, wherever one fits. Voids are
+   * found from samples, and a void that only just takes a stone (the seam between a frame row
+   * and the honeycomb, the strip between two rows down a stroke) has a single spot where it
+   * fits, which no sample may be close enough to reach: those seats were left bare. Every pair
+   * of stones close enough to hold one between them is asked instead, both sides, and stones
+   * placed here are asked in turn, so a strip fills along its length.
+   */
+  private fillGaps(size: number): void {
+    const r = size / 2
+    for (let i = 0; i < this.stones.length; i++) {
+      const a = this.stones[i]!
+      const reach = a.diameter / 2 + this.largest / 2 + size + 2 * this.o.gap + 2 * SLACK
+      const pairs: number[] = []
+      this.grid.near(a.position[0], a.position[1], a.position[2], reach, (j, d2) => {
+        const b = this.stones[j]!
+        const span = (a.diameter + b.diameter) / 2 + size + 2 * this.o.gap + 2 * SLACK
+        if (j > i && d2 <= span * span) pairs.push(j)
+      })
+      pairs.sort((x, y) => x - y)
+      for (const j of pairs)
+        for (const side of [1, -1]) {
+          this.tick()
+          // Cheap first: in a packed field the spot is nearly always taken by a third stone.
+          const rough = this.roughTangent(i, j, r, side)
+          if (!rough || !this.roughlyFree(rough, size)) continue
+          const hit = this.tangentPoint(i, j, r, side)
+          if (hit && this.sizeFor(hit.sample, hit.p) >= size - EPS && this.fits(hit.p, hit.n, size))
+            this.place(hit.p, hit.n, size, hit.sample)
+        }
+    }
+  }
+
+  /** The first, unsnapped guess of {@link tangentPoint}: in the two girdles' mean plane. */
+  private roughTangent(i: number, j: number, r: number, side: number): Vec3 | null {
+    const a = this.stones[i]!
+    const b = this.stones[j]!
+    const da = a.diameter / 2 + r + this.o.gap + SLACK
+    const db = b.diameter / 2 + r + this.o.gap + SLACK
+    const n = normalize(add(a.normal, b.normal))
+    const axis = sub(b.position, a.position)
+    const flat = sub(axis, scale(n, dot(axis, n)))
+    const len = Math.hypot(flat[0], flat[1], flat[2])
+    if (len < EPS) return null
+    const e1 = scale(flat, 1 / len)
+    const x = (da * da - db * db + len * len) / (2 * len)
+    const y2 = da * da - x * x
+    if (y2 <= 0) return null
+    return add(add(a.position, scale(e1, x)), scale(cross(n, e1), side * Math.sqrt(y2)))
+  }
+
+  /** No placed girdle overlaps a stone of diameter d centred at c by more than snapping moves it. */
+  private roughlyFree(c: Vec3, d: number): boolean {
+    let ok = true
+    this.grid.near(c[0], c[1], c[2], d / 2 + this.largest / 2 + this.o.gap, (j, d2) => {
+      const min = (d + this.stones[j]!.diameter) / 2 + this.o.gap - DRIFT * d
+      if (d2 < min * min) ok = false
+    })
+    return ok
   }
 
   /**

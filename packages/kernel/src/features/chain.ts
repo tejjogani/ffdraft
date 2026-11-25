@@ -14,9 +14,7 @@ import {
   metalOf,
   QUALITY,
   runtime,
-  type Solid,
   type Stone,
-  solidFromManifold,
   type Vec3,
 } from '../core'
 import {

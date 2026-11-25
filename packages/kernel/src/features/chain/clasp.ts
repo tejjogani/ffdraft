@@ -198,10 +198,16 @@ export function boxClasp(width: number, height: number, span: number): Clasp {
   }
 }
 
-/** The shortest span a box clasp takes: a box 1.4 line widths long. */
+/**
+ * Shortest box a box clasp has, mm: its tongue needs that much length to spring and catch. At
+ * 1.4 line widths alone a 2 mm tennis line got a 3 mm box, shorter than any stock clasp.
+ */
+const BOX_LEAST = 5
+
+/** The shortest span a box clasp takes: a box 1.4 line widths long, and BOX_LEAST at least. */
 export function boxMin(width: number): number {
   const wall = Math.max(0.4, 0.1 * width)
-  return 1.4 * width - 2 * END_REACH + CLASP_CLEARANCE + wall
+  return Math.max(BOX_LEAST, 1.4 * width) - 2 * END_REACH + CLASP_CLEARANCE + wall
 }
 
 /** Unit vector from a to b. */

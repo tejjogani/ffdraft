@@ -360,6 +360,93 @@ describe('pavé of large stones on sculpted hosts at production', () => {
   }, 120_000)
 })
 
+describe('pavé layout on flat fields', () => {
+  // The seam between a field's frame row and its honeycomb was left bare where a void only
+  // just took a stone: no sample landed on the one spot where it fit. Measured as bald.mts
+  // measures it, on a 0.1 mm grid over the front face.
+  it('leaves no seat for the smallest stone empty and packs the field densely', async () => {
+    for (const [shape, density] of [
+      ['circle', 0.62],
+      ['heart', 0.61],
+      ['tag', 0.59],
+    ] as const) {
+      const thickness = 2.5
+      const design = designFrom('pendant', [
+        {
+          id: 'b',
+          kind: 'vectorBody',
+          source: { type: 'shape', shape },
+          height: 30,
+          thickness,
+          bevel: 'flat',
+          bevelSize: 0,
+        },
+        { id: 'ice', kind: 'pave', host: 'b', sizeMax: 1.8, sizeMin: 1 },
+      ])
+      const node = design.nodes.ice as { margin: number; gap: number }
+      const scene = await kernel.scene(design)
+      const tris = scene.nodes.get('b')!.bodies[0]!.solid.triangles(QUALITY.draft)
+      const bvh = new TriangleBvh({
+        positions: tris.positions.slice(),
+        indices: tris.indices.slice(),
+      })
+      const box = scene.nodes.get('b')!.bodies[0]!.solid.bounds()
+      const stones = scene.evaluation.stones
+        .filter((x) => x.nodeId === 'ice')
+        .map((x) => ({ x: x.matrix[12]!, z: x.matrix[14]!, r: x.dims.width / 2 }))
+      const h = 0.1
+      const nx = Math.ceil((box.max[0] - box.min[0]) / h) + 3
+      const nz = Math.ceil((box.max[2] - box.min[2]) / h) + 3
+      const at = (k: number) => [
+        box.min[0] + ((k % nx) - 1) * h,
+        box.min[2] + (Math.floor(k / nx) - 1) * h,
+      ]
+      // The front face, and each point's distance to its edge (two-pass chamfer).
+      const edge = new Float32Array(nx * nz)
+      for (let k = 0; k < edge.length; k++) {
+        const [x, z] = at(k)
+        const t = bvh.raycast(x!, -50, z!, 0, 1, 0)
+        edge[k] = Number.isFinite(t) && Math.abs(t - 50 + thickness) < 0.02 ? 1e9 : 0
+      }
+      const relax = (k: number, o: number, w: number) => {
+        if (edge[o]! + w < edge[k]!) edge[k] = edge[o]! + w
+      }
+      for (let j = 1; j < nz - 1; j++)
+        for (let i = 1; i < nx - 1; i++) {
+          const k = j * nx + i
+          relax(k, k - 1, h)
+          relax(k, k - nx, h)
+          relax(k, k - nx - 1, h * Math.SQRT2)
+          relax(k, k - nx + 1, h * Math.SQRT2)
+        }
+      for (let j = nz - 2; j > 0; j--)
+        for (let i = nx - 2; i > 0; i--) {
+          const k = j * nx + i
+          relax(k, k + 1, h)
+          relax(k, k + nx, h)
+          relax(k, k + nx + 1, h * Math.SQRT2)
+          relax(k, k + nx - 1, h * Math.SQRT2)
+        }
+      let face = 0
+      const missed: string[] = []
+      for (let k = 0; k < edge.length; k++) {
+        if (edge[k] === 0) continue
+        face++
+        const [x, z] = at(k)
+        let clear = Infinity
+        for (const s of stones) clear = Math.min(clear, Math.hypot(x! - s.x, z! - s.z) - s.r)
+        // The smallest stone fits here with gap and margin kept (0.1 mm of slack for the grid).
+        const margin = Math.max(node.margin, 0.4)
+        if (edge[k]! - margin >= 0.5 + 0.1 && clear - node.gap >= 0.5 + 0.1)
+          missed.push(`${x!.toFixed(1)},${z!.toFixed(1)}`)
+      }
+      expect(missed, shape).toEqual([])
+      const area = stones.reduce((sum, s) => sum + Math.PI * s.r * s.r, 0)
+      expect(area / (face * h * h), shape).toBeGreaterThanOrEqual(density)
+    }
+  }, 60_000)
+})
+
 describe('pavé too large to cut', () => {
   it('says which stone size would fit the budget, without measuring every stone', async () => {
     const design = designFrom('pendant', [

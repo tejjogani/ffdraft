@@ -51,6 +51,19 @@ function hiddenShare(scene: Scene, stone: Scene['stones'][number]['stone']): num
   return hidden / total
 }
 
+/** A round plate `thickness` thick hung from a bail of the given style, opening and wire. */
+const plate = (thickness: number, style: string, opening: number, wire: number) =>
+  designFrom('pendant', [
+    {
+      id: 'body',
+      kind: 'vectorBody',
+      source: { type: 'shape', shape: 'circle' },
+      height: 20,
+      thickness,
+    },
+    { id: 'bail', kind: 'bail', host: 'body', style, opening, wire, width: 3 },
+  ] as never)
+
 describe('bail fit', () => {
   it.each<[string, number]>([
     ['cable', 1.2],
@@ -116,6 +129,60 @@ describe('bail fit', () => {
       }
     expect(found).toEqual([])
   }, 180_000)
+
+  it.each<[string, () => ReturnType<typeof buildDesign>]>([
+    ['ring on a 2 mm disc', () => plate(2, 'ring', 3.2, 1.36)],
+    ['tube on a 1.6 mm disc', () => plate(1.6, 'tube', 6, 1.2)],
+    [
+      'ring on an iced 45 mm KING',
+      () =>
+        buildDesign({
+          ...T,
+          kind: 'pendant',
+          archetype: 'icedPendant',
+          body: { heightMm: 45, text: 'KING', thicknessMm: 3, iceLevel: 1 },
+          stones: [{ role: 'pave', widthMm: 1.3 }],
+        } as PieceSpecInput),
+    ],
+  ])(
+    'keeps a %s inside the plate where it meets the top',
+    async (_, make) => {
+      // The sunk arc of a ring or tube is wider than a thin plate where it meets the top: it
+      // stood 1–1.5 mm proud of both faces, and on an iced KING buried the top stones 59 % in
+      // metal. Now it stands on a stem and its arc meets the top no wider than the plate.
+      const design = make()
+      const scene = await kernel.scene(design)
+      const body = scene.nodes.get('body')!.bodies[0]!.solid
+      const box = body.bounds()
+      const opening = scene.nodes.get('bail')!.frames.opening!.origin
+      const mid = (box.min[1] + box.max[1]) / 2
+      const hits = body
+        .manifold(QUALITY.draft)
+        .rayCast([opening[0], mid, box.max[2] + 5], [opening[0], mid, box.min[2] - 5])
+      const top = Math.max(...hits.map((h) => h.position[2]!))
+      // Bail metal in the millimetre under the top, sampled across the plate's thickness.
+      const bail = scene.nodes.get('bail')!.bodies.map((b) => b.solid.manifold(QUALITY.draft))
+      let lo = Infinity
+      let hi = -Infinity
+      for (let dz = 0.05; dz < 1; dz += 0.1)
+        for (let dx = -0.5; dx <= 0.5; dx += 0.25)
+          for (const m of bail)
+            for (const h of m.rayCast(
+              [opening[0] + dx, box.min[1] - 5, top - dz],
+              [opening[0] + dx, box.max[1] + 5, top - dz],
+            )) {
+              lo = Math.min(lo, h.position[1]!)
+              hi = Math.max(hi, h.position[1]!)
+            }
+      expect(lo).toBeGreaterThanOrEqual(box.min[1] - 0.05)
+      expect(hi).toBeLessThanOrEqual(box.max[1] + 0.05)
+      if (design.nodes.ice) {
+        const production = await kernel.evaluate(design, { detail: 'production' })
+        expect(production.diagnostics.map((d) => d.code)).not.toContain('stone.inMetal')
+      }
+    },
+    120_000,
+  )
 
   const trophy = (heightMm: number) =>
     buildDesign({

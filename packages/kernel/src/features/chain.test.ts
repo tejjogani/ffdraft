@@ -151,6 +151,18 @@ describe('chain', () => {
         clasp: 'box',
       },
     ],
+    [
+      'tennis 2 mm, box',
+      {
+        id: 'c',
+        kind: 'chain',
+        style: 'tennis',
+        linkWidth: 2,
+        wire: 0.6,
+        length: 400,
+        clasp: 'box',
+      },
+    ],
   ])(
     'opens a draped %s clasp at the back, so it can be put on',
     async (_, node) => {
@@ -161,6 +173,8 @@ describe('chain', () => {
       expect(data.clasp?.style).toBe(
         (node as { style: string }).style === 'tennis' ? 'box' : 'lobster',
       )
+      // A clasp no shorter than a stock one: a fine tennis line's box got 3 mm at first.
+      expect(data.clasp!.length).toBeGreaterThanOrEqual(data.clasp!.style === 'box' ? 5 : 10)
       // The clasp is part of the chain's one body: its pieces (the lobster and its ring, the box
       // and its tongue) and the end links are separate shells that never touch, as links are.
       expect(result.bodies).toHaveLength(1)

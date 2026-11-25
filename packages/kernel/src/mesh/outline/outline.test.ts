@@ -206,6 +206,52 @@ describe('joining loose parts of lettering', () => {
     }
   })
 
+  it('hangs a dot set beside a sloping arm on a narrow sprue along the slope', () => {
+    const { manifold: mf } = runtime()
+    // A script u's dots stand to the right of its arms: nothing lies straight under them, and
+    // they were left loose, to fall out of the casting.
+    const arm = new mf.CrossSection([
+      [
+        [0, 0],
+        [0.6, 0],
+        [2.6, 5],
+        [2, 5],
+      ],
+    ])
+    const dot = new mf.CrossSection([rect(2.7, 5.6, 0.6, 0.6)])
+    const text = mf.CrossSection.union([arm, dot])
+    const joined = joinIslands(text, 0.5, 32, false)!
+    expect(joined.section.decompose()).toHaveLength(1)
+    // The dot is where it was, and the sprue is narrow: far less metal than a full tie.
+    const above = (c: CrossSection) =>
+      mf.CrossSection.intersection(c, new mf.CrossSection([rect(2, 5.6, 2, 1)])).area()
+    expect(above(joined.section)).toBeCloseTo(above(text), 6)
+    expect(joined.section.area() - text.area()).toBeLessThan(0.35)
+  })
+
+  it('never ties the next letter to an accent', () => {
+    const { manifold: mf } = runtime()
+    // An accented letter, then a tall one (an á before an l or a k) whose top is nearer to the
+    // accent than to the letter under it: a bar from it to the accent read as a stroke of the
+    // letter and turned á into a different glyph.
+    const a = new mf.CrossSection([rect(0, 0, 2.6, 5)])
+    // Slanted, as a font's acute is, with points down its edge where a tie can land.
+    const edge = Array.from({ length: 9 }, (_, k): [number, number] => [
+      2.6 + 0.05 * k,
+      5.5 + 0.1 * k,
+    ])
+    const acute = new mf.CrossSection([[[1.6, 5.5], ...edge, [2, 6.3]]])
+    const l = new mf.CrossSection([rect(3.6, 0, 0.6, 9)])
+    const text = mf.CrossSection.union([a, acute, l])
+    const joined = joinIslands(text, 0.5, 32, true)!
+    expect(joined.section.decompose()).toHaveLength(1)
+    const between = mf.CrossSection.intersection(
+      joined.section,
+      new mf.CrossSection([rect(3.01, 5, 0.58, 1.5)]),
+    )
+    expect(between.area()).toBeCloseTo(0, 9)
+  })
+
   it('meets each letter flush, never standing proud of the edge it joins', () => {
     const { manifold: mf } = runtime()
     // An L whose foot reaches toward an I: the nearest points are the foot's top corner and
