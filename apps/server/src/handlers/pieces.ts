@@ -3,6 +3,7 @@ import {
   type Design,
   emptyDesign,
   originNeedsAttestation,
+  PAVE_MIME,
   type Piece,
   type PieceKind,
   type PieceOrigin,
@@ -16,7 +17,7 @@ import {
 } from '@pave/schema'
 import { and, desc, eq, ilike, inArray, isNull, type SQL } from 'drizzle-orm'
 import type { z } from 'zod'
-import { getAssetRow } from '../assets/assets'
+import { assetBytes, getAssetRow, putAsset } from '../assets/assets'
 import { type Ctx, publish } from '../context'
 import * as t from '../db/schema'
 import { commitChange, refreshFacts, replaceDesignOps } from '../design'
@@ -24,6 +25,8 @@ import { chooseDirection, proposeDirections, removeDirection, toDirection } from
 import { badRequest, conflict, forbidden } from '../errors'
 import { createId } from '../ids'
 import { ensure, ensureAll, getCollection, getPiece } from '../lookups'
+import { openPieceFile } from '../pavefile/open'
+import { savePieceFile } from '../pavefile/save'
 import { recordRenderFeedback, takeAgent } from '../render-feedback'
 import type { HandlerGroup } from './types'
 
@@ -58,6 +61,7 @@ export async function toPiece(ctx: Ctx, r: PieceRow): Promise<Piece> {
     origin: r.origin ?? null,
     directions: (r.directions ?? []).map(toDirection),
     chosenDirectionId: r.chosenDirectionId ?? null,
+    provenance: r.provenance ?? null,
   }
 }
 
@@ -298,6 +302,23 @@ export const pieces: HandlerGroup<'pieces'> = {
       coverAuto: source.coverAuto,
       origin: source.origin,
     })
+  },
+
+  // A .pave file is free both ways: nothing here claims from the plan's allowance.
+  'pieces.saveFile': async (ctx, { id }) => {
+    const file = await savePieceFile(ctx, id)
+    const asset = await putAsset(ctx, {
+      bytes: file.bytes,
+      name: file.name,
+      mime: PAVE_MIME,
+      kind: 'archive',
+    })
+    return { asset, notes: file.notes }
+  },
+
+  'pieces.openFile': async (ctx, { assetId, collectionId }) => {
+    const row = await getAssetRow(ctx, assetId)
+    return openPieceFile(ctx, await assetBytes(ctx, row), row.name, { collectionId })
   },
 
   'pieces.proposeDirections': (ctx, input) => proposeDirections(ctx, input),

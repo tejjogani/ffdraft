@@ -22,6 +22,7 @@ const NEVER_COUNTED = [
   'Designing, CAD, checks and previews',
   'AI jobs and conversations with your own Claude key',
   'Browser previews and the pictures the assistant takes to see the design',
+  'Saving and opening Pavé files (.pave)',
   'STL, 3MF, OBJ and GLB exports',
 ]
 

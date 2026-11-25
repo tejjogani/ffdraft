@@ -1,12 +1,13 @@
 import { PIECE_KINDS, type PieceKind, type PieceSummary, STAGES, type Stage } from '@pave/schema'
 import { Badge, Button, EmptyState, InlineError, Segmented, Select, Skeleton } from '@pave/ui'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { Folder, LayoutGrid, Plus, Rows3 } from 'lucide-react'
+import { FileUp, Folder, LayoutGrid, Plus, Rows3 } from 'lucide-react'
 import { useMemo } from 'react'
 import { KindGlyph } from '../../components/KindGlyph'
 import { Column, PageHeader, PageTitle } from '../../components/Page'
 import { PieceCard, PieceCardSkeleton } from '../../components/PieceCard'
 import { StageIcon } from '../../components/StageChip'
+import { useOpenPaveFile } from '../../features/pavefile'
 import { KIND_LABEL, STAGE_LABEL } from '../../lib/domain'
 import { plural } from '../../lib/format'
 import { useCreatePiece } from '../../lib/pieces'
@@ -46,6 +47,7 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
   const collection = collections.data?.find((c) => c.id === collectionId)
   const pieces = useRpc('pieces.list', { collectionId, stage, limit: 200 })
   const create = useCreatePiece()
+  const openPaveFile = useOpenPaveFile()
 
   const visible = useMemo(
     () => (pieces.data ?? []).filter((p) => !kind || p.kind === kind).sort(SORTS[sort]),
@@ -80,14 +82,19 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
             : [{ label: 'Pieces' }]
         }
         actions={
-          <Button
-            variant="primary"
-            size="sm"
-            icon={Plus}
-            onClick={() => create.mutate({ collectionId: collectionId ?? null })}
-          >
-            New piece
-          </Button>
+          <>
+            <Button variant="ghost" size="sm" icon={FileUp} onClick={openPaveFile}>
+              Open Pavé file
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              icon={Plus}
+              onClick={() => create.mutate({ collectionId: collectionId ?? null })}
+            >
+              New piece
+            </Button>
+          </>
         }
       />
       <Column wide>

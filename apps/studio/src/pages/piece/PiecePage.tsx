@@ -21,7 +21,7 @@ import {
   tabListClass,
 } from '@pave/ui'
 import { Link, Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
-import { Copy, Folder, FolderInput, Images, MoreHorizontal, Trash2 } from 'lucide-react'
+import { Copy, FileDown, Folder, FolderInput, Images, MoreHorizontal, Trash2 } from 'lucide-react'
 import { type ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { KindGlyph } from '../../components/KindGlyph'
 import { Column, PageHeader } from '../../components/Page'
@@ -29,6 +29,7 @@ import { StagePicker } from '../../components/StageChip'
 import { JobPanel } from '../../features/assistant/jobs/JobPanel'
 import { StageStepper } from '../../features/assistant/jobs/StageStepper'
 import { StartJob } from '../../features/assistant/jobs/StartJob'
+import { savePaveFile } from '../../features/pavefile'
 import { DOCK_PANEL_PX, ReferenceDock } from '../../features/references/ReferencePanel'
 import { useReferencePanel } from '../../features/references/store'
 import { type Command, useRegisterCommands } from '../../lib/commands'
@@ -218,6 +219,14 @@ function PieceHeader({ piece, stage }: { piece: Piece | undefined; stage: JobSta
           run: () => duplicate.mutate({ id: piece.id }),
         },
         {
+          id: 'piece.saveFile',
+          title: 'Save as Pavé file',
+          group: 'Piece',
+          icon: FileDown,
+          keywords: ['export', 'download', '.pave', 'file'],
+          run: () => void savePaveFile(piece),
+        },
+        {
           id: 'piece.delete',
           title: 'Delete piece',
           group: 'Piece',
@@ -264,6 +273,13 @@ function PieceHeader({ piece, stage }: { piece: Piece | undefined; stage: JobSta
               >
                 <MenuItem icon={Copy} onClick={() => duplicate.mutate({ id: piece.id })}>
                   Duplicate
+                </MenuItem>
+                <MenuItem
+                  icon={FileDown}
+                  description="Free, never counted"
+                  onClick={() => void savePaveFile(piece)}
+                >
+                  Save as Pavé file
                 </MenuItem>
                 <MenuSub label="Move to collection" icon={FolderInput}>
                   <CollectionChoices piece={piece} />

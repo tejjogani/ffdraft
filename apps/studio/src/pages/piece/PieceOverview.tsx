@@ -7,7 +7,7 @@ import { SectionTitle } from '../../components/Page'
 import { SpecCard } from '../../components/SpecCard'
 import { takeMedia } from '../../features/render/shots'
 import { assetUrl } from '../../lib/assets'
-import { plural, relativeTime } from '../../lib/format'
+import { dateTime, plural, relativeTime } from '../../lib/format'
 import { useUpdatePiece } from '../../lib/pieces'
 import { useRpc, useRpcMutation } from '../../lib/query'
 
@@ -26,7 +26,26 @@ export function PieceOverview({ pieceId }: { pieceId: string }) {
       <SpecCard piece={piece.data} />
       <Moodboards pieceId={pieceId} />
       <LatestRenders pieceId={pieceId} />
+      {piece.data.provenance && <FileProvenance provenance={piece.data.provenance} />}
     </div>
+  )
+}
+
+/** Where a piece opened from a .pave file came from: the saves it travelled through. */
+function FileProvenance({ provenance }: { provenance: NonNullable<Piece['provenance']> }) {
+  const last = provenance.files[provenance.files.length - 1]!
+  return (
+    <section aria-label="Where this piece came from">
+      <SectionTitle>Where it came from</SectionTitle>
+      <p className="text-sm text-fg-muted">
+        Opened from <span className="text-fg">{provenance.fileName}</span>{' '}
+        {relativeTime(provenance.openedAt)}, saved{' '}
+        {provenance.elsewhere ? 'by another organisation or install' : 'here'} with Pavé{' '}
+        {last.appVersion} on {dateTime(last.savedAt)}. First made {dateTime(provenance.createdAt)}
+        {provenance.files.length > 1 ? `; saved to a file ${provenance.files.length} times` : ''}.
+        Its history keeps who made each change.
+      </p>
+    </section>
   )
 }
 

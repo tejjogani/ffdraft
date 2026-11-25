@@ -38,6 +38,7 @@ watch, pause, take over or stop.
 | The assistant: chat in the dock, AI jobs for each stage, a design from a written brief or from a photo, edits by chat, questions about a selected part | Works with your own Claude API key ([below](#use-the-assistant-with-your-claude-api-key)). Built and tested against recorded stand-ins for Claude, not yet against Claude itself: run `pnpm agent:smoke` once with your key to check it |
 | Reference panel beside CAD: museum search, pins with their rights, pictures laid in a view as image planes | Works. The museum search was tested with recorded answers only |
 | Exports: STL, 3MF, OBJ, GLB, STEP, 3DM | Works |
+| The Pavé file (`.pave`): save a piece with its history, references and shots, and open it on another computer | Works; always free ([the format](docs/pave-file.md)) |
 | Plans: Free and Pro, with monthly counts of Blender renders and Rhino/STEP exports | Counting works; there is no payment yet |
 | Production package: spec sheet, drawings, files, stone list, cost estimate, checks, as a zip | Works [from a script](#using-it-from-scripts); its screen is not built yet |
 | Connecting Claude Code to Pavé over MCP | Planned, not built |
@@ -286,7 +287,9 @@ cost, and the changes it made.
    walls that are too thin, stones too close to an edge, and so on. Some come with a one-click
    fix.
 5. **Export** (top right of the model) saves the piece as STL or 3MF for printing and casting,
-   STEP for Rhino and MatrixGold, 3DM, OBJ or GLB.
+   STEP for Rhino and MatrixGold, 3DM, OBJ or GLB. **Pavé file** saves everything about the
+   piece (design, history, references, shots) as one `.pave` file, always free; open it with
+   **Open Pavé file** on the Pieces page, or drop it on the window.
 6. **+** above the feature list adds a stone, a setting, a halo, a row of stones, pavé, a bail,
    a chain, text, an imported mesh and more.
 7. The **Design** tab holds the brief and the directions. **Add from a template** adds a
@@ -303,7 +306,7 @@ Pavé has two plans. What they include is set in one file,
 
 | | Free | Pro |
 | --- | --- | --- |
-| CAD, the assistant on your own key, browser previews, STL / 3MF / OBJ / GLB exports | Unlimited | Unlimited |
+| CAD, the assistant on your own key, browser previews, Pavé files, STL / 3MF / OBJ / GLB exports | Unlimited | Unlimited |
 | Finished Blender renders | 5 a month | Unlimited (fair use: 1,000 a month) |
 | Rhino (3DM) and STEP exports, and production packages that contain them | 5 a month | Unlimited (fair use: 2,000 a month) |
 

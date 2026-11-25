@@ -3,6 +3,7 @@ import { Outlet } from '@tanstack/react-router'
 import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 import { Suspense } from 'react'
 import { useUiTools } from '../features/assistant/ui-tools'
+import { usePaveFileDrop } from '../features/pavefile'
 import { PlanLimitCard } from '../features/plans/PlanLimitCard'
 import { useBrowserTakes } from '../features/render/browser-takes'
 import { useClientToolRelay } from '../lib/client-tools'
@@ -62,6 +63,8 @@ function Shell() {
   useUiTools()
   // Without Blender, this window draws the person's (and their assistant's) preview takes.
   useBrowserTakes()
+  // A .pave file dropped anywhere opens as a new piece.
+  usePaveFileDrop()
   const collapsed = useUI((s) => s.sidebarCollapsed)
   const docked = useAssistant(isDockedOpen)
   return (

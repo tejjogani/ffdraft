@@ -170,15 +170,28 @@ export function FileToolbar({
               </Button>
             }
           >
+            {/* The native file first: everything about the piece, and never counted. */}
+            <MenuGroup label="Pavé">
+              <MenuItem
+                description="Design, history, references and shots · Always free"
+                tag="PAVE"
+                onClick={() => runCommand('piece.saveFile')}
+              >
+                Pavé file
+              </MenuItem>
+            </MenuGroup>
+            <MenuSeparator />
             <MenuGroup label="Download">
               {formats.map((f) => (
                 <MenuItem
                   key={f}
-                  description={
-                    exportCounts(f) && cadLeft !== null
-                      ? `${EXPORT_PURPOSE[f].hint} · ${cadLeft} of ${cadLimit} free left this month`
-                      : EXPORT_PURPOSE[f].hint
-                  }
+                  description={`${EXPORT_PURPOSE[f].hint} · ${
+                    !exportCounts(f)
+                      ? 'Free'
+                      : cadLeft !== null
+                        ? `${cadLeft} of ${cadLimit} free left this month`
+                        : 'Counted on your plan'
+                  }`}
                   tag={f.toUpperCase()}
                   onClick={() => runCommand(`design.export.${f}`)}
                 >

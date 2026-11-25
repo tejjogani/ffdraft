@@ -1,4 +1,4 @@
-import { hkdfSync } from 'node:crypto'
+import { createHmac, hkdfSync } from 'node:crypto'
 import type { Actor, CommandInput, CommandName, CommandOutput } from '@pave/schema'
 import type { BlobStore } from './assets/blob-store'
 import type { Auth } from './auth/auth'
@@ -111,6 +111,12 @@ export class Runtime {
     return Buffer.from(hkdfSync('sha256', this.#secret, 'pave', purpose, 32))
   }
 
+  #orgKey: Buffer | null = null
+  #fingerprintKey(): Buffer {
+    this.#orgKey ??= this.deriveKey('pave-file-org')
+    return this.#orgKey
+  }
+
   /** Organisations that saved a Claude API key — system scope, for the assistant's boot only. */
   async assistantKeyOrgs(): Promise<string[]> {
     const rows = await this.#database.db
@@ -151,6 +157,10 @@ export class Runtime {
       blobs: this.blobs,
       events: this.events,
       authMode: this.config.auth,
+      orgFingerprint: createHmac('sha256', this.#fingerprintKey())
+        .update(membership.org.id)
+        .digest('hex')
+        .slice(0, 32),
       planOverride: this.config.plan,
       execute: this.#execute,
     }

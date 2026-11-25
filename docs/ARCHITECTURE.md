@@ -200,6 +200,13 @@ model is configured, Generated.
   canceled. The studio claims before exporting in the browser (`plan.claim`, `plan.settle`).
   Over the limit the server answers `plan_limit` (402); there is no checkout yet. `PAVE_PLAN`
   switches plans on a local install for testing.
+- **The Pavé file** — `.pave` is the native file: a zip with a manifest, the design and its
+  full change history, spec, directions, pinned references (pictures only where their rights let
+  them travel), image planes, saved shots, thumbnails and the evaluated geometry, plus a checksum.
+  Saving and opening one is always free and never counted (`pieces.saveFile`, `pieces.openFile`);
+  opening checks everything, migrates older files and makes a new piece that keeps its
+  provenance. The format and its versioning rules are in [`pave-file.md`](./pave-file.md); the
+  contract is `packages/schema/src/files/pave.ts`, the code `apps/server/src/pavefile/`.
 - **Desktop** — Electron: one Chromium everywhere matters for a GPU viewport. The shell only
   starts the server on loopback and opens a window; the web build is the same code.
 - **Cross-platform** — macOS, Windows, Linux and the browser are all first-class. Geometry runs

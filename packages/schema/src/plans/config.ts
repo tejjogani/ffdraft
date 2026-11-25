@@ -77,5 +77,6 @@ export const PLAN_FEATURES: { label: string; free: string; pro: string }[] = [
   { label: 'Design, CAD, checks and previews', free: 'Included', pro: 'Included' },
   { label: 'AI jobs with your own Claude key', free: 'Included', pro: 'Included' },
   { label: 'Browser previews and AI captures', free: 'Unlimited', pro: 'Unlimited' },
+  { label: 'Pavé files (.pave), saved and opened', free: 'Unlimited', pro: 'Unlimited' },
   { label: 'STL, 3MF, OBJ and GLB exports', free: 'Unlimited', pro: 'Unlimited' },
 ]

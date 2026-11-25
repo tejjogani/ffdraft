@@ -42,6 +42,7 @@ const EXTENSIONS: Record<string, { kind: AssetKind; mime: string }> = {
   '.txt': { kind: 'document', mime: 'text/plain' },
   '.md': { kind: 'document', mime: 'text/markdown' },
   '.zip': { kind: 'archive', mime: 'application/zip' },
+  '.pave': { kind: 'archive', mime: 'application/vnd.pave.piece+zip' },
 }
 
 const IMAGE_MIME: Record<string, string> = {

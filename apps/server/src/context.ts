@@ -37,6 +37,11 @@ export interface Ctx {
   readonly events: EventBus
   /** `local` (single-user desktop/self-host, no sign-in) or `accounts`. */
   readonly authMode: AuthMode
+  /**
+   * This organisation on this install, as a fingerprint (an HMAC of its id under a key derived
+   * from the auth secret): a .pave file says where it was saved without carrying the org's id.
+   */
+  readonly orgFingerprint: string
   /** PAVE_PLAN on a local install (testing): wins over the organisation's plan. */
   readonly planOverride: PlanName | null
   /** The command pipeline (role, validation, audit) for an explicit context; see {@link invoke}. */

@@ -233,6 +233,65 @@ export function applyOps(design: Design, ops: readonly Op[]): { design: Design; 
   return { design: next, inverse }
 }
 
+// ── Versions ─────────────────────────────────────────────────────────────────────────────────
+
+/** The design document version this build writes (`Design.schemaVersion`). */
+export const DESIGN_VERSION = 1
+
+/**
+ * One step per older version, keyed by the version it starts from, each bringing a document up
+ * by one. Version 0 is a document written before `schemaVersion` existed; its nodes already had
+ * today's shape. Fields a node gained since are not a version: parsing fills in their defaults.
+ */
+const DESIGN_MIGRATIONS: Record<number, (doc: Record<string, unknown>) => Record<string, unknown>> =
+  {
+    0: (doc) => ({ ...doc, schemaVersion: 1 }),
+  }
+
+/** A design document this build cannot read: not a design, or made by a newer Pavé. */
+export class DesignVersionError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'DesignVersionError'
+  }
+}
+
+/**
+ * Brings a design document from any earlier version up to {@link DESIGN_VERSION} and validates
+ * it, for documents that come from outside the database (a .pave file). A document from a newer
+ * version is refused rather than guessed at, since its meaning may have changed.
+ */
+export function migrateDesign(raw: unknown): Design {
+  if (!isObject(raw)) throw new DesignVersionError('The design document is not an object')
+  let doc = raw
+  let version = doc.schemaVersion === undefined ? 0 : doc.schemaVersion
+  if (typeof version !== 'number' || !Number.isInteger(version) || version < 0)
+    throw new DesignVersionError(`The design document has an unreadable version (${version})`)
+  if (version > DESIGN_VERSION)
+    throw new DesignVersionError(
+      `This design was made by a newer version of Pavé (design version ${version}; this one reads up to ${DESIGN_VERSION}). Update Pavé to open it.`,
+    )
+  for (; version < DESIGN_VERSION; version++) doc = DESIGN_MIGRATIONS[version]!(doc)
+  const parsed = DesignSchema.safeParse(doc)
+  if (!parsed.success)
+    throw new DesignVersionError(
+      `The design document is not valid: ${z.prettifyError(parsed.error)}`,
+    )
+  const errors = validateDesign(parsed.data).filter((i) => i.level === 'error')
+  // applyOps keeps these by construction; a document from outside must show it keeps them too.
+  const { nodes, order } = parsed.data
+  if (new Set(order).size !== order.length || order.length !== Object.keys(nodes).length)
+    errors.push({ level: 'error', message: 'The outliner order must list every node exactly once' })
+  for (const [key, node] of Object.entries(nodes))
+    if (node.id !== key)
+      errors.push({ level: 'error', message: `Node "${key}" is stored under another id` })
+  if (errors.length)
+    throw new DesignVersionError(
+      `The design document is not valid: ${errors.map((e) => e.message).join('; ')}`,
+    )
+  return parsed.data
+}
+
 // ── Integrity ────────────────────────────────────────────────────────────────────────────────
 
 export interface DesignIssue {

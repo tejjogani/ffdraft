@@ -22,6 +22,7 @@ import type {
   Op,
   PieceKind,
   PieceOrigin,
+  PieceProvenance,
   PieceSpec,
   PieceSummary,
   PlanName,
@@ -127,6 +128,8 @@ export const piece = pgTable(
     chosenDirectionId: text('chosen_direction_id'),
     /** How many directions were ever proposed: the next one's letter, so letters are not reused. */
     directionCount: integer('direction_count').notNull().default(0),
+    /** Where the piece came from when it was opened from a .pave file. */
+    provenance: jsonb('provenance').$type<PieceProvenance>(),
     createdBy: text('created_by')
       .notNull()
       .references(() => user.id),

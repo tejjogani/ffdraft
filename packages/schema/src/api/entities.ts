@@ -103,6 +103,35 @@ export const originNeedsAttestation = (origin: PieceOrigin | null): boolean =>
   origin.attestation === null &&
   origin.sourceAssetIds.length + origin.referenceIds.length > 0
 
+/** One save of a piece to a .pave file: where and when, so a piece passed around keeps its trail. */
+export const PaveHopSchema = z.object({
+  /** A new id for every save. */
+  fileId: z.string().min(8).max(64),
+  savedAt: iso,
+  app: z.string().max(60),
+  appVersion: z.string().max(40),
+  formatVersion: z.number().int().positive(),
+  /** The piece it was saved from, as the place that saved it knew it. */
+  pieceId: z.string().max(64),
+  /** A fingerprint of the organisation that saved it (a hash: never its id or name). */
+  org: z.string().max(64),
+})
+export type PaveHop = z.infer<typeof PaveHopSchema>
+
+/** Set on a piece opened from a .pave file. */
+export const PieceProvenanceSchema = z.object({
+  /** When the piece was first made, wherever that was. */
+  createdAt: iso,
+  /** Every save it travelled through, oldest first; the last is the file it was opened from. */
+  files: z.array(PaveHopSchema).min(1).max(32),
+  fileName: z.string().max(200),
+  openedAt: iso,
+  openedBy: id,
+  /** The file was saved by another organisation or another install of Pavé. */
+  elsewhere: z.boolean(),
+})
+export type PieceProvenance = z.infer<typeof PieceProvenanceSchema>
+
 export const PieceSummarySchema = z.object({
   id,
   title: z.string(),
@@ -141,6 +170,8 @@ export const PieceSchema = PieceSummarySchema.extend({
   directions: z.array(DirectionSchema),
   /** The direction the piece's design was last taken from; null when none was chosen. */
   chosenDirectionId: id.nullable(),
+  /** Where the piece came from when it was opened from a .pave file; null otherwise. */
+  provenance: PieceProvenanceSchema.nullable(),
 })
 export type Piece = z.infer<typeof PieceSchema>
 

@@ -441,6 +441,25 @@ export const commands = {
     input: z.object({ id, title: z.string().max(120).optional() }),
     output: PieceSchema,
   }),
+  // Not tools for now: a .pave file is for people moving a piece between installs.
+  'pieces.saveFile': def({
+    description:
+      'Save a piece as a native Pavé file (.pave): the design with its full change history, spec, directions, pinned references (pictures only where their rights let them travel), image planes, saved shots, thumbnails and the evaluated geometry. Always free: never counted against the plan’s exports. Returns the file as a downloadable asset.',
+    kind: 'mutation',
+    input: z.object({ id }),
+    output: z.object({
+      asset: AssetSchema,
+      /** What could not go in, in plain sentences (e.g. a picture whose rights stay behind). */
+      notes: z.array(z.string()),
+    }),
+  }),
+  'pieces.openFile': def({
+    description:
+      'Open a .pave file uploaded as an asset as a new piece, with its history, references, image planes and shots. The file is checked first (format version, sizes, names, checksums); a file from an older Pavé is migrated, one from a newer Pavé is refused. A file saved elsewhere keeps its provenance.',
+    kind: 'mutation',
+    input: z.object({ assetId: id, collectionId: id.nullable().optional() }),
+    output: z.object({ piece: PieceSchema, notes: z.array(z.string()) }),
+  }),
   'pieces.proposeDirections': def({
     description:
       'Add design directions to a piece for the designer to compare side by side (two to four in a round). Give each a name of two to four words, a one-line idea, its honest trade-off, and one of: `spec` (a full spec), `templateId`, or `mix` (a direction with parts taken from others: `head`, `band`, `metal`, `style`). Pavé builds each with the canon’s proportions, evaluates and draws it, and returns each direction’s letter and id, metal weight, carats, stone count, rough cost, kernel warnings and style findings. Earlier directions stay as alternatives. Let the designer choose.',
