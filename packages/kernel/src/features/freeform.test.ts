@@ -783,21 +783,77 @@ describe('outline bodies: what the engine pass found', () => {
     }
   })
 
-  it('sets an accented letter the font lacks as its base letter, and flags both as errors', async () => {
+  // Polish, Czech, Hungarian and Turkish names once failed in every bundled font, which hold
+  // only Latin-1: their letters are composed from the base letter and the font's own marks.
+  it('composes Latin Extended-A letters the fonts lack, and flags what it cannot draw', async () => {
+    for (const font of ['sans', 'serif', 'script', 'block'] as const) {
+      const scene = await kernel.scene(
+        pendant({
+          id: 'v',
+          kind: 'vectorBody',
+          source: { type: 'text', text: 'ŻÓŁĆ Šťěpán Őrsi Şengül Ğİ ąę ☆', font },
+          height: 8,
+        }),
+      )
+      const d = scene.evaluation.diagnostics
+      expect(scene.nodes.get('v')!.status, font).toBe('ok')
+      const composed = d.find((x) => x.code === 'text.composed')
+      for (const c of ['Ż', 'Ł', 'Ć', 'Š', 'ť', 'ě', 'Ő', 'Ş', 'Ğ', 'İ', 'ą', 'ę'])
+        expect(composed?.message, `${font} ${c}`).toContain(`“${c}”`)
+      expect(
+        d.find((x) => x.code === 'text.accentDropped'),
+        font,
+      ).toBeUndefined()
+      expect(d.find((x) => x.code === 'text.missingGlyph')?.level, font).toBe('error')
+    }
+    // A mark with no donor in the font (a dot below) still sets the base letter, as an error.
     const scene = await kernel.scene(
-      pendant({
-        id: 'v',
-        kind: 'vectorBody',
-        source: { type: 'text', text: 'ŻÓŁĆ☆', font: 'sans' },
-      }),
+      pendant({ id: 'v', kind: 'vectorBody', source: { type: 'text', text: 'Ṃa', font: 'sans' } }),
     )
-    const d = scene.evaluation.diagnostics
-    const accent = d.find((x) => x.code === 'text.accentDropped')
-    expect(accent?.message).toMatch(/“Ż” was set as “Z”/)
-    // The name is spelled differently: an error the designer cannot miss.
+    const accent = scene.evaluation.diagnostics.find((x) => x.code === 'text.accentDropped')
+    expect(accent?.message).toMatch(/“Ṃ” was set as “M”/)
     expect(accent?.level).toBe('error')
-    expect(d.find((x) => x.code === 'text.missingGlyph')?.level).toBe('error')
-  })
+  }, 180_000)
+
+  // The rule that sets an i's dot down onto its stem was applied to every mark: umlauts and
+  // acutes were pushed into their letters, and the name came out up to 0.8 mm short.
+  it('keeps accented names at the height asked, with the accents above their letters', async () => {
+    const body = async (text: string, font: 'block' | 'script', join: 'auto' | 'off') => {
+      const scene = await kernel.scene(
+        pendant({
+          id: 'v',
+          kind: 'vectorBody',
+          source: { type: 'text', text, font },
+          height: 12,
+          thickness: 1.6,
+          bevel: 'flat',
+          bevelSize: 0,
+          join,
+        }),
+      )
+      const m = scene.nodes.get('v')!.bodies[0]!.solid.manifold()
+      const box = m.boundingBox()
+      // The top half millimetre (the accents' tops), whose metal must not move or fuse.
+      const slab = m.trimByPlane([0, 0, 1], box.max[2] - 0.5)
+      const top = slab.volume()
+      slab.delete()
+      return { height: box.max[2] - box.min[2], top }
+    }
+    for (const [text, font] of [
+      ['MÜLLER', 'block'],
+      ['JOSÉ', 'block'],
+      ['Zoë', 'block'],
+      ['Zoë', 'script'],
+    ] as const) {
+      const joined = await body(text, font, 'auto')
+      const loose = await body(text, font, 'off')
+      // As tall as with the marks left loose: 12 mm, or a hair more where hairlines of the
+      // script were thickened.
+      expect(joined.height, `${font} ${text}`).toBeCloseTo(loose.height, 3)
+      expect(Math.abs(loose.height - 12), `${font} ${text}`).toBeLessThan(0.1)
+      expect(joined.top, `${font} ${text}`).toBeCloseTo(loose.top, 3)
+    }
+  }, 120_000)
 })
 
 describe('engraving around a band', () => {

@@ -12,11 +12,15 @@ import {
   type Frame,
   type Mat4,
   metalOf,
+  runtime,
+  type Solid,
   type Stone,
+  solidFromManifold,
   type Vec3,
 } from '../core'
 import {
   addScaled,
+  cross,
   frameMatrix,
   IDENTITY,
   multiply,
@@ -24,6 +28,7 @@ import {
   transformPoint,
   translation,
 } from '../geometry/vec'
+import { boxClasp, boxMin, type Clasp, lobsterClasp, lobsterMin, toward } from './chain/clasp'
 import { type ChainPath, drapePath, linkFrames, straightPath } from './chain/drape'
 import { type Instance, instancedSolid } from './chain/instances'
 import { type LinkSet, wireChain } from './chain/links'
@@ -167,6 +172,63 @@ function pathPolyline(path: ChainPath, place: Mat4): Vec3[] {
   )
 }
 
+/**
+ * Where the clasp goes on a closed drape: in place of the fewest links at the back of the loop
+ * (opposite its low point, where a clasp sits on the neck) that leave it room. Returns the
+ * indices of the links it replaces, the clasp sized to the gap they leave, and its frame (x
+ * along the chord from the end of the last link before it to the start of the first after it,
+ * z toward the chain's face).
+ */
+function claspAt(
+  node: ChainNode,
+  plan: ChainPlan,
+  path: ChainPath,
+  centres: readonly number[],
+): { dropped: Set<number>; clasp: Clasp; frame: Frame } | null {
+  if (node.clasp === 'none' || !path.closed || centres.length < 4) return null
+  const top = path.length / 2
+  const tennis = node.style === 'tennis'
+  const least = tennis ? boxMin(2 * plan.half.y) : lobsterMin(node.linkWidth, plan.wire)
+  // Links nearest the top first; the nearest m form one run.
+  const order = centres.map((s, i) => ({ i, d: Math.abs(s - top) })).sort((a, b) => a.d - b.d)
+  for (let m = 1; m <= centres.length - 2; m++) {
+    const run = order.slice(0, m).map((o) => o.i)
+    const first = Math.min(...run)
+    const last = Math.max(...run)
+    if (first === 0 || last === centres.length - 1) return null
+    const a = path.at(centres[first - 1]! + plan.linkLength / 2).point
+    const b = path.at(centres[last + 1]! - plan.linkLength / 2).point
+    const span = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2])
+    if (span < least) continue
+    const x = toward(a, b)
+    const f = path.face
+    const along = f[0] * x[0] + f[1] * x[1] + f[2] * x[2]
+    const z = toward([0, 0, 0], [f[0] - along * x[0], f[1] - along * x[1], f[2] - along * x[2]])
+    const frame: Frame = { origin: a, x, y: cross(z, x), z }
+    const clasp = tennis
+      ? boxClasp(2 * plan.half.y, 1.6 * plan.half.z, span)
+      : lobsterClasp(node.linkWidth, plan.wire, span)
+    return { dropped: new Set(run), clasp, frame }
+  }
+  return null
+}
+
+/** The clasp's metal placed in the chain (node-local space). */
+function claspSolid(clasp: Clasp, place: Mat4, quality: BuildContext['quality']): Solid {
+  const { manifold: mf } = runtime()
+  const owned: { delete(): void }[] = []
+  const own = <T extends { delete(): void }>(m: T): T => {
+    owned.push(m)
+    return m
+  }
+  try {
+    const whole = own(mf.Manifold.union(clasp.parts(own, quality)))
+    return solidFromManifold(whole.transform(place as never))
+  } finally {
+    for (const m of owned) m.delete()
+  }
+}
+
 /** Facts published for dependents, checks and exporters (node-local space). */
 export interface ChainData {
   links: number
@@ -178,7 +240,10 @@ export interface ChainData {
   section: ChainSection
   wire: number
   path: Vec3[]
+  /** False once a clasp opens the loop. */
   closed: boolean
+  /** The clasp that opens the chain, when it has one. */
+  clasp?: { style: 'lobster' | 'box'; length: number }
 }
 
 export const chain = defineFeature('chain', (node, ctx) => {
@@ -207,15 +272,20 @@ export const chain = defineFeature('chain', (node, ctx) => {
   const section = sectionOf(node, plan, draped)
   const place = anchor(node, ctx, path, section, draped ? bend : Infinity)
 
-  const instances: Instance[] = frames.map((frame, k) => {
+  // A clasp opens a draped chain at the back, in place of the links there.
+  const clasp = draped ? claspAt(node, plan, path, centres) : null
+  const kept = (k: number) => !clasp?.dropped.has(k)
+  const instances: Instance[] = frames.flatMap((frame, k) => {
+    if (!kept(k)) return []
     const { template, orient } = plan.period[k % plan.period.length]!
-    return { template, matrix: multiply(place, multiply(frame, orient)) }
+    return [{ template, matrix: multiply(place, multiply(frame, orient)) }]
   })
   const stones: Stone[] = plan.stone
-    ? frames.map((frame) => ({
-        ...plan.stone!,
-        frame: transformFrame(multiply(place, frame), plan.stone!.frame),
-      }))
+    ? frames.flatMap((frame, k) =>
+        kept(k)
+          ? [{ ...plan.stone!, frame: transformFrame(multiply(place, frame), plan.stone!.frame) }]
+          : [],
+      )
     : []
 
   if (plan.wire < node.wire - 1e-9)
@@ -235,14 +305,28 @@ export const chain = defineFeature('chain', (node, ctx) => {
       message: `The ${n} links were meshed coarser than ${ctx.detail} detail to keep the chain's triangle count down; its volume and weight are unaffected.`,
     })
 
+  const claspPlace = clasp ? multiply(place, frameMatrix(clasp.frame)) : null
+  const ends = clasp
+    ? {
+        end0: transformFrame(place, clasp.frame),
+        end1: transformFrame(place, {
+          ...clasp.frame,
+          origin: addScaled(clasp.frame.origin, clasp.frame.x, clasp.clasp.span),
+        }),
+      }
+    : undefined
   const data: ChainData = {
-    links: n,
+    links: n - (clasp?.dropped.size ?? 0),
     length,
     width: 2 * Math.max(plan.half.y, plan.half.z),
     section,
     wire: plan.wire,
     path: pathPolyline(path, place),
-    closed: path.closed,
+    closed: path.closed && !clasp,
+    ...(clasp ? { clasp: { style: clasp.clasp.style, length: clasp.clasp.length } } : {}),
   }
-  return { bodies: [{ solid, ...metalOf(node) }], stones, data }
+  const bodies = [{ solid, ...metalOf(node) }]
+  if (clasp && claspPlace)
+    bodies.push({ solid: claspSolid(clasp.clasp, claspPlace, ctx.quality), ...metalOf(node) })
+  return { bodies, stones, data, ...(ends ? { frames: ends } : {}) }
 })

@@ -24,24 +24,29 @@ interface Box {
   maxY: number
 }
 
-/** Mark → the Latin-1 letters (upper, lower) that carry it, their bases, and how it is changed. */
-const MARKS: Record<
-  string,
+/**
+ * Combining mark (by code point) → the Latin-1 letters (upper, lower) that carry it, their
+ * bases, and how it is changed. A dot above takes its gap from the acute and its shape from the
+ * dot of the i (or the full stop, in a font whose i has none).
+ */
+const MARKS = new Map<
+  number,
   { donor: [string, string]; base: [string, string]; below?: boolean; change?: Change }
-> = {
-  '́': { donor: ['É', 'é'], base: ['E', 'e'] },
-  '̀': { donor: ['È', 'è'], base: ['E', 'e'] },
-  '̂': { donor: ['Ê', 'ê'], base: ['E', 'e'] },
-  '̌': { donor: ['Ê', 'ê'], base: ['E', 'e'], change: 'flip' },
-  '̈': { donor: ['Ë', 'ë'], base: ['E', 'e'] },
-  '̃': { donor: ['Ñ', 'ñ'], base: ['N', 'n'] },
-  '̊': { donor: ['Å', 'å'], base: ['A', 'a'] },
-  '̆': { donor: ['Å', 'å'], base: ['A', 'a'], change: 'breve' },
-  '̋': { donor: ['É', 'é'], base: ['E', 'e'], change: 'double' },
-  '̇': { donor: ['É', 'i'], base: ['E', 'ı'], change: 'dot' },
-  '̧': { donor: ['Ç', 'ç'], base: ['C', 'c'], below: true },
-  '̨': { donor: ['Ç', 'ç'], base: ['C', 'c'], below: true, change: 'mirror' },
-}
+>([
+  [0x301, { donor: ['É', 'é'], base: ['E', 'e'] }], // acute
+  [0x300, { donor: ['È', 'è'], base: ['E', 'e'] }], // grave
+  [0x302, { donor: ['Ê', 'ê'], base: ['E', 'e'] }], // circumflex
+  [0x30c, { donor: ['Ê', 'ê'], base: ['E', 'e'], change: 'flip' }], // caron
+  [0x308, { donor: ['Ë', 'ë'], base: ['E', 'e'] }], // diaeresis
+  [0x303, { donor: ['Ñ', 'ñ'], base: ['N', 'n'] }], // tilde
+  [0x30a, { donor: ['Å', 'å'], base: ['A', 'a'] }], // ring
+  [0x306, { donor: ['Å', 'å'], base: ['A', 'a'], change: 'breve' }], // breve
+  [0x30b, { donor: ['É', 'é'], base: ['E', 'e'], change: 'double' }], // double acute
+  [0x307, { donor: ['É', 'é'], base: ['E', 'e'], change: 'dot' }], // dot above
+  [0x327, { donor: ['Ç', 'ç'], base: ['C', 'c'], below: true }], // cedilla
+  [0x328, { donor: ['Ç', 'ç'], base: ['C', 'c'], below: true, change: 'mirror' }], // ogonek
+])
+const CARON = 0x30c
 type Change = 'flip' | 'breve' | 'double' | 'dot' | 'mirror'
 
 /** Letters with a stroke through them, which Unicode does not decompose. */
@@ -71,17 +76,14 @@ function recipe(font: Font, c: string): { base: string; marks: string[]; stroke?
   const marks = parts.slice(1)
   if (!base || marks.length === 0 || !has(base)) return null
   for (const m of marks) {
-    const mark = MARKS[m]
+    const mark = MARKS.get(m.codePointAt(0)!)
     if (!mark) return null
     if (![...mark.donor, ...mark.base].every(has)) return null
   }
-  if (marks.includes('̌') && ASCENDER_CARON.has(base) && !has('’')) return null
+  const caron = marks.some((m) => m.codePointAt(0) === CARON)
+  if (caron && ASCENDER_CARON.has(base) && !has('’')) return null
+  if (marks.some((m) => m.codePointAt(0) === 0x307) && !has('.')) return null
   return { base, marks }
-}
-
-/** Whether the font lacks c but can compose it from its own letters and marks. */
-export function canCompose(font: Font, c: string): boolean {
-  return font.charToGlyphIndex(c) === 0 && recipe(font, c) !== null
 }
 
 function bounds(contours: readonly Contour[]): Box {
@@ -192,7 +194,7 @@ export function composeLetter(
   // Marks stack outward: a second mark above sits over the first.
   let top = box.maxY
   for (const m of r.marks) {
-    const spec = MARKS[m]!
+    const spec = MARKS.get(m.codePointAt(0)!)!
     const which = upper ? 0 : 1
     const donorBase = outline(spec.base[which])
     const donorBox = bounds(donorBase)
@@ -201,16 +203,17 @@ export function composeLetter(
       : clip(outline(spec.donor[which]), donorBox.maxY + 1e-4 * em, true)
     if (mark.length === 0) return null
     let markBox = bounds(mark)
-    if (spec.change === 'dot' && upper) {
-      // The dot of the i, at the gap the font leaves between a capital and its acute.
-      const acute = bounds(clip(outline('É'), donorBox.maxY + 1e-4 * em, true))
-      const dotBase = bounds(outline('ı'))
-      const dot = clip(outline('i'), dotBase.maxY + 1e-4 * em, true)
-      if (dot.length === 0) return null
+    if (spec.change === 'dot') {
+      // The dot of the i (the part above the dotless ı), or else the full stop, where the
+      // acute sits: centred over the donor's base, at the acute's gap.
+      const stem = bounds(outline('ı'))
+      let dot =
+        font.charToGlyphIndex('ı') !== 0 ? clip(outline('i'), stem.maxY + 1e-4 * em, true) : []
+      if (dot.length === 0) dot = outline('.')
       const dotBox = bounds(dot)
       mark = mapped(dot, ([x, y]) => [
         x - (dotBox.minX + dotBox.maxX) / 2 + (donorBox.minX + donorBox.maxX) / 2,
-        y - dotBox.minY + acute.minY,
+        y - dotBox.minY + markBox.minY,
       ])
       markBox = bounds(mark)
     }
@@ -244,7 +247,7 @@ export function composeLetter(
       }
       mark = [arc]
     }
-    if (m === '̌' && ASCENDER_CARON.has(r.base)) {
+    if (m.codePointAt(0) === CARON && ASCENDER_CARON.has(r.base)) {
       // ď ľ ť Ľ: the caron is a small apostrophe right of the ascender.
       const apostrophe = outline('’')
       const a = bounds(apostrophe)

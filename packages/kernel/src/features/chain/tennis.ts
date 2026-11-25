@@ -41,9 +41,10 @@ export interface TennisLink {
   /**
    * The hinge's wires as closed centrelines in link-local space, for checks that it stays
    * threaded and clear: `ahead` (under the front edge) is threaded by the next link's `behind`.
-   * Flat: the tongue, and each staple closed through the plate it stands from.
+   * Flat: the tongue, and each staple closed through the plate it stands from. `pivot` is the
+   * height a link turns about against its neighbour round a wrist (the plates' underside).
    */
-  hinge: { ahead: WireLoop[]; behind: WireLoop[]; flat: boolean }
+  hinge: { ahead: WireLoop[]; behind: WireLoop[]; flat: boolean; pivot: number }
 }
 
 /** The link is too narrow for any hinge: its posts would land in the light hole. */
@@ -88,11 +89,16 @@ const TIP_INSET = 0.4
 /** Air round the tongue inside each staple, beyond the clearance, so the hinge moves freely, mm. */
 const HINGE_PLAY = 0.1
 /**
- * The most a link turns against its neighbour on a wrist, radians (a 3.7 mm pitch round a
- * 28 mm radius is 0.13): the tongue slides along its staples by this times its depth under the
- * line's centre, and keeps that much wire either side of them.
+ * Tightest radius a bracelet bends to round a wrist, mm (a small wrist is about 45 × 55 mm
+ * across). Each link turns against its neighbour by pitch / this, about the plates' underside
+ * where their back edges meet.
  */
-const LINK_TURN = 0.15
+const WRIST_RADIUS = 22
+/**
+ * Most air either side of the tongue's wire in a staple, as a share of the wire: past it the
+ * staple stands wider than a jeweler makes one, and the hinge limits the sideways bend instead.
+ */
+const PLAY_MAX = 1
 
 /** Distance from the stone's centre to its girdle in the direction `angle` (from +x). */
 function girdleReach(cut: GemCutId, dims: GemDims, angle: number): number {
@@ -159,7 +165,8 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
   const box: Box = { lx, ly, corner, wall, bottom, crown, pitch, ring, lightHole, minBend }
   // The flat hinge where the plate has room for its staples; on the narrowest links, whose
   // light hole leaves only a rim of plate, the rings below.
-  const hinge = flatHinge(box) ?? ringHinge(box)
+  const flat = flatHinge(box)
+  const hinge = flat ?? ringHinge(box)
   if (!hinge) throw new NoRoomForHinge(stoneWidth)
   const lowest = hinge.lowest
 
@@ -224,11 +231,11 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
     dims,
     length: lx,
     pitch,
-    minBend,
+    minBend: Math.max(minBend, flat?.minBend ?? 0),
     half: { y: halfY, z: (crown - lowest) / 2 },
     middle: (crown + lowest) / 2,
     prong,
-    hinge: { ahead: hinge.ahead, behind: hinge.behind, flat: hinge.flat },
+    hinge: { ahead: hinge.ahead, behind: hinge.behind, flat: hinge.flat, pivot: hinge.pivot },
   }
 }
 
@@ -252,6 +259,8 @@ interface Box {
 
 interface Hinge {
   lowest: number
+  /** Height the link turns about against its neighbour round a wrist. */
+  pivot: number
   /** The hinge's metal; `own` takes each temporary for deletion when the link is built. */
   parts(own: <T extends Deletable>(m: T) => T, quality: Quality): Manifold[]
   ahead: WireLoop[]
@@ -290,16 +299,19 @@ function polyline(point: (t: number) => Vec3, count: number, open: boolean): Flo
 
 /**
  * The flat hinge: a tongue on two posts under the front edge, through two staples under the next
- * link's back edge, laid out at the widest stance the plate carries. The play is sized for the
- * line's bends: on a wrist the next link's plate drops onto the tongue by LINK_TURN times the
- * tongue's reach past the line's pivot, so the tongue hangs that much lower; sideways each staple
- * shifts across the tongue's wire by the turn times its own reach, so its legs stand that much
- * wider. Both depend on where the staples land, so the layout is settled in a few passes.
+ * link's back edge, laid out at the widest stance the plate carries. Its play is sized for the
+ * line's bends. Round a wrist each link turns by pitch / WRIST_RADIUS about the plates'
+ * underside: the next link's plate drops onto the tongue by that turn times the tongue's reach
+ * past the turn, so the tongue hangs that much lower. Sideways (on the drape, down to the boxes'
+ * tightest bend) each staple shifts across the tongue's wire by the turn times its reach, so its
+ * legs stand that much wider, up to PLAY_MAX; past that the hinge sets the tightest bend.
+ * Both depend on where the staples land, so the layout is settled in a few passes.
  * Null when the plate has no room for it.
  */
-function flatHinge(b: Box): Hinge | null {
+function flatHinge(b: Box): (Hinge & { minBend: number }) | null {
   const { ring, pitch } = b
-  const sideTurn = pitch / b.minBend
+  const wristTurn = pitch / WRIST_RADIUS
+  let sideTurn = pitch / b.minBend
   const plateMid = b.bottom + b.wall / 2
   /** The x nearest the plate's edge on the side `sign` where every y in `ys` lands on plate. */
   const edgeX = (sign: 1 | -1, ys: number[]): number | null => {
@@ -309,17 +321,15 @@ function flatHinge(b: Box): Hinge | null {
   }
   let drop = CLEARANCE
   let play = HINGE_PLAY
-  for (let pass = 0; pass < 6; pass++) {
+  for (let pass = 0; pass < 8; pass++) {
     const tongueZ = b.bottom - drop - ring / 2
     // Staple legs stand this far either side of the tongue's side wire (centre to centre).
     const straddle = ring + play
-    const lowest = tongueZ - straddle - ring / 2
-    const middle = (b.crown + lowest) / 2
     let layout: { half: number; post: number; staple: number; slide: number } | null = null
     for (let half = b.ly / 2; half >= straddle + ring && !layout; half -= 0.01) {
-      // The tongue slides in its staples on a wrist (turning about the line's middle) and
-      // sideways (turning about its centre): as far as the larger, plus its play.
-      const slide = HINGE_PLAY + Math.max(LINK_TURN * (middle - tongueZ), sideTurn * half)
+      // The tongue slides along its staples on a wrist (turning about the plates' underside)
+      // and sideways (turning about the line's centre): as far as the larger, plus its play.
+      const slide = HINGE_PLAY + Math.max(wristTurn * (b.bottom - tongueZ), sideTurn * half)
       const post = edgeX(1, [half, -half])
       const staple = edgeX(-1, [
         half - straddle,
@@ -336,8 +346,14 @@ function flatHinge(b: Box): Hinge | null {
     const { half, post, staple, slide } = layout
     // The tongue reaches past the next link's staples by its slide.
     const front = pitch + staple + ring + slide
-    const needDrop = CLEARANCE + LINK_TURN * (front - pitch / 2)
-    const needPlay = HINGE_PLAY + sideTurn * (pitch / 2 + staple)
+    const reach = pitch / 2 + staple
+    const needDrop = CLEARANCE + wristTurn * (front - pitch / 2)
+    let needPlay = HINGE_PLAY + sideTurn * reach
+    if (needPlay > PLAY_MAX * ring) {
+      // The hinge, not the boxes, sets how tight the line bends sideways.
+      needPlay = PLAY_MAX * ring
+      sideTurn = (needPlay - HINGE_PLAY) / reach
+    }
     if (needDrop > drop + 1e-6 || needPlay > play + 1e-6) {
       drop = Math.max(drop, needDrop)
       play = Math.max(play, needPlay)
@@ -360,8 +376,10 @@ function flatHinge(b: Box): Hinge | null {
       }
     const sides = [half, -half]
     return {
-      lowest,
+      lowest: tongueZ - straddle - ring / 2,
+      minBend: pitch / sideTurn,
       flat: true,
+      pivot: b.bottom,
       parts: (own, quality) => {
         const { manifold: mf } = runtime()
         return [
@@ -435,6 +453,7 @@ function ringHinge(b: Box): Hinge | null {
   return {
     lowest: ringZ - R - ring / 2,
     flat: false,
+    pivot: b.bottom,
     parts: (own, quality) => {
       const { manifold: mf } = runtime()
       const seg = segmentsFor(ring / 2, quality.chord, 10, 40)

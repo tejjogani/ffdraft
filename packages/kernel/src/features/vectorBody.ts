@@ -9,7 +9,6 @@
 import type { NodeOf } from '@pave/schema'
 import type { CrossSection, Manifold } from 'manifold-3d'
 import { type BuildContext, defineFeature, metalOf, runtime, solidFromManifold } from '../core'
-import { canCompose } from '../fonts/compose'
 import { OutlineDistance } from '../mesh/outline/distance'
 import { edgeProfile, flatProfile, membraneDome, profiledSlab } from '../mesh/outline/profile'
 import { SHAPES } from '../mesh/outline/shapes'
@@ -22,7 +21,7 @@ import {
 } from '../mesh/outline/stroke'
 import { type Contour, parseSvgPath } from '../mesh/outline/svgPath'
 import type { PaveField } from '../mesh/pave/region'
-import { type FontId, loadFont, textOutline } from '../text'
+import { canCompose, type FontId, loadFont, textOutline } from '../text'
 
 type VectorBodyNode = NodeOf<'vectorBody'>
 

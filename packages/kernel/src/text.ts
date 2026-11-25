@@ -183,6 +183,17 @@ export function layoutText(font: Font, text: string, size: number, tolerance = 0
   return { glyphs, width, lineHeight }
 }
 
+/** Whether the font lacks c but can compose it from its own letters and marks (fonts/compose.ts). */
+export function canCompose(font: Font, c: string): boolean {
+  if (font.charToGlyphIndex(c) !== 0) return false
+  // At 1 mm to the em, coarsely: only whether the pieces exist matters here.
+  return (
+    composeLetter(font, c, 1, (g) =>
+      contoursOf(font.charToGlyph(g).getPath(0, 0, 1).commands, 0.01),
+    ) !== null
+  )
+}
+
 /** Outlines of `text` in a bundled font; see {@link layoutText}. */
 export async function textOutline(
   text: string,

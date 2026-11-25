@@ -36,6 +36,34 @@ function seatedHost(scene: Scene, hostId: string, iceId = 'ice') {
   return { seated, beads }
 }
 
+/** A 3 mm standing bar, which takes one row of 1.8 mm stones. */
+const bar: NodeInput = {
+  id: 'b',
+  kind: 'vectorBody',
+  source: { type: 'svg', d: 'M0 0 H3 V30 H0 Z' },
+  height: 30,
+  thickness: 2.5,
+  bevel: 'flat',
+  bevelSize: 0,
+}
+const barPave: NodeInput = { id: 'ice', kind: 'pave', host: 'b', sizeMax: 1.8, sizeMin: 1.8 }
+
+/** Centre and radius of every bead the pavé node adds (each is its own piece). */
+function beadsOf(scene: Scene, iceId = 'ice'): { c: number[]; r: number }[] {
+  const pieces = scene.nodes
+    .get(iceId)!
+    .additions[0]!.solid.manifold(QUALITY.production)
+    .decompose()
+  return pieces.map((piece) => {
+    const box = piece.boundingBox()
+    piece.delete()
+    return {
+      c: [0, 1, 2].map((k) => (box.min[k]! + box.max[k]!) / 2),
+      r: (box.max[0]! - box.min[0]!) / 2,
+    }
+  })
+}
+
 describe('pavé beads at the edge of the field', () => {
   // A bead squeezed between a girdle and a raised border wall touches the wall and the floor
   // and leaves a tunnel under it: the casting gains a handle investment cannot fill.
@@ -77,56 +105,98 @@ describe('pavé beads at the edge of the field', () => {
     for (const m of [seated, joined]) m.delete()
   }, 60_000)
 
-  it('keeps metal between every bead and the side of a narrow bar, square to the row', async () => {
-    // A 3 mm standing bar takes one row of 1.8 mm stones.
-    const design = designFrom('pendant', [
-      {
-        id: 'b',
-        kind: 'vectorBody',
-        source: { type: 'svg', d: 'M0 0 H3 V30 H0 Z' },
-        height: 30,
-        thickness: 2.5,
-        bevel: 'flat',
-        bevelSize: 0,
-      },
-      { id: 'ice', kind: 'pave', host: 'b', sizeMax: 1.8, sizeMin: 1.8 },
-    ])
-    const scene = await kernel.scene(design, { detail: 'production' })
-    const bar = scene.nodes.get('b')!.bodies[0]!.solid.bounds()
-    const stones = scene.evaluation.stones.filter((s) => s.nodeId === 'ice')
-    expect(stones.length).toBeGreaterThan(10)
-    const beads = scene.nodes.get('ice')!.additions[0]!.solid.manifold(QUALITY.production)
-    const pieces = beads.decompose()
-    expect(pieces.length).toBeGreaterThanOrEqual(stones.length)
-    const zs = stones.map((s) => s.matrix[14]!).sort((a, b) => a - b)
-    let square = 0
-    let side = 0
-    for (const piece of pieces) {
-      const box = piece.boundingBox()
-      const c = [0, 1, 2].map((k) => (box.min[k]! + box.max[k]!) / 2)
-      const r = (box.max[0]! - box.min[0]!) / 2
-      const metal = Math.min(c[0]! - bar.min[0], bar.max[0] - c[0]!) - r
+  it('keeps metal between every bead and the side of a narrow bar', async () => {
+    const scene = await kernel.scene(designFrom('pendant', [bar, barPave]), {
+      detail: 'production',
+    })
+    const box = scene.nodes.get('b')!.bodies[0]!.solid.bounds()
+    for (const { c, r } of beadsOf(scene)) {
+      const metal = Math.min(c[0]! - box.min[0], box.max[0] - c[0]!) - r
       expect(metal, `bead at ${c.map((x) => x.toFixed(2))}`).toBeGreaterThanOrEqual(0.1 - 0.005)
-      // A side bead (beside its stone rather than between two) sits square to the row (Z).
-      const near = stones.reduce((a, s) =>
-        Math.hypot(s.matrix[12]! - c[0]!, s.matrix[14]! - c[2]!) <
-        Math.hypot(a.matrix[12]! - c[0]!, a.matrix[14]! - c[2]!)
-          ? s
-          : a,
-      )
-      const dx = Math.abs(c[0]! - near.matrix[12]!)
-      const dz = Math.abs(c[2]! - near.matrix[14]!)
-      // The two end stones have one neighbour and are held round their open end.
-      const end = near.matrix[14] === zs[0] || near.matrix[14] === zs.at(-1)
-      if (dx > dz && !end) {
-        side++
-        if (Math.atan2(dz, dx) < (2 * Math.PI) / 180) square++
-      }
-      piece.delete()
     }
-    expect(side).toBeGreaterThanOrEqual(2 * (stones.length - 2))
-    expect(square).toBe(side)
   }, 60_000)
+
+  // Beads dropped near the field's edge once left stones held from one side only: a single row
+  // had a bead at 3 and 9 o'clock and nothing along it, and the outer row inside a raised border
+  // leaned on a wall 0.1–0.2 mm off its girdle with one bead on the other side.
+  it('holds every stone round its whole girdle, by beads or by a wall against it', async () => {
+    const initial: NodeInput = {
+      id: 'b',
+      kind: 'vectorBody',
+      source: { type: 'text', text: 'A', font: 'block' },
+      height: 32,
+      thickness: 4,
+      bevel: 'round',
+      bevelSize: 0.4,
+      border: 0.8,
+    }
+    for (const [label, host, pave] of [
+      ['3 mm bar', bar, barPave],
+      [
+        'initial A, 0.8 mm',
+        initial,
+        { id: 'ice', kind: 'pave', host: 'b', sizeMax: 0.8, sizeMin: 0.8 },
+      ],
+    ] as const) {
+      const scene = await kernel.scene(designFrom('pendant', [host, pave as NodeInput]), {
+        detail: 'production',
+      })
+      const tris = scene.nodes.get('b')!.bodies[0]!.solid.triangles(QUALITY.production)
+      const bvh = new TriangleBvh({
+        positions: tris.positions.slice(),
+        indices: tris.indices.slice(),
+      })
+      // Inside the host: an odd number of crossings up a ray.
+      const inside = (p: number[], d: number[]) =>
+        bvh.crossings(p[0]!, p[1]!, p[2]!, d[0]!, d[1]!, d[2]!).length % 2 === 1
+      const beads = beadsOf(scene)
+      const stones = scene.evaluation.stones.filter((x) => x.nodeId === 'ice')
+      expect(stones.length, label).toBeGreaterThan(10)
+      for (const stone of stones) {
+        const m = stone.matrix
+        const unit = (k: number) => {
+          const v = [m[k]!, m[k + 1]!, m[k + 2]!]
+          const len = Math.hypot(v[0]!, v[1]!, v[2]!)
+          return v.map((x) => x / len)
+        }
+        const [u, v, n] = [unit(0), unit(4), unit(8)]
+        const c = [m[12]!, m[13]!, m[14]!]
+        const d = stone.dims.width
+        const at = (q: number[], dot: number[]) => q.reduce((sum, x, k) => sum + x * dot[k]!, 0)
+        const holds: number[] = []
+        for (const b of beads) {
+          const q = b.c.map((x, k) => x - c[k]!)
+          const h = at(q, n)
+          const radial = Math.sqrt(Math.max(0, at(q, q) - h * h))
+          // A bead holds the stone when its edge reaches within 0.15 mm of the girdle.
+          if (Math.abs(h) < d && radial - b.r <= d / 2 + 0.15)
+            holds.push(Math.atan2(at(q, v), at(q, u)))
+        }
+        // A wall holds it where host metal stands over the girdle within 0.05 mm outside it.
+        for (let k = 0; k < 24; k++) {
+          const a = -Math.PI + ((k + 0.5) / 24) * 2 * Math.PI
+          const r = d / 2 + 0.05
+          const p = c.map(
+            (x, j) =>
+              x + u[j]! * r * Math.cos(a) + v[j]! * r * Math.sin(a) + n[j]! * (0.1 + 0.02 * d),
+          )
+          if (inside(p, n)) holds.push(a)
+        }
+        holds.sort((a, b) => a - b)
+        let open = holds.length === 0 ? 2 * Math.PI : 0
+        holds.forEach((a, i) => {
+          open = Math.max(
+            open,
+            (i + 1 < holds.length ? holds[i + 1]! : holds[0]! + 2 * Math.PI) - a,
+          )
+        })
+        expect(
+          (open * 180) / Math.PI,
+          `${label}: stone at ${c.map((x) => x.toFixed(2))}`,
+        ).toBeLessThanOrEqual(180)
+      }
+    }
+  }, 120_000)
 })
 
 describe('hollow bodies', () => {
@@ -163,6 +233,40 @@ describe('hollow bodies', () => {
       expect(median, `hollow ${hollow}`).toBeLessThanOrEqual(hollow * 1.06)
     }
   }, 60_000)
+
+  // Escape holes once started 2 mm inside the cavity, and a millimetre either side of the axis
+  // their start cap ended in the metal beside it: skins of 0.02–0.07 mm under a dice pip, the
+  // crown's edge and the trophy's cup, which break through in casting.
+  it('keeps the wall asked for everywhere, escape holes included', async () => {
+    for (const [name, height, hollow] of [
+      ['dice', 40, 0.7],
+      ['trophy', 40, 0.9],
+      ['crown', 20, 0.3],
+    ] as const) {
+      const label = `${name} ${height} mm, hollow ${hollow}`
+      const solid = await kernel.scene(designFrom('pendant', [sculpt(name, height, 0)]))
+      const skin = solid.nodes.get('m')!.bodies[0]!.solid.triangles(QUALITY.draft)
+      const outside = new TriangleBvh({
+        positions: skin.positions.slice(),
+        indices: skin.indices.slice(),
+      })
+      const scene = await kernel.scene(designFrom('pendant', [sculpt(name, height, hollow)]))
+      expect(
+        scene.evaluation.diagnostics.map((d) => d.code),
+        label,
+      ).toContain('mesh.drains')
+      const tris = scene.nodes.get('m')!.bodies[0]!.solid.triangles(QUALITY.draft)
+      const hit = { d2: 0, x: 0, y: 0, z: 0, triangle: -1 }
+      let thinnest = Infinity
+      for (let v = 0; v < tris.positions.length; v += 3) {
+        outside.closest(tris.positions[v]!, tris.positions[v + 1]!, tris.positions[v + 2]!, hit)
+        const d = Math.sqrt(hit.d2)
+        // Vertices on the outside skin (and the rims where holes leave it) are not wall.
+        if (d > 0.02) thinnest = Math.min(thinnest, d)
+      }
+      expect(thinnest, label).toBeGreaterThanOrEqual(0.95 * hollow)
+    }
+  }, 120_000)
 
   // The crown's points and band are only a little thicker than two walls: the cavity there was
   // a slit, pierced by over a hundred pillars, with sealed specks and loose crumbs.

@@ -588,6 +588,10 @@ export const Chain = z
     wire: mm('Wire', 0.3, 6, 0.8),
     through: ref('Through bail', ['bail']).optional(),
     layout: choice('Layout', ['drape', 'straight'], 'drape'),
+    clasp: choice('Clasp', ['none', 'lobster', 'box'], 'none', {
+      labels: { none: 'None (closed loop)', lobster: 'Lobster', box: 'Box' },
+      description: 'Opens a draped chain at the back so it can be put on.',
+    }),
   })
   .meta({ title: 'Chain', description: 'Cable, curb/Cuban, rope, box or tennis chain.' })
 

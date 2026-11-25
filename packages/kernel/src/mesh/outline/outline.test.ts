@@ -1,3 +1,4 @@
+import type { CrossSection } from 'manifold-3d'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { loadRuntime, runtime } from '../../runtime/index'
 import { trianglesFromManifold } from '../../solid/solid'
@@ -162,6 +163,67 @@ describe('joining loose parts of lettering', () => {
       new mf.CrossSection([rect(0, 0, 0.6, 9)]),
     )
     expect(i.bounds().max[1]).toBeLessThan(5.6)
+  })
+
+  it('keeps accents where the font put them, each held on a narrow sprue straight down', () => {
+    const { manifold: mf } = runtime()
+    // A U with an umlaut over its arms, and an E with an acute over its top bar. Setting such
+    // marks down as an i's dot is fused them into the letter: a U with notched prongs, an E
+    // with a horn, and a name shorter than asked.
+    const u = mf.CrossSection.union([
+      new mf.CrossSection([rect(0, 0, 2, 10)]),
+      new mf.CrossSection([rect(4, 0, 2, 10)]),
+      new mf.CrossSection([rect(0, 0, 6, 2)]),
+    ])
+    const e = mf.CrossSection.union([
+      new mf.CrossSection([rect(8, 0, 2, 10)]),
+      new mf.CrossSection([rect(8, 8, 6, 2)]),
+      new mf.CrossSection([rect(8, 0, 6, 2)]),
+    ])
+    const marks = new mf.CrossSection([
+      rect(0.25, 11, 1.5, 1.5),
+      rect(4.25, 11, 1.5, 1.5),
+      rect(10.5, 11, 2, 1),
+    ])
+    const text = mf.CrossSection.union([u, e, marks])
+    const joined = joinIslands(text, 0.5, 32, true)!
+    expect(joined.section.decompose()).toHaveLength(1)
+    expect(joined.section.bounds().max[1]).toBeCloseTo(12.5, 6)
+    // The marks are where they were, whole…
+    const above = (c: CrossSection) =>
+      mf.CrossSection.intersection(c, new mf.CrossSection([rect(-1, 11, 20, 3)])).area()
+    expect(above(joined.section)).toBeCloseTo(above(text), 6)
+    // …and only the sprues cross the gap: narrower than the marks, one under each.
+    const gap = mf.CrossSection.intersection(
+      joined.section,
+      new mf.CrossSection([rect(-1, 10.2, 20, 0.6)]),
+    )
+    const sprues = gap.decompose()
+    expect(sprues).toHaveLength(3)
+    for (const sprue of sprues) {
+      const box = sprue.bounds()
+      expect(box.max[0] - box.min[0]).toBeLessThanOrEqual(0.75 + 1e-6)
+    }
+  })
+
+  it('meets each letter flush, never standing proud of the edge it joins', () => {
+    const { manifold: mf } = runtime()
+    // An L whose foot reaches toward an I: the nearest points are the foot's top corner and
+    // the I, and a tie there stood above the foot, leaving a step.
+    const l = mf.CrossSection.union([
+      new mf.CrossSection([rect(0, 0, 2, 10)]),
+      new mf.CrossSection([rect(0, 0, 4, 2)]),
+    ])
+    const text = mf.CrossSection.union([l, new mf.CrossSection([rect(5, 0, 2, 10)])])
+    const joined = joinIslands(text, 0.5, 32)!
+    expect(joined.section.decompose()).toHaveLength(1)
+    const tie = mf.CrossSection.intersection(
+      joined.section,
+      new mf.CrossSection([rect(4, 0, 1, 10)]),
+    )
+    expect(tie.area()).toBeGreaterThan(0.4)
+    expect(tie.bounds().max[1]).toBeLessThanOrEqual(2 + 1e-6)
+    expect(tie.bounds().min[1]).toBeGreaterThanOrEqual(-1e-6)
   })
 
   it('stands the letters on a bar under their full width', () => {
