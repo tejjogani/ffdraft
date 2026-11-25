@@ -52,6 +52,51 @@ describe('http surface', () => {
     expect(empty.status).toBe(200)
   })
 
+  // Local mode has no sign-in, so a browser on any website can reach it. A POST with no body, or
+  // a multipart upload, needs no CORS preflight: only the Origin header tells them apart.
+  it('refuses writes sent by a page of another website', async () => {
+    const api = client(server)
+    const upload = (headers: Record<string, string>, url = '/api/assets') => {
+      const form = new FormData()
+      form.set('file', new File([new TextEncoder().encode('hello')], 'note.txt'))
+      return server.app.request(url, { method: 'POST', body: form, headers })
+    }
+    const pieces = async () => (await api.call('pieces.list', {})).length
+    const before = await pieces()
+
+    const command = await server.app.request('/api/rpc/pieces.create', {
+      method: 'POST',
+      headers: { origin: 'https://evil.example', 'content-type': 'text/plain' },
+    })
+    expect(command.status).toBe(403)
+    expect(await command.json()).toMatchObject({ error: { code: 'forbidden' } })
+    expect(await pieces()).toBe(before)
+    expect((await upload({ origin: 'https://evil.example' })).status).toBe(403)
+    expect((await upload({ origin: 'null' })).status).toBe(403)
+
+    // The studio served by this server, the configured dev origin, the public URL, and callers
+    // that are not browsers (no Origin at all) are let through.
+    expect((await upload({})).status).toBe(201)
+    expect((await upload({ origin: 'http://localhost:5173' })).status).toBe(201)
+    expect((await upload({ origin: 'http://localhost:8787' })).status).toBe(201)
+    expect(
+      (await upload({ origin: 'http://127.0.0.1:9999' }, 'http://127.0.0.1:9999/api/assets'))
+        .status,
+    ).toBe(201)
+    // Behind a TLS proxy the scheme differs while the host is the same.
+    expect(
+      (await upload({ origin: 'https://studio.example' }, 'http://studio.example/api/assets'))
+        .status,
+    ).toBe(201)
+    // Reads are not writes: CORS already keeps their answers from other sites.
+    const read = await server.app.request('/api/rpc/collections.list', {
+      method: 'OPTIONS',
+      headers: { origin: 'https://evil.example', 'access-control-request-method': 'POST' },
+    })
+    expect(read.status).toBeLessThan(400)
+    expect(read.headers.get('access-control-allow-origin')).toBeNull()
+  })
+
   it('streams org events over SSE', async () => {
     const api = client(server)
     const abort = new AbortController()

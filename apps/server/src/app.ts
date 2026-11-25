@@ -8,7 +8,7 @@ import { createAuth } from './auth/auth'
 import { ensureLocalWorkspace, loadOrCreateSecret } from './auth/workspace'
 import { type Config, configFromEnv } from './config'
 import { openDatabase } from './db/client'
-import { AppError, notFound } from './errors'
+import { AppError, forbidden, notFound } from './errors'
 import { EventBus } from './events'
 import { mountAssets } from './http/assets'
 import { mountEvents } from './http/events'
@@ -92,12 +92,42 @@ export async function createApp(options: CreateAppOptions = {}): Promise<PaveSer
   }
 }
 
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+const parsed = (url: string): URL | null => (URL.canParse(url) ? new URL(url) : null)
+
+/**
+ * Refuses a write that a browser sent from a page of another website. A POST with no body, or a
+ * multipart upload, needs no CORS preflight, and local mode has no session cookie whose SameSite
+ * rule would stop it; the Origin header a browser attaches is what tells such a request apart.
+ * Trusted: the public URL, the CORS origins, and the host the request itself was sent to (the
+ * studio this server serves, whatever scheme a proxy terminates). Callers that are not browsers
+ * send no Origin and are not affected.
+ */
+function refuseForeignWrites(config: Config): MiddlewareHandler<Env> {
+  const trusted = new Set(
+    [config.publicUrl, ...config.corsOrigins].map((url) => parsed(url)?.origin ?? url),
+  )
+  return async (c, next) => {
+    const origin = c.req.header('origin')
+    if (
+      origin !== undefined &&
+      !SAFE_METHODS.has(c.req.method) &&
+      !trusted.has(origin) &&
+      parsed(origin)?.host !== new URL(c.req.url).host
+    )
+      throw forbidden('This request comes from a website this server does not trust')
+    await next()
+  }
+}
+
 function buildRoutes(runtime: Runtime, routes: CreateAppOptions['routes']): App {
   const { config } = runtime
   const app = new Hono<Env>()
 
   if (config.logRequests) app.use('/api/*', logger())
   app.use('/api/*', cors({ origin: config.corsOrigins, credentials: true }))
+  app.use('/api/*', refuseForeignWrites(config))
 
   app.onError((err, c) => {
     if (err instanceof AppError) return c.json(err.toJSON(), err.status)
