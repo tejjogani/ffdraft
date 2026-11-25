@@ -38,6 +38,8 @@ A render setting that looks wrong (research 14):
 
 6. Cycles counts each internal reflection inside a stone as a glossy bounce, not a transmission bounce. `quality.ts` sets glossy 12/16 against transmission 24/32, so a stone's light path is cut at 12 to 16 bounces. A small calculation on an ideal round brilliant shows about 4% of the light is still inside a diamond after 16 internal hits. Suggested: glossy = transmission = total (16 draft, 32 final). The browser gem shader's 6 bounces leave about 15% to its fallback.
 
+7. Stone nodes hold `sourcing` (supplier, SKU, price, certificate) inside the design document (`packages/schema/src/design/nodes.ts`). So the design and every history op in a saved file carry prices. The file plan redacts them in Share and Clean copies.
+
 Also: `docs/pave-file.md` says adding an entry or a field is not a breaking change, but the reader refuses unknown entries, rejects new enum values and checks names before the version. A newer file gets the wrong error instead of "update Pavé". `geometry/exact.step` inside the file hands the paid STEP export to anyone who unzips it, and open never reads it.
 
 Corrections to earlier research:
@@ -66,7 +68,7 @@ Ten research subagents, one per topic, one file each (topic 22 was added on the 
 | `docs/research/14-jewelry-rendering.md` | Rendering state of the art for jewelry | Done (some engine rows are working knowledge, marked [E]: the web-search budget ran out) |
 | `docs/research/15-own-renderer.md` | Our own renderer (priority) | Running |
 | `docs/research/16-ai-models-on-model.md` | AI human models, on-model imagery | Done; plan `docs/plans/brand-models-v2.md` written, under review |
-| `docs/research/17-pave-file-format.md` | The native file format | Done; plan being written |
+| `docs/research/17-pave-file-format.md` | The native file format | Done; plan `docs/plans/pave-file-format.md` written, under review |
 | `docs/research/18-low-end-machines.md` | Low-end machines | Done |
 | `docs/research/19-erp-and-pos-apis.md` | ERP, POS and accounting APIs | Done; plan being written |
 | `docs/research/20-accounts-and-identity.md` | Accounts and identity | Done; plan `docs/plans/accounts-and-developer-api.md` written, under review |
