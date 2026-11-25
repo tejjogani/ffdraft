@@ -50,6 +50,7 @@ Pavé is an AI-native jewelry design suite. **One AI assistant carries a piece t
 | AI assistant (key in app, tiers, AI jobs, stages, directions, photo to CAD, render job, plans, MCP for Claude Code) | Being built on `ai/assistant` | `docs/plans/assistant.md` plus the founder's additions in section 1 |
 | Rhino-class modeling from scratch (curves, surfaces, solids, gumball, Notion-style slash palette, glass chrome) | Planned (eight steps); build starts when the engine pass ends | `docs/plans/freeform-cad.md`, `docs/research/12-rhino-parity.md` |
 | Ideas boards, brand models, on-model imagery, sourcing screen, publishing, desktop app, cost monitoring screens | Not built | their plans in `docs/plans` |
+| Durable jobs with checkpoints, local GPU for Blender, hosting on Render, render nodes | Planned only; build after the founder's first local test | `docs/plans/deploy-and-durable-jobs.md` |
 | ERP and catalogue import | Researched only; deliberately after the core product | the ERP report; `docs/strategy/catalog-import-and-store.md` |
 | Diaex partner API | Contract, OpenAPI file and Diaex agent brief written, checked against the Diaex code and fixed; Diaex side not started | `docs/integrations` |
 
