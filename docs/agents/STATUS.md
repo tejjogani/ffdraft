@@ -27,7 +27,7 @@ Branch `claude/assistant-build`, head: 342481a Verify the assistant harness agai
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: d8a6cda Handover: the Design stage is image-based ideation, not 3D
+Branch `claude/busy-bardeen-o482lo`, head: c743a25 Add the master plan and a live status file of every agent and task
 
 | Agent | State | Outcome |
 |---|---|---|
