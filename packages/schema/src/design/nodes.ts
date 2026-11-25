@@ -292,7 +292,7 @@ export const Halo = z
     clearClaws: toggle('Clear the claws', true, {
       advanced: true,
       description:
-        'Start the halo outside the centre stone’s claws, so no claw crosses a halo stone. Off: the layout of halos made before this option, stones evenly round at the gap to the centre stone with the claws crossing them.',
+        'Keep the centre stone’s claws clear of the halo stones: a claw along a side stands in a notch between two stones, and round a claw on a point the row steps out. Off: the layout of halos made before this option, stones evenly round at the gap to the centre stone with the claws crossing them.',
     }),
   })
   .meta({

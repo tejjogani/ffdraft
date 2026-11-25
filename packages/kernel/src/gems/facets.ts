@@ -124,6 +124,7 @@ function brilliantHalf(
 ): { ring: Vec3[]; facets: Facet[]; dip: number } {
   const crown = apexZ > girdleZ
   const K = o.mains.length
+  const pointed = o.prongs.some((p) => p.point)
   const girdle = o.mains.map((phi) => outlinePoint(o, phi))
   // Table corners (crown) or the culet (pavilion, apexScale = 0).
   const apex: Vec3[] = girdle.map((g) => [
@@ -166,11 +167,13 @@ function brilliantHalf(
       const g1 = girdle[(k + 1) % K]!
       const side = (g: Vec2, x: number, y: number) =>
         (g[0] - o.centre[0]) * y - (g[1] - o.centre[1]) * x
+      // The angular test is for points only: on a cut-corner outline (a long radiant) the
+      // planes meet a little outside the sector at the corners, and taking the fold there
+      // instead crosses slivers over the culet.
       const between =
         dx * a.direction[0] + dy * a.direction[1] > 0 &&
         dx * b.direction[0] + dy * b.direction[1] > 0 &&
-        side(g0, dx, dy) > 0 &&
-        -side(g1, dx, dy) > 0
+        (!pointed || (side(g0, dx, dy) > 0 && -side(g1, dx, dy) > 0))
       ok = between && Math.hypot(dx, dy) < 0.98 * o.radius(Math.atan2(dy, dx))
     }
     mid.push(ok && met ? met : fallback)

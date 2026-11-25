@@ -149,7 +149,7 @@ function checks(
   shank: ShankData,
   slots: readonly Slot[],
   depth: (w: number) => number,
-  sink: (w: number) => number,
+  sink: (slot: Slot) => number,
   ctx: BuildContext,
 ): void {
   let widest: { over: number; slot: Slot; band: number } | null = null
@@ -159,7 +159,7 @@ function checks(
     const needed = 2 * Math.abs(slot.a) + slot.width + 2 * RULES.stoneBorder
     if (needed > band + 1e-6 && (!widest || needed - band > widest.over))
       widest = { over: needed - band, slot, band }
-    const culet = shank.outer(slot.theta, slot.a).radius - sink(slot.width) - depth(slot.width)
+    const culet = shank.outer(slot.theta, slot.a).radius - sink(slot) - depth(slot.width)
     const clearance = culet - shank.innerRadius
     if (clearance < RULES.culetClearance && (!lowest || clearance < lowest.clearance))
       lowest = { clearance, slot }
@@ -194,6 +194,26 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
   const depth = (width: number) => culetDepth(node.cut, dimsOf(width))
   const crown = (width: number) => dimsOf(width).depth - depth(width)
   const sink = (width: number) => SINK[node.setting] * crown(width)
+  // A stone in a seat needs the setter's wall of metal beside it (dfm `seatWall`) down past its
+  // girdle. On a domed band the surface falls away toward the edges, so a stone off the crest,
+  // or a wide one, is sunk until the metal at its wall stands above its girdle.
+  const seated = node.setting === 'pave' || node.setting === 'flush' || node.setting === 'bar'
+  const slotSink = (slot: Slot): number => {
+    const base = sink(slot.width)
+    if (!seated) return base
+    const out = slot.width / 2 + RULES.channelWall
+    const { radius, slope } = shank.outer(slot.theta, slot.a)
+    let sag = 0
+    for (const side of [-1, 1]) {
+      const a = slot.a + side * out
+      // Off the band no sinking helps; the stone-width check reports it.
+      if (Math.abs(a) >= shank.width(slot.theta) / 2) continue
+      // How far the band falls below the girdle's plane (tangent to the surface) at the wall.
+      sag = Math.max(sag, radius + slope * side * out - shank.outer(slot.theta, a).radius)
+    }
+    // The dfm probe looks a tenth of the stone's depth under the girdle.
+    return Math.max(base, sag - 0.1 * dimsOf(slot.width).depth + 0.05)
+  }
   // Stones are spaced where their girdles are: near the surface at the top of the band.
   const radius = shank.outer(node.center * DEG).radius - sink(node.stoneWidth)
   const angles = rowAngles(node, radius)
@@ -216,14 +236,14 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
       row % 2 === 1 && angles.length > 1 ? (angles[1]!.theta - angles[0]!.theta) / 2 : 0
     for (const { theta, width } of angles) slots.push({ theta: theta + stagger, a, width })
   }
-  checks(shank, slots, depth, sink, ctx)
+  checks(shank, slots, depth, slotSink, ctx)
 
   const place = (frame: Frame): Frame => transformFrame(host.matrix, frame)
   const stones: Stone[] = slots.map((slot) => ({
     cut: node.cut,
     stone: node.stone,
     dims: dimsOf(slot.width),
-    frame: place(seatFrame(shank, slot.theta, slot.a, sink(slot.width))),
+    frame: place(seatFrame(shank, slot.theta, slot.a, slotSink(slot))),
     role: 'accent',
     setting: node.setting,
   }))
@@ -344,7 +364,7 @@ export const gemRow = defineFeature('gemRow', (node, ctx) => {
     stones.forEach((stone, i) => {
       const slot = slots[i]!
       // Open the seat to above the band, and drill through to the finger so the culet has light.
-      const open = Math.max(0.3, sink(slot.width)) + 0.4
+      const open = Math.max(0.3, slotSink(slot)) + 0.4
       const scale = node.setting === 'flush' ? 0.94 : RULES.seatScale
       const through = shank.outer(slot.theta, slot.a).radius - shank.innerRadius
       cuts.push({ solid: seatCutter(stone, { open, scale }), targets: 'all' })

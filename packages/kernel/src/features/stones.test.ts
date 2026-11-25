@@ -6,6 +6,7 @@ import {
   designFrom,
   GEM_CUT_IDS,
   GEM_CUTS,
+  type GemCutId,
   gemDims,
   type NodeOf,
   prongSpinFor,
@@ -15,6 +16,7 @@ import {
   TEMPLATES,
 } from '@pave/schema'
 import { afterAll, describe, expect, it } from 'vitest'
+import type { Scene } from '../core'
 import { unitContains } from '../gems/index'
 import { clawLayoutIssues, prongDirections, stoneShape } from '../gems/shape'
 import { toFrame } from '../geometry/vec'
@@ -160,6 +162,24 @@ describe('heads', () => {
     expect(await codes(template('solitaire'))).not.toContain('prong.light')
   })
 
+  it('a long stone’s rails stay clear of its pavilion: no seat cuts a rail off or shaves it thin', async () => {
+    // A stud's basket rail round a 5 ct baguette at lw 5 was cut clean off at both ends.
+    const studs = template('studs')
+    const long = replaceStone(studs, { nodeId: 'stone' }, { cut: 'baguette', carat: 5, lw: 5 })
+    const e = await kernel.evaluate(applyOps(studs, long.ops).design, { detail: 'production' })
+    expect(e.diagnostics.filter((x) => x.level === 'error').map((x) => x.code)).toEqual([])
+    // A princess at its longest ratio keeps its base rail whole, at every head that holds it.
+    for (const id of ['solitaire', 'three-stone', 'halo']) {
+      const base = template(id)
+      const r = replaceStone(base, { nodeId: 'center' }, { cut: 'princess', carat: 5, lw: 1.1 })
+      const p = await kernel.evaluate(applyOps(base, r.ops).design, { detail: 'production' })
+      expect(
+        p.diagnostics.filter((x) => x.level === 'error').map((x) => x.code),
+        id,
+      ).toEqual([])
+    }
+  }, 120_000)
+
   it('a half bezel holds the points of a pointed stone', async () => {
     const d = update(update(template('solitaire'), 'head', { style: 'halfBezel' }), 'center', {
       cut: 'marquise',
@@ -260,25 +280,86 @@ describe('halo and rows', () => {
     }
   })
 
-  it('the halo template is continuous: claws inside the ring, even spacing, free of stone.inMetal at production', async () => {
-    const scene = await kernel.scene(template('halo'), { detail: 'production' })
+  it('the halo template is a frame, not a tyre: built at its gap, claws in notches, face as the canon reckons it', async () => {
+    const design = template('halo')
+    const scene = await kernel.scene(design, { detail: 'production' })
     const e = scene.evaluation
-    const halo = scene.nodes.get('halo')!.stones
-    // Stone to stone, round the ring: the template's 0.15 mm gap, nowhere a bald corner.
-    const gaps = halo.map((s, i) => {
-      const o = s.frame.origin
-      const q = halo[(i + 1) % halo.length]!.frame.origin
-      return Math.hypot(o[0] - q[0], o[1] - q[1], o[2] - q[2]) - s.dims.width
-    })
-    expect(Math.min(...gaps)).toBeGreaterThan(0.1)
-    expect(Math.max(...gaps)).toBeLessThan(0.4)
+    const centre = scene.nodes.get('center')!.stones[0]!
+    const node = design.nodes.halo as NodeOf<'halo'>
+    const layout = haloLayout(scene)
+    // The inner row stands at the node's gap to the centre stone, not beyond the claws.
+    expect(Math.min(...layout.toGirdle)).toBeCloseTo(node.offset, 1)
+    // Every claw stands in a notch between two halo stones; elsewhere the stones run evenly.
+    expect(layout.notches).toBe(4)
+    expect(Math.min(...layout.plain)).toBeGreaterThan(0.1)
+    expect(Math.max(...layout.plain)).toBeLessThanOrEqual(0.4)
+    // Face across the halo: the centre, the gap, the stones and the 0.45 mm border each side.
+    const expected = centre.dims.width + 2 * (node.offset + node.stoneWidth + 0.45)
+    expect(layout.face).toBeCloseTo(expected, 1)
+    expect(layout.face / centre.dims.width).toBeLessThan(1.7)
     const bad = e.diagnostics.filter(
       (x) =>
         x.nodeId === 'halo' && ['stone.inMetal', 'seat.wall', 'stone.overlap'].includes(x.code),
     )
     expect(bad).toEqual([])
     expect(e.parts).toHaveLength(1)
-  })
+    // The gap field is the gap built: a wider gap moves the inner row out with it.
+    const wider = await kernel.scene(update(design, 'halo', { offset: 0.45 }))
+    expect(Math.min(...haloLayout(wider).toGirdle)).toBeCloseTo(0.45, 1)
+  }, 60_000)
+
+  it('halo rows stay continuous over centre sizes and cuts: no gap past 0.4 mm but at a claw', async () => {
+    const base = template('halo')
+    for (const cut of ['cushion', 'princess', 'asscher', 'round', 'oval', 'pear', 'heart'] as const)
+      for (const carat of [0.3, 1, 2, 5]) {
+        const r = replaceStone(base, { nodeId: 'center' }, { cut, carat })
+        const scene = await kernel.scene(applyOps(base, r.ops).design)
+        const { plain, notches, claws } = haloLayout(scene)
+        // A heart's cleft is open by design: its two stones only clear each other across it.
+        const open = cut === 'heart' ? plain.toSorted((a, b) => b - a).slice(1) : plain
+        expect(Math.max(...open), `${cut} ${carat} ct`).toBeLessThanOrEqual(0.4)
+        // Claws along a side stand in notches; claws on points the row steps out round.
+        expect(notches, `${cut} ${carat} ct`).toBeLessThanOrEqual(claws)
+      }
+    // A square bezel head has no claws to notch round: the count keeps four-fold symmetry where
+    // that does not space the stones out (or crowd them), two-fold where it would.
+    for (const cut of ['princess', 'asscher', 'cushion'] as const)
+      for (const carat of [0.3, 0.75, 1, 2]) {
+        const r = replaceStone(base, { nodeId: 'center' }, { cut, carat })
+        const d = update(applyOps(base, r.ops).design, 'head', { style: 'bezel' })
+        const { plain, stones } = haloLayout(await kernel.scene(d))
+        expect(stones % 2, `${cut} ${carat} ct bezel`).toBe(0)
+        expect(Math.min(...plain), `${cut} ${carat} ct bezel`).toBeGreaterThanOrEqual(0.05)
+        expect(Math.max(...plain), `${cut} ${carat} ct bezel`).toBeLessThanOrEqual(0.4)
+      }
+  }, 120_000)
+
+  it('halo stones keep their seat wall at production, the heart included, from 0.3 to 5 ct', async () => {
+    const base = template('halo')
+    const cases: [GemCutId, number][] = [
+      ['heart', 2],
+      ['heart', 3],
+      ['heart', 4],
+      ['heart', 5],
+      ['cushion', 0.3],
+      ['princess', 0.3],
+      ['round', 0.3],
+      ['oval', 5],
+      ['emerald', 5],
+    ]
+    for (const [cut, carat] of cases) {
+      const r = replaceStone(base, { nodeId: 'center' }, { cut, carat })
+      const e = await kernel.evaluate(applyOps(base, r.ops).design, { detail: 'production' })
+      expect(
+        e.diagnostics.filter(
+          (x) =>
+            x.nodeId === 'halo' &&
+            ['seat.wall', 'stone.inMetal', 'stone.overlap', 'seat.through'].includes(x.code),
+        ),
+        `${cut} ${carat} ct`,
+      ).toEqual([])
+    }
+  }, 240_000)
 
   it('every centre cut at 5 ct in the halo is free of stone.inMetal errors at production', async () => {
     const base = template('halo')
@@ -323,6 +404,20 @@ describe('halo and rows', () => {
       expect(d).toBeLessThan(0.2)
     }
   })
+
+  it('pavé on a domed band keeps its seat wall: stones off the crest sink until the metal stands above their girdles', async () => {
+    for (const [band, stone] of [
+      [3, 1.5],
+      [2.5, 1.5],
+      [4, 2.5],
+    ] as const) {
+      const d = designFrom('ring', [
+        { id: 'band', kind: 'ringShank', widthTop: band, widthBottom: band, profile: 'court' },
+        { id: 'row', kind: 'gemRow', host: 'band', stoneWidth: stone, coverage: 120 },
+      ])
+      expect(await codes(d, 'production'), `${stone} on ${band}`).not.toContain('seat.wall')
+    }
+  }, 120_000)
 
   it('a row graduating to exactly 1.5 mm graduates, and its end stones are the size asked', async () => {
     const d = designFrom('ring', [
@@ -379,3 +474,48 @@ describe('halo and rows', () => {
     }
   })
 })
+
+/**
+ * A halo as a setter sees it: each halo stone's plan distance from the centre's girdle, the
+ * gaps between neighbours (split into those a claw stands in and the rest), and the face
+ * across the ring.
+ */
+function haloLayout(scene: Scene) {
+  const centre = scene.nodes.get('center')!.stones[0]!
+  const shape = stoneShape(centre)
+  const halo = scene.nodes.get('halo')!
+  const stones = halo.stones
+  const local = (p: readonly number[]) => toFrame(centre.frame, p as [number, number, number])
+  const girdle = shape.polygon(16).points
+  const toGirdle = stones.map((s) => {
+    const [x, y] = local(s.frame.origin)
+    const d = Math.min(...girdle.map(([gx, gy]) => Math.hypot(gx - x, gy - y)))
+    return d - Math.max(s.dims.width, s.dims.length) / 2
+  })
+  const claws = ((scene.nodes.get('head')?.data as HeadData | undefined)?.claws ?? []).map((c) => {
+    const g = shape.point(c.phi)
+    const n = shape.normal(c.phi)
+    const off = c.reach - c.radius
+    return [g[0] + n[0] * off, g[1] + n[1] * off] as const
+  })
+  const plain: number[] = []
+  let notches = 0
+  stones.forEach((s, i) => {
+    const a = local(s.frame.origin)
+    const b = local(stones[(i + 1) % stones.length]!.frame.origin)
+    const gap = Math.hypot(a[0] - b[0], a[1] - b[1]) - Math.max(s.dims.width, s.dims.length)
+    const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]
+    const half = Math.hypot(a[0] - b[0], a[1] - b[1]) / 2
+    if (claws.some(([x, y]) => Math.hypot(x - mid[0]!, y - mid[1]!) < half)) notches++
+    else plain.push(gap)
+  })
+  const pts = halo.bodies.flatMap((b) => {
+    const p = b.solid.triangles().positions
+    return Array.from({ length: p.length / 3 }, (_, k) =>
+      local([p[k * 3]!, p[k * 3 + 1]!, p[k * 3 + 2]!]),
+    )
+  })
+  const xs = pts.map((p) => p[0])
+  const face = Math.max(...xs) - Math.min(...xs)
+  return { toGirdle, plain, notches, claws: claws.length, stones: stones.length, face }
+}

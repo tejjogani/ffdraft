@@ -269,12 +269,21 @@ function headReach(top: BandView['tops'][number]): number {
     )
   } else if (head?.style === 'bezel' || head?.style === 'halfBezel') reach = head.wall
   const metal = reach
+  // Claws on a stone's points or corners (a princess, pear, marquise, heart, trillion) push
+  // the halo out round them, and on a convex stone the straight runs between them too.
+  const cut = GEM_CUTS[top.gem.cut]
+  const pointed =
+    ['pear', 'marquise', 'heart', 'trillion'].includes(cut.outline) ||
+    (['square', 'rect'].includes(cut.outline) && cut.cornerCut === 0)
+  const clawed = head?.style === 'prong' || head?.style === 'basket'
   for (const h of top.halos) {
     const melee = gemDims(h.cut, h.stoneWidth)
     const size = Math.max(melee.width, melee.length)
-    // The kernel starts a halo just beyond the head's claws or bezel (unless it keeps the
-    // layout of an old piece).
-    const inner = h.clearClaws === false ? h.offset : Math.max(h.offset, metal + 0.05)
+    // The kernel starts a halo at its gap to the stone, with claws along a side standing in
+    // notches between its stones, and beyond a bezel's wall. Where claws stand on points, take
+    // the halo as clearing the claws all round (it does no more than that).
+    const inner =
+      h.clearClaws === false || (clawed && !pointed) ? h.offset : Math.max(h.offset, metal + 0.05)
     reach = Math.max(reach, inner + h.rows * (size + h.gap) - h.gap + MOUNT.haloBorder)
   }
   return reach

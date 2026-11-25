@@ -124,8 +124,9 @@ describe('gem unit meshes', () => {
     })
   })
 
-  it('cuts are convex: no vertex lies outside any facet plane', () => {
+  it('cuts are convex at every ratio: no vertex lies outside any facet plane', () => {
     // Pointed outlines (pear, marquise, heart, trillion) fold their tip facets and are excluded.
+    // A long radiant once crossed slivers over its culet (0.52 of the width out of plane).
     for (const id of [
       'round',
       'emerald',
@@ -135,24 +136,30 @@ describe('gem unit meshes', () => {
       'cushion',
       'radiant',
       'princess',
-    ] as const) {
-      const { positions, normals, indices } = gemUnit(id).mesh
-      let worst = 0
-      for (let t = 0; t < indices.length; t += 3) {
-        const a = indices[t]! * 3
-        for (let v = 0; v < positions.length; v += 3) {
-          const d =
-            (positions[v]! - positions[a]!) * normals[a]! +
-            (positions[v + 1]! - positions[a + 1]!) * normals[a + 1]! +
-            (positions[v + 2]! - positions[a + 2]!) * normals[a + 2]!
-          worst = Math.max(worst, d)
+    ] as const)
+      for (const ratio of new Set([
+        GEM_CUTS[id].lw.min,
+        GEM_CUTS[id].lw.default,
+        GEM_CUTS[id].lw.max,
+      ])) {
+        const { positions, normals, indices } = gemUnit(id, ratio).mesh
+        let worst = 0
+        for (let t = 0; t < indices.length; t += 3) {
+          const a = indices[t]! * 3
+          for (let v = 0; v < positions.length; v += 3) {
+            const d =
+              (positions[v]! - positions[a]!) * normals[a]! +
+              (positions[v + 1]! - positions[a + 1]!) * normals[a + 1]! +
+              (positions[v + 2]! - positions[a + 2]!) * normals[a + 2]!
+            worst = Math.max(worst, d)
+          }
         }
+        // Round and step cuts are exactly convex; on fancy outlines the half facets next to a
+        // strongly curved girdle dent the hull by a few percent of the width.
+        // A long oval's are the deepest, 5 %.
+        const exact = ['round', 'emerald', 'asscher', 'baguette'].includes(id)
+        expect(worst, `${id}@${ratio}`).toBeLessThan(exact ? 1e-4 : 0.06)
       }
-      // Round and step cuts are exactly convex; on fancy outlines the half facets next to a
-      // strongly curved girdle dent the hull by a few percent of the width.
-      const exact = ['round', 'emerald', 'asscher', 'baguette'].includes(id)
-      expect(worst, id).toBeLessThan(exact ? 1e-4 : 0.04)
-    }
   })
 
   it('every cut at its shortest, usual and longest ratio is closed and consistently wound, with no triangle facing in', () => {

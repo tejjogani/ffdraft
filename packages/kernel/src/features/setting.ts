@@ -17,7 +17,14 @@ import {
 } from '@pave/schema'
 import { type Body, type BuildContext, type Cut, defineFeature, metalOf, type Solid } from '../core'
 import { seatCutter } from '../gems/cutter'
-import { clawLayoutIssues, prongDirections, type StoneShape, stoneShape } from '../gems/shape'
+import {
+  clawLayoutIssues,
+  insidePolygon,
+  polygonDistance,
+  prongDirections,
+  type StoneShape,
+  stoneShape,
+} from '../gems/shape'
 import {
   arcSegment,
   circleLoop,
@@ -47,6 +54,8 @@ type SettingNode = NodeOf<'setting'>
 
 /** How far a claw's root is buried in the band, mm. */
 const ROOT_SINK = 0.5
+/** Air between a rail and the stone's pavilion, mm (the seat cutter leaves a little more). */
+const RAIL_CLEARANCE = 0.05
 /** Metal kept between the lowest point of a head and the finger, mm. */
 const FINGER_CLEARANCE = 0.25
 /**
@@ -335,6 +344,8 @@ export interface ClawPlace {
   point: boolean
   /** Half its width along the girdle, mm. */
   halfWidth: number
+  /** Half its thickness out from the girdle, mm: its axis stands `reach − radius` off the girdle. */
+  radius: number
   /** How far its outside stands beyond the girdle, mm. */
   reach: number
 }
@@ -346,6 +357,7 @@ function clawPlaces(node: SettingNode, shape: StoneShape, claws: Claws): ClawPla
       phi,
       point,
       halfWidth: clawHalfWidth(node, claws.diameter, point),
+      radius: style.radius,
       reach: 2 * style.radius - style.overlap,
     }
   })
@@ -373,11 +385,32 @@ function prongs(
 function rail(head: Head, depth: number, standoff: number, wire: number): Solid {
   const { shape } = head
   const poly = shape.polygon(head.perSpan)
+  // The pavilion at the rail's depth. The legs stand off the girdle at the top and clear the
+  // pavilion at their base, but halfway down a long stone's ends (a keel, an elongated princess
+  // or baguette) its pavilion can bulge past the line between: a rail there is shaved by the seat
+  // to a sliver, or cut clean off.
+  const [cx, cy] = shape.centre
+  const pavilion = shape.polygon(8).phis.map((phi) => shape.silhouette(phi, -depth))
+  const clear = wire / 2 + RAIL_CLEARANCE
+  const outside = (q: Vec2) => !insidePolygon(pavilion, q) && polygonDistance(pavilion, q) >= clear
   const path = poly.phis.map((phi) => {
     const leg = legAt(head, phi, standoff, wire / 2 + 0.1)
     const t = clamp((depth - -leg.top[2]) / Math.max(1e-6, -leg.base[2] - -leg.top[2]), 0, 1)
     const p = lerp3(leg.top, leg.base, t)
-    return [p[0], p[1], -depth] as Vec3
+    let q: Vec2 = [p[0], p[1]]
+    if (!outside(q)) {
+      // Step it out from the stone's centre until it clears.
+      const at = (k: number): Vec2 => [cx + (p[0] - cx) * k, cy + (p[1] - cy) * k]
+      let lo = 1
+      let hi = 2
+      for (let i = 0; i < 24; i++) {
+        const mid = (lo + hi) / 2
+        if (outside(at(mid))) hi = mid
+        else lo = mid
+      }
+      q = at(hi)
+    }
+    return [q[0], q[1], -depth] as Vec3
   })
   const up = normalize(sub(shape.toWorld([0, 0, 1]), shape.toWorld([0, 0, 0])))
   const frames = pathFrames(world(shape, path), { closed: true, up, kinks: poly.corners })

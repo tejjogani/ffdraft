@@ -128,21 +128,8 @@ export function stoneShape(stone: Stone): StoneShape {
       return out
     },
     offsetPath(distance) {
-      // Distance from a point to the girdle polygon.
       const girdle = this.polygon(8).points
-      const clearance = (q: Vec2) =>
-        Math.min(
-          ...girdle.map((g, i) => {
-            const h = girdle[(i + 1) % girdle.length]!
-            const dx = h[0] - g[0]
-            const dy = h[1] - g[1]
-            const t = Math.max(
-              0,
-              Math.min(1, ((q[0] - g[0]) * dx + (q[1] - g[1]) * dy) / (dx * dx + dy * dy || 1)),
-            )
-            return Math.hypot(q[0] - g[0] - t * dx, q[1] - g[1] - t * dy)
-          }),
-        )
+      const clearance = (q: Vec2) => polygonDistance(girdle, q)
       const anchors = outlineAnchors(o)
       const sharp = new Set(o.corners.map((c) => Math.round((((c % TAU) + TAU) % TAU) * 1e6)))
       const path: Vec2[] = []
@@ -199,6 +186,33 @@ export function stoneShape(stone: Stone): StoneShape {
     },
     toWorld: (p) => fromFrame(stone.frame, p),
   }
+}
+
+/** Distance from a point to a closed polygon's edges (unsigned: as far inside as outside). */
+export function polygonDistance(polygon: readonly Vec2[], q: Vec2): number {
+  return Math.min(
+    ...polygon.map((g, i) => {
+      const h = polygon[(i + 1) % polygon.length]!
+      const dx = h[0] - g[0]
+      const dy = h[1] - g[1]
+      const t = Math.max(
+        0,
+        Math.min(1, ((q[0] - g[0]) * dx + (q[1] - g[1]) * dy) / (dx * dx + dy * dy || 1)),
+      )
+      return Math.hypot(q[0] - g[0] - t * dx, q[1] - g[1] - t * dy)
+    }),
+  )
+}
+
+/** Whether a point lies inside a closed polygon (even-odd rule). */
+export function insidePolygon(polygon: readonly Vec2[], [x, y]: Vec2): boolean {
+  let inside = false
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i]!
+    const [xj, yj] = polygon[j]!
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside
+  }
+  return inside
 }
 
 /** Reflection across the stone's length axis (x → −x): left and right of the head as worn. */
