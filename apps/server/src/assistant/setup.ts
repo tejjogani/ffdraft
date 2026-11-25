@@ -5,6 +5,8 @@
  * restart. In accounts mode a key belongs to one organisation: the service is shared, so it also
  * answers per organisation (`available`), and `session.get` follows that.
  */
+import { rename, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { MODELS, resolveTiers, TIER_ENV, TIERS, typicalRunUsd } from '@pave/agent'
 import type { KeyCheck } from '@pave/agent/anthropic'
 import {
@@ -26,6 +28,13 @@ import type { Assistant } from './service'
 
 export type KeyChecker = (apiKey: string) => Promise<KeyCheck>
 
+/**
+ * A note under PAVE_DATA_DIR saying whether any organisation has a key saved in Settings, AI, so
+ * `node scripts/install.mjs --check` can report it without opening the database (which the
+ * running server holds). It says only yes or no: never the key, nor its last characters.
+ */
+export const KEY_NOTE_FILE = 'assistant-key.json'
+
 const price = (id: AssistantModelId) => {
   const r = MODELS[id].rates
   return { input: r.input, output: r.output, cacheRead: r.cacheRead, cacheWrite: r.cacheWrite5m }
@@ -41,6 +50,7 @@ export class AssistantSetupImpl implements AssistantSetupService {
   /** Organisations with a saved key; with the .env key or scripted mode, every one has a key. */
   readonly #orgs = new Set<string>()
   readonly #dispose: () => Promise<void>
+  #noteChain: Promise<void> = Promise.resolve()
 
   constructor(init: {
     runtime: Runtime
@@ -69,6 +79,7 @@ export class AssistantSetupImpl implements AssistantSetupService {
   async ready(): Promise<void> {
     for (const orgId of await this.#runtime.assistantKeyOrgs()) this.#orgs.add(orgId)
     this.#sync()
+    await this.#writeNote()
   }
 
   dispose(): Promise<void> {
@@ -81,6 +92,28 @@ export class AssistantSetupImpl implements AssistantSetupService {
     if (on && services.optional('assistant') !== this.#assistant)
       services.register('assistant', this.#assistant)
     else if (!on && services.isConfigured('assistant')) services.unregister('assistant')
+  }
+
+  /**
+   * Best effort: the note is a hint for the installer, never a reason for a save to fail. Writes
+   * are queued one after another, each reading the state when it runs, so two saves at once
+   * cannot leave the older answer on disk.
+   */
+  #writeNote(): Promise<void> {
+    const dir = this.#runtime.config.dataDir
+    if (!dir) return Promise.resolve()
+    const file = join(dir, KEY_NOTE_FILE)
+    // Written whole, then renamed over the old note, so a reader never sees half a file.
+    const tmp = `${file}.${process.pid}.tmp`
+    this.#noteChain = this.#noteChain.then(async () => {
+      try {
+        await writeFile(tmp, `${JSON.stringify({ keySavedInApp: this.#orgs.size > 0 })}\n`)
+        await rename(tmp, file)
+      } catch {
+        // A read-only data folder: --check then says it cannot tell.
+      }
+    })
+    return this.#noteChain
   }
 
   #ctx(sctx: ServiceContext): Promise<Ctx> {
@@ -140,6 +173,7 @@ export class AssistantSetupImpl implements AssistantSetupService {
     await this.#keys.save(ctx, apiKey.trim())
     this.#orgs.add(ctx.orgId)
     this.#sync()
+    await this.#writeNote()
     return this.get(sctx, { admin: true })
   }
 
@@ -174,6 +208,7 @@ export class AssistantSetupImpl implements AssistantSetupService {
     await this.#keys.remove(ctx)
     this.#orgs.delete(ctx.orgId)
     this.#sync()
+    await this.#writeNote()
     return this.get(sctx, { admin: true })
   }
 

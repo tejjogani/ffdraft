@@ -3,10 +3,14 @@
  * it turns it off; the key never comes back out of the server; only owners and admins handle it;
  * .env wins; each tier runs on its model with that model's request shape; test mode.
  */
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/messages/messages'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { BOOT_TIMEOUT, type Client, client, joinOrg, signUp } from '../test/harness'
 import { scriptedFromEnv } from './scripted'
+import { KEY_NOTE_FILE } from './setup'
 import { type AssistantServer, assistantServer, settled, text } from './testing'
 
 const KEY = 'sk-ant-api03-SECRETSECRETSECRETSECRET-abcdefghijklmnop-WXYZ'
@@ -352,4 +356,25 @@ describe('test mode (PAVE_ASSISTANT=scripted:…)', () => {
       await server.dispose()
     }
   })
+})
+
+describe('the note the installer reads', () => {
+  it('says whether a key is saved in the app, and never says the key', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'pave-note-'))
+    const s = await assistantServer({ env: {}, config: { dataDir: dir } })
+    try {
+      const api = client(s.server)
+      const note = () => readFile(join(dir, KEY_NOTE_FILE), 'utf8')
+      expect(JSON.parse(await note())).toEqual({ keySavedInApp: false })
+      await api.call('assistant.key.set', { apiKey: KEY })
+      const saved = await note()
+      expect(JSON.parse(saved)).toEqual({ keySavedInApp: true })
+      expect(saved).not.toContain('WXYZ')
+      await api.call('assistant.key.remove', {})
+      expect(JSON.parse(await note())).toEqual({ keySavedInApp: false })
+    } finally {
+      await s.server.dispose()
+      await rm(dir, { recursive: true, force: true })
+    }
+  }, 60_000)
 })

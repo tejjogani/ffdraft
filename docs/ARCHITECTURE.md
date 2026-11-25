@@ -37,8 +37,8 @@ person's correction is implicit feedback, captured without extra instrumentation
 Every operation the product can perform is declared once with its input/output schema, minimum
 role and whether it needs confirmation
 ([`commands.ts`](../packages/schema/src/api/commands.ts)). The server implements a handler per
-command; the studio calls them through a typed client; the assistant's tools and the MCP server
-are generated from the same entries. "What can a user do", "what can the assistant do" and "what
+command; the studio calls them through a typed client; the assistant's tools (and, once built,
+the MCP server) are generated from the same entries. "What can a user do", "what can the assistant do" and "what
 can an outside agent do" are one list with one set of permissions, metering and traces.
 
 ## Workspace model
@@ -52,8 +52,8 @@ Organisation
  └─ Settings       members, AI, plan, usage, traces, privacy, integrations
 ```
 
-The sidebar is navigation plus the collection tree. A piece page has tabs — Overview, Design,
-Render, On model, Sourcing, Production, History. A stage is a status, not a gate: every tool is
+The sidebar is navigation plus the collection tree. A piece page has tabs — Overview, Design
+(directions), CAD, Render, On model, Sourcing, Production, History. A stage is a status, not a gate: every tool is
 always available. The assistant lives in a dock that is aware of the open piece or board, and on
 the Home page as the starting point ("What are we making?").
 
@@ -66,11 +66,11 @@ the Home page as the starting point ("What are we making?").
 | `packages/render` | Material library, looks, scene resolution, three.js materials (incl. the gem shader), Blender job runner |
 | `packages/sourcing` | Stone and metal requirements from CAD; marketplace providers (Diaex first) |
 | `packages/production` | Drawings, bill of materials, costing, manufacturability report, the bundle |
-| `packages/agent` | The assistant: tools from the registry, the frozen prompt and skills, model tiers and prices, the run reducer; the gate's pure rules (run caps, rights, loop breaker, human-edit overlap); `./anthropic` (server only) builds Claude requests and adapts the SDK stream. MCP server to come |
+| `packages/agent` | The assistant: tools from the registry, the frozen prompt and skills, model tiers and prices, the run reducer; the gate's pure rules (run caps, rights, loop breaker, human-edit overlap); `./anthropic` (server only) builds Claude requests and adapts the SDK stream; `./tier-check` is the quick per-model request check. An MCP server for Claude Code is planned, not built |
 | `packages/ui` | Design tokens and components |
 | `apps/server` | Hono API: auth, tenancy, command handlers, assets, usage ledger, traces, jobs; `src/assistant` runs the assistant (durable run loop, live-run driver and run event stream, approvals, client-tool bridge, feedback hook, the Claude API key sealed per organisation and registered at runtime, tiers) |
 | `apps/studio` | The application (Vite + React); also served by the server as a single binary |
-| `apps/desktop` | Electron shell: starts the local server and opens a window on it |
+| `apps/desktop` | Planned, not built: an Electron shell that starts the local server and opens a window on it |
 | `workers/render` | Python + `bpy`: the fixed Blender runner |
 
 ## Geometry
@@ -132,6 +132,16 @@ evaluated and priced variants of the same piece, compared as cards, mixed by par
 the designer, the chosen one becoming the piece's design. Runs, steps, tool calls, token usage and cost are stored and linked to the
 design changes they produced; organisations control retention and whether their traces may be
 used for evaluation.
+
+The Claude API key comes from `ANTHROPIC_API_KEY` or is pasted in Settings, AI and sealed per
+organisation in the database; each run uses its conversation's tier (Power, Standard, Light),
+each tier a model from a fixed allow-list. The server notes only whether a key is saved
+(`<PAVE_DATA_DIR>/assistant-key.json`, yes or no) so the installer's `--check` can report it.
+`pnpm agent:smoke` (`apps/server/src/smoke-cli.ts`, journeys in `src/assistant/smoke.ts`) is the
+live check for a person with a key: the real server with its database in memory runs a brief to
+directions, a photo to a design, a chat edit and a Blender render with the model's critique, and
+checks that each run finished, each design evaluates, the prompt cache is read and no replayed
+thinking block is dropped. Its harness is tested without a key, with scripted turns.
 
 ## References beside CAD
 

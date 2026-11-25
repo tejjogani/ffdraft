@@ -8,7 +8,8 @@
     ".": "./src/index.ts",
     "./anthropic": "./src/anthropic.ts",
     "./studio": "./src/studio.ts",
-    "./photo": "./src/photo.ts"
+    "./photo": "./src/photo.ts",
+    "./tier-check": "./src/tier-check.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"

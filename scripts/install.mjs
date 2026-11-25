@@ -15,8 +15,9 @@ import { spawn, spawnSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parseEnv } from 'node:util'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const isWindows = process.platform === 'win32'
@@ -46,6 +47,8 @@ const note = (ok, label, detail = '') => {
   results.push({ ok, label })
   console.log(`${ok ? '  ok  ' : ' FAIL '} ${label}${detail ? ` — ${detail}` : ''}`)
 }
+/** Something worth knowing that is neither ready nor broken (an optional part not set up). */
+const info = (label) => console.log(`  --   ${label}`)
 const step = (title) => console.log(`\n${title}`)
 
 /** Runs a command in the repository, showing its output. `.cmd` shims on Windows need a shell. */
@@ -127,8 +130,52 @@ note(
   existsSync(envFile) ? 'apps/server/.env present' : 'no apps/server/.env (defaults apply)',
 )
 
-// ── 6. Blender renderer (optional) ───────────────────────────────────────────────────────────
-step('6. Photoreal renderer (optional)')
+/**
+ * Where the assistant's key comes from, without ever printing it: the terminal, then
+ * apps/server/.env (the server reads them in that order), then a key saved in Settings, AI, which
+ * the server notes (yes or no only) in assistant-key.json under its data folder.
+ */
+function reportKey() {
+  const fileEnv = existsSync(envFile) ? parseEnv(readFileSync(envFile, 'utf8')) : {}
+  const shellKey = process.env.ANTHROPIC_API_KEY?.trim()
+  const fileKey = fileEnv.ANTHROPIC_API_KEY?.trim()
+  const key = shellKey || fileKey
+  if (key) {
+    info(
+      shellKey
+        ? 'a key is set in this terminal (ANTHROPIC_API_KEY); it wins over apps/server/.env'
+        : 'a key is set in apps/server/.env (ANTHROPIC_API_KEY)',
+    )
+    if (!key.startsWith('sk-ant-'))
+      info(
+        'it does not look like a Claude API key (those start with sk-ant-); check it was copied whole',
+      )
+    info('check it against Claude with: pnpm agent:smoke (spends a few dollars)')
+    return
+  }
+  // `pnpm start` runs the server from apps/server, so a relative PAVE_DATA_DIR is resolved there.
+  const dataSetting = process.env.PAVE_DATA_DIR || fileEnv.PAVE_DATA_DIR
+  const dataDir = dataSetting ? resolve(root, 'apps', 'server', dataSetting) : join(root, '.data')
+  const noteFile = join(dataDir, 'assistant-key.json')
+  let saved = null
+  try {
+    saved = JSON.parse(readFileSync(noteFile, 'utf8')).keySavedInApp === true
+  } catch {
+    // No note yet: Pavé has not run with this data folder since keys could be saved in the app.
+  }
+  if (saved) info('a key is saved in the app (Settings, AI)')
+  else
+    info(
+      `no key${saved === null ? ' found' : ''}: the assistant is off. Paste one in Settings, AI, or put ANTHROPIC_API_KEY in apps/server/.env (README: "Use the assistant with your Claude API key")`,
+    )
+}
+
+// ── 6. The assistant's key (optional) ────────────────────────────────────────────────────────
+step('6. The assistant (your Claude API key, optional)')
+reportKey()
+
+// ── 7. Blender renderer (optional) ───────────────────────────────────────────────────────────
+step('7. Photoreal renderer (optional)')
 const venvPython = join(
   root,
   'workers',
@@ -151,7 +198,7 @@ if (flags.has('--render') && !checkOnly) {
   console.log('  not installed. Add it any time with: node scripts/install.mjs --render')
 }
 
-// ── 7. Does it start? ────────────────────────────────────────────────────────────────────────
+// ── 8. Does it start? ────────────────────────────────────────────────────────────────────────
 function freePort() {
   return new Promise((resolve, reject) => {
     const s = createServer()
@@ -224,7 +271,7 @@ async function smoke() {
   }
 }
 
-step('7. Start-up check')
+step('8. Start-up check')
 if (flags.has('--no-smoke')) console.log('  skipped (--no-smoke)')
 else if (!existsSync(studioIndex))
   note(false, 'starts and serves the studio', 'the studio is not built')
@@ -245,6 +292,7 @@ Pavé is ready.
 
   Your work is kept in the .data folder here. Back that folder up; delete it to start over.
   Settings:        apps/server/.env
+  The assistant:   paste your Claude API key in Settings, AI (see README.md)
   More:            README.md
 `)
 
