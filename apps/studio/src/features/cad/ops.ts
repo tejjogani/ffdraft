@@ -83,7 +83,8 @@ const HEAD_CLEARANCE_MM = 0.75
 const LINK_PER_OPENING = 0.34
 const WIRE_PER_LINK = 0.33
 
-const round = (v: number, step: number) => Math.round(v / step) * step
+/** The nearest multiple of `step`, as the decimal it reads as (1.4, not 1.4000000000000001). */
+const round = (v: number, step: number) => Number((Math.round(v / step) * step).toFixed(6))
 
 /**
  * Defaults a new feature takes from what it joins, where the schema's own defaults cannot

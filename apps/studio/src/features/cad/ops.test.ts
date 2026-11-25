@@ -30,6 +30,18 @@ describe('defaults from context', () => {
     expect(values.linkWidth).toBeLessThan(bail.opening / 2)
     expect(values.wire).toBeLessThan(values.linkWidth as number)
   })
+
+  it('writes chain sizes that are exact steps, whatever the bail opening', () => {
+    const d = template('name-pendant')
+    const bail = idOf(d, 'bail')
+    for (const opening of [3, 3.2, 4, 5, 5.5, 7, 8.4]) {
+      const sized = applyOps(d, [{ t: 'update', id: bail, patch: { opening } }]).design
+      const { linkWidth, wire } = contextValues(sized, 'chain', bail) as Record<string, number>
+      // 1.4, not 1.4000000000000001: the values are stored in the design.
+      expect(Number(linkWidth!.toFixed(1))).toBe(linkWidth)
+      expect(Number(wire!.toFixed(2))).toBe(wire)
+    }
+  })
 })
 
 describe('deleting a selection', () => {
