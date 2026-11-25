@@ -194,7 +194,17 @@ if (flags.has('--render') && !checkOnly) {
         '  Or install Blender 5.3 yourself and set PAVE_BLENDER in apps/server/.env.',
     )
 } else if (existsSync(venvPython)) {
-  note(true, 'Blender renderer installed')
+  // The environment is created before Blender is downloaded into it, so its Python alone proves
+  // nothing: an install that stopped half-way leaves it behind. Ask it for Blender.
+  const loads =
+    spawnSync(venvPython, ['-c', 'import bpy'], { cwd: root, stdio: 'ignore', timeout: 120_000 })
+      .status === 0
+  if (loads) note(true, 'Blender renderer installed')
+  else
+    console.log(
+      '  not ready: workers/render/.venv exists, but Blender does not load from it (an install\n' +
+        '  that did not finish?). Repair it with: node scripts/install.mjs --render',
+    )
 } else {
   console.log('  not installed. Add it any time with: node scripts/install.mjs --render')
 }

@@ -31,8 +31,11 @@ class OfflineError extends Error {}
 class FakeServer {
   log: StoredChange[] = []
   design: Design
-  /** `lost`: the change is committed but the response never arrives. */
-  failNext: ('offline' | 'conflict' | 'invalid' | 'lost')[] = []
+  /**
+   * `lost`: the change is committed but the response never arrives. `garbled`: it is committed
+   * and answered, but the answer is not the JSON the client expects (a proxy's error page).
+   */
+  failNext: ('offline' | 'conflict' | 'invalid' | 'lost' | 'garbled')[] = []
   failHistory = 0
   applyCalls = 0
   /** Changes committed by others, delivered to the session only when `flush` is called. */
@@ -80,6 +83,7 @@ class FakeServer {
             reverts: req.reverts,
           })
           if (fail === 'lost') throw new OfflineError('response lost')
+          if (fail === 'garbled') return null as never
           return { version: change.seq, change }
         } catch (e) {
           if (e instanceof OpError) throw new Error(`invalid: ${e.message}`)
@@ -258,6 +262,22 @@ describe('design session core', () => {
     expect(s.notices.at(-1)).toMatchObject({ type: 'nothing-to-redo' })
   })
 
+  it('offers no redo for an undo that was dropped before it was sent', () => {
+    const server = new FakeServer(solitaire())
+    const gem = server.design.order.find((id) => server.design.nodes[id]!.kind === 'gem')!
+    let s = core.createSession('p1', server.design, 0)
+    s = core.commit(s, [{ t: 'update', id: gem, patch: { width: 7 } }])
+    s = core.receive(s, server.commit(s.pending[0]!.ops, { id: s.pending[0]!.id }))
+    s = core.undo(s)
+    expect(core.canRedo(s)).toBe(true)
+    // Someone deletes the stone before the undo is sent: the undo no longer applies.
+    s = core.receive(s, server.commit([{ t: 'remove', id: gem, cascade: true }]))
+    expect(s.pending).toHaveLength(0)
+    expect(s.notices.at(-1)).toMatchObject({ type: 'dropped' })
+    // Redo would find nothing to re-apply; offering it is a button that does nothing.
+    expect(core.canRedo(s)).toBe(false)
+  })
+
   it('undo of an added node removes it, unless it is already gone', () => {
     const d = solitaire()
     const node = { id: 'prim_1', kind: 'primitive' as const }
@@ -351,6 +371,24 @@ describe('design session sync', () => {
     expect(server.log).toHaveLength(0)
     expect(session.takeNotices()).toMatchObject([{ type: 'dropped', reason: 'conflict' }])
     expect(width(session.get().view)).toBe(2.2)
+  })
+
+  it('keeps saving after an answer it cannot read, instead of stalling the outbox', async () => {
+    const server = new FakeServer(solitaire())
+    const session = sessionOn(server)
+    server.failNext = ['garbled']
+    session.commit(setWidth(session.get().view, 3))
+    session.commit(setWidth(session.get().view, 3.4))
+    const settled = await Promise.race([
+      session.idle().then(() => 'saved'),
+      new Promise((r) => setTimeout(() => r('stalled'), 300)),
+    ])
+    expect(settled).toBe('saved')
+    // The first change was committed once (the retry under the same id is replayed).
+    expect(server.log.map((c) => c.seq)).toEqual([1, 2])
+    expect(width(server.design)).toBe(3.4)
+    expect(session.get().confirmed).toEqual(server.design)
+    expect(session.get().save).toEqual({ status: 'saved' })
   })
 
   it('drops a change the server refuses', async () => {

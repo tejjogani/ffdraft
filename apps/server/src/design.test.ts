@@ -164,6 +164,49 @@ describe('design document', () => {
     expect(mine).toEqual(expect.arrayContaining(['pieces.create', 'pieces.update']))
     expect(rows.every((r) => r.actor.type === 'user')).toBe(true)
   })
+
+  // Postgres stores neither U+0000 nor half a surrogate pair. Such text used to reach the
+  // database: a lone surrogate passed the handler's own write and then failed the audit write,
+  // leaving a change that was made, answered with 500 and never audited.
+  it('refuses text the database cannot store before anything is written', async () => {
+    const post = (name: string, body: string) =>
+      api.request(`/api/rpc/${name}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+      })
+    const ctx = await server.runtime.context(server.runtime.local!)
+    const before = {
+      collections: (await api.call('collections.list', {})).length,
+      audit: await ctx.repo.audit.count(),
+    }
+    const piece = await api.call('pieces.create', {})
+    const refused = [
+      await post('collections.create', '{"name":"half \\ud83d pair"}'),
+      await post('collections.create', '{"name":"nul \\u0000 byte"}'),
+      await post('pieces.get', '{"id":"pc_\\u0000"}'),
+      await post(
+        'design.apply',
+        JSON.stringify({ pieceId: piece.id, label: 'Deep', ops: [gem('g\udc00', 0)] }),
+      ),
+    ]
+    expect(refused.map((r) => r.status)).toEqual([400, 400, 400, 400])
+    expect(await refused[0]!.json()).toMatchObject({
+      error: { code: 'bad_request', message: expect.stringContaining('name') },
+    })
+    expect(await refused[3]!.json()).toMatchObject({
+      error: { message: expect.stringContaining('ops[0].node.id') },
+    })
+    expect((await api.call('collections.list', {})).length).toBe(before.collections)
+    // Only pieces.create above was audited; nothing refused left a row or a change.
+    expect(await ctx.repo.audit.count()).toBe(before.audit + 1)
+    expect((await api.call('pieces.get', { id: piece.id })).version).toBe(0)
+    expect((await api.request('/api/assets/as_%00')).status).toBe(404)
+
+    // A whole pair (an emoji) is ordinary text.
+    const ring = await api.call('collections.create', { name: 'Bridal 💍', icon: '💍' })
+    expect(ring.name).toBe('Bridal 💍')
+  })
 })
 
 describe('undo', () => {

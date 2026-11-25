@@ -19,17 +19,18 @@ import {
 import { and, desc, eq, ilike, inArray, isNull, type SQL } from 'drizzle-orm'
 import type { z } from 'zod'
 import { assetBytes, getAssetRow, putAsset } from '../assets/assets'
-import { type Ctx, publish } from '../context'
+import { type Ctx, invoke, publish } from '../context'
 import * as t from '../db/schema'
 import { commitChange, refreshFacts, replaceDesignOps } from '../design'
 import { chooseDirection, proposeDirections, removeDirection, toDirection } from '../directions'
-import { badRequest, conflict, forbidden } from '../errors'
+import { AppError, badRequest, conflict, forbidden } from '../errors'
 import { estimateSpec, openAsCad, takeToCad } from '../ideas'
 import { createId } from '../ids'
 import { ensure, ensureAll, getCollection, getPiece } from '../lookups'
 import { openPieceFile } from '../pavefile/open'
 import { savePieceFile } from '../pavefile/save'
 import { recordRenderFeedback, takeAgent } from '../render-feedback'
+import { LIVE_STATUSES } from '../service-context'
 import type { HandlerGroup } from './types'
 
 type PieceRow = typeof t.piece.$inferSelect
@@ -163,6 +164,33 @@ async function insertPiece(
   refreshFacts(ctx, row.id, row.version, row.design)
   publish(ctx, { type: 'piece.updated', pieceId: row.id })
   return toPiece(ctx, row)
+}
+
+/**
+ * Cancels the piece's renders, image-to-3D jobs and on-model images that are still queued or
+ * running, each through its own cancel command: the engine is told to stop and the job is
+ * published as canceled. Deleting the piece deletes their rows, and without this Blender would
+ * go on rendering, a paid provider go on working, and whoever waits on a job wait for ever.
+ */
+async function cancelLiveJobs(ctx: Ctx, pieceId: string): Promise<void> {
+  const [renders, meshJobs, shots] = await Promise.all([
+    ctx.repo.renders.many({
+      where: and(eq(t.renderJob.pieceId, pieceId), inArray(t.renderJob.status, LIVE_STATUSES)),
+    }),
+    ctx.repo.meshJobs.many({
+      where: and(eq(t.meshJob.pieceId, pieceId), inArray(t.meshJob.status, LIVE_STATUSES)),
+    }),
+    ctx.repo.shots.many({
+      where: and(eq(t.modelShot.pieceId, pieceId), inArray(t.modelShot.status, LIVE_STATUSES)),
+    }),
+  ])
+  // A job that settles before its turn answers 409: there is nothing left to stop.
+  const settledMeanwhile = (err: unknown) => {
+    if (!(err instanceof AppError && err.code === 'conflict')) throw err
+  }
+  for (const { id } of renders) await invoke(ctx, 'renders.cancel', { id }).catch(settledMeanwhile)
+  for (const { id } of meshJobs) await invoke(ctx, 'mesh3d.cancel', { id }).catch(settledMeanwhile)
+  for (const { id } of shots) await invoke(ctx, 'shots.cancel', { id }).catch(settledMeanwhile)
 }
 
 /** A person made one of the assistant's takes the piece's cover: the strongest "kept". */
@@ -344,6 +372,7 @@ export const pieces: HandlerGroup<'pieces'> = {
 
   'pieces.delete': async (ctx, { id }) => {
     await getPiece(ctx, id)
+    await cancelLiveJobs(ctx, id)
     await ctx.repo.pieces.delete(eq(t.piece.id, id))
     publish(ctx, { type: 'piece.updated', pieceId: id })
     return { ok: true }

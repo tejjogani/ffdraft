@@ -42,6 +42,11 @@ interface WorkspaceState {
   pick(p: NodePick | null, additive?: boolean): void
   /** A right-click on a feature (or empty space): see `menuSelection`. Returns what the menu acts on. */
   selectForMenu(nodeId: string | null): string[]
+  /**
+   * Forgets features that are no longer in the design (an undo took back an addition, a teammate
+   * or the assistant deleted one): they leave the selection, the hover and a rename in progress.
+   */
+  retain(exists: (nodeId: string) => boolean): void
   setHover(p: NodePick | null): void
   toggleHidden(id: string): void
   setRenaming(id: string | null): void
@@ -107,6 +112,16 @@ export const useWorkspace = create<WorkspaceState>()(
         // A kept selection keeps its picked stone too.
         if (!same(ids, s.selection)) s.select(ids)
         return ids
+      },
+      retain: (exists) => {
+        const s = get()
+        const selection = s.selection.filter(exists)
+        const next: Partial<WorkspaceState> = {}
+        // A picked stone belongs to the one selected feature.
+        if (selection.length !== s.selection.length) Object.assign(next, { selection, stone: null })
+        if (s.hover && !exists(s.hover.nodeId)) next.hover = null
+        if (s.renaming && !exists(s.renaming)) next.renaming = null
+        if (Object.keys(next).length) set(next)
       },
       setHover: (hover) => {
         const h = get().hover

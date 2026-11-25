@@ -61,8 +61,13 @@ const DEFAULT_QUALITY: Record<StoneRequirement['kind'], { colors: string[]; clar
   parcel: { colors: ['F', 'G'], clarities: ['VS'] },
 }
 
+/**
+ * A lab-grown diamond is lab-grown whatever its quality note says: the note outlives a change of
+ * stone (natural to lab-grown keeps `origin: 'natural'`), and the package already labels by
+ * material first (`stoneOrigin` in @pave/production).
+ */
 const originOf = (material: GemMaterialId, quality?: StoneQuality): StoneRequirement['origin'] =>
-  quality?.origin && quality.origin !== 'any' ? quality.origin : material === 'diamond-lab' ? 'lab' : 'any'
+  material === 'diamond-lab' ? 'lab' : quality?.origin && quality.origin !== 'any' ? quality.origin : 'any'
 
 export function stoneRequirements(design: Design, report: Report): StoneRequirement[] {
   return report.lots.map((lot) => {

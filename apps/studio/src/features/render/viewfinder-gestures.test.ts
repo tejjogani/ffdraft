@@ -1,7 +1,7 @@
 /** The viewfinder's gestures: which way each one moves the camera, and by how much. */
 import { poseOf, projectPoint, type ViewPose } from '@pave/render'
 import { describe, expect, it } from 'vitest'
-import { drag, dragModeOf, key, pinch, touchOf, wheel } from './viewfinder'
+import { drag, dragModeOf, key, pinch, touchOf, wheel } from './viewfinder-gestures'
 
 const pose: ViewPose = poseOf(
   { target: [0, 0, 5], azimuth: 30, elevation: 20, distance: 80, roll: 0, focalLength: 90 },

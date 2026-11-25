@@ -65,3 +65,10 @@ export class NotConfiguredError extends AppError {
     this.name = 'NotConfiguredError'
   }
 }
+
+/** Whether a database error (as the driver or Drizzle wraps it) is a unique-index violation. */
+export function isUniqueViolation(err: unknown): boolean {
+  for (let e = err, depth = 0; e instanceof Error && depth < 4; e = e.cause, depth++)
+    if ((e as { code?: unknown }).code === '23505') return true
+  return false
+}

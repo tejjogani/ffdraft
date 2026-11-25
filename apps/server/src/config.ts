@@ -19,6 +19,11 @@ export interface Config {
   authSecret: string | null
   publicUrl: string
   corsOrigins: string[]
+  /**
+   * Extra host names a local install answers to, besides loopback, the public URL and `HOST`.
+   * Names only, no port. Ignored with accounts, where a session is what proves the caller.
+   */
+  allowedHosts: string[]
   seed: boolean
   studioDist: string
   maxUploadBytes: number
@@ -46,6 +51,7 @@ const EnvSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32).optional(),
   PAVE_PUBLIC_URL: z.url().optional(),
   PAVE_CORS_ORIGINS: z.string().optional(),
+  PAVE_ALLOWED_HOSTS: z.string().optional(),
   PAVE_SEED: flag,
   PAVE_STUDIO_DIST: z.string().optional(),
   PAVE_MAX_UPLOAD_MB: z.coerce.number().positive().default(200),
@@ -73,6 +79,10 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): Config {
     corsOrigins: (e.PAVE_CORS_ORIGINS ?? 'http://localhost:5173')
       .split(',')
       .map((s) => s.trim())
+      .filter(Boolean),
+    allowedHosts: (e.PAVE_ALLOWED_HOSTS ?? '')
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
       .filter(Boolean),
     seed: e.PAVE_SEED ?? true,
     studioDist: e.PAVE_STUDIO_DIST

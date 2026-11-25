@@ -3,6 +3,7 @@ import type { ServerEvent } from '@pave/schema'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { putAsset } from './assets/assets'
 import type { Ctx } from './context'
+import { serviceContext } from './service-context'
 import type { JobHandle, ModelShotPatch, Services } from './services'
 import {
   authPost,
@@ -366,6 +367,44 @@ describe('saved shots and takes', () => {
       error: expect.stringContaining('Interrupted'),
     })
   })
+
+  // Every other kind of work is failed when its service cannot take it up again; a run was not.
+  it('fails a run its assistant could not take up again, and keeps one that awaits approval', async () => {
+    const running = await traces.startRun(ctx, { model: 'm' })
+    const waiting = await traces.startRun(ctx, { model: 'm' })
+    await traces.finishRun(ctx, waiting.id, { status: 'awaiting-approval' })
+    const refuse = async () => {
+      throw new Error('not used')
+    }
+    const resume = vi.fn<NonNullable<Services['assistant']['resume']>>(async () => {
+      throw new Error('the model key is gone')
+    })
+    server.runtime.services.register('assistant', {
+      send: refuse,
+      decide: refuse,
+      cancel: refuse,
+      respond: refuse,
+      pause: refuse,
+      resumeJob: refuse,
+      accept: refuse,
+      resume,
+    })
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await server.runtime.recover()
+    } finally {
+      logged.mockRestore()
+    }
+    expect(resume.mock.calls.map(([run]) => run.id)).toEqual(
+      expect.arrayContaining([running.id, waiting.id]),
+    )
+    const runs = await api.call('traces.runs', {})
+    expect(runs.find((r) => r.id === running.id)).toMatchObject({
+      status: 'failed',
+      errorCode: 'interrupted',
+    })
+    expect(runs.find((r) => r.id === waiting.id)?.status).toBe('awaiting-approval')
+  })
 })
 
 describe('brand models and on-model images', () => {
@@ -576,6 +615,73 @@ describe('brand models and on-model images', () => {
       'failed',
       'failed',
     ])
+  })
+
+  // Deleting a piece deletes its job rows; the engines must be told, or Blender keeps rendering
+  // and a paid provider keeps working for a piece that is gone, and whoever waits on a job
+  // (`jobSettled`) waits for ever.
+  it('stops and settles a piece’s live jobs when the piece is deleted', async () => {
+    const cancelRender = vi.fn<Services['renderQueue']['cancel']>(async () => {})
+    const cancelMesh = vi.fn<Services['mesh3d']['cancel']>(async () => {})
+    const cancelShot = vi.fn<Services['onModel']['cancelShot']>(async () => {})
+    const { services } = server.runtime
+    services.register('renderQueue', {
+      capabilities: { blender: true },
+      submit: async () => {},
+      cancel: cancelRender,
+    })
+    services.register('mesh3d', {
+      estimate: async () => ({ provider: 'fake', model: 'm3d-1', usd: 0, seconds: 1 }),
+      submit: async () => {},
+      cancel: cancelMesh,
+    })
+    services.register('onModel', { ...services.get('onModel'), cancelShot })
+
+    const piece = await api.call('pieces.create', { templateId: 'solitaire' })
+    const draft = await api.call('models.create', { name: 'Ines', card, attestedSynthetic: true })
+    const model = await api.call('models.update', { id: draft.id, status: 'approved' })
+    const photo = await putAsset(ctx, {
+      bytes: new TextEncoder().encode('photo'),
+      name: 'photo.png',
+      kind: 'image',
+    })
+    const blender = await api.call('renders.create', { pieceId: piece.id, scene: {} })
+    const browser = await api.call('renders.create', {
+      pieceId: piece.id,
+      scene: {},
+      engine: 'browser',
+    })
+    const mesh = await api.call('mesh3d.create', { pieceId: piece.id, imageAssetIds: [photo.id] })
+    const [shot] = await api.call('shots.create', {
+      modelId: model.id,
+      pieceId: piece.id,
+      placement: 'hand',
+    })
+    const finished = await api.call('renders.create', { pieceId: piece.id, scene: {} })
+    await api.call('renders.cancel', { id: finished.id })
+    cancelRender.mockClear()
+
+    const settled: string[] = []
+    const off = server.runtime.events.subscribe(ctx.orgId, (e) => {
+      if (e.type === 'job.updated') settled.push(`${e.kind} ${e.id} ${e.status}`)
+    })
+    const waiting = serviceContext(ctx).jobSettled('render', blender.id)
+    await api.call('pieces.delete', { id: piece.id })
+    off()
+
+    expect(cancelRender.mock.calls.map(([id]) => id)).toEqual([blender.id])
+    expect(cancelMesh.mock.calls.map(([id]) => id)).toEqual([mesh.id])
+    expect(cancelShot.mock.calls.map(([id]) => id)).toEqual([shot!.id])
+    expect(settled.toSorted()).toEqual(
+      [
+        `render ${blender.id} canceled`,
+        `render ${browser.id} canceled`,
+        `mesh3d ${mesh.id} canceled`,
+        `shot ${shot!.id} canceled`,
+      ].toSorted(),
+    )
+    expect(await waiting).toBe('canceled')
+    expect((await api.fail('renders.get', { id: blender.id })).status).toBe(404)
   })
 })
 

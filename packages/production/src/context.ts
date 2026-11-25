@@ -27,7 +27,14 @@ export interface LotInfo {
   depth: number
   origin: StoneOrigin
   suppliedBy: 'brand' | 'manufacturer'
+  /** The first supplier record among the lot's nodes; `sourced` has them all. */
   sourcing?: StoneSourcing
+  /**
+   * Every supplier record attached to the lot's nodes, in node order. The kernel groups stones
+   * by size, not by node, so two stones bought apart can share a lot, each with its own price
+   * and certificate.
+   */
+  sourced: { nodeId: string; sourcing: StoneSourcing }[]
 }
 
 /**
@@ -112,10 +119,11 @@ export function createContext(raw: BuildInput): PackageContext {
   const requirements = stoneRequirements(design, evaluation.report)
   const lots = evaluation.report.lots.map((lot, i): LotInfo => {
     const requirement = requirements[i]!
-    const sourcing = lot.nodeIds
-      .map((id) => design.nodes[id])
-      .map((n) => (n && 'sourcing' in n ? n.sourcing : undefined))
-      .find((s): s is StoneSourcing => !!s)
+    const sourced = lot.nodeIds.flatMap((nodeId) => {
+      const n = design.nodes[nodeId]
+      return n && 'sourcing' in n && n.sourcing ? [{ nodeId, sourcing: n.sourcing }] : []
+    })
+    const sourcing = sourced[0]?.sourcing
     const declared = lot.nodeIds.map((id) => options.stonesSuppliedBy?.[id]).find(Boolean)
     return {
       key: lotKey(i),
@@ -125,6 +133,7 @@ export function createContext(raw: BuildInput): PackageContext {
       origin: stoneOrigin(lot.stone, requirement.origin),
       suppliedBy: declared ?? (sourcing ? 'brand' : 'manufacturer'),
       ...(sourcing ? { sourcing } : {}),
+      sourced,
     }
   })
   const sku = input.piece.sku?.trim() || input.piece.id

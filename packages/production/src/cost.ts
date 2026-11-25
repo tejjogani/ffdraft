@@ -140,11 +140,18 @@ export interface CostBasis {
   quantity: number
   metals: readonly Pick<PackageContext['metals'][number], 'metal' | 'netGrams'>[]
   lots: readonly (Pick<PackageContext['lots'][number], 'key' | 'sourcing' | 'suppliedBy'> & {
+    /** Every supplier record on the lot's nodes; absent for a quick estimate, which has none. */
+    sourced?: PackageContext['lots'][number]['sourced']
     lot: Pick<
       PackageContext['lots'][number]['lot'],
       'stone' | 'cut' | 'width' | 'count' | 'caratEach' | 'caratTotal' | 'setting' | 'nodeIds'
     >
   })[]
+  /**
+   * Per node, its stones in each lot (`stonesByNode`), so an attached price is charged once and
+   * in full. Only a production package has the evaluation to work it out from.
+   */
+  nodeStones?: NodeStones
   plated: boolean
 }
 
@@ -154,6 +161,7 @@ export function estimateCost(ctx: PackageContext): CostEstimate {
     quantity: ctx.quantity,
     metals: ctx.metals,
     lots: ctx.lots,
+    nodeStones: stonesByNode(ctx),
     plated: ctx.input.evaluation.parts.some((p) => p.plating !== 'none'),
   })
 }
@@ -234,7 +242,8 @@ function estimateFrom(ctx: CostBasis): CostEstimate {
     if (rates.metalPricePerGramUsd !== undefined || metal.fineness === 0) {
       const price = rate(
         `${metal.label} per g`,
-        rates.metalPricePerGramUsd,
+        // An alloy with no fineness (brass) is bought by the gram: its family rate is the price.
+        rates.metalPricePerGramUsd ?? rates.spotPerGram?.[metal.family],
         DEFAULTS.spotPerGram[metal.family],
         `${currency}/g`,
       )
@@ -273,26 +282,74 @@ function estimateFrom(ctx: CostBasis): CostEstimate {
   }
 
   // Stones, per lot.
-  for (const info of ctx.lots) {
-    const { lot, sourcing } = info
+  const nodeStones: NodeStones = ctx.nodeStones ?? new Map()
+  /** What each parcel has been charged to the lots before this one, so the last takes the rest. */
+  const charged = new Map<string, number>()
+  ctx.lots.forEach((info, index) => {
+    const { lot } = info
     const label = `${info.key} · ${lot.count} × ${GEM_MATERIALS[lot.stone].label}, ${GEM_CUTS[lot.cut].label.toLowerCase()} ${lot.width.toFixed(2)} mm`
-    if (sourcing?.priceUsd !== undefined) {
-      // A gem node's sourcing prices one stone; a pavé or row node's prices the parcel.
-      const perStone = lot.count === 1 || lot.nodeIds.length === lot.count
-      const price: CostInput = {
-        name: perStone ? 'price per stone' : 'parcel price',
-        value: sourcing.priceUsd,
-        unit: currency,
-        source: 'sourcing',
+    const priced = (info.sourced ?? []).flatMap(({ nodeId, sourcing }) =>
+      sourcing.priceUsd === undefined ? [] : [{ nodeId, sourcing, price: sourcing.priceUsd }],
+    )
+    if (priced.length) {
+      // A node that is one stone (a gem) is priced by the stone; a node that is many (a pavé
+      // field, a row) is a parcel bought at one price, shared by weight between the lots its
+      // stones fall in: one field in two graded sizes is two lots, and one purchase.
+      const isParcel = (nodeId: string) => (nodeStones.get(nodeId)?.count ?? 0) > 1
+      const singles = priced.filter((p) => !isParcel(p.nodeId))
+      const parcels = priced.filter((p) => isParcel(p.nodeId))
+      const inputs: CostInput[] = [computed('qty', lot.count, 'pcs')]
+      let amount = 0
+      let shared = false
+      for (const p of parcels) {
+        const { carats, total } = nodeStones.get(p.nodeId)!
+        const share = total > 0 ? carats[index]! / total : 1
+        const last = carats.findLastIndex((ct) => ct > 0) === index
+        const before = charged.get(p.nodeId) ?? 0
+        // The last lot takes what is left, so the lots add up to the parcel price to the cent.
+        const part = last ? r2(p.price - before) : r2(p.price * share)
+        charged.set(p.nodeId, before + part)
+        amount += part
+        inputs.push({ name: 'parcel price', value: p.price, unit: currency, source: 'sourcing' })
+        if (share < 1) {
+          shared = true
+          inputs.push(computed('share of the parcel in this lot', round3(share), ''))
+        }
       }
+      // Stones in the lot with no price of their own (a mirrored copy, the twin of a matched
+      // pair not bought yet) are estimated at the price of the stones they match, when the lot
+      // is single stones throughout.
+      const everyNodeOneStone = lot.nodeIds.length === lot.count
+      if (singles.length) {
+        const sum = singles.reduce((t, p) => t + p.price, 0)
+        const estimated = everyNodeOneStone ? lot.count - parcels.length : singles.length
+        amount += (sum / singles.length) * estimated
+        for (const p of singles)
+          inputs.push({
+            name: 'price per stone',
+            value: p.price,
+            unit: currency,
+            source: 'sourcing',
+          })
+      }
+      const formula =
+        parcels.length === 0
+          ? singles.length === 1
+            ? 'qty × price_per_stone'
+            : everyNodeOneStone && singles.length < lot.count
+              ? 'qty × mean price_per_stone'
+              : 'Σ price_per_stone'
+          : singles.length === 0
+            ? `${parcels.length > 1 ? 'Σ ' : ''}parcel_price${shared ? ' × share' : ''}`
+            : 'Σ attached prices'
       lines.push({
         id: `stones:${info.key}`,
         group: 'stones',
         label,
-        formula: perStone ? 'qty × price_per_stone' : 'parcel_price',
-        inputs: [computed('qty', lot.count, 'pcs'), price],
-        amount: r2(perStone ? lot.count * sourcing.priceUsd : sourcing.priceUsd),
-        note: `${sourcing.provider} ${sourcing.sku}`,
+        formula,
+        inputs,
+        amount: r2(amount),
+        note: priced.map((p) => `${p.sourcing.provider} ${p.sourcing.sku}`).join('; '),
       })
     } else if (info.suppliedBy === 'brand') {
       lines.push({
@@ -324,7 +381,7 @@ function estimateFrom(ctx: CostBasis): CostEstimate {
         amount: r2(lot.caratTotal * perCt.value),
       })
     }
-  }
+  })
 
   // Setting, per lot by setting type.
   for (const info of ctx.lots) {
@@ -459,3 +516,39 @@ function estimateFrom(ctx: CostBasis): CostEstimate {
 }
 
 const round3 = (v: number) => Math.round(v * 1000) / 1000
+
+/**
+ * Per node: how many stones it has in the evaluation, and their carats in each lot and in
+ * total. Lots are matched the way the kernel builds them (cut, stone, size to 0.01 mm, setting,
+ * role), among the lots that name the node.
+ */
+type NodeStones = Map<string, { count: number; carats: number[]; total: number }>
+
+function stonesByNode(ctx: PackageContext): NodeStones {
+  const size = (v: number) => Math.round(v * 100) / 100
+  const key = (o: {
+    cut: string
+    stone: string
+    width: number
+    length: number
+    setting: string
+    role: string
+  }) => [o.cut, o.stone, size(o.width), size(o.length), o.setting, o.role].join('|')
+  const lotsByKey = new Map<string, number[]>()
+  ctx.lots.forEach(({ lot }, i) => {
+    lotsByKey.set(key(lot), [...(lotsByKey.get(key(lot)) ?? []), i])
+  })
+  const out: NodeStones = new Map()
+  for (const s of ctx.input.evaluation.stones) {
+    const node = out.get(s.nodeId) ?? { count: 0, carats: ctx.lots.map(() => 0), total: 0 }
+    out.set(s.nodeId, node)
+    node.count++
+    const lot = lotsByKey
+      .get(key({ ...s, width: s.dims.width, length: s.dims.length }))
+      ?.find((i) => ctx.lots[i]!.lot.nodeIds.includes(s.nodeId))
+    if (lot === undefined) continue
+    node.carats[lot]! += s.carat
+    node.total += s.carat
+  }
+  return out
+}

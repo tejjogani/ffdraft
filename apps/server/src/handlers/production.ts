@@ -2,7 +2,7 @@ import type { Design, ProductionPackage } from '@pave/schema'
 import { desc, eq, max } from 'drizzle-orm'
 import type { Ctx } from '../context'
 import * as t from '../db/schema'
-import { conflict } from '../errors'
+import { conflict, isUniqueViolation } from '../errors'
 import { createId } from '../ids'
 import { packageHandle } from '../jobs'
 import { getPiece } from '../lookups'
@@ -39,6 +39,41 @@ async function assertProducible(ctx: Ctx, piece: { id: string; design: Design })
     throw conflict('Nothing to produce: the piece has no metal or stones.')
 }
 
+const REVISION_ATTEMPTS = 8
+
+/**
+ * Inserts the package as the piece's next revision. Two requests at once (a double click) read
+ * the same last revision; the unique index lets one in and the other takes the number after it.
+ */
+async function insertNextRevision(
+  ctx: Ctx,
+  id: string,
+  piece: { id: string; version: number },
+  request: (typeof t.productionPackage.$inferInsert)['request'],
+) {
+  for (let attempt = 1; ; attempt++) {
+    const [last] = await ctx.repo.packages.select(
+      { revision: max(t.productionPackage.revision) },
+      eq(t.productionPackage.pieceId, piece.id),
+    )
+    try {
+      return await ctx.repo.packages.insert({
+        id,
+        pieceId: piece.id,
+        revision: (last?.revision ?? 0) + 1,
+        sourceVersion: piece.version,
+        status: 'queued',
+        request,
+        createdBy: ctx.user.id,
+      })
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err
+      if (attempt >= REVISION_ATTEMPTS)
+        throw conflict('Other packages of this piece are being queued right now; try again')
+    }
+  }
+}
+
 export const production: HandlerGroup<'production'> = {
   'production.list': async (ctx, { pieceId }) => {
     await getPiece(ctx, pieceId)
@@ -54,29 +89,15 @@ export const production: HandlerGroup<'production'> = {
     const piece = await getPiece(ctx, pieceId)
     assertAttested(piece)
     await assertProducible(ctx, piece)
-    const [last] = await ctx.repo.packages.select(
-      { revision: max(t.productionPackage.revision) },
-      eq(t.productionPackage.pieceId, pieceId),
-    )
     const id = createId('pkg')
     // Its Rhino and STEP files count as one export, claimed before the build is queued; the build
     // settling settles the claim (updatePackage), released if no such file came out.
     if (request.cadFiles)
       await claim(ctx, { allowance: 'export', key: packageKey(id), subject: 'package', pieceId })
-    const row = await ctx.repo.packages
-      .insert({
-        id,
-        pieceId,
-        revision: (last?.revision ?? 0) + 1,
-        sourceVersion: piece.version,
-        status: 'queued',
-        request,
-        createdBy: ctx.user.id,
-      })
-      .catch(async (err: unknown) => {
-        await settle(ctx, packageKey(id), 'released')
-        throw err
-      })
+    const row = await insertNextRevision(ctx, id, piece, request).catch(async (err: unknown) => {
+      await settle(ctx, packageKey(id), 'released')
+      throw err
+    })
     const pkg = toPackage(row)
     const job = { kind: 'production' as const, id: pkg.id, pieceId }
     const handle = packageHandle(ctx, job)

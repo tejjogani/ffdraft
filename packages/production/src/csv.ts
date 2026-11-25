@@ -7,12 +7,17 @@
 export type Cell = string | number | boolean | null | undefined
 
 const FORMULA = /^[=+\-@\t\r]/
+/**
+ * The one text that may start with a minus sign: a plain negative number. Anything longer
+ * (`-2+3+cmd|…`, `-1+HYPERLINK(…)`) is a formula to a spreadsheet and gets the apostrophe.
+ */
+const NEGATIVE_NUMBER = /^-(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i
 
 export function csvCell(v: Cell): string {
   if (v === null || v === undefined) return ''
   if (typeof v === 'number') return Number.isFinite(v) ? String(v) : ''
   if (typeof v === 'boolean') return v ? 'yes' : 'no'
-  const text = FORMULA.test(v) && !/^-?\d/.test(v) ? `'${v}` : v
+  const text = FORMULA.test(v) && !NEGATIVE_NUMBER.test(v) ? `'${v}` : v
   return /[",\r\n]|^\s|\s$/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
 }
 

@@ -34,7 +34,7 @@ beforeAll(async () => {
 afterAll(() => server.dispose())
 
 /** Invites `email` into Ada's org with `role`, accepts as `who`, and makes it their active org. */
-async function join(who: Client, email: string, role: 'viewer' | 'designer' | 'admin') {
+async function join(who: Client, email: string, role: 'guest' | 'viewer' | 'designer' | 'admin') {
   const adaOrg = (await ada.call('session.get', {})).activeOrgId
   await ada.call('org.invite', { email, role })
   const owner = await ada.call('org.members', {})
@@ -183,6 +183,37 @@ describe('roles', () => {
       refused.map(() => [403, 'forbidden']),
     )
     expect((await upload(viewer, PNG_1PX, 'x.png')).status).toBe(403)
+  })
+
+  // A guest's role allows no command, so nothing else may hand them the org's work either.
+  it('gives a guest no commands, no assets and no live events', async () => {
+    const uploaded = await upload(ada, PNG_1PX, 'not-for-guests.png')
+    const asset = (await uploaded.json()) as { id: string }
+    const guest = await signUp(server, 'Gus Guest', 'gus@example.com')
+    await join(guest, 'gus@example.com', 'guest')
+
+    const refused = [await guest.fail('session.get', {}), await guest.fail('pieces.list', {})]
+    expect(refused.map((r) => r.status)).toEqual([403, 403])
+
+    const read = await guest.request(`/api/assets/${asset.id}`)
+    expect(read.status).toBe(403)
+    expect((await guest.request(`/api/assets/${asset.id}?w=64`)).status).toBe(403)
+
+    const abort = new AbortController()
+    const events = await guest.request('/api/events', { signal: abort.signal })
+    expect(events.status).toBe(403)
+    expect(await events.json()).toMatchObject({ error: { code: 'forbidden' } })
+    abort.abort()
+
+    // A viewer, whose role does allow reading, still gets both.
+    const viewer = await signUp(server, 'Vik Viewer', 'vik@example.com')
+    await join(viewer, 'vik@example.com', 'viewer')
+    expect((await viewer.request(`/api/assets/${asset.id}`)).status).toBe(200)
+    const stream = new AbortController()
+    const open = await viewer.request('/api/events', { signal: stream.signal })
+    expect(open.status).toBe(200)
+    stream.abort()
+    await open.body?.cancel().catch(() => {})
   })
 
   it('lets a designer edit but not administer', async () => {

@@ -28,7 +28,7 @@ export function serveKernel(
   port: Port<Response, Request>,
   locks: Locks | undefined = platformLocks(),
 ): void {
-  const ledger = new PartLedger()
+  let ledger = new PartLedger()
   const running = new Map<number, AbortController>()
   const assets = new Map<number, { resolve(bytes: Uint8Array): void; reject(error: Error): void }>()
   let nextAsset = 0
@@ -80,7 +80,15 @@ export function serveKernel(
           })
           .then((evaluation) => {
             const { wire, transfer } = ledger.encode(evaluation)
-            port.postMessage({ type: 'evaluated', id: data.id, evaluation: wire }, transfer)
+            try {
+              port.postMessage({ type: 'evaluated', id: data.id, evaluation: wire }, transfer)
+            } catch (error) {
+              // The ledger now counts these buffers as held by the client, which never got
+              // them: the next result would leave them out and the client could not rebuild
+              // it. Forget everything, so what comes next is sent whole.
+              ledger = new PartLedger()
+              throw error
+            }
           })
           // After the result too: a result that cannot be posted must still answer the request.
           .catch((error) => fail(data.id, error, controller.signal))

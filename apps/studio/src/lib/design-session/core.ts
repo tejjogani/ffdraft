@@ -130,6 +130,7 @@ function derive(s: SessionState): SessionState {
   const notices = [...s.notices]
   const own = { ...s.own }
   let undo = s.undo
+  let redo = s.redo
   for (const p of s.pending) {
     if (p.unconfirmed) {
       pending.push(p)
@@ -148,6 +149,8 @@ function derive(s: SessionState): SessionState {
       notices.push({ type: 'dropped', label: p.label, reason: err.message })
       delete own[p.id]
       undo = undo.filter((id) => id !== p.id)
+      // A dropped undo is in the redo list: with nothing left to re-apply, redo is not offered.
+      redo = redo.filter((id) => id !== p.id)
     }
   }
   let view = settled
@@ -160,7 +163,7 @@ function derive(s: SessionState): SessionState {
       gesture = null
     }
   }
-  return { ...s, pending, notices, own, undo, settled, view, gesture }
+  return { ...s, pending, notices, own, undo, redo, settled, view, gesture }
 }
 
 // ── Local edits ──────────────────────────────────────────────────────────────────────────────
