@@ -34,8 +34,17 @@ function loadRhino(): Promise<RhinoModule> {
   return loading
 }
 
-/** rhino3dm's typings omit Embind's `delete()`, which every wrapped object has. */
-const free = (o: object) => (o as { delete?: () => void }).delete?.()
+/**
+ * Frees a wrapped object's WASM memory with Embind's `delete()`, which rhino3dm's typings omit.
+ * The object and string tables define a `delete(key)` of their own (remove an entry) that
+ * hides it, so Embind's is looked up where it lives: on the last prototype of the chain.
+ */
+function free(o: object): void {
+  let embind: (() => void) | undefined
+  for (let proto = Object.getPrototypeOf(o); proto; proto = Object.getPrototypeOf(proto))
+    if (Object.hasOwn(proto, 'delete')) embind = (proto as { delete: () => void }).delete
+  embind?.call(o)
+}
 
 const rgba = (hex: string) => ({
   r: Number.parseInt(hex.slice(1, 3), 16),
@@ -94,8 +103,19 @@ function girdle(stone: MeshObject & { kind: 'stone' }): number[][] {
 async function write3dm(scene: Scene, objects: readonly MeshObject[]): Promise<Uint8Array> {
   const rhino = await loadRhino()
   const doc = new rhino.File3dm()
+  // The document's tables, fetched once and freed with it. Each call to `doc.objects()` (or
+  // `layers()`, `settings()`, `strings()`) makes a WASM-side object that keeps the whole model
+  // alive: left unfreed, every export's meshes stayed in the heap for good.
+  const held: object[] = []
+  const hold = <T extends object>(o: T): T => {
+    held.push(o)
+    return o
+  }
   try {
-    doc.settings().modelUnitSystem = rhino.UnitSystem.Millimeters
+    const settings = hold(doc.settings())
+    const layerTable = hold(doc.layers())
+    const objectTable = hold(doc.objects())
+    settings.modelUnitSystem = rhino.UnitSystem.Millimeters
     const layers = new Map<string, number>()
     /** A layer by path (`['Metal', '18k Yellow Gold']`), created with its parents on first use. */
     const layerFor = (path: readonly string[], color: string): number => {
@@ -105,9 +125,12 @@ async function write3dm(scene: Scene, objects: readonly MeshObject[]): Promise<U
         const layer = new rhino.Layer()
         layer.name = path[path.length - 1]!
         layer.color = rgba(color)
-        if (path.length > 1)
-          layer.parentLayerId = doc.layers().get(layerFor(path.slice(0, -1), color)).id
-        index = doc.layers().add(layer)
+        if (path.length > 1) {
+          const parent = layerTable.get(layerFor(path.slice(0, -1), color))
+          layer.parentLayerId = parent.id
+          free(parent)
+        }
+        index = layerTable.add(layer)
         free(layer)
         layers.set(key, index)
       }
@@ -123,24 +146,32 @@ async function write3dm(scene: Scene, objects: readonly MeshObject[]): Promise<U
     for (const o of objects) {
       const mesh = new rhino.Mesh()
       const p = o.positions
-      for (let i = 0; i < p.length; i += 3) mesh.vertices().add(p[i]!, p[i + 1]!, p[i + 2]!)
+      // One list object for the whole loop, freed after it: `mesh.vertices()` hands out a new
+      // WASM-side object on every call, and one per vertex and per face was never freed.
+      const vertices = mesh.vertices()
+      for (let i = 0; i < p.length; i += 3) vertices.add(p[i]!, p[i + 1]!, p[i + 2]!)
+      free(vertices)
+      const faces = mesh.faces()
       for (let t = 0; t < o.indices.length; t += 3)
-        mesh.faces().addTriFace(o.indices[t]!, o.indices[t + 1]!, o.indices[t + 2]!)
-      mesh.normals().computeNormals()
+        faces.addTriFace(o.indices[t]!, o.indices[t + 1]!, o.indices[t + 2]!)
+      free(faces)
+      const normals = mesh.normals()
+      normals.computeNormals()
+      free(normals)
       mesh.compact()
       const layer =
         o.kind === 'metal'
           ? layerFor(['Metal', METALS[o.material].label], objectColor(o))
           : layerFor(['Stones'], '#9fd3ff')
       const attrs = attributes(o.name, layer, userStrings(o))
-      doc.objects().addMesh(mesh, attrs)
+      objectTable.addMesh(mesh, attrs)
       free(attrs)
       free(mesh)
       if (o.kind === 'stone') {
         const curve = attributes(`${o.name} girdle`, layerFor(['Curves', 'Girdles'], '#5a8fb8'), {
           stoneId: o.stone.id,
         })
-        doc.objects().addPolyline(girdle(o), curve)
+        objectTable.addPolyline(girdle(o), curve)
         free(curve)
       }
     }
@@ -158,12 +189,13 @@ async function write3dm(scene: Scene, objects: readonly MeshObject[]): Promise<U
             lengthMm: data.length.toFixed(1),
           },
         )
-        doc.objects().addPolyline(points, attrs)
+        objectTable.addPolyline(points, attrs)
         free(attrs)
       }
-    doc.strings().set('generator', 'Pave')
+    hold(doc.strings()).set('generator', 'Pave')
     return doc.toByteArray()
   } finally {
+    for (const table of held) free(table)
     free(doc)
   }
 }
