@@ -1,15 +1,96 @@
 # Lane B and C research: status
 
-_Branch `claude/fable-research`. Items B1 and C1 from the board, run as one session from `docs/agents/LAPTOP-RESEARCH-PROMPT.md`. Updated 25 November 2026._
+_Branch `claude/fable-research`. Items B1 and C1 from the board, run as one session from `docs/agents/LAPTOP-RESEARCH-PROMPT.md`, plus two things the founder added on the day. Updated 25 November 2026. **State: all research, plans, reviews and fixes are done. Nothing is pushed yet** (see "How this session ran")._
 
 ## Summary for the founder
 
-Not written yet. It lands here when the plans have been reviewed.
+### What was done
 
-## Done
+- **Ten research files** (`docs/research/13` to `22`), each with every outside claim labelled verified at source, search result only, or estimate. Topic 22 was added on your word: a full audit of Rhino's CAD features against the product.
+- **Six plans** (`docs/plans/`), each reviewed by a fresh adversarial reviewer and then fixed. The reviews found 10 blockers and 80 majors between them; all were fixed in the plans, none was waved away. The reviews are kept in `docs/inbox/fable-research/reviews/`.
+- **A renderer spike**: one ring rendered in Mitsuba, Cycles, LuxCore, a small tracer of our own in C and its WebGPU port. Scripts, timings and a side-by-side image are in `docs/research/spikes/15-renderer/`.
+- **A bug sweep** of the integration branch, as you asked: four branches, 35 commits, 37 defects fixed (17 major), 115 tests added. Details and what still needs a decision: `BUGSWEEP.md` beside this file.
 
-- Working copy set up on `claude/fable-research`, based on `claude/busy-bardeen-o482lo` at `cb7dcd0`.
-- Core docs read: `docs/PLAN.md`, `docs/HANDOVER.md`, `docs/agents/OPERATING-MODEL.md`, `docs/agents/BOARD.md`, `docs/agents/README.md`.
+### What I found, in order of weight
+
+1. **Security, before you install a build that stores your key.** A local install answers to any host name, so a web page using DNS rebinding can read and change the workspace and spend your Claude key. Guests could read every file and every live edit (fixed on `claude/bugsweep-server`). Any website open in your browser could create pieces and upload files (fixed there too). The first `.pave` version has three security faults and gives away the paid STEP export (fixes are steps 1 to 4 of the file plan).
+2. **Three licence and terms points for counsel.** (a) The kernel already ships OpenCascade, which is LGPL 2.1; as the review reads it, that needs a notice in the app, the library's source or a written offer, and product terms that allow modifying that library. None exists today. (b) The Edge's licence agreement bars interfacing other software with it without written permission. (c) Shopify's and Xero's terms forbid using API data to train or improve AI. None of this is legal advice.
+3. **Our own renderer is plausible but unproven.** A 340-line tracer of our own shows the same facets and fire as Cycles and Mitsuba on the same ring. But at equal CPU time Cycles was closer to the reference, our gold came out rose-coloured, and **nothing was measured on a GPU or on your Air**. The plan therefore starts with a one-hour measurement only you can run.
+4. **"All of Rhino" is far.** The product has 16 of Rhino's 195 capabilities today, and 53 after the existing eight freeform steps, which are not built. The additions plan reaches 160 done, 30 in part and 5 left out, for an estimated 114 to 133 lane-weeks. Exact SubD-to-NURBS may never ship: the Rhino vendor does not offer it outside Rhino.
+5. **Rivals shipped AI in 2026.** Rhino 9 has an assistant, RhinoArtisan 7 has an MCP server and live diamond prices, KeyShot added an AI scene agent on 12 November, and a free browser product (Diatech Make) calls itself AI-native jewelry CAD. Nobody ships the whole line from design board to CAD to renders without a Rhino licence.
+6. **The paid exports are not protected today.** STEP and Rhino files are written in the browser after only a server "claim". No plan owns moving that to the server.
+7. **A likely bug in today's renders.** Cycles counts reflections inside a stone as glossy bounces; the worker caps those at 12 to 16, so a diamond's light paths are cut short. A one-line fix (step 1 of the renderer plan).
+8. **No image model keeps a jewelry design true.** On-model pictures must be built render-first: render the piece from CAD, let the model paint the person around it, paste the true render back, and check it in code.
+
+### What I recommend we build first
+
+**This week, before your first install (small, mostly done):**
+1. Merge the four bug-sweep branches (lane A reviews them; each has a ready pull request description in `BUGSWEEP.md`).
+2. Close the any-host gap: accounts plan step 1, on top of the server bug-sweep branch. It needs your answer to decision 1 below.
+3. File plan steps 1 to 4 (about 3.5 days): the first-version fixes.
+4. Renderer plan step 1: the Cycles bounce fix, with a before-and-after image.
+
+**From you, this week (about two hours):**
+5. Run the renderer measurement on your Air (research 15, section 6.6; three commands, allow an hour). It decides plan A or plan B.
+6. Send counsel the three questions in finding 2, plus EU labelling duties for AI images (brand-models plan, section 4).
+
+**Then, in parallel lanes:**
+7. Freeform additions steps 9 to 13 (about nine weeks; they need none of steps 1 to 8): the parity ledger, the licence step, the tech sheet as a screen, weight-reduction cutters, hand control of stone layouts. Freeform steps 1 to 8 run beside them as B2.
+8. Renderer: the GPU lab and the reference harness (useful under both plans), then the gate that decides the heavy build.
+9. Integrations step 1: the item file as CSV and JSON. Small, useful by itself, no terms risk.
+10. Brand models steps 1 and 2: the model card and a $10 go or no-go spike.
+
+Hosted accounts, live connectors and on-model composites come after these.
+
+### The decisions that are yours
+
+Each plan's section 4 ends with its full list and my recommendation for each. The ones that block work soonest:
+
+| # | Decision | Recommended |
+|---|---|---|
+| 1 | Which host names a local install answers to | Loopback plus an explicit allow-list setting; other machines on the LAN enter by a pasted link |
+| 2 | Our own renderer (plan A) or Cycles standalone as a sidecar (plan B, native only, 8 to 12 weeks against 25 to 33) | Plan A, but only if your Air's measurement is green |
+| 3 | A rented Mac and Windows GPU machine for the renderer build, about €150 to €170 a month | Yes: without them no builder can run the renderer on a real GPU |
+| 4 | Are renders on the user's own GPU free or counted? | Free for good; paid means Blender-grade takes and render-node jobs |
+| 5 | Exact geometry inside the `.pave` file. You asked for it; the plan recommends none, because it hands out the paid export | None in the file |
+| 6 | Learning from edits: a condition of the free plan, or opt-in per organisation (an earlier decision said opt-in) | Opt-in until hosting exists; a free-plan condition needs counsel first |
+| 7 | Publish the file's envelope spec, or keep it closed | Publish the envelope now, the design schema later |
+| 8 | Allow open surfaces as objects (reverses "bodies are closed" to "metal is closed") | Yes, as a separate surface class |
+| 9 | SubD: castable-mesh grade first, exact NURBS conversion only if a spike passes; accept it may never ship | Yes |
+| 10 | The Edge: ask the vendor for permission, get counsel's view, drop it, or ship only a generic file the jeweler maps | Ask the vendor and counsel; ship the generic file meanwhile |
+| 11 | Data read back from Shopify or Xero never reaches a model, a trace or a saved file | Yes |
+| 12 | Stop connectors after Shopify one-way until a customer pays for stock read-back | Yes |
+| 13 | On-model pictures: concept first, composite after a measured go | Concept first |
+| 14 | May unreleased designs go to Higgsfield (it may train on content unless enterprise)? | Public designs only |
+| 15 | Up to $100 of measurement spend on your image keys, about two hours of labelling | Yes |
+| 16 | Which legal entity registers the Google, Microsoft and Apple sign-in apps (also the `LICENSE` holder) | Yours to name; it blocks three steps and takes calendar time |
+| 17 | Local limits on free renders and exports are honest-customer limits; hard limits only when hosted | Accept |
+| 18 | Who casts for the first paying user (shrink scaling and the sprue stay off until answered) | Yours to say |
+| 19 | A trade-mark and file-extension search for `.pave`, done by a person. No agent could check it: the search rules forbid the word | Before any outside release |
+| 20 | Diatech Make (Dubai) is a browser rival with a name close to the diamond marketplace's. Please confirm it is unrelated | — |
+
+### What is not verified
+
+- No timing on an Apple M2 or any GPU. Every laptop render time in these files is an estimate.
+- Nothing was checked in a browser, and Blender was not installed. The bug-sweep branches passed their own targeted tests and per-package type checks; I re-ran a sample of each myself (61, 16, 80 and 191 tests, all passing). Nobody ran the full suite or the repo-wide type check, which ran out of memory on this machine. Integration must.
+- Parts of research 14 (V-Ray, Corona, Redshift, Octane details) and the gem-rendering literature in research 15 are working knowledge, marked as estimates: the web-search budget ran out.
+- Effort figures in every plan are estimates by the agents who wrote them. Nothing was built.
+- Several vendor pages would not open (Intuit, parts of Xero, SAP, Lightspeed, JewelCAD). Those rows are marked.
+
+## The files
+
+| Research | Plan from it | Review result, all fixed |
+|---|---|---|
+| `13-jewelry-cad-features.md`, `22-rhino-full-parity.md` | `freeform-cad-additions.md` (steps 9 to 40) | 1 blocker, 13 majors, 13 minors |
+| `14-jewelry-rendering.md`, `15-own-renderer.md`, `18-low-end-machines.md` | `jewelry-renderer.md` | 1 blocker, 13 majors, 11 minors |
+| `16-ai-models-on-model.md` | `brand-models-v2.md` | 1 blocker, 10 majors, 9 minors |
+| `17-pave-file-format.md` | `pave-file-format.md` (18 steps) | 3 blockers, 15 majors, 8 minors |
+| `19-erp-and-pos-apis.md`, `21-connectors-and-developer-api.md` | `integrations-hub.md` | 2 blockers, 15 majors, 11 minors |
+| `20-accounts-and-identity.md`, `21-connectors-and-developer-api.md` | `accounts-and-developer-api.md` (23 steps) | 2 blockers, 14 majors, 10 minors |
+
+Research files are in `docs/research/`, plans in `docs/plans/`, reviews in `docs/inbox/fable-research/reviews/`. No existing plan was edited; where a new plan changes an old one, it says so in its own text.
+
+## What each research file found
 
 - Research 17, the native file format: `docs/research/17-pave-file-format.md`. Keep the zip with a manifest as a strict profile; fix how v1 handles newer files; take the exact STEP copy out of the file; three save profiles (Working, Share, Clean copy).
 - Research 21, connectors and developer access: `docs/research/21-connectors-and-developer-api.md`. One first-party connector interface and one sync engine, nothing bought; the ERP report's connector order holds, with one correction on The Edge (below).
@@ -22,7 +103,7 @@ Not written yet. It lands here when the plans have been reviewed.
 - Research 14, rendering for jewelry: `docs/research/14-jewelry-rendering.md`. KeyShot's edge for jewelry is workflow, not physics (a gem material with an Abbe number, a one-click jewelry lighting preset, photon-mapped caustics; USD 1,299 a year). Its November 2026 release added an AI agent that sets up scenes from plain language. Only Cycles, Octane X, Redshift and KeyShot (beta) run on an Apple GPU. Standalone Cycles, LuxCore and pbrt-v4 are Apache-2.0; Mitsuba 3 is BSD-3-Clause with an extra clause. Measured optical data exists for pure gold, silver, copper, platinum, palladium and rhodium (CC0), but none was found for karat alloys.
 - Research 15, our own renderer (the priority): `docs/research/15-own-renderer.md`, with the spike scripts, timings and a side-by-side image in `docs/research/spikes/15-renderer/`. Recommendation: our own contained path tracer as WebGPU compute kernels with a TypeScript host in the studio, the same kernels headless later, Open Image Denoise for denoising, Blender kept as a separate reference process. Five stages, 19 to 27 weeks for one graphics engineer by estimate, each with an image-distance gate. The spike: a 340-line tracer of our own and its 247-line WebGPU port show the same facet pattern and coloured flashes as Cycles and spectral Mitsuba on the same ring. The caveat: at similar CPU time Cycles was closer to the converged reference, and our gold came out slightly orange. Plan B is licence-clean: Cycles standalone is Apache-2.0, but native only. **No Mac or GPU timing was measured**: everything ran on a shared 2-core Linux CPU; the M2 figures are estimates, and section 6.6 has the commands to measure them.
 
-## Requests and findings for lane A (from the research so far)
+## Requests and findings for lane A
 
 **Request, time-sensitive:** saving `.pave` version 1 is already in the assistant build, and A3 gives the founder a commit to install. Please take steps 1 to 4 of `docs/plans/pave-file-format.md` (about 3.5 days, confined to `apps/server/src/pavefile/`, `runtime.ts`, `files/pave.ts` and `ReferencePanel.tsx`) into A3 before that commit, and step 5 before any build goes to anyone else. If that cannot happen, name the shipped commit so the plan's fallback for version 1 files in the wild (its section 3.8) can be built.
 
@@ -69,46 +150,25 @@ Corrections to earlier research:
 - `docs/ARCHITECTURE.md` (lines 177 to 182) still describes "Continue with Diaex" as a sign-in through OpenID. The contract links an organisation by plain OAuth. The `guest` role can currently call no command at all.
 - The light-machine work exists only on `claude/assistant-build`. Its `e2e/light.ts` always uses a software renderer, so it cannot measure a real machine. Nothing budgets memory across the browser tab, the WASM kernels, the server pool and Blender; the browser kernel worker is never recycled.
 
-## Now
+## The bug sweep (product code, not on this branch)
 
-Ten research subagents, one per topic, one file each (topic 22 was added on the founder's word, 25 Nov: "ensure our Notion like beauty software has all the CAD features of rhino too"):
+You asked on 25 November for an agent team to look for bugs, obvious misses and missing tests, fix them in a separate working tree, and raise pull requests, and you chose the integration branch as the target. Because this is product code it is kept off this docs-only branch:
 
-| File | Topic | State |
+| Branch | Area | Result |
 |---|---|---|
-| `docs/research/13-jewelry-cad-features.md` | Full jewelry CAD feature set | Done; plan `docs/plans/freeform-cad-additions.md` reviewed (1 blocker, 13 majors, 13 minors) and fixed |
-| `docs/research/14-jewelry-rendering.md` | Rendering state of the art for jewelry | Done (some engine rows are working knowledge, marked [E]: the web-search budget ran out) |
-| `docs/research/15-own-renderer.md` | Our own renderer (priority) | Done, with spikes in five engines; plan `docs/plans/jewelry-renderer.md` reviewed (1 blocker, 13 majors, 11 minors) and fixed |
-| `docs/research/16-ai-models-on-model.md` | AI human models, on-model imagery | Done; plan `docs/plans/brand-models-v2.md` reviewed (1 blocker, 10 majors, 9 minors) and fixed |
-| `docs/research/17-pave-file-format.md` | The native file format | Done; plan `docs/plans/pave-file-format.md` reviewed (3 blockers, 15 majors, 8 minors) and fixed |
-| `docs/research/18-low-end-machines.md` | Low-end machines | Done |
-| `docs/research/19-erp-and-pos-apis.md` | ERP, POS and accounting APIs | Done; plan `docs/plans/integrations-hub.md` reviewed (2 blockers, 15 majors, 11 minors) and fixed |
-| `docs/research/20-accounts-and-identity.md` | Accounts and identity | Done; plan `docs/plans/accounts-and-developer-api.md` reviewed (2 blockers, 14 majors, 10 minors) and fixed |
-| `docs/research/21-connectors-and-developer-api.md` | Connectors and developer API | Done; both plans reviewed and fixed |
-| `docs/research/22-rhino-full-parity.md` | Every Rhino 8 CAD capability (and Rhino 9's additions) against the plan and the product | Done; plan `docs/plans/freeform-cad-additions.md` reviewed (1 blocker, 13 majors, 13 minors) and fixed |
+| `claude/bugsweep-server` | `apps/server` | 7 fixes, 1 open major (any host name is answered), 8 tests |
+| `claude/bugsweep-studio` | `apps/studio`, `packages/ui` | 14 defects fixed in 11 commits, 65 tests |
+| `claude/bugsweep-packages` | production, render, match, canon, sourcing, installers | 7 fixes, 11 tests |
+| `claude/bugsweep-kernel` | `packages/kernel`, `packages/schema` | 9 fixes (two export memory leaks), 31 tests |
 
-## Next
+Each branch is based on `claude/busy-bardeen-o482lo` at `cb7dcd0` and is meant to become one pull request into it. The nine open majors lane A carries into A4 were left alone. Findings, checks run, what needs a decision, and a pull request title and description for each branch are in `BUGSWEEP.md`. **Request to lane A:** these are extra `claude/bugsweep-*` branches outside the board; the founder asked for them directly. **The pull requests are not raised yet**: nothing could be pushed.
 
-1. Six plans: `jewelry-renderer.md`, `brand-models-v2.md`, `pave-file-format.md`, `freeform-cad-additions.md` (from topics 13 and 22: the steps to full Rhino parity), `integrations-hub.md`, `accounts-and-developer-api.md` (all in `docs/plans/`).
-2. One adversarial review per plan by a fresh subagent, then fixes.
-3. The summary at the top of this file.
+## How this session ran
 
-## A second job from the founder: a bug-sweep team (not on this branch)
-
-The founder also asked (25 Nov) for an agent team to look for bugs, obvious misses and missing tests, fix them in a separate working tree, and raise pull requests. He chose the integration branch as the target. This is product code, so it is kept off this docs-only branch:
-
-| Branch | Area | State |
-|---|---|---|
-| `claude/bugsweep-server` | `apps/server` | Done: 7 fixes, 1 open major (any Host name is answered), 8 tests; see `BUGSWEEP.md` |
-| `claude/bugsweep-studio` | `apps/studio`, `packages/ui` | Done: 14 defects fixed in 11 commits, 65 tests; see `BUGSWEEP.md` |
-| `claude/bugsweep-packages` | production, render, match, canon, sourcing, installers | Done: 7 fixes, 11 tests; see `BUGSWEEP.md` |
-| `claude/bugsweep-kernel` | `packages/kernel`, `packages/schema` | Done: 9 fixes (two export memory leaks), 31 tests; see `BUGSWEEP.md` |
-
-Each branch is based on `claude/busy-bardeen-o482lo` at `cb7dcd0` and becomes one pull request into it. The nine open majors lane A carries into A4 are left alone. **Request to lane A:** these are extra `claude/bugsweep-*` branches outside the board; the founder asked for them directly.
-
-## Notes on how this session runs
-
-- This session runs in a cloud workspace linked to the founder's laptop, not on macOS itself. Renderer spikes run on Linux CPU (2 cores). Apple M2 and Metal timings are therefore taken from sources or estimated, and labelled so. A real M2 run is still to do.
-- Pushing from this workspace is not authorised yet. Commits are local until the founder authorises the repository for the session, or pushes a bundle from the laptop.
+- It ran in a cloud workspace linked to the founder's laptop, not on macOS itself. That is why no Metal timing exists.
+- **Pushing was refused** for this session: the repository is readable here but not authorised for push. All work is in local commits on `claude/fable-research` and the four `claude/bugsweep-*` branches. It reaches GitHub when the founder authorises the repository for the session, or pushes the git bundles from his laptop.
+- The integration branch was merged in at `aa86f49` (status commits only).
+- The board gives C1 its own branch and status file; this session followed the newer laptop prompt and kept B1 and C1 together here.
 
 ## Things in the repo that look out of date
 
@@ -116,7 +176,9 @@ Each branch is based on `claude/busy-bardeen-o482lo` at `cb7dcd0` and becomes on
 - `docs/HANDOVER.md` section 1 still describes the Design stage as parametric directions in its first bullet, and as an image pin board further down (25 Nov). `docs/PLAN.md` matches the pin board. This session treats the pin board as current.
 - `docs/HANDOVER.md` section 2 lists research `01`–`11` and says `freeform-cad.md` and `12-rhino-parity.md` are "when written". Both exist.
 
-## Questions for the founder
+## All questions raised by the research, by topic
+
+These are the questions as each research file raised them. Where a plan's reviewed list of founder decisions (its section 4) differs, the plan is the later word. The numbers are labels only.
 
 From research 17 (the file):
 1. Open or closed spec? Recommended: publish the envelope now (container, manifest, thumbnail, mesh, provenance) and the design schema once freeform settles.

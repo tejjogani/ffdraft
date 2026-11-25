@@ -138,3 +138,113 @@ Not reached: the mesh pipeline (repair, shell, simplify), fonts, DFM checks, the
 ## 5. Totals
 
 Four branches, 35 commits, 37 defects fixed (17 major), 115 tests added. Open and needing a decision: the any-Host-name gap on a local install (major), keyboard shortcuts firing behind dialogs (major, unverified), currency mixing in cost estimates, and the smaller items listed under each branch. Nothing was checked in a browser, and Blender was not installed on the machine.
+
+## 6. Pull request text, ready to paste
+
+All four target `claude/busy-bardeen-o482lo`. The pull requests are not raised yet: this session could not push. To raise them after the branches are on GitHub:
+
+```bash
+gh pr create --base claude/busy-bardeen-o482lo --head claude/bugsweep-server --title "<title below>" --body-file <file with the description below>
+```
+
+Each description should end with these two lines:
+
+```
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+https://claude.ai/code/session_016tMMHaaq3eF5cAC9rFpKCe
+```
+
+### `claude/bugsweep-server`
+
+**Title:** Server bug sweep: guest access, cross-site writes, unstorable text, orphaned jobs and three smaller fixes
+
+**Description:**
+
+What: seven server defects fixed, each with a test that failed first, and one recorded as an expected failure.
+
+- Guests could download organisation assets and watch the live event stream; both now need the viewer role.
+- On a local install, any website could run empty-body commands and upload files; writes from an untrusted Origin are refused with 403.
+- A lone surrogate or NUL in command input caused a 500, and in the surrogate case left a change with no audit row; such input is refused with 400 before anything is written.
+- Deleting a piece left its renders, image-to-3D jobs and on-model images running in their engines; they are cancelled first.
+- Command bodies had no size limit; now 64 MB, 413 beyond.
+- Concurrent `production.create` calls returned 500; they now get consecutive revisions.
+- A run whose assistant failed to resume at boot stayed `running`; it is now failed as interrupted.
+
+Why: found in a sweep of `apps/server` for authorisation, input handling, job durability and database issues.
+
+How verified: 8 new tests. 13 server test files pass (68 and 40 passed in two runs, each with 1 expected failure). `pnpm -s typecheck` exits 0. The formatter is clean on changed files. `drizzle-kit generate` reports no schema drift.
+
+Not included: a local install still answers to any Host name (DNS rebinding), recorded as `it.fails` in `http.test.ts` and waiting for a decision on which hosts to allow; production package builds are not cancelled when their piece is deleted; no migration for the missing indexes; no change to `packages/schema`. The engine suites (kernel, Blender) were not run; engine code is unchanged.
+
+### `claude/bugsweep-studio`
+
+**Title:** Studio bug sweep: delete and selection, unreadable server answers, export fallback, viewport error state, number and name formatting
+
+**Description:**
+
+What:
+
+- Delete now works when a feature is selected together with something attached to it, and the selection no longer keeps features that left the design.
+- The RPC client rejects a successful answer that is not JSON, treats a connection lost mid-answer as unreachable, and never produces an empty error message. The design outbox retries instead of stalling.
+- Redo is not offered for an undo that was dropped before it was sent.
+- The server export fallback no longer saves an error response as the exported file.
+- The viewport says when the first evaluation failed and offers a retry, instead of "Preparing the workbench…" for good.
+- Stone widths from carats and default chain sizes are stored as exact steps. Weights under 0.1 ct show three decimals. Relative times never read "60 sec. ago". Export file names catch Windows device names before a dot and never cut a character in half. A file extension that is an Object method name is not an importable type.
+- The command registry never falls back to a registration that has already left.
+
+Why: a sweep of `apps/studio` and `packages/ui` for state and data correctness, error paths, resource cleanup, input basics and missing tests. Each fix is for a defect reproduced by a failing test.
+
+How verified: 65 new tests; all 24 studio and UI test files (192 tests) pass, one file at a time. `pnpm --filter @pave/studio typecheck` and `pnpm --filter @pave/ui typecheck` are clean; the formatter is clean on changed files. The repo-wide `pnpm -s typecheck` was killed for lack of memory on the shared machine and must be run at integration. Nothing was checked in a browser.
+
+Not included: bare-key shortcuts while a dialog or menu has focus (needs a browser check and a rule); a notice for a failed update over a model already on screen; rollback for the optimistic spec edit; the unhandled rejection in the next-step chips; the server export fallback waiting for unsaved edits; validation of values read from localStorage; the replace-stone dialog outliving its tab (owned by lane A).
+
+Review notes: `remove()` in `features/cad/ops.ts` now takes the design as its first argument. `carats()` prints three decimals below 0.1 ct wherever it is used. The viewport status overlay moved to `features/cad/viewport/StageStatus.tsx`.
+
+### `claude/bugsweep-packages`
+
+**Title:** Bug sweep, packages: stone pricing, CSV formulas, SVG, render progress, installer
+
+**Description:**
+
+What: seven fixes in the supporting packages and the install path, each with the test that proves it.
+
+- Production cost: a supplier price attached to stones is now charged once and in full. A pavé parcel whose stones fall in two size lots was charged to both (1,000 became 2,000); two stones bought apart that share a lot were costed at the first one's price, and `stones.csv` listed only the first SKU and certificate.
+- Production CSV: text starting with a minus sign and a digit is no longer exempt from formula neutralising. Only a plain negative number is exempt now.
+- Production drawings: control characters in a piece title no longer make every SVG unparseable.
+- Production cost: brass honours `spotPerGram.base` instead of the placeholder.
+- Render runner: a stdout line that looks like progress but is not valid JSON is skipped instead of throwing an uncaught exception in the server.
+- Sourcing: a lab-grown diamond is lab-grown whatever a leftover quality note says.
+- Installer: step 6 checks that Blender actually loads before saying it is installed; the README step numbers match the script.
+
+Why: the first three reach a customer or a workshop (money in the estimate, files opened in a spreadsheet, drawings that will not open).
+
+How verified: 11 new tests (the installer change was checked by hand). `packages/production` 57 tests; `packages/render` and `packages/sourcing` 36 passed and 2 skipped (no Blender on the machine); `pnpm -s typecheck` clean; the formatter clean on the changed production, render and installer files.
+
+Not included: currency conversion for USD-named prices when the estimate is in another currency; what a price on a patterned gem means; rejecting an empty design; the Node 22.3 versus 22 mismatch; `install.ps1` with brackets in the path; formatting of `packages/sourcing`, which fails the formatter before this branch.
+
+### `claude/bugsweep-kernel`
+
+**Title:** Kernel and schema bug sweep: export memory, GLB import bounds, Worker recovery, export names
+
+**Description:**
+
+What: nine fixes in the CAD kernel, each with a test that failed first, plus property and table tests for the schema.
+
+- 3DM export no longer keeps every exported model in the rhino3dm heap (17 MB to 269 MB over 60 exports before; flat now).
+- STEP export frees its document, session and stone facets instead of leaving them to the garbage collector (105 MB to 451 MB over 60 exports before; flat now).
+- The kernel Worker recovers when a result cannot be posted; before, the next `evaluate()` never settled.
+- GLB import stays inside the file's binary chunk, checks triangle indices, and reports a truncated file readably.
+- GLB export refuses an empty selection instead of writing an invalid glTF.
+- Object names in 3MF, OBJ and 3DM: control characters become a space, and repeated names are numbered past names already taken.
+- A stone of zero or negative size from a stored document fails its node instead of producing negative carats and NaN matrices.
+- The OBJ float32 test can now fail.
+- New tests: undo as a property over all 14 templates, and ring sizes against published charts.
+
+Why: these are the paths the engine pass looked at least: files other programs must open, memory over many exports, and the Worker's failure path.
+
+How verified: the export suite (30 tests), eight neighbouring kernel test files (160), the production bundle test (5) and the schema suite (150) pass on the final code. Typecheck of `@pave/kernel` and `@pave/schema` is clean; the formatter is clean on all changed files. The two memory fixes are proven by reading the WASM heaps directly.
+
+Note for reviewers: STEP files change once. Geometry, products and colour assignments are identical entity for entity; only the order of the colour blocks at the end of the file differs.
+
+Not included: UK quarter-size labels; negative US sizes from small diameters; range clamping at the kernel boundary; reference-kind checks in `validateDesign`; the cabochon carat factor. Each needs a decision. No change to any contract in `packages/schema`.
