@@ -13,6 +13,8 @@ Not written yet. It lands here when the plans have been reviewed.
 
 - Research 17, the native file format: `docs/research/17-pave-file-format.md`. Keep the zip with a manifest as a strict profile; fix how v1 handles newer files; take the exact STEP copy out of the file; three save profiles (Working, Share, Clean copy).
 - Research 21, connectors and developer access: `docs/research/21-connectors-and-developer-api.md`. One first-party connector interface and one sync engine, nothing bought; the ERP report's connector order holds, with one correction on The Edge (below).
+- Research 13, the jewelry CAD feature set: `docs/research/13-jewelry-cad-features.md`. The market moved in 2026: Rhino 9 is on sale with an AI assistant; RhinoArtisan 7 ships an MCP server and live diamond prices; Drakon 2 has a copilot; one browser product (Diatech Make, Dubai) calls itself AI-native jewelry CAD and is free with an account. The freeform plan's gaps are in the jewelry and workshop layers: scoop and azure cutters, hand control inside automatic stone layouts, the tech sheet as a screen, more cuts and heads, matching bands, shrink scaling and a sprue, re-sizing foreign files, an own-parts library. SubD should become a named later step.
+- Research 18, low-end machines: `docs/research/18-low-end-machines.md`. The Air is a fine CAD machine and a poor render machine: its GPU scores about 302 to 354 on Blender Open Data against 2,285 for an RTX 3060. A one-minute still is fine; a 5-second turntable is an estimated 1 to 7 hours locally, or roughly 15 to 55 cents on a rented GPU. 8 GB of memory is the real limit. Render.com has no GPU.
 
 ## Requests and findings for lane A (from the research so far)
 
@@ -30,6 +32,10 @@ Corrections to earlier research:
 - The server uses PGlite (embedded Postgres), not SQLite. Queues are ordinary tables in both local and hosted modes.
 - Etsy now lists webhook events for commercial and personal apps (`08-channels.md` flagged this as a contradiction).
 - `01-cad.md` says STEP AP214; `step.ts` writes AP242.
+- RhinoGold is discontinued; RhinoArtisan is a separate product from another company, not its new name. MatrixGold is at 4.0, Rhino at 9, 3Design at V13.
+- `freeform-cad.md` lists Make2D and shrinkage compensation as cut or later, while `production/drawing` and `shrinkagePct` already exist.
+- `03-rendering.md` says Open Image Denoise runs on the CPU; it has run on the GPU since Blender 4.1. A comment in the render worker's `devices.py` about Metal on Intel Macs is wrong since Blender 4.3.
+- The light-machine work exists only on `claude/assistant-build`. Its `e2e/light.ts` always uses a software renderer, so it cannot measure a real machine. Nothing budgets memory across the browser tab, the WASM kernels, the server pool and Blender; the browser kernel worker is never recycled.
 
 ## Now
 
@@ -37,12 +43,12 @@ Ten research subagents, one per topic, one file each (topic 22 was added on the 
 
 | File | Topic | State |
 |---|---|---|
-| `docs/research/13-jewelry-cad-features.md` | Full jewelry CAD feature set | Running |
+| `docs/research/13-jewelry-cad-features.md` | Full jewelry CAD feature set | Done |
 | `docs/research/14-jewelry-rendering.md` | Rendering state of the art for jewelry | Running |
 | `docs/research/15-own-renderer.md` | Our own renderer (priority) | Running |
 | `docs/research/16-ai-models-on-model.md` | AI human models, on-model imagery | Running |
 | `docs/research/17-pave-file-format.md` | The native file format | Done; plan being written |
-| `docs/research/18-low-end-machines.md` | Low-end machines | Running |
+| `docs/research/18-low-end-machines.md` | Low-end machines | Done |
 | `docs/research/19-erp-and-pos-apis.md` | ERP, POS and accounting APIs | Running |
 | `docs/research/20-accounts-and-identity.md` | Accounts and identity | Running |
 | `docs/research/21-connectors-and-developer-api.md` | Connectors and developer API | Done |
@@ -93,3 +99,17 @@ From research 21 (connectors):
 8. Add a stock-unit record for tagged one-of-a-kind pieces? It changes the publishing plan's "variants are never stored" rule.
 9. Is a small hosted webhook relay acceptable before full hosting, and who runs it?
 10. Fold `channels` and `sourcing` into one connector package now, or keep them apart?
+
+From research 13 (CAD features):
+11. Who is the first paying user: a custom jeweler who sends files to a bureau, or a manufacturer casting in-house? It decides whether shrink scaling and a sprue belong in the first release.
+12. Is an engagement ring with its matching band one design with two rings, or two linked pieces?
+13. Does the product answer RhinoArtisan's live diamond pricing and MCP server at launch?
+14. Is SubD worth a later multi-week step, or is "import a sculpt and make it castable" enough for year one?
+15. A browser rival is called Diatech Make (Dubai). The name is close to the diamond marketplace's. Please confirm it is unrelated.
+
+From research 18 (machines):
+16. Which Air exactly (13 or 15 inch, 8 or 16 GB, 8 or 10 GPU cores, macOS version)? Is 8 GB a supported target?
+17. Where do animations render for a free user on an Air: hours locally, or a rented GPU that the product pays for or passes on?
+18. May designs leave the laptop for rented-GPU jobs, with consent per job or a setting?
+19. Is an 8 GB Intel Windows laptop a launch target? It has no usable local Cycles, so a server path or our own renderer must exist first.
+20. Is a one-minute 2K still at 96 samples acceptable as the default render? Is iPad in scope?
