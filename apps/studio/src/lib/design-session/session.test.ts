@@ -31,8 +31,11 @@ class OfflineError extends Error {}
 class FakeServer {
   log: StoredChange[] = []
   design: Design
-  /** `lost`: the change is committed but the response never arrives. */
-  failNext: ('offline' | 'conflict' | 'invalid' | 'lost')[] = []
+  /**
+   * `lost`: the change is committed but the response never arrives. `garbled`: it is committed
+   * and answered, but the answer is not the JSON the client expects (a proxy's error page).
+   */
+  failNext: ('offline' | 'conflict' | 'invalid' | 'lost' | 'garbled')[] = []
   failHistory = 0
   applyCalls = 0
   /** Changes committed by others, delivered to the session only when `flush` is called. */
@@ -80,6 +83,7 @@ class FakeServer {
             reverts: req.reverts,
           })
           if (fail === 'lost') throw new OfflineError('response lost')
+          if (fail === 'garbled') return null as never
           return { version: change.seq, change }
         } catch (e) {
           if (e instanceof OpError) throw new Error(`invalid: ${e.message}`)
@@ -367,6 +371,24 @@ describe('design session sync', () => {
     expect(server.log).toHaveLength(0)
     expect(session.takeNotices()).toMatchObject([{ type: 'dropped', reason: 'conflict' }])
     expect(width(session.get().view)).toBe(2.2)
+  })
+
+  it('keeps saving after an answer it cannot read, instead of stalling the outbox', async () => {
+    const server = new FakeServer(solitaire())
+    const session = sessionOn(server)
+    server.failNext = ['garbled']
+    session.commit(setWidth(session.get().view, 3))
+    session.commit(setWidth(session.get().view, 3.4))
+    const settled = await Promise.race([
+      session.idle().then(() => 'saved'),
+      new Promise((r) => setTimeout(() => r('stalled'), 300)),
+    ])
+    expect(settled).toBe('saved')
+    // The first change was committed once (the retry under the same id is replayed).
+    expect(server.log.map((c) => c.seq)).toEqual([1, 2])
+    expect(width(server.design)).toBe(3.4)
+    expect(session.get().confirmed).toEqual(server.design)
+    expect(session.get().save).toEqual({ status: 'saved' })
   })
 
   it('drops a change the server refuses', async () => {

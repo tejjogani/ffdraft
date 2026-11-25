@@ -29,27 +29,45 @@ export async function postJson<T>(url: string, body: unknown): Promise<T> {
   } catch {
     throw new RpcError('network', 'Can’t reach the Pavé server.', 0)
   }
-  const text = await res.text()
+  let text: string
+  try {
+    text = await res.text()
+  } catch {
+    // The connection dropped while the answer was being read. The request may have been
+    // applied, so this is "unreachable" (callers retry), not a refusal.
+    throw new RpcError('network', 'Can’t reach the Pavé server.', 0)
+  }
   const json = text ? safeParse(text) : null
   if (!res.ok) {
-    const err =
-      (json as { error?: { code?: string; message?: string }; message?: string } | null) ?? {}
+    const err = (isRecord(json) ? json : {}) as {
+      error?: { code?: string; message?: string }
+      message?: string
+    }
     throw new RpcError(
       err.error?.code ?? (res.status === 401 ? 'unauthorized' : 'http_error'),
-      err.error?.message ?? err.message ?? res.statusText ?? 'Request failed',
+      // HTTP/2 has no status text: never an empty message.
+      err.error?.message || err.message || res.statusText || `Request failed (${res.status})`,
       res.status,
     )
   }
+  // A success that is not JSON did not come from the Pavé server (a proxy's page, a dev server's
+  // index.html): treated as not having reached it, so nothing reads a missing answer as data.
+  if (json === NOT_JSON)
+    throw new RpcError('invalid_response', 'The Pavé server sent an answer that can’t be read.', 0)
   return json as T
 }
+
+const NOT_JSON = Symbol('not JSON')
 
 const safeParse = (text: string): unknown => {
   try {
     return JSON.parse(text)
   } catch {
-    return null
+    return NOT_JSON
   }
 }
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null
 
 export const rpc = {
   call: <N extends CommandName>(name: N, input: CommandInput<N>): Promise<CommandOutput<N>> =>
