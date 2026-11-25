@@ -55,14 +55,14 @@ Each plan's section 4 ends with its full list and my recommendation for each. Th
 | 5 | Exact geometry inside the `.pave` file. You asked for it; the plan recommends none, because it hands out the paid export | None in the file **Decided: none in the file.** |
 | 6 | Learning from edits: a condition of the free plan, or opt-in per organisation (an earlier decision said opt-in) | Opt-in until hosting exists; a free-plan condition needs counsel first |
 | 7 | Publish the file's envelope spec, or keep it closed | Publish the envelope now, the design schema later |
-| 8 | Allow open surfaces as objects (reverses "bodies are closed" to "metal is closed") | Yes, as a separate surface class |
+| 8 | Allow open surfaces as objects (reverses "bodies are closed" to "metal is closed") | Yes, as a separate surface class **Taken as yes: it is the CAD standard.** |
 | 9 | SubD: castable-mesh grade first, exact NURBS conversion only if a spike passes; accept it may never ship | Yes **Decided: yes. Keep trying for exact conversion.** |
 | 10 | The Edge: ask the vendor for permission, get counsel's view, drop it, or ship only a generic file the jeweler maps | Ask the vendor and counsel; ship the generic file meanwhile |
 | 11 | Data read back from Shopify or Xero never reaches a model, a trace or a saved file | Yes |
 | 12 | Stop connectors after Shopify one-way until a customer pays for stock read-back | Yes |
 | 13 | On-model pictures: concept first, composite after a measured go | Concept first **Decided: concept first, composite on a go.** |
 | 14 | May unreleased designs go to Higgsfield (it may train on content unless enterprise)? | Public designs only **Decided: yes for the founder's own organisation, moving to its enterprise plan later.** |
-| 15 | Up to $100 of measurement spend on your image keys, about two hours of labelling | Yes |
+| 15 | Up to $100 of measurement spend on your image keys, about two hours of labelling | Yes **Decided: yes, as a cap.** |
 | 16 | Which legal entity registers the Google, Microsoft and Apple sign-in apps (also the `LICENSE` holder) | Yours to name; it blocks three steps and takes calendar time **Decided: the same organisation that runs the diamond marketplace. It has a D-U-N-S number and an Apple developer account already.** |
 | 17 | Local limits on free renders and exports are honest-customer limits; hard limits only when hosted | Accept |
 | 18 | Who casts for the first paying user (shrink scaling and the sprue stay off until answered) | Yours to say **Decided: the caster handles shrinkage. Shrink scaling and the sprue stay off.** |
@@ -86,14 +86,15 @@ Recorded from his reply in chat. Where his reply was short, the reading taken is
 - SubD: castable-mesh grade first; exact NURBS conversion stays conditional on its spike. On the chance that exact conversion never ships: "hopefully we can fix it". So the spike stays in, and public wording stays honest until it passes.
 - Counsel on the OpenCascade licence duties: yes, instruct. The change to `LICENSE` and the product terms is approved in principle; counsel sets the wording. **For lane A:** step 10 of the additions plan (the notice, the licences screen, the source bundle or written offer, the replaceable engine file) can be scheduled.
 - Casting: the caster handles shrinkage. The product generates the exports, learns from how casters use them, and adds shrink handling later. Shrink scaling and the sprue stay off, and the RFQ keeps its line telling the caster to apply their own shrinkage.
-- Still open: surfaces as objects (he asked what it means; explained in chat), and the stopping point after step 21 (explained in chat).
+- Stop after step 21 and decide again: yes.
+- Surfaces as objects: he asked what the standard is in CAD. The standard is that surfaces and solids are both objects (Rhino treats a solid as a closed set of surfaces; SolidWorks, Fusion, CATIA, NX and Creo keep surface bodies beside solid bodies and join or thicken them into solids). The plan's proposal matches that. **Taken as yes on that basis unless he says otherwise.**
 
 **Brand models and on-model pictures** (`docs/plans/brand-models-v2.md`)
 - Concept pictures first; the composite track only on a go from the first spike.
 - Higgsfield: no "public designs only" limit for his own organisation; move to Higgsfield's enterprise plan later. Reading taken: this is his choice for his own designs. For other organisations the default stays "public designs only", and an admin can loosen it after reading the provider's clause, as the plan already allows. Stills never go to Higgsfield in any case: they go straight to the Gemini and OpenAI APIs, and Higgsfield is only the second choice for video.
 - Body views are kept, with the Portrait and Figure shots.
 - On-model scene renders count against the 5 free renders a month.
-- Still open: the measurement spend (he asked what it is; explained in chat).
+- Measurement spend: yes, as a cap. Up to $100 of image-API charges on his own keys, for testing only.
 
 **The file** (`docs/plans/pave-file-format.md`)
 - No exact geometry in the file.
