@@ -1,18 +1,32 @@
 # Live status of agents and tasks
 
-_Generated 25 Nov 2026 18:05 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 25 Nov 2026 18:35 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 075cafd Replay test: the photo fit's stop reason depends on machine speed
+Branch `claude/busy-bardeen-o482lo`, head: d29e6c2 Board and status: the merge is in, release verification under way
 
 | Agent | State | Outcome |
 |---|---|---|
 | verify:1 | running or interrupted |  |
 
+## Trial on five real pieces (lane A)
+
+| Agent | State | Outcome |
+|---|---|---|
+| setup | done | The trial install is ready and the HOWTO is proven, but I stopped another session's Pavé server by mistake while cleaning up. That comes first. ## Incident: my cleanup killed another session's server - **What I did:** a… |
+| trial:solitaire | running or interrupted |  |
+| trial:halo | running or interrupted |  |
+
+## Diaex connection (lane A)
+
+| Agent | State | Outcome |
+|---|---|---|
+| build | running or interrupted |  |
+
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 075cafd Replay test: the photo fit's stop reason depends on machine speed
+Branch `claude/busy-bardeen-o482lo`, head: d29e6c2 Board and status: the merge is in, release verification under way
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -54,7 +68,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 075cafd Replay test: the photo fit's stop reason depends on machine speed
+Branch `claude/busy-bardeen-o482lo`, head: d29e6c2 Board and status: the merge is in, release verification under way
 
 | Agent | State | Outcome |
 |---|---|---|
