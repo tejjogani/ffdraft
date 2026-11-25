@@ -79,7 +79,7 @@ The founder also asked (25 Nov) for an agent team to look for bugs, obvious miss
 |---|---|---|
 | `claude/bugsweep-server` | `apps/server` | Running |
 | `claude/bugsweep-studio` | `apps/studio`, `packages/ui` | Running |
-| `claude/bugsweep-packages` | production, render, match, canon, sourcing, installers | Running |
+| `claude/bugsweep-packages` | production, render, match, canon, sourcing, installers | Done: 7 fixes, 11 tests; see `BUGSWEEP.md` |
 | `claude/bugsweep-kernel` | `packages/kernel`, `packages/schema` | Queued (starts when the renderer spike frees the machine) |
 
 Each branch is based on `claude/busy-bardeen-o482lo` at `cb7dcd0` and becomes one pull request into it. The nine open majors lane A carries into A4 are left alone. **Request to lane A:** these are extra `claude/bugsweep-*` branches outside the board; the founder asked for them directly.
