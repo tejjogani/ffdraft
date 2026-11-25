@@ -7,7 +7,7 @@
 import type { ExportFormat } from '@pave/kernel'
 import { type Design, originNeedsAttestation, type Piece } from '@pave/schema'
 import { toast } from '@pave/ui'
-import { assetUrl } from '../../lib/assets'
+import { downloadAsset } from '../../lib/assets'
 import { plural } from '../../lib/format'
 import { exportDesign } from '../../lib/kernel/client'
 import { rpc } from '../../lib/rpc'
@@ -67,7 +67,7 @@ export async function runExport(
         .catch(() => {
           throw local
         })
-      blob = await (await fetch(assetUrl(asset.id))).blob()
+      blob = await downloadAsset(asset.id)
       notes = serverNotes
     }
     toast.dismiss(pending)

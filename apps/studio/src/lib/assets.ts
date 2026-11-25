@@ -12,3 +12,15 @@ export async function uploadAsset(file: File): Promise<Asset> {
 
 export const assetUrl = (id: string, width?: number): string =>
   `/api/assets/${id}${width ? `?w=${width}` : ''}`
+
+/** A stored asset's bytes. Fails when the server has no such file, so an error page is never taken for one. */
+export async function downloadAsset(id: string): Promise<Blob> {
+  const res = await fetch(assetUrl(id), { credentials: 'same-origin' })
+  if (!res.ok)
+    throw new RpcError(
+      'download_failed',
+      `The file could not be downloaded (${res.status})`,
+      res.status,
+    )
+  return res.blob()
+}
