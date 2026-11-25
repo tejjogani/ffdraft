@@ -463,7 +463,9 @@ function bailNode(
         : round
           ? w + 1.7
           : 1.15 * w + 2.0
-  const forHeight = bodyHeight ? 0.15 * bodyHeight - 2 * wire : 0
+  // Capped at the largest opening a bail takes (20 mm): a 200 mm trophy asked for 25 mm and
+  // came out with a note that 20 was used.
+  const forHeight = bodyHeight ? Math.min(20, 0.15 * bodyHeight - 2 * wire) : 0
   const opening = hidden ? hiddenOpening : Math.max(need + 0.3, forHeight)
   return {
     id: 'bail',

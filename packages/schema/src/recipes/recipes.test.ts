@@ -337,6 +337,10 @@ describe('recipes', () => {
     expect([16, 20].map(trophy)).not.toContain('hidden')
     expect([25, 45, 100, 120].map(trophy)).toEqual(['hidden', 'hidden', 'hidden', 'hidden'])
     expect([150, 200].map(trophy)).toEqual(['tube', 'tube'])
+    // The bail on a very large piece is the largest the node takes, not one the fit clamps.
+    const huge = planDesign(pendant({ archetype: 'icedPendant', body: { heightMm: 200 }, stones: pave }))
+    expect((huge.design.nodes.bail as NodeOf<'bail'>).opening).toBe(20)
+    expect(huge.notes.join(' ')).not.toMatch(/Bail/)
   })
 
   it('sets an iced name in block letters, which take stones', () => {
