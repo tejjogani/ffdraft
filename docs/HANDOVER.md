@@ -67,6 +67,8 @@ If a workflow died part-way, rerun its script from `docs/agents/workflows` with 
 
 ## 5. Next, in order
 
+0. **Deep research and plan, queued behind the assistant build** (the founder chose build first; run it when the build ends, or on Fable 5.2 after Sat 28 Nov 07:00 UTC, when the weekly limit resets): the full jewelry CAD feature set beyond `docs/research/12-rhino-parity.md` (MatrixGold, RhinoGold, 3Design, JewelCAD); KeyShot-class jewelry rendering (spectral dispersion, caustics, measured metal IOR, HDRI studios) and a jewelry-specialised renderer of our own, with renderer spikes on real gems (no GPL code in-process); brand AI models (face, hand, full body) for on-model shots, with CAD-fidelity checks, NSFW and consent safety, building on `docs/plans/render-and-models.md`; a native Pavé file format (free inside Pavé, where traces are captured; Rhino and STEP exports stay paid, STL stays free); rendering on low-end machines such as a 2023 MacBook Air.
+
 1. Finish and merge the assistant; finish the engine pass; give the founder one verified commit to install, with the design-to-CAD-to-render tour and a one-time `pnpm agent:smoke` against his key.
 2. Build Rhino-class modeling from the plan, step by step.
 3. Process the founder's father's files when they arrive (3DM, STL/STEP, photos, rate card): analyse them in a scratch folder, run import and photo-matching probes, and **never commit his files**; commit only measurements and findings.
