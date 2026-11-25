@@ -4,12 +4,13 @@
  * the edits people made since the assistant's last turn — rendered once and stored, never edited.
  */
 import { canonText, renderContext, type TurnContext } from '@pave/agent'
-import type { CommandParsedInput } from '@pave/schema'
+import { allowanceLine, type CommandParsedInput } from '@pave/schema'
 import { and, asc, desc, eq, gt, inArray, isNull, max, ne } from 'drizzle-orm'
 import { readAsset } from '../assets/assets'
 import type { Ctx } from '../context'
 import * as t from '../db/schema'
 import { getBoard, getPiece } from '../lookups'
+import { planStatus } from '../plans'
 import { modelImage } from './images'
 
 type Send = CommandParsedInput<'threads.send'>
@@ -157,6 +158,7 @@ export async function contextText(
     })),
     designerEdits: piece ? await designerEdits(ctx, piece.id, run.threadId, run.id) : [],
     canon: piece ? canonText({ spec: piece.spec, design: piece.design }) : null,
+    plan: allowanceLine(await planStatus(ctx)),
   })
   return skipped.length
     ? `${text}\nNot shown to you (a format you cannot read): ${skipped.join(', ')}.`

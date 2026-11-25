@@ -114,9 +114,16 @@ export async function exportCad(ctx: PackageContext): Promise<CadExports> {
     })
   }
 
+  const cad = options.includeCad !== false
+  if (!cad)
+    notes.push({
+      file: joinPath('cad', `${ctx.stem}.3dm`),
+      notes: [
+        'Not included: this package was built without the Rhino and STEP files. Build it again with them, or export them from the CAD tab.',
+      ],
+    })
   const assemblies: ExportFormat[] = [
-    '3dm',
-    'step',
+    ...(cad ? (['3dm', 'step'] as const) : []),
     ...(options.include3mf === false ? [] : (['3mf'] as const)),
   ]
   for (const format of assemblies) {

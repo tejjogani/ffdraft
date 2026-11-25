@@ -41,6 +41,8 @@ export interface TurnContext {
   designerEdits: { seq: number; label: string; by: string }[]
   /** The canon slice for the piece (`canonText`), when there is a piece. */
   canon: string | null
+  /** The plan's allowances left this month (`allowanceLine`), so a job plans within them. */
+  plan?: string | null
 }
 
 const line = (label: string, value: string) => `${label}: ${value}`
@@ -114,6 +116,7 @@ export function renderContext(c: TurnContext): string {
       'Edits by people since your last turn (build on them; do not undo them):',
       ...c.designerEdits.map((e) => `- v${e.seq} ${e.label} (${e.by})`),
     )
+  if (c.plan) out.push(line('Plan', c.plan))
   if (c.canon) out.push('', c.canon)
   return out.join('\n')
 }

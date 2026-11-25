@@ -64,7 +64,8 @@ const cm = () => `cm${++n}`
 const events: RunEvent[] = []
 
 beforeAll(async () => {
-  s = await assistantServer({ env: { ANTHROPIC_API_KEY: KEY } })
+  // Pro: these tests queue more takes than a Free month allows; plans.test.ts covers the limit.
+  s = await assistantServer({ env: { ANTHROPIC_API_KEY: KEY }, config: { plan: 'pro' } })
   api = client(s.server)
   queue = new FakeQueue()
   s.server.runtime.services.register('renderQueue', queue.service)

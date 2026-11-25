@@ -13,6 +13,7 @@ import { ChangeSchema, DesignSchema, OpSchema, PIECE_KINDS } from '../design/des
 import { DirectionSchema, MIX_PARTS } from '../design/directions'
 import { PhotoReadSchema } from '../design/photo-read'
 import { PieceSpecSchema } from '../design/spec'
+import { PlanStatusSchema } from '../plans/plans'
 import {
   ASSISTANT_MODELS,
   ASSISTANT_TIERS,
@@ -88,6 +89,8 @@ const def = <I extends z.ZodType, O extends z.ZodType, const T extends ToolFlag 
 ) => d as CommandDef<I, O> & { tool: T }
 
 const id = z.string()
+/** Every format the CAD exports to; which of them count is in plans/plans.ts. */
+export const EXPORT_FORMATS = ['stl', 'step', '3dm', 'glb', 'obj', '3mf'] as const
 const ok = z.object({ ok: z.literal(true) })
 const none = z.object({})
 /** A JSON merge patch (RFC 7396): objects merge, arrays and scalars replace, null deletes. */
@@ -554,13 +557,15 @@ export const commands = {
   }),
   'design.export': def({
     description:
-      'Export the CAD as STL, STEP, 3DM, GLB, OBJ or 3MF. Returns a downloadable asset. A piece made from someone’s artwork needs a person’s attestation first (409 otherwise).',
+      'Export the CAD as STL, STEP, 3DM, GLB, OBJ or 3MF. Returns a downloadable asset. STEP and 3DM count against the plan’s monthly allowance of CAD exports (plan_limit, 402, once it is used up); STL, 3MF, OBJ and GLB are never counted. A piece made from someone’s artwork needs a person’s attestation first (409 otherwise).',
     kind: 'mutation',
     tool: true,
     input: z.object({
       pieceId: id,
-      format: z.enum(['stl', 'step', '3dm', 'glb', 'obj', '3mf']),
+      format: z.enum(EXPORT_FORMATS),
       stones: z.boolean().optional(),
+      /** The studio's claim (plan.claim) when its own exporter failed; never set by the assistant. */
+      claimId: id.optional(),
     }),
     output: z.object({ asset: AssetSchema, notes: z.array(z.string()) }),
   }),
@@ -1012,7 +1017,7 @@ export const commands = {
   }),
   'renders.create': def({
     description:
-      'Queue a photoreal render (still or animation) of a piece from a saved shot (`sceneId`) or a declarative scene: look, camera, environment, overrides, animation, output. `engine: auto` uses Blender when available, else the browser (preview quality, labelled so). It costs machine time on this computer, not money; outside a Render job the designer approves it, and every call in one turn is approved together. For variants ("in rose gold and platinum"), make one call per variant in the same turn, with a shared `groupId`, a `variantLabel` and the metal in `scene.overrides["*"]`. To re-render after a critique, pass `retryOf` (the take it replaces) and a short `note` saying what changed. In a conversation you do not poll: the result arrives when the take is finished, with the image.',
+      'Queue a photoreal render (still or animation) of a piece from a saved shot (`sceneId`) or a declarative scene: look, camera, environment, overrides, animation, output. `engine: auto` uses Blender when available, else the browser (preview quality, labelled so). Each finished Blender take counts against the plan’s monthly render allowance (plan_limit, 402, once it is used up; a failed or canceled take is not counted); browser takes never count. It costs machine time on this computer, not money; outside a Render job the designer approves it, and every call in one turn is approved together. For variants ("in rose gold and platinum"), make one call per variant in the same turn, with a shared `groupId`, a `variantLabel` and the metal in `scene.overrides["*"]`. To re-render after a critique, pass `retryOf` (the take it replaces) and a short `note` saying what changed. In a conversation you do not poll: the result arrives when the take is finished, with the image.',
     kind: 'mutation',
     tool: { confirm: true },
     input: z
@@ -1204,11 +1209,13 @@ export const commands = {
   }),
   'production.create': def({
     description:
-      'Build a manufacturer-ready production package for a piece: spec sheet PDF, dimensioned drawings, STL/STEP/3DM, stone list and BOM, cost estimate and manufacturability report, zipped as a new revision. A piece made from someone’s artwork needs a person’s attestation first (409 otherwise).',
+      'Build a manufacturer-ready production package for a piece: spec sheet PDF, dimensioned drawings, STL/STEP/3DM, stone list and BOM, cost estimate and manufacturability report, zipped as a new revision. A package with its STEP and 3DM files counts as one CAD export against the plan’s monthly allowance; `cadFiles: false` builds it with STL only, which is never counted. A piece made from someone’s artwork needs a person’s attestation first (409 otherwise).',
     kind: 'mutation',
     tool: true,
     input: z.object({
       pieceId: id,
+      /** Include the editable STEP and 3DM files (one CAD export). */
+      cadFiles: z.boolean().default(true),
       notes: z.string().max(4000).optional(),
       quantity: z.number().int().min(1).max(100_000).default(1),
       rates: z
@@ -1429,6 +1436,34 @@ export const commands = {
       byDay: z.array(z.object({ day: z.string(), costUsd: z.number() })),
       recent: z.array(UsageEventSchema),
     }),
+  }),
+
+  // ── Plan: never tools; the assistant sees its allowance in the context message ──────────────
+  'plan.get': def({
+    description:
+      'The organisation’s plan and this month’s use of its allowances (Blender renders, Rhino and STEP exports), and when the counts reset.',
+    kind: 'query',
+    input: none,
+    output: PlanStatusSchema,
+  }),
+  'plan.claim': def({
+    description:
+      'Claim one CAD export from the allowance before the studio exports in the browser, so the server still decides. Formats that are never counted return `counted: false` and no claim. The same `key` returns the same claim. Refused with plan_limit (402) once the allowance is used up.',
+    kind: 'mutation',
+    input: z.object({
+      pieceId: id,
+      format: z.enum(EXPORT_FORMATS),
+      /** Made once per export attempt by the studio, so a retried claim is counted once. */
+      key: z.string().min(8).max(100),
+    }),
+    output: z.object({ claimId: id.nullable(), counted: z.boolean(), plan: PlanStatusSchema }),
+  }),
+  'plan.settle': def({
+    description:
+      'Say how a claimed browser export ended: `delivered: false` (it failed or was canceled before the file was saved) gives the export back to the allowance. Only the person who claimed it, once.',
+    kind: 'mutation',
+    input: z.object({ claimId: id, delivered: z.boolean() }),
+    output: PlanStatusSchema,
   }),
 } as const
 

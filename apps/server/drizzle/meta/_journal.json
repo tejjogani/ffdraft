@@ -78,6 +78,13 @@
       "when": 1795560352139,
       "tag": "0010_render_takes",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1795563989735,
+      "tag": "0011_plan_allowances",
+      "breakpoints": true
     }
   ]
 }

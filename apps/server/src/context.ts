@@ -1,4 +1,12 @@
-import type { Actor, CommandInput, CommandName, CommandOutput, Role, User } from '@pave/schema'
+import type {
+  Actor,
+  CommandInput,
+  CommandName,
+  CommandOutput,
+  PlanName,
+  Role,
+  User,
+} from '@pave/schema'
 import type { BlobStore } from './assets/blob-store'
 import type { AuthMode } from './config'
 import type { EventAudience, EventBus, ServerEvent } from './events'
@@ -29,6 +37,8 @@ export interface Ctx {
   readonly events: EventBus
   /** `local` (single-user desktop/self-host, no sign-in) or `accounts`. */
   readonly authMode: AuthMode
+  /** PAVE_PLAN on a local install (testing): wins over the organisation's plan. */
+  readonly planOverride: PlanName | null
   /** The command pipeline (role, validation, audit) for an explicit context; see {@link invoke}. */
   readonly execute: Execute
   /**

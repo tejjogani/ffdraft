@@ -6,7 +6,7 @@
  * approval as it lands; the text still streaming sits outside it, so it is not read out word by
  * word.
  */
-import type { Op, Run, StoredChange } from '@pave/schema'
+import { type Op, planLimitAllowanceOf, type Run, type StoredChange } from '@pave/schema'
 import { Skeleton, toast } from '@pave/ui'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { ArrowRight } from 'lucide-react'
@@ -14,6 +14,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { type AssistantContext, useAssistant } from '../../stores/assistant'
 import { DirectionCards } from '../directions/DirectionCards'
+import { PlanLimitNotice } from '../plans/PlanLimitCard'
 import { ApprovalCard } from './ApprovalCard'
 import { useRunActions, useSend } from './actions'
 import { JobStrip } from './jobs/JobStrip'
@@ -45,6 +46,10 @@ function touched(input: unknown): string[] {
  * Tells the CAD workspace what the assistant is doing to its piece (the "working" pill, and the
  * nodes to tint), for as long as this run is live.
  */
+/** The allowance a failed call ran out of, read from the sentence the model was given. */
+const limitOf = (c: CallItem) =>
+  c.status === 'error' && c.errorText ? planLimitAllowanceOf(c.errorText) : null
+
 export function usePublishActivity(
   run: Run | null,
   items: readonly Item[],
@@ -244,13 +249,19 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
                 />
               ) : (
                 <Fragment key={c.toolCallId}>
-                  <ToolChip
-                    call={c}
-                    pieceId={pieceId}
-                    change={changeOfCall(history.data, c.runId, c.toolCallId)}
-                    onUndo={undo}
-                    undoing={revert.isPending}
-                  />
+                  {/* A render or export past the plan's allowance is not a failure: the calm
+                      card stands in for the error chip. */}
+                  {limitOf(c) ? (
+                    <PlanLimitNotice allowance={limitOf(c)!} message={c.errorText!} />
+                  ) : (
+                    <ToolChip
+                      call={c}
+                      pieceId={pieceId}
+                      change={changeOfCall(history.data, c.runId, c.toolCallId)}
+                      onUndo={undo}
+                      undoing={revert.isPending}
+                    />
+                  )}
                   {/* A take shows where it was asked for: progress, then the picture. */}
                   {c.name === 'renders.create' && pieceId && (
                     <TakeCard call={c} pieceId={pieceId} />

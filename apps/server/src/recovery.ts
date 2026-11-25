@@ -15,6 +15,7 @@ import { toPackage } from './handlers/production'
 import { toRenderJobs } from './handlers/render'
 import { engineError, meshHandle, packageHandle, renderHandle, shotHandle } from './jobs'
 import { getModel, getPiece } from './lookups'
+import { packageKey, releaseOrphan, renderKey } from './plans'
 import type { Runtime } from './runtime'
 import { LIVE_STATUSES, serviceContext } from './service-context'
 import { finishRun, toRun } from './traces'
@@ -121,6 +122,7 @@ async function failOrphan(db: Db, item: Unfinished): Promise<void> {
         .update(t.renderJob)
         .set({ ...failed, finishedAt })
         .where(and(eq(t.renderJob.id, item.id), inArray(t.renderJob.status, LIVE_STATUSES)))
+      await releaseOrphan(db, item.orgId, renderKey(item.id))
       return
     case 'mesh3d':
       await db
@@ -144,6 +146,7 @@ async function failOrphan(db: Db, item: Unfinished): Promise<void> {
             inArray(t.productionPackage.status, LIVE_STATUSES),
           ),
         )
+      await releaseOrphan(db, item.orgId, packageKey(item.id))
       return
     case 'run':
       await db

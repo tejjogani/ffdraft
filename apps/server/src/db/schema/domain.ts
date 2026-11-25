@@ -7,6 +7,7 @@
 import type {
   Actor,
   AiJob,
+  Allowance,
   AssistantModelId,
   AssistantTier,
   BrandModel,
@@ -23,6 +24,7 @@ import type {
   PieceOrigin,
   PieceSpec,
   PieceSummary,
+  PlanName,
   Reference,
   RenderJob,
   RenderScene,
@@ -67,6 +69,8 @@ export const orgSettings = pgTable('org_settings', {
     .notNull()
     .default({}),
   monthlyBudgetUsd: doublePrecision('monthly_budget_usd'),
+  /** The organisation's plan; null = the default (Free). Set by billing, not by members. */
+  plan: text('plan').$type<PlanName>(),
   /** Set once the welcome workspace has been created, so deleting it does not bring it back. */
   welcomeSeededAt: timestamp('welcome_seeded_at', { withTimezone: true }),
   updatedAt: at('updated_at'),
@@ -571,6 +575,41 @@ export const usageEvent = pgTable(
   (t) => [
     uniqueIndex('usage_event_idempotency_idx').on(t.orgId, t.idempotencyKey),
     index('usage_event_org_time_idx').on(t.orgId, t.occurredAt),
+  ],
+)
+
+/**
+ * One counted use of a plan allowance (a Blender take, a Rhino or STEP export). The database
+ * decides who gets the last one: a claim takes a numbered slot in its month, and the unique index
+ * on (org, allowance, period, slot) lets only one claim hold each slot, however many tabs, agent
+ * runs or MCP clients ask at once. Releasing a claim (the work failed or was canceled) clears its
+ * slot, so the slot can be taken again; the row stays as a record.
+ */
+export const planClaim = pgTable(
+  'plan_claim',
+  {
+    id: text('id').primaryKey(),
+    orgId: orgId(),
+    /** Derived from the work (`render:<takeId>`), so a retried claim is counted once. */
+    idempotencyKey: text('idempotency_key').notNull(),
+    allowance: text('allowance').$type<Allowance>().notNull(),
+    /** Calendar month (UTC), `YYYY-MM`. */
+    period: text('period').notNull(),
+    /** 1..limit while held or used; null once released. */
+    slot: integer('slot'),
+    /** held: the work is running; used: delivered; released: it failed or was canceled. */
+    state: text('state').$type<'held' | 'used' | 'released'>().notNull(),
+    /** What it was for, e.g. `step` or `render`, for the record. */
+    subject: text('subject').notNull(),
+    pieceId: text('piece_id'),
+    userId: text('user_id').notNull(),
+    actor: jsonb('actor').$type<Actor>().notNull(),
+    createdAt: at('created_at'),
+    settledAt: timestamp('settled_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('plan_claim_idempotency_idx').on(t.orgId, t.idempotencyKey),
+    uniqueIndex('plan_claim_slot_idx').on(t.orgId, t.allowance, t.period, t.slot),
   ],
 )
 

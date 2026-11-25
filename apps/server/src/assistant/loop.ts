@@ -85,6 +85,7 @@ import {
   toRun,
 } from '../traces'
 import { assertBudget, recordUsage } from '../usage'
+import { lastFreeTracker } from './allowance'
 import { NoWindow } from './bridge'
 import { captureOnServer } from './capture'
 import type { RunHost } from './host'
@@ -675,6 +676,7 @@ async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepO
   const run = await ctx.repo.runs.first(eq(t.agentRun.id, runId))
   // Calls a Render job's plan already approved, made so far in this run.
   let preapproved = steps.filter((s) => s.name === 'renders.create' && s.status !== 'denied').length
+  const allowances = lastFreeTracker(ctx)
 
   for (const call of calls) {
     const existing = byCall.get(call.id)
@@ -722,7 +724,10 @@ async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepO
       await refuse(errorResult(call.id, admission.message), parsed.command)
       continue
     }
-    if (
+    // The last free render or export of the month is the person's to spend, job or not.
+    const lastFree = await allowances.spend(parsed.command, parsed.input)
+    if (lastFree) admission = { kind: 'approve' }
+    else if (
       admission.kind === 'approve' &&
       jobApproves(run?.job ?? null, parsed.command, preapproved)
     ) {
@@ -760,7 +765,7 @@ async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepO
         toolCallId: call.id,
         name: parsed.command,
         input: parsed.input,
-        summary: approvalSummary(parsed.def, parsed.input),
+        summary: [approvalSummary(parsed.def, parsed.input), lastFree].filter(Boolean).join(' '),
         estimate: await estimateFor(host, job),
       })
       waiting = true

@@ -5,6 +5,7 @@ import * as t from '../db/schema'
 import { commitChange, FACTS_DETAIL, storeFacts, toStoredChange } from '../design'
 import { conflict, notFound } from '../errors'
 import { getPiece } from '../lookups'
+import { exportClaim, withClaim } from '../plans'
 import { serviceContext } from '../service-context'
 import { assertAttested } from './pieces'
 import type { HandlerGroup } from './types'
@@ -192,14 +193,18 @@ export const design: HandlerGroup<'design'> = {
   'design.export': async (ctx, input) => {
     const piece = await getPiece(ctx, input.pieceId)
     assertAttested(piece)
-    const { file, notes } = await ctx.services
-      .get('geometry')
-      .export(
+    const geometry = ctx.services.get('geometry')
+    const work = async () => {
+      const { file, notes } = await geometry.export(
         piece.design,
         { format: input.format, stones: input.stones ?? true, pieceId: piece.id },
         serviceContext(ctx),
       )
-    const asset = await putAsset(ctx, { ...file, kind: 'mesh' })
-    return { asset, notes }
+      const asset = await putAsset(ctx, { ...file, kind: 'mesh' })
+      return { asset, notes }
+    }
+    // Rhino and STEP claim one export first; an export that fails gives it back.
+    const key = await exportClaim(ctx, input)
+    return key ? withClaim(ctx, key, work) : work()
   },
 }

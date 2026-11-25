@@ -3,6 +3,7 @@ import { Outlet } from '@tanstack/react-router'
 import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 import { Suspense } from 'react'
 import { useUiTools } from '../features/assistant/ui-tools'
+import { PlanLimitCard } from '../features/plans/PlanLimitCard'
 import { useBrowserTakes } from '../features/render/browser-takes'
 import { useClientToolRelay } from '../lib/client-tools'
 import { useShortcutListener } from '../lib/commands'
@@ -87,6 +88,7 @@ function Shell() {
       </main>
       <AnimatePresence initial={false}>{dockOpen && <AssistantDock key="dock" />}</AnimatePresence>
       <Palette />
+      <PlanLimitCard />
     </div>
   )
 }

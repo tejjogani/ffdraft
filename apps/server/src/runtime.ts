@@ -151,6 +151,7 @@ export class Runtime {
       blobs: this.blobs,
       events: this.events,
       authMode: this.config.auth,
+      planOverride: this.config.plan,
       execute: this.#execute,
     }
     return ctx

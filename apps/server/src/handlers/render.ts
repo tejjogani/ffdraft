@@ -8,6 +8,7 @@ import { AppError, badRequest, conflict, forbidden } from '../errors'
 import { createId } from '../ids'
 import { renderHandle, stopJob, submitJob, updateRender } from '../jobs'
 import { ensure, ensureAll, getPiece, getRender, getScene } from '../lookups'
+import { claim, renderKey, settle } from '../plans'
 import { isTerminal, publishJob, serviceContext } from '../service-context'
 import { toPiece } from './pieces'
 import type { HandlerGroup } from './types'
@@ -95,7 +96,7 @@ function strippedKeys(patch: Record<string, unknown>, parsed: unknown, path = ''
 }
 
 /** Which engine `auto` means here: Blender when the queue is set up and found it. */
-function engineFor(ctx: Ctx, asked: 'auto' | 'blender' | 'browser'): 'blender' | 'browser' {
+export function engineFor(ctx: Ctx, asked: 'auto' | 'blender' | 'browser'): 'blender' | 'browser' {
   if (asked !== 'auto') return asked
   return ctx.services.isConfigured('renderQueue') && ctx.services.capabilities().blender
     ? 'blender'
@@ -246,25 +247,40 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     if (input.engine === 'blender') ctx.services.require('renderQueue')
     const engine = engineFor(ctx, input.engine)
     const scene = input.scene ?? saved!.scene
-    const row = await ctx.repo.renders.insert({
-      id: createId('rnd'),
-      pieceId: piece.id,
-      title: input.title ?? saved?.title ?? piece.title,
-      scene,
-      requestedScene: scene,
-      sceneId: saved?.id ?? null,
-      groupId: input.groupId ?? null,
-      variantLabel: input.variantLabel ?? null,
-      purpose: input.purpose,
-      engine,
-      autoTune: input.autoTune,
-      status: 'queued',
-      sourceVersion: piece.version,
-      retryOf: input.retryOf ?? null,
-      note: input.note ?? null,
-      actor: ctx.actor,
-      createdBy: ctx.user.id,
-    })
+    const id = createId('rnd')
+    // A Blender take claims its render before anything is queued; the take settling settles
+    // the claim (updateRender). Browser takes are previews and never count.
+    if (engine === 'blender')
+      await claim(ctx, {
+        allowance: 'render',
+        key: renderKey(id),
+        subject: 'render',
+        pieceId: piece.id,
+      })
+    const row = await ctx.repo.renders
+      .insert({
+        id,
+        pieceId: piece.id,
+        title: input.title ?? saved?.title ?? piece.title,
+        scene,
+        requestedScene: scene,
+        sceneId: saved?.id ?? null,
+        groupId: input.groupId ?? null,
+        variantLabel: input.variantLabel ?? null,
+        purpose: input.purpose,
+        engine,
+        autoTune: input.autoTune,
+        status: 'queued',
+        sourceVersion: piece.version,
+        retryOf: input.retryOf ?? null,
+        note: input.note ?? null,
+        actor: ctx.actor,
+        createdBy: ctx.user.id,
+      })
+      .catch(async (err: unknown) => {
+        await settle(ctx, renderKey(id), 'released')
+        throw err
+      })
     const job = await one(ctx, row)
     announce(ctx, row)
     if (engine === 'blender') {

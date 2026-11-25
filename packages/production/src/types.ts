@@ -43,6 +43,11 @@ export interface ProductionOptions {
   paper?: 'a4' | 'letter'
   /** Also export a 3MF (general print bureaus). Default true. */
   include3mf?: boolean
+  /**
+   * Include the editable Rhino (.3dm) and STEP assembly. Default true. Off, the package says why
+   * they are missing (they count as a CAD export on the plan; STL never does).
+   */
+  includeCad?: boolean
   /** Design version the evaluation came from (Piece.version). */
   sourceVersion?: number
   /** Who buys each stone group, by node id. Default: the brand when sourcing is attached. */

@@ -13,7 +13,8 @@ import {
   type RenderScene,
   RenderSceneSchema,
 } from '@pave/schema'
-import { AiMark, Button, Popover, Segmented, Spinner, Textarea, toast } from '@pave/ui'
+import { AiMark, Button, cn, Popover, Segmented, Spinner, Textarea, toast } from '@pave/ui'
+import { Link } from '@tanstack/react-router'
 import { Circle, ImagePlus, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { uploadAsset } from '../../../lib/assets'
@@ -233,7 +234,15 @@ function RenderPlan({ pieceId, onGoal }: { pieceId: string; onGoal: (goal: strin
   )
   const browser = engine.data ? !engine.data.available : false
   const titles = shots.map((x) => x.title)
-  const goal = `Render ${titles.length ? titles.join(', ') : 'the standard shots'} in ${lookLabel(look)} at ${QUALITY_LABELS[quality].toLowerCase()} quality. Look at every take, re-render what falls short (at most twice per shot), and hand the set over for review.`
+  // Blender takes count against the plan; the job plans within what is left.
+  const plan = useRpc('plan.get', {})
+  const renders = plan.data?.allowances.find((a) => a.allowance === 'render')
+  const left = !browser && renders && renders.limit !== null ? renders.left : null
+  const within =
+    left !== null && left < titles.length
+      ? ` Only ${left} free ${left === 1 ? 'render is' : 'renders are'} left this month: render the shots that matter most first, and ask before the last one.`
+      : ''
+  const goal = `Render ${titles.length ? titles.join(', ') : 'the standard shots'} in ${lookLabel(look)} at ${QUALITY_LABELS[quality].toLowerCase()} quality. Look at every take, re-render what falls short (at most twice per shot), and hand the set over for review.${within}`
   const last = useRef('')
   useEffect(() => {
     if (!titles.length || last.current === goal) return
@@ -272,6 +281,20 @@ function RenderPlan({ pieceId, onGoal }: { pieceId: string; onGoal: (goal: strin
             ? `About ${machineTime(estimate.data.seconds).replace(/^about /, '')} of this computer’s time, plus up to two re-renders a shot. Nothing is paid.`
             : 'Working out the time…'}
       </p>
+      {left !== null && renders && (
+        <p className={cn('text-xs', left === 0 ? 'text-warn' : 'text-fg-muted')}>
+          {left === 0 ? (
+            <>
+              No free Blender renders left this month.{' '}
+              <Link to="/upgrade" className="underline underline-offset-2">
+                See Pro
+              </Link>
+            </>
+          ) : (
+            `${left} of ${renders.limit} free Blender renders left this month; each finished take and re-render uses one, and you are asked before the last.`
+          )}
+        </p>
+      )}
     </div>
   )
 }

@@ -1,11 +1,12 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
-import { Activity, Blocks, Box, Settings, Shield, Sparkles, Users } from 'lucide-react'
+import { Activity, BadgeCheck, Blocks, Box, Settings, Shield, Sparkles, Users } from 'lucide-react'
 import { PageHeader } from '../../components/Page'
 
 const NAV = [
   { to: '/settings/general', label: 'General', icon: Settings },
   { to: '/settings/members', label: 'Members', icon: Users },
   { to: '/settings/ai', label: 'AI', icon: Sparkles },
+  { to: '/settings/plan', label: 'Plan', icon: BadgeCheck },
   { to: '/settings/usage', label: 'Usage', icon: Activity },
   { to: '/settings/traces', label: 'Traces', icon: Box },
   { to: '/settings/privacy', label: 'Data & privacy', icon: Shield },

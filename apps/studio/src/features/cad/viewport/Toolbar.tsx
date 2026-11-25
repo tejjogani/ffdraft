@@ -1,10 +1,12 @@
 /** The floating controls over the viewport: history, display, framing, x-ray; and on the right, saving and export. */
 import type { ExportFormat } from '@pave/kernel'
+import { exportCounts } from '@pave/schema'
 import { Button, cn, IconButton, Menu, MenuGroup, MenuItem, Segmented, Tooltip } from '@pave/ui'
 import { ChevronDown, Crosshair, Download, Focus, Gauge, Redo2, ScanEye, Undo2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { runCommand } from '../../../lib/commands'
 import type { SaveState } from '../../../lib/design-session/store'
+import { useRpc } from '../../../lib/query'
 import { DISPLAY_MODES } from '../commands'
 import { EXPORT_PURPOSE } from '../export'
 import { SavePill } from '../hud/SavePill'
@@ -87,6 +89,11 @@ export function FileToolbar({
   simplified: boolean
   compact: boolean
 }) {
+  // Rhino and STEP count against the plan; the menu says what is left before anyone asks.
+  const plan = useRpc('plan.get', {})
+  const cad = plan.data?.allowances.find((a) => a.allowance === 'export')
+  const cadLimit = cad?.limit ?? null
+  const cadLeft = cad && cadLimit !== null ? cad.left : null
   return (
     <div className="flex items-center gap-2">
       {simplified && (
@@ -123,7 +130,11 @@ export function FileToolbar({
               {formats.map((f) => (
                 <MenuItem
                   key={f}
-                  description={EXPORT_PURPOSE[f].hint}
+                  description={
+                    exportCounts(f) && cadLeft !== null
+                      ? `${EXPORT_PURPOSE[f].hint} · ${cadLeft} of ${cadLimit} free left this month`
+                      : EXPORT_PURPOSE[f].hint
+                  }
                   tag={f.toUpperCase()}
                   onClick={() => runCommand(`design.export.${f}`)}
                 >

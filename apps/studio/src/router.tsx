@@ -21,10 +21,12 @@ import { AiSettings } from './pages/settings/AiSettings'
 import { GeneralSettings } from './pages/settings/GeneralSettings'
 import { IntegrationsSettings } from './pages/settings/IntegrationsSettings'
 import { MembersSettings } from './pages/settings/MembersSettings'
+import { PlanSettings } from './pages/settings/PlanSettings'
 import { PrivacySettings } from './pages/settings/PrivacySettings'
 import { SettingsLayout } from './pages/settings/SettingsLayout'
 import { TraceDetail, TracesSettings } from './pages/settings/TracesSettings'
 import { UsageSettings } from './pages/settings/UsageSettings'
+import { UpgradePage } from './pages/upgrade/UpgradePage'
 
 // Feature folders load on demand: the CAD and render workspaces bring heavy 3D dependencies.
 const PieceDesign = lazy(async () => ({ default: (await import('./features/cad')).PieceDesign }))
@@ -174,6 +176,7 @@ const routeTree = rootRoute.addChildren([
   modelRoute,
   route('/sourcing', () => <SourcingPage />),
   libraryRoute,
+  route('/upgrade', () => <UpgradePage />),
   settingsRoute.addChildren([
     createRoute({
       getParentRoute: () => settingsRoute,
@@ -186,6 +189,7 @@ const routeTree = rootRoute.addChildren([
     setting('general', GeneralSettings),
     setting('members', MembersSettings),
     setting('ai', AiSettings),
+    setting('plan', PlanSettings),
     setting('usage', UsageSettings),
     setting('traces', TracesSettings),
     traceRoute,

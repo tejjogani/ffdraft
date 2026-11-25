@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { serve } from '@hono/node-server'
 import { createApp } from './app'
 import { compose } from './compose'
+import { planWarning } from './config'
 
 /**
  * Longest a shutdown may take. Above the engines' own bound (a Blender that ignores its abort is
@@ -17,6 +18,10 @@ if (existsSync(envFile)) process.loadEnvFile(envFile)
 
 const server = await createApp(compose())
 const { config } = server.runtime
+const planNote = planWarning(config)
+if (planNote) console.warn(planNote)
+else if (config.plan)
+  console.warn(`PAVE_PLAN=${config.plan}: acting as the ${config.plan} plan (testing).`)
 
 const http = serve(
   { fetch: server.app.fetch, port: config.port, hostname: config.host },

@@ -49,7 +49,7 @@ Organisation
  ├─ Boards (ideas) ─▶ References       on-model shots, stones, production packages, history
  ├─ Brand models
  ├─ Library        metals, stones, cuts, ring sizes, templates
- └─ Settings       members, usage, traces, privacy, integrations
+ └─ Settings       members, AI, plan, usage, traces, privacy, integrations
 ```
 
 The sidebar is navigation plus the collection tree. A piece page has tabs — Overview, Design,
@@ -135,6 +135,15 @@ used for evaluation.
   the same schema runs as a single process. Content-addressed blobs on disk or S3.
 - **Usage** — an append-only ledger of metered events (model tokens, images, searches, 3D
   generations, render time) with idempotency keys; billing is an adapter on top.
+- **Plans** — Free and Pro, defined in `packages/schema/src/plans/config.ts`. The CAD studio,
+  AI jobs on your own key, browser previews and mesh exports (STL, 3MF, OBJ, GLB) are never
+  counted; finished Blender takes and Rhino or STEP exports (and production packages with them)
+  are counted per calendar month (UTC). `apps/server/src/plans.ts` is the one owner: each
+  counted action claims a numbered slot before its work starts (a unique index decides races),
+  keyed by the work so a retry counts once, and gives it back when the work fails or is
+  canceled. The studio claims before exporting in the browser (`plan.claim`, `plan.settle`).
+  Over the limit the server answers `plan_limit` (402); there is no checkout yet. `PAVE_PLAN`
+  switches plans on a local install for testing.
 - **Desktop** — Electron: one Chromium everywhere matters for a GPU viewport. The shell only
   starts the server on loopback and opens a window; the web build is the same code.
 - **Cross-platform** — macOS, Windows, Linux and the browser are all first-class. Geometry runs

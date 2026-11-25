@@ -16,6 +16,7 @@ import {
   useMutation,
   useQuery,
 } from '@tanstack/react-query'
+import { reportPlanLimit } from '../features/plans/plan-limit'
 import { type MutationName, type QueryName, RpcError, rpc } from './rpc'
 
 export const rpcKey = <N extends QueryName>(name: N, input?: CommandInput<N>) =>
@@ -36,11 +37,19 @@ const DOMAIN_QUERIES: Record<string, QueryName[]> = {
   design: ['pieces.get', 'pieces.list', 'design.history', 'design.evaluate', 'renders.list'],
   boards: ['boards.list', 'boards.get', 'pieces.get'],
   references: ['boards.get', 'boards.list'],
-  renders: ['renders.list', 'renders.get', 'pieces.list', 'scenes.list', 'renders.estimate'],
+  renders: [
+    'renders.list',
+    'renders.get',
+    'pieces.list',
+    'scenes.list',
+    'renders.estimate',
+    'plan.get',
+  ],
   scenes: ['scenes.list', 'renders.estimate'],
   models: ['models.list'],
   shots: ['shots.list'],
-  production: ['production.list'],
+  production: ['production.list', 'plan.get'],
+  plan: ['plan.get'],
   threads: ['threads.list', 'threads.get'],
   runs: ['threads.list', 'threads.get', 'traces.runs', 'traces.run'],
   assistant: ['assistant.setup.get', 'session.get'],
@@ -68,6 +77,8 @@ export const queryClient = new QueryClient({
   mutationCache: new MutationCache({
     onError: (e, _vars, _ctx, mutation) => {
       if (mutation.meta?.silent) return
+      // A plan limit is not a failure to report: the upgrade card says it calmly.
+      if (reportPlanLimit(e)) return
       toast.error('Couldn’t save that change', e.message)
     },
   }),

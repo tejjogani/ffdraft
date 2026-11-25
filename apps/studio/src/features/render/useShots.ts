@@ -15,6 +15,7 @@ import { toast } from '@pave/ui'
 import { useRef } from 'react'
 import { queryClient, rpcKey, useRpc } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
+import { reportPlanLimit } from '../plans/plan-limit'
 import { type Shot, shotList } from './shots'
 
 export function useShots(pieceId: string) {
@@ -78,7 +79,11 @@ export function useShots(pieceId: string) {
   }
 
   /** Queues a take of each shot; Blender when it is set up, else this window draws a preview. */
-  const render = async (list: Shot[], extra: { retryOf?: string; note?: string } = {}) => {
+  const render = async (
+    list: Shot[],
+    extra: { retryOf?: string; note?: string; engine?: 'browser' } = {},
+  ): Promise<void> => {
+    let done = 0
     try {
       for (const shot of list) {
         const row = await savedFor(shot)
@@ -88,9 +93,17 @@ export function useShots(pieceId: string) {
           title: row.title,
           ...extra,
         })
+        done++
       }
     } catch (e) {
-      toast.error('Couldn’t start the render', e instanceof Error ? e.message : undefined)
+      // Out of free Blender renders: the shots not yet queued can still be browser previews.
+      const rest = list.slice(done)
+      const preview = {
+        label: 'Preview in the browser',
+        run: () => void render(rest, { ...extra, engine: 'browser' }),
+      }
+      if (!reportPlanLimit(e, preview))
+        toast.error('Couldn’t start the render', e instanceof Error ? e.message : undefined)
     } finally {
       refresh()
     }
@@ -108,7 +121,8 @@ export function useShots(pieceId: string) {
         ...(take.variantLabel ? { variantLabel: take.variantLabel } : {}),
       })
     } catch (e) {
-      toast.error('Couldn’t re-render', e instanceof Error ? e.message : undefined)
+      if (!reportPlanLimit(e))
+        toast.error('Couldn’t re-render', e instanceof Error ? e.message : undefined)
     } finally {
       refresh()
     }

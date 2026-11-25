@@ -50,6 +50,7 @@ export class Repo extends OrgScope {
   readonly messages = this.scope(t.agentMessage)
   readonly feedback = this.scope(t.runFeedback)
   readonly usage = this.scope(t.usageEvent)
+  readonly planClaims = this.scope(t.planClaim)
   readonly audit = this.scope(t.auditLog)
   readonly invitations = new ScopedTable(
     this.db,

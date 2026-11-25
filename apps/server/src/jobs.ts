@@ -3,10 +3,12 @@
  * through which a render queue, image-to-3D provider or on-model pipeline reports on a job —
  * when it is submitted, and again when it is resumed after a restart (see `Runtime.recover`).
  */
+import { COUNTED_EXPORT_FORMATS } from '@pave/schema'
 import { and, eq, inArray } from 'drizzle-orm'
 import type { Ctx } from './context'
 import * as t from './db/schema'
 import { AppError } from './errors'
+import { packageKey, renderKey, settle } from './plans'
 import { isTerminal, jobHandle, LIVE_STATUSES, stepProgress } from './service-context'
 import type {
   JobHandle,
@@ -19,12 +21,21 @@ import { toMicros } from './usage'
 
 type JobRef = { id: string; pieceId: string }
 
-/** Writes a render update unless the job has already settled. */
+/**
+ * Writes a render update unless the job has already settled. The update that settles a Blender
+ * take also settles its plan claim (browser takes never claim one): a finished take is counted;
+ * a failed or canceled one, or one served from the render cache (no Blender time: the queue
+ * writes it as done in 0 seconds), gives its render back.
+ */
 export async function updateRender(ctx: Ctx, id: string, patch: RenderJobPatch) {
   const [row] = await ctx.repo.renders.update(
     and(eq(t.renderJob.id, id), inArray(t.renderJob.status, LIVE_STATUSES))!,
     { ...patch, ...(isTerminal(patch.status) ? { finishedAt: new Date() } : {}) },
   )
+  if (row && row.engine === 'blender' && isTerminal(row.status)) {
+    const delivered = row.status === 'done' && row.seconds !== 0
+    await settle(ctx, renderKey(row.id), delivered ? 'used' : 'released')
+  }
   return row
 }
 
@@ -60,7 +71,24 @@ export async function updatePackage(ctx: Ctx, id: string, patch: ProductionPacka
   // A progress-only update writes nothing; it is still refused once the build has settled.
   if (Object.keys(stored).length === 0) return ctx.repo.packages.first(live)
   const [row] = await ctx.repo.packages.update(live, stored)
+  // A package counts as one export only if it was delivered with a Rhino or STEP file in it.
+  if (row && isTerminal(row.status))
+    await settle(
+      ctx,
+      packageKey(row.id),
+      row.status === 'done' && hasCadFile(row.manifest) ? 'used' : 'released',
+    )
   return row
+}
+
+/** Whether a package manifest lists a Rhino (.3dm) or STEP file. */
+function hasCadFile(manifest: Record<string, unknown> | null): boolean {
+  const files = (manifest as { files?: { path?: unknown }[] } | null)?.files ?? []
+  return files.some(
+    (f) =>
+      typeof f.path === 'string' &&
+      COUNTED_EXPORT_FORMATS.some((ext) => (f.path as string).toLowerCase().endsWith(`.${ext}`)),
+  )
 }
 
 /** The handle for render job `job`; each accepted update is published as `job.updated`. */

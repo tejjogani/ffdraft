@@ -8,6 +8,7 @@ import { mesh3d } from './mesh3d'
 import { models } from './models'
 import { org } from './org'
 import { pieces } from './pieces'
+import { plan } from './plan'
 import { production } from './production'
 import { render } from './render'
 import { session } from './session'
@@ -29,4 +30,5 @@ export const handlers: Handlers = {
   ...production,
   ...assistant,
   ...usage,
+  ...plan,
 }
