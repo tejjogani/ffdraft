@@ -40,6 +40,8 @@ interface WorkspaceState {
   select(ids: string[], stone?: string | null): void
   /** Click on the model: first click selects the feature, a second on the same stone picks it. */
   pick(p: NodePick | null, additive?: boolean): void
+  /** A right-click on a feature (or empty space): see `menuSelection`. Returns what the menu acts on. */
+  selectForMenu(nodeId: string | null): string[]
   setHover(p: NodePick | null): void
   toggleHidden(id: string): void
   setRenaming(id: string | null): void
@@ -53,6 +55,14 @@ interface WorkspaceState {
 
 const same = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((x, i) => x === b[i])
+
+/**
+ * The selection after a right-click, as in every CAD tool: on a feature already selected it
+ * stays as it is, so Hide and Delete in the menu act on all of it; on anything else it becomes
+ * that feature (or nothing, for empty space), so the menu and the highlight agree.
+ */
+export const menuSelection = (selection: readonly string[], nodeId: string | null): string[] =>
+  nodeId === null ? [] : selection.includes(nodeId) ? [...selection] : [nodeId]
 
 export const useWorkspace = create<WorkspaceState>()(
   persist(
@@ -90,6 +100,13 @@ export const useWorkspace = create<WorkspaceState>()(
         }
         const already = s.selection.length === 1 && s.selection[0] === p.nodeId
         s.select([p.nodeId], already && p.stoneId ? p.stoneId : null)
+      },
+      selectForMenu: (nodeId) => {
+        const s = get()
+        const ids = menuSelection(s.selection, nodeId)
+        // A kept selection keeps its picked stone too.
+        if (!same(ids, s.selection)) s.select(ids)
+        return ids
       },
       setHover: (hover) => {
         const h = get().hover

@@ -27,7 +27,13 @@ export interface CommandPaletteProps {
   groupOrder?: string[]
   placeholder?: string
   /** Offered for any typed query (and the only option when nothing matches), e.g. “Ask the assistant”. */
-  fallback?: (query: string) => { title: string; icon?: ReactNode; onSelect: () => void } | null
+  fallback?: (query: string) => {
+    title: string
+    icon?: ReactNode
+    onSelect: () => void
+    /** Why it cannot be used yet: the row stays, dimmed, with the reason beside it. */
+    disabled?: string
+  } | null
 }
 
 const RECENTS_KEY = 'pave:palette-recents'
@@ -145,15 +151,23 @@ export function CommandPalette({
                   <Command.Item
                     forceMount
                     value={`fallback:${query}`}
+                    disabled={!!fb.disabled}
                     onSelect={() => {
                       onOpenChange(false)
                       fb.onSelect()
                     }}
-                    className={cn(floatingRow, 'h-8 data-[selected=true]:bg-bg-active')}
+                    className={cn(
+                      floatingRow,
+                      'h-8 data-[selected=true]:bg-bg-active data-[disabled=true]:text-fg-subtle',
+                    )}
                   >
                     {fb.icon}
                     <span className="min-w-0 flex-1 truncate">{fb.title}</span>
-                    <ArrowRight aria-hidden />
+                    {fb.disabled ? (
+                      <span className="shrink-0 text-xs text-fg-subtle">{fb.disabled}</span>
+                    ) : (
+                      <ArrowRight aria-hidden />
+                    )}
                   </Command.Item>
                 </Command.Group>
               )}

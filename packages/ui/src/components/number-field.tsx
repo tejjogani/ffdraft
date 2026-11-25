@@ -1,5 +1,5 @@
 import { NumberField as Base } from '@base-ui/react/number-field'
-import { type ReactNode, useEffect, useId, useRef } from 'react'
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { cn } from '../cn'
 
 export interface NumberFieldProps {
@@ -69,12 +69,27 @@ export function NumberField({
   const digits = precision ?? decimalsOf(step)
   const commit = useRef(onCommit)
   commit.current = onCommit
+  // Escape after an edit puts back what the field held when it took focus, and goes no further:
+  // a dialog around the field stays open with its other choices. On an untouched field Escape
+  // is left to whatever is around it.
+  const atFocus = useRef<number | null>(value)
+  const current = useRef(value)
+  current.current = value
+  // Base UI keeps the typed text while the input has focus, whatever `value` says: putting the
+  // old value back means a fresh field, focused again.
+  const [generation, setGeneration] = useState(0)
+  const input = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (generation) input.current?.focus()
+  }, [generation])
   const keyed = useRef<{ value: number | null; timer: ReturnType<typeof setTimeout> } | null>(null)
   const flush = () => {
     const k = keyed.current
     if (!k) return
     clearTimeout(k.timer)
     keyed.current = null
+    // A committed value is the one Escape goes back to from here on.
+    atFocus.current = k.value
     commit.current?.(k.value)
   }
   // An edit still waiting for its idle commit is committed, not lost, when the field goes away.
@@ -106,9 +121,23 @@ export function NumberField({
         </Base.ScrubArea>
       )}
       <Base.Input
+        ref={input}
         aria-label={aria['aria-label'] ?? label}
+        onFocus={() => {
+          atFocus.current = current.current
+        }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur()
+          if (e.key === 'Escape' && current.current !== atFocus.current) {
+            e.preventDefault()
+            e.stopPropagation()
+            if (keyed.current) {
+              clearTimeout(keyed.current.timer)
+              keyed.current = null
+            }
+            onChange?.(atFocus.current)
+            setGeneration((g) => g + 1)
+          }
         }}
         onBlur={flush}
         className={cn(
@@ -123,6 +152,7 @@ export function NumberField({
   )
   return (
     <Base.Root
+      key={generation}
       id={id}
       value={value}
       onValueChange={(v) => onChange?.(v)}
@@ -136,6 +166,7 @@ export function NumberField({
           clearTimeout(keyed.current.timer)
           keyed.current = null
         }
+        atFocus.current = v
         onCommit?.(v)
       }}
       min={min}

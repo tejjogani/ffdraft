@@ -18,7 +18,16 @@ import {
   type Piece,
   type PieceSpecInput,
 } from '@pave/schema'
-import { AiMark, Button, cn, Dialog, IconButton, Sheet, Spinner } from '@pave/ui'
+import {
+  AiMark,
+  Button,
+  type ContextMenuHandle,
+  cn,
+  Dialog,
+  IconButton,
+  Sheet,
+  Spinner,
+} from '@pave/ui'
 import { useNavigate } from '@tanstack/react-router'
 import { PanelLeft, PanelRight, Plus } from 'lucide-react'
 import {
@@ -41,6 +50,8 @@ import { usePieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { activeOrg, useSession } from '../../lib/session'
+import { useQuickIntent } from '../assistant/quick-intent-store'
+import { type Subject, subjectFor } from '../assistant/quick-intents'
 import { useViewportTools } from './capture-tool'
 import { useCadCommands } from './commands'
 import { captureCover } from './cover'
@@ -57,10 +68,13 @@ import { AddMenu } from './outliner/AddMenu'
 import { Outliner } from './outliner/Outliner'
 import { type NextStep, nextSteps } from './outliner/suggestions'
 import { PiecePanel } from './PiecePanel'
+import { useQuickIntentCommands } from './quick-commands'
 import { useWorkspace } from './state/workspace'
 import { Dimensions } from './viewport/Dimensions'
+import { dockArea } from './viewport/dock-area'
 import { Marker, type MarkerSpot } from './viewport/Marker'
 import { FileToolbar, ViewToolbar } from './viewport/Toolbar'
+import { ViewportMenu } from './viewport/ViewportMenu'
 
 /** Workspace actions read the latest UI state without subscribing to it. */
 const ws = useWorkspace.getState
@@ -91,6 +105,53 @@ function useWidth(ref: RefObject<HTMLElement | null>): number {
     return () => observer.disconnect()
   }, [ref])
   return width
+}
+
+/**
+ * Tells the Replace stone dialog where to dock on this tab (kept current as the window
+ * resizes), and while it is open over the view, has the view frame the piece beside it.
+ */
+function useReplaceDock(
+  pieceId: string,
+  root: RefObject<HTMLElement | null>,
+  viewport: RefObject<HTMLElement | null>,
+  dockInspector: boolean,
+  viewer: Viewer | null,
+) {
+  useLayoutEffect(() => {
+    const el = root.current
+    if (!el) return
+    const measure = () => {
+      const view = viewport.current
+      if (!view) return
+      const inspector = dockInspector
+        ? el.querySelector<HTMLElement>(':scope > [data-region="inspector"]')
+        : null
+      const area = dockArea(
+        {
+          inspector: inspector?.getBoundingClientRect() ?? null,
+          viewport: view.getBoundingClientRect(),
+        },
+        document.documentElement.clientWidth,
+      )
+      useQuickIntent.getState().setDock({ pieceId, ...area })
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    window.addEventListener('resize', measure)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', measure)
+      if (useQuickIntent.getState().dock?.pieceId === pieceId)
+        useQuickIntent.getState().setDock(null)
+    }
+  }, [pieceId, root, viewport, dockInspector])
+
+  const inset = useQuickIntent((s) =>
+    s.replacing?.pieceId === pieceId && s.dock?.pieceId === pieceId ? s.dock.viewInset : 0,
+  )
+  useEffect(() => viewer?.setInsetRight(inset), [viewer, inset])
 }
 
 /** Toasts rise above the facts strip at the bottom of the view while the Design tab is open. */
@@ -150,6 +211,9 @@ function Workspace({ piece }: { piece: Piece }) {
   )
 
   const viewer = useRef<Viewer | null>(null)
+  const viewport = useRef<HTMLElement>(null)
+  const menu = useRef<ContextMenuHandle>(null)
+  const [menuSubject, setMenuSubject] = useState<Subject>({ type: 'piece', pieceId })
   const [addOpen, setAddOpen] = useState(false)
   const [confirm, setConfirm] = useState<{ ids: string[]; dependents: string[] } | null>(null)
   const root = useRef<HTMLDivElement>(null)
@@ -301,6 +365,35 @@ function Workspace({ piece }: { piece: Piece }) {
     undoRun: () => run && revertRun.mutate({ pieceId, runId: run.runId }),
   })
 
+  useQuickIntentCommands(pieceId, view, evaluation, readOnly)
+
+  const subjectOf = (nodeId: string) => subjectFor(pieceId, view, { nodeId }, evaluation)
+
+  /**
+   * The view's context menu. A right-click selects what it is on, as in every CAD tool, so the
+   * menu and the highlight agree; from the keyboard it is about the selection and opens where
+   * the selection is on screen.
+   */
+  const openViewportMenu = (
+    p: { nodeId: string; stoneId?: string } | null,
+    at: { x: number; y: number },
+    source: 'pointer' | 'keyboard',
+  ) => {
+    let pick = p
+    let anchor = at
+    if (source === 'keyboard') {
+      const { selection: ids, stone: picked } = ws()
+      const id = ids.length === 1 ? ids[0]! : null
+      pick = id ? { nodeId: id, ...(picked ? { stoneId: picked } : {}) } : null
+      const box = id ? viewer.current?.screenBounds([id]) : null
+      const rect = viewport.current?.getBoundingClientRect()
+      if (box && rect)
+        anchor = { x: rect.left + (box.x0 + box.x1) / 2, y: rect.top + (box.y0 + box.y1) / 2 }
+    } else ws().selectForMenu(p?.nodeId ?? null)
+    setMenuSubject(subjectFor(pieceId, view, pick, evaluation))
+    menu.current?.openAt(anchor.x, anchor.y)
+  }
+
   const viewerState = useMemo<ViewerState>(
     () => ({ display, selection, stone, hover, hidden, xray }),
     [display, selection, stone, hover, hidden, xray],
@@ -320,6 +413,7 @@ function Workspace({ piece }: { piece: Piece }) {
     run?.prior ?? null,
   )
   const [viewerHandle, setViewerHandle] = useState<Viewer | null>(null)
+  useReplaceDock(pieceId, root, viewport, dockInspector, viewerHandle)
   const selectedTitle = selection.length
     ? selection.map((id) => (view.nodes[id] ? nodeTitle(view.nodes[id]!) : id)).join(', ')
     : 'Nothing'
@@ -332,6 +426,7 @@ function Workspace({ piece }: { piece: Piece }) {
       aiTouched={aiTouched}
       readOnly={readOnly}
       onDelete={requestDelete}
+      subjectOf={subjectOf}
       header={
         <div className="flex h-11 shrink-0 items-center justify-between pr-2 pl-4">
           <h2 className="text-xs font-medium text-fg-muted">Features</h2>
@@ -381,6 +476,7 @@ function Workspace({ piece }: { piece: Piece }) {
         </aside>
       )}
       <main
+        ref={viewport}
         data-region="viewport"
         aria-label="Viewport"
         className="relative min-w-0 flex-1 overflow-clip"
@@ -390,7 +486,7 @@ function Workspace({ piece }: { piece: Piece }) {
           state={viewerState}
           frameNodeIds={frameNodeIds}
           wheel={wheel}
-          label="3D view of the piece. Drag to orbit, right-drag or Shift-drag to pan, scroll to zoom; arrow keys orbit, F fits, 1 to 4 pick a view."
+          label="3D view of the piece. Drag to orbit, right-drag or Shift-drag to pan, scroll to zoom, right-click for actions; arrow keys orbit, F fits, 1 to 4 pick a view, Shift+F10 opens actions for the selection."
           onViewer={(v, tier) => {
             viewer.current = v
             setViewerHandle(v)
@@ -404,7 +500,17 @@ function Workspace({ piece }: { piece: Piece }) {
           }
           onPick={(p, { additive }) => ws().pick(p, additive)}
           onHover={(p) => ws().setHover(p)}
+          onContextMenu={openViewportMenu}
         >
+          {!empty && (
+            <ViewportMenu
+              handle={menu}
+              subject={menuSubject}
+              design={view}
+              readOnly={readOnly}
+              onDelete={requestDelete}
+            />
+          )}
           {sweep > 0 && <Sweep key={sweep} />}
           {!empty && (
             <Dimensions viewer={viewerHandle} evaluation={evaluation} edit={selectedEdit} />

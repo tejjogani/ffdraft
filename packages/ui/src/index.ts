@@ -36,6 +36,8 @@ export {
 export { Kbd, shortcutKeys } from './components/kbd'
 export {
   ContextMenu,
+  type ContextMenuHandle,
+  isMenuKey,
   Menu,
   MenuGroup,
   MenuItem,

@@ -3,9 +3,11 @@ import { useNavigate } from '@tanstack/react-router'
 import { Folder } from 'lucide-react'
 import { useMemo } from 'react'
 import { StageIcon } from '../components/StageChip'
+import { assistantUnavailable } from '../features/assistant/quick-intents'
 import { type CommandGroup, isAvailable, useCommands } from '../lib/commands'
 import { STAGE_LABEL } from '../lib/domain'
 import { useRpc } from '../lib/query'
+import { useSession } from '../lib/session'
 import { assistant } from '../stores/assistant'
 import { useUI } from '../stores/ui'
 
@@ -25,6 +27,7 @@ export function Palette() {
   const open = useUI((s) => s.paletteOpen)
   const setOpen = useUI((s) => s.setPaletteOpen)
   const navigate = useNavigate()
+  const auth = useSession()
   const commands = useCommands()
   const pieces = useRpc('pieces.list', { limit: 30 }, { enabled: open })
   const collections = useRpc('collections.list', {}, { enabled: open })
@@ -78,11 +81,16 @@ export function Palette() {
       items={items}
       groupOrder={ORDER}
       placeholder="Search pieces, run a command, or ask…"
-      fallback={(q) => ({
-        title: `Ask the assistant: “${q}”`,
-        icon: <AiMark className="size-3.5" />,
-        onSelect: () => assistant.open({ prompt: q }),
-      })}
+      fallback={(q) => {
+        // The same reason the menus' "Ask AI about this…" row gives while the assistant cannot answer.
+        const disabled = assistantUnavailable(auth.capabilities)
+        return {
+          title: `Ask the assistant: “${q}”`,
+          icon: <AiMark className="size-3.5" />,
+          onSelect: () => assistant.open({ prompt: q }),
+          ...(disabled ? { disabled } : {}),
+        }
+      }}
     />
   )
 }

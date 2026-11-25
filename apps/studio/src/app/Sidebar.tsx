@@ -16,6 +16,7 @@ import {
 } from '@pave/ui'
 import { Link, type LinkProps, useNavigate } from '@tanstack/react-router'
 import {
+  ArrowUpRight,
   BookOpen,
   ChevronRight,
   ChevronsLeft,
@@ -44,6 +45,7 @@ import {
   Users,
 } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
+import { AskAiSection } from '../features/assistant/AskAiSection'
 import { runCommand } from '../lib/commands'
 import { usd } from '../lib/format'
 import { useRpc, useRpcMutation } from '../lib/query'
@@ -313,6 +315,7 @@ function CollectionRow({ collection: c }: { collection: Collection }) {
 
   return (
     <div>
+      {/* no AskAiSection: a collection holds pieces but has no design to ask about */}
       <ContextMenu content={actions}>
         <div className="group relative">
           <Link
@@ -367,15 +370,30 @@ function CollectionRow({ collection: c }: { collection: Collection }) {
       {expanded && (
         <div className="flex flex-col gap-px">
           {pieces.data?.map((p) => (
-            <Link
+            // A piece row's menu is about the whole piece: its quick edits, then Ask AI.
+            <ContextMenu
               key={p.id}
-              to="/pieces/$id"
-              params={{ id: p.id }}
-              className={cn(row, 'h-6.5 pl-8 text-[12.5px]')}
+              content={
+                <>
+                  <MenuItem
+                    icon={ArrowUpRight}
+                    render={<Link to="/pieces/$id" params={{ id: p.id }} />}
+                  >
+                    Open
+                  </MenuItem>
+                  <AskAiSection subject={{ type: 'piece', pieceId: p.id }} />
+                </>
+              }
             >
-              <span className="size-1 shrink-0 rounded-full bg-fg-faint" aria-hidden />
-              <span className="truncate">{p.title || 'Untitled'}</span>
-            </Link>
+              <Link
+                to="/pieces/$id"
+                params={{ id: p.id }}
+                className={cn(row, 'h-6.5 pl-8 text-[12.5px]')}
+              >
+                <span className="size-1 shrink-0 rounded-full bg-fg-faint" aria-hidden />
+                <span className="truncate">{p.title || 'Untitled'}</span>
+              </Link>
+            </ContextMenu>
           ))}
           {pieces.data?.length === 0 && (
             <div className="h-6.5 pl-8 text-xs leading-6.5 text-fg-subtle">No pieces yet</div>

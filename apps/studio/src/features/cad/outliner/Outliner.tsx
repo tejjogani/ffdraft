@@ -1,7 +1,8 @@
 /**
  * The feature list: an ARIA tree of the design's nodes, named from the schema ("Ring band",
  * never `ringShank`), nested by what each attaches to. Arrow keys move and fold, Enter selects,
- * F2 renames; the eye hides a feature from view only; diagnostics show as a dot.
+ * F2 renames; Shift+F10 or the Menu key opens a row's menu; the eye hides a feature from view
+ * only; diagnostics show as a dot.
  */
 import type { Diagnostic } from '@pave/kernel'
 import { type Design, nodeTitle } from '@pave/schema'
@@ -28,6 +29,8 @@ import {
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { runCommand } from '../../../lib/commands'
 import type { DesignSession } from '../../../lib/design-session/store'
+import { AskAiSection } from '../../assistant/AskAiSection'
+import type { Subject } from '../../assistant/quick-intents'
 import { KIND_ICON } from '../kindIcon'
 import { rename } from '../ops'
 import { useWorkspace } from '../state/workspace'
@@ -41,6 +44,8 @@ export interface OutlinerProps {
   aiTouched: ReadonlySet<string>
   readOnly: boolean
   onDelete(ids: string[]): void
+  /** What a row's menu is about: a stone (a gem, or a whole row, halo or pavé) or a part. */
+  subjectOf(nodeId: string): Subject
   header: React.ReactNode
 }
 
@@ -51,6 +56,7 @@ export function Outliner({
   aiTouched,
   readOnly,
   onDelete,
+  subjectOf,
   header,
 }: OutlinerProps) {
   const selection = useWorkspace((s) => s.selection)
@@ -146,11 +152,13 @@ export function Outliner({
             const excluded = node.visible === false
             const level = levels.get(row.id)
             const order = design.order.indexOf(row.id)
-            // The menu acts on the row it was opened on, through the same commands as the palette.
+            // The menu acts on the row it was opened on, or on the whole selection when the row
+            // is part of it, through the same commands as the palette. Rename is one row only.
             const onRow = (command: string) => () => {
-              ws().select([row.id])
+              ws().selectForMenu(row.id)
               runCommand(command)
             }
+            const menuIds = selected ? selection : [row.id]
             const item = (
               <div
                 data-node={row.id}
@@ -255,7 +263,10 @@ export function Outliner({
                     <MenuItem
                       icon={PencilLine}
                       disabled={readOnly}
-                      onClick={onRow('design.rename')}
+                      onClick={() => {
+                        ws().select([row.id])
+                        runCommand('design.rename')
+                      }}
                       shortcut="f2"
                     >
                       Rename
@@ -294,13 +305,17 @@ export function Outliner({
                       icon={Trash2}
                       danger
                       disabled={readOnly}
-                      onClick={() => onDelete([row.id])}
+                      onClick={() => onDelete(menuIds)}
                       shortcut="delete"
                     >
-                      Delete
+                      {menuIds.length > 1 ? `Delete ${menuIds.length} features` : 'Delete'}
                     </MenuItem>
+                    <AskAiSection subject={subjectOf(row.id)} />
                   </>
                 }
+                // Opening the menu selects its row, as a right-click in the view does, so the
+                // inspector shows what the menu is about.
+                onOpenChange={(open) => open && ws().selectForMenu(row.id)}
               >
                 {item}
               </ContextMenu>

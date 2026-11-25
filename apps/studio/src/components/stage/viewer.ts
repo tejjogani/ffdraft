@@ -105,7 +105,7 @@ export interface CaptureOptions {
 }
 
 /** CSS pixels the floating toolbars and the facts strip cover at the top and bottom of the view. */
-const HUD_BAND_PX = 56
+export const HUD_BAND_PX = 56
 
 const FOCAL_MM = 70
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -311,6 +311,7 @@ export class Viewer {
     this.renderer.setPixelRatio(dpr)
     this.renderer.setSize(this.width, this.height, false)
     this.camera.aspect = this.width / this.height
+    this.applyInset()
     this.updateFov(this.camera.aspect)
     this.updateSafeFraction()
     for (const m of [this.materials.silhouette, this.materials.selected, this.materials.hovered])
@@ -677,13 +678,17 @@ export class Viewer {
     animate: boolean,
   ): void {
     if (!pts.length) return
+    // Framed into the part no panel covers: its aspect, with the fill rescaled because
+    // `viewTangents` puts the sensor on that part's larger side, not on the canvas's.
+    const [, tyCanvas] = viewTangents(FOCAL_MM, this.camera.aspect)
+    const [, tyFree] = viewTangents(FOCAL_MM, this.freeAspect)
     const { target, distance } = framePoints(
       pts,
       azimuth,
       elevation,
       FOCAL_MM,
-      this.camera.aspect,
-      fill * this.safeFraction,
+      this.freeAspect,
+      (fill * this.safeFraction * tyCanvas) / tyFree,
     )
     const { back } = cameraBasis(azimuth, elevation)
     const pos = toThreePoint([
@@ -708,6 +713,66 @@ export class Viewer {
 
   private updateSafeFraction(): void {
     this.safeFraction = Math.max(0.5, (this.height - 2 * HUD_BAND_PX) / this.height)
+  }
+
+  /**
+   * Pixels at the right of the view that a docked panel covers (the Replace stone dialog on a
+   * narrow window). The picture is shifted so the orbit centre sits in the middle of the rest,
+   * and framing fits the rest; picking and `project` follow, since they use the same camera.
+   */
+  private insetRight = 0
+  /** Whether setting the inset re-framed the piece, so clearing it frames it back. */
+  private insetFramed = false
+
+  private applyInset(): void {
+    if (this.insetRight > 0)
+      this.camera.setViewOffset(
+        this.width,
+        this.height,
+        this.insetRight / 2,
+        0,
+        this.width,
+        this.height,
+      )
+    else this.camera.clearViewOffset()
+  }
+
+  /** The aspect framing fits into: the part of the view no panel covers. */
+  private get freeAspect(): number {
+    return (this.camera.aspect * (this.width - this.insetRight)) / this.width
+  }
+
+  /**
+   * Keeps the piece clear of a panel docked over the right of the view: when part of it would
+   * sit under the panel, it is framed again (from the same direction) in the part left free;
+   * when the panel goes, a piece framed that way gets its usual fill back.
+   */
+  setInsetRight(px: number): void {
+    const next = Math.round(Math.max(0, Math.min(px, this.width * 0.6)))
+    if (next === this.insetRight) return
+    this.insetRight = next
+    this.applyInset()
+    if (next > 0 && this.evaluation && !this.fitsFree()) {
+      this.insetFramed = true
+      this.frameAll()
+    } else if (next === 0 && this.insetFramed) {
+      this.insetFramed = false
+      this.frameAll()
+    }
+    this.invalidate()
+  }
+
+  /** Whether the whole piece is on screen left of the inset (and inside the HUD bands). */
+  private fitsFree(): boolean {
+    const pts = this.pointsFor().map((p) => this.project(p))
+    return pts.every(
+      (p) =>
+        p.visible &&
+        p.x >= 0 &&
+        p.x <= this.width - this.insetRight &&
+        p.y >= HUD_BAND_PX &&
+        p.y <= this.height - HUD_BAND_PX,
+    )
   }
 
   private defaultView(): CameraPreset {
@@ -814,12 +879,16 @@ export class Viewer {
       width: this.width,
       height: this.height,
       dpr: this.renderer.getPixelRatio(),
+      insetRight: this.insetRight,
     }
     if (opts.evaluation) this.setEvaluation(opts.evaluation)
     const canvases: HTMLCanvasElement[] = []
     try {
       this.renderer.setPixelRatio(1)
       this.renderer.setSize(opts.size, opts.size, false)
+      // A picture has no panel over it: centred and framed on the whole square.
+      this.insetRight = 0
+      this.camera.clearViewOffset()
       this.camera.aspect = 1
       this.updateFov(1)
       for (const m of [this.materials.silhouette, this.materials.selected, this.materials.hovered])
@@ -860,6 +929,7 @@ export class Viewer {
       this.camera.near = saved.near
       this.camera.far = saved.far
       this.renderer.setPixelRatio(saved.dpr)
+      this.insetRight = saved.insetRight
       this.setSize(saved.width, saved.height)
       void this.controls.setLookAt(
         saved.position.x,

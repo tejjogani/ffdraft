@@ -2,6 +2,7 @@ import { Button, EmptyState, Spinner } from '@pave/ui'
 import { Outlet } from '@tanstack/react-router'
 import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 import { Suspense } from 'react'
+import { QuickIntentHost } from '../features/assistant/QuickIntentHost'
 import { useShortcutListener } from '../lib/commands'
 import { useServerEvents } from '../lib/events'
 import { useRpc } from '../lib/query'
@@ -79,6 +80,7 @@ function Shell() {
       </main>
       <AnimatePresence initial={false}>{dockOpen && <AssistantDock key="dock" />}</AnimatePresence>
       <Palette />
+      <QuickIntentHost />
     </div>
   )
 }

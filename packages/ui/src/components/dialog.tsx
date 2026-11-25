@@ -16,12 +16,25 @@ export interface DialogProps {
   title: string
   description?: ReactNode
   children?: ReactNode
-  /** Footer actions, right-aligned. */
+  /** Footer actions, right-aligned; they stay in view while a long body scrolls. */
   footer?: ReactNode
+  /**
+   * `center` (default) is modal and dims the page behind. `end` docks at the inline end and is
+   * not modal, for a dialog about something on screen that must stay in view and in reach (a
+   * stone being replaced): the page keeps its pointer input, so the designer can orbit the
+   * model while it is open, and only Escape or the dialog's own buttons close it.
+   */
+  placement?: 'center' | 'end'
+  /**
+   * Where a docked dialog sits, in px from the window's edges, when the caller knows a better
+   * place than the default (the inspector column, say). `height` fills that place, so the
+   * footer stays put while the body changes.
+   */
+  dock?: { top: number; right: number; width: number; height: number }
   className?: string
 }
 
-/** Centred modal on a frosted surface. */
+/** A dialog on a frosted surface; a body taller than the window scrolls between title and footer. */
 export function Dialog({
   open,
   onOpenChange,
@@ -30,29 +43,52 @@ export function Dialog({
   description,
   children,
   footer,
+  placement = 'center',
+  dock,
   className,
 }: DialogProps) {
+  const docked = placement === 'end'
   return (
-    <Base.Root open={open} onOpenChange={onOpenChange && ((o) => onOpenChange(o))}>
+    <Base.Root
+      open={open}
+      onOpenChange={onOpenChange && ((o) => onOpenChange(o))}
+      modal={!docked}
+      disablePointerDismissal={docked}
+    >
       {trigger && <Base.Trigger render={trigger} />}
       <Base.Portal>
-        <Base.Backdrop className={backdrop} />
+        {!docked && <Base.Backdrop className={backdrop} />}
         <Base.Popup
+          style={
+            dock && { top: dock.top, right: dock.right, width: dock.width, height: dock.height }
+          }
           className={cn(
-            'glass shadow-pop fixed top-[18vh] left-1/2 z-50 w-[min(440px,calc(100vw-32px))] -translate-x-1/2 rounded-xl p-5 text-fg outline-none',
+            'glass shadow-pop fixed z-50 flex flex-col rounded-xl pb-4 text-fg outline-none',
+            docked
+              ? 'top-20 right-4 max-h-[calc(100dvh-6rem)] w-[min(360px,calc(100vw-32px))]'
+              : 'top-[18vh] left-1/2 max-h-[calc(82dvh-1rem)] w-[min(440px,calc(100vw-32px))] -translate-x-1/2',
             'transition-[opacity,scale] duration-180 ease-out data-starting-style:scale-[0.97] data-starting-style:opacity-0',
             'data-ending-style:scale-[0.97] data-ending-style:opacity-0 data-ending-style:duration-120',
             className,
           )}
         >
-          <Base.Title className="text-base font-medium">{title}</Base.Title>
-          {description && (
-            <Base.Description className="mt-1 text-sm text-fg-muted">
-              {description}
-            </Base.Description>
+          <div className="shrink-0 px-5 pt-5">
+            <Base.Title className="text-base font-medium">{title}</Base.Title>
+            {description && (
+              <Base.Description className="mt-1 text-sm text-fg-muted">
+                {description}
+              </Base.Description>
+            )}
+          </div>
+          {/* Padded inside the scroller so focus rings at its edges are not clipped. */}
+          {children && (
+            <div className="mt-3 min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-1">
+              {children}
+            </div>
           )}
-          {children && <div className="mt-4">{children}</div>}
-          {footer && <div className="mt-5 flex justify-end gap-2">{footer}</div>}
+          {footer && (
+            <div className="mt-auto flex shrink-0 justify-end gap-2 px-5 pt-4 pb-1">{footer}</div>
+          )}
         </Base.Popup>
       </Base.Portal>
     </Base.Root>
