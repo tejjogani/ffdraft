@@ -88,10 +88,12 @@ type Box = { min: readonly number[]; max: readonly number[] }
  *    sideways to the next letter crosses an l or a t and reads as a bar.
  *  - Any other mark (an acute, a grave, the dots of an umlaut, a tilde, a ring) stays where the
  *    font put it, so the name keeps its spelling and its height, and hangs from its letter on a
- *    short, narrow sprue straight down inside its own column. A mark with no metal straight
- *    under it stays loose (the caller reports the loose pieces).
- * Returns the joined outline and how many parts were joined, or null when it is already one
- * piece. The caller owns the result.
+ *    short, narrow sprue: straight down inside its own column where there is metal under it,
+ *    else along the shortest steep link to its letter (a dot beside a sloping arm, dots over a
+ *    capital's counter), its ends seated inside both parts. An umlaut dot nothing can hold
+ *    that way is bridged to its pair. A mark none of these reach stays loose.
+ * Returns the joined outline, how many parts were joined and the boxes of the parts left loose
+ * (for the caller to name), or null when it is already one piece. The caller owns the result.
  */
 export function joinIslands(
   outline: CrossSection,

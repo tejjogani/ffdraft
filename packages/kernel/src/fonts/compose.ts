@@ -7,9 +7,10 @@
  *    Ç), so it has the font's weight and its distance from the letter. Marks Latin-1 lacks are
  *    made from the nearest one it has: a caron is a circumflex upside down, a double acute two
  *    acutes, an ogonek a cedilla mirrored, a breve the lower half of the ring of Å, a dot above
- *    the dot of the i; the stroke of Ł is a bar as thick as the font's hyphen.
- * The mark is placed over (or under) the new base as it sat over its donor's base: centred on
- * it, at the same gap from its top (or bottom).
+ *    the dot of the i; the stroke of Ł is a bar across the letter's stem, as heavy as the stem.
+ * A mark above is placed over the new base as it sat over its donor's base: centred on it, at
+ * the same gap from its top. A mark below is only the hook under the donor's base, hung into
+ * the base's bottom stroke: a cedilla under the middle, an ogonek under the last foot.
  */
 import type { Font } from 'opentype.js'
 import type { Vec2 } from '../geometry/vec'

@@ -254,7 +254,7 @@ describe('joining loose parts of lettering', () => {
     expect(joined.section.area() - text.area()).toBeLessThan(0.45)
   })
 
-  it('hangs the dots of an umlaut set over a capital\'s counter from its arms', () => {
+  it("hangs the dots of an umlaut set over a capital's counter from its arms", () => {
     const { manifold: mf } = runtime()
     // A U whose dots stand over the counter, inside its arms, as a sans font sets them: straight
     // down there is only the bottom of the bowl, far below, and the dots were left loose.

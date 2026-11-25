@@ -16,7 +16,11 @@ const FONTS: FontId[] = ['sans', 'serif', 'script', 'block']
 async function letter(font: FontId, c: string): Promise<CrossSection> {
   const { manifold: mf } = runtime()
   const glyphs = layoutText(await loadFont(font), c, 12).glyphs.map(
-    (g) => new mf.CrossSection(g.contours, 'EvenOdd'),
+    (g) =>
+      new mf.CrossSection(
+        g.contours.map((c) => c.map(([x, y]): [number, number] => [x, y])),
+        'EvenOdd',
+      ),
   )
   const s = mf.CrossSection.union(glyphs)
   for (const g of glyphs) g.delete()

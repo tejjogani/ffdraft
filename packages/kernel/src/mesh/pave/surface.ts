@@ -26,6 +26,8 @@ export interface SurfaceOptions {
 
 /** Samples beyond this are thinned by widening the spacing (keeps memory and time bounded). */
 const MAX_SAMPLES = 250_000
+/** A girdle may stand this share of its stone above the face (drift of the tangent plane). */
+const FLOAT = 0.02
 /** Neighbours whose normals differ by more than this are across a crease and not averaged. */
 const SMOOTH_COS = Math.cos((30 * Math.PI) / 180)
 /** Fixed so the sampling (and thus the fields) never depends on the user's layout seed. */
@@ -171,6 +173,31 @@ export class PaveSurface {
     const lift = this.spacing * 0.05
     const o: Vec3 = [p[0] + n[0] * lift, p[1] + n[1] * lift, p[2] + n[2] * lift]
     return this.bvh.firstHit(o[0], o[1], o[2], n[0], n[1], n[2], lift, reach).triangle < 0
+  }
+
+  /**
+   * Whether a stone of diameter d with its girdle centred at p and axis n sits on the face it was
+   * meant for: looking down the axis from two stones above, the first metal met is a face square
+   * to the axis within `tilt`, no deeper than `sink`·d over the girdle and not below it. A seat snapped onto the
+   * tangent plane of a sample across a crease (where a handle meets a cup) fails both: the stone
+   * was set upside down inside the metal.
+   */
+  seatsOnFace(p: Vec3, n: Vec3, d: number, cosTilt: number, sink: number): boolean {
+    this.bvh ??= new TriangleBvh(this.host)
+    const up = 2 * d
+    const hit = this.bvh.firstHit(
+      p[0] + n[0] * up,
+      p[1] + n[1] * up,
+      p[2] + n[2] * up,
+      -n[0],
+      -n[1],
+      -n[2],
+    )
+    // Above the face is floating: its seat would not hold it.
+    if (hit.triangle < 0 || up - hit.t > sink * d || up - hit.t < -FLOAT * d) return false
+    const f = this.faceNormals
+    const t = hit.triangle * 3
+    return f[t]! * n[0] + f[t + 1]! * n[1] + f[t + 2]! * n[2] >= cosTilt
   }
 
   /** Distance from a point to the host's surface, up to `cap` (returned when it is farther). */

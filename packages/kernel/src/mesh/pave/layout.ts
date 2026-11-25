@@ -161,6 +161,12 @@ const FACE_LINK = 1.8
 /** Samples asked when choosing a frame row's size, and the share of them that must take it. */
 const ROW_PROBES = 200
 const ROW_FITS = 0.5
+/**
+ * A stone's axis stays within 25° of the face under it, and its girdle at most a quarter of the
+ * stone under that face (a girdle sits about 0.05 d down; deeper is buried in the metal).
+ */
+const SEAT_TILT_COS = Math.cos((25 * Math.PI) / 180)
+const SEAT_SINK = 0.25
 /** Room a setter needs above a stone's table, along its axis (a graver, a bead tool), mm. */
 const SETTER_REACH = 3
 /** Metal kept between a cavity and a seat (as between two seats), and below a drill hole, mm. */
@@ -496,7 +502,12 @@ class Packer {
       const min = (d + this.stones[j]!.diameter) / 2 + this.o.gap
       if (d2 < (min - EPS) * (min - EPS)) ok = false
     })
-    return ok && !this.clashNear(c, n, d) && this.settable(p, n, d)
+    return (
+      ok &&
+      !this.clashNear(c, n, d) &&
+      this.surface.seatsOnFace(c, n, d, SEAT_TILT_COS, SEAT_SINK) &&
+      this.settable(p, n, d)
+    )
   }
 
   /** A setter can reach the stone, and its seat keeps clear of any cavity. */
@@ -942,6 +953,7 @@ class Packer {
       const centred = fit?.rows === 1 && 2 * (half - this.o.margin) - d < ZIGZAG * (d + this.o.gap)
       const levels = centred ? [Math.max(hug, half - RIDGE_INSET * d)] : [hug]
       if (fit && fit.rows % 2 === 1 && fit.rows > 1) levels.push(half - RIDGE_INSET * d)
+      if (centred) for (let l = levels[0]! - 0.15 * d; l >= hug - EPS; l -= 0.15 * d) levels.push(l)
       for (const level of levels)
         walkLevelSets({
           surface: this.surface,
@@ -1219,9 +1231,20 @@ class Packer {
     for (const i of this.order) {
       if (this.dead[i] || this.sizeAt(i) < size - EPS) continue
       this.tick()
-      const p = this.surface.point(i)
-      const n = this.surface.normal(i)
-      if (this.sizeFor(i, p) < size - EPS) continue
+      let p = this.surface.point(i)
+      let n = this.surface.normal(i)
+      if (this.sizeFor(i, p) < size - EPS) {
+        // In a strip only just wide enough (a letter's diagonal, an arm), the stone fits only on
+        // the strip's middle line, which samples seldom lie on: slide across to it and ask again.
+        if (this.surface.edge[i]! < this.o.margin + size / 2 - 2 * this.surface.spacing) continue
+        const mid = this.centredOnRidge({ p, n, sample: i }, size)
+        if (this.sizeFor(mid.sample, mid.p) < size - EPS) continue
+        ;({ p, n } = mid)
+        if (this.fits(p, n, size)) {
+          this.place(p, n, size, mid.sample)
+          continue
+        }
+      }
       // A void that only just takes the stone has a single spot where it fits, which a sample
       // seldom hits: so look for the spot tangent to the nearest stones even when p is taken.
       const snug = this.nestle(p, size)

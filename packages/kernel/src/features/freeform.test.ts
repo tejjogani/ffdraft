@@ -16,6 +16,7 @@ import {
 import { afterAll, describe, expect, it } from 'vitest'
 import { invertSimilarity, transformPoint } from '../geometry/vec'
 import { createKernel, type LocalKernel } from '../kernel'
+import { TriangleBvh } from '../mesh/bvh'
 import { grayPng } from '../mesh/image/fixtures'
 import { OutlineDistance } from '../mesh/outline/distance'
 import type { PaveField } from '../mesh/pave/region'
@@ -667,6 +668,235 @@ describe('pave', () => {
     const off = await kernel.evaluate(iced(heart, { sizeMin: 1.15, sizeMax: 1.15 }).design)
     expect(off.diagnostics.map((d) => d.code)).toContain('pave.sizeRange')
   })
+})
+
+/**
+ * Coverage of a flat pavé face seen from the front, on a 0.1 mm grid: the share of the field
+ * (the face inside the margin) farther than 0.5 mm from any stone, and the separate spots where
+ * a stone of `size` would still fit with the gap and margin kept (seats the packer missed).
+ */
+function coverage(
+  scene: Awaited<ReturnType<LocalKernel['scene']>>,
+  thickness: number,
+  pave: { margin: number; gap: number },
+  size: number,
+): { bald: number; missed: number } {
+  const host = scene.nodes.get('b')!
+  const tris = host.bodies[0]!.solid.triangles(QUALITY.draft)
+  const positions = new Float32Array(tris.positions.length)
+  for (let i = 0; i < tris.positions.length; i += 3) {
+    const p = transformPoint(host.matrix, [
+      tris.positions[i]!,
+      tris.positions[i + 1]!,
+      tris.positions[i + 2]!,
+    ])
+    positions.set(p, i)
+  }
+  const bvh = new TriangleBvh({ positions, indices: tris.indices })
+  const stones = scene.evaluation.stones
+    .filter((x) => x.nodeId === 'ice')
+    .map((x) => ({ c: centre(x), r: x.dims.width / 2 }))
+  let minX = Infinity
+  let maxX = -Infinity
+  let minZ = Infinity
+  let maxZ = -Infinity
+  for (let i = 0; i < positions.length; i += 3) {
+    minX = Math.min(minX, positions[i]!)
+    maxX = Math.max(maxX, positions[i]!)
+    minZ = Math.min(minZ, positions[i + 2]!)
+    maxZ = Math.max(maxZ, positions[i + 2]!)
+  }
+  const h = 0.1
+  const nx = Math.ceil((maxX - minX) / h) + 3
+  const nz = Math.ceil((maxZ - minZ) / h) + 3
+  const x = (k: number) => minX + ((k % nx) - 1) * h
+  const z = (k: number) => minZ + (Math.floor(k / nx) - 1) * h
+  // Distance to the face's edge (chamfer, 3–4 weights) and to the nearest stone's girdle.
+  const edge = new Float32Array(nx * nz)
+  const clear = new Float32Array(nx * nz).fill(1e9)
+  for (let k = 0; k < edge.length; k++) {
+    const t = bvh.raycast(x(k), -50, z(k), 0, 1, 0)
+    edge[k] = t !== Infinity && Math.abs(t - 50 + thickness) < 0.02 ? 1e9 : 0
+    for (const s of stones) {
+      const d = Math.hypot(x(k) - s.c[0], z(k) - s.c[2]) - s.r
+      if (d < clear[k]!) clear[k] = d
+    }
+  }
+  const relax = (k: number, o: number, w: number) => {
+    if (edge[o]! + w < edge[k]!) edge[k] = edge[o]! + w
+  }
+  const diag = h * Math.SQRT2
+  for (let j = 1; j < nz - 1; j++)
+    for (let i = 1; i < nx - 1; i++) {
+      const k = j * nx + i
+      relax(k, k - 1, h)
+      relax(k, k - nx, h)
+      relax(k, k - nx - 1, diag)
+      relax(k, k - nx + 1, diag)
+    }
+  for (let j = nz - 2; j > 0; j--)
+    for (let i = nx - 2; i > 0; i--) {
+      const k = j * nx + i
+      relax(k, k + 1, h)
+      relax(k, k + nx, h)
+      relax(k, k + nx + 1, diag)
+      relax(k, k + nx - 1, diag)
+    }
+  let field = 0
+  let bald = 0
+  const fits = new Uint8Array(nx * nz)
+  for (let k = 0; k < edge.length; k++) {
+    if (edge[k]! < pave.margin) continue
+    field++
+    if (clear[k]! > 0.5) bald++
+    // A tenth of a millimetre of slack for the grid.
+    if (edge[k]! - pave.margin >= size / 2 + 0.1 && clear[k]! - pave.gap >= size / 2 + 0.1)
+      fits[k] = 1
+  }
+  let missed = 0
+  for (let k = 0; k < fits.length; k++) {
+    if (fits[k] !== 1) continue
+    missed++
+    const stack = [k]
+    fits[k] = 2
+    while (stack.length > 0) {
+      const c = stack.pop()!
+      for (const o of [c - 1, c + 1, c - nx, c + nx])
+        if (fits[o] === 1) {
+          fits[o] = 2
+          stack.push(o)
+        }
+    }
+  }
+  return { bald: bald / field, missed }
+}
+
+describe('pave layout: what the follow-up found', () => {
+  // Strokes narrower than a letter's stem (the K's arm, the N's diagonal) and spots a sample
+  // never hit were left bare: one stone on the K's upper arm, seats a stone still fitted.
+  it('leaves no seat a stone would fit and no bald strokes on letters and a star', async () => {
+    const flat = { thickness: 2.5, bevel: 'flat' as const, bevelSize: 0 }
+    const king: NodeInput = {
+      id: 'b',
+      kind: 'vectorBody',
+      source: { type: 'text', text: 'KING', font: 'block' },
+      height: 18,
+      ...flat,
+      thickness: 3,
+    }
+    const star: NodeInput = {
+      id: 'b',
+      kind: 'vectorBody',
+      source: { type: 'shape', shape: 'star' },
+      height: 30,
+      ...flat,
+    }
+    for (const [name, body, thickness, sizeMin, sizeMax, bald] of [
+      // The square ends of the strokes keep bare corners a stone's width wide (5.0 % of the
+      // field, against 5.5 % before): the rows stop a stone short of them.
+      ['KING', king, 3, 1, 1.8, 0.052],
+      // A 1.3 mm stone does not fit the N's diagonal inside the margin at all: no seats are
+      // missed, but that stroke stays bare whatever the layout.
+      ['KING', king, 3, 1.3, 1.3, 1],
+      ['star', star, 2.5, 1, 1.8, 0.05],
+      ['star', star, 2.5, 1.3, 1.3, 0.05],
+      ['star', star, 2.5, 0.8, 1.5, 0.05],
+    ] as const) {
+      const c = iced(body, { sizeMin, sizeMax })
+      const scene = await kernel.scene(c.design, { detail: 'draft' })
+      const node = c.design.nodes.ice as unknown as { margin: number; gap: number }
+      // Measured as the engine pass measured it: the field starts at least 0.4 mm in, where
+      // the edge's own beads stand.
+      const got = coverage(
+        scene,
+        thickness,
+        { ...node, margin: Math.max(node.margin, 0.4) },
+        sizeMin,
+      )
+      const label = `${name} ${sizeMin}–${sizeMax}`
+      expect(got.missed, label).toBe(0)
+      expect(got.bald, label).toBeLessThan(bald)
+    }
+  }, 180_000)
+})
+
+describe('pave on sculpted hosts: what the follow-up found', () => {
+  // On the solid trophy one stone was set upside down and buried where the handle meets the
+  // cup: its seat was snapped onto the plane of a sample on the other surface of the crease.
+  // On the relief, small stones stood above its sloping face, held by nothing.
+  it('sets every stone upright on its face, neither buried nor floating', async () => {
+    const trophy: NodeInput = {
+      id: 'b',
+      kind: 'meshBody',
+      source: { type: 'builtin', name: 'trophy' },
+      height: 45,
+    }
+    const relief: NodeInput = { id: 'b', kind: 'relief', width: 24, height: 24 }
+    for (const [body, sizeMin, sizeMax, all] of [
+      [trophy, 1, 1.8, true],
+      [trophy, 3, 3, true],
+      [relief, 0.8, 0.8, false],
+    ] as const) {
+      const c = iced(body, {
+        sizeMin,
+        sizeMax,
+        ...(all ? { region: { type: 'all' as const } } : {}),
+      })
+      const scene = await kernel.scene(c.design, { detail: 'draft' })
+      const host = scene.nodes.get('b')!
+      const tris = host.bodies[0]!.solid.triangles(QUALITY.draft)
+      const positions = new Float32Array(tris.positions.length)
+      for (let i = 0; i < tris.positions.length; i += 3)
+        positions.set(
+          transformPoint(host.matrix, [
+            tris.positions[i]!,
+            tris.positions[i + 1]!,
+            tris.positions[i + 2]!,
+          ]),
+          i,
+        )
+      const bvh = new TriangleBvh({ positions, indices: tris.indices })
+      const vertex = (k: number): [number, number, number] => [
+        positions[k * 3]!,
+        positions[k * 3 + 1]!,
+        positions[k * 3 + 2]!,
+      ]
+      for (const stone of scene.evaluation.stones.filter((x) => x.nodeId === 'ice')) {
+        const m = stone.matrix
+        const len = Math.hypot(m[8]!, m[9]!, m[10]!)
+        const n = [m[8]! / len, m[9]! / len, m[10]! / len] as const
+        const p = centre(stone)
+        const d = stone.dims.width
+        // The surface over the girdle, looking down the stone's axis from two stones above.
+        const hit = bvh.firstHit(
+          p[0] + 2 * d * n[0],
+          p[1] + 2 * d * n[1],
+          p[2] + 2 * d * n[2],
+          -n[0],
+          -n[1],
+          -n[2],
+        )
+        const label = `${body.kind} ${sizeMin}–${sizeMax} at ${p.map((v) => v.toFixed(2)).join(', ')}`
+        expect(hit.triangle, label).toBeGreaterThanOrEqual(0)
+        const sink = (2 * d - hit.t) / d
+        expect(sink, label).toBeLessThanOrEqual(0.25)
+        expect(sink, label).toBeGreaterThan(-0.02)
+        const [a, b, c2] = [0, 1, 2].map((j) => vertex(tris.indices[hit.triangle * 3 + j]!))
+        const u = [b![0] - a![0], b![1] - a![1], b![2] - a![2]]
+        const v = [c2![0] - a![0], c2![1] - a![1], c2![2] - a![2]]
+        const f = [
+          u[1]! * v[2]! - u[2]! * v[1]!,
+          u[2]! * v[0]! - u[0]! * v[2]!,
+          u[0]! * v[1]! - u[1]! * v[0]!,
+        ]
+        const fl = Math.hypot(f[0]!, f[1]!, f[2]!)
+        const tilt =
+          (Math.acos(Math.min(1, (f[0]! * n[0] + f[1]! * n[1] + f[2]! * n[2]) / fl)) * 180) /
+          Math.PI
+        expect(tilt, label).toBeLessThan(25)
+      }
+    }
+  }, 180_000)
 })
 
 describe('pave on hollow and many-sided bodies', () => {
