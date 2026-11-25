@@ -244,6 +244,20 @@ describe('stones', () => {
     }
   })
 
+  it('a pair of studs that a large stone would fuse into one casting is offered the spacing to part it', async () => {
+    const studs = template('studs')
+    const r = replaceStone(studs, { nodeId: 'stone' }, { cut: 'trillion', carat: 5 })
+    const fused = await kernel.evaluate(applyOps(studs, r.ops).design, { detail: 'production' })
+    expect(fused.parts).toHaveLength(1)
+    const w = r.warnings.find((x) => x.code === 'pair.touch')!
+    expect(w.nodeId).toBe('stone')
+    const parted = applyOps(studs, [...r.ops, ...w.suggestion!.ops]).design
+    expect((await kernel.evaluate(parted, { detail: 'production' })).parts).toHaveLength(2)
+    // A stone the pair already has room for is not warned about.
+    const small = replaceStone(studs, { nodeId: 'stone' }, { cut: 'trillion', carat: 3 })
+    expect(small.warnings.map((x) => x.code)).not.toContain('pair.touch')
+  }, 60_000)
+
   it('an unusable measured size falls back to the nominal stone with a warning', async () => {
     // Bypass the schema's bounds, as a raw stored record would.
     const base = template('solitaire')
@@ -401,7 +415,10 @@ describe('halo and rows', () => {
 
   it('a halo saved before claw clearance keeps its stones, and is offered the clear layout', async () => {
     // A piece saved then, with the 1.3 mm melee the template had.
-    const v1 = { ...update(template('halo'), 'halo', { stoneWidth: 1.3 }), schemaVersion: 1 } as Design
+    const v1 = {
+      ...update(template('halo'), 'halo', { stoneWidth: 1.3 }),
+      schemaVersion: 1,
+    } as Design
     const old = await kernel.scene(v1)
     const fix = old.evaluation.diagnostics.find((x) => x.code === 'halo.claws')!
     expect(fix.fix?.ops).toEqual([{ t: 'update', id: 'halo', patch: { clearClaws: true } }])
@@ -421,6 +438,17 @@ describe('halo and rows', () => {
       expect(d).toBeLessThan(0.2)
     }
   })
+
+  it('the halo and eternity templates ship with their rows’ seat walls', async () => {
+    // Melee and bands sized for 0.4 mm of metal each side of the row. (Oval-pavé is still open.)
+    for (const id of ['halo', 'eternity']) {
+      const e = await kernel.evaluate(template(id), { detail: 'production' })
+      expect(
+        e.diagnostics.filter((x) => x.level !== 'info').map((x) => `${x.code}@${x.nodeId}`),
+        id,
+      ).toEqual([])
+    }
+  }, 60_000)
 
   it('pavé on a domed band keeps its seat wall: stones off the crest sink until the metal stands above their girdles', async () => {
     for (const [band, stone] of [

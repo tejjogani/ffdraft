@@ -5,10 +5,11 @@
  *
  * Clasp-local space: x runs along the chord from the end of the last link on one side (A, at
  * x = 0) to the start of the first link on the other (B), y across the chain in its plane, z
- * toward the chain's face. Like the links, the clasp is separate pieces that never touch: the
- * lobster (or box) against A's last link, the ring (or tongue) against B's first, caught in it,
- * each stopping the clearance short of its link. A chain is bought or cast apart and assembled
- * (the kernel never fuses its shells), and a jeweler solders the clasp's ends on then.
+ * toward the chain's face. Like the links, the clasp's two pieces never touch each other, and
+ * each is held by the chain: the lobster's eye and its ring are each cast onto an end link that
+ * threads the chain as every link does (as a jeweler closes a clasp onto its end rings), and a
+ * tennis line's box clasp hinges onto its end links as they hinge onto each other. Stood loose
+ * beside their links, the pieces were held by nothing.
  */
 import type { Manifold } from 'manifold-3d'
 import { type Deletable, QUALITY, type Quality, runtime } from '../../core'
@@ -24,7 +25,7 @@ import {
 } from '../../geometry/vec'
 import { manifoldFromTriangles } from '../../solid/solid'
 import { lobsterEyeWire, lobsterMesh } from '../finding/shapes'
-import { sampleCurve, segmentsFor, sweepAlong } from './centreline'
+import { sampleCurve, sweepAlong } from './centreline'
 import type { TennisLink } from './tennis'
 
 export type ClaspStyle = 'lobster' | 'box'
@@ -76,14 +77,20 @@ const lobsterLength = (linkWidth: number) => Math.min(25, Math.max(10, 2 * linkW
 
 /**
  * A lobster clasp and its ring spanning `span` (at least `lobsterMin(...)`): the lobster's eye
- * is against A; the ring's near side passes through the claw where it is widest, and its far
- * side is against B. The ring grows to take up the span, so the clasp meets both ends
- * whatever whole number of links it replaces.
+ * is at A; the ring's near side passes through the claw where it is widest, and its far side is
+ * at B. The ring grows to take up the span, so the clasp meets both ends whatever whole number
+ * of links it replaces. Each end reaches `reach` into what it meets (negative: stops short),
+ * and `ends` gives the metal each piece is cast onto there (the end links, clasp-local).
  */
-export function lobsterClasp(linkWidth: number, wire: number, span: number): Clasp {
+export function lobsterClasp(
+  linkWidth: number,
+  wire: number,
+  span: number,
+  reach = END_REACH,
+  ends?: (own: <T extends Deletable>(m: T) => T, quality: Quality) => [Manifold[], Manifold[]],
+): Clasp {
   const L = lobsterLength(linkWidth)
   const eye = lobsterEyeWire(L, wire)
-  const reach = END_REACH
   // The ring's near side crosses the claw's plane at 0.75 of its length (inside the claw), its
   // far side past the claw's top; it reaches B.
   const near = 0.75 * L - reach
@@ -92,18 +99,29 @@ export function lobsterClasp(linkWidth: number, wire: number, span: number): Cla
     style: 'lobster',
     length: L,
     span,
-    parts: (own, quality) => [
-      own(lobsterPlaced(L, eye, quality)),
-      own(ringAboutY(near + r, r, eye, quality)),
-    ],
+    parts: (own, quality) => {
+      const lobster = own(lobsterPlaced(L, eye, quality, reach))
+      const ring = own(ringAboutY(near + r, r, eye, quality))
+      if (!ends) return [lobster, ring]
+      const [a, b] = ends(own, quality)
+      const { manifold: mf } = runtime()
+      return [own(mf.Manifold.union([lobster, ...a])), own(mf.Manifold.union([ring, ...b]))]
+    },
   }
 }
 
-/** The lobster in clasp-local space, its eye reaching SOLDER behind x = 0. */
-function lobsterPlaced(L: number, eye: number, quality: Quality): Manifold {
+/**
+ * How far a lobster's eye and its ring reach into the end links they are cast onto: half the
+ * thinner of the eye's wire and the chain's, so the joint is solid metal and not a kiss.
+ */
+export const lobsterFuse = (linkWidth: number, wire: number) =>
+  0.5 * Math.min(wire, lobsterEyeWire(lobsterLength(linkWidth), wire))
+
+/** The lobster in clasp-local space, its eye reaching `reach` behind x = 0. */
+function lobsterPlaced(L: number, eye: number, quality: Quality, reach = END_REACH): Manifold {
   const claw = manifoldFromTriangles(lobsterMesh(L, eye, quality))
   try {
-    return claw.transform(multiply(translation([-END_REACH, 0, 0]), LOBSTER_AXES) as never)
+    return claw.transform(multiply(translation([-reach, 0, 0]), LOBSTER_AXES) as never)
   } finally {
     claw.delete()
   }
@@ -116,15 +134,14 @@ const shortest = new Map<string, number>()
  * claw's top and that touches the claw nowhere, found on the meshes (the claw is not a simple
  * shape to clear by formula).
  */
-export function lobsterMin(linkWidth: number, wire: number): number {
+export function lobsterMin(linkWidth: number, wire: number, reach = END_REACH): number {
   const L = lobsterLength(linkWidth)
   const eye = lobsterEyeWire(L, wire)
-  const key = `${L}:${eye}`
+  const key = `${L}:${eye}:${reach}`
   const known = shortest.get(key)
   if (known !== undefined) return known
-  const reach = END_REACH
   const near = 0.75 * L - reach
-  const lobster = lobsterPlaced(L, eye, QUALITY.draft)
+  const lobster = lobsterPlaced(L, eye, QUALITY.draft, reach)
   let span = Infinity
   try {
     // From a ring whose far side just passes the claw's top, outward until nothing touches.
@@ -147,77 +164,10 @@ export function lobsterMin(linkWidth: number, wire: number): number {
 }
 
 /**
- * A box clasp for a tennis line `width` wide and `height` deep, spanning `span` (at least
- * `boxMin(width)`): a box closed at A and open toward B, and on B a plate carrying a tongue that
- * fills the box with clearance all round. The box grows to take up the span.
- */
-export function boxClasp(width: number, height: number, span: number): Clasp {
-  const wall = Math.max(0.4, 0.1 * width)
-  const reach = END_REACH
-  const c = CLASP_CLEARANCE
-  // The plate on B is a wall thick; the box takes the rest of the span.
-  const box = span + 2 * reach - c - wall
-  const W = width
-  const H = height
-  return {
-    style: 'box',
-    length: box,
-    span,
-    parts: (own, quality) => {
-      const { manifold: mf } = runtime()
-      const seg = (r: number) => segmentsFor(r, quality.chord, 8, 32)
-      const r = Math.min(wall, 0.3 * Math.min(W, H))
-      /** A rounded rectangle w × h across (y × z), extruded from x0 to x1. */
-      const block = (w: number, h: number, round: number, x0: number, x1: number) => {
-        const section = own(
-          own(mf.CrossSection.square([w - 2 * round, h - 2 * round], true)).offset(
-            round,
-            'Round',
-            2,
-            seg(round),
-          ),
-        )
-        // Extruded along z, then turned so it runs along x (w across y, h along z).
-        const solid = own(section.extrude(x1 - x0))
-        return own(own(solid.transform(LOBSTER_AXES as never)).translate([x0, 0, 0]))
-      }
-      const start = -reach
-      const mouth = start + box
-      const outer = block(W, H, r, start, mouth)
-      const cavity = block(
-        W - 2 * wall,
-        H - 2 * wall,
-        Math.max(0.05, r - wall),
-        start + wall,
-        mouth + 1,
-      )
-      const shell = own(outer.subtract(cavity))
-      // The tongue fills the cavity's width with clearance, half its depth, from just inside
-      // the cap to the plate past the mouth.
-      const tongue = block(
-        W - 2 * wall - 2 * c,
-        0.5 * (H - 2 * wall),
-        Math.min(0.1, 0.1 * (H - 2 * wall)),
-        start + wall + c,
-        mouth + c + wall / 2,
-      )
-      const plate = block(W, H, r, mouth + c, mouth + c + wall)
-      return [shell, tongue, plate]
-    },
-  }
-}
-
-/**
  * Shortest box a box clasp has, mm: its tongue needs that much length to spring and catch. At
  * 1.4 line widths alone a 2 mm tennis line got a 3 mm box, shorter than any stock clasp.
  */
 const BOX_LEAST = 5
-
-/** The shortest span a box clasp takes: a box 1.4 line widths long, and BOX_LEAST at least. */
-export function boxMin(width: number): number {
-  const wall = Math.max(0.4, 0.1 * width)
-  return Math.max(BOX_LEAST, 1.4 * width) - 2 * END_REACH + CLASP_CLEARANCE + wall
-}
 
 /** Spacing of the sections a hinged box clasp is swept through along the line, mm. */
 const SWEEP_STEP = 0.5
@@ -232,8 +182,7 @@ const END_LAP = 0.15
 const endPiece = (link: TennisLink, wall: number) => Math.max(wall, link.box.attach + END_LAP)
 
 /** The box clasp's walls: as a box clasp's, and no thinner than the link's plate. */
-const boxWall = (link: TennisLink, width: number) =>
-  Math.max(0.4, 0.1 * width, link.box.wall)
+const boxWall = (link: TennisLink, width: number) => Math.max(0.4, 0.1 * width, link.box.wall)
 
 /**
  * Least distance between the centres of the first and last links a hinged box clasp replaces:
@@ -306,7 +255,13 @@ export function hingedBoxClasp(
         }
       }
       const outer = along(W, H, r, s0, mouth)
-      const cavity = along(W - 2 * wall, H - 2 * wall, Math.max(0.05, r - wall), s0 + wall, mouth + 1)
+      const cavity = along(
+        W - 2 * wall,
+        H - 2 * wall,
+        Math.max(0.05, r - wall),
+        s0 + wall,
+        mouth + 1,
+      )
       const box = own(outer.subtract(cavity))
       // The tongue fills the cavity's width with clearance, half its depth, from just inside the
       // cap into the end piece.

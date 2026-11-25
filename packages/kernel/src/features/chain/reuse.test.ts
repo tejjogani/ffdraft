@@ -43,7 +43,7 @@ vi.mock('./clasp', async (importOriginal) => {
   return {
     ...actual,
     lobsterClasp: counted(actual.lobsterClasp),
-    boxClasp: counted(actual.boxClasp),
+    hingedBoxClasp: counted(actual.hingedBoxClasp),
   }
 })
 

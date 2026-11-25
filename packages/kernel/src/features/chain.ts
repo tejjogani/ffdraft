@@ -13,6 +13,7 @@ import {
   type Mat4,
   metalOf,
   QUALITY,
+  type Quality,
   runtime,
   type Stone,
   type Vec3,
@@ -22,17 +23,19 @@ import {
   cross,
   frameMatrix,
   IDENTITY,
+  invertSimilarity,
   multiply,
   transformFrame,
   transformPoint,
   translation,
 } from '../geometry/vec'
-import { trianglesFromManifold } from '../solid/solid'
+import { manifoldFromTriangles, trianglesFromManifold } from '../solid/solid'
 import {
   type Clasp,
   hingedBoxClasp,
   hingedBoxMin,
   lobsterClasp,
+  lobsterFuse,
   lobsterMin,
   toward,
 } from './chain/clasp'
@@ -215,7 +218,15 @@ function claspAt(
   plan: ChainPlan,
   path: ChainPath,
   centres: readonly number[],
-): { dropped: Set<number>; clasp: Clasp; key: string; frame: Frame; ends: [Frame, Frame] } | null {
+): {
+  dropped: Set<number>
+  /** Links built into the clasp's own pieces instead of standing as links. */
+  absorbed?: Set<number>
+  clasp: Clasp
+  key: string
+  frame: Frame
+  ends: [Frame, Frame]
+} | null {
   if (node.clasp === 'none' || !path.closed || centres.length < 4) return null
   const top = path.length / 2
   if (plan.tennis) return hingedClaspAt(node, plan, plan.tennis, path, centres)
@@ -229,14 +240,18 @@ function claspAt(
       behind = Math.min(behind, p[i]!)
     }
   }
-  const least = lobsterMin(node.linkWidth, plan.wire)
+  // The lobster's eye and its ring are cast onto the end links either side, reaching into each
+  // by half the thinner wire so the joint is solid; those links thread the chain as before.
+  const fuse = lobsterFuse(node.linkWidth, plan.wire)
+  const least = lobsterMin(node.linkWidth, plan.wire, fuse)
+  const halfSpan = Math.min(...plan.pitches) / 2
   // Links nearest the top first; the nearest m form one run.
   const order = centres.map((s, i) => ({ i, d: Math.abs(s - top) })).sort((a, b) => a.d - b.d)
-  for (let m = 1; m <= centres.length - 2; m++) {
+  for (let m = 1; m <= centres.length - 4; m++) {
     const run = order.slice(0, m).map((o) => o.i)
     const first = Math.min(...run)
     const last = Math.max(...run)
-    if (first === 0 || last === centres.length - 1) return null
+    if (first <= 1 || last >= centres.length - 2) return null
     const sa = centres[first - 1]!
     const sb = centres[last + 1]!
     const a0 = path.at(sa + ahead).point
@@ -252,11 +267,34 @@ function claspAt(
     const along = f[0] * x[0] + f[1] * x[1] + f[2] * x[2]
     const z = toward([0, 0, 0], [f[0] - along * x[0], f[1] - along * x[1], f[2] - along * x[2]])
     const frame: Frame = { origin: a, x, y: cross(z, x), z }
-    const clasp = lobsterClasp(node.linkWidth, plan.wire, span)
-    // Everything the clasp's shape depends on (its frame only places it).
-    const key = `lobster|${node.linkWidth}|${plan.wire}|${span}`
+    const local = invertSimilarity(frameMatrix(frame))
+    /** The end link k as the chain would place it, in clasp-local space. */
+    const endLink = (
+      k: number,
+      own: <T extends { delete(): void }>(m: T) => T,
+      quality: Quality,
+    ) => {
+      const { template, orient } = plan.period[k % plan.period.length]!
+      const at = multiply(local, multiply(linkFrames(path, [centres[k]!], halfSpan)[0]!, orient))
+      const link = own(manifoldFromTriangles(plan.templates[template]!.mesh(quality)))
+      return own(link.transform(at as never))
+    }
+    const clasp = lobsterClasp(node.linkWidth, plan.wire, span, fuse, (own, quality) => [
+      [endLink(first - 1, own, quality)],
+      [endLink(last + 1, own, quality)],
+    ])
+    // Everything the clasp's shape depends on: its span, and the end links as they stand
+    // against its frame.
+    const key = `lobster|${node.style}|${node.linkWidth}|${plan.wire}|${span}|${path.length}|${path.minRadius}|${sa}|${sb}`
     const ends: [Frame, Frame] = [frame, { ...frame, origin: addScaled(a, x, span) }]
-    return { dropped: new Set(run), clasp, key, frame, ends }
+    return {
+      dropped: new Set(run),
+      absorbed: new Set([first - 1, last + 1]),
+      clasp,
+      key,
+      frame,
+      ends,
+    }
   }
   return null
 }
@@ -390,7 +428,7 @@ export const chain = defineFeature('chain', (node, ctx) => {
   const clasp = draped ? claspAt(node, plan, path, centres) : null
   const kept = (k: number) => !clasp?.dropped.has(k)
   const instances: Instance[] = frames.flatMap((frame, k) => {
-    if (!kept(k)) return []
+    if (!kept(k) || clasp?.absorbed?.has(k)) return []
     const { template, orient } = plan.period[k % plan.period.length]!
     return [{ template, matrix: multiply(place, multiply(frame, orient)) }]
   })

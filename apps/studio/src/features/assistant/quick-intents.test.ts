@@ -157,9 +157,10 @@ describe('quick intents for a stone', () => {
       label: 'Replace stones…',
       hint: 'All 24 stones in this halo',
     })
-    expect(byId(intents, 'bigger')).toMatchObject({ hint: '1.3 → 1.4 mm' })
+    // The halo template's melee are 1.1 mm (a 1.6× face); the next stock size is 1.2.
+    expect(byId(intents, 'bigger')).toMatchObject({ hint: '1.1 → 1.2 mm' })
     expect(byId(intents, 'bigger')!.edit!.ops).toEqual([
-      { t: 'update', id: 'halo', patch: { stoneWidth: 1.4 } },
+      { t: 'update', id: 'halo', patch: { stoneWidth: 1.2 } },
     ])
   })
 

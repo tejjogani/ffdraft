@@ -857,6 +857,63 @@ describe('outline bodies: what the engine pass found', () => {
   }, 120_000)
 })
 
+describe('outline bodies: what the follow-up found', () => {
+  const name = (
+    text: string,
+    font: 'sans' | 'serif' | 'script' | 'block',
+    join: 'auto' | 'off' | 'underline' = 'auto',
+  ) =>
+    kernel.scene(
+      pendant({
+        id: 'v',
+        kind: 'vectorBody',
+        source: { type: 'text', text, font },
+        height: 12,
+        thickness: 1.6,
+        bevel: 'flat',
+        bevelSize: 0,
+        join,
+      }),
+    )
+
+  // Umlauts over a capital's counter, dots set just off a lowercase stem, a tilde and an acute
+  // beside their letter's corner: each was left loose, or on a sloped sprue that touched a round
+  // dot at one point only, and a cast name lost it.
+  it('hangs every accent of sans, serif and script names on its letter, in one piece', async () => {
+    for (const font of ['sans', 'serif', 'script'] as const)
+      for (const text of ['MÜLLER', 'Zoë', 'Ñandú', 'Şükrü']) {
+        const scene = await name(text, font)
+        const codes = scene.evaluation.diagnostics.map((d) => d.code)
+        expect(codes, `${font} ${text}`).not.toContain('outline.disconnected')
+        const m = scene.nodes.get('v')!.bodies[0]!.solid.manifold()
+        const pieces = m.decompose()
+        expect(pieces.length, `${font} ${text}`).toBe(1)
+        for (const p of pieces) p.delete()
+        const box = m.boundingBox()
+        expect(box.max[2] - box.min[2], `${font} ${text}`).toBeGreaterThan(11.9)
+      }
+  }, 240_000)
+
+  // The warning said only how many pieces there were, and advised a script font, which leaves
+  // accents loose too.
+  it('names the letter whose accent stays loose, without advising another font', async () => {
+    const scene = await name('İpek', 'script')
+    const loose = scene.evaluation.diagnostics.find((d) => d.code === 'outline.disconnected')
+    expect(loose?.message).toContain('“İ”')
+    expect(loose?.message).not.toMatch(/script|font/)
+  })
+
+  // Setting an i's dot down onto its stem lowered the name's top when the dot was its highest
+  // point: Lubica came out 11.62 mm tall against the 12 asked.
+  it('keeps a name whose i dot is its highest point at the height asked', async () => {
+    for (const text of ['Lubica', 'Ľubica']) {
+      const scene = await name(text, 'sans')
+      const box = scene.nodes.get('v')!.bodies[0]!.solid.manifold().boundingBox()
+      expect(box.max[2] - box.min[2], text).toBeCloseTo(12, 1)
+    }
+  })
+})
+
 describe('engraving around a band', () => {
   it('says text longer than the band laps over itself, with letters that fit', async () => {
     const band = (size: number, text: string) =>

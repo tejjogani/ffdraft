@@ -4,8 +4,8 @@
  *
  * The inner row starts at the node's gap to the centre stone (`offset`), as a setter builds it:
  * the centre's claws come up through the halo's inner edge, each standing in a notch between two
- * halo stones, so no claw crosses a stone and the halo stays a frame, not a tyre (canon
- * `halo.outline`: 1.4–1.6× the centre). A bezel is continuous, so there the row starts beyond its
+ * halo stones (or, on a sharp point, with the row stepping out round it), so no claw crosses a
+ * stone and the halo stays a frame, not a tyre (canon `halo.outline`: 1.4–1.6× the centre). A bezel is continuous, so there the row starts beyond its
  * wall. The ring's inner edge tucks under the centre's girdle, clear of its pavilion, to give the
  * inner row its seat wall. (Pieces from before claw clearance keep their old layout through
  * `clearClaws: false`.) On a band the ring is lifted off it where it would sink in, and stands
@@ -71,6 +71,12 @@ const MIN_GAP = 0.05
  * they step out round it, mm; past it the claw stands in a notch instead.
  */
 const MAX_SIDE_PUSH = 0.1
+/**
+ * Metal kept in hand beyond the outer seat walls where the rows step out round a point, mm: the
+ * step changes fast close to the point, and the stones and the ring's sections sample it at
+ * different places (a marquise at 2.5:1 left two tip stones just short of their wall).
+ */
+const STEP_MARGIN = 0.05
 /** Air between the ring's inner edge, tucked under the centre's girdle, and its pavilion, mm. */
 const PAVILION_CLEARANCE = 0.05
 
@@ -138,7 +144,9 @@ function sectionHull(surface: Float32Array, z: number): Vec2[] {
       ])
     }
   // Neighbouring triangles share their edges: each crossing is found twice.
-  const unique = [...new Map(points.map((q) => [`${q[0].toFixed(3)},${q[1].toFixed(3)}`, q])).values()]
+  const unique = [
+    ...new Map(points.map((q) => [`${q[0].toFixed(3)},${q[1].toFixed(3)}`, q])).values(),
+  ]
   return unique.length >= 3 ? convexHull(unique) : unique
 }
 
@@ -156,7 +164,7 @@ function convexDistance(hull: readonly Vec2[], q: Vec2): number {
 }
 
 /**
- * A claw as an obstacle for halo stones of `stone`'s cut and size whose girdles stand at
+ * A claw as an obstacle for halo stones shaped as `small` whose girdles stand at
  * `girdleZ` (the centre's frame). Legs lean in and, on a band, sideways toward its metal, and the
  * section turns where the claw bends over the crown, so the claw is taken as built: its sections
  * at heights through the halo stone, each against the stone's own width at that height.
@@ -359,8 +367,7 @@ function sidePush(
 ): (claw: ClawPlace) => number {
   const turn = (v: number) => ((v % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)
   const dirs = claws.map((c) => turn(Math.atan2(...dirOf(shape, c.phi)))).sort((a, b) => a - b)
-  const at = (a: number) =>
-    push([shape.centre[0] + Math.cos(a), shape.centre[1] + Math.sin(a)])
+  const at = (a: number) => push([shape.centre[0] + Math.cos(a), shape.centre[1] + Math.sin(a)])
   return (claw) => {
     const own = turn(Math.atan2(...dirOf(shape, claw.phi)))
     const i = dirs.findIndex((d) => Math.abs(d - own) < 1e-9)
@@ -688,13 +695,13 @@ export const halo = defineFeature('halo', (node, ctx) => {
   // ring would reach its culet), the row moves out by what is missing, as on a bezel.
   let drop = node.drop
   let inner = gapInner
-  const wallIn = RULES.channelWall + 0.02 + PAVILION_CLEARANCE - inner
+  // How far the pavilion has narrowed inside the girdle at height z, at its least.
+  const girdle = shape.polygon(8)
+  const inset = (z: number) =>
+    Math.min(...girdle.phis.map((phi) => polygonDistance(girdle.points, shape.silhouette(phi, z))))
+  const wallFor = (from: number) => RULES.channelWall + 0.02 + PAVILION_CLEARANCE - from
+  const wallIn = wallFor(inner)
   if (!legacy && wallIn > 0) {
-    const girdle = shape.polygon(8)
-    const inset = (z: number) =>
-      Math.min(
-        ...girdle.phis.map((phi) => polygonDistance(girdle.points, shape.silhouette(phi, z))),
-      )
     let top = shape.girdleBottom
     while (top > shape.culet / 2 && inset(top) < wallIn) top -= 0.02
     const gained = inset(top)
@@ -710,18 +717,6 @@ export const halo = defineFeature('halo', (node, ctx) => {
       value: drop,
       limit: node.drop,
     })
-  if (inner > gapInner + 1e-6)
-    ctx.report({
-      level: 'info',
-      code: 'halo.offset',
-      message: `The halo starts ${inner.toFixed(2)} mm from the centre stone, not at the ${node.offset.toFixed(2)} mm gap asked: the centre’s pavilion leaves no room under its girdle for the inner stones’ seat wall, so the wall stands in the gap.`,
-      value: inner,
-      limit: node.offset,
-      fix: {
-        label: `Set the gap to ${inner.toFixed(2)} mm`,
-        ops: [{ t: 'update', id: node.id, patch: { offset: Number(inner.toFixed(2)) } }],
-      },
-    })
   if (legacy && clawReach > node.offset + 0.02)
     ctx.report({
       level: 'warning',
@@ -736,10 +731,12 @@ export const halo = defineFeature('halo', (node, ctx) => {
 
   // The metal ring under all rows, following the centre stone's outline.
   const width = node.rows * pitch - node.gap + 2 * (legacy ? LEGACY_BORDER : BORDER)
-  const middle = inner + (node.rows * pitch - node.gap) / 2
   const depth = culet + FLOOR
-  const middleFlat = shape.offsetPath(middle)
-  const ringFlat = legacy ? middleFlat : bridgeClefts(shape, middleFlat, width)
+  const ringPaths = () => {
+    const middleFlat = shape.offsetPath(inner + (node.rows * pitch - node.gap) / 2)
+    return { middleFlat, ringFlat: legacy ? middleFlat : bridgeClefts(shape, middleFlat, width) }
+  }
+  let { middleFlat, ringFlat } = ringPaths()
 
   // On a band: lift the ring where it would sink into the band (a small centre stone sits low).
   let lift = 0
@@ -769,6 +766,25 @@ export const halo = defineFeature('halo', (node, ctx) => {
       message: `The halo is raised ${lift.toFixed(2)} mm above its drop so it does not sink into the band under a small centre stone.`,
       value: lift,
     })
+  // Lifted, the ring's top stands where the pavilion is wider than it was lowered for: the row
+  // moves out by the wall that no longer fits under the girdle.
+  const short = legacy ? 0 : wallFor(inner) - inset(Math.min(surfaceZ, shape.girdleBottom))
+  if (lift > 0 && short > 0) {
+    inner += short
+    ;({ middleFlat, ringFlat } = ringPaths())
+  }
+  if (inner > gapInner + 1e-6)
+    ctx.report({
+      level: 'info',
+      code: 'halo.offset',
+      message: `The halo starts ${inner.toFixed(2)} mm from the centre stone, not at the ${node.offset.toFixed(2)} mm gap asked: the centre’s pavilion leaves no room under its girdle for the inner stones’ seat wall, so the wall stands in the gap.`,
+      value: inner,
+      limit: node.offset,
+      fix: {
+        label: `Set the gap to ${inner.toFixed(2)} mm`,
+        ops: [{ t: 'update', id: node.id, patch: { offset: Number(inner.toFixed(2)) } }],
+      },
+    })
 
   // Claws along a side stand in notches of the row; round a claw on a point the row steps out,
   // unless stepping out would carry the sides with it: a princess's or trillion's straight sides
@@ -786,9 +802,11 @@ export const halo = defineFeature('halo', (node, ctx) => {
   const built = new Map<ClawPlace, Obstacle>()
   const obstacle = (c: ClawPlace): Obstacle => {
     const own = claws.find((k) => k.phi === c.phi) ?? c
-    let o = built.get(own)
-    if (!o) built.set(own, (o = clawObstacle(shape, own, small, girdleZ)))
-    return o
+    const known = built.get(own)
+    if (known) return known
+    const made = clawObstacle(shape, own, small, girdleZ)
+    built.set(own, made)
+    return made
   }
   const innerPath = shape.offsetPath(inner + size / 2)
   const pushFor = (onPoint: readonly ClawPlace[]) =>
@@ -886,9 +904,9 @@ export const halo = defineFeature('halo', (node, ctx) => {
     const q = stations[i]!
     // Across a cleft's bridge the stones round the cleft still follow the unbridged row, which
     // dips inside the bridge (one may sit in the V itself), so there the ring fills the V up to
-    // the centre's pavilion, as a setter fills it, to keep their seat walls.
-    // There the nearest point of the pavilion is a lobe beside the section, not the V ahead of
-    // it, so the reach is measured along the section.
+    // the centre's pavilion, as a setter fills it, to keep their seat walls. The nearest point
+    // of the pavilion there is a lobe beside the section, not the V ahead of it, so the reach is
+    // measured along the section.
     const bridged = !legacy && polygonDistance(middleFlat, q) > 0.01
     const ahead = bridged
       ? rayToPolygon(silhouette, q, scale2(outwardAt(stations, i), -1))
@@ -896,7 +914,8 @@ export const halo = defineFeature('halo', (node, ctx) => {
     const inside = legacy
       ? width / 2
       : clamp(ahead - PAVILION_CLEARANCE, corner + 0.05, bridged ? width + size : width / 2)
-    const outside = width / 2 + push(q)
+    const step = push(q)
+    const outside = width / 2 + step + (step > 0 ? STEP_MARGIN : 0)
     // Loop x points outward from the stone (the path runs counter-clockwise, x = tangent × up).
     const loop = roundedRectLoop(inside + outside, thickness, corner)
     return placeLoop(f, translateLoop(loop, (outside - inside) / 2, zMid))

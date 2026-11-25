@@ -12,8 +12,8 @@ import {
   QUALITY,
   runtime,
   type Solid,
-  solidFromManifold,
   type Stone,
+  solidFromManifold,
 } from '../core'
 import { circleLoop, type Loop, roundedRectLoop } from '../geometry/loop'
 import { pathFrames } from '../geometry/path'
@@ -462,48 +462,17 @@ function standPoint(
   }
   const span = bounds.max[0] - bounds.min[0]
   // Nearest the centre of mass first: hanging level matters more than standing on the very top.
-  let top: Vec3 | null = null
-  let thick = node.wire
-  let sink = need
+  let found: { at: Vec3; thick: number } | null = null
   let walked = 0
-  for (let d = 0; d <= span / 2 && !top; d += STEP)
+  for (let d = 0; d <= span / 2 && !found; d += STEP)
     for (const x of d > 0 ? [com[0] + d, com[0] - d] : [com[0]]) {
       const foot = footAt(x)
       if (foot && foot.run >= need) {
-        top = foot.at
-        thick = foot.thick
+        found = { at: foot.at, thick: foot.thick }
         walked = d
         break
       }
     }
-  /** Whether a foot at `at` sunk `deep` hangs the piece within HANG_TILT, before any lift. */
-  const level = (at: Vec3, deep: number) => {
-    const lever = at[2] + openingRise(node, deep) + node.opening / 2 - com[2]
-    return lever > 0 && Math.abs(at[0] - com[0]) <= Math.tan((HANG_TILT * Math.PI) / 180) * lever
-  }
-  // Where the full sink found metal only so far off the centre of mass that the piece hangs
-  // turned, a nearer foot on shallower metal that hangs it level is taken, sunk to THIN_SKIN
-  // above that metal's underside (no less than SINK). A hidden loop does not stand on the top.
-  if (top && node.style !== 'hidden' && !level(top, need))
-    thin: for (let d = 0; d < walked; d += STEP)
-      for (const x of d > 0 ? [com[0] + d, com[0] - d] : [com[0]]) {
-        // Carried by the shallow metal, the foot keeps to the middle of the plate: chosen by
-        // depth alone it stood a third of the way to the front of a 1.4 mm name.
-        const foot = footAt(x, SINK + THIN_SKIN)
-        if (!foot || foot.run < SINK + THIN_SKIN) continue
-        const deep = Math.min(need, foot.run - THIN_SKIN)
-        if (!level(foot.at, deep)) continue
-        top = foot.at
-        thick = foot.thick
-        sink = deep
-        break thin
-      }
-  // Nothing anywhere carries the foot: stand on the highest point so the problem is visible.
-  let supported = true
-  if (!top) {
-    supported = false
-    top = [com[0], (bounds.min[1] + bounds.max[1]) / 2, bounds.max[2]]
-  }
   // The tallest metal within the bail's reach either side: the hole must sit above it.
   const reach = (node.opening + node.wire) / 2 + node.wire
   const clearAt = (x: number): number => {
@@ -515,87 +484,117 @@ function standPoint(
       }
     return clear
   }
-  let clear = Math.max(top[2], clearAt(top[0]))
-  if (supported && node.style !== 'hidden' && clear - top[2] > node.wire) {
-    // Taller metal within reach (an ascender beside a low letter): rather than raise the bail
-    // on a stem drawn across that letter, stand on the taller metal itself, if that keeps the
-    // piece hanging as level as it would from here (or within HANG_TILT).
-    const tilt = (x: number, z: number) =>
-      Math.atan2(Math.abs(x - com[0]), Math.max(1e-6, z + node.opening - com[2]))
-    const limit = Math.max((HANG_TILT * Math.PI) / 180, tilt(top[0], clear))
-    const from = top
-    search: for (let d = STEP; d <= reach + 1e-9; d += STEP)
-      for (const x of [from[0] + d, from[0] - d]) {
-        const foot = footAt(x)
-        if (!foot || foot.run < need || tilt(x, foot.at[2]) > limit) continue
-        const over = Math.max(foot.at[2], clearAt(x))
-        if (over - foot.at[2] > node.wire / 2) continue
-        top = foot.at
-        thick = foot.thick
-        sink = need
-        clear = over
-        break search
-      }
+  const first = settle(found?.at ?? null, found?.thick ?? node.wire, need)
+  const level = (stand: Stand) => {
+    const tilt = hangTilt(node, stand)
+    return tilt !== null && tilt <= HANG_TILT
   }
-  // A rise smaller than the foot's own sink is taken up by the sink: a stem that short would
-  // be a sliver of metal under the casting's wall limit.
-  const rise = clear - top[2]
-  let lift = node.style === 'hidden' || rise < sink ? 0 : rise
-  // A ring or tube sinks into the host, but its arc widens as it rises: on a plate thinner than
-  // that arc's chord at the plate's top, the sunk arc stood out of both faces (1.1 mm proud each
-  // side of a 1.4 mm name; over the top stones of an iced 45 mm KING, buried 59 % in metal). It
-  // is raised until its arc is no wider than the metal under it where it meets the top, and
-  // stands on a stem sunk in its place.
-  if (supported && (node.style === 'ring' || node.style === 'tube')) {
-    const outer = node.opening / 2 + node.wire
-    const across = Math.min(outer, thick)
-    // How deep the arc's outer face may go into the top before it is wider than the metal.
-    const fits = outer - Math.sqrt(outer * outer - across * across)
-    // The foot stands on the lowest metal under its width; a rounded top (a disc's) is higher
-    // under the middle of the band, where the arc meets it first.
-    const band = node.style === 'ring' ? node.wire / 2 : half
-    const high = Math.max(
-      top[2],
-      ...[-1, -0.5, 0.5, 1].map((f) => columnAt(top![0] + f * band, top![1])?.z ?? -Infinity),
-    )
-    const raise = high - top[2] + sink + node.wire / 2 - fits
-    if (raise > 0) lift = Math.max(lift, raise)
-  }
-  // Stones set in the host's top (a halo's top stones, tables to the front): the foot and the
-  // bottom of the band would sit across their crowns, where no setter can reach them. As a bench
-  // jeweler hangs a halo, the foot moves behind the stones' girdle plane, onto the back of the
-  // rim, and the band rises on a stem until its lowest metal clears the stones' tops.
-  // The bail's lowest metal is at its foot, whatever its lift: a stem stands there.
-  const footLow = top[2] - sink - node.wire / 2
-  const under = node.style === 'hidden' || !supported ? null : stonesUnder(stones, top[0], footLow)
-  if (under) {
-    const front = node.wire / 2 + (node.style === 'loop' ? LEG_SPREAD * node.wire : 0)
-    const want = under.girdle + under.side * (STONE_MARGIN + front)
-    if ((want - top[1]) * under.side > 0) {
-      // The nearest place to `want`, walking back toward the first stand, that carries the foot.
+  if (!first.supported || node.style === 'hidden' || level(first)) return first
+  // Where the full sink found metal only so far off the centre of mass that the piece hangs
+  // turned, however it then stands, a nearer foot on shallower metal that hangs it level is
+  // taken, sunk to THIN_SKIN above that metal's underside (no less than SINK). Judged on the
+  // stand as settled: a foot that rises onto an ascender beside it may hang level already, and
+  // a lower foot nearer the centre then let the chain run through the letters (Legend, 16 mm).
+  for (let d = 0; d < walked; d += STEP)
+    for (const x of d > 0 ? [com[0] + d, com[0] - d] : [com[0]]) {
+      // Carried by the shallow metal, the foot keeps to the middle of the plate: chosen by
+      // depth alone it stood a third of the way to the front of a 1.4 mm name.
+      const foot = footAt(x, SINK + THIN_SKIN)
+      if (!foot || foot.run < SINK + THIN_SKIN) continue
+      const stand = settle(foot.at, foot.thick, Math.min(need, foot.run - THIN_SKIN))
+      if (level(stand)) return stand
+    }
+  return first
+
+  /**
+   * The stand on a foot at `at` (null: none carries it), `across` thick and sunk `deep`: raised
+   * over taller metal within reach, out of a thin plate, and behind stones set in the top.
+   */
+  function settle(at: Vec3 | null, across: number, deep: number): Stand {
+    let top = at
+    let thick = across
+    let sink = deep
+    // Nothing anywhere carries the foot: stand on the highest point so the problem is visible.
+    let supported = true
+    if (!top) {
+      supported = false
+      top = [com[0], (bounds.min[1] + bounds.max[1]) / 2, bounds.max[2]]
+    }
+    let clear = Math.max(top[2], clearAt(top[0]))
+    if (supported && node.style !== 'hidden' && clear - top[2] > node.wire) {
+      // Taller metal within reach (an ascender beside a low letter): rather than raise the bail
+      // on a stem drawn across that letter, stand on the taller metal itself, if that keeps the
+      // piece hanging as level as it would from here (or within HANG_TILT).
+      const tilt = (x: number, z: number) =>
+        Math.atan2(Math.abs(x - com[0]), Math.max(1e-6, z + node.opening - com[2]))
+      const limit = Math.max((HANG_TILT * Math.PI) / 180, tilt(top[0], clear))
       const from = top
-      for (let k = 0; k <= 16; k++) {
-        const y = want + ((from[1] - want) * k) / 16
-        const c = carry(from[0], y)
-        if (c && c.run >= sink) {
-          // The foot may now overhang the back of the rim: a loop's legs meet at its centre.
-          thick = node.wire / 2
-          top = [from[0], y, c.z]
-          break
+      search: for (let d = STEP; d <= reach + 1e-9; d += STEP)
+        for (const x of [from[0] + d, from[0] - d]) {
+          const foot = footAt(x)
+          if (!foot || foot.run < need || tilt(x, foot.at[2]) > limit) continue
+          const over = Math.max(foot.at[2], clearAt(x))
+          if (over - foot.at[2] > node.wire / 2) continue
+          top = foot.at
+          thick = foot.thick
+          sink = need
+          clear = over
+          break search
+        }
+    }
+    // A rise smaller than the foot's own sink is taken up by the sink: a stem that short would
+    // be a sliver of metal under the casting's wall limit.
+    const rise = clear - top[2]
+    let lift = node.style === 'hidden' || rise < sink ? 0 : rise
+    // A ring or tube sinks into the host, but its arc widens as it rises: on a plate thinner
+    // than that arc's chord at the plate's top, the sunk arc stood out of both faces (1.1 mm
+    // proud each side of a 1.4 mm name; over the top stones of an iced 45 mm KING, buried 59 %
+    // in metal). It is raised until its arc is no wider than the metal under it where it meets
+    // the top, and stands on a stem sunk in its place.
+    if (supported && (node.style === 'ring' || node.style === 'tube')) {
+      const outer = node.opening / 2 + node.wire
+      const width = Math.min(outer, thick)
+      // How deep the arc's outer face may go into the top before it is wider than the metal.
+      const fits = outer - Math.sqrt(outer * outer - width * width)
+      // The foot stands on the lowest metal under its width; a rounded top (a disc's) is higher
+      // under the middle of the band, where the arc meets it first.
+      const band = node.style === 'ring' ? node.wire / 2 : half
+      const high = Math.max(
+        top[2],
+        ...[-1, -0.5, 0.5, 1].map((f) => columnAt(top![0] + f * band, top![1])?.z ?? -Infinity),
+      )
+      const raise = high - top[2] + sink + node.wire / 2 - fits
+      if (raise > 0) lift = Math.max(lift, raise)
+    }
+    // Stones set in the host's top (a halo's top stones, tables to the front): the foot and the
+    // bottom of the band would sit across their crowns, where no setter can reach them. As a
+    // bench jeweler hangs a halo, the foot moves behind the stones' girdle plane, onto the back
+    // of the rim, and the band rises on a stem until its lowest metal clears the stones' tops.
+    // The bail's lowest metal is at its foot, whatever its lift: a stem stands there.
+    const footLow = top[2] - sink - node.wire / 2
+    const under =
+      node.style === 'hidden' || !supported ? null : stonesUnder(stones, top[0], footLow)
+    if (under) {
+      const front = node.wire / 2 + (node.style === 'loop' ? LEG_SPREAD * node.wire : 0)
+      const want = under.girdle + under.side * (STONE_MARGIN + front)
+      if ((want - top[1]) * under.side > 0) {
+        // The nearest place to `want`, walking back toward the first stand, that carries it.
+        const from = top
+        for (let k = 0; k <= 16; k++) {
+          const y = want + ((from[1] - want) * k) / 16
+          const c = carry(from[0], y)
+          if (c && c.run >= sink) {
+            // The foot may now overhang the back of the rim: a loop's legs meet at its centre.
+            thick = node.wire / 2
+            top = [from[0], y, c.z]
+            break
+          }
         }
       }
+      const rise = under.top + STONE_CLEAR + sink + node.wire / 2 - top[2]
+      if (rise > 0) lift = Math.max(lift, rise, sink)
     }
-    const rise = under.top + STONE_CLEAR + sink + node.wire / 2 - top[2]
-    if (rise > 0) lift = Math.max(lift, rise, sink)
-  }
-  return {
-    top,
-    lift,
-    sink,
-    supported,
-    thick,
-    com,
-    hidden: hiddenPlace,
+    return { top, lift, sink, supported, thick, com, hidden: hiddenPlace }
   }
 
   /**
@@ -777,16 +776,19 @@ function heavyBody(host: NodeResult, ctx: BuildContext) {
     host.bodies.reduce((sum, b) => sum + b.solid.volume(), 0),
   )
   if (grams <= HEAVY_G) return
-  const what = `${grams.toFixed(0)} g of ${METALS[metal].label}`
+  // The body as its own node built it: pavé seats are cut into it by a later node, which this
+  // one cannot see, so the weight is said to be before them (an iced 100 mm KING: 658 g here,
+  // 577 g once its seats were cut).
+  const what = `${grams.toFixed(0)} g of ${METALS[metal].label} hanging from the bail (weighed before any stone seats are cut)`
   ctx.report({
     level: body.kind === 'meshBody' || grams > UNWEARABLE_G ? 'warning' : 'info',
     code: 'body.heavy',
     message:
       body.kind === 'meshBody' && failed
-        ? `The hollow failed, so the piece is cast solid: ${what} hanging from the bail. Thin walls stopped it: try a thinner hollow wall, or a larger piece.`
+        ? `The hollow failed, so the piece is cast solid: ${what}. Thin walls stopped it: try a thinner hollow wall, or a larger piece.`
         : body.kind === 'meshBody'
-          ? `The piece is cast solid: ${what} hanging from the bail. Hollow it from the back to a ${HOLLOW_WALL} mm wall, which still takes 1.3 mm pavé seats.`
-          : `The piece is cast solid: ${what} hanging from the bail. ${body.kind === 'vectorBody' ? 'An outline body cannot be hollowed yet: make the plate thinner, or build the piece as a sculpted body and hollow that.' : 'Make the base thinner, or build the piece as a sculpted body and hollow that.'}`,
+          ? `The piece is cast solid: ${what}. Hollow it from the back to a ${HOLLOW_WALL} mm wall, which still takes 1.3 mm pavé seats.`
+          : `The piece is cast solid: ${what}. ${body.kind === 'vectorBody' ? 'An outline body cannot be hollowed yet: make the plate thinner, or build the piece as a sculpted body and hollow that.' : 'Make the base thinner, or build the piece as a sculpted body and hollow that.'}`,
     value: grams,
     limit: HEAVY_G,
     ...(body.kind === 'meshBody' && !failed

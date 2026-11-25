@@ -362,6 +362,9 @@ describe('bail', () => {
     expect(plate?.fix).toBeUndefined()
     expect(plate?.level).toBe(plate!.value! > 200 ? 'warning' : 'info')
     expect(plate?.message).toMatch(/cannot be hollowed yet/)
+    // The weight is the body's before any pavé seats are cut into it: an iced 100 mm KING was
+    // quoted 658 g where its cast part weighed 577 g, so the message says which it is.
+    expect(plate?.message).toMatch(/before any stone seats are cut/)
     // A light piece says nothing.
     const light = await kernel.evaluate(name('Mia'))
     expect(light.diagnostics.map((d) => d.code)).not.toContain('body.heavy')

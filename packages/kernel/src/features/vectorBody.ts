@@ -64,19 +64,28 @@ const domeSpacing = (field: CrossSection, resolution: number): number => {
 /** The rim's edge treatment takes at most this share of the border; the rest is at full height. */
 const RIM_EDGE = 0.75
 
-/** The source's filled area, y up, in source units (the caller owns it). */
+/** A letter of a text source and the box of its outline, in the units of the section. */
+type Letter = { char: string; min: [number, number]; max: [number, number] }
+
+/**
+ * The source's filled area, y up, in source units (the caller owns it), and for text where
+ * each letter lies, so a loose piece can be named by its letter.
+ */
 async function sourceSection(
   source: VectorBodyNode['source'],
   height: number,
   ctx: BuildContext,
-): Promise<CrossSection> {
+): Promise<{ section: CrossSection; letters: Letter[] }> {
   const { manifold: mf } = runtime()
   switch (source.type) {
     case 'shape':
-      return new mf.CrossSection(
-        parseSvgPath(SHAPES[source.shape], RELATIVE_TOLERANCE * 2),
-        'NonZero',
-      )
+      return {
+        section: new mf.CrossSection(
+          parseSvgPath(SHAPES[source.shape], RELATIVE_TOLERANCE * 2),
+          'NonZero',
+        ),
+        letters: [],
+      }
     case 'svg': {
       // Flatten once coarsely to learn the artwork's size, then at the tolerance its scale needs.
       const rough = artwork(source.d, 1)
@@ -87,7 +96,7 @@ async function sourceSection(
       const contours = artwork(source.d, tolerance).map((c) =>
         c.map(([x, y]): [number, number] => [x, -y]),
       )
-      return new mf.CrossSection(contours, 'NonZero')
+      return { section: new mf.CrossSection(contours, 'NonZero'), letters: [] }
     }
     case 'text': {
       const text = await drawableText(source.text, source.font, ctx)
@@ -100,8 +109,18 @@ async function sourceSection(
             'EvenOdd',
           ),
       )
+      const letters = layout.glyphs.map((g): Letter => {
+        const ps = g.contours.flat()
+        const xs = ps.map((p) => p[0])
+        const ys = ps.map((p) => p[1])
+        return {
+          char: g.char,
+          min: [Math.min(...xs), Math.min(...ys)],
+          max: [Math.max(...xs), Math.max(...ys)],
+        }
+      })
       try {
-        return mf.CrossSection.union(glyphs)
+        return { section: mf.CrossSection.union(glyphs), letters }
       } finally {
         for (const g of glyphs) g.delete()
       }
@@ -202,10 +221,21 @@ function innerReach(outline: CrossSection, distance: OutlineDistance): number {
 
 export const vectorBody = defineFeature('vectorBody', async (node, ctx) => {
   const own = <T extends CrossSection | Manifold>(x: T): T => ctx.track(x)
-  let outline = own(await sourceSection(node.source, node.height, ctx))
+  const source = await sourceSection(node.source, node.height, ctx)
+  let outline = own(source.section)
   if (outline.isEmpty()) throw new Error('The outline encloses no area')
   const box = outline.bounds()
   const scale = node.height / (box.max[1] - box.min[1])
+  // Where each letter lies once the outline is centred and scaled.
+  const at = (x: number, y: number): [number, number] => [
+    (x - (box.min[0] + box.max[0]) / 2) * scale,
+    (y - (box.min[1] + box.max[1]) / 2) * scale,
+  ]
+  const letters = source.letters.map((l) => ({
+    char: l.char,
+    min: at(l.min[0], l.min[1]),
+    max: at(l.max[0], l.max[1]),
+  }))
   const width = (box.max[0] - box.min[0]) * scale
   if (width > MAX_WIDTH)
     throw new Error(
@@ -249,17 +279,40 @@ export const vectorBody = defineFeature('vectorBody', async (node, ctx) => {
       limit: MIN_STROKE,
     })
   }
+  /** Letters whose accent stayed loose after joining. */
+  const looseLetters: string[] = []
   if (node.source.type === 'text' && node.join !== 'off') {
     // Lettering must cast as one piece: on a bar under it, if the designer asked for one, and
     // then dots, accents and letters that still stand apart are tied on. Joining changes how
     // the name reads, so it is reported, with the way to turn it off.
-    if (node.join === 'underline')
-      outline = own(underline(outline, underlineDepth(node.height)))
+    if (node.join === 'underline') outline = own(underline(outline, underlineDepth(node.height)))
     // Only an i or a j has a dot to set down onto its stem; every other mark is an accent.
     const tittles = /[ij]/.test(node.source.text)
     const joined = joinIslands(outline, TIE_WIDTH, SEGMENTS, tittles)
     if (joined) {
+      const before = outline.bounds()
       outline = own(joined.section)
+      // An i's dot set down onto its stem lowers the top when it was the highest point: scale
+      // back up to the height asked (by a few per cent at most, which only thickens the ties).
+      const after = outline.bounds()
+      const back = (before.max[1] - before.min[1]) / (after.max[1] - after.min[1])
+      if (back > 1 + 1e-6)
+        outline = own(
+          own(
+            outline.translate([
+              -(after.min[0] + after.max[0]) / 2,
+              -(after.min[1] + after.max[1]) / 2,
+            ]),
+          ).scale(back),
+        )
+      for (const piece of joined.loose) {
+        const cx = (piece.min[0]! + piece.max[0]!) / 2
+        const cy = (piece.min[1]! + piece.max[1]!) / 2
+        const letter = letters.find(
+          (l) => cx >= l.min[0] && cx <= l.max[0] && cy >= l.min[1] && cy <= l.max[1],
+        )
+        if (letter && !looseLetters.includes(letter.char)) looseLetters.push(letter.char)
+      }
       ctx.report({
         level: 'info',
         code: 'outline.joined',
@@ -268,7 +321,7 @@ export const vectorBody = defineFeature('vectorBody', async (node, ctx) => {
       })
     }
   }
-  reportPieces(outline, node, ctx)
+  reportPieces(outline, node, looseLetters, ctx)
   const bevel = fittedBevel(node, ctx)
 
   // Fine enough for the profile to read smoothly, coarse enough to stay interactive.
@@ -406,18 +459,33 @@ function borderedSlab(
   }
 }
 
-/** Text whose glyphs do not touch casts as several loose pieces: say so. */
-function reportPieces(outline: CrossSection, node: VectorBodyNode, ctx: BuildContext): void {
+/**
+ * Text whose glyphs do not touch casts as several loose pieces: say so. When joining left an
+ * accent loose, name its letter: another font would not help (every bundled font sets some
+ * accents apart), only moving the accent nearer or casting it apart.
+ */
+function reportPieces(
+  outline: CrossSection,
+  node: VectorBodyNode,
+  looseLetters: readonly string[],
+  ctx: BuildContext,
+): void {
   const pieces = outline.decompose()
   const count = pieces.length
   for (const p of pieces) p.delete()
-  if (count > 1)
-    ctx.report({
-      level: 'warning',
-      code: 'outline.disconnected',
-      message:
-        node.source.type === 'text'
-          ? `The letters form ${count} separate pieces; choose a joined (script) font, tighten the spacing, or add a bar so it casts as one.`
-          : `The outline has ${count} separate pieces; join them so the body casts as one part.`,
-    })
+  if (count <= 1) return
+  const named = looseLetters.map((c) => `“${c}”`).join(', ')
+  const one = looseLetters.length === 1
+  ctx.report({
+    level: 'warning',
+    code: 'outline.disconnected',
+    message:
+      node.source.type !== 'text'
+        ? `The outline has ${count} separate pieces; join them so the body casts as one part.`
+        : looseLetters.length > 0
+          ? `The accent of ${named} stands too far from ${one ? 'its letter' : 'their letters'} to hang on a sprue, so the name casts as ${count} separate pieces; use an outline (SVG) of the lettering with ${one ? 'that accent' : 'those accents'} nearer, or cast ${one ? 'it' : 'them'} apart and solder ${one ? 'it' : 'them'} on.`
+          : node.join === 'off'
+            ? `The letters form ${count} separate pieces; set Join letters to auto, or to underline to stand them on a bar, so it casts as one.`
+            : `The lettering casts as ${count} separate pieces; tighten the spacing or add a bar so it casts as one.`,
+  })
 }

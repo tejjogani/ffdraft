@@ -176,7 +176,9 @@ describe('chain', () => {
       // A clasp no shorter than a stock one: a fine tennis line's box got 3 mm at first.
       expect(data.clasp!.length).toBeGreaterThanOrEqual(data.clasp!.style === 'box' ? 5 : 10)
       // The clasp is part of the chain's one body: its pieces (the lobster and its ring, the box
-      // and its tongue) and the end links are separate shells that never touch, as links are.
+      // and its tongue) are separate shells that never touch, as links are. The lobster and its
+      // ring are each cast onto an end link, so they are two shells; the box and its end piece
+      // hinge onto end links that stay shells of their own, four in all.
       expect(result.bodies).toHaveLength(1)
       const { end0, end1 } = result.frames
       const near = (b: { min: number[]; max: number[] }) =>
@@ -189,7 +191,7 @@ describe('chain', () => {
       const shells = result.bodies[0]!.solid.manifold(scene.quality).decompose()
       try {
         const here = shells.filter((m) => near(m.boundingBox() as never))
-        expect(here.length).toBeGreaterThanOrEqual(4)
+        expect(here.length).toBeGreaterThanOrEqual(data.clasp!.style === 'box' ? 4 : 2)
         for (let i = 0; i < here.length; i++)
           for (let j = i + 1; j < here.length; j++) {
             const shared = here[i]!.intersect(here[j]!)
@@ -218,7 +220,7 @@ describe('chain', () => {
     [3, 0.9, 508],
     [2, 0.6, 400],
   ])(
-    'hinges a %d mm tennis line\'s box clasp onto its end links: neither piece pulls off its link',
+    "hinges a %d mm tennis line's box clasp onto its end links: neither piece pulls off its link",
     async (linkWidth, wire, length) => {
       // Loose, the end link's tongue stood out into the gap with nothing to pass through, and
       // each clasp piece stood beside its link, held by nothing until a jeweler soldered it.
@@ -258,7 +260,9 @@ describe('chain', () => {
         const box = pieces.reduce((a, b) => (b.lo < a.lo ? b : a))
         const plate = pieces.reduce((a, b) => (b.hi > a.hi ? b : a))
         expect(box).not.toBe(plate)
-        const before = reach.filter((r) => r.along < 0).reduce((a, b) => (b.along > a.along ? b : a))
+        const before = reach
+          .filter((r) => r.along < 0)
+          .reduce((a, b) => (b.along > a.along ? b : a))
         const after = reach
           .filter((r) => r.along > span)
           .reduce((a, b) => (b.along < a.along ? b : a))
@@ -295,11 +299,13 @@ describe('chain', () => {
     ],
     ['curb 4 mm', { id: 'c', kind: 'chain', style: 'curb', linkWidth: 4, wire: 0.88, length: 457 }],
   ])(
-    'joins a %s chain\'s lobster and its ring to the end links: neither pulls off',
+    "joins a %s chain's lobster and its ring to the end links: neither pulls off",
     async (_, node) => {
       // The lobster's eye stood 0.1 mm beside the last link, threaded through nothing, and the
       // ring it catches beside the first link on the other side.
-      const scene = await kernel.scene(designFrom('chain', [{ ...node, clasp: 'lobster' }]))
+      const scene = await kernel.scene(
+        designFrom('chain', [{ ...node, clasp: 'lobster' } as NodeInput]),
+      )
       const result = scene.nodes.get('c')!
       expect((result.data as ChainData).clasp?.style).toBe('lobster')
       const { end0, end1 } = result.frames
@@ -318,17 +324,21 @@ describe('chain', () => {
         const ring = shells.find((m) => m !== lobster && holds(m, at(span - 0.3)))!
         expect(lobster).toBeDefined()
         expect(ring).toBeDefined()
-        // The links near the clasp, which a piece pulled off along the chord would run into.
+        // The links near each end of the clasp, which a piece pulled off along the chord runs
+        // into if it is held: the lobster's on the side before it, the ring's after it.
         const reach = 3 * (node as { linkWidth: number }).linkWidth + 5
-        const near = shells.filter((m) => {
-          if (m === lobster || m === ring) return false
-          const { min, max } = m.boundingBox()
-          const c = [0, 1, 2].map((k) => (min[k]! + max[k]!) / 2 - o[k]!)
-          const along = c[0]! * x[0]! + c[1]! * x[1]! + c[2]! * x[2]!
-          return along > -reach && along < span + reach && Math.hypot(...c) < span + reach
-        })
+        const side = (before: boolean) =>
+          shells.filter((m) => {
+            if (m === lobster || m === ring) return false
+            const { min, max } = m.boundingBox()
+            const c = [0, 1, 2].map((k) => (min[k]! + max[k]!) / 2 - o[k]!)
+            const along = c[0]! * x[0]! + c[1]! * x[1]! + c[2]! * x[2]!
+            if (Math.hypot(...c) > span + reach) return false
+            return before ? along < span / 2 && along > -reach : along > span / 2
+          })
         /** Whether `piece`, pulled `sign` along the chord up to 3 mm, runs into a link. */
         const caught = (piece: Manifold, sign: number) => {
+          const near = side(sign > 0)
           for (let t = 0.05; t <= 3; t += 0.05) {
             const moved = piece.translate(x.map((v) => sign * t * v) as never)
             const hit = near.some((link) => {

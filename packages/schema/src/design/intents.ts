@@ -26,7 +26,15 @@ import {
 } from '../domain/gems'
 import { nodeTitle } from './describe'
 import type { Design, Op } from './design'
-import { measuredUsable, migrateDesign, pinsOffRule, resolveDesign, stoneDims } from './mount'
+import {
+  clawReach,
+  MOUNT,
+  measuredUsable,
+  migrateDesign,
+  pinsOffRule,
+  resolveDesign,
+  stoneDims,
+} from './mount'
 import { type Node, type NodeOf, StoneQuality, StoneSourcing } from './nodes'
 
 // ── Input ────────────────────────────────────────────────────────────────────────────────────
@@ -447,6 +455,7 @@ function plan(
   const ids = new Set(targets.map((n) => n.id))
   const related = relatedTo(after, ids)
   if (ops.length) notes.push(...followNotes(design, after, related))
+  warnings.push(...pairSpacing(after, ids))
 
   // Pins: a follow field the designer fixed is kept, and named when it now breaks its rule.
   // Not the fields this change writes itself (a fitted stone's measured ratio is not a hand
@@ -482,6 +491,69 @@ function plan(
     notes: [...new Set(notes)],
     warnings,
   }
+}
+
+/**
+ * Least air between the two copies of a mirrored pair (a pair of studs), mm. Small: the claws'
+ * reach is counted all round the stone, though they stand at its corners or points.
+ */
+const PAIR_AIR = 0.2
+
+/**
+ * A mirrored pair (studs) whose stone grew until its two heads meet across the mirror: they
+ * would cast as one piece. Offers to move the stone out, in 0.5 mm steps, until the copies
+ * stand `PAIR_AIR` apart: the stone, its claws or bezel, and any halo round it.
+ */
+function pairSpacing(after: Design, ids: ReadonlySet<string>): IntentWarning[] {
+  const r = resolveDesign(after)
+  const nodes = Object.values(r.nodes)
+  const out: IntentWarning[] = []
+  for (const p of nodes) {
+    if (p.kind !== 'pattern' || p.type !== 'mirror') continue
+    const k = { x: 0, y: 1, z: 2 }[p.axis]
+    for (const id of p.sources) {
+      const g = r.nodes[id]
+      if (g?.kind !== 'gem' || !ids.has(id) || !g.transform) continue
+      const dims = stoneDims(g)
+      let reach = 0
+      for (const n of nodes) {
+        if (n.kind === 'setting' && n.gem === id)
+          reach = Math.max(
+            reach,
+            n.style === 'prong' || n.style === 'basket'
+              ? clawReach(n.prongDiameter ?? 0)
+              : n.style === 'bezel' || n.style === 'halfBezel'
+                ? n.wall
+                : 0,
+          )
+        if (n.kind === 'halo' && n.around === id) {
+          const melee = gemDims(n.cut, n.stoneWidth)
+          const size = Math.max(melee.width, melee.length)
+          reach = Math.max(reach, n.offset + n.rows * (size + n.gap) - n.gap + MOUNT.haloBorder)
+        }
+      }
+      const at = g.transform.position[k]!
+      // The stone's width lies along its own x: across the mirror when it is turned about that
+      // axis alone (a stud faced to the front), else its larger size, to be safe.
+      const [, ry, rz] = g.transform.rotation
+      const across =
+        k === 0 && ry === 0 && rz === 0 ? dims.width : Math.max(dims.width, dims.length)
+      const need = across / 2 + reach + PAIR_AIR / 2
+      if (Math.abs(at) >= need - 1e-9) continue
+      const position = [...g.transform.position] as [number, number, number]
+      position[k] = (Math.ceil(need * 2) / 2) * (at < 0 ? -1 : 1)
+      out.push({
+        code: 'pair.touch',
+        nodeId: id,
+        message: `The two “${nodeTitle(g)}” copies of “${nodeTitle(p)}” would meet across the mirror and cast as one piece: they stand ${fmt(2 * Math.abs(at))} mm apart, and each takes ${fmt(2 * (need - PAIR_AIR / 2))} mm with its setting.`,
+        suggestion: {
+          label: `Set the pair ${fmt(2 * Math.abs(position[k]))} mm apart`,
+          ops: [{ t: 'update', id, patch: { transform: { ...g.transform, position } } }],
+        },
+      })
+    }
+  }
+  return out
 }
 
 function applyPatches(design: Design, ops: readonly Op[]): Design {

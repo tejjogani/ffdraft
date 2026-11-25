@@ -122,7 +122,7 @@ export const prongLightFor = (width: number, count: number, inHalo: boolean): nu
 export const prongHeavyFor = (width: number): number => Math.max(0.18 * width, 1.0)
 
 /** How far the claw's outside stands beyond the girdle (axis at radius − overlap), mm. */
-const clawReach = (d: number) => d - Math.max(0.15, d * 0.15)
+export const clawReach = (d: number) => d - Math.max(0.15, d * 0.15)
 
 // ── Bands ────────────────────────────────────────────────────────────────────────────────────
 

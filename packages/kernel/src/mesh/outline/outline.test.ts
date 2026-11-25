@@ -229,6 +229,90 @@ describe('joining loose parts of lettering', () => {
     expect(joined.section.area() - text.area()).toBeLessThan(0.35)
   })
 
+  it('hangs a round dot set beside a sloping arm by more than a point', () => {
+    const { manifold: mf } = runtime()
+    // A round dot whose nearest metal is the arm's top, down and to the left: the sloped sprue
+    // was cut flat at the dot's lowest point, touched the round dot at a tangent only, and the
+    // dot stayed loose with a stub standing in the gap.
+    const arm = new mf.CrossSection([
+      [
+        [0, 0],
+        [0.6, 0],
+        [2.6, 5],
+        [2, 5],
+      ],
+    ])
+    const dot = mf.CrossSection.circle(0.36, 32).translate([3.2, 6.1])
+    const text = mf.CrossSection.union([arm, dot])
+    const joined = joinIslands(text, 0.5, 32, false)!
+    const pieces = joined.section.decompose()
+    expect(pieces).toHaveLength(1)
+    // Joined across the sprue's width, not at a point: eroding by a tenth of a millimetre
+    // leaves the dot on the arm.
+    expect(joined.section.offset(-0.1, 'Round', 2, 32).decompose()).toHaveLength(1)
+    // Narrow, and no longer than the gap: far less metal than a tie.
+    expect(joined.section.area() - text.area()).toBeLessThan(0.45)
+  })
+
+  it('hangs the dots of an umlaut set over a capital\'s counter from its arms', () => {
+    const { manifold: mf } = runtime()
+    // A U whose dots stand over the counter, inside its arms, as a sans font sets them: straight
+    // down there is only the bottom of the bowl, far below, and the dots were left loose.
+    const u = mf.CrossSection.union([
+      new mf.CrossSection([rect(0, 0, 1.2, 9)]),
+      new mf.CrossSection([rect(4.8, 0, 1.2, 9)]),
+      new mf.CrossSection([rect(0, 0, 6, 1.2)]),
+    ])
+    const dots = mf.CrossSection.union([
+      mf.CrossSection.circle(0.7, 32).translate([2.2, 10.85]),
+      mf.CrossSection.circle(0.7, 32).translate([3.8, 10.85]),
+    ])
+    const text = mf.CrossSection.union([u, dots])
+    const joined = joinIslands(text, 0.5, 32, false)!
+    expect(joined.section.decompose()).toHaveLength(1)
+    // Nothing runs down through the counter.
+    const counter = mf.CrossSection.intersection(
+      joined.section,
+      new mf.CrossSection([rect(1.3, 1.3, 3.4, 7.2)]),
+    )
+    expect(counter.area()).toBeCloseTo(0, 6)
+    // The dots are where they were.
+    const above = (c: CrossSection) =>
+      mf.CrossSection.intersection(c, new mf.CrossSection([rect(-1, 10.6, 8, 2)])).area()
+    expect(above(joined.section)).toBeCloseTo(above(text), 6)
+  })
+
+  it('bridges an umlaut dot that nothing under it can hold to its pair', () => {
+    const { manifold: mf } = runtime()
+    // A script Ü: the right dot stands over its arm, the left one over the counter, too far from
+    // either arm for a sprue. A jeweler joins the pair with a short bar.
+    const u = mf.CrossSection.union([
+      new mf.CrossSection([rect(0, 0, 0.6, 9)]),
+      new mf.CrossSection([rect(4.4, 0, 0.6, 9)]),
+      new mf.CrossSection([rect(0, 0, 5, 0.6)]),
+    ])
+    const dots = mf.CrossSection.union([
+      mf.CrossSection.circle(0.4, 32).translate([3, 10.9]),
+      mf.CrossSection.circle(0.4, 32).translate([4.7, 10.9]),
+    ])
+    const text = mf.CrossSection.union([u, dots])
+    const joined = joinIslands(text, 0.5, 32, false)!
+    expect(joined.section.decompose()).toHaveLength(1)
+    expect(joined.loose).toHaveLength(0)
+    const counter = mf.CrossSection.intersection(
+      joined.section,
+      new mf.CrossSection([rect(0.7, 0.7, 3.6, 8.2)]),
+    )
+    expect(counter.area()).toBeCloseTo(0, 6)
+    // A narrow bar between the dots, no taller than they are.
+    const between = mf.CrossSection.intersection(
+      joined.section,
+      new mf.CrossSection([rect(3.45, 10, 0.8, 2)]),
+    )
+    expect(between.area()).toBeGreaterThan(0.2)
+    expect(between.bounds().max[1] - between.bounds().min[1]).toBeLessThanOrEqual(0.8)
+  })
+
   it('never ties the next letter to an accent', () => {
     const { manifold: mf } = runtime()
     // An accented letter, then a tall one (an á before an l or a k) whose top is nearer to the

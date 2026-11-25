@@ -63,6 +63,8 @@ export interface GlyphOutline {
   to: number
   /** Which line (0 = first) the glyph is on. */
   line: number
+  /** The character it draws (a composed letter's base and marks all carry the letter). */
+  char: string
 }
 
 export interface TextOutline {
@@ -176,7 +178,8 @@ export function layoutText(font: Font, text: string, size: number, tolerance = 0
         shape.map((c) => c.map(([x, y]): Vec2 => [x + from, y - index * lineHeight])),
       ) ?? [contoursOf(glyph.getPath(from, index * lineHeight, em).commands, tolerance)]
       for (const contours of shapes)
-        if (contours.length > 0) glyphs.push({ contours, from, to: pen, line: index })
+        if (contours.length > 0)
+          glyphs.push({ contours, from, to: pen, line: index, char: characters[i]! })
     })
     width = Math.max(width, pen)
   })

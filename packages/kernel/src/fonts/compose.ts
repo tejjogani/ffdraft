@@ -62,8 +62,15 @@ const STROKES: Record<string, { base: string; at: number; slant: number; full?: 
 /** Lowercase letters with an ascender: a caron there is set as a small apostrophe beside it. */
 const ASCENDER_CARON = new Set(['d', 'l', 't', 'L'])
 
-/** How the cedilla is cut from Ç: everything under C's bottom, and this share of the em above. */
-const CEDILLA_NECK = 0.03
+/**
+ * The thinnest stroke that survives casting, mm (MIN_STROKE in mesh/outline/stroke.ts); the
+ * outlines are drawn with capitals about as many mm tall as the body asked for.
+ */
+const MIN_BAR = 0.35
+/** A stem leans at most this far from upright (a script's slant is 15–30°), degrees. */
+const STEM_LEAN = 35
+/** A hook hung under a letter overlaps the letter's bottom stroke by this share of it. */
+const HOOK_OVERLAP = 0.4
 
 /** The base letter and marks of c, when the font can compose it; null otherwise. */
 function recipe(font: Font, c: string): { base: string; marks: string[]; stroke?: string } | null {
@@ -161,6 +168,79 @@ function slice(contours: readonly Contour[], y: number): [number, number][] {
   return out
 }
 
+/** The y-intervals where the contours (even-odd) cross the line x, bottom to top. */
+function column(contours: readonly Contour[], x: number): [number, number][] {
+  const ys: number[] = []
+  for (const c of contours)
+    for (let i = 0; i < c.length; i++) {
+      const p = c[i]!
+      const q = c[(i + 1) % c.length]!
+      if (p[0] > x !== q[0] > x) ys.push(p[1] + ((x - p[0]) * (q[1] - p[1])) / (q[0] - p[0]))
+    }
+  ys.sort((a, b) => a - b)
+  const out: [number, number][] = []
+  for (let i = 0; i + 1 < ys.length; i += 2) out.push([ys[i]!, ys[i + 1]!])
+  return out
+}
+
+/**
+ * The letter's stem: the longest run of outline that keeps going up or down within STEM_LEAN of
+ * upright, as its bottom and top and its x along the way. One side of a stem runs unbroken from
+ * end to end even where a swash crosses the other side, so it outlasts any loop's side; a
+ * script L's box centre is nowhere near its stem.
+ */
+function stemRun(
+  contours: readonly Contour[],
+): { lo: number; hi: number; x: (y: number) => number } | null {
+  const lean = Math.tan((STEM_LEAN * Math.PI) / 180)
+  let best: Vec2[] | null = null
+  let extent = 0
+  for (const c of contours) {
+    const n = c.length
+    const dir = (i: number) => {
+      const p = c[i % n]!
+      const q = c[(i + 1) % n]!
+      const dy = q[1] - p[1]
+      return Math.abs(q[0] - p[0]) <= lean * Math.abs(dy) && dy !== 0 ? Math.sign(dy) : 0
+    }
+    // Start where a run breaks, so no run is split by the contour's own start.
+    let start = 0
+    while (start < n && dir(start) !== 0 && dir(start) === dir(start + n - 1)) start++
+    let run: Vec2[] = []
+    let sign = 0
+    for (let k = 0; k <= n; k++) {
+      const i = start + k
+      const d = k < n ? dir(i) : 0
+      if (d !== 0 && d === sign) run.push(c[(i + 1) % n]!)
+      else {
+        if (run.length > 1) {
+          const ys = run.map((p) => p[1])
+          const e = Math.max(...ys) - Math.min(...ys)
+          if (e > extent) {
+            extent = e
+            best = run
+          }
+        }
+        sign = d
+        run = d !== 0 ? [c[i % n]!, c[(i + 1) % n]!] : []
+      }
+    }
+  }
+  if (!best) return null
+  const run = [...best].sort((p, q) => p[1] - q[1])
+  return {
+    lo: run[0]![1],
+    hi: run[run.length - 1]![1],
+    x: (y) => {
+      for (let i = 0; i + 1 < run.length; i++) {
+        const [p, q] = [run[i]!, run[i + 1]!]
+        if (y >= p[1] && y <= q[1]) return p[0] + ((y - p[1]) * (q[0] - p[0])) / (q[1] - p[1] || 1)
+      }
+      return run[0]![0]
+    },
+  }
+}
+
 /**
  * The composed letter: its base glyph (for the advance and kerning) and its shapes, each filled
  * even-odd on its own (a stroke overlaps the stem it crosses, so it cannot share the base's
@@ -181,11 +261,24 @@ export function composeLetter(
   if (r.stroke) {
     const s = STROKES[r.stroke]!
     const hyphen = bounds(outline('-'))
-    const thick = hyphen.maxY - hyphen.minY
-    const y = box.minY + s.at * (box.maxY - box.minY)
-    // Across the first stem standing at that height (the only one, for đ and ħ up there).
-    const stem = slice(base, y)[0] ?? [box.minX, box.maxX]
-    const length = s.full ? box.maxX - box.minX + thick : stem[1] - stem[0] + 3 * thick
+    // At its share of the stem's own height, across the stem's own column: the box of a swash
+    // letter reaches far past its stem. (A crossbar across the whole letter keeps to the box.)
+    const run = s.full ? null : stemRun(base)
+    const lo = run?.lo ?? box.minY
+    const hi = run?.hi ?? box.maxY
+    const y = lo + s.at * (hi - lo)
+    const at = slice(base, y)
+    const sx = run?.x(y)
+    const gap = ([a, b]: [number, number]) => (sx === undefined ? 0 : Math.max(a - sx, sx - b, 0))
+    const stem = [...at].sort((p, q) => gap(p) - gap(q))[0] ?? [box.minX, box.maxX]
+    const stemWidth = stem[1] - stem[0]
+    // As heavy as the stem (a hyphen is a script's hairline), and out past it on both sides by
+    // more than its own weight, so it reads at pendant size.
+    const thick = s.full
+      ? hyphen.maxY - hyphen.minY
+      : Math.max(hyphen.maxY - hyphen.minY, 0.85 * stemWidth, MIN_BAR)
+    const clear = Math.max(1.5 * thick, 0.1 * (hi - lo))
+    const length = s.full ? box.maxX - box.minX + thick : stemWidth + 2 * clear
     const cx = s.full ? (box.minX + box.maxX) / 2 : (stem[0] + stem[1]) / 2
     shapes.push([bar(cx, y, length, thick, s.slant)])
     return { base: r.base, shapes }
@@ -198,8 +291,10 @@ export function composeLetter(
     const which = upper ? 0 : 1
     const donorBase = outline(spec.base[which])
     const donorBox = bounds(donorBase)
+    // Under a letter, only the hook that hangs below the donor's base: anything above that is
+    // its bowl, which another letter's bottom does not share.
     let mark = spec.below
-      ? clip(outline(spec.donor[which]), donorBox.minY + CEDILLA_NECK * em, false)
+      ? clip(outline(spec.donor[which]), donorBox.minY, false)
       : clip(outline(spec.donor[which]), donorBox.maxY + 1e-4 * em, true)
     if (mark.length === 0) return null
     let markBox = bounds(mark)
@@ -264,9 +359,23 @@ export function composeLetter(
     let dx = bcx - dcx
     let dy: number
     if (spec.below) {
-      dy = box.minY - donorBox.minY
-      // The ogonek hangs from the letter's right foot.
-      if (spec.change === 'mirror') dx = box.maxX - 0.15 * w - markBox.maxX
+      // The hook's neck: where it meets the line it was cut at.
+      const neckSpan = slice(mark, markBox.maxY - 0.02 * (markBox.maxY - markBox.minY))
+      const n0 = neckSpan[0]?.[0] ?? markBox.minX
+      const n1 = neckSpan.at(-1)?.[1] ?? markBox.maxX
+      const neck = (n0 + n1) / 2
+      if (spec.change === 'mirror') {
+        // The ogonek hangs from the letter's last foot (A, E), or the bottom right of its bowl
+        // (a, e): toward the right end of the rightmost metal just above the bottom.
+        const feet = slice(base, box.minY + 0.04 * (box.maxY - box.minY))
+        const [f0, f1] = feet.at(-1) ?? [box.minX, box.maxX]
+        dx = f1 - Math.min((f1 - f0) / 2, 1.5 * (n1 - n0)) - neck
+      }
+      // Its top sunk into the letter's bottom stroke where the neck lands, so the two join.
+      const under = column(base, neck + dx)[0]
+      dy = under
+        ? under[0] + HOOK_OVERLAP * Math.min(under[1] - under[0], n1 - n0) - markBox.maxY
+        : box.minY - markBox.maxY
     } else {
       // Keep the gap the donor leaves above its base, over the top of what is below (the base,
       // or the mark already set over it).
