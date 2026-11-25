@@ -200,6 +200,8 @@ export interface GeometryService extends Service {
       focus: string[]
       /** Instead of `views`: pictures through these cameras at their own sizes. */
       shots?: PictureShot[]
+      /** The metal's colour (RGB, 0–255) instead of the rasteriser's warm grey: covers. */
+      metal?: [number, number, number]
     } & GeometryCall,
     sctx: ServiceContext,
   ): Promise<{ images: Uint8Array[]; summary: EvaluationSummary }>

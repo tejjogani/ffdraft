@@ -33,6 +33,8 @@ export type KernelTask =
       focus: string[]
       /** Instead of `views`: pictures through these exact cameras, at their own sizes (shots). */
       shots?: PictureShot[]
+      /** The metal's colour (RGB, 0–255); the rasteriser's warm grey when omitted. */
+      metal?: [number, number, number]
     }
   /** Fit the design's outline numbers to one photo's matte (`match.fit`). */
   | { kind: 'photoFit'; design: Design; fit: PhotoFitTask }

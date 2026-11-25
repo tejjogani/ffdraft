@@ -157,9 +157,12 @@ async function run(
     }
     case 'picture': {
       const evaluation = await kernel.evaluate(task.design, { detail: 'draft', assets, signal })
-      const hide = Object.entries(task.design.nodes)
+      // A pendant's chain would shrink the pendant to a speck, so it is left out, unless the
+      // chain is the whole piece (a Cuban link, a tennis bracelet).
+      const chains = Object.entries(task.design.nodes)
         .filter(([, n]) => (n as { kind: string }).kind === 'chain')
         .map(([id]) => id)
+      const hide = chains.length < task.design.order.length ? chains : []
       // Rasterising is synchronous; check between views so a cancel lands between pictures.
       const images: Uint8Array<ArrayBuffer>[] = []
       const jobs = task.shots
@@ -170,7 +173,15 @@ async function run(
           }))
       for (const { camera, size } of jobs) {
         signal.throwIfAborted()
-        images.push(own(shade(evaluation, camera, size, { focus: task.focus, hide })))
+        images.push(
+          own(
+            shade(evaluation, camera, size, {
+              focus: task.focus,
+              hide,
+              ...(task.metal ? { metal: task.metal } : {}),
+            }),
+          ),
+        )
       }
       return {
         result: { images, summary: summarize(evaluation) },

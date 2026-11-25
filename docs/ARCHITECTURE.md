@@ -161,6 +161,12 @@ runs two workers of 1 GB with two warm pieces each. Blender uses the Apple GPU t
 Metal when present (`workers/render/pave_worker/devices.py`); time estimates learn from takes on
 the device in use and count a fixed cost per animation frame.
 
+Every piece shows a picture from its first build (`apps/server/src/covers.ts`): once the facts of
+a built piece are stored and it has no cover, a kernel worker draws it as clay in its metal's
+colour, and that becomes its automatic cover; the welcome workspace's examples get theirs the
+same way. The studio's viewport capture and the first finished render replace it; a cover a
+person chose is never replaced.
+
 ## Assistant
 
 The run loop lives on the server and uses the command registry as its toolset, plus a few

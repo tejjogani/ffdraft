@@ -6,6 +6,7 @@
 import { COUNTED_EXPORT_FORMATS, renderCost } from '@pave/schema'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { type Ctx, publish } from './context'
+import { isClayCover } from './covers'
 import * as t from './db/schema'
 import { AppError } from './errors'
 import { packageKey, renderKeys, settle } from './plans'
@@ -42,9 +43,9 @@ export async function updateRender(ctx: Ctx, id: string, patch: RenderJobPatch) 
 }
 
 /**
- * A piece whose cover is automatic and still empty gets its first finished still: cards and the
- * overview show the jewellery, not a placeholder. A cover a person chose is never replaced, and
- * an animation's frames are not a cover.
+ * A piece whose cover is automatic and still empty, or only the server's clay picture, gets its
+ * first finished still: cards and the overview show the rendered jewellery. A cover a person
+ * chose is never replaced, nor an earlier take, and an animation's frames are not a cover.
  */
 async function coverFromTake(
   ctx: Ctx,
@@ -52,8 +53,20 @@ async function coverFromTake(
 ) {
   const still = take.assetIds[0]
   if (!take.pieceId || !still || take.scene?.animation) return
+  const piece = await ctx.repo.pieces.first(eq(t.piece.id, take.pieceId))
+  if (!piece?.coverAuto) return
+  const current = piece.coverAssetId
+  if (current) {
+    const asset = await ctx.repo.assets.first(eq(t.asset.id, current))
+    if (asset && !isClayCover(asset.name)) return
+  }
+  // Only over the cover just read: a capture or a person's choice landing meanwhile wins.
   const rows = await ctx.repo.pieces.update(
-    and(eq(t.piece.id, take.pieceId), eq(t.piece.coverAuto, true), isNull(t.piece.coverAssetId))!,
+    and(
+      eq(t.piece.id, take.pieceId),
+      eq(t.piece.coverAuto, true),
+      current ? eq(t.piece.coverAssetId, current) : isNull(t.piece.coverAssetId),
+    )!,
     { coverAssetId: still },
   )
   if (rows.length) publish(ctx, { type: 'piece.updated', pieceId: take.pieceId })

@@ -28,9 +28,10 @@ import {
 } from '@pave/ui'
 import { useNavigate } from '@tanstack/react-router'
 import { Check, CircleHelp, Hammer } from 'lucide-react'
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import { queryClient, rpcKey, useRpcMutation } from '../lib/query'
 import { assistant } from '../stores/assistant'
+import { cadMovedOn } from './spec-drift'
 
 const ROLE_LABEL: Record<StoneSpec['role'], string> = {
   center: 'Centre',
@@ -117,6 +118,9 @@ export function SpecCard({
     },
   })
 
+  // After a fit to a photo or an edit, the plan no longer describes the CAD; say so.
+  const moved = useMemo(() => cadMovedOn(piece.spec, piece.design), [piece.spec, piece.design])
+
   if (!draft)
     return (
       <Card>
@@ -177,6 +181,16 @@ export function SpecCard({
           onBlur={() => draft.summary !== piece.spec?.summary && save(draft)}
           className="mt-1 text-sm leading-6 text-fg-muted"
         />
+        {!inline && moved && (
+          <p
+            data-spec-drift
+            className="mt-2 rounded-md bg-bg-muted px-3 py-2 text-xs text-fg-muted"
+          >
+            The CAD has changed since it was built from this spec (fitted to a photo or edited), so
+            its sizes may differ from these. The Design tab and the facts show the piece as it is
+            now.
+          </p>
+        )}
       </div>
 
       <dl className="mt-3 divide-y divide-line border-t border-line">

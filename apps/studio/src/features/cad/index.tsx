@@ -53,6 +53,7 @@ import { captureCover } from './cover'
 import { EmptyDesign } from './empty/EmptyDesign'
 import { exportFormats, runExport } from './export'
 import { ChangeChip } from './hud/ChangeChip'
+import { pieceFigures } from './hud/figures'
 import { Hud } from './hud/Hud'
 import { toIssues } from './hud/issues'
 import { useProductionCheck } from './hud/useProductionCheck'
@@ -165,6 +166,8 @@ function Workspace({ piece }: { piece: Piece }) {
     settled,
     kernel.status === 'ready' && view.order.length > 0,
   )
+  // One set of figures for the readout and the Facts panel.
+  const figures = pieceFigures(evaluation, check, view === settled)
 
   const viewer = useRef<Viewer | null>(null)
   const [addOpen, setAddOpen] = useState(false)
@@ -415,7 +418,7 @@ function Workspace({ piece }: { piece: Piece }) {
         <PiecePanel
           piece={piece}
           design={view}
-          evaluation={evaluation}
+          figures={figures}
           session={session}
           readOnly={readOnly}
         />
@@ -581,7 +584,7 @@ function Workspace({ piece }: { piece: Piece }) {
               </div>
               <Hud
                 design={view}
-                evaluation={evaluation}
+                figures={figures}
                 issues={issues}
                 check={check}
                 evaluating={status === 'evaluating'}
