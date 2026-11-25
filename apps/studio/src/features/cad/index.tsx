@@ -30,6 +30,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { QualityIndicator } from '../../components/stage/QualityIndicator'
 import { Stage } from '../../components/stage/Stage'
 import type { Viewer, ViewerState } from '../../components/stage/viewer'
 import { assetUrl } from '../../lib/assets'
@@ -576,6 +577,7 @@ function Workspace({ piece }: { piece: Piece }) {
                       {s.label}
                     </Button>
                   ))}
+                <QualityIndicator source={viewerHandle} className="self-end" />
               </div>
               <Hud
                 design={view}

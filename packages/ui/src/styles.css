@@ -278,6 +278,12 @@
     background: var(--bg-subtle);
     backdrop-filter: none;
   }
+  /* A machine that cannot keep a 3D view smooth (or the Smooth setting): blurring the moving
+     picture behind every toolbar on every frame is the cost it can least afford. */
+  :root[data-glass="solid"] & {
+    background: var(--bg-subtle);
+    backdrop-filter: none;
+  }
 }
 
 /* The same glass for surfaces people read: dialogs, sheets, the palette, floating windows. More
@@ -290,6 +296,10 @@
     background: var(--bg-subtle);
   }
   @media (prefers-reduced-transparency: reduce) {
+    background: var(--bg-subtle);
+    backdrop-filter: none;
+  }
+  :root[data-glass="solid"] & {
     background: var(--bg-subtle);
     backdrop-filter: none;
   }

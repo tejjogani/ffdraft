@@ -134,6 +134,33 @@ Without Blender, a take is drawn by one of the person's own windows from the sam
 and labelled "Preview quality". A render costs this computer's time, never money: estimates are
 machine time, learnt from this machine's finished takes.
 
+### On a light machine
+
+The CAD view and the Render tab's live preview draw on demand: nothing moves, nothing is drawn
+(an idle window costs no frames and no battery). How sharp they draw is decided in one place,
+`apps/studio/src/components/stage/adaptive.ts`, from measured frame times and the Performance
+setting (Settings › General, per device: Auto by default, Smooth, Sharp):
+
+- A still picture is drawn at the screen's pixel ratio, capped at 1.5 on a Retina screen in Auto
+  and by the GPU tier (`quality.ts`; the base Apple M chips that Chrome and Electron name are
+  integrated GPUs, like Safari's "Apple GPU").
+- While the camera moves or a slider scrubs, the picture is drawn lighter: the pixel ratio follows
+  the time between frames towards 30 frames a second (never below 0.5), and only when that is
+  not enough do the effects step down (fewer bounces in the stones, then plain clay stand-ins
+  while moving). It sharpens about 150 ms after the move stops. A machine where a full frame is
+  slow draws every edit light first and sharpens it a moment later.
+- When Auto had to step the effects down (or the setting is Smooth), the page drops its frosted
+  glass for solid fills (`<html data-glass="solid">`): a software or weak GPU compositor pays for
+  each blur on every frame.
+- A quiet chip in the corner of the view says when the picture is reduced and opens the setting.
+  Captures for covers and the assistant always use full effects.
+
+On the server, the kernel pool sizes itself to the computer (`poolDefaults` in
+`engines/kernel/pool.ts`): about a third of its memory and one CPU left free, so an 8 GB laptop
+runs two workers of 1 GB with two warm pieces each. Blender uses the Apple GPU through Cycles on
+Metal when present (`workers/render/pave_worker/devices.py`); time estimates learn from takes on
+the device in use and count a fixed cost per animation frame.
+
 ## Assistant
 
 The run loop lives on the server and uses the command registry as its toolset, plus a few

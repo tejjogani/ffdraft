@@ -115,53 +115,94 @@ export function takePasses(scene: RenderScene, autoTune: boolean): RenderScene[]
   return sameScene(draft, scene) ? [scene] : [draft, scene]
 }
 
-/** A take's work in million pixel-samples, and how many Blender passes it starts. */
-export function takeWork(scene: RenderScene, autoTune: boolean): { work: number; passes: number } {
-  const passes = takePasses(scene, autoTune)
-  return { work: passes.reduce((sum, s) => sum + passWork(s), 0), passes: passes.length }
+/** Frames of an animation after its first: each costs Blender a fixed amount beyond its pixels. */
+function extraFrames(scene: RenderScene): number {
+  return scene.animation
+    ? Math.max(0, Math.round(scene.animation.seconds * scene.animation.fps) - 1)
+    : 0
 }
 
 /**
- * Seconds per million pixel-samples with Cycles on a CPU, and the fixed cost of a pass (starting
- * Blender, importing the piece, building the BVH). From the development machine (4 shared cores,
- * the fixture solitaire): a 640 px preview with its auto-tune draft took 62 s. Rounded towards a
- * quicker machine; after two finished takes a machine's own rate replaces this.
+ * A take's work in million pixel-samples, how many Blender passes it starts, and how many
+ * animation frames it renders after the first.
  */
-export const TYPICAL_RATE = { secondsPerWork: 0.6, passSeconds: 10 }
+export function takeWork(
+  scene: RenderScene,
+  autoTune: boolean,
+): { work: number; passes: number; frames: number } {
+  const passes = takePasses(scene, autoTune)
+  return {
+    work: passes.reduce((sum, s) => sum + passWork(s), 0),
+    passes: passes.length,
+    frames: passes.reduce((sum, s) => sum + extraFrames(s), 0),
+  }
+}
+
+/**
+ * Seconds per million pixel-samples with Cycles on a CPU, the fixed cost of a pass (starting
+ * Blender, importing the piece, building the BVH), and the fixed cost of each animation frame
+ * after the first (scene update, denoise, compositing and encoding). From the development
+ * machine (4 shared cores, the fixture solitaire): a 640 px preview with its auto-tune draft took
+ * 34–62 s (this rate says 46 s), and a 24-frame 256 px turntable took 81–94 s (this rate says 88
+ * s; without the frame cost it said 40, half the truth). A 2023 MacBook Air's CPU is about as
+ * quick, and its Apple GPU (Cycles on Metal) somewhat quicker, so a first estimate there errs on
+ * the long side; after two finished takes on the device in use, the machine's own rate replaces
+ * this.
+ */
+export const TYPICAL_RATE = { secondsPerWork: 0.6, passSeconds: 10, frameSeconds: 2 }
 
 export interface RenderRate {
   secondsPerWork: number
   passSeconds: number
+  frameSeconds: number
   /** `measured`: from this machine's finished takes; `typical`: the fallback above. */
   basis: 'measured' | 'typical'
 }
 
+export interface RenderHistoryItem {
+  scene: RenderScene
+  autoTune: boolean
+  seconds: number
+  /** The Cycles device that rendered it ("CPU", "METAL", "OPTIX"…), when known. */
+  device?: string | null
+}
+
 /**
  * The rate this machine renders at, from its finished Blender takes (what was rendered, whether
- * auto-tune ran, and the seconds it took). The median keeps one cached or odd take from
- * skewing it; fewer than two takes and the typical rate stands.
+ * auto-tune ran, and the seconds it took). Takes from the device in use count when there are two
+ * of them: a GPU's takes say nothing about the CPU it fell back to, and the reverse would promise
+ * a GPU's speed. The median keeps one cached or odd take from skewing it; fewer than two takes
+ * and the typical rate stands.
  */
 export function rateFrom(
-  history: readonly { scene: RenderScene; autoTune: boolean; seconds: number }[],
+  history: readonly RenderHistoryItem[],
+  device: string | null = null,
 ): RenderRate {
-  const rates = history
+  const same = device ? history.filter((h) => h.device === device) : []
+  const rates = (same.length >= 2 ? same : history)
     .filter((h) => h.seconds > 0)
     .map((h) => {
-      const { work, passes } = takeWork(h.scene, h.autoTune)
-      return (h.seconds - passes * TYPICAL_RATE.passSeconds) / work
+      const { work, passes, frames } = takeWork(h.scene, h.autoTune)
+      const fixed = passes * TYPICAL_RATE.passSeconds + frames * TYPICAL_RATE.frameSeconds
+      return (h.seconds - fixed) / work
     })
     .filter((r) => Number.isFinite(r) && r > 0)
     .sort((a, b) => a - b)
   if (rates.length < 2) return { ...TYPICAL_RATE, basis: 'typical' }
   const mid = rates.length / 2
   const median = rates.length % 2 ? rates[Math.floor(mid)]! : (rates[mid - 1]! + rates[mid]!) / 2
-  return { secondsPerWork: median, passSeconds: TYPICAL_RATE.passSeconds, basis: 'measured' }
+  return {
+    secondsPerWork: median,
+    passSeconds: TYPICAL_RATE.passSeconds,
+    frameSeconds: TYPICAL_RATE.frameSeconds,
+    basis: 'measured',
+  }
 }
 
 /** How long one Blender take keeps the machine busy, in seconds. */
 export function estimateTakeSeconds(scene: RenderScene, autoTune: boolean, rate: RenderRate) {
-  const { work, passes } = takeWork(scene, autoTune)
-  return passes * rate.passSeconds + work * rate.secondsPerWork
+  const { work, passes, frames } = takeWork(scene, autoTune)
+  return passes * rate.passSeconds + work * rate.secondsPerWork + frames * rate.frameSeconds
 }
 
 /** A browser preview: building the piece and a few frames, whatever the size. */

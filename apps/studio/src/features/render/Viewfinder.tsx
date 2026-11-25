@@ -23,6 +23,7 @@ import type { RenderScene } from '@pave/schema'
 import { Chip, cn, IconButton } from '@pave/ui'
 import { Grid3x3, Lock, LockOpen, Pause, Play, RotateCcw } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { QualityIndicator, useQuality } from '../../components/stage/QualityIndicator'
 import { createWheelClassifier } from '../../components/stage/wheel'
 import { ShotRenderer } from './shot-renderer'
 import {
@@ -91,6 +92,9 @@ export function Viewfinder({
   const host = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const renderer = useRef<ShotRenderer | null>(null)
+  /** The same renderer as state, for the quality indicator. */
+  const [live, setLive] = useState<ShotRenderer | null>(null)
+  const quality = useQuality(live)
   const [failed, setFailed] = useState<string | null>(null)
   const [box, setBox] = useState({ width: 0, height: 0 })
   const [resolved, setResolved] = useState<ResolvedScene | null>(null)
@@ -103,13 +107,15 @@ export function Viewfinder({
 
   useEffect(() => {
     try {
-      renderer.current = new ShotRenderer(canvas.current!)
+      renderer.current = new ShotRenderer(canvas.current!, { live: true })
+      setLive(renderer.current)
     } catch (e) {
       setFailed(e instanceof Error ? e.message : 'WebGL is not available')
     }
     return () => {
       renderer.current?.dispose()
       renderer.current = null
+      setLive(null)
     }
   }, [])
 
@@ -134,20 +140,19 @@ export function Viewfinder({
       ? { width: room.height * aspect, height: room.height }
       : { width: room.width, height: room.width / aspect }
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new still quality is a trigger to draw again
   useEffect(() => {
     const r = renderer.current
     if (!r || !evaluation || fit.width < 8 || fit.height < 8) return
-    // Next frame, so a burst of changes draws once.
+    // Not in the middle of a drag (the machine just proved slow, say): the drag's release saves
+    // the shot, and that draws the new picture anyway.
+    if (pointers.current.size > 0) return
+    // Next frame, so a burst of changes draws once. The still picture's sharpness follows the
+    // Performance setting (a Retina laptop in Auto draws at 1.5, not 2).
+    const dpr = r.stillDpr()
     const frame = requestAnimationFrame(() => {
       try {
-        setResolved(
-          r.draw(
-            evaluation,
-            scene,
-            fit.width * Math.min(2, devicePixelRatio),
-            fit.height * Math.min(2, devicePixelRatio),
-          ),
-        )
+        setResolved(r.draw(evaluation, scene, fit.width * dpr, fit.height * dpr))
         // The saved shot is back (or changed elsewhere): it is what is drawn now.
         poseRef.current = null
         setPose(null)
@@ -157,7 +162,8 @@ export function Viewfinder({
       }
     })
     return () => cancelAnimationFrame(frame)
-  }, [evaluation, scene, fit.width, fit.height])
+    // A new still quality (the setting changed, or the machine proved slow) draws again.
+  }, [evaluation, scene, fit.width, fit.height, quality?.stillDpr, quality?.stillEffects])
 
   const points = useMemo(() => (evaluation ? framingPoints(evaluation) : []), [evaluation])
   const radius = resolved?.subject.radius ?? 10
@@ -389,6 +395,8 @@ export function Viewfinder({
                   {scene.output.width}×{scene.output.height}
                 </Chip>
                 {custom && <Chip className="bg-bg/85">Custom view</Chip>}
+                {/* Top left: the bottom-left corner carries the Render tab's caption. */}
+                <QualityIndicator source={live} className="pointer-events-auto" />
               </div>
               <div className="pointer-events-auto flex items-center gap-0.5 rounded-md bg-bg/85 p-0.5 shadow-sm">
                 <IconButton

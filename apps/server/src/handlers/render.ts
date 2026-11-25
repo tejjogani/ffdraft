@@ -112,6 +112,7 @@ async function renderHistory(ctx: Ctx) {
     scene: r.requestedScene ?? r.scene,
     autoTune: r.autoTune,
     seconds: r.seconds ?? 0,
+    device: r.device,
   }))
 }
 
@@ -291,15 +292,17 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
         basis: 'browser' as const,
         device: null,
       }
-    const rate = rateFrom(await renderHistory(ctx))
+    // The device Cycles reported last: the estimate learns from that device's takes.
+    const device =
+      (await ctx.services.optional('renderEngine')?.status(serviceContext(ctx)))?.device ?? null
+    const rate = rateFrom(await renderHistory(ctx), device)
     const takes = scenes.map((s) => Math.round(estimateTakeSeconds(s, input.autoTune, rate)))
     return {
       engine,
       seconds: takes.reduce((a, b) => a + b, 0),
       takes,
       basis: rate.basis,
-      device:
-        (await ctx.services.optional('renderEngine')?.status(serviceContext(ctx)))?.device ?? null,
+      device,
     }
   },
 

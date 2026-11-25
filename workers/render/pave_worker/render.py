@@ -17,18 +17,17 @@ from pathlib import Path
 import bpy
 import numpy as np
 
+from .devices import backend_order
 from .imageio import read_png, write_png
 from .job import Background, ColorSettings, Output
 
 Progress = Callable[[float], None]
 
 _VIEW = {"agx": "AgX", "neutral": "Khronos PBR Neutral"}
-_GPU_BACKENDS = ("OPTIX", "CUDA", "HIP", "ONEAPI", "METAL")
-
-
 def select_device() -> str:
     """Best available Cycles device: a GPU backend if one has devices, else CPU.
 
+    On a Mac that is Metal on the Apple GPU (see devices.py for the order elsewhere).
     `PAVE_CYCLES_DEVICE=CPU` (or a backend name) overrides the probe.
     """
     scene = bpy.context.scene
@@ -37,7 +36,7 @@ def select_device() -> str:
         scene.cycles.device = "CPU"
         return "CPU"
     prefs = bpy.context.preferences.addons["cycles"].preferences
-    for backend in (forced,) if forced else _GPU_BACKENDS:
+    for backend in backend_order(sys.platform, forced):
         try:
             prefs.compute_device_type = backend
         except TypeError:  # backend not compiled into this build

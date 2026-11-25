@@ -420,8 +420,8 @@ turn it on, then restart Pavé. A value set in your terminal wins over the file.
 | `PAVE_PUBLIC_URL` | `http://localhost:8787` | The address people reach Pavé at, when it is not your own computer |
 | `DATABASE_URL` | — | A PostgreSQL 18 address. Without it Pavé uses its own built-in database in the data folder |
 | `PAVE_MAX_UPLOAD_MB` | `200` | Largest file that can be uploaded |
-| `PAVE_KERNEL_WORKERS` | processors − 1, at most 4 | How many geometry jobs run at once |
-| `PAVE_KERNEL_MEMORY_MB` | `1536` | Memory a geometry worker may hold before it is restarted |
+| `PAVE_KERNEL_WORKERS` | from the computer: 2 on 8 GB, 3 on 16 GB, at most 4, and one processor left free | How many geometry jobs run at once |
+| `PAVE_KERNEL_MEMORY_MB` | `1024` on 8 GB or less, else `1536` | Memory a geometry worker may hold before it is restarted |
 | `PAVE_PYTHON`, `PAVE_BLENDER` | — | Where Blender is, if not installed by `--render` |
 | `ANTHROPIC_API_KEY` | — | Your Claude API key for the assistant. Wins over a key saved in Settings, AI |
 | `PAVE_ASSISTANT_TIER` | `standard` | The tier new conversations start on: `power`, `standard` or `light` |
@@ -529,6 +529,7 @@ Back the folder up first if the work in it matters.
 | The model is a plain matt colour instead of polished metal | The browser is drawing without a graphics card, so Pavé switches to a simpler view. Turn on hardware acceleration in the browser's settings |
 | The CAD tab stays on "Preparing the workbench…" | The first load can take up to half a minute on a slow computer. If it never finishes, reload the page and check the terminal for errors |
 | A heavily iced piece is slow | Pieces with hundreds of stones take a second or two per change today. This is being worked on |
+| The 3D view feels slow on a laptop | Settings › General › Performance: Auto (the default) already draws lighter while you move; Smooth always draws the lighter picture. A small chip in the corner of the view shows when the picture is reduced |
 | `--render` fails with "CPython 3.13 not found" | Install Python 3.13, or install Blender 5.3 and set `PAVE_BLENDER` |
 | PowerShell: "running scripts is disabled on this system" | `powershell -ExecutionPolicy Bypass -File .\install.ps1` |
 | The assistant answers with an error | See [When something goes wrong](#when-something-goes-wrong) |

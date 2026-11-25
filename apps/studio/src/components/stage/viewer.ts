@@ -60,6 +60,16 @@ import {
 } from 'three'
 import { acceleratedRaycast, computeBoundsTree } from 'three-mesh-bvh'
 import { VIEW_ANGLES } from '../../lib/image-planes'
+import { usePerformance } from '../../stores/performance'
+import {
+  AdaptiveQuality,
+  type Learned,
+  type PerformanceMode,
+  type Quality,
+  type QualityState,
+  qualityState,
+  sameQuality,
+} from './adaptive'
 import { viewportScene } from './environment'
 import { ImagePlaneLayer, type ImagePlaneSpec } from './image-planes'
 import {
@@ -69,7 +79,7 @@ import {
   type OutlineMaterial,
   readPalette,
 } from './materials'
-import { type GpuTier, gpuTier, type QualityPolicy, qualityFor } from './quality'
+import { type GpuTier, gemQualityFor, gpuTier, type QualityPolicy, qualityFor } from './quality'
 
 CameraControls.install({
   THREE: { Vector2, Vector3, Vector4, Quaternion, Matrix4, Spherical, Box3, Sphere, Raycaster },
@@ -96,6 +106,17 @@ export interface ViewerState {
   /** Nodes an assistant just edited, tinted once in the AI colour (cleared by the caller). */
   aiTint?: readonly string[]
 }
+
+/**
+ * What the last viewer of this page learned about the machine's frame times, so the next piece
+ * opened starts at the right level instead of learning it again on its first orbit.
+ */
+let learned: Learned | null = null
+
+/** Evaluations closer together than this are a scrub: drawn light, refined when it stops. */
+const SCRUB_GAP_MS = 600
+/** How long after the last scrubbed evaluation the picture is refined. */
+const SCRUB_SETTLE_MS = 250
 
 export interface CaptureOptions {
   /** Show this evaluation first (the caller waited for it), so the pictures match its version. */
@@ -142,6 +163,22 @@ export class Viewer {
   readonly controls: CameraControls
   readonly tier: GpuTier
   private readonly policy: QualityPolicy
+  /** Frame times decide how sharp a moving picture is (see ./adaptive). */
+  private readonly adaptive: AdaptiveQuality
+  /** The quality last applied to the renderer and the gems. */
+  private applied: Quality | null = null
+  private scrubbing = false
+  /** Clay stand-ins for metals and stones are on (a very slow machine, while moving). */
+  private standIn = false
+  private scrubTimer: ReturnType<typeof setTimeout> | undefined
+  private lastEvaluationAt = -Infinity
+  /** The frame was requested by the previous one (a continuous move), so its interval is a frame time. */
+  private chained = false
+  private lastTick = 0
+  private stillProbe = 0
+  private readonly qualityListeners = new Set<() => void>()
+  private qualitySnapshot: QualityState
+  private readonly unsubscribePerformance: () => void
   private materials: ModeMaterials
   private readonly overlay: Group = zUpGroup('cad-overlay')
   private readonly decor: Group = zUpGroup('cad-decor')
@@ -150,6 +187,7 @@ export class Viewer {
   private evaluation: Evaluation | null = null
   private environment: PaveEnvironment | null = null
   private envRadius = 0
+  private envSize = 0
   private lastGood = new Map<string, Part[]>()
   private readonly geometries = new Map<string, CachedGeometry>()
   private generation = 0
@@ -191,6 +229,15 @@ export class Viewer {
     this.renderer.setClearColor(0x000000, 0)
     this.tier = gpuTier(this.renderer.getContext())
     this.policy = qualityFor(this.tier)
+    this.adaptive = new AdaptiveQuality(this.adaptiveConfig(usePerformance.getState().mode))
+    this.adaptive.adopt(learned)
+    this.qualitySnapshot = qualityState(this.adaptive, false)
+    this.unsubscribePerformance = usePerformance.subscribe((s) => {
+      if (s.mode === this.adaptive.mode) return
+      this.adaptive.configure(this.adaptiveConfig(s.mode))
+      this.applyQuality()
+      this.invalidate()
+    })
     this.materials = createModeMaterials(readPalette(themeRoot))
     this.planes = new ImagePlaneLayer(this.invalidate)
     this.planes.setSelectColor(readPalette(themeRoot).select)
@@ -232,10 +279,22 @@ export class Viewer {
 
   private readonly tick = (): void => {
     this.frame = 0
+    const now = performance.now()
+    // Only the interval between two frames of one continuous move says what a frame costs; a
+    // frame after a pause in the drag would read as a very slow one.
+    if (this.chained && this.isLight() && this.adaptive.observe(now - this.lastTick)) {
+      learned = this.adaptive.learned()
+      this.applyQuality()
+    }
+    this.chained = false
+    this.lastTick = now
     this.timer.update()
     const moving = this.controls.update(this.timer.getDelta())
     this.draw()
-    if (moving) this.invalidate()
+    if (moving) {
+      this.invalidate()
+      this.chained = true
+    }
   }
 
   private draw(): void {
@@ -252,6 +311,15 @@ export class Viewer {
     }
     this.frameTimes.push(performance.now() - start)
     if (this.frameTimes.length > 60) this.frameTimes.shift()
+    // A still frame is timed to the next animation frame, which waits for the GPU to finish it.
+    // One callback per still frame, and none at all while nothing is drawn.
+    if (!this.isLight() && !this.stillProbe)
+      this.stillProbe = requestAnimationFrame(() => {
+        this.stillProbe = 0
+        if (this.disposed) return
+        this.adaptive.observeStill(performance.now() - start)
+        learned = this.adaptive.learned()
+      })
     for (const l of this.renderListeners) l()
   }
 
@@ -298,37 +366,88 @@ export class Viewer {
     this.invalidate()
     if (this.moving) return
     this.moving = true
-    this.applyGemQuality()
+    this.applyQuality()
   }
 
   private readonly stopMoving = (): void => {
     clearTimeout(this.restTimer)
-    // Refine the gems once the camera has settled for a moment.
+    // Refine once the camera has settled for a moment.
     this.restTimer = setTimeout(() => {
       this.moving = false
-      this.applyGemQuality()
+      this.applyQuality()
       this.invalidate()
     }, 150)
   }
 
-  private applyGemQuality(): void {
+  /** Whether the picture is drawn light now: the camera moves or a slider scrubs. */
+  private isLight(): boolean {
+    return this.moving || this.scrubbing
+  }
+
+  private adaptiveConfig(mode: PerformanceMode) {
+    return { mode, deviceDpr: window.devicePixelRatio || 1, tierMaxDpr: this.policy.maxDpr }
+  }
+
+  private quality(): Quality {
+    return this.isLight() ? this.adaptive.moving() : this.adaptive.still()
+  }
+
+  /**
+   * Applies the pixel ratio and effects for the current state. A new pixel ratio reallocates
+   * the drawing buffer, so it is only set when it changed; the frame that follows draws at it.
+   */
+  private applyQuality(): void {
+    const q = this.quality()
+    if (!this.applied || this.applied.dpr !== q.dpr) {
+      this.renderer.setPixelRatio(q.dpr)
+      this.renderer.setSize(this.width, this.height, false)
+    }
+    this.applied = q
+    this.applyGemQuality()
+    const standIn = this.wantsStandIn()
+    if (standIn !== this.standIn) {
+      this.standIn = standIn
+      this.applyMaterials()
+    }
+    const next = qualityState(this.adaptive, this.isLight())
+    const changed = !sameQuality(this.qualitySnapshot, next)
+    this.qualitySnapshot = next
+    if (changed) for (const l of this.qualityListeners) l()
+  }
+
+  /** What the viewport draws now; stable between changes (for useSyncExternalStore). */
+  get qualityState(): QualityState {
+    return this.qualitySnapshot
+  }
+
+  /** Calls `listener` when the drawn quality changes; returns the unsubscribe. */
+  onQuality(listener: () => void): () => void {
+    this.qualityListeners.add(listener)
+    return () => this.qualityListeners.delete(listener)
+  }
+
+  private applyGemQuality(effects = this.quality().effects, light = this.isLight()): void {
     const model = this.built?.model
     if (!model || !this.evaluation) return
     const melee = this.evaluation.stones.filter((s) => s.role === 'melee' || s.role === 'accent')
-    const set = this.moving ? this.policy.moving : this.policy.rest
+    const set = gemQualityFor(this.policy, effects, light)
     model.setGemQuality('hero', set.hero)
     model.setGemQuality(
       'melee',
-      melee.length > this.policy.meleeBudget ? this.policy.moving.melee : set.melee,
+      melee.length > this.policy.meleeBudget
+        ? gemQualityFor(this.policy, effects, true).melee
+        : set.melee,
     )
   }
 
   setSize(width: number, height: number): void {
     this.width = Math.max(1, width)
     this.height = Math.max(1, height)
-    const dpr = Math.min(window.devicePixelRatio || 1, this.policy.maxDpr)
-    this.renderer.setPixelRatio(dpr)
-    this.renderer.setSize(this.width, this.height, false)
+    // The window may have moved to a screen of another density.
+    this.adaptive.configure(this.adaptiveConfig(this.adaptive.mode))
+    // A forced resize: the canvas's CSS size changed even when the pixel ratio did not.
+    this.applied = null
+    this.applyQuality()
     this.camera.aspect = this.width / this.height
     this.updateFov(this.camera.aspect)
     this.updateSafeFraction()
@@ -368,6 +487,18 @@ export class Viewer {
       if (!failed.has(nodeId) && !byNode.has(nodeId)) this.lastGood.delete(nodeId)
     for (const [nodeId, parts] of byNode) this.lastGood.set(nodeId, parts)
 
+    // A burst of evaluations is a slider being scrubbed: draw it light like a moving camera,
+    // and refine once the burst stops. A single edit draws at full quality straight away.
+    // On a machine where a full frame is slow, every edit is drawn light first, so the change
+    // shows at once and sharpens a moment later.
+    const now = performance.now()
+    if (
+      this.evaluation &&
+      (now - this.lastEvaluationAt < SCRUB_GAP_MS || this.adaptive.stillIsSlow())
+    )
+      this.scrub()
+    this.lastEvaluationAt = now
+
     this.evaluation = evaluation
     this.planes.setBounds(evaluation.report.bounds)
     const resolved = viewportScene(
@@ -379,14 +510,18 @@ export class Viewer {
     configureRenderer(this.renderer, resolved)
     this.renderer.shadowMap.enabled = false
     const radius = resolved.subject.radius
-    if (!this.environment || Math.abs(radius - this.envRadius) / this.envRadius > 0.3) {
+    // The studio reflection is rebuilt only when the piece's size changes a lot, or the still
+    // picture's effects ask for another resolution (a slow machine gets the smaller one).
+    const envSize = this.tier === 'software' || this.adaptive.still().effects !== 'full' ? 128 : 256
+    if (
+      !this.environment ||
+      envSize !== this.envSize ||
+      Math.abs(radius - this.envRadius) / this.envRadius > 0.3
+    ) {
       this.environment?.dispose()
-      this.environment = createEnvironment(
-        this.renderer,
-        resolved,
-        this.tier === 'software' ? 128 : 256,
-      )
+      this.environment = createEnvironment(this.renderer, resolved, envSize)
       this.envRadius = radius
+      this.envSize = envSize
       this.scene.environment = this.environment.texture
     }
 
@@ -429,6 +564,18 @@ export class Viewer {
       this.framedOnce = true
       this.view(this.defaultView(), false)
     }
+  }
+
+  private scrub(): void {
+    clearTimeout(this.scrubTimer)
+    this.scrubTimer = setTimeout(() => {
+      this.scrubbing = false
+      this.applyQuality()
+      this.invalidate()
+    }, SCRUB_SETTLE_MS)
+    if (this.scrubbing) return
+    this.scrubbing = true
+    this.applyQuality()
   }
 
   /**
@@ -514,26 +661,11 @@ export class Viewer {
     const m = this.materials
     const hiddenSet = new Set(hidden)
 
-    for (const mesh of b.metals) {
-      const nodeId = mesh.userData.nodeId as string
-      mesh.visible = !hiddenSet.has(nodeId)
-      mesh.material =
-        xray && display !== 'technical'
-          ? m.xray
-          : display === 'clay'
-            ? m.clayMetal
-            : display === 'technical'
-              ? m.paper
-              : b.originals.get(mesh)!
-    }
+    this.standIn = this.wantsStandIn()
+    this.applyMaterials()
+    for (const mesh of b.metals) mesh.visible = !hiddenSet.has(mesh.userData.nodeId as string)
     const zero = new Matrix4().makeScale(0, 0, 0).elements
     for (const gems of b.gems) {
-      gems.material =
-        display === 'clay'
-          ? m.clayStone
-          : display === 'technical'
-            ? m.paper
-            : b.originals.get(gems)!
       const ids = gems.userData.stoneIds as string[]
       const original = b.matrices.get(gems)!
       const arr = gems.instanceMatrix.array as Float32Array
@@ -556,6 +688,36 @@ export class Viewer {
     if (hover && !selected.has(hover.nodeId))
       this.outline(b, (id) => id === hover.nodeId, hover.stoneId ?? null, m.hovered, null)
     this.invalidate()
+  }
+
+  /** The rendered look is too heavy to move on this machine: clay while it moves (see ./adaptive). */
+  private wantsStandIn(): boolean {
+    const { display, xray } = this.state
+    return display === 'rendered' && !xray && this.isLight() && this.quality().effects === 'minimal'
+  }
+
+  /** Metal and stone materials for the display mode, x-ray and stand-ins; overlays untouched. */
+  private applyMaterials(): void {
+    const b = this.built
+    if (!b) return
+    const { display, xray } = this.state
+    const m = this.materials
+    const clay = display === 'clay' || this.standIn
+    for (const mesh of b.metals)
+      mesh.material =
+        xray && display !== 'technical'
+          ? m.xray
+          : clay
+            ? m.clayMetal
+            : display === 'technical'
+              ? m.paper
+              : b.originals.get(mesh)!
+    for (const gems of b.gems)
+      gems.material = clay
+        ? m.clayStone
+        : display === 'technical'
+          ? m.paper
+          : b.originals.get(gems)!
   }
 
   private clearOverlay(): void {
@@ -881,7 +1043,6 @@ export class Viewer {
       far: this.camera.far,
       width: this.width,
       height: this.height,
-      dpr: this.renderer.getPixelRatio(),
     }
     if (opts.evaluation) this.setEvaluation(opts.evaluation)
     const canvases: HTMLCanvasElement[] = []
@@ -905,9 +1066,11 @@ export class Viewer {
         xray: false,
         aiTint: [],
       }
-      this.applyLook()
+      // A picture is never light: full effects and the real materials, whatever is moving.
       this.moving = false
-      this.applyGemQuality()
+      this.scrubbing = false
+      this.applyLook()
+      this.applyGemQuality('full', false)
       const pts = this.pointsFor(opts.focusNodeIds)
       for (const view of opts.views) {
         const angle = typeof view === 'string' ? CAMERA_PRESETS[view] : { ...view, fill: 0.66 }
@@ -929,7 +1092,7 @@ export class Viewer {
       this.state = saved.state
       this.camera.near = saved.near
       this.camera.far = saved.far
-      this.renderer.setPixelRatio(saved.dpr)
+      // setSize puts back the pixel ratio the current quality asks for.
       this.setSize(saved.width, saved.height)
       void this.controls.setLookAt(
         saved.position.x,
@@ -1021,6 +1184,10 @@ export class Viewer {
     cancelAnimationFrame(this.frame)
     clearTimeout(this.restTimer)
     clearTimeout(this.indexTimer)
+    clearTimeout(this.scrubTimer)
+    cancelAnimationFrame(this.stillProbe)
+    this.unsubscribePerformance()
+    this.qualityListeners.clear()
     this.clearOverlay()
     if (this.built) this.release(this.built)
     for (const { geometry } of this.geometries.values()) geometry.dispose()

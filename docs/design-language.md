@@ -59,7 +59,10 @@ something must be read exactly.
    window (directions, takes) keep their own solid `bg`.
 4. **Every glass surface has an opaque fallback.** Under *reduced transparency*, or where the
    browser has no `backdrop-filter`, glass becomes `bg-subtle`. Do not set a glass background
-   inline (`style={{ background }}`): it would win over the fallback.
+   inline (`style={{ background }}`): it would win over the fallback. The same fallback applies
+   under `<html data-glass="solid">`, which a 3D view sets while the Performance setting is
+   Smooth, or once Auto finds the machine cannot keep the view smooth: re-blurring a moving
+   picture behind every toolbar on every frame halved the frame rate on a slow machine.
 5. **Write `backdrop-filter` once, unprefixed.** The build adds the `-webkit-` prefix where it is
    needed. Writing both by hand made the build keep only the prefixed one, which Chromium and
    Electron ignore, so until this pass no glass in the app was actually frosted.
