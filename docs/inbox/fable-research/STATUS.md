@@ -20,6 +20,7 @@ Not written yet. It lands here when the plans have been reviewed.
 - Research 16, AI human models and on-model imagery: `docs/research/16-ai-models-on-model.md`. No image or video model keeps a jewelry design true, so the pipeline is render-first: render the CAD on a simple proxy, let the model paint the brand model around it, paste the true render back, then gate with checks. Default provider Gemini, fallback OpenAI. Higgsfield's help centre says it may train on user content unless enterprise, so unreleased designs should not go there by default. Video by API has shrunk: Veo 3.1 left the Gemini API on 22 Oct 2026 and OpenAI's video API closed on 24 Sep 2026. Estimated cost: $0.30 to $0.70 per accepted still, $1.50 to $4 per accepted 5-second clip.
 - Research 22, full Rhino parity: `docs/research/22-rhino-full-parity.md`. Rhino 8's command list has 1,078 names, grouped into 195 capabilities. The product has 16 today and 58 in part. Steps 1 to 8 of the freeform plan finish 37 more. After step 8, 142 of 195 (73%) are still open. Of those, 74 are cheap on today's engines, 55 are known algorithms and 13 need research or a new engine (SubD, QuadRemesh, Squish, BlendSrf, exact cage deformation). Three causes sit under most gaps: the plan's "bodies are closed" rule, the shipped OpenCascade build being a 353-class subset, and no SubD engine. The file proposes 15 further steps (9 to 23), about 65 to 90 lane-weeks by estimate.
 - Research 14, rendering for jewelry: `docs/research/14-jewelry-rendering.md`. KeyShot's edge for jewelry is workflow, not physics (a gem material with an Abbe number, a one-click jewelry lighting preset, photon-mapped caustics; USD 1,299 a year). Its November 2026 release added an AI agent that sets up scenes from plain language. Only Cycles, Octane X, Redshift and KeyShot (beta) run on an Apple GPU. Standalone Cycles, LuxCore and pbrt-v4 are Apache-2.0; Mitsuba 3 is BSD-3-Clause with an extra clause. Measured optical data exists for pure gold, silver, copper, platinum, palladium and rhodium (CC0), but none was found for karat alloys.
+- Research 15, our own renderer (the priority): `docs/research/15-own-renderer.md`, with the spike scripts, timings and a side-by-side image in `docs/research/spikes/15-renderer/`. Recommendation: our own contained path tracer as WebGPU compute kernels with a TypeScript host in the studio, the same kernels headless later, Open Image Denoise for denoising, Blender kept as a separate reference process. Five stages, 19 to 27 weeks for one graphics engineer by estimate, each with an image-distance gate. The spike: a 340-line tracer of our own and its 247-line WebGPU port show the same facet pattern and coloured flashes as Cycles and spectral Mitsuba on the same ring. The caveat: at similar CPU time Cycles was closer to the converged reference, and our gold came out slightly orange. Plan B is licence-clean: Cycles standalone is Apache-2.0, but native only. **No Mac or GPU timing was measured**: everything ran on a shared 2-core Linux CPU; the M2 figures are estimates, and section 6.6 has the commands to measure them.
 
 ## Requests and findings for lane A (from the research so far)
 
@@ -61,6 +62,8 @@ Corrections to earlier research:
 - RhinoGold is discontinued; RhinoArtisan is a separate product from another company, not its new name. MatrixGold is at 4.0, Rhino at 9, 3Design at V13.
 - Research 12 and `freeform-cad.md` treat Make2D as absent, and research 12 lists ShrinkWrap as an existing tool. Neither matches the code: `packages/production/src/drawing/` already draws hidden-line sheets, and level-set re-surfacing runs in `mesh/resurface.ts`. The assistant branch's README says MCP is "Planned, not built".
 - `freeform-cad.md` lists Make2D and shrinkage compensation as cut or later, while `production/drawing` and `shrinkagePct` already exist.
+- `workers/render/LICENSE` is a notice with a link, not the GPL text. The full text should be added before the worker is distributed.
+- Mitsuba 3.9.1 has no dispersion, even in its spectral variants (the spike wrote its own dispersive material).
 - `03-rendering.md` on three-gpu-pathtracer: its README today does not list dispersion and accepts only the two standard three.js materials, so the product's gem shader cannot run in it.
 - `03-rendering.md` says Open Image Denoise runs on the CPU; it has run on the GPU since Blender 4.1. A comment in the render worker's `devices.py` about Metal on Intel Macs is wrong since Blender 4.3.
 - `docs/ARCHITECTURE.md` (lines 177 to 182) still describes "Continue with Diaex" as a sign-in through OpenID. The contract links an organisation by plain OAuth. The `guest` role can currently call no command at all.
@@ -74,7 +77,7 @@ Ten research subagents, one per topic, one file each (topic 22 was added on the 
 |---|---|---|
 | `docs/research/13-jewelry-cad-features.md` | Full jewelry CAD feature set | Done; plan `docs/plans/freeform-cad-additions.md` reviewed (1 blocker, 13 majors, 13 minors) and fixed |
 | `docs/research/14-jewelry-rendering.md` | Rendering state of the art for jewelry | Done (some engine rows are working knowledge, marked [E]: the web-search budget ran out) |
-| `docs/research/15-own-renderer.md` | Our own renderer (priority) | Running |
+| `docs/research/15-own-renderer.md` | Our own renderer (priority) | Done, with spikes in five engines; plan being written |
 | `docs/research/16-ai-models-on-model.md` | AI human models, on-model imagery | Done; plan `docs/plans/brand-models-v2.md` reviewed (1 blocker, 10 majors, 9 minors) and fixed |
 | `docs/research/17-pave-file-format.md` | The native file format | Done; plan `docs/plans/pave-file-format.md` reviewed (3 blockers, 15 majors, 8 minors) and fixed |
 | `docs/research/18-low-end-machines.md` | Low-end machines | Done |
@@ -168,6 +171,13 @@ From research 14 (rendering):
 41. Can real alloy swatches, including rhodium-plated white gold, be measured with a spectrophotometer? No published data for karat alloys was found.
 42. Does moissanite's facet doubling matter? Birefringence is otherwise left out.
 43. Meter paid renders by time, by image or by samples?
+
+From research 15 (our own renderer):
+44. Plan A: our own engine (more reach, more risk), or the Cycles sidecar (less risk, native only, no rendering in the browser)?
+45. Does a render on the user's own GPU count against the paid allowance, and how is it labelled next to a Blender take?
+46. Who judges "photoreal enough"? Proposed: a blind comparison by working jewelers in stage 2.
+47. Should Blender ever be bundled with the product? That needs counsel.
+48. Please run the spike on your Air (section 6.6 of research 15): it gives the one number nobody could measure here.
 
 From research 18 (machines):
 16. Which Air exactly (13 or 15 inch, 8 or 16 GB, 8 or 10 GPU cores, macOS version)? Is 8 GB a supported target?
