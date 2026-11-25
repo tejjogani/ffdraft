@@ -291,6 +291,18 @@ export const IntentWarningSchema = z.object({
 
 const SummaryDiagnostic = EvaluationSummarySchema.shape.diagnostics.element
 
+/**
+ * The ids of the spec questions asked before building from a picture (packages/agent's
+ * specQuestions): the one set chat.ask may pass with more than three questions.
+ */
+export const SPEC_QUESTION_IDS: readonly string[] = [
+  'kind',
+  'size',
+  'centre-stone',
+  'metal',
+  'budget',
+]
+
 export const commands = {
   // ── Session & organisation ────────────────────────────────────────────────────────────────
   'session.get': def({
@@ -1665,7 +1677,14 @@ export const commands = {
     input: z.object({
       intro: z.string().min(1).max(300),
       /** Three at most, except the five spec questions references.read returns. */
-      questions: z.array(QuickQuestionSchema).min(1).max(5),
+      questions: z
+        .array(QuickQuestionSchema)
+        .min(1)
+        .max(5)
+        .refine((qs) => qs.length <= 3 || qs.every((q) => SPEC_QUESTION_IDS.includes(q.id)), {
+          message:
+            'Ask at most three questions; only the spec questions references.read returns (up to five) may be passed together',
+        }),
     }),
     output: QuickAnswersSchema,
   }),

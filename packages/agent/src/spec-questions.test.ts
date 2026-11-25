@@ -1,4 +1,10 @@
-import { PieceSpecSchema, QuickQuestionSchema, resolveAnswers } from '@pave/schema'
+import {
+  commands,
+  PieceSpecSchema,
+  QuickQuestionSchema,
+  resolveAnswers,
+  SPEC_QUESTION_IDS,
+} from '@pave/schema'
 import { describe, expect, it } from 'vitest'
 import { specQuestions } from './spec-questions'
 
@@ -17,6 +23,13 @@ describe('the spec questions asked before building from a picture', () => {
     const qs = specQuestions(ring)
     expect(qs.map((q) => q.id)).toEqual(['kind', 'size', 'centre-stone', 'metal', 'budget'])
     for (const q of qs) expect(() => QuickQuestionSchema.parse(q)).not.toThrow()
+    // chat.ask lets these five through together, and no other set of more than three.
+    expect(qs.map((q) => q.id)).toEqual(SPEC_QUESTION_IDS)
+    const ask = commands['chat.ask'].input
+    expect(ask.safeParse({ intro: 'Read the picture', questions: qs }).success).toBe(true)
+    const others = qs.slice(0, 4).map((q, i) => ({ ...q, id: `q${i}` }))
+    expect(ask.safeParse({ intro: 'Hi', questions: others }).success).toBe(false)
+    expect(ask.safeParse({ intro: 'Hi', questions: others.slice(0, 3) }).success).toBe(true)
     const picks = Object.fromEntries(qs.map((q) => [q.id, q.defaults]))
     expect(picks).toEqual({
       kind: ['ring'],
