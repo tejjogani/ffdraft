@@ -62,10 +62,19 @@ function ply(binary: boolean): Uint8Array {
   return out
 }
 
-/** glTF is Y-up: write the cube rotated into Y-up so the parser's conversion restores it. */
-function glb(): Uint8Array {
+interface GlbJson {
+  bufferViews: { buffer: number; byteOffset: number; byteLength: number }[]
+  accessors: { bufferView?: number; componentType: number; count: number; type: string }[]
+}
+
+/**
+ * glTF is Y-up: write the cube rotated into Y-up so the parser's conversion restores it. `edit`
+ * damages the JSON (a wrong count, an index past the vertices) and `spoil` the index data.
+ */
+function glb(edit?: (json: GlbJson) => void, spoil?: (indices: Uint16Array) => void): Uint8Array {
   const positions = new Float32Array(V.flatMap(([x, y, z]) => [x!, z!, -y!]))
   const indices = new Uint16Array(TRIS.flat())
+  spoil?.(indices)
   const bin = new Uint8Array(positions.byteLength + indices.byteLength + 2)
   bin.set(new Uint8Array(positions.buffer), 0)
   bin.set(new Uint8Array(indices.buffer), positions.byteLength)
@@ -85,6 +94,7 @@ function glb(): Uint8Array {
       { bufferView: 1, componentType: 5123, count: indices.length, type: 'SCALAR' },
     ],
   }
+  edit?.(json)
   let text = JSON.stringify(json)
   while (text.length % 4) text += ' '
   const j = strToU8(text)
@@ -125,7 +135,7 @@ describe('mesh import', () => {
     ['obj', obj],
     ['ply', () => ply(false)],
     ['ply', () => ply(true)],
-    ['glb', glb],
+    ['glb', () => glb()],
     ['3mf', threemf],
   ]
   for (const [format, make] of cases)
@@ -162,5 +172,44 @@ describe('a cut-short file', () => {
     )
     // Other bytes that are no mesh still get the general message.
     expect(() => parseMesh(new Uint8Array(200).fill(0xff))).toThrow(/not a mesh format/)
+  })
+})
+
+describe('a GLB whose JSON does not match its data', () => {
+  it('refuses a triangle that refers to a vertex the file does not have', () => {
+    const bytes = glb(undefined, (indices) => {
+      indices[4] = 200
+    })
+    expect(() => parseMesh(bytes)).toThrow(
+      /GLB file has a triangle that refers to a missing vertex/,
+    )
+  })
+
+  it('never reads past its binary chunk into whatever memory lies behind the file', () => {
+    // The file sits inside a larger buffer, as a small upload does in Node's shared Buffer
+    // pool; what follows it is somebody else's data.
+    const file = glb((json) => {
+      json.accessors[0]!.count = 40
+    })
+    const pool = new Uint8Array(file.length + 4096).fill(0x41)
+    pool.set(file, 0)
+    const inPool = pool.subarray(0, file.length)
+    expect(() => parseMesh(inPool)).toThrow(/GLB file .*(outside|beyond|ends early)/)
+    // The same file with nothing behind it fails the same readable way, not with a RangeError.
+    expect(() => parseMesh(file)).toThrow(/GLB file .*(outside|beyond|ends early)/)
+  })
+
+  it('says a GLB cut short ends early', () => {
+    const whole = glb()
+    expect(() => parseMesh(whole.slice(0, whole.length - 100))).toThrow(/GLB file .*ends early/)
+  })
+
+  it('refuses an accessor count that is no count, or data too large to be a mesh', () => {
+    for (const count of [-1, 2.5, 4e9]) {
+      const bytes = glb((json) => {
+        json.accessors[0] = { componentType: 5126, count, type: 'VEC3' }
+      })
+      expect(() => parseMesh(bytes), String(count)).toThrow(/GLB file has an accessor/)
+    }
   })
 })

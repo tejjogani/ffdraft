@@ -331,3 +331,77 @@ describe('a Worker that dies after starting', () => {
     local.dispose()
   })
 })
+
+/** Fails instead of hanging the suite when a request is never answered. */
+const settled = <T>(promise: Promise<T>, ms = 10_000): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`not answered within ${ms} ms`)), ms),
+    ),
+  ])
+
+describe('a result that does not arrive', () => {
+  it('is sent in full the next time: the Worker does not count on buffers it never delivered', async () => {
+    const { client: port, worker, sent } = channel()
+    const local = coreKernel()
+    // The first result cannot be posted, as when cloning a large mesh runs out of memory.
+    const post = worker.postMessage
+    let failing = true
+    worker.postMessage = (m, transfer) => {
+      if (m.type === 'evaluated' && failing) {
+        failing = false
+        throw new DOMException('The result could not be cloned', 'DataCloneError')
+      }
+      post(m, transfer)
+    }
+    serveKernel(local, worker)
+    const client = createKernelClient({ port })
+    await client.ready()
+    await expect(settled(client.evaluate(solitaire))).rejects.toThrow(/could not be cloned/)
+    // The same design again: nothing changed in the kernel, yet the client holds none of it.
+    const second = await settled(client.evaluate(solitaire))
+    expect(second.parts.length).toBeGreaterThan(0)
+    for (const part of second.parts) expect(part.mesh.positions.length).toBeGreaterThan(0)
+    expect(Object.keys(second.gemMeshes).length).toBeGreaterThan(0)
+    const last = sent[sent.length - 1] as Extract<Response, { type: 'evaluated' }>
+    for (const part of last.evaluation.parts) expect(part.mesh, part.id).toBeDefined()
+    client.terminate()
+    local.dispose()
+  })
+
+  it('a result the client cannot put together rejects its request instead of leaving it pending', async () => {
+    // A Worker that answers an evaluation with a part whose buffers it believes the client has.
+    const port: Port<Request, Response> = {
+      onmessage: null,
+      postMessage: (m) => {
+        if (m.type !== 'evaluate') return
+        queueMicrotask(() => {
+          try {
+            port.onmessage?.({
+              data: {
+                type: 'evaluated',
+                id: m.id,
+                evaluation: {
+                  detail: 'draft',
+                  parts: [{ id: 'band', rev: 'r1' } as never],
+                  stones: [],
+                  gemMeshes: {},
+                  report: {} as never,
+                  diagnostics: [],
+                  ms: 0,
+                  timings: {},
+                },
+              },
+            })
+          } catch {
+            // A real Worker's message handler throwing is an uncaught error on the page.
+          }
+        })
+      },
+    }
+    const client = createKernelClient({ port })
+    await expect(settled(client.evaluate(solitaire), 2_000)).rejects.toThrow(/unknown geometry/)
+    client.terminate()
+  })
+})

@@ -7,6 +7,7 @@ import { buildDesign, type Design, designFrom, METALS, TEMPLATES } from '@pave/s
 import { unzipSync } from 'fflate'
 import { importSTEP, measureVolume, type Shape3D } from 'replicad'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { runtime } from '../core'
 import { createKernel, type LocalKernel } from '../kernel'
 import type { Bounds, ExportFormat, ExportResult } from '../types'
 import { loadRhino3dm } from './rhino3dm'
@@ -422,7 +423,18 @@ describe('export fidelity', () => {
       m.slice(1).map(Number),
     )
     expect(values.length).toBeGreaterThan(0)
-    for (const v of values) expect(Math.fround(v)).toBe(Math.fround(Math.fround(v)))
+    // The STL holds the same welded vertices as raw float32: every OBJ vertex, read back as
+    // float32, must be one of them bit for bit, and none may be missing.
+    const stl = parseStl((await exportOf(solitaire(), 'stl', true)).bytes).triangles.positions
+    const corners = (p: readonly number[]) => {
+      const set = new Set<string>()
+      for (let i = 0; i < p.length; i += 3) set.add(`${p[i]},${p[i + 1]},${p[i + 2]}`)
+      return set
+    }
+    const written = corners(values.map(Math.fround))
+    const expected = corners(stl)
+    expect(written.size).toBe(expected.size)
+    expect([...written].filter((c) => !expected.has(c))).toEqual([])
     // Finer than the old 0.1 µm grid somewhere: slivers keep their vertices apart.
     expect(values.some((v) => Math.abs(v * 1e4 - Math.round(v * 1e4)) > 1e-3)).toBe(true)
   })
@@ -437,4 +449,25 @@ describe('export fidelity', () => {
       json.materials.find((m) => m.name === name)!.pbrMetallicRoughness.baseColorFactor.join()
     expect(colour('au18k-yellow')).not.toBe(colour('pt950'))
   })
+})
+
+describe('STEP memory', () => {
+  it('frees what an export allocates: a faceted stone does not grow the OpenCascade heap each time', async () => {
+    const design = designFrom('other', [
+      { id: 'box', kind: 'primitive', shape: 'box', size: [4, 5, 6] },
+      {
+        id: 'g',
+        kind: 'gem',
+        width: 6.5,
+        transform: { position: [20, 0, 0], rotation: [0, 0, 0], scale: 1 },
+      },
+    ])
+    const heap = () => runtime().oc.wasmMemory.buffer.byteLength
+    await kernel.export(design, 'step', { stones: true })
+    const before = heap()
+    for (let i = 0; i < 40; i++) await kernel.export(design, 'step', { stones: true })
+    // Left to the garbage collector (which cannot see WASM memory and so did not run), each
+    // export kept about 4 MB: 150–200 MB over these forty. The heap grows in 20 MB steps.
+    expect(heap() - before).toBeLessThan(30e6)
+  }, 120_000)
 })

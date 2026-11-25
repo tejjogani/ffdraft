@@ -8,12 +8,11 @@
 import { GEM_MATERIALS, METALS } from '@pave/schema'
 import {
   assembleWire,
-  cast,
-  exportSTEP,
+  createAssembly,
+  downcast,
+  type Face,
   makeFace,
   makeLine,
-  makePolygon,
-  makeSolid,
   revolution,
   type Shape3D,
 } from 'replicad'
@@ -30,7 +29,7 @@ import { createBreather } from '../evaluate/yield'
 import { gemUnit } from '../gems/index'
 import { isRuntimeFault, runtimeGeneration } from '../runtime/index'
 import { boundsOverlap, weld } from '../solid/meshing'
-import { compoundOf, scoped, shapeVolume, transformShape } from '../solid/occt'
+import { compoundOf, scoped, shapeVolume, transformShape, wrapShape } from '../solid/occt'
 import type { Bounds, MeshData, StoneInstance } from '../types'
 import { linearHex } from './color'
 
@@ -182,20 +181,34 @@ function polyhedron(mesh: MeshData, s: readonly [number, number, number]): Shape
     p[i * 3 + 1]! * s[1],
     p[i * 3 + 2]! * s[2],
   ]
-  const faces = []
-  for (let t = 0; t < indices.length; t += 3)
-    faces.push(makePolygon([point(indices[t]!), point(indices[t + 1]!), point(indices[t + 2]!)]))
-  const solid = makeSolid(faces)
-  for (const f of faces) f.delete()
+  // Edges and wires are freed here, as in `envelope`: replicad's `makePolygon` leaves three
+  // edges and a wire per facet to the garbage collector, which has no idea how much WASM
+  // memory they hold, so every export of a faceted stone grew the heap by megabytes.
+  const faces: Face[] = []
+  for (let t = 0; t < indices.length; t += 3) {
+    const corners = [point(indices[t]!), point(indices[t + 1]!), point(indices[t + 2]!)]
+    const edges = corners.map((p, i) => makeLine(p, corners[(i + 1) % 3]!))
+    const wire = assembleWire(edges)
+    faces.push(makeFace(wire))
+    wire.delete()
+    for (const e of edges) e.delete()
+  }
   const { oc } = runtime()
   try {
     return scoped((own) => {
-      const unify = own(new oc.ShapeUpgrade_UnifySameDomain(solid.wrapped, true, true, false))
+      // What replicad's `makeSolid` does, with the sewing tool (which holds every facet and
+      // its own maps) freed now rather than whenever the garbage collector next runs.
+      const sewing = own(new oc.BRepBuilderAPI_Sewing(1e-6, true, true, true, false))
+      for (const f of faces) sewing.Add(f.wrapped)
+      sewing.Perform()
+      const shell = own(downcast(own(sewing.SewedShape())))
+      const solid = own(own(new oc.ShapeFix_Solid()).SolidFromShell(shell))
+      const unify = own(new oc.ShapeUpgrade_UnifySameDomain(solid, true, true, false))
       unify.Build()
-      return cast(unify.Shape()) as Shape3D
+      return wrapShape<Shape3D>(unify.Shape())
     })
   } finally {
-    solid.delete()
+    for (const f of faces) f.delete()
   }
 }
 
@@ -265,6 +278,41 @@ function stoneShapes(scene: Scene, stones: readonly StoneInstance[]): NamedShape
     })
   } finally {
     for (const unit of units.values()) unit.delete()
+  }
+}
+
+/**
+ * Writes named, coloured shapes as STEP in millimetres: replicad's `exportSTEP`, call for call,
+ * except that the document, the session and the writer are freed before returning. replicad
+ * leaves them to the garbage collector, which cannot see the WASM memory they hold (megabytes
+ * per faceted stone), so the heap of a long-lived kernel grew with every export.
+ */
+function writeStep(shapes: readonly NamedShape[]): Uint8Array {
+  const { oc } = runtime()
+  const doc = createAssembly([...shapes])
+  try {
+    return scoped((own) => {
+      own(new oc.STEPCAFControl_Writer())
+      oc.Interface_Static.SetCVal('xstep.cascade.unit', 'MM')
+      oc.Interface_Static.SetCVal('write.step.unit', 'MM')
+      const session = own(new oc.XSControl_WorkSession())
+      const writer = own(new oc.STEPCAFControl_Writer(session, false))
+      writer.SetColorMode(true)
+      writer.SetLayerMode(true)
+      writer.SetNameMode(true)
+      oc.Interface_Static.SetIVal('write.surfacecurve.mode', 1)
+      oc.Interface_Static.SetIVal('write.precision.mode', 0)
+      oc.Interface_Static.SetIVal('write.step.assembly', 2)
+      oc.Interface_Static.SetIVal('write.step.schema', 5)
+      const progress = own(new oc.Message_ProgressRange())
+      if (!writer.Perform(doc.wrapped, 'export.step', progress))
+        throw new Error('OpenCascade could not write the STEP file')
+      const file = oc.FS.readFile('/export.step') as Uint8Array
+      oc.FS.unlink('/export.step')
+      return file
+    })
+  } finally {
+    doc.delete()
   }
 }
 
@@ -378,7 +426,7 @@ export const step = defineExporter({
         seen.set(s.name, n)
         return { ...s, name: n > 1 ? `${s.name} ${n}` : s.name, color: linearHex(s.color) }
       })
-      const blob = exportSTEP(written, { unit: 'MM' })
+      const file = writeStep(written)
       const notes = [
         'STEP AP242, millimetres: exact B-rep solids, one per metal body, named and coloured by alloy.',
       ]
@@ -396,7 +444,7 @@ export const step = defineExporter({
           : 'Stones are not included.',
       )
       return {
-        bytes: withoutTimestamp(new Uint8Array(await blob.arrayBuffer())),
+        bytes: withoutTimestamp(file),
         mime: 'model/step',
         extension: 'step',
         notes,

@@ -173,7 +173,14 @@ export function createKernelClient(options: KernelClientOptions = {}): KernelCli
     pending.delete(data.id)
     if (data.type === 'evaluated') {
       // Decode even when nobody is waiting any more: the ledger must see every result.
-      const evaluation = ledger.decode(data.evaluation)
+      let evaluation: Evaluation
+      try {
+        evaluation = ledger.decode(data.evaluation)
+      } catch (error) {
+        // The request is no longer pending, so nothing else would ever settle it.
+        entry?.reject(error instanceof Error ? error : new Error(String(error)))
+        return
+      }
       entry?.resolve(evaluation as never)
     } else if (data.type === 'ready') {
       kinds = data.kinds

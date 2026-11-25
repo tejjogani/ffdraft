@@ -32,16 +32,40 @@ export interface MeshSelection {
   only?: readonly string[]
 }
 
-/** Gives each name a ` 2`, ` 3`… suffix where it repeats, so objects stay addressable. */
+/**
+ * A name as a file can carry it: control characters (a pasted tab, line break or worse) become
+ * a space. XML 1.0 cannot hold most of them at all, so one in a part's name made the whole 3MF
+ * model unreadable, and OpenNURBS drops such a name altogether.
+ */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are the point
+const cleanName = (name: string): string => name.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim()
+
+/**
+ * Gives each name a ` 2`, ` 3`… suffix where it repeats, so objects stay addressable. A number
+ * another object already carries is skipped: "Block", "Block" beside a part the designer named
+ * "Block 2" become "Block", "Block 3", not two parts called "Block 2".
+ */
 function uniqueNames<T extends { name: string }>(objects: T[]): T[] {
+  const taken = new Set(objects.map((o) => o.name))
   const seen = new Map<string, number>()
   for (const o of objects) {
-    const n = (seen.get(o.name) ?? 0) + 1
-    seen.set(o.name, n)
-    if (n > 1) o.name = `${o.name} ${n}`
+    const base = o.name
+    let n = (seen.get(base) ?? 0) + 1
+    if (n > 1) {
+      while (taken.has(`${base} ${n}`)) n++
+      o.name = `${base} ${n}`
+      taken.add(o.name)
+    }
+    seen.set(base, n)
   }
   return objects
 }
+
+/** Why nothing can be written for a selection that holds no metal (and no stones, if asked for). */
+export const nothingToExport = (selection: MeshSelection): string =>
+  selection.only
+    ? `Nothing to export: no metal${selection.stones ? ' or stones' : ''} comes from ${selection.only.join(', ')}.`
+    : `Nothing to export: the piece has no metal${selection.stones ? ' or stones' : ''}.`
 
 /**
  * A part's triangles as they will be written: welded at float32, which drops triangles whose
@@ -78,7 +102,7 @@ export function sceneObjects(scene: Scene, selection: MeshSelection): MeshObject
     .filter((p) => !only || p.sources.some((s) => only.has(s.nodeId)))
     .map((p) => ({
       kind: 'metal',
-      name: p.part.name,
+      name: cleanName(p.part.name) || 'Part',
       material: p.part.material,
       finish: p.part.finish,
       plating: p.part.plating,
@@ -97,12 +121,7 @@ export function sceneObjects(scene: Scene, selection: MeshSelection): MeshObject
         }))
     : []
   const objects = [...uniqueNames(metal), ...stones]
-  if (objects.length === 0)
-    throw new Error(
-      selection.only
-        ? `Nothing to export: no metal${selection.stones ? ' or stones' : ''} comes from ${selection.only.join(', ')}.`
-        : `Nothing to export: the piece has no metal${selection.stones ? ' or stones' : ''}.`,
-    )
+  if (objects.length === 0) throw new Error(nothingToExport(selection))
   return objects
 }
 
