@@ -206,6 +206,11 @@ export interface StageController {
   setFrame(frame: number): void
   /** Re-fits the camera after the viewport's aspect changes. */
   resize(): void
+  /**
+   * Moves the camera alone (a viewfinder drag): the studio, ground and lights stay as resolved
+   * until the scene is resolved again, as it is when the move is saved.
+   */
+  setCamera(camera: ResolvedCamera): void
   dispose(): void
 }
 
@@ -238,9 +243,10 @@ export function applyResolvedScene(
     return keys ? sampleTrack(keys, frame) : fallback
   }
   let current = 0
+  let cameraNow = resolved.camera
   const setFrame = (frame: number) => {
     current = frame
-    const c = resolved.camera
+    const c = cameraNow
     placeCamera(
       camera,
       {
@@ -263,6 +269,10 @@ export function applyResolvedScene(
   return {
     setFrame,
     resize: () => setFrame(current),
+    setCamera: (c) => {
+      cameraNow = c
+      setFrame(current)
+    },
     dispose: () => {
       stage.removeFromParent()
       stage.traverse((o) => {

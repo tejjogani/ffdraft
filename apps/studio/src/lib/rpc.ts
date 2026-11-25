@@ -12,6 +12,8 @@ export class RpcError extends Error {
     message: string,
     /** HTTP status; 0 when the server could not be reached. */
     readonly status: number,
+    /** The rest of the error body, e.g. what a `plan_limit` was about. */
+    readonly details: Readonly<Record<string, unknown>> = {},
   ) {
     super(message)
   }
@@ -33,11 +35,16 @@ export async function postJson<T>(url: string, body: unknown): Promise<T> {
   const json = text ? safeParse(text) : null
   if (!res.ok) {
     const err =
-      (json as { error?: { code?: string; message?: string }; message?: string } | null) ?? {}
+      (json as {
+        error?: { code?: string; message?: string; [k: string]: unknown }
+        message?: string
+      } | null) ?? {}
+    const { code, message, ...details } = err.error ?? {}
     throw new RpcError(
-      err.error?.code ?? (res.status === 401 ? 'unauthorized' : 'http_error'),
-      err.error?.message ?? err.message ?? res.statusText ?? 'Request failed',
+      code ?? (res.status === 401 ? 'unauthorized' : 'http_error'),
+      message ?? err.message ?? res.statusText ?? 'Request failed',
       res.status,
+      details,
     )
   }
   return json as T
@@ -67,24 +74,33 @@ export const QUERY_NAMES = [
   'collections.list',
   'pieces.list',
   'pieces.get',
+  'pieces.estimate',
+  'projects.summary',
   'design.history',
   'design.evaluate',
   'boards.list',
   'boards.get',
   'references.search',
+  'references.pins',
   'references.lineage',
   'references.similar',
   'references.estimate',
+  'references.briefs',
   'mesh3d.estimate',
   'mesh3d.list',
   'mesh3d.get',
   'scenes.list',
+  'scenes.suggest',
+  'scenes.capture',
+  'chat.ask',
+  'scenes.history',
   'renders.engine',
   'models.estimatePortraits',
   'shots.get',
   'shots.estimate',
   'renders.list',
   'renders.get',
+  'renders.estimate',
   'models.list',
   'shots.list',
   'production.list',
@@ -93,6 +109,11 @@ export const QUERY_NAMES = [
   'traces.runs',
   'traces.run',
   'usage.summary',
+  'assistant.setup.get',
+  'assistant.key.test',
+  'images.setup.get',
+  'images.key.test',
+  'plan.get',
 ] as const satisfies readonly CommandName[]
 
 export type QueryName = (typeof QUERY_NAMES)[number]

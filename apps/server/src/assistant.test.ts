@@ -74,6 +74,15 @@ describe('assistant commands', () => {
       decide: async () => {
         throw new Error('unused')
       },
+      pause: async () => {
+        throw new Error('unused')
+      },
+      resumeJob: async () => {
+        throw new Error('unused')
+      },
+      accept: async () => {
+        throw new Error('unused')
+      },
       cancel: async (runId, sctx) => {
         const ctx = await server.runtime.context({ userId: sctx.userId, orgId: sctx.orgId })
         return traces.finishRun(ctx, runId, { status: 'canceled' })

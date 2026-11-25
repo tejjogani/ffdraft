@@ -28,9 +28,10 @@ import {
 } from '@pave/ui'
 import { useNavigate } from '@tanstack/react-router'
 import { Check, CircleHelp, Hammer } from 'lucide-react'
-import { type ReactNode, useEffect, useState } from 'react'
-import { queryClient, rpcKey, useRpcMutation } from '../../lib/query'
-import { assistant } from '../../stores/assistant'
+import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { queryClient, rpcKey, useRpcMutation } from '../lib/query'
+import { assistant } from '../stores/assistant'
+import { cadMovedOn } from './spec-drift'
 
 const ROLE_LABEL: Record<StoneSpec['role'], string> = {
   center: 'Centre',
@@ -91,8 +92,21 @@ const sizeSystemOptions = RING_SIZE_SYSTEMS.map((s) => ({
 /**
  * The spec as a human-readable, editable plan. Every edit saves the whole spec; open questions
  * are highlighted because the assistant should not guess them.
+ *
+ * `inline` is the variant the assistant's conversation shows: the same editable plan (an edit
+ * is a person's `pieces.setSpec`), with the caller's footer (Build it, as the approval) in place
+ * of the page's build button.
  */
-export function SpecCard({ piece }: { piece: Piece }) {
+export function SpecCard({
+  piece,
+  variant = 'full',
+  footer,
+}: {
+  piece: Piece
+  variant?: 'full' | 'inline'
+  footer?: ReactNode
+}) {
+  const inline = variant === 'inline'
   const [draft, setDraft] = useState(piece.spec)
   useEffect(() => setDraft(piece.spec), [piece.spec])
   const setSpec = useRpcMutation('pieces.setSpec', {
@@ -103,6 +117,9 @@ export function SpecCard({ piece }: { piece: Piece }) {
       )
     },
   })
+
+  // After a fit to a photo or an edit, the plan no longer describes the CAD; say so.
+  const moved = useMemo(() => cadMovedOn(piece.spec, piece.design), [piece.spec, piece.design])
 
   if (!draft)
     return (
@@ -164,6 +181,16 @@ export function SpecCard({ piece }: { piece: Piece }) {
           onBlur={() => draft.summary !== piece.spec?.summary && save(draft)}
           className="mt-1 text-sm leading-6 text-fg-muted"
         />
+        {!inline && moved && (
+          <p
+            data-spec-drift
+            className="mt-2 rounded-md bg-bg-muted px-3 py-2 text-xs text-fg-muted"
+          >
+            The CAD has changed since it was built from this spec (fitted to a photo or edited), so
+            its sizes may differ from these. The Design tab and the facts show the piece as it is
+            now.
+          </p>
+        )}
       </div>
 
       <dl className="mt-3 divide-y divide-line border-t border-line">
@@ -431,7 +458,7 @@ export function SpecCard({ piece }: { piece: Piece }) {
         </div>
       )}
 
-      <BuildFooter piece={piece} openQuestions={draft.openQuestions.length} />
+      {inline ? footer : <BuildFooter piece={piece} openQuestions={draft.openQuestions.length} />}
     </Card>
   )
 }

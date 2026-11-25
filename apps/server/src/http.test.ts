@@ -41,6 +41,40 @@ describe('http surface', () => {
     expect(res.headers.get('access-control-allow-credentials')).toBe('true')
   })
 
+  it('in local mode, answers only requests addressed to this computer (no DNS rebinding)', async () => {
+    // A page on attacker.example that resolves to 127.0.0.1 is same-origin to the browser: the
+    // Host header is the only thing that gives it away.
+    const rebound = await server.app.request('http://attacker.example:8932/api/rpc/session.get', {
+      method: 'POST',
+    })
+    expect(rebound.status).toBe(403)
+    const key = await server.app.request('http://attacker.example:8932/api/rpc/assistant.key.set', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ apiKey: 'sk-ant-api03-WXYZWXYZWXYZWXYZWXYZWXYZ' }),
+    })
+    expect(key.status).toBe(403)
+    for (const path of ['/api/assets', '/api/events', '/api/runs/run_x/events'])
+      expect((await server.app.request(`http://attacker.example${path}`)).status, path).toBe(403)
+    for (const host of ['localhost:8787', '127.0.0.1:8787', '[::1]:8787']) {
+      const ok = await server.app.request(`http://${host}/api/rpc/session.get`, { method: 'POST' })
+      expect(ok.status, host).toBe(200)
+    }
+    // A change sent from another site's page is refused even to localhost.
+    const forged = await server.app.request('http://localhost:8787/api/rpc/collections.create', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'http://evil.example' },
+      body: '{"name":"x"}',
+    })
+    expect(forged.status).toBe(403)
+    const dev = await server.app.request('http://localhost:5173/api/rpc/collections.create', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'http://localhost:5173' },
+      body: '{"name":"x"}',
+    })
+    expect(dev.status).toBe(200)
+  })
+
   it('requires JSON for command input', async () => {
     const res = await server.app.request('/api/rpc/collections.create', {
       method: 'POST',
@@ -108,31 +142,17 @@ describe('http surface', () => {
     expect(read.headers.get('access-control-allow-origin')).toBeNull()
   })
 
-  // Needs a decision (which hosts a local install answers to), so it is recorded, not fixed.
-  // A page whose domain is re-pointed at 127.0.0.1 (DNS rebinding) is same-origin with this
-  // server: the Origin check above passes and, with no sign-in, it could read and change
-  // everything. The Host it was sent to is what gives it away.
-  it('refuses a request sent to a host name that is not this server (local mode)', async () => {
-    const post = (url: string, headers: Record<string, string> = {}) =>
+  it('a name that only looks like this computer is refused (local mode)', async () => {
+    const post = (url: string) =>
       server.app.request(url, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', ...headers },
+        headers: { 'content-type': 'application/json' },
         body: '{}',
       })
-    const rebound = await post('http://attacker.example:8787/api/rpc/pieces.list', {
-      origin: 'http://attacker.example:8787',
-    })
-    expect(rebound.status).toBe(403)
-    expect(await rebound.json()).toMatchObject({ error: { code: 'forbidden' } })
-    // Reads and the studio's own files are refused too, not only writes.
-    expect((await server.app.request('http://attacker.example:8787/')).status).toBe(403)
-    // A Host header that disagrees with the address is judged as well.
-    expect(
-      (await post('http://localhost:8787/api/rpc/pieces.list', { host: 'attacker.example:8787' }))
-        .status,
-    ).toBe(403)
-    // A name that merely ends like loopback is not loopback.
-    expect((await post('http://localhost.attacker.example/api/rpc/pieces.list')).status).toBe(403)
+    const refused = await post('http://localhost.attacker.example/api/rpc/pieces.list')
+    expect(refused.status).toBe(403)
+    expect(await refused.json()).toMatchObject({ error: { code: 'forbidden' } })
+    expect((await post('http://127.0.0.1.attacker.example/api/rpc/pieces.list')).status).toBe(403)
   })
 
   it('answers to loopback names, whatever the port (local mode)', async () => {

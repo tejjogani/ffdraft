@@ -1,0 +1,104 @@
+{
+ "runs": [
+  [
+   {
+    "paceMs": 25,
+    "content": [
+     {
+      "type": "thinking",
+      "thinking": "A picture from the design board, taken to CAD. Read it part by part before naming anything; then the specs it cannot show."
+     },
+     {
+      "type": "text",
+      "text": "Reading the picture first."
+     },
+     {
+      "type": "tool_use",
+      "name": "references_read",
+      "input": {
+       "assetIds": [
+        "{{attachment}}"
+       ]
+      }
+     }
+    ]
+   },
+   {
+    "content": [
+     {
+      "type": "text",
+      "text": "{\"observations\": \"A round brilliant in six slim claws on a plain court band in white metal, seen from the front and above. The band is a little wider than a classic solitaire\\u2019s; the gallery under the stone is hidden.\", \"kind\": {\"value\": \"ring\", \"visible\": \"yes\"}, \"view\": \"threeQuarter\", \"archetype\": {\"value\": \"solitaire\", \"visible\": \"yes\"}, \"stones\": [{\"role\": \"center\", \"cut\": \"round\", \"arrangement\": \"single\", \"setting\": \"prong\", \"prongs\": 6, \"countVisible\": 1, \"widthToCentre\": 1, \"visible\": \"yes\"}], \"band\": {\"profile\": \"court\", \"shoulder\": \"plain\", \"widthToStone\": 0.4, \"taperTopToBottom\": 1, \"visible\": \"yes\"}, \"body\": null, \"metal\": {\"colour\": \"white\", \"finish\": \"polished\", \"visible\": \"yes\"}, \"notVisible\": [\"the inside of the band\", \"the gallery under the stone\"], \"unsure\": [{\"field\": \"band.profile\", \"why\": \"a photo along the finger would show whether it is court or flat\"}], \"plainBackground\": true}"
+     }
+    ]
+   },
+   {
+    "paceMs": 20,
+    "content": [
+     {
+      "type": "text",
+      "text": "It reads as a round solitaire in six slim claws on a plain court band, in white metal. A picture has no scale and no price, so five quick specs first; the defaults are what the picture shows."
+     },
+     {
+      "type": "tool_use",
+      "name": "chat_ask",
+      "input": {
+       "intro": "A round solitaire in six claws on a court band, white metal. Five specs the picture cannot show:",
+       "questions": "{{readQuestions}}"
+      }
+     }
+    ]
+   },
+   {
+    "paceMs": 20,
+    "content": [
+     {
+      "type": "text",
+      "text": "Saving the spec as answered and estimating it before anything is built."
+     },
+     {
+      "type": "tool_use",
+      "name": "pieces_setSpec",
+      "input": {
+       "id": "{{pieceId}}",
+       "spec": "{{readSpec}}"
+      }
+     },
+     {
+      "type": "tool_use",
+      "name": "pieces_estimate",
+      "input": {
+       "id": "{{pieceId}}",
+       "spec": "{{readSpec}}"
+      }
+     }
+    ]
+   },
+   {
+    "paceMs": 20,
+    "content": [
+     {
+      "type": "text",
+      "text": "The estimate is on the spec card: metal weight, carats and a rough cost at placeholder rates. Build it when it looks right."
+     },
+     {
+      "type": "tool_use",
+      "name": "pieces_buildFromSpec",
+      "input": {
+       "id": "{{pieceId}}"
+      }
+     }
+    ]
+   },
+   {
+    "paceMs": 20,
+    "content": [
+     {
+      "type": "text",
+      "text": "Built from your picture through the canon: a round solitaire in six claws on a court band. The picture now lies in the front view as an image plane, scaled to the ring, so you can model over it. Scale was assumed from the ring size you picked; check the claw tips against the picture before it goes further."
+     }
+    ],
+    "stop_reason": "end_turn"
+   }
+  ]
+ ]
+}

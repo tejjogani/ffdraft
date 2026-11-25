@@ -1,5 +1,6 @@
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { PLAN_NAMES, type PlanName } from '@pave/schema'
 import { z } from 'zod'
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url))
@@ -29,6 +30,11 @@ export interface Config {
   /** Validate handler outputs against the contract (dev and test). */
   validateOutputs: boolean
   logRequests: boolean
+  /**
+   * PAVE_PLAN: the plan to act as, for testing on a local install. Null in accounts mode, where
+   * the plan belongs to the organisation, and when unset or not a plan's name.
+   */
+  plan: PlanName | null
 }
 
 const flag = z
@@ -50,6 +56,8 @@ const EnvSchema = z.object({
   PAVE_STUDIO_DIST: z.string().optional(),
   PAVE_MAX_UPLOAD_MB: z.coerce.number().positive().default(200),
   NODE_ENV: z.string().optional(),
+  // Checked below rather than here: a mistyped plan is ignored with a warning, not a crash.
+  PAVE_PLAN: z.string().optional(),
 })
 
 /** Reads configuration from the environment. Every variable is documented in `.env.example`. */
@@ -83,5 +91,20 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): Config {
     maxUploadBytes: Math.round(e.PAVE_MAX_UPLOAD_MB * 1024 * 1024),
     validateOutputs: !production,
     logRequests: !production && e.NODE_ENV !== 'test',
+    plan: auth === 'local' ? planFrom(e.PAVE_PLAN) : null,
   }
+}
+
+const planFrom = (v: string | undefined): PlanName | null => {
+  const name = v?.trim().toLowerCase()
+  return (PLAN_NAMES as readonly string[]).includes(name ?? '') ? (name as PlanName) : null
+}
+
+/** Why PAVE_PLAN is not in force, for a warning at start-up; null when it is, or is unset. */
+export function planWarning(config: Config, env: NodeJS.ProcessEnv = process.env): string | null {
+  const v = env.PAVE_PLAN?.trim()
+  if (!v || config.plan !== null) return null
+  return config.auth === 'accounts'
+    ? 'PAVE_PLAN is ignored in accounts mode: each organisation has its own plan.'
+    : `PAVE_PLAN="${v}" is not a plan (use ${PLAN_NAMES.join(' or ')}); it is ignored.`
 }

@@ -28,6 +28,7 @@ import {
   NumberField,
   Segmented,
   Select,
+  Skeleton,
   Spinner,
   Swatch,
   toast,
@@ -497,7 +498,7 @@ function FactsSkeleton() {
       {['Metal', 'Carats', 'Stones'].map((label) => (
         <div key={label} aria-hidden className="flex h-5 items-center justify-between text-xs">
           <span className="text-fg-muted">{label}</span>
-          <span className="h-2 w-28 animate-pulse rounded-xs bg-bg-muted" />
+          <Skeleton className="h-2 w-28 rounded-xs" />
         </div>
       ))}
       <p className="sr-only">Weighing the new stone…</p>

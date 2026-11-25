@@ -4,6 +4,7 @@ import {
   Activity,
   BookOpen,
   Box,
+  FileUp,
   FolderPlus,
   Gem,
   Home,
@@ -21,6 +22,7 @@ import {
   Truck,
   User,
 } from 'lucide-react'
+import { useOpenPaveFile } from '../features/pavefile'
 import { type Command, useRegisterCommands } from '../lib/commands'
 import { useCreatePiece } from '../lib/pieces'
 import { useRpcMutation } from '../lib/query'
@@ -37,6 +39,7 @@ export function useGlobalCommands(): void {
   const createCollection = useRpcMutation('collections.create', {
     onSuccess: (c) => void navigate({ to: '/collections/$id', params: { id: c.id } }),
   })
+  const openPaveFile = useOpenPaveFile()
   const go = (to: string) => () => void navigate({ to })
 
   const commands: Command[] = [
@@ -82,6 +85,15 @@ export function useGlobalCommands(): void {
       icon: Lightbulb,
       keywords: ['idea', 'board', 'references'],
       run: () => createBoard.mutate({ title: 'Untitled board' }),
+    },
+    {
+      id: 'file.openPave',
+      title: 'Open Pavé file…',
+      group: 'Create',
+      icon: FileUp,
+      shortcut: 'mod+o',
+      keywords: ['open', 'import', '.pave', 'file'],
+      run: openPaveFile,
     },
     {
       id: 'collection.new',

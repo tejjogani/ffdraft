@@ -8,6 +8,7 @@ export type ErrorCode =
   | 'conflict'
   | 'payload_too_large'
   | 'budget_exceeded'
+  | 'plan_limit'
   | 'not_configured'
   | 'internal'
 
@@ -18,6 +19,8 @@ const STATUS = {
   not_found: 404,
   /** The organisation's monthly budget would be exceeded; an admin can raise it. */
   budget_exceeded: 402,
+  /** A plan allowance (renders, CAD exports) is used up for this month; Pro has more. */
+  plan_limit: 402,
   conflict: 409,
   payload_too_large: 413,
   internal: 500,

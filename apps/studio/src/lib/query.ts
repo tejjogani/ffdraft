@@ -16,6 +16,7 @@ import {
   useMutation,
   useQuery,
 } from '@tanstack/react-query'
+import { reportPlanLimit } from '../features/plans/plan-limit'
 import { type MutationName, type QueryName, RpcError, rpc } from './rpc'
 
 export const rpcKey = <N extends QueryName>(name: N, input?: CommandInput<N>) =>
@@ -29,19 +30,50 @@ export const rpcQuery = <N extends QueryName>(name: N, input: CommandInput<N>) =
 
 const DOMAIN_QUERIES: Record<string, QueryName[]> = {
   session: ['session.get'],
-  org: ['session.get', 'org.members', 'org.settings.get'],
-  collections: ['collections.list', 'pieces.list'],
-  pieces: ['pieces.list', 'pieces.get', 'collections.list', 'design.history', 'design.evaluate'],
-  design: ['pieces.get', 'pieces.list', 'design.history', 'design.evaluate'],
-  boards: ['boards.list', 'boards.get', 'pieces.get'],
-  references: ['boards.get', 'boards.list'],
-  renders: ['renders.list', 'renders.get', 'pieces.list'],
+  org: ['session.get', 'org.members', 'org.settings.get', 'assistant.setup.get'],
+  collections: ['collections.list', 'pieces.list', 'projects.summary'],
+  pieces: [
+    'pieces.list',
+    'pieces.get',
+    'collections.list',
+    'design.history',
+    'design.evaluate',
+    'pieces.estimate',
+    'projects.summary',
+  ],
+  // A design change makes earlier takes stale (computed by the server).
+  design: ['pieces.get', 'pieces.list', 'design.history', 'design.evaluate', 'renders.list'],
+  boards: ['boards.list', 'boards.get', 'pieces.get', 'references.pins', 'projects.summary'],
+  references: [
+    'boards.get',
+    'boards.list',
+    'references.pins',
+    'references.briefs',
+    'projects.summary',
+    'usage.summary',
+  ],
+  projects: ['projects.summary'],
+  renders: [
+    'renders.list',
+    'renders.get',
+    'pieces.list',
+    'scenes.list',
+    'scenes.history',
+    'renders.estimate',
+    'plan.get',
+    'projects.summary',
+  ],
+  scenes: ['scenes.list', 'scenes.history', 'renders.estimate'],
   models: ['models.list'],
   shots: ['shots.list'],
-  production: ['production.list'],
+  production: ['production.list', 'plan.get', 'projects.summary'],
+  plan: ['plan.get', 'projects.summary'],
   threads: ['threads.list', 'threads.get'],
+  runs: ['threads.list', 'threads.get', 'traces.runs', 'traces.run', 'projects.summary'],
+  assistant: ['assistant.setup.get', 'session.get', 'images.setup.get'],
+  images: ['images.setup.get', 'session.get', 'references.estimate'],
   traces: ['traces.runs', 'traces.run'],
-  usage: ['usage.summary'],
+  usage: ['usage.summary', 'projects.summary'],
 }
 
 /** Refresh everything a command (or a server event named like one) may have changed. */
@@ -64,6 +96,8 @@ export const queryClient = new QueryClient({
   mutationCache: new MutationCache({
     onError: (e, _vars, _ctx, mutation) => {
       if (mutation.meta?.silent) return
+      // A plan limit is not a failure to report: the upgrade card says it calmly.
+      if (reportPlanLimit(e)) return
       toast.error('Couldn’t save that change', e.message)
     },
   }),

@@ -1,8 +1,50 @@
 [
-  {"name": "Assistant build (lane A, A1)", "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_920329c5-70e/journal.jsonl", "branch": "claude/assistant-build"},
-  {"name": "Engine follow-up (lane A, A2)", "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_a082f7c6-17b/journal.jsonl", "branch": "claude/busy-bardeen-o482lo"},
-  {"name": "Engine test pass, rounds 2-3 and studio menus", "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_372d97e8-c85/journal.jsonl"},
-  {"name": "Durable jobs and hosting plan", "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_4b24741e-18e/journal.jsonl"},
-  {"name": "Freeform CAD plan", "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_2c9d000a-d65/journal.jsonl"},
-  {"name": "Diaex contract", "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_67d96a6f-f63/journal.jsonl"}
+  {
+    "name": "Spec as the source of truth (lane A, A7)",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_a9861f4a-9a2/journal.jsonl"
+  },
+  {
+    "name": "Release verification (lane A, A3)",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_9296cd32-437/journal.jsonl",
+    "branch": "claude/busy-bardeen-o482lo"
+  },
+  {
+    "name": "Trial on five real pieces (lane A)",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_9b8dbfd7-d49/journal.jsonl"
+  },
+  {
+    "name": "Diaex sign-in and access gate (lane A)",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_db88fdb2-003/journal.jsonl"
+  },
+  {
+    "name": "Integration and release (lane A, A3)",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_edfee788-f55/journal.jsonl",
+    "branch": "claude/busy-bardeen-o482lo"
+  },
+  {
+    "name": "Assistant build (lane A, A1)",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_920329c5-70e/journal.jsonl",
+    "branch": "claude/assistant-build"
+  },
+  {
+    "name": "Engine follow-up (lane A, A2)",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_a082f7c6-17b/journal.jsonl",
+    "branch": "claude/busy-bardeen-o482lo"
+  },
+  {
+    "name": "Engine test pass, rounds 2-3 and studio menus",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_372d97e8-c85/journal.jsonl"
+  },
+  {
+    "name": "Durable jobs and hosting plan",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_4b24741e-18e/journal.jsonl"
+  },
+  {
+    "name": "Freeform CAD plan",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_2c9d000a-d65/journal.jsonl"
+  },
+  {
+    "name": "Diaex contract",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_67d96a6f-f63/journal.jsonl"
+  }
 ]

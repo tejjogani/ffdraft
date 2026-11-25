@@ -3,14 +3,18 @@
  * settled design, run on the production worker two seconds after editing stops. Its
  * diagnostics are the only ones allowed to say "Ready to cast".
  */
-import type { Diagnostic } from '@pave/kernel'
+import type { Diagnostic, Report } from '@pave/kernel'
 import type { Design } from '@pave/schema'
 import { useEffect, useState } from 'react'
 import { evaluationScheduler } from '../../../lib/kernel/client'
 
 export type ProductionCheck =
   | { state: 'idle' | 'running' }
-  | { state: 'done'; diagnostics: Diagnostic[] }
+  /**
+   * `report`: the production weights and carats, the same evaluation the piece's stored facts
+   * come from, so the readout and the overview agree once the check has run.
+   */
+  | { state: 'done'; diagnostics: Diagnostic[]; report: Report }
   | { state: 'failed'; error: string }
 
 const IDLE_MS = 2000
@@ -32,7 +36,10 @@ export function useProductionCheck(
         .then(
           (e) => {
             if (current && e)
-              setResult({ design, check: { state: 'done', diagnostics: e.diagnostics } })
+              setResult({
+                design,
+                check: { state: 'done', diagnostics: e.diagnostics, report: e.report },
+              })
           },
           (err: unknown) => {
             if (current) setResult({ design, check: { state: 'failed', error: String(err) } })

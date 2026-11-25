@@ -3,7 +3,7 @@
  * unfinished by a restart are handed back to their services in the context of the user they
  * belong to; work nobody can resume is failed as interrupted rather than left live for ever.
  */
-import type { Actor, JobStatus, Run } from '@pave/schema'
+import { type Actor, ANIMATION_RENDER_COST, type JobStatus, type Run } from '@pave/schema'
 import { and, eq, inArray } from 'drizzle-orm'
 import type { Ctx } from './context'
 import type { Db } from './db/client'
@@ -15,6 +15,7 @@ import { toPackage } from './handlers/production'
 import { toRenderJobs } from './handlers/render'
 import { engineError, meshHandle, packageHandle, renderHandle, shotHandle } from './jobs'
 import { getModel, getPiece } from './lookups'
+import { packageKey, releaseOrphan, renderKeys } from './plans'
 import type { Runtime } from './runtime'
 import { LIVE_STATUSES, serviceContext } from './service-context'
 import { finishRun, toRun } from './traces'
@@ -36,7 +37,7 @@ export type Unfinished = { createdAt: Date } & (
 )
 
 const INTERRUPTED = 'Interrupted by a server restart; run it again.'
-const LIVE_RUNS: Run['status'][] = ['running', 'awaiting-approval']
+const LIVE_RUNS: Run['status'][] = ['running', 'awaiting-approval', 'waiting']
 
 /**
  * Live work across all orgs: Blender renders, image-to-3D jobs, on-model shots and production
@@ -121,6 +122,9 @@ async function failOrphan(db: Db, item: Unfinished): Promise<void> {
         .update(t.renderJob)
         .set({ ...failed, finishedAt })
         .where(and(eq(t.renderJob.id, item.id), inArray(t.renderJob.status, LIVE_STATUSES)))
+      // Its scene is not read here: give back every key a take of either kind may hold.
+      for (const key of renderKeys(item.id, ANIMATION_RENDER_COST))
+        await releaseOrphan(db, item.orgId, key)
       return
     case 'mesh3d':
       await db
@@ -144,6 +148,7 @@ async function failOrphan(db: Db, item: Unfinished): Promise<void> {
             inArray(t.productionPackage.status, LIVE_STATUSES),
           ),
         )
+      await releaseOrphan(db, item.orgId, packageKey(item.id))
       return
     case 'run':
       await db

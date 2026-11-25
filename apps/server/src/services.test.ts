@@ -48,7 +48,7 @@ describe('engines that are not configured', () => {
       await api.fail('design.evaluate', { pieceId: piece.id }),
       await api.fail('design.export', { pieceId: piece.id, format: 'stl' }),
       await api.fail('references.search', { query: 'art deco ring' }),
-      await api.fail('references.generate', { boardId: board.id, prompt: 'an art deco ring' }),
+      await api.fail('references.brief', { boardId: board.id, request: 'an art deco ring' }),
       await api.fail('models.generatePortraits', { id: model.id, views: ['face'] }),
       await api.fail('shots.create', { modelId: model.id, pieceId: piece.id, placement: 'hand' }),
       await api.fail('production.create', { pieceId: piece.id }),
@@ -93,30 +93,14 @@ describe('registered engines', () => {
           },
         },
         imageGen: {
-          capabilities: { imageGeneration: ['acme'] },
-          estimate: async (req) => ({
-            provider: 'acme',
-            model: 'acme-1',
-            usd: 0.04 * req.count,
-            seconds: 12,
-          }),
-          generate: async (req, sctx) => {
-            await sctx.recordUsage({
-              meter: 'image',
-              provider: 'acme',
-              model: 'acme-1',
-              quantity: req.count,
-              unit: 'images',
-              costUsd: 0.04 * req.count,
-            })
-            return {
-              model: 'acme-1',
-              images: Array.from({ length: req.count }, (_, i) => ({
-                bytes: tiny,
-                name: `gen-${i}.png`,
-                mime: 'image/png',
-              })),
-            }
+          capabilities: { imageGeneration: ['fake'] },
+          // Session reports what this organisation can use, not the static capability list.
+          available: () => ['fake'],
+          resolve: async () => {
+            throw new Error('not used')
+          },
+          price: async () => {
+            throw new Error('not used')
           },
         },
         production: {
@@ -140,7 +124,7 @@ describe('registered engines', () => {
     const { capabilities } = await api.call('session.get', {})
     expect(capabilities).toMatchObject({
       mesh3d: ['kernel'],
-      imageGeneration: ['acme'],
+      imageGeneration: ['fake'],
       blender: true,
       imageSearch: [],
     })
@@ -174,68 +158,7 @@ describe('registered engines', () => {
     expect((await api.request(asset.url)).status).toBe(200)
   })
 
-  it('generate images onto a board with lineage and metering', async () => {
-    const board = await api.call('boards.create', { title: 'Concepts' })
-    const [note] = await api.call('references.save', {
-      boardId: board.id,
-      items: [{ note: 'deco', rights: 'own' }],
-    })
-    const [link] = await api.call('references.save', {
-      boardId: board.id,
-      items: [{ url: 'https://example.com/a' }],
-    })
-    expect(
-      (
-        await api.fail('references.generate', {
-          boardId: board.id,
-          prompt: 'a ring',
-          referenceIds: [link!.id],
-        })
-      ).status,
-    ).toBe(400)
-
-    // The price shown before confirming is the one checked against the budget.
-    expect(await api.call('references.estimate', { prompt: 'an art deco ring', count: 2 })).toEqual(
-      { provider: 'acme', model: 'acme-1', usd: 0.08, seconds: 12 },
-    )
-    await api.call('org.settings.update', { monthlyBudgetUsd: 0.05 })
-    const over = await api.fail('references.generate', {
-      boardId: board.id,
-      prompt: 'an art deco ring',
-      count: 2,
-    })
-    expect([over.status, over.error.code]).toEqual([402, 'budget_exceeded'])
-    await api.call('org.settings.update', { monthlyBudgetUsd: null })
-
-    const refs = await api.call('references.generate', {
-      boardId: board.id,
-      prompt: 'an art deco ring',
-      referenceIds: [note!.id],
-      count: 2,
-    })
-    expect(refs).toHaveLength(2)
-    expect(refs[0]).toMatchObject({
-      type: 'generated',
-      rights: 'own',
-      width: 64,
-      height: 48,
-      generation: {
-        prompt: 'an art deco ring',
-        model: 'acme-1',
-        parentIds: [note!.id],
-        runId: null,
-      },
-    })
-    const full = await api.call('boards.get', { id: board.id })
-    expect(full.board.coverAssetIds).toEqual(refs.map((r) => r.assetId))
-    const usage = await api.call('usage.summary', {})
-    expect(usage.byMeter).toContainEqual({
-      meter: 'image',
-      unit: 'images',
-      quantity: 2,
-      costUsd: 0.08,
-    })
-  })
+  // Image generation (brief, provider, check, metering) is covered in imagegen/imagegen.test.ts.
 
   it('hand queued renders to the render queue, which reports back through its handle', async () => {
     const piece = await api.call('pieces.create', { templateId: 'halo' })

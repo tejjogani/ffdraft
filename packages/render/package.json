@@ -12,7 +12,8 @@
     "typecheck": "tsc -p tsconfig.json",
     "setup:blender": "node ../../workers/render/setup.mjs",
     "demo": "vite demo",
-    "shots": "tsx scripts/blender-shots.ts"
+    "shots": "tsx scripts/blender-shots.ts",
+    "repeat-check": "tsx scripts/repeat-check.ts"
   },
   "dependencies": {
     "@pave/kernel": "workspace:*",

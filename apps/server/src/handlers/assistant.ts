@@ -1,8 +1,8 @@
-import { roleAllows } from '@pave/schema'
+import { type Message, roleAllows } from '@pave/schema'
 import { and, asc, desc, eq, inArray } from 'drizzle-orm'
 import type { Ctx } from '../context'
 import * as t from '../db/schema'
-import { forbidden, notFound } from '../errors'
+import { badRequest, forbidden, notFound } from '../errors'
 import { createId } from '../ids'
 import { ensure, ensureAll, getBoard, getPiece, getRun, getScene, getThread } from '../lookups'
 import { serviceContext } from '../service-context'
@@ -28,6 +28,24 @@ async function readableRun(ctx: Ctx, id: string) {
   return run
 }
 
+/**
+ * A message as the studio reads it: photos sent to the model are stored inline (the model must
+ * get the same bytes on every turn), but the studio shows them from their assets, so their data
+ * is left out here to keep the conversation light.
+ */
+function forStudio(m: Message): Message {
+  if (!m.content.some((b) => b.type === 'image')) return m
+  return {
+    ...m,
+    content: m.content.map((b) => {
+      const source = b.source as { type?: string; media_type?: string } | undefined
+      return b.type === 'image' && source?.type === 'base64'
+        ? { ...b, source: { type: 'base64', media_type: source.media_type, data: '' } }
+        : b
+    }),
+  }
+}
+
 /** Runs are steered (approved, stopped) only by the person they act for. */
 async function ownRun(ctx: Ctx, id: string) {
   const run = await getRun(ctx, id)
@@ -35,7 +53,34 @@ async function ownRun(ctx: Ctx, id: string) {
   return run
 }
 
-export const assistant: HandlerGroup<'threads' | 'runs' | 'client' | 'traces'> = {
+export const assistant: HandlerGroup<
+  'threads' | 'runs' | 'client' | 'traces' | 'assistant' | 'chat'
+> = {
+  // Inside a run the loop answers it with what the person picked; on its own it has nobody to ask.
+  'chat.ask': async () => {
+    throw badRequest(
+      'chat.ask asks the designer inside an assistant conversation; there is no one to answer it here.',
+    )
+  },
+  // Setup works without a key (that is how one is entered); the key itself never comes back.
+  'assistant.setup.get': async (ctx) =>
+    ctx.services
+      .get('assistantSetup')
+      .get(serviceContext(ctx), { admin: roleAllows(ctx.role, 'admin') }),
+
+  'assistant.key.set': async (ctx, { apiKey }) => {
+    if (ctx.actor.type !== 'user') throw forbidden('Only a person can set the API key')
+    return ctx.services.get('assistantSetup').setKey(apiKey, serviceContext(ctx))
+  },
+
+  'assistant.key.test': async (ctx, { apiKey }) =>
+    ctx.services.get('assistantSetup').testKey(apiKey ?? null, serviceContext(ctx)),
+
+  'assistant.key.remove': async (ctx) => {
+    if (ctx.actor.type !== 'user') throw forbidden('Only a person can remove the API key')
+    return ctx.services.get('assistantSetup').removeKey(serviceContext(ctx))
+  },
+
   'threads.list': async (ctx, input) => {
     const rows = await ctx.repo.threads.many({
       where: and(
@@ -59,7 +104,7 @@ export const assistant: HandlerGroup<'threads' | 'runs' | 'client' | 'traces'> =
     ])
     return {
       thread: toThread(thread),
-      messages: messages.map(toMessage),
+      messages: messages.map((m) => forStudio(toMessage(m))),
       run: run ? toRun(run) : null,
     }
   },
@@ -99,6 +144,25 @@ export const assistant: HandlerGroup<'threads' | 'runs' | 'client' | 'traces'> =
   'runs.cancel': async (ctx, { runId }) => {
     await ownRun(ctx, runId)
     return ctx.services.require('assistant').cancel(runId, serviceContext(ctx))
+  },
+
+  'runs.pause': async (ctx, { runId, takeover }) => {
+    await ownRun(ctx, runId)
+    return ctx.services
+      .require('assistant')
+      .pause(runId, takeover ? 'takeover' : 'pause', serviceContext(ctx))
+  },
+
+  'runs.resume': async (ctx, input) => {
+    if (ctx.actor.type !== 'user') throw forbidden('Only a person can resume an AI job')
+    await ownRun(ctx, input.runId)
+    return ctx.services.require('assistant').resumeJob(input, serviceContext(ctx))
+  },
+
+  'runs.accept': async (ctx, { runId }) => {
+    if (ctx.actor.type !== 'user') throw forbidden('Only a person can accept an AI job’s work')
+    await ownRun(ctx, runId)
+    return ctx.services.require('assistant').accept(runId, serviceContext(ctx))
   },
 
   'client.respond': async (ctx, input) => {

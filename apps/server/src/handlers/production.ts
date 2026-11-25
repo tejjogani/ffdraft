@@ -6,6 +6,7 @@ import { conflict, isUniqueViolation } from '../errors'
 import { createId } from '../ids'
 import { packageHandle } from '../jobs'
 import { getPiece } from '../lookups'
+import { claim, packageKey, settle } from '../plans'
 import { publishJob, serviceContext } from '../service-context'
 import { assertAttested, toPiece } from './pieces'
 import type { HandlerGroup } from './types'
@@ -46,6 +47,7 @@ const REVISION_ATTEMPTS = 8
  */
 async function insertNextRevision(
   ctx: Ctx,
+  id: string,
   piece: { id: string; version: number },
   request: (typeof t.productionPackage.$inferInsert)['request'],
 ) {
@@ -56,7 +58,7 @@ async function insertNextRevision(
     )
     try {
       return await ctx.repo.packages.insert({
-        id: createId('pkg'),
+        id,
         pieceId: piece.id,
         revision: (last?.revision ?? 0) + 1,
         sourceVersion: piece.version,
@@ -87,7 +89,16 @@ export const production: HandlerGroup<'production'> = {
     const piece = await getPiece(ctx, pieceId)
     assertAttested(piece)
     await assertProducible(ctx, piece)
-    const pkg = toPackage(await insertNextRevision(ctx, piece, request))
+    const id = createId('pkg')
+    // Its Rhino and STEP files count as one export, claimed before the build is queued; the build
+    // settling settles the claim (updatePackage), released if no such file came out.
+    if (request.cadFiles)
+      await claim(ctx, { allowance: 'export', key: packageKey(id), subject: 'package', pieceId })
+    const row = await insertNextRevision(ctx, id, piece, request).catch(async (err: unknown) => {
+      await settle(ctx, packageKey(id), 'released')
+      throw err
+    })
+    const pkg = toPackage(row)
     const job = { kind: 'production' as const, id: pkg.id, pieceId }
     const handle = packageHandle(ctx, job)
     publishJob(ctx, job, { status: 'queued', progress: 0 })

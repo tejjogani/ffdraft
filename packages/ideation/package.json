@@ -1,0 +1,16 @@
+{
+  "name": "@pave/ideation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Image providers for the design board (Gemini, OpenAI, Higgsfield, and a fake for tests): one shape, injected fetch, prices, and the providers' own safety settings at their strictest.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@pave/schema": "workspace:*"
+  }
+}

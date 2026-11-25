@@ -1,0 +1,30 @@
+{
+  "runs": [
+    [
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "I will export the STEP file for the setter."
+          },
+          {
+            "type": "tool_use",
+            "name": "design_export",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "format": "step"
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "This month’s free Rhino and STEP exports are used, so I could not make the STEP file. An STL is always free: I can export that now for casting, or you can try Pro for unlimited STEP exports."
+          }
+        ]
+      }
+    ]
+  ]
+}

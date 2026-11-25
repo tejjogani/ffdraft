@@ -5,15 +5,17 @@ import type {
   Reference,
   SearchResult,
 } from '@pave/schema'
-import { and, asc, count, desc, eq, inArray, max, ne, or, type SQL, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, inArray, isNull, max, ne, or, type SQL, sql } from 'drizzle-orm'
 import { getAssetRow, putAsset } from '../assets/assets'
 import { actorRunId, type Ctx, publish } from '../context'
 import * as t from '../db/schema'
-import { badRequest, conflict, forbidden, notFound } from '../errors'
+import { badRequest, conflict, forbidden, NotConfiguredError, notFound } from '../errors'
+import { designBoardFor } from '../ideas'
 import { createId } from '../ids'
+import { attestBrief, boardBriefs, estimate, generate, writeBrief } from '../imagegen/pipeline'
 import { ensure, ensureAll, getBoard, getPiece, getReference } from '../lookups'
+import { ensurePinBoard, pinBoardOf } from '../references/pins'
 import { serviceContext } from '../service-context'
-import type { ImageGenRequest } from '../services'
 import { assertBudget } from '../usage'
 import { toPieceSummary } from './pieces'
 import type { HandlerGroup } from './types'
@@ -57,6 +59,7 @@ export const toReference = (r: ReferenceRow): Reference => ({
     : null,
   pieceId: r.pieceId,
   canvas: r.canvas ?? null,
+  plane: r.plane ?? null,
   width: r.width,
   height: r.height,
   position: r.position,
@@ -86,11 +89,13 @@ async function toBoards(ctx: Ctx, rows: BoardRow[]): Promise<Board[]> {
     icon: b.icon,
     description: b.description,
     pieceId: b.pieceId,
+    pinsFor: b.pinsFor,
     coverAssetIds: imageRefs
       .filter((r) => r.boardId === b.id && r.assetId)
       .slice(0, COVER_COUNT)
       .map((r) => r.assetId!),
     referenceCount: countOf.get(b.id) ?? 0,
+    imageProvider: b.imageProvider ?? null,
     createdAt: b.createdAt.toISOString(),
     updatedAt: b.updatedAt.toISOString(),
   }))
@@ -146,7 +151,13 @@ const source = (s: Pick<Source, 'provider' | 'url'> & Partial<Source>): Source =
 async function trustedResult(ctx: Ctx, r: SearchResult): Promise<SearchResult> {
   const search = ctx.services.optional('search')
   if (!search) return { ...r, rights: 'viewOnly', mayStore: false }
-  const trusted = await search.resolve({ provider: r.provider, key: r.key }, serviceContext(ctx))
+  let trusted: SearchResult | null
+  try {
+    trusted = await search.resolve({ provider: r.provider, key: r.key }, serviceContext(ctx))
+  } catch {
+    // The provider is down or slow: nothing is saved on trust, so the person tries again later.
+    throw conflict(`Couldn’t check “${r.title}” with ${r.provider} just now; try again`)
+  }
   if (!trusted) throw badRequest(`“${r.title}” is no longer available from ${r.provider}`)
   return trusted
 }
@@ -212,6 +223,7 @@ async function referenceFromItem(ctx: Ctx, item: SaveItem): Promise<NewReference
         url: r.pageUrl ?? r.imageUrl,
         credit: r.credit,
         license: r.license,
+        licenseUrl: r.licenseUrl ?? null,
         capturedAt: asset ? asset.createdAt : null,
       }),
       // A client may lower rights to view-only, never raise them.
@@ -226,7 +238,13 @@ async function referenceFromItem(ctx: Ctx, item: SaveItem): Promise<NewReference
     return {
       ...text,
       title: item.title ?? asset.name,
-      type: asset.kind === 'image' || asset.kind === 'render' ? 'image' : 'link',
+      // A 3D file is kept as a model the board shows in a small viewer; other files as links.
+      type:
+        asset.kind === 'image' || asset.kind === 'render'
+          ? 'image'
+          : asset.kind === 'mesh'
+            ? 'model'
+            : 'link',
       assetId: asset.id,
       source: source({ provider: 'upload', url: null, capturedAt: asset.createdAt.toISOString() }),
       rights: item.rights ?? 'own',
@@ -249,6 +267,56 @@ async function referenceFromItem(ctx: Ctx, item: SaveItem): Promise<NewReference
   }
   if (item.note) return { ...text, type: 'note', rights: item.rights ?? 'own' }
   throw badRequest('Each item needs a search result, a URL, an asset id, a swatch or a note')
+}
+
+type PinItem = CommandParsedInput<'references.pin'>['items'][number]
+
+/** A reference from one of the org's boards, copied onto the pin board with its provenance. */
+async function copiedReference(ctx: Ctx, item: PinItem): Promise<NewReference> {
+  const from = await getReference(ctx, item.referenceId!)
+  return {
+    type: from.type,
+    assetId: from.assetId,
+    thumbUrl: from.thumbUrl,
+    title: item.title ?? from.title,
+    note: item.note ?? from.note,
+    source: from.source,
+    // A copy may be lowered to view-only, never raised.
+    rights: item.rights === 'viewOnly' ? 'viewOnly' : from.rights,
+    tags: from.tags,
+    palette: from.palette,
+    generation: from.generation,
+    pieceId: from.pieceId,
+    width: from.width,
+    height: from.height,
+  }
+}
+
+/**
+ * The pin already on the board for the same thing, so pinning twice (or a retry) adds nothing:
+ * the same provider item, the same stored picture, or the same web address.
+ */
+function samePin(
+  existing: ReferenceRow[],
+  key: { provider?: string; url?: string | null; assetId?: string | null },
+): ReferenceRow | undefined {
+  return existing.find((r) =>
+    key.assetId
+      ? r.assetId === key.assetId
+      : !!key.url && r.source?.url === key.url && r.source?.provider === key.provider,
+  )
+}
+
+/** What identifies a pin item before anything is fetched or copied. */
+async function pinKey(ctx: Ctx, item: PinItem) {
+  if (item.result)
+    return { provider: item.result.provider, url: item.result.pageUrl ?? item.result.imageUrl }
+  if (item.url) return { provider: 'web', url: item.url }
+  if (item.assetId) return { assetId: item.assetId }
+  const from = await getReference(ctx, item.referenceId!)
+  return from.assetId
+    ? { assetId: from.assetId }
+    : { provider: from.source?.provider, url: from.source?.url ?? null }
 }
 
 const containsId = (column: SQL, ids: readonly string[]) =>
@@ -291,35 +359,14 @@ const cosine = (a: number[], b: number[]) => {
   return na && nb ? dot / Math.sqrt(na * nb) : 0
 }
 
-/**
- * The request a generation provider receives: the references, checked to belong to the org and
- * to allow generative use, and roles only for those references.
- */
-async function generationRequest(
-  ctx: Ctx,
-  { referenceIds, ...input }: CommandParsedInput<'references.estimate'>,
-): Promise<ImageGenRequest> {
-  const refs = referenceIds.length
-    ? await ctx.repo.references.many({ where: inArray(t.reference.id, referenceIds) })
-    : []
-  const missing = referenceIds.filter((id) => !refs.some((r) => r.id === id))
-  if (missing.length) throw notFound('Reference', missing[0])
-  const stray = input.roles.find((r) => !referenceIds.includes(r.id))
-  if (stray) throw badRequest(`A role was given for "${stray.id}", which is not among referenceIds`)
-  const viewOnly = refs.filter((r) => r.rights === 'viewOnly')
-  if (viewOnly.length)
-    throw badRequest(
-      `These references are view-only and cannot be sent to a generative model: ${viewOnly.map((r) => r.title || r.id).join(', ')}`,
-    )
-  // In the order asked for, so "image 1" in a prompt is the first id given.
-  const references = referenceIds.map((id) => toReference(refs.find((r) => r.id === id)!))
-  return { ...input, references }
-}
-
 export const ideate: HandlerGroup<'boards' | 'references'> = {
   'boards.list': async (ctx, input) => {
+    // A piece's pin board belongs to its reference panel, not among the moodboards.
     const rows = await ctx.repo.boards.many({
-      where: input.pieceId ? eq(t.board.pieceId, input.pieceId) : undefined,
+      where: and(
+        isNull(t.board.pinsFor),
+        input.pieceId ? eq(t.board.pieceId, input.pieceId) : undefined,
+      ),
       orderBy: desc(t.board.updatedAt),
     })
     return toBoards(ctx, rows)
@@ -333,6 +380,8 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
     })
     return { board: await toBoard(ctx, board), references: refs.map(toReference) }
   },
+
+  'boards.forPiece': async (ctx, { pieceId }) => toBoard(ctx, await designBoardFor(ctx, pieceId)),
 
   'boards.create': async (ctx, input) => {
     await ensure(getPiece, ctx, input.pieceId)
@@ -371,6 +420,58 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
     await getBoard(ctx, input.boardId)
     const items = await Promise.all(input.items.map((item) => referenceFromItem(ctx, item)))
     return insertReferences(ctx, input.boardId, items)
+  },
+
+  'references.pins': async (ctx, { pieceId }) => {
+    await getPiece(ctx, pieceId)
+    const board = await pinBoardOf(ctx, pieceId)
+    if (!board) return { boardId: null, references: [] }
+    const rows = await ctx.repo.references.many({
+      where: eq(t.reference.boardId, board.id),
+      orderBy: asc(t.reference.position),
+    })
+    return { boardId: board.id, references: rows.map(toReference) }
+  },
+
+  'references.pin': async (ctx, { pieceId, items }) => {
+    const piece = await getPiece(ctx, pieceId)
+    const board = await ensurePinBoard(ctx, piece)
+    const existing = await ctx.repo.references.many({ where: eq(t.reference.boardId, board.id) })
+    // Each new item is checked (a search result re-read from its provider) before anything is
+    // written, so a refused item leaves the board as it was.
+    const order = await Promise.all(
+      items.map(async (item) => {
+        const same = samePin(existing, await pinKey(ctx, item))
+        if (same) return same
+        return item.referenceId
+          ? copiedReference(ctx, item)
+          : referenceFromItem(ctx, {
+              ...(item.result ? { result: item.result } : {}),
+              ...(item.url ? { url: item.url } : {}),
+              ...(item.assetId ? { assetId: item.assetId } : {}),
+              ...(item.title !== undefined ? { title: item.title } : {}),
+              ...(item.note !== undefined ? { note: item.note } : {}),
+              ...(item.rights ? { rights: item.rights } : {}),
+            })
+      }),
+    )
+    const isRow = (o: ReferenceRow | NewReference): o is ReferenceRow => 'id' in o
+    const fresh = order.filter((o): o is NewReference => !isRow(o))
+    const inserted = fresh.length ? await insertReferences(ctx, board.id, fresh) : []
+    return order.map((o) => (isRow(o) ? toReference(o) : inserted[fresh.indexOf(o)]!))
+  },
+
+  'references.place': async (ctx, { id, plane }) => {
+    const ref = await getReference(ctx, id)
+    if (plane) {
+      const board = await getBoard(ctx, ref.boardId)
+      if (!board.pinsFor) throw conflict('Pin the picture to the piece before laying it in a view')
+      if (!ref.assetId)
+        throw conflict('Only a picture can be laid in a view; capture the link’s image first')
+    }
+    const [row] = await ctx.repo.references.update(eq(t.reference.id, id), { plane })
+    await touchBoards(ctx, [ref.boardId])
+    return toReference(row!)
   },
 
   'references.update': async (ctx, { id, attestation, ...patch }) => {
@@ -415,6 +516,14 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
       orderBy: asc(t.reference.position),
     })
     return rows.map(toReference)
+  },
+
+  // Inside an assistant run the loop reads on the run's own client; this is everyone else's way.
+  'references.read': async (ctx, input) => {
+    const assistant = ctx.services.require('assistant')
+    if (!assistant.readPhotos)
+      throw new NotConfiguredError('assistant', 'This server cannot read photos.')
+    return assistant.readPhotos(input, serviceContext(ctx))
   },
 
   'references.capture': async (ctx, { id }) => {
@@ -560,54 +669,9 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
     return { ok: true }
   },
 
-  'references.estimate': async (ctx, input) => {
-    const request = await generationRequest(ctx, input)
-    return ctx.services.get('imageGen').estimate(request, serviceContext(ctx))
-  },
-
-  'references.generate': async (ctx, { boardId, ...input }) => {
-    await getBoard(ctx, boardId)
-    const request = await generationRequest(ctx, input)
-    const imageGen = ctx.services.get('imageGen')
-    const sctx = serviceContext(ctx)
-    // The figure the person confirmed is the one checked against the budget.
-    await assertBudget(ctx, (await imageGen.estimate(request, sctx)).usd)
-
-    const { referenceIds } = input
-    const parents = request.references
-    const result = await imageGen.generate(request, sctx)
-    // Credit lines survive the parents being deleted.
-    const inputs: GenerationInput[] = parents.map((p) => ({
-      id: p.id,
-      role: input.roles.find((r) => r.id === p.id)?.role ?? null,
-      title: p.title,
-      provider: p.source?.provider ?? null,
-      url: p.source?.url ?? null,
-      credit: p.source?.credit ?? null,
-      license: p.source?.license ?? null,
-      rights: p.rights,
-    }))
-    const items: NewReference[] = []
-    for (const [i, image] of result.images.entries()) {
-      const asset = await putAsset(ctx, { ...image, kind: 'image' })
-      items.push({
-        type: 'generated',
-        assetId: asset.id,
-        title: `${input.prompt.slice(0, 80)} (${i + 1})`,
-        source: source({ provider: result.model, url: null, capturedAt: asset.createdAt }),
-        rights: 'own',
-        generation: {
-          prompt: input.prompt,
-          model: result.model,
-          seed: result.seed ?? input.seed ?? null,
-          parentIds: referenceIds,
-          inputs,
-          runId: actorRunId(ctx.actor),
-        },
-        width: asset.width,
-        height: asset.height,
-      })
-    }
-    return insertReferences(ctx, boardId, items)
-  },
+  'references.estimate': (ctx, input) => estimate(ctx, input),
+  'references.brief': (ctx, input) => writeBrief(ctx, input),
+  'references.attestBrief': (ctx, input) => attestBrief(ctx, input),
+  'references.briefs': (ctx, { boardId, limit }) => boardBriefs(ctx, boardId, limit),
+  'references.generate': (ctx, input) => generate(ctx, input),
 }

@@ -1,0 +1,185 @@
+{
+  "runs": [
+    [
+      {
+        "paceMs": 25,
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "A ring on a plain sweep. Read it part by part before naming the archetype; count the claws on the head itself."
+          },
+          {
+            "type": "text",
+            "text": "Let me read the photo first."
+          },
+          {
+            "type": "tool_use",
+            "name": "references_read",
+            "input": {
+              "assetIds": ["{{attachment}}"]
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"observations\": \"A round brilliant in six slim claws on a plain court band in white metal, seen from the front and above. The band is a little wider than a classic solitaire\\u2019s; the gallery under the stone is hidden.\", \"kind\": {\"value\": \"ring\", \"visible\": \"yes\"}, \"view\": \"threeQuarter\", \"archetype\": {\"value\": \"solitaire\", \"visible\": \"yes\"}, \"stones\": [{\"role\": \"center\", \"cut\": \"round\", \"arrangement\": \"single\", \"setting\": \"prong\", \"prongs\": 6, \"countVisible\": 1, \"widthToCentre\": 1, \"visible\": \"yes\"}], \"band\": {\"profile\": \"court\", \"shoulder\": \"plain\", \"widthToStone\": 0.4, \"taperTopToBottom\": 1, \"visible\": \"yes\"}, \"body\": null, \"metal\": {\"colour\": \"white\", \"finish\": \"polished\", \"visible\": \"yes\"}, \"notVisible\": [\"the inside of the band\", \"the gallery under the stone\"], \"unsure\": [{\"field\": \"band.profile\", \"why\": \"a photo along the finger would show whether it is court or flat\"}], \"plainBackground\": true}"
+          }
+        ]
+      },
+      {
+        "paceMs": 20,
+        "content": [
+          {
+            "type": "text",
+            "text": "It reads as a round solitaire in six claws on a court band, in white gold. The photo has no scale, so I am assuming a 1 ct centre and ring size US 6. Building it from that read through the canon."
+          },
+          {
+            "type": "tool_use",
+            "name": "pieces_create",
+            "input": {
+              "title": "Six-claw solitaire from a photo",
+              "spec": {
+                "kind": "ring",
+                "archetype": "solitaire",
+                "title": "Six-claw solitaire from a photo",
+                "summary": "A round brilliant in six slim claws on a plain court band in white metal, seen from the front and above. The band is a little wider than a classic solitaire’s; the gallery under the stone is hidden.",
+                "metal": {
+                  "alloy": "au18k-white",
+                  "finish": "polished",
+                  "plating": "none"
+                },
+                "stones": [
+                  {
+                    "role": "center",
+                    "cut": "round",
+                    "stone": "diamond",
+                    "setting": "prong",
+                    "carat": 1,
+                    "prongs": 6
+                  }
+                ],
+                "notes": "Not visible in the photo: the inside of the band; the gallery under the stone.",
+                "openQuestions": [
+                  "band.profile: a photo along the finger would show whether it is court or flat"
+                ],
+                "ring": {
+                  "size": {
+                    "system": "us",
+                    "value": 6
+                  },
+                  "profile": "court",
+                  "shoulder": "plain",
+                  "bandWidthMm": 2.57
+                }
+              },
+              "origin": {
+                "kind": "image",
+                "sourceAssetIds": ["{{attachment}}"]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "ui_navigate",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "tab": "design"
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 20,
+        "content": [
+          {
+            "type": "text",
+            "text": "Now fitting it to the outline in the photo."
+          },
+          {
+            "type": "tool_use",
+            "name": "match_fit",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "assetId": "{{attachment}}",
+              "view": "threeQuarter",
+              "seconds": 30
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "viewport_capture",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "views": ["three-quarter", "top"],
+              "mode": "clay"
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 20,
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "Side by side: the band in the photo is wider at the top than mine, and the stone sits a touch larger against it."
+          },
+          {
+            "type": "text",
+            "text": "Side by side, the band in the photo is wider than mine. Widening it."
+          },
+          {
+            "type": "tool_use",
+            "name": "design_apply",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "label": "Widened the band to match the photo",
+              "ops": [
+                {
+                  "t": "update",
+                  "id": "band",
+                  "patch": {
+                    "widthTop": 3,
+                    "widthBottom": 2.6
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "viewport_capture",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "views": ["three-quarter"],
+              "mode": "clay"
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 15,
+        "content": [
+          {
+            "type": "text",
+            "text": "Done. It now matches the photo's outline from the same angle.\n\n**Matches:** a round brilliant in six claws, a plain court band, white gold, the band's width against the stone.\n\n**Unsure:** whether the band is court or flat inside; a photo along the finger would settle it.\n\n**Assumed:** the scale (a 1 ct centre, ring size US 6) and the gallery under the stone, which the photo does not show. Tell me the stone's size or the ring size and I will rescale it."
+          }
+        ]
+      }
+    ]
+  ]
+}
