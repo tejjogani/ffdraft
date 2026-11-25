@@ -161,7 +161,8 @@ export function estimateCost(ctx: PackageContext): CostEstimate {
     if (rates.metalPricePerGramUsd !== undefined || metal.fineness === 0) {
       const price = rate(
         `${metal.label} per g`,
-        rates.metalPricePerGramUsd,
+        // An alloy with no fineness (brass) is bought by the gram: its family rate is the price.
+        rates.metalPricePerGramUsd ?? rates.spotPerGram?.[metal.family],
         DEFAULTS.spotPerGram[metal.family],
         `${currency}/g`,
       )

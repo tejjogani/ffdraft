@@ -117,6 +117,24 @@ describe('cost estimate', () => {
     expect(c.lines.find((l) => l.id === 'stones:S1')!.amount).toBe(0)
   })
 
+  it('uses the base-metal price the user set for a prototype alloy', () => {
+    // Brass has no fineness, so it is priced per gram of alloy; the family rate must still count.
+    const evaluation = evaluationOf([
+      { id: 'band', name: 'Ring', material: 'brass', mesh: box([0, 0, 0], [10, 10, 10]) },
+    ])
+    const c = estimateCost(
+      createContext({
+        ...input({ rates: { spotPerGram: { base: 0.5 }, castingLossPct: 0 } }),
+        evaluation,
+        kernel: fixtureKernel(evaluation),
+      }),
+    )
+    const metal = c.lines.find((l) => l.id === 'metal:brass')!
+    expect(metal.amount).toBeCloseTo(METALS.brass.density * 0.5, 2)
+    expect(metal.inputs.at(-1)).toMatchObject({ value: 0.5, source: 'user' })
+    expect(c.placeholders).not.toContain('Brass (prototype) per g')
+  })
+
   it('prices attached stones from sourcing', () => {
     const design = templateDesign('solitaire')
     const gem = design.nodes.center!
