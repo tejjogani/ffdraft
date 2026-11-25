@@ -2,6 +2,8 @@
  * One take in the filmstrip: its picture (or its progress while it renders, or what went
  * wrong), what it is (preview quality, stale, the assistant's, in the set), and what can be
  * done with it: star, use in the set, set as cover, compare, download, re-render, cancel.
+ * Each finished take shows the fingerprint of the scene it rendered, and says so when that is
+ * the view the viewfinder shows now (same fingerprint: the same picture, exactly).
  */
 import type { RenderJob } from '@pave/schema'
 import { AiMark, Button, Chip, cn, IconButton, Menu, MenuItem, MenuSeparator } from '@pave/ui'
@@ -18,6 +20,8 @@ export interface TakeActions {
   rerender(take: RenderJob): void
   cancel(take: RenderJob): void
   open(take: RenderJob): void
+  /** Ask the assistant to look at this take and improve its shot. */
+  improve(take: RenderJob): void
 }
 
 export function TakeTile({
@@ -27,6 +31,7 @@ export function TakeTile({
   isCover,
   selected,
   actions,
+  liveHash = null,
 }: {
   take: RenderJob
   estimate: number | null
@@ -34,6 +39,8 @@ export function TakeTile({
   isCover: boolean
   selected: boolean
   actions: TakeActions
+  /** The viewfinder's scene fingerprint, to say when this take is exactly that view. */
+  liveHash?: string | null
 }) {
   const image = take.assetIds[0]
   const done = take.status === 'done' && !!image
@@ -136,6 +143,14 @@ export function TakeTile({
                   Download
                 </MenuItem>
               )}
+              {done && (
+                <MenuItem
+                  leading={<AiMark className="size-3" />}
+                  onClick={() => actions.improve(take)}
+                >
+                  Improve with AI…
+                </MenuItem>
+              )}
               <MenuSeparator />
               <MenuItem icon={RefreshCw} onClick={() => actions.rerender(take)}>
                 {take.status === 'failed' ? 'Retry' : 'Re-render'}
@@ -144,6 +159,17 @@ export function TakeTile({
           </>
         )}
       </div>
+      {done && take.sceneHash && (
+        <p
+          className="flex items-center gap-1 border-t border-line px-2 py-1 font-mono text-[10px] text-fg-subtle"
+          title="Fingerprint of the exact scene this take rendered"
+        >
+          scene {take.sceneHash.slice(0, 8)}
+          {liveHash === take.sceneHash && (
+            <span className="ml-auto font-sans text-ok">= this view</span>
+          )}
+        </p>
+      )}
       {take.stale && done && (
         <button
           type="button"

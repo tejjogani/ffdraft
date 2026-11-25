@@ -10,6 +10,8 @@
  */
 import type { Bounds, Evaluation, Part } from '@pave/kernel'
 import {
+  boundsCenter,
+  boundsRadius,
   CAMERA_PRESETS,
   type CameraPreset,
   cameraBasis,
@@ -743,6 +745,26 @@ export class Viewer {
   view(preset: CameraPreset, animate = true): void {
     const p = CAMERA_PRESETS[preset]
     this.look(p.azimuth, p.elevation, this.pointsFor(), p.fill, animate)
+  }
+
+  /**
+   * The camera as a render shot stores it ("Render this view"): Z-up position and target in
+   * mm, this view's lens, and the piece's bounds centre and radius it is framed against.
+   */
+  shotCamera(): {
+    position: Vec3
+    target: Vec3
+    focalLength: number
+    framedOn: { center: Vec3; radius: number } | null
+  } {
+    const toZUp = (v: Vector3): Vec3 => [v.x, -v.z, v.y]
+    const bounds = this.evaluation?.report.bounds
+    return {
+      position: toZUp(this.controls.getPosition(new Vector3())),
+      target: toZUp(this.controls.getTarget(new Vector3())),
+      focalLength: FOCAL_MM,
+      framedOn: bounds ? { center: boundsCenter(bounds), radius: boundsRadius(bounds) } : null,
+    }
   }
 
   /** The camera's current orbit angles in the Z-up convention of `cameraBasis`. */

@@ -52,6 +52,7 @@ import {
   type Role,
   RunSchema,
   SavedSceneSchema,
+  SceneChangeSchema,
   SearchResultSchema,
   STAGES,
   StepSchema,
@@ -952,7 +953,7 @@ export const commands = {
   }),
   'scenes.update': def({
     description:
-      'Adjust a saved shot. `patch` is a JSON merge patch on its scene (e.g. {"camera":{"focalLength":105}}); the result is re-validated. The viewport shows the change before any render time is spent.',
+      'Adjust a saved shot. `patch` is a JSON merge patch on its scene (e.g. {"camera":{"focalLength":105}}); the result is re-validated, and the viewfinder shows the change before any render time is spent. Each change can be undone (scenes.revert). To move the camera, set {"camera":{"preset":"custom","position":[x,y,z],"target":[x,y,z]}} in the piece\'s millimetres (Z up, the front faces −Y; the result names the current pose) and optionally `roll` in degrees; keep the target to orbit, move both to pan. A shot whose camera is `locked` cannot be moved until a person unlocks it.',
     kind: 'mutation',
     tool: true,
     input: z.object({
@@ -964,6 +965,20 @@ export const commands = {
       takeId: id.nullable().optional(),
     }),
     output: SavedSceneSchema,
+  }),
+  'scenes.history': def({
+    description: 'The changes made to a saved shot, newest first: before and after, and by whom.',
+    kind: 'query',
+    input: z.object({ id, limit: z.number().int().min(1).max(200).default(50) }),
+    output: z.array(SceneChangeSchema),
+  }),
+  'scenes.revert': def({
+    description:
+      'Undo a change to a saved shot: `changeId`, or the latest change not yet undone. Only the fields that change touched go back; later changes to other fields stay. Undoing an undo redoes it. Refused while the camera is locked if it would move it.',
+    kind: 'mutation',
+    tool: true,
+    input: z.object({ id, changeId: id.optional() }),
+    output: z.object({ scene: SavedSceneSchema, change: SceneChangeSchema }),
   }),
   'scenes.delete': def({
     description: 'Delete a saved shot. Its takes are kept.',
@@ -1010,14 +1025,14 @@ export const commands = {
         )
         .min(1)
         .max(48),
-      autoTune: z.boolean().default(true),
+      autoTune: z.boolean().default(false),
       engine: z.enum(['auto', 'blender', 'browser']).default('auto'),
     }),
     output: RenderEstimateSchema,
   }),
   'renders.create': def({
     description:
-      'Queue a photoreal render (still or animation) of a piece from a saved shot (`sceneId`) or a declarative scene: look, camera, environment, overrides, animation, output. `engine: auto` uses Blender when available, else the browser (preview quality, labelled so). Each finished Blender take counts against the plan’s monthly render allowance (plan_limit, 402, once it is used up; a failed or canceled take is not counted); browser takes never count. It costs machine time on this computer, not money; outside a Render job the designer approves it, and every call in one turn is approved together. For variants ("in rose gold and platinum"), make one call per variant in the same turn, with a shared `groupId`, a `variantLabel` and the metal in `scene.overrides["*"]`. To re-render after a critique, pass `retryOf` (the take it replaces) and a short `note` saying what changed. In a conversation you do not poll: the result arrives when the take is finished, with the image.',
+      'Queue a photoreal render (still or animation) of a piece from a saved shot (`sceneId`) or a declarative scene: look, camera, environment, overrides, animation, output. `engine: auto` uses Blender when available, else the browser (preview quality, labelled so). Each finished Blender take counts against the plan’s monthly render allowance (plan_limit, 402, once it is used up; a failed or canceled take is not counted); browser takes never count. It costs machine time on this computer, not money; outside a Render job the designer approves it, and every call in one turn is approved together. For variants ("in rose gold and platinum"), make one call per variant in the same turn, with a shared `groupId`, a `variantLabel` and the metal in `scene.overrides["*"]`. A take renders exactly the scene asked for (fixed seed: the same scene gives the same pixels); `autoTune: true` lets numeric checks adjust framing and exposure in a draft first, for inside a Render job or when the designer asks you to improve a shot. To re-render after a critique, pass `retryOf` (the take it replaces) and a short `note` saying what changed. In a conversation you do not poll: the result arrives when the take is finished, with the image.',
     kind: 'mutation',
     tool: { confirm: true },
     input: z
@@ -1030,8 +1045,11 @@ export const commands = {
         groupId: z.string().min(1).max(64).optional(),
         variantLabel: z.string().max(80).optional(),
         engine: z.enum(['auto', 'blender', 'browser']).default('auto'),
-        /** Let numeric checks fix framing and exposure in preview drafts first. */
-        autoTune: z.boolean().default(true),
+        /**
+         * Let numeric checks fix framing and exposure in a preview draft first. Off by default:
+         * a take renders exactly the scene asked for.
+         */
+        autoTune: z.boolean().default(false),
         retryOf: id.optional(),
         note: z.string().max(500).optional(),
         purpose: z.enum(['take', 'reference']).default('take'),
@@ -1052,6 +1070,8 @@ export const commands = {
         error: z.string().max(2000).optional(),
         seconds: z.number().nonnegative().optional(),
         device: z.string().max(200).optional(),
+        /** `sceneHash` of the resolved scene the browser drew. */
+        sceneHash: z.string().max(64).optional(),
       })
       .refine((v) => v.assetIds.length > 0 !== (v.error !== undefined), {
         message: 'Give either the rendered assetIds or an error',

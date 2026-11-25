@@ -106,7 +106,7 @@ describe('the command registry', () => {
     expect(render.safeParse({ pieceId: 'p' }).success).toBe(false)
     expect(render.parse({ pieceId: 'p', sceneId: 's' })).toMatchObject({
       engine: 'auto',
-      autoTune: true,
+      autoTune: false,
       purpose: 'take',
     })
     const complete = commands['renders.complete'].input

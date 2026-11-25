@@ -80,6 +80,7 @@ describe('renderTake', () => {
       autoTune: true,
       glb: new Uint8Array(),
       subject,
+      design: { pieceId: 'pc_1', version: 1 },
       workDir: 'unused',
       runtime: {},
       signal: controller.signal,

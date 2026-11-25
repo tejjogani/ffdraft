@@ -31,14 +31,18 @@ async function drawTake(job: RenderJob): Promise<void> {
     await fail('The design changed before this preview was drawn. Render it again.')
     return
   }
-  const evaluation = await evaluationScheduler('draft').request(`take:${job.id}`, piece.design)
+  // Production detail, as Blender takes use, so a preview frames and fingerprints the same.
+  const evaluation = await evaluationScheduler('production').request(`take:${job.id}`, piece.design)
   if (!evaluation) {
     await fail('The design changed while this preview was being drawn. Render it again.')
     return
   }
   // three.js loads only when a take is drawn, so the shell stays light.
   const { renderStill } = await import('./shot-renderer')
-  const blob = await renderStill(evaluation, job.scene)
+  const { blob, sceneHash } = await renderStill(evaluation, job.scene, {
+    pieceId: job.pieceId,
+    version: job.sourceVersion,
+  })
   const slug = job.title.replace(/[^\w-]+/g, '-').replace(/^-|-$/g, '') || 'take'
   const asset = await uploadAsset(new File([blob], `${slug}-preview.png`, { type: 'image/png' }))
   await rpc.call('renders.complete', {
@@ -46,6 +50,7 @@ async function drawTake(job: RenderJob): Promise<void> {
     assetIds: [asset.id],
     seconds: Math.max(0.1, (performance.now() - started) / 1000),
     device: BROWSER_DEVICE,
+    sceneHash,
   })
 }
 

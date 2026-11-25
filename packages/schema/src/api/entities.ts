@@ -317,6 +317,10 @@ export const RenderSceneSchema = z.object({
           group: 'Angle',
           description: 'Orbiting the view by hand sets `custom`.',
         }),
+      /**
+       * A custom camera (`preset: 'custom'`): where it stands and what it looks at, in the piece's
+       * millimetres (Z up, the front faces −Y). Framing a shot in the viewfinder writes these.
+       */
       position: Vec3.optional().meta({
         title: 'Camera position',
         unit: 'mm',
@@ -330,6 +334,35 @@ export const RenderSceneSchema = z.object({
         widget: 'vec3',
         group: 'Angle',
         advanced: true,
+      }),
+      /** Turns the picture about its centre, degrees; positive turns it clockwise. */
+      roll: z.number().min(-180).max(180).optional().meta({
+        title: 'Roll',
+        unit: 'deg',
+        step: 1,
+        group: 'Angle',
+        advanced: true,
+        description: 'Turns the picture about its centre; positive turns it clockwise.',
+      }),
+      /**
+       * The piece's bounds centre and half-diagonal (mm) when the custom camera was set. On a
+       * piece of another size (a house shot reused, or a design that grew) the camera scales and
+       * moves with the piece; on the piece it was framed on it is used exactly as stored.
+       */
+      framedOn: z
+        .object({ center: Vec3, radius: z.number().positive() })
+        .optional()
+        .meta({ title: 'Framed on', group: 'Angle', advanced: true }),
+      /** The preset the custom camera started from, so Reset can go back to it. */
+      basePreset: z
+        .enum(['hero', 'front', 'side', 'top', 'three-quarter', 'macro'])
+        .optional()
+        .meta({ title: 'Started from', group: 'Angle', advanced: true }),
+      /** A locked camera is not moved by the viewfinder or the assistant until a person unlocks it. */
+      locked: z.boolean().optional().meta({
+        title: 'Lock camera',
+        group: 'Angle',
+        description: 'Keeps the framing as it is: no orbiting, and the assistant cannot move it.',
       }),
       /** 35 mm-equivalent focal length. Jewelry reads best at 85–105. */
       focalLength: z
@@ -475,6 +508,25 @@ export const SavedSceneSchema = z.object({
 })
 export type SavedScene = z.infer<typeof SavedSceneSchema>
 
+/**
+ * One change to a saved shot, kept so it can be undone (by anyone, the assistant's included):
+ * the scene before and after, and who made it. Undoing is itself a change that `reverts` it.
+ */
+export const SceneChangeSchema = z.object({
+  id,
+  sceneId: id,
+  seq: z.number().int(),
+  before: RenderSceneSchema,
+  after: RenderSceneSchema,
+  actor: ActorSchema,
+  /** The change this one undoes, if it is an undo. */
+  reverts: id.nullable(),
+  /** Set when a later change undid this one. */
+  revertedBy: id.nullable(),
+  at: iso,
+})
+export type SceneChange = z.infer<typeof SceneChangeSchema>
+
 /** One numeric fix the critique proposes: a scene path and the value to set it to. */
 export const SceneAdjustmentSchema = z.object({
   path: z.enum([
@@ -541,6 +593,11 @@ export const RenderJobSchema = z.object({
   progress: z.number().min(0).max(1),
   /** Design version rendered, so stale renders can be flagged. */
   sourceVersion: z.number().int(),
+  /**
+   * Fingerprint of the exact resolved scene rendered (`sceneHash` in @pave/render): the same
+   * hash means the same camera, light, materials and design version. Null until it has run.
+   */
+  sceneHash: z.string().nullable(),
   /** The piece has changed since this was rendered (server-computed). */
   stale: z.boolean(),
   assetIds: z.array(id),

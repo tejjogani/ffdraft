@@ -12,10 +12,10 @@ import {
   type SavedScene,
 } from '@pave/schema'
 import { toast } from '@pave/ui'
-import { useRef } from 'react'
 import { queryClient, rpcKey, useRpc } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { reportPlanLimit } from '../plans/plan-limit'
+import { ensureShotsSaved } from './shot-actions'
 import { type Shot, shotList } from './shots'
 
 export function useShots(pieceId: string) {
@@ -24,34 +24,18 @@ export function useShots(pieceId: string) {
   const takes = useRpc('renders.list', { pieceId, limit: 200 })
   const engine = useRpc('renders.engine', {})
   const shots = piece.data ? shotList(saved.data, piece.data.kind) : []
-  const saving = useRef<Promise<SavedScene[]> | null>(null)
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: rpcKey('scenes.list') })
+    void queryClient.invalidateQueries({ queryKey: rpcKey('scenes.history') })
     void queryClient.invalidateQueries({ queryKey: rpcKey('renders.list') })
   }
 
   /** The shots as saved rows: the default set is saved (once, in order) the first time it is needed. */
-  const ensureSaved = (): Promise<SavedScene[]> => {
-    if (saved.data?.length) return Promise.resolve(saved.data)
-    saving.current ??= (async () => {
-      const rows: SavedScene[] = []
-      for (const [i, s] of shots.entries())
-        rows.push(
-          await rpc.call('scenes.create', {
-            pieceId,
-            title: s.title,
-            scene: s.scene,
-            position: i + 1,
-          }),
-        )
-      queryClient.setQueryData(rpcKey('scenes.list', { pieceId }), rows)
-      return rows
-    })().finally(() => {
-      saving.current = null
-    })
-    return saving.current
-  }
+  const ensureSaved = (): Promise<SavedScene[]> =>
+    saved.data?.length
+      ? Promise.resolve(saved.data)
+      : ensureShotsSaved(pieceId, piece.data?.kind ?? 'ring')
 
   /** The saved row for a shot (a default one by its position in the set). */
   const savedFor = async (shot: Shot): Promise<SavedScene> => {
@@ -70,6 +54,7 @@ export function useShots(pieceId: string) {
         list?.map((s) => (s.id === row.id ? { ...s, scene: next } : s)),
       )
       const updated = await rpc.call('scenes.update', { id: row.id, patch })
+      void queryClient.invalidateQueries({ queryKey: rpcKey('scenes.history') })
       return { key: updated.id, title: updated.title, scene: updated.scene, saved: updated }
     } catch (e) {
       toast.error('Couldn’t change the shot', e instanceof Error ? e.message : undefined)
@@ -138,8 +123,17 @@ export function useShots(pieceId: string) {
     }
   }
 
+  /** Undoes (or redoes) a change to a saved shot: `scenes.revert` of the change the history names. */
+  const revert = (shot: Shot, changeId: string) =>
+    act('Couldn’t undo that', async () => {
+      if (!shot.saved) return
+      await rpc.call('scenes.revert', { id: shot.saved.id, changeId })
+    })
+
   return {
     piece: piece.data,
+    revert,
+    ensureSaved,
     shots,
     takes: takes.data ?? [],
     loading: piece.isPending || saved.isPending,

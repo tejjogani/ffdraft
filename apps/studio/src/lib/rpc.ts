@@ -86,6 +86,7 @@ export const QUERY_NAMES = [
   'mesh3d.list',
   'mesh3d.get',
   'scenes.list',
+  'scenes.history',
   'renders.engine',
   'models.estimatePortraits',
   'shots.get',

@@ -5,7 +5,7 @@
  * "Preview quality" take itself. One WebGL context per renderer; `dispose` releases it.
  */
 import type { Evaluation } from '@pave/kernel'
-import { resolveScene } from '@pave/render'
+import { type ResolvedCamera, type ResolvedScene, resolveScene, sceneHash } from '@pave/render'
 import {
   applyResolvedScene,
   configureRenderer,
@@ -62,7 +62,7 @@ export class ShotRenderer {
    * Draws `scene` of `evaluation` at `width`×`height` CSS pixels (the shot's aspect). Rebuilds
    * the studio and the model each time: a shot changes on a release, not on every frame.
    */
-  draw(evaluation: Evaluation, scene: RenderScene, width: number, height: number): void {
+  draw(evaluation: Evaluation, scene: RenderScene, width: number, height: number): ResolvedScene {
     this.#release()
     const resolved = resolveScene(scene, evaluation)
     this.renderer.setSize(Math.max(1, Math.round(width)), Math.max(1, Math.round(height)), false)
@@ -73,6 +73,17 @@ export class ShotRenderer {
     const stage = applyResolvedScene(this.#scene, this.#camera, resolved, { model, environment })
     this.#built = { model, environment, stage }
     for (let i = 0; i < SETTLE_FRAMES; i++) this.renderer.render(this.#scene, this.#camera)
+    return resolved
+  }
+
+  /**
+   * Moves the camera and draws one frame, without rebuilding the studio: a viewfinder drag. The
+   * full scene is drawn again (`draw`) once the move is saved, as the take will be.
+   */
+  setCamera(camera: ResolvedCamera): void {
+    if (!this.#built) return
+    this.#built.stage.setCamera(camera)
+    this.renderer.render(this.#scene, this.#camera)
   }
 
   /** The last frame as a PNG. */
@@ -111,13 +122,20 @@ export function browserSize(scene: RenderScene): { width: number; height: number
   return { width: Math.round(width * k), height: Math.round(height * k) }
 }
 
-/** One still, drawn off screen and released: a browser take. */
-export async function renderStill(evaluation: Evaluation, scene: RenderScene): Promise<Blob> {
+/**
+ * One still, drawn off screen and released: a browser take, with the fingerprint of the scene
+ * it drew (the same `sceneHash` a Blender take of that scene records).
+ */
+export async function renderStill(
+  evaluation: Evaluation,
+  scene: RenderScene,
+  design: { pieceId: string; version: number },
+): Promise<{ blob: Blob; sceneHash: string }> {
   const r = new ShotRenderer()
   try {
     const { width, height } = browserSize(scene)
-    r.draw(evaluation, scene, width, height)
-    return await r.toBlob()
+    const resolved = r.draw(evaluation, scene, width, height)
+    return { blob: await r.toBlob(), sceneHash: sceneHash(resolved, design) }
   } finally {
     r.dispose()
   }

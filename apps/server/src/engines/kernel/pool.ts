@@ -54,6 +54,7 @@ const DEFAULT_TIMEOUT_MS: Record<TaskKind, number> = {
   evaluate: 120_000,
   export: 300_000,
   renderInput: 300_000,
+  subject: 120_000,
   package: 900_000,
   picture: 120_000,
   // The fit stops itself at its own budget (at most two minutes); this is the backstop.
@@ -64,6 +65,7 @@ const VERB: Record<TaskKind, string> = {
   evaluate: 'evaluate this design',
   export: 'export this design',
   renderInput: 'prepare this design for rendering',
+  subject: 'measure this design for framing',
   package: 'build this production package',
   picture: 'draw this design',
   photoFit: 'fit this design to the photo',
@@ -75,6 +77,7 @@ const RANK: Record<TaskKind, number> = {
   picture: 0,
   export: 1,
   renderInput: 1,
+  subject: 0,
   // A fit holds a worker for up to two minutes: heavy, so it never takes the last free one.
   photoFit: 2,
   package: 2,

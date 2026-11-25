@@ -1,14 +1,19 @@
-import { BROWSER_TAKE_SECONDS, estimateTakeSeconds, rateFrom } from '@pave/render'
-import { mergePatch, type RenderJob, RenderSceneSchema, type SavedScene } from '@pave/schema'
+import {
+  BROWSER_TAKE_SECONDS,
+  estimateTakeSeconds,
+  rateFrom,
+  shotChangeRefusal,
+} from '@pave/render'
+import type { RenderJob, SavedScene } from '@pave/schema'
 import { and, asc, desc, eq, gt, inArray, isNull, lt, max, type SQL } from 'drizzle-orm'
-import { z } from 'zod'
 import { type Ctx, publish } from '../context'
 import * as t from '../db/schema'
-import { AppError, badRequest, conflict, forbidden } from '../errors'
+import { badRequest, conflict, forbidden } from '../errors'
 import { createId } from '../ids'
 import { renderHandle, stopJob, submitJob, updateRender } from '../jobs'
 import { ensure, ensureAll, getPiece, getRender, getScene } from '../lookups'
 import { claim, renderKey, settle } from '../plans'
+import { changeScene, patchScene, revertScene, sceneHistory } from '../scenes'
 import { isTerminal, publishJob, serviceContext } from '../service-context'
 import { toPiece } from './pieces'
 import type { HandlerGroup } from './types'
@@ -31,6 +36,7 @@ export const toRenderJob = (r: RenderRow, pieceVersion: number): RenderJob => ({
   status: r.status,
   progress: r.progress,
   sourceVersion: r.sourceVersion,
+  sceneHash: r.sceneHash,
   stale: r.sourceVersion < pieceVersion,
   assetIds: r.assetIds,
   critique: r.critique ?? null,
@@ -80,20 +86,6 @@ const sceneScope = (pieceId: string | null): SQL =>
 
 const announceScene = (ctx: Ctx, row: SceneRow) =>
   publish(ctx, { type: 'scene.updated', sceneId: row.id, pieceId: row.pieceId })
-
-const isObject = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v)
-
-/** Paths a merge patch writes that the parsed result does not have (stripped as unknown). */
-function strippedKeys(patch: Record<string, unknown>, parsed: unknown, path = ''): string[] {
-  if (!isObject(parsed)) return []
-  return Object.entries(patch).flatMap(([k, v]) => {
-    const at = path ? `${path}.${k}` : k
-    if (v === null) return []
-    if (!(k in parsed)) return [at]
-    return isObject(v) ? strippedKeys(v, parsed[k], at) : []
-  })
-}
 
 /** Which engine `auto` means here: Blender when the queue is set up and found it. */
 export function engineFor(ctx: Ctx, asked: 'auto' | 'blender' | 'browser'): 'blender' | 'browser' {
@@ -150,32 +142,26 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
   },
 
   'scenes.update': async (ctx, { id, patch, takeId, ...rest }) => {
-    const current = await getScene(ctx, id)
     if (takeId) {
+      const current = await getScene(ctx, id)
       const take = await getRender(ctx, takeId)
       if (take.pieceId !== current.pieceId) throw badRequest('That take is of another piece')
       if (take.status !== 'done') throw conflict('Only a finished take can go in the set')
     }
-    let scene = current.scene
-    if (patch) {
-      const parsed = RenderSceneSchema.safeParse(mergePatch(current.scene, patch))
-      if (!parsed.success) throw badRequest(z.prettifyError(parsed.error), parsed.error.issues)
-      // Parsing strips unknown keys; a misspelt one must fail, not "succeed" with no change.
-      const unknown = strippedKeys(patch, parsed.data)
-      if (unknown.length)
-        throw new AppError('bad_request', `Unknown scene fields: ${unknown.join(', ')}`, {
-          paths: unknown,
-        })
-      scene = parsed.data
-    }
-    const [row] = await ctx.repo.scenes.update(eq(t.renderScene.id, id), {
-      ...rest,
-      ...(takeId === undefined ? {} : { takeId }),
-      scene,
-      updatedAt: new Date(),
-    })
-    announceScene(ctx, row!)
-    return toSavedScene(row!)
+    const { row } = await changeScene(ctx, id, async (current) => ({
+      scene: patch ? patchScene(current.scene, patch) : current.scene,
+      fields: { ...rest, ...(takeId === undefined ? {} : { takeId }) },
+    }))
+    announceScene(ctx, row)
+    return toSavedScene(row)
+  },
+
+  'scenes.history': (ctx, { id, limit }) => sceneHistory(ctx, id, limit),
+
+  'scenes.revert': async (ctx, { id, changeId }) => {
+    const { row, change } = await revertScene(ctx, id, changeId)
+    announceScene(ctx, row)
+    return { scene: toSavedScene(row), change: change! }
   },
 
   'scenes.delete': async (ctx, { id }) => {
@@ -247,6 +233,11 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     if (input.engine === 'blender') ctx.services.require('renderQueue')
     const engine = engineFor(ctx, input.engine)
     const scene = input.scene ?? saved!.scene
+    // A locked shot is rendered as it is framed: the assistant cannot re-frame it in passing.
+    if (saved && input.scene && ctx.actor.type === 'agent') {
+      const refusal = shotChangeRefusal(saved.scene, input.scene, 'agent')
+      if (refusal) throw conflict(refusal)
+    }
     const id = createId('rnd')
     // A Blender take claims its render before anything is queued; the take settling settles
     // the claim (updateRender). Browser takes are previews and never count.
@@ -293,7 +284,7 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     return job
   },
 
-  'renders.complete': async (ctx, { id, assetIds, error, seconds, device }) => {
+  'renders.complete': async (ctx, { id, assetIds, error, seconds, device, sceneHash }) => {
     const job = await getRender(ctx, id)
     if (job.engine !== 'browser') throw conflict('Only browser renders are completed this way')
     if (job.createdBy !== ctx.user.id)
@@ -310,6 +301,7 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
       error: error ?? null,
       seconds: seconds ?? null,
       device: device ?? null,
+      sceneHash: error === undefined ? (sceneHash ?? null) : null,
     })
     // First write wins: a second delivery, or one after a cancel, is refused.
     if (!row) throw conflict(`This render is already ${job.status}`)

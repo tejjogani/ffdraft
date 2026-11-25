@@ -21,6 +21,8 @@ export type KernelTask =
   | { kind: 'evaluate'; design: Design; detail: 'draft' | 'production' }
   | { kind: 'export'; design: Design; format: ExportFormat; stones: boolean }
   | { kind: 'renderInput'; design: Design }
+  /** The subject summary alone (bounds, support points), for framing without a render. */
+  | { kind: 'subject'; design: Design }
   | { kind: 'package'; design: Design; build: PackageBuild }
   /** Shaded clay pictures (RGBA, `size`×`size`) from the software rasteriser. */
   | { kind: 'picture'; design: Design; views: View[]; size: number; focus: string[] }
@@ -46,6 +48,7 @@ export interface TaskResults {
   evaluate: EvaluationSummary
   export: ExportResult
   renderInput: { glb: Uint8Array; subject: RenderSubject }
+  subject: RenderSubject
   package: { zip: Uint8Array; manifest: Manifest; root: string; timings: Record<string, number> }
   picture: { images: Uint8Array[]; summary: EvaluationSummary }
   photoFit: PhotoFitResult

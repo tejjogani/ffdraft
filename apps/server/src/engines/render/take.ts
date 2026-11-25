@@ -11,6 +11,7 @@ import {
   draftOf,
   resolveScene,
   type SceneAdjustment,
+  sceneHash,
 } from '@pave/render'
 import { type BlenderRenderResult, type RuntimeOptions, renderWithBlender } from '@pave/render/node'
 import { type RenderJob, type RenderScene, RenderSceneSchema } from '@pave/schema'
@@ -30,6 +31,8 @@ export interface TakeOptions {
   autoTune: boolean
   glb: Uint8Array
   subject: RenderSubject
+  /** The piece and design version rendered: part of the take's scene hash. */
+  design: { pieceId: string; version: number }
   workDir: string
   runtime: Pick<RuntimeOptions, 'blenderPath'>
   signal: AbortSignal
@@ -48,6 +51,8 @@ export interface TakeResult {
   critique: Critique
   seconds: number
   device: string
+  /** `sceneHash` of the resolved scene the take itself rendered. */
+  sceneHash: string
 }
 
 /** One adjustment per path, from the most severe issue that proposes it. */
@@ -71,9 +76,10 @@ export async function renderTake(o: TakeOptions): Promise<TakeResult> {
   // a cancel that lands between passes (or while one is being stored) must be caught here.
   const blend = async (scene: RenderScene, from: number, to: number) => {
     o.signal.throwIfAborted()
+    const resolved = resolveScene(scene, o.subject)
     const result = await renderWithBlender({
       ...o.runtime,
-      resolved: resolveScene(scene, o.subject),
+      resolved,
       glb: o.glb,
       outDir: join(o.workDir, `pass-${pass}`),
       signal: o.signal,
@@ -83,7 +89,7 @@ export async function renderTake(o: TakeOptions): Promise<TakeResult> {
     seconds += result.seconds
     await o.onPass(pass++, result)
     o.signal.throwIfAborted()
-    return result
+    return { ...result, hash: sceneHash(resolved, o.design) }
   }
   const store = async (path: string, role: 'draft' | 'take') => {
     const assetId = await o.store(path, role)
@@ -103,7 +109,14 @@ export async function renderTake(o: TakeOptions): Promise<TakeResult> {
     if (!tuned?.success && draftIsTake) {
       const assetId = await store(draft.files.image!, 'take')
       passes.push({ adjustments: [], issues, draftAssetId: null })
-      return { scene, assetIds: [assetId], critique: { passes }, seconds, device: draft.device }
+      return {
+        scene,
+        assetIds: [assetId],
+        critique: { passes },
+        seconds,
+        device: draft.device,
+        sceneHash: draft.hash,
+      }
     }
     const draftAssetId = await store(draft.files.image!, 'draft')
     passes.push({ adjustments: tuned?.success ? fixes : [], issues, draftAssetId })
@@ -119,5 +132,12 @@ export async function renderTake(o: TakeOptions): Promise<TakeResult> {
       : (take.files.frames ?? [])
   const assetIds: string[] = []
   for (const path of outputs) assetIds.push(await store(path, 'take'))
-  return { scene, assetIds, critique: { passes }, seconds, device: take.device }
+  return {
+    scene,
+    assetIds,
+    critique: { passes },
+    seconds,
+    device: take.device,
+    sceneHash: take.hash,
+  }
 }

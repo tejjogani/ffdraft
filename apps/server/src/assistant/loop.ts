@@ -65,6 +65,7 @@ import type {
   EvaluationSummary,
   RenderJob,
   Run,
+  SavedScene,
 } from '@pave/schema'
 import { and, asc, desc, eq, gt, inArray, isNull, max, ne, or } from 'drizzle-orm'
 import { readAsset } from '../assets/assets'
@@ -87,6 +88,7 @@ import {
 import { assertBudget, recordUsage } from '../usage'
 import { lastFreeTracker } from './allowance'
 import { NoWindow } from './bridge'
+import { cameraNote } from './camera-note'
 import { captureOnServer } from './capture'
 import type { RunHost } from './host'
 import { modelImage } from './images'
@@ -1021,6 +1023,22 @@ async function afterCommand(
   }
   if (command === 'design.apply') {
     const note = await evaluationFor(host, input.pieceId as string)
+    if (note) notes.push(note)
+  }
+  if (
+    command === 'scenes.list' ||
+    command === 'scenes.create' ||
+    command === 'scenes.update' ||
+    command === 'scenes.revert'
+  ) {
+    const shots = (
+      command === 'scenes.list'
+        ? out
+        : command === 'scenes.revert'
+          ? [(out as { scene: SavedScene }).scene]
+          : [out]
+    ) as SavedScene[]
+    const note = await cameraNote(host.ctx, shots[0]?.pieceId ?? null, shots, host.signal)
     if (note) notes.push(note)
   }
   // The checks the CAD job runs are the kernel's diagnostics (in the result) and the canon's

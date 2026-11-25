@@ -10,7 +10,8 @@ import type { Background, LookId, ViewTransform } from './looks'
 import type { ResolvedMaterial } from './materials'
 import type { Quat, Vec3 } from './math'
 
-export const RESOLVED_SCENE_VERSION = 1
+/** 2: the camera gained `roll`. */
+export const RESOLVED_SCENE_VERSION = 2
 
 /**
  * The camera is an orbit rig: a pivot at `target` turned by azimuth (about Z) and elevation,
@@ -22,6 +23,11 @@ export interface ResolvedCamera {
   azimuth: number
   elevation: number
   distance: number
+  /**
+   * Degrees the camera turns about its view axis after the orbit; positive turns the picture
+   * clockwise. Both renderers apply it as the last rotation of the camera itself.
+   */
+  roll: number
   /** 35 mm-equivalent focal length; the sensor width applies to the larger image side. */
   focalLength: number
   sensorWidth: number

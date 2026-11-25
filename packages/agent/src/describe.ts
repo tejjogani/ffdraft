@@ -128,7 +128,14 @@ export const TOOL_CHIPS = {
   'mesh3d.get': { quiet: true, running: 'Checking the 3D job', done: 'Checked the 3D job' },
   'scenes.list': { quiet: true, running: 'Listing shots', done: 'Listed shots' },
   'scenes.create': { running: 'Saving a shot', done: 'Saved a shot' },
-  'scenes.update': { running: 'Adjusting the shot', done: 'Adjusted the shot' },
+  'scenes.update': {
+    running: 'Adjusting the shot',
+    done: (i) =>
+      i.patch && 'camera' in i.patch && Object.keys(i.patch).length === 1
+        ? 'Moved the camera'
+        : 'Adjusted the shot',
+  },
+  'scenes.revert': { running: 'Undoing a shot change', done: 'Undid a shot change' },
   'renders.list': { quiet: true, running: 'Listing renders', done: 'Listed renders' },
   'renders.get': { quiet: true, running: 'Checking the render', done: 'Checked the render' },
   'renders.estimate': {

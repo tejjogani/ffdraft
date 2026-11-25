@@ -6,7 +6,7 @@
  */
 import { LOOK_CHOICES, machineTime, QUALITY_LABELS, SIZE_PRESETS } from '@pave/render'
 import { METAL_IDS, type RenderScene } from '@pave/schema'
-import { cn, Segmented, Select, Slider } from '@pave/ui'
+import { cn, Segmented, Select, Slider, Switch } from '@pave/ui'
 import { type ReactNode, useEffect, useState } from 'react'
 import { metalLabel, metalSwatch } from '../../lib/domain'
 
@@ -83,6 +83,7 @@ export function ShotInspector({
   const lead = LOOK_CHOICES.slice(0, 3)
   const more = LOOK_CHOICES.slice(3)
   const metal = scene.overrides['*']?.material ?? null
+  const locked = scene.camera.locked === true
   const size =
     SIZE_PRESETS.find((p) => p.width === scene.output.width && p.height === scene.output.height)
       ?.key ?? 'custom'
@@ -117,21 +118,73 @@ export function ShotInspector({
       </Section>
 
       <Section title="Angle">
-        <Segmented
-          size="sm"
-          value={scene.camera.preset === 'custom' ? 'hero' : scene.camera.preset}
-          onChange={(preset) => onChange({ camera: { preset } })}
-          options={ANGLES.map((a) => ({ value: a.value, label: a.label }))}
-        />
-        <LiveSlider
-          label="Lens"
-          value={scene.camera.focalLength}
-          min={50}
-          max={150}
-          step={1}
-          format={(v) => `${Math.round(v)} mm`}
-          onCommit={(focalLength) => onChange({ camera: { focalLength } })}
-        />
+        <div className={cn('flex flex-col gap-2', locked && 'pointer-events-none opacity-50')}>
+          <Segmented
+            size="sm"
+            aria-label="Angle"
+            value={scene.camera.preset}
+            disabled={locked}
+            onChange={(preset) =>
+              preset !== 'custom' &&
+              onChange({
+                camera: {
+                  preset,
+                  position: null,
+                  target: null,
+                  framedOn: null,
+                  basePreset: null,
+                },
+              })
+            }
+            // A custom camera presses no preset; the line below names it. Seven segments do
+            // not fit the inspector's width.
+            options={ANGLES.map((a) => ({ value: a.value, label: a.label }))}
+          />
+          {scene.camera.preset === 'custom' && (
+            <p className="text-[11px] text-fg-muted">
+              Custom view, framed in the viewfinder
+              {scene.camera.basePreset
+                ? ` (from ${ANGLES.find((a) => a.value === scene.camera.basePreset)?.label})`
+                : ''}
+              . Pick an angle to go back to a preset.
+            </p>
+          )}
+          <LiveSlider
+            label="Lens"
+            value={scene.camera.focalLength}
+            min={35}
+            max={150}
+            step={1}
+            format={(v) => `${Math.round(v)} mm`}
+            onCommit={(focalLength) => onChange({ camera: { focalLength } })}
+          />
+          <LiveSlider
+            label="Roll"
+            value={scene.camera.roll ?? 0}
+            min={-45}
+            max={45}
+            step={0.5}
+            format={(v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}°`}
+            onCommit={(roll) => onChange({ camera: { roll: roll === 0 ? null : roll } })}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <span className="text-fg-muted">
+            Lock camera
+            <span className="block text-[11px] text-fg-subtle">
+              Keeps this framing: no orbiting, and the assistant cannot move it.
+            </span>
+          </span>
+          <Switch
+            checked={locked}
+            onChange={(on) => onChange({ camera: { locked: on ? true : null } })}
+            aria-label="Lock camera"
+          />
+        </div>
+        <p className="text-[11px] text-fg-subtle">
+          Frame the shot in the viewfinder: drag to orbit, shift-drag to pan, scroll to come closer,
+          alt-drag to roll.
+        </p>
       </Section>
 
       <Section title="Light">

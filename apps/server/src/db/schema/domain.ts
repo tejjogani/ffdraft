@@ -281,6 +281,29 @@ export const renderScene = pgTable(
   (t) => [index('render_scene_piece_idx').on(t.orgId, t.pieceId, t.position)],
 )
 
+/** Every change to a saved shot, so any of them can be undone (see `scenes.revert`). */
+export const renderSceneChange = pgTable(
+  'render_scene_change',
+  {
+    id: text('id').primaryKey(),
+    orgId: orgId(),
+    sceneId: text('scene_id')
+      .notNull()
+      .references(() => renderScene.id, { onDelete: 'cascade' }),
+    /** 1, 2, … per shot; the unique index decides two writers racing on one shot. */
+    seq: integer('seq').notNull(),
+    before: jsonb('before').$type<RenderScene>().notNull(),
+    after: jsonb('after').$type<RenderScene>().notNull(),
+    actor: jsonb('actor').$type<Actor>().notNull(),
+    /** The change this one undoes. */
+    reverts: text('reverts'),
+    /** The later change that undid this one. */
+    revertedBy: text('reverted_by'),
+    at: at('at'),
+  },
+  (t) => [uniqueIndex('render_scene_change_seq_idx').on(t.sceneId, t.seq)],
+)
+
 export const renderJob = pgTable(
   'render_job',
   {
@@ -311,6 +334,8 @@ export const renderJob = pgTable(
     device: text('device'),
     /** Set by the queue: sha256 of piece, version, requested scene, engine and runner version. */
     cacheKey: text('cache_key'),
+    /** `sceneHash` of the resolved scene rendered; set when the take finishes. */
+    sceneHash: text('scene_hash'),
     error: text('error'),
     actor: jsonb('actor').$type<Actor>().notNull(),
     /** The user who queued it (for an agent actor, the user it acts for). Null on older rows. */

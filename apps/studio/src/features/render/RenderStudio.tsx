@@ -1,31 +1,53 @@
 /**
  * The Render tab: the shot list on the left, the selected shot drawn live (or a take shown
  * large, or two takes compared) in the middle, its settings on the right, and its takes in a
- * filmstrip below. Render renders the selected shot, Render all the whole set (mod+enter,
- * mod+shift+enter). Without Blender, takes are drawn by this window and say "Preview quality".
- * On a phone the columns stack.
+ * filmstrip below. The live picture is a viewfinder: frame the shot by hand, and the take
+ * renders exactly that (fixed seed, no automatic adjustment unless asked). Every change to a
+ * shot can be undone (mod+z) and redone (mod+shift+z); a framed shot can be saved as a house
+ * shot and reused on any piece. Render renders the selected shot, Render all the whole set
+ * (mod+enter, mod+shift+enter). Without Blender, takes are drawn by this window and say
+ * "Preview quality". On a phone the columns stack.
  */
-import { machineTime } from '@pave/render'
+import { machineTime, redoTarget, resetCameraPatch, undoTarget } from '@pave/render'
 import type { RenderJob } from '@pave/schema'
-import { AiMark, Button, cn, EmptyState, Skeleton } from '@pave/ui'
-import { Camera, Columns2, Play, Settings2, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import {
+  AiMark,
+  Button,
+  cn,
+  EmptyState,
+  IconButton,
+  Menu,
+  MenuGroup,
+  MenuItem,
+  MenuSeparator,
+  Skeleton,
+  toast,
+} from '@pave/ui'
+import { Camera, Columns2, Copy, House, Play, Plus, Redo2, Settings2, Undo2, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { assetUrl } from '../../lib/assets'
 import { type Command, useRegisterCommands } from '../../lib/commands'
 import { usePieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
 import { useRpc } from '../../lib/query'
-import { assistant } from '../../stores/assistant'
+import { assistant, openAssistant } from '../../stores/assistant'
 import { EngineDialog, engineLabel } from './EngineDialog'
 import { ShotInspector } from './ShotInspector'
-import { ShotPreview } from './ShotPreview'
+import { addShot, saveHouseShot, takeShotIntent } from './shot-actions'
 import { isLive, pickOf, type Shot, takeLabel, takesOf } from './shots'
 import { TakeTile } from './TakeTile'
 import { useShots } from './useShots'
+import { Viewfinder } from './Viewfinder'
 
 export function RenderStudio({ pieceId }: { pieceId: string }) {
   const s = useShots(pieceId)
-  const { evaluation } = usePieceEvaluation(pieceId, 'draft')
+  // Production detail, as Blender takes use: the viewfinder frames and fingerprints the take.
+  const { evaluation } = usePieceEvaluation(pieceId, 'production')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  // A shot made elsewhere ("Render this view") is selected once the list has it.
+  const [wanted, setWanted] = useState<string | null>(() => takeShotIntent(pieceId))
+  const [liveHash, setLiveHash] = useState<string | null>(null)
+  const onHash = useCallback((h: string | null) => setLiveHash(h), [])
+  const houses = useRpc('scenes.list', { pieceId: null })
   const [viewing, setViewing] = useState<string | null>(null)
   const [comparing, setComparing] = useState<[string, string] | null>(null)
   const [engineOpen, setEngineOpen] = useState(false)
@@ -33,10 +55,20 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
   const shot = s.shots.find((x) => x.key === selectedKey) ?? s.shots[0] ?? null
   // A default shot becomes a saved one on the first edit: follow it by position.
   useEffect(() => {
-    if (selectedKey && !s.shots.some((x) => x.key === selectedKey)) setSelectedKey(null)
-  }, [selectedKey, s.shots])
+    if (wanted && s.shots.some((x) => x.key === wanted)) {
+      setSelectedKey(wanted)
+      setWanted(null)
+    } else if (selectedKey && !s.shots.some((x) => x.key === selectedKey)) setSelectedKey(null)
+  }, [selectedKey, wanted, s.shots])
 
   const takes = useMemo(() => (shot ? takesOf(shot, s.takes) : []), [shot, s.takes])
+  const history = useRpc(
+    'scenes.history',
+    { id: shot?.saved?.id ?? '' },
+    { enabled: !!shot?.saved },
+  )
+  const undo = history.data ? undoTarget(history.data) : null
+  const redo = history.data ? redoTarget(history.data) : null
   const others = useMemo(
     () => s.takes.filter((t) => !s.shots.some((x) => x.saved && x.saved.id === t.sceneId)),
     [s.takes, s.shots],
@@ -60,6 +92,24 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
 
   const commands: Command[] = shot
     ? [
+        {
+          id: 'render.undo',
+          title: 'Undo the last shot change',
+          group: 'Piece',
+          icon: Undo2,
+          shortcut: 'mod+z',
+          when: () => !!undo,
+          run: () => undo && s.revert(shot, undo.id),
+        },
+        {
+          id: 'render.redo',
+          title: 'Redo the shot change',
+          group: 'Piece',
+          icon: Redo2,
+          shortcut: 'mod+shift+z',
+          when: () => !!redo,
+          run: () => redo && s.revert(shot, redo.id),
+        },
         {
           id: 'render.shot',
           title: `Render ${shot.title}`,
@@ -97,6 +147,11 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
       setComparing(null)
       setViewing(t.id)
     },
+    improve: (t: RenderJob) =>
+      openAssistant({
+        pieceId,
+        draft: `Improve the "${t.title}" shot: look at its latest take, change the framing or light where it falls short, and render it again.`,
+      }),
     compare: (t: RenderJob) => {
       const base = viewing ?? (shot ? pickOf(shot, takes)?.id : null)
       if (base && base !== t.id) setComparing([base, t.id])
@@ -131,6 +186,59 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               }}
             />
           ))}
+          <Menu
+            trigger={
+              <Button size="sm" variant="ghost" icon={Plus} className="shrink-0 justify-start">
+                Add shot
+              </Button>
+            }
+            align="start"
+            className="min-w-56"
+          >
+            {shot && (
+              <MenuItem
+                icon={Copy}
+                onClick={() =>
+                  void addShot(pieceId, s.piece!.kind, `${shot.title} copy`, shot.scene)
+                    .then((row) => setSelectedKey(row.id))
+                    .catch((e: Error) => toast.error('Couldn’t add the shot', e.message))
+                }
+              >
+                Copy of {shot.title}
+              </MenuItem>
+            )}
+            {shot && (
+              <MenuItem
+                icon={House}
+                onClick={() =>
+                  void saveHouseShot(shot.title, shot.scene)
+                    .then((h) => toast.success(`Saved “${h.title}” as a house shot`))
+                    .catch((e: Error) => toast.error('Couldn’t save the house shot', e.message))
+                }
+              >
+                Save {shot.title} as a house shot
+              </MenuItem>
+            )}
+            {!!houses.data?.length && (
+              <>
+                <MenuSeparator />
+                <MenuGroup label="House shots">
+                  {houses.data.map((h) => (
+                    <MenuItem
+                      key={h.id}
+                      onClick={() =>
+                        void addShot(pieceId, s.piece!.kind, h.title, h.scene)
+                          .then((row) => setSelectedKey(row.id))
+                          .catch((e: Error) => toast.error('Couldn’t add the shot', e.message))
+                      }
+                    >
+                      {h.title}
+                    </MenuItem>
+                  ))}
+                </MenuGroup>
+              </>
+            )}
+          </Menu>
           {!s.shots.some((x) => x.saved) && (
             <p className="hidden px-2 pt-2 text-[11px] text-fg-subtle @5xl:block">
               The standard set for a {s.piece.kind}. It is saved the first time you change or render
@@ -153,6 +261,24 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               <Settings2 className="size-3.5" aria-hidden />
               {engineLabel(s.engine)}
             </button>
+            <span className="flex items-center gap-0.5">
+              <IconButton
+                icon={Undo2}
+                label="Undo the last shot change"
+                shortcut="mod+z"
+                size="sm"
+                disabled={!undo}
+                onClick={() => shot && undo && s.revert(shot, undo.id)}
+              />
+              <IconButton
+                icon={Redo2}
+                label="Redo"
+                shortcut="mod+shift+z"
+                size="sm"
+                disabled={!redo}
+                onClick={() => shot && redo && s.revert(shot, redo.id)}
+              />
+            </span>
             <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
               <Button
                 size="sm"
@@ -206,22 +332,46 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                   {view.engine === 'browser' && ' · Preview quality'}
                   {view.seconds ? ` · ${Math.round(view.seconds)} s` : ''}
                   {view.note && ` · ${view.note}`}
+                  {view.sceneHash && (
+                    <span className="font-mono text-[11px] text-fg-subtle">
+                      · scene {view.sceneHash.slice(0, 8)}
+                    </span>
+                  )}
+                  <Button size="sm" variant="ghost" onClick={() => actions.improve(view)}>
+                    <AiMark className="size-3" /> Improve with AI…
+                  </Button>
                   <Button size="sm" variant="ghost" icon={X} onClick={() => setViewing(null)}>
                     Live view
                   </Button>
                 </figcaption>
               </figure>
             ) : shot ? (
-              <ShotPreview
+              <Viewfinder
                 evaluation={evaluation}
                 scene={shot.scene}
+                design={{ pieceId, version: s.piece.version }}
                 label={`Live preview of the ${shot.title} shot`}
                 className="absolute inset-4"
+                onHash={onHash}
+                onCommit={(patch) =>
+                  void s.adjust(shot, patch).then((next) => next && setSelectedKey(next.key))
+                }
+                onLock={(locked) =>
+                  void s
+                    .adjust(shot, { camera: { locked: locked ? true : null } })
+                    .then((next) => next && setSelectedKey(next.key))
+                }
+                onReset={() =>
+                  void s
+                    .adjust(shot, resetCameraPatch(shot.scene.camera))
+                    .then((next) => next && setSelectedKey(next.key))
+                }
               />
             ) : null}
             {!view && !pair && shot && (
               <span className="glass absolute bottom-3 left-3 rounded-md px-2 py-1 text-[11px] whitespace-nowrap text-fg-muted">
-                Live preview{browser ? '' : ' · takes render in Blender'}
+                Viewfinder ·{' '}
+                {browser ? 'takes draw in the browser' : 'takes render exactly this in Blender'}
               </span>
             )}
           </div>
@@ -253,6 +403,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                       isCover={!!t.assetIds[0] && s.piece!.coverAssetId === t.assetIds[0]}
                       selected={viewing === t.id}
                       actions={actions}
+                      liveHash={liveHash}
                     />
                   </li>
                 ))}

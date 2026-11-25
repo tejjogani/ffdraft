@@ -122,6 +122,15 @@ async function run(
       })
       return { result: { glb, subject: subjectOf(evaluation) }, transfer: [glb.buffer] }
     }
+    case 'subject': {
+      // The production evaluation, as for a take, so framing matches what Blender frames.
+      const evaluation = await kernel.evaluate(task.design, {
+        detail: 'production',
+        assets,
+        signal,
+      })
+      return { result: subjectOf(evaluation), transfer: [] }
+    }
     case 'package': {
       const evaluation = await kernel.evaluate(task.design, {
         detail: 'production',

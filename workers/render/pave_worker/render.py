@@ -77,8 +77,15 @@ def configure(output: Output, color: ColorSettings, animated: bool) -> None:
     c.caustics_refractive = True
     c.use_denoising = output["denoise"]
     c.denoiser = "OPENIMAGEDENOISE"
+    # A fixed seed makes a take reproducible: the same scene gives the same pixels on the same
+    # machine (measured with packages/render/scripts/repeat-check.ts, whatever the thread count).
     c.seed = output["seed"]
     c.use_animated_seed = animated
+    threads = os.environ.get("PAVE_RENDER_THREADS", "")
+    if threads.isdigit() and int(threads) > 0:
+        # Leaves cores free for other work; it changes the time a take takes, not its pixels.
+        scene.render.threads_mode = "FIXED"
+        scene.render.threads = int(threads)
     view = scene.view_settings
     view.view_transform = _VIEW[color["view"]]
     view.look = "None"

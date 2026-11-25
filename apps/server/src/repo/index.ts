@@ -39,6 +39,7 @@ export class Repo extends OrgScope {
   readonly boards = this.scope(t.board)
   readonly references = this.scope(t.reference)
   readonly scenes = this.scope(t.renderScene)
+  readonly sceneChanges = this.scope(t.renderSceneChange)
   readonly renders = this.scope(t.renderJob)
   readonly models = this.scope(t.brandModel)
   readonly shots = this.scope(t.modelShot)

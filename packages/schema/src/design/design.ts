@@ -117,7 +117,7 @@ const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON
  * after the update, not from the patch: parsing can drop or fill fields the patch never named
  * (switching a variant drops the old variant's fields), and only the stored values restore them.
  */
-function diffPatch(
+export function diffPatch(
   from: Record<string, unknown>,
   to: Record<string, unknown>,
 ): Record<string, unknown> {

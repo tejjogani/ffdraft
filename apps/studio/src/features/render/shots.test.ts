@@ -27,6 +27,7 @@ const take = (id: string, at: string, extra: Partial<RenderJob> = {}): RenderJob
   status: 'done',
   progress: 1,
   sourceVersion: 1,
+  sceneHash: null,
   stale: false,
   assetIds: ['as_1'],
   critique: null,

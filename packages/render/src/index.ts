@@ -19,10 +19,34 @@ export {
   cameraBasis,
   cameraPose,
   framePoints,
+  MAX_ELEVATION,
+  MIN_DISTANCE_SHARE,
+  orbitOf,
+  placeCustom,
+  rolledBasis,
   SENSOR_WIDTH_MM,
   viewTangents,
 } from './camera'
 export { hexToRgb, kelvinToRgb, luminance, type Rgb, srgbToLinear } from './color'
+export {
+  type CustomCamera,
+  canonicalJson,
+  customCameraPatch,
+  describePose,
+  dollyBy,
+  type Framing,
+  type FramingVerdict,
+  orbitBy,
+  panBy,
+  poseFromLookAt,
+  poseOf,
+  predictFraming,
+  projectPoint,
+  resetCameraPatch,
+  rollBy,
+  sceneHash,
+  type ViewPose,
+} from './framing'
 export {
   type Background,
   DEFAULT_GROUNDS,
@@ -39,7 +63,15 @@ export {
 export * from './materials'
 export type { Quat, Vec3 } from './math'
 export { resolveScene } from './resolve'
-export { boundsRadius, type SceneSubject, subjectOf } from './subject'
+export {
+  type ChangeKind,
+  cameraMoves,
+  kindsOf,
+  redoTarget,
+  shotChangeRefusal,
+  undoTarget,
+} from './shot-history'
+export { boundsCenter, boundsRadius, type SceneSubject, subjectOf } from './subject'
 export {
   BROWSER_TAKE_SECONDS,
   DEFAULT_SHOTS,

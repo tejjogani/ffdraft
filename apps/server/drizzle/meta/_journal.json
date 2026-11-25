@@ -85,6 +85,13 @@
       "when": 1795563989735,
       "tag": "0011_plan_allowances",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1795567236704,
+      "tag": "0012_scene_changes",
+      "breakpoints": true
     }
   ]
 }

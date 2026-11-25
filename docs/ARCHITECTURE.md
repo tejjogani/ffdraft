@@ -107,8 +107,15 @@ BVH-traced gem shader) and Blender Cycles through a fixed, reviewed runner
 ([research](./research/03-rendering.md)). The assistant directs shots by editing that JSON; it
 never writes Python. A look is a rig of softboxes described once, built as an environment map in
 the browser and as area lights in Blender, so the preview and the final render agree. Renders are
-checked numerically (framing, clipping, exposure, noise) in a preview draft that auto-tune may
-adjust; the vision pass is the assistant's own look at the finished take, inside a traced run.
+checked numerically (framing, clipping, exposure, noise); a take renders exactly the scene it was
+given, with a fixed Cycles seed (the same scene gives the same pixels on the same machine, measured
+at any thread count), and auto-tune adjusts a preview draft only when asked or inside an AI job.
+Each take records `sceneHash`, the fingerprint of the resolved scene it rendered. The Render tab's
+live picture is a viewfinder: framing it by hand stores a custom camera (position, target, lens,
+roll, and the bounds it was framed on, so a house shot scales to other pieces) as one undoable
+shot change (`scenes.history`, `scenes.revert`), and a locked camera moves for nobody, the
+assistant included. The vision pass is the assistant's own look at the finished take, inside a
+traced run.
 Without Blender, a take is drawn by one of the person's own windows from the same resolved scene
 and labelled "Preview quality". A render costs this computer's time, never money: estimates are
 machine time, learnt from this machine's finished takes.

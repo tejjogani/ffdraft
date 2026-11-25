@@ -18,7 +18,7 @@ import {
   type Piece,
   type PieceSpecInput,
 } from '@pave/schema'
-import { AiMark, Button, cn, Dialog, IconButton, Sheet, Spinner } from '@pave/ui'
+import { AiMark, Button, cn, Dialog, IconButton, Sheet, Spinner, toast } from '@pave/ui'
 import { useNavigate } from '@tanstack/react-router'
 import { PanelLeft, PanelRight, Plus } from 'lucide-react'
 import {
@@ -44,6 +44,7 @@ import { activeOrg, useSession } from '../../lib/session'
 import { useAssistant } from '../../stores/assistant'
 import { planProgress } from '../assistant/jobs/status'
 import { useLiveRun } from '../assistant/jobs/useJob'
+import { renderThisView } from '../render/shot-actions'
 import { useViewportTools } from './capture-tool'
 import { useCadCommands } from './commands'
 import { captureCover } from './cover'
@@ -322,6 +323,13 @@ function Workspace({ piece }: { piece: Piece }) {
     steps,
     hasRun: !!run,
     openAddMenu: () => setAddOpen(true),
+    renderThisView: () => {
+      const camera = viewer.current?.shotCamera()
+      if (!camera) return
+      void renderThisView(piece.id, view.kind, camera)
+        .then(() => navigate({ to: '/pieces/$id/render', params: { id: piece.id } }))
+        .catch((e: Error) => toast.error('Couldn’t copy the view to a shot', e.message))
+    },
     requestDelete,
     exportAs: (f: ExportFormat) =>
       void runExport(piece, view, f, {
@@ -450,7 +458,8 @@ function Workspace({ piece }: { piece: Piece }) {
               onDone={() => setMarker(null)}
             />
           )}
-          <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-2 [&>*]:pointer-events-auto">
+          {/* On a phone the two toolbars do not fit one row: saving and export wrap below. */}
+          <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex flex-wrap items-start justify-between gap-2 [&>*]:pointer-events-auto">
             <div className="flex min-w-0 items-center gap-2">
               {!dockOutliner && (
                 <IconButton
@@ -460,9 +469,9 @@ function Workspace({ piece }: { piece: Piece }) {
                   className="glass size-9 shrink-0 rounded-lg shadow-sm"
                 />
               )}
-              <ViewToolbar canUndo={undoable} canRedo={redoable} />
+              <ViewToolbar canUndo={undoable} canRedo={redoable} compact={compact} />
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="ml-auto flex shrink-0 items-center gap-2">
               <FileToolbar
                 save={save}
                 formats={empty ? [] : formats}

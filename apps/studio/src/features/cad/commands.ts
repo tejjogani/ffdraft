@@ -10,6 +10,7 @@ import {
   ArrowDown,
   ArrowUp,
   Box,
+  Camera,
   Crosshair,
   Download,
   Eye,
@@ -66,6 +67,8 @@ export interface CadCommandContext {
   fix(d: Diagnostic): void
   addStep(step: NextStep): void
   undoRun(): void
+  /** Copies this view's camera into a new shot and opens it in the Render tab. */
+  renderThisView(): void
 }
 
 const VIEWS: { id: CameraPreset; title: string; key: string }[] = [
@@ -314,6 +317,13 @@ export function useCadCommands(c: CadCommandContext): void {
       icon: Focus,
       shortcut: 'f',
       run: () => c.viewer.current?.frameAll(true, ws().selection),
+    },
+    {
+      id: 'view.renderThis',
+      title: 'Render this view',
+      group: 'View',
+      icon: Camera,
+      run: () => c.renderThisView(),
     },
     {
       id: 'view.zoomIn',

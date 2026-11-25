@@ -178,6 +178,12 @@ export interface GeometryService extends Service {
     opts?: GeometryCall,
   ): Promise<{ glb: FileData; subject: RenderSubject }>
   /**
+   * The subject summary renders are framed by (bounds and support points of the production
+   * evaluation), without writing a GLB. Optional: without it the assistant is told the camera
+   * but not how much of the frame the piece fills.
+   */
+  subject?(design: Design, sctx: ServiceContext, opts?: GeometryCall): Promise<RenderSubject>
+  /**
    * Shaded clay pictures of the design (RGBA bytes, `size`×`size`, one per view) from the
    * software rasteriser, for when no studio window can draw it. Optional: engines without it
    * leave the assistant without pictures when no window is open.
@@ -243,7 +249,15 @@ export interface CaptureService extends Service {
 export type RenderJobPatch = Partial<
   Pick<
     RenderJob,
-    'status' | 'progress' | 'assetIds' | 'error' | 'scene' | 'critique' | 'seconds' | 'device'
+    | 'status'
+    | 'progress'
+    | 'assetIds'
+    | 'error'
+    | 'scene'
+    | 'critique'
+    | 'seconds'
+    | 'device'
+    | 'sceneHash'
   >
 > & {
   /** sha256 of piece, source version, requested scene, engine and runner version. */

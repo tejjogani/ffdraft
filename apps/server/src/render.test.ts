@@ -107,7 +107,8 @@ describe('saved shots and takes', () => {
       groupId: 'grp_1',
       variantLabel: 'Platinum',
       purpose: 'take',
-      autoTune: true,
+      // Exact by default: a take renders the scene as asked.
+      autoTune: false,
       stale: false,
       starred: false,
       critique: null,
