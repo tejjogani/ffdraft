@@ -13,8 +13,8 @@
     "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_9b8dbfd7-d49/journal.jsonl"
   },
   {
-    "name": "Diaex connection (lane A)",
-    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_e4bdce9b-0c6/journal.jsonl"
+    "name": "Diaex sign-in and access gate (lane A)",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_db88fdb2-003/journal.jsonl"
   },
   {
     "name": "Integration and release (lane A, A3)",
