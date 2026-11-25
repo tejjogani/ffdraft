@@ -23,6 +23,10 @@ Not written yet. It lands here when the plans have been reviewed.
 
 ## Requests and findings for lane A (from the research so far)
 
+**Request, time-sensitive:** saving `.pave` version 1 is already in the assistant build, and A3 gives the founder a commit to install. Please take steps 1 to 4 of `docs/plans/pave-file-format.md` (about 3.5 days, confined to `apps/server/src/pavefile/`, `runtime.ts`, `files/pave.ts` and `ReferencePanel.tsx`) into A3 before that commit, and step 5 before any build goes to anyone else. If that cannot happen, name the shipped commit so the plan's fallback for version 1 files in the wild (its section 3.8) can be built.
+
+**The paid exports are not protected today:** STEP and Rhino files are written in the browser after only a server "claim" (`apps/studio/src/features/cad/export.ts`), so the allowance can be skipped, even when hosted. Moving that writing to the server is not owned by any plan yet.
+
 Three items in the first `.pave` version on `claude/assistant-build` (details in research 17, section 2.3, rows 9 to 11):
 
 1. The "saved here" organisation fingerprint is a fixed value that can be copied from any file of that organisation, so a crafted file can carry a forged rights attestation.
@@ -68,7 +72,7 @@ Ten research subagents, one per topic, one file each (topic 22 was added on the 
 | `docs/research/14-jewelry-rendering.md` | Rendering state of the art for jewelry | Done (some engine rows are working knowledge, marked [E]: the web-search budget ran out) |
 | `docs/research/15-own-renderer.md` | Our own renderer (priority) | Running |
 | `docs/research/16-ai-models-on-model.md` | AI human models, on-model imagery | Done; plan `docs/plans/brand-models-v2.md` reviewed (1 blocker, 10 majors, 9 minors) and fixed |
-| `docs/research/17-pave-file-format.md` | The native file format | Done; plan `docs/plans/pave-file-format.md` written, under review |
+| `docs/research/17-pave-file-format.md` | The native file format | Done; plan `docs/plans/pave-file-format.md` reviewed (3 blockers, 15 majors, 8 minors) and fixed |
 | `docs/research/18-low-end-machines.md` | Low-end machines | Done |
 | `docs/research/19-erp-and-pos-apis.md` | ERP, POS and accounting APIs | Done; plan `docs/plans/integrations-hub.md` written, under review |
 | `docs/research/20-accounts-and-identity.md` | Accounts and identity | Done; plan `docs/plans/accounts-and-developer-api.md` written, under review |
