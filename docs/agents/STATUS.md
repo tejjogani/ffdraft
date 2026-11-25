@@ -1,10 +1,10 @@
 # Live status of agents and tasks
 
-_Generated 25 Nov 2026 12:35 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 25 Nov 2026 13:36 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## Assistant build (lane A, A1)
 
-Branch `claude/assistant-build`, head: 1149e99 Concept images on the design board: Claude briefs and checks, four images from Gemini, OpenAI or Higgsfield
+Branch `claude/assistant-build`, head: 84f032a wip: review fixes (temporary)
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -29,11 +29,12 @@ Branch `claude/assistant-build`, head: 1149e99 Concept images on the design boar
 | build:ideas | done | commit 8df7d93. Step 17 is built and committed as 8df7d93 on ai/assistant, on top of 342481a. It is not pushed. The Design stage no longer holds 3D: it is the piece's design board, a board of pictures, sketches and models. - **Design b… |
 | build:imagegen | done | commit 1149e99. Step 18 is built and committed as 1149e99 on ai/assistant, on top of 8df7d93. It is not pushed. The design board can now generate concept images. - **How it works.** The designer writes a request and picks board picture… |
 | review:e2e | done | 1 blocker, 2 major, 11 minor. FAIL for the founder's first hour. One blocker, two majors, and a set of polish issues, all reproduced in a real browser. The setup: the studio as committed, `… |
-| review:design | running or interrupted |  |
+| review:design | done | 6 major, 15 minor. FAIL on the premium-design bar, with no blockers. Nothing I saw puts the founder's test, money or the key at risk. Six major issues break flows or the design-l… |
+| fix:1 | running or interrupted |  |
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 10c11bf Status: agents and tasks, 11:14 UTC
+Branch `claude/busy-bardeen-o482lo`, head: aa86f49 Status: agents and tasks, 12:35 UTC
 
 | Agent | State | Outcome |
 |---|---|---|
