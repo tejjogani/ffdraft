@@ -1,10 +1,10 @@
 # Live status of agents and tasks
 
-_Generated 25 Nov 2026 10:35 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 25 Nov 2026 10:54 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## Assistant build (lane A, A1)
 
-Branch `claude/assistant-build`, head: 342481a Verify the assistant harness against a strict fake Claude API, with the founder's journeys recorded by Claude and replayed
+Branch `claude/assistant-build`, head: 8df7d93 The Design stage becomes an image-based design board; projects and folders show what each stage cost
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -26,11 +26,12 @@ Branch `claude/assistant-build`, head: 342481a Verify the assistant harness agai
 | build:light | done | commit 499b203. Step 14 is built and committed as 499b203 on ai/assistant, on top of 95f4336. It is not pushed. Orbiting is now 22–37 frames a second in the slow test setup, up from 1–2. A slider step shows in 0.2–0.34 s, down from 2.1… |
 | review:api | running or interrupted |  |
 | review:safety | running or interrupted |  |
-| build:ideas | running or interrupted |  |
+| build:ideas | done | commit 8df7d93. Step 17 is built and committed as 8df7d93 on ai/assistant, on top of 342481a. It is not pushed. The Design stage no longer holds 3D: it is the piece's design board, a board of pictures, sketches and models. - **Design b… |
+| build:imagegen | running or interrupted |  |
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 33d1125 Status: agents and tasks, 10:34 UTC
+Branch `claude/busy-bardeen-o482lo`, head: ab29e98 Status: agents and tasks, 10:35 UTC
 
 | Agent | State | Outcome |
 |---|---|---|
