@@ -101,6 +101,40 @@ The end-to-end scripts in `apps/studio/e2e` are driver scripts that need Playwri
 
 Not reached: `features/assistant`, the middle of the viewer (picking, model build, framing), settings, library and auth pages, the small feature folders, most of `packages/ui`.
 
-## 4. Kernel and schema: `claude/bugsweep-kernel`
+## 4. Kernel and schema: `claude/bugsweep-kernel` (9 commits, done)
 
-Running.
+Checks run on the final code, one file at a time with a 4 GB heap: the export suite (30 tests), eight neighbouring kernel test files (160), the production bundle test (5) and the schema suite (150) all pass; `@pave/kernel` and `@pave/schema` typecheck clean; the formatter clean on all changed files. 31 tests added and 1 strengthened. **Not run:** the repo-wide typecheck and the rest of the kernel suite (freeform, bail, finding, fonts, mesh, hosts). No contract in `packages/schema` was changed.
+
+| # | Severity | Where (under `packages/kernel/src`) | What was wrong | Commit |
+|---|---|---|---|---|
+| 1 | Major | `export/rhino3dm.ts` | Every 3DM export left its whole model in the rhino3dm heap: 17 MB grew to 269 MB over 60 exports. Flat after the fix. | `4936b68` |
+| 2 | Major | `export/step.ts` | Every STEP export with a faceted stone grew the OpenCascade heap by about 4 MB: 105 MB grew to 451 MB over 60 exports. Flat after the fix. | `a1fa2eb` |
+| 3 | Major | `workerHost.ts`, `client.ts` | If posting an evaluation to the page failed, the worker still recorded those buffers as delivered. The next `evaluate()` never settled. | `6c8f6d2` |
+| 4 | Major | `mesh/parse/glb.ts` | GLB import read accessor data through a view of the caller's whole buffer, so a crafted file returned whatever bytes lay behind it as vertex positions. Indices were never checked. | `9bfb4f5` |
+| 5 | Minor | `export/glbFormat.ts` | GLB export of an empty selection wrote an invalid glTF. It is now refused, as in the other formats. | `b5b21dc` |
+| 6 | Minor | `export/meshes.ts` | A control character in a part name made the 3MF model malformed XML and dropped the name in 3DM. | `03868f1` |
+| 7 | Minor | `export/meshes.ts` | Repeated names were numbered without checking names already taken, so two objects could share a name. | `03868f1` |
+| 8 | Minor | `evaluate/build.ts` | A stone of zero or negative size from a stored document was weighed (−0.134 ct for a −3 mm round) and a halo with stone size 0 sent 147 NaN matrices to the viewer. | `706e6b2` |
+| 9 | Minor, test | `export/export.test.ts` | The OBJ float32 test compared a value with itself and could never fail. | `220db97` |
+
+Also added (`cb46c1f`): undo as a property over all 14 templates (120 random op batches each), and ring sizes against published charts.
+
+**For the reviewer:** STEP files change once. Geometry, products and colour assignments are identical entity for entity; only the order of the colour blocks at the end differs. No test or stored hash depends on the old bytes. The first line of commit `03868f1` lists STL among the formats that carry names; STL carries none.
+
+### Needs a decision (not changed)
+
+1. UK quarter sizes print as halves: 11.25 shows as "UK L½" (`packages/schema/src/domain/sizes.ts`).
+2. `ringSizeFromDiameter(10, 'us')` returns −2, which prints as "US -2" and which the node schema would then refuse.
+3. Out-of-range values in stored documents are slow, not refused: a stone row with gap −5 took 9 s at draft (7,999 stones); a setting with 500 prongs took 17 s. Clamping at the kernel boundary is a design choice.
+4. Reference kinds are not checked in `validateDesign` beyond pavé, engraving and boolean; a chain threaded through a non-bail builds with no message.
+5. The cabochon carat factor (`0.0105` in `packages/schema/src/domain/gems.ts`) looks about 14% above the usual formula. Not checked against a published source: please verify before changing.
+
+Seen, not reproduced: 3MF import has no cap on triangles through nested components; `geometry/sweep.ts` uses the same collector-dependent sewing tool that was replaced in STEP export.
+
+Found clean: US ring sizes 3 to 13 against published diameters, undo and op squashing over 2,737 random change sets, 224 extreme piece specs, 67 degenerate designs.
+
+Not reached: the mesh pipeline (repair, shell, simplify), fonts, DFM checks, the API contracts, the numeric rules in `intents.ts` and `mount.ts`.
+
+## 5. Totals
+
+Four branches, 35 commits, 37 defects fixed (17 major), 115 tests added. Open and needing a decision: the any-Host-name gap on a local install (major), keyboard shortcuts firing behind dialogs (major, unverified), currency mixing in cost estimates, and the smaller items listed under each branch. Nothing was checked in a browser, and Blender was not installed on the machine.
