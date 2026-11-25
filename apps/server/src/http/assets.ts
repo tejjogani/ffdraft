@@ -3,7 +3,8 @@ import { bodyLimit } from 'hono/body-limit'
 import { z } from 'zod'
 import { assetBytes, getAssetRow, putAsset, readThumbnail } from '../assets/assets'
 import { writeAudit } from '../audit'
-import { AppError, badRequest, forbidden } from '../errors'
+import { AppError, badRequest, forbidden, notFound } from '../errors'
+import { storable } from '../rpc/execute'
 import type { Runtime } from '../runtime'
 import type { App, HttpContext } from './types'
 
@@ -77,7 +78,10 @@ export function mountAssets(app: App, runtime: Runtime) {
     const ctx = c.var.ctx
     // Reading follows the commands: a role that may run no query (guest) reads no files either.
     if (!roleAllows(ctx.role, 'viewer')) throw forbidden('Reading files needs the viewer role')
-    const asset = await getAssetRow(ctx, c.req.param('id'))
+    const id = c.req.param('id')
+    // No asset has such an id, and the database refuses to even compare it.
+    if (!storable(id)) throw notFound('Asset')
+    const asset = await getAssetRow(ctx, id)
     const w = c.req.query('w')
     if (w !== undefined && asset.mime.startsWith('image/')) {
       const width = Number.parseInt(w, 10)
