@@ -8,7 +8,7 @@
  */
 import type { Detail, Evaluation } from '@pave/kernel'
 import type { Design } from '@pave/schema'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   type DesignSession,
   type SessionStore,
@@ -29,6 +29,8 @@ export interface PieceEvaluation {
   /** `evaluation` is not yet of `design`. */
   stale: boolean
   error: string | null
+  /** Evaluates the current design again after a failure (nothing else would, until an edit). */
+  retry(): void
 }
 
 /** Scrubs whose dependent nodes cost more than this are evaluated on release only. */
@@ -57,9 +59,15 @@ export function usePieceEvaluation(pieceId: string, detail: Detail = 'draft'): P
   const scheduler = evaluationScheduler(detail)
   const [result, setResult] = useState<{ design: Design; evaluation: Evaluation } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  const retry = useCallback(() => {
+    setError(null)
+    setAttempt((n) => n + 1)
+  }, [])
 
   useEffect(() => warmKernel(), [])
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` asks for the same design again
   useEffect(() => {
     if (!design) return
     let current = true
@@ -76,7 +84,7 @@ export function usePieceEvaluation(pieceId: string, detail: Detail = 'draft'): P
     return () => {
       current = false
     }
-  }, [design, pieceId, detail, scheduler])
+  }, [design, pieceId, detail, scheduler, attempt])
 
   const evaluation = result?.evaluation ?? null
   const stale = !!design && result?.design !== design
@@ -90,5 +98,5 @@ export function usePieceEvaluation(pieceId: string, detail: Detail = 'draft'): P
           : stale
             ? 'evaluating'
             : 'ready'
-  return { evaluation, design, status, stale, error }
+  return { evaluation, design, status, stale, error, retry }
 }
