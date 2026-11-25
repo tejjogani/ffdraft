@@ -1,0 +1,230 @@
+{
+  "journey": "a-directions",
+  "pieces": [
+    {
+      "title": "Tenth anniversary ring",
+      "kind": "ring",
+      "stage": "design",
+      "version": 1,
+      "spec": {
+        "kind": "ring",
+        "ring": {
+          "size": {
+            "value": 6,
+            "system": "us"
+          },
+          "profile": "court",
+          "bandWidthMm": 2.2
+        },
+        "metal": {
+          "alloy": "au18k-yellow",
+          "finish": "polished",
+          "plating": "none"
+        },
+        "style": [
+          "minimal"
+        ],
+        "title": "Bezel round on the slim band",
+        "stones": [
+          {
+            "cut": "round",
+            "role": "center",
+            "carat": 1,
+            "stone": "diamond",
+            "setting": "bezel"
+          }
+        ],
+        "summary": "A 1 ct round in a low 18k yellow bezel on a 2 mm court band.",
+        "archetype": "solitaire",
+        "budgetUsd": 4000,
+        "openQuestions": []
+      },
+      "design": {
+        "kind": "ring",
+        "nodes": {
+          "band": {
+            "id": "band",
+            "kind": "ringShank",
+            "name": "Band",
+            "size": {
+              "value": 6,
+              "system": "us"
+            },
+            "finish": "polished",
+            "plating": "none",
+            "profile": "court",
+            "visible": true,
+            "material": "au18k-yellow",
+            "shoulder": "plain",
+            "splitGap": 2,
+            "widthTop": 2.2,
+            "baseShape": "round",
+            "widthBottom": 2.2,
+            "thicknessTop": 1.8,
+            "shoulderHeight": 3,
+            "thicknessBottom": 1.6
+          },
+          "head": {
+            "id": "head",
+            "gem": "center",
+            "kind": "setting",
+            "name": "Head",
+            "wall": 0.6,
+            "rails": 1,
+            "style": "bezel",
+            "taper": 0.35,
+            "finish": "polished",
+            "plating": "none",
+            "visible": true,
+            "material": "au18k-yellow",
+            "prongTip": "round",
+            "prongSpin": 45,
+            "prongCount": 4,
+            "prongDiameter": 1
+          },
+          "center": {
+            "id": "center",
+            "lw": 1,
+            "cut": "round",
+            "kind": "gem",
+            "name": "Centre stone",
+            "stone": "diamond",
+            "width": 6.44,
+            "visible": true,
+            "placement": {
+              "spin": 0,
+              "type": "ringTop",
+              "angle": 0,
+              "shank": "band",
+              "elevation": 1
+            }
+          }
+        },
+        "order": [
+          "band",
+          "center",
+          "head"
+        ],
+        "schemaVersion": 1
+      },
+      "directions": [
+        {
+          "letter": "A",
+          "name": "Low bezel round",
+          "origin": "assistant"
+        },
+        {
+          "letter": "B",
+          "name": "Oval in low claws",
+          "origin": "assistant"
+        },
+        {
+          "letter": "C",
+          "name": "East-west emerald",
+          "origin": "assistant"
+        },
+        {
+          "letter": "D",
+          "name": "Bezel round on the slim band",
+          "origin": "mix"
+        }
+      ],
+      "changes": [
+        {
+          "actor": "agent",
+          "label": "Chose direction D: Bezel round on the slim band",
+          "ops": 3
+        }
+      ],
+      "takes": []
+    }
+  ],
+  "runs": [
+    {
+      "status": "done",
+      "model": "claude-opus-5-5",
+      "tier": "standard",
+      "costUsd": 0.225804,
+      "tokens": {
+        "input": 0,
+        "output": 1392,
+        "cacheRead": 99997,
+        "cacheWrite": 35593
+      },
+      "job": {
+        "stage": "design",
+        "review": "pending",
+        "pausedBy": null,
+        "plan": [
+          "brief:done",
+          "directions:done",
+          "choose:pending"
+        ]
+      },
+      "steps": [
+        "model:claude-opus-5-5:done",
+        "tool:pieces.get:done",
+        "tool:references.pins:done",
+        "model:claude-opus-5-5:done",
+        "tool:chat.ask:done",
+        "model:claude-opus-5-5:done",
+        "tool:pieces.proposeDirections:done",
+        "model:claude-opus-5-5:done"
+      ]
+    },
+    {
+      "status": "done",
+      "model": "claude-opus-5-5",
+      "tier": "standard",
+      "costUsd": 0.027586,
+      "tokens": {
+        "input": 0,
+        "output": 285,
+        "cacheRead": 72126,
+        "cacheWrite": 1492
+      },
+      "job": {
+        "stage": "design",
+        "review": "pending",
+        "pausedBy": null,
+        "plan": [
+          "brief:done",
+          "directions:done",
+          "choose:pending"
+        ]
+      },
+      "steps": [
+        "model:claude-opus-5-5:done",
+        "tool:pieces.proposeDirections:done",
+        "model:claude-opus-5-5:done"
+      ]
+    },
+    {
+      "status": "done",
+      "model": "claude-opus-5-5",
+      "tier": "standard",
+      "costUsd": 0.023729,
+      "tokens": {
+        "input": 0,
+        "output": 114,
+        "cacheRead": 74993,
+        "cacheWrite": 1290
+      },
+      "job": {
+        "stage": "design",
+        "review": "pending",
+        "pausedBy": null,
+        "plan": [
+          "brief:done",
+          "directions:done",
+          "choose:done"
+        ]
+      },
+      "steps": [
+        "model:claude-opus-5-5:done",
+        "tool:pieces.chooseDirection:done",
+        "model:claude-opus-5-5:done"
+      ]
+    }
+  ]
+}

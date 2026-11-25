@@ -55,7 +55,14 @@ export interface Recording {
 export function stripImages(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stripImages)
   if (!isObj(value)) return value
-  if (value.type === 'image' && isObj(value.source) && value.source.type === 'base64' && typeof value.source.data === 'string') {
+  if (
+    value.type === 'image' &&
+    isObj(value.source) &&
+    value.source.type === 'base64' &&
+    typeof value.source.data === 'string' &&
+    // Already stripped (a request saved by the agent source): keep it as it is.
+    !value.source.data.startsWith('sha256:')
+  ) {
     const buf = Buffer.from(value.source.data, 'base64')
     const size = imageSize(buf, String(value.source.media_type))
     return {
@@ -90,7 +97,12 @@ export class Recorder {
       isNew = true
     }
     let prefix = 0
-    while (prefix < conv.messages.length && prefix < json.length && conv.messages[prefix] === json[prefix]) prefix++
+    while (
+      prefix < conv.messages.length &&
+      prefix < json.length &&
+      conv.messages[prefix] === json[prefix]
+    )
+      prefix++
     return { index: this.#conversations.indexOf(conv), prefix, isNew }
   }
 
@@ -120,7 +132,13 @@ export class Recorder {
   }
 
   recording(journey: string, description: string): Recording {
-    return { version: 1, journey, description, recordedAt: new Date().toISOString(), exchanges: this.exchanges }
+    return {
+      version: 1,
+      journey,
+      description,
+      recordedAt: new Date().toISOString(),
+      exchanges: this.exchanges,
+    }
   }
 }
 
@@ -147,8 +165,8 @@ const norm = (t: string) => (ID_LIKE.test(t) ? '<id>' : t)
 export interface Alignment {
   /** Recorded id → live id. */
   ids: Map<string, string>
-  /** Non-id tokens that differ (recorded → live), with a little context. */
-  drift: { at: string; recorded: string; live: string }[]
+  /** Non-id tokens that differ (recorded → live), with the few tokens before them. */
+  drift: { at: string; recorded: string; live: string; after: string }[]
   /** The two requests do not have the same shape (message count, roles, block types). */
   structural: string[]
 }
@@ -161,11 +179,16 @@ const shape = (messages: unknown[]) =>
   )
 
 /** Pairs the ids of a recorded request with the live one, block by block. */
-export function align(recorded: unknown[], live: unknown[], into: Map<string, string> = new Map()): Alignment {
+export function align(
+  recorded: unknown[],
+  live: unknown[],
+  into: Map<string, string> = new Map(),
+): Alignment {
   const out: Alignment = { ids: into, drift: [], structural: [] }
   const a = shape(recorded)
   const b = shape(live)
-  if (a.length !== b.length) out.structural.push(`message count ${a.length} recorded, ${b.length} live`)
+  if (a.length !== b.length)
+    out.structural.push(`message count ${a.length} recorded, ${b.length} live`)
   for (let i = 0; i < Math.min(a.length, b.length); i++)
     if (a[i] !== b[i]) out.structural.push(`messages.${i}: ${a[i]} recorded, ${b[i]} live`)
   const n = Math.min(recorded.length, live.length)
@@ -181,7 +204,13 @@ export function align(recorded: unknown[], live: unknown[], into: Map<string, st
         if (r !== l) {
           const known = out.ids.get(r)
           if (known === undefined) out.ids.set(r, l)
-          else if (known !== l) out.drift.push({ at: `messages.${i}`, recorded: r, live: `${l} (already paired with ${known})` })
+          else if (known !== l)
+            out.drift.push({
+              at: `messages.${i}`,
+              recorded: r,
+              live: `${l} (already paired with ${known})`,
+              after: ra.slice(Math.max(0, x - 6), x).join(' '),
+            })
         }
         x++
         y++
@@ -193,15 +222,30 @@ export function align(recorded: unknown[], live: unknown[], into: Map<string, st
         for (let j = 0; j <= k && !found; j++) {
           const xi = x + j
           const yi = y + (k - j)
-          if (xi < ra.length && yi < la.length && norm(ra[xi]!) === norm(la[yi]!) && ra[xi]!.length > 2) {
-            out.drift.push({ at: `messages.${i}`, recorded: ra.slice(x, xi).join(' '), live: la.slice(y, yi).join(' ') })
+          if (
+            xi < ra.length &&
+            yi < la.length &&
+            norm(ra[xi]!) === norm(la[yi]!) &&
+            ra[xi]!.length > 2
+          ) {
+            out.drift.push({
+              at: `messages.${i}`,
+              recorded: ra.slice(x, xi).join(' '),
+              live: la.slice(y, yi).join(' '),
+              after: ra.slice(Math.max(0, x - 6), x).join(' '),
+            })
             x = xi
             y = yi
             found = true
           }
         }
       if (!found) {
-        out.drift.push({ at: `messages.${i}`, recorded: ra.slice(x, x + 8).join(' '), live: la.slice(y, y + 8).join(' ') })
+        out.drift.push({
+          at: `messages.${i}`,
+          recorded: ra.slice(x, x + 8).join(' '),
+          live: la.slice(y, y + 8).join(' '),
+          after: ra.slice(Math.max(0, x - 6), x).join(' '),
+        })
         break
       }
     }
@@ -220,7 +264,8 @@ export function remap(reply: FakeReply, ids: ReadonlyMap<string, string>): FakeR
 
 // ── A readable view of a request, for Claude answering in the loop ───────────────────────────
 
-const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max)}… [${s.length - max} more chars]` : s)
+const clip = (s: string, max: number) =>
+  s.length > max ? `${s.slice(0, max)}… [${s.length - max} more chars]` : s
 
 function blockLine(b: unknown, max: number): string {
   if (!isObj(b)) return String(b)
@@ -251,7 +296,8 @@ export function describeMessages(messages: unknown[], from: number, max = 2500):
   const out: string[] = []
   messages.slice(from).forEach((m, k) => {
     if (!isObj(m)) return
-    const content = typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : (m.content as unknown[])
+    const content =
+      typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : (m.content as unknown[])
     out.push(`[${from + k}] ${String(m.role).toUpperCase()}`)
     for (const b of content ?? []) out.push(`  ${blockLine(stripImages(b), max)}`)
   })

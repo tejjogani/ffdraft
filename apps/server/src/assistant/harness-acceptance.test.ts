@@ -19,7 +19,11 @@ let n = 0
 const cm = () => `acc${++n}`
 
 /** Each tier at one of the four models; Light is Haiku so all four are reachable in one thread. */
-const TIERS = { power: 'claude-fable-5-2', standard: 'claude-opus-5-5', light: 'claude-haiku-5-5' } as const
+const TIERS = {
+  power: 'claude-fable-5-2',
+  standard: 'claude-opus-5-5',
+  light: 'claude-haiku-5-5',
+} as const
 
 beforeAll(async () => {
   // This file picks each model itself, so a whole-suite tier run (PAVE_TEST_MODEL) must not
@@ -60,7 +64,10 @@ describe('the harness against the strict fake API', () => {
       // Light can point at any of the four models; it is the tier under test here.
       await api.call('org.settings.update', { assistantModels: { light: model } } as never)
       const tier = 'light' as const
-      const piece = await api.call('pieces.create', { templateId: 'solitaire', title: `On ${model}` } as never)
+      const piece = await api.call('pieces.create', {
+        templateId: 'solitaire',
+        title: `On ${model}`,
+      } as never)
       s.model.push(
         {
           content: [
@@ -73,10 +80,18 @@ describe('the harness against the strict fake API', () => {
         { content: [tool('pieces_buildFromSpec', { id: piece.id }, `t_${model}_build`)] },
         { content: [think('Declined. Say so.'), text('Left it as it is.')] },
       )
-      const { run } = await send('Rebuild it from the spec', { tier, context: { pieceId: piece.id } })
+      const { run } = await send('Rebuild it from the spec', {
+        tier,
+        context: { pieceId: piece.id },
+      })
       expect(run.model).toBe(model)
       await until(run.id, 'awaiting-approval')
-      await api.call('runs.decide', { runId: run.id, toolCallId: `t_${model}_build`, decision: 'deny', note: 'Not now' } as never)
+      await api.call('runs.decide', {
+        runId: run.id,
+        toolCallId: `t_${model}_build`,
+        decision: 'deny',
+        note: 'Not now',
+      } as never)
       const done = await until(run.id, 'done')
       expect(done.status).toBe('done')
       expect(s.model.problems()).toEqual([])
@@ -93,7 +108,10 @@ describe('the harness against the strict fake API', () => {
         { content: [think(`turn ${i} on ${tier}`), text('Looking.'), tool('pieces_list', {})] },
         { content: [think(`answer ${i}`), text(`Answer ${i} on ${tier}.`)] },
       )
-      const { run, thread } = await send(`Message ${i}`, { tier, ...(threadId ? { threadId } : {}) })
+      const { run, thread } = await send(`Message ${i}`, {
+        tier,
+        ...(threadId ? { threadId } : {}),
+      })
       threadId = thread.id
       await settled(s.parts, run.id)
       const detail = await api.call('traces.run', { id: run.id })
@@ -110,23 +128,47 @@ describe('the harness against the strict fake API', () => {
 
   it('asks a quick question first in a Design job, on every model', async () => {
     for (const tier of ['power', 'standard', 'light'] as const) {
-      const piece = await api.call('pieces.create', { title: `Brief on ${tier}`, brief: 'A cocktail ring, about 3 ct.' } as never)
+      const piece = await api.call('pieces.create', {
+        title: `Brief on ${tier}`,
+        brief: 'A cocktail ring, about 3 ct.',
+      } as never)
       s.model.push(
         {
           content: [
-            tool('chat_ask', {
-              intro: 'Two things the brief leaves open.',
-              questions: [
-                { id: 'metal', question: 'Metal?', options: [{ id: 'yg', label: '18k yellow' }, { id: 'pt', label: 'Platinum' }], defaults: ['yg'] },
-              ],
-            }, `ask_${tier}`),
+            tool(
+              'chat_ask',
+              {
+                intro: 'Two things the brief leaves open.',
+                questions: [
+                  {
+                    id: 'metal',
+                    question: 'Metal?',
+                    options: [
+                      { id: 'yg', label: '18k yellow' },
+                      { id: 'pt', label: 'Platinum' },
+                    ],
+                    defaults: ['yg'],
+                  },
+                ],
+              },
+              `ask_${tier}`,
+            ),
           ],
         },
         { content: [text('Noted: 18k yellow. Directions next time.')] },
       )
-      const { run } = await send('Propose directions', { tier, context: { pieceId: piece.id }, job: { stage: 'design' } })
+      const { run } = await send('Propose directions', {
+        tier,
+        context: { pieceId: piece.id },
+        job: { stage: 'design' },
+      })
       await until(run.id, 'awaiting-approval')
-      await api.call('runs.decide', { runId: run.id, toolCallId: `ask_${tier}`, decision: 'approve', answers: {} } as never)
+      await api.call('runs.decide', {
+        runId: run.id,
+        toolCallId: `ask_${tier}`,
+        decision: 'approve',
+        answers: {},
+      } as never)
       await until(run.id, 'done')
     }
     expect(s.model.problems()).toEqual([])

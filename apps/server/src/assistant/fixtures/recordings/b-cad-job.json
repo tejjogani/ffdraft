@@ -2,7 +2,7 @@
  "version": 1,
  "journey": "b-cad-job",
  "description": "The design-to-CAD job on the chosen direction: Claude asks first, edits, the designer edits by hand mid-job (the job pauses), Resume replans, review and Accept",
- "recordedAt": "2026-11-25T08:24:47.759Z",
+ "recordedAt": "2026-11-25T09:22:00.168Z",
  "exchanges": [
   {
    "n": 1,
@@ -68,7 +68,13 @@
        "detail": "production"
       }
      }
-    ]
+    ],
+    "usage": {
+     "input_tokens": 0,
+     "cache_read_input_tokens": 0,
+     "cache_creation_input_tokens": 33791,
+     "output_tokens": 151
+    }
    }
   },
   {
@@ -224,7 +230,13 @@
        ]
       }
      }
-    ]
+    ],
+    "usage": {
+     "input_tokens": 0,
+     "cache_read_input_tokens": 33791,
+     "cache_creation_input_tokens": 2337,
+     "output_tokens": 316
+    }
    }
   },
   {
@@ -346,7 +358,13 @@
        ]
       }
      }
-    ]
+    ],
+    "usage": {
+     "input_tokens": 0,
+     "cache_read_input_tokens": 36128,
+     "cache_creation_input_tokens": 522,
+     "output_tokens": 73
+    }
    }
   },
   {
@@ -473,7 +491,13 @@
        "detail": "production"
       }
      }
-    ]
+    ],
+    "usage": {
+     "input_tokens": 0,
+     "cache_read_input_tokens": 36906,
+     "cache_creation_input_tokens": 1631,
+     "output_tokens": 117
+    }
    }
   },
   {
@@ -577,7 +601,13 @@
        "size": 768
       }
      }
-    ]
+    ],
+    "usage": {
+     "input_tokens": 0,
+     "cache_read_input_tokens": 38537,
+     "cache_creation_input_tokens": 2257,
+     "output_tokens": 152
+    }
    }
   },
   {
@@ -638,8 +668,10 @@
           "source": {
            "type": "base64",
            "media_type": "image/png",
-           "data": "sha256:e0564964d093d584",
-           "bytes": 16
+           "data": "sha256:94f759cdf5d84f3c",
+           "bytes": 170819,
+           "width": 768,
+           "height": 768
           }
          },
          {
@@ -651,8 +683,10 @@
           "source": {
            "type": "base64",
            "media_type": "image/png",
-           "data": "sha256:d773b4a22a85b189",
-           "bytes": 16
+           "data": "sha256:e62da5a24ec106c2",
+           "bytes": 132601,
+           "width": 768,
+           "height": 768
           }
          }
         ],
@@ -673,7 +707,13 @@
       "type": "text",
       "text": "Ready for your review.\n\n- **Changed by me:** the bezel wall is 0.7 mm (from 0.6), the canon's typical for a 6.4 mm stone and better for daily knocks. Finish stays polished all over.\n- **Your edit kept:** the band is 2.6 mm at the top, tapering to 2.2 mm at the base. That is within the canon's range, a little above the 2.4 mm it suggests for a 1 ct, so the band reads slightly stronger against the stone. Your call; I left it.\n- **Checks:** production detail evaluates with no kernel warnings and no canon findings. Size US 6, one 1.00 ct round (6.44 mm), set low in the bezel.\n- **Weight and cost:** 3.93 g of 18k yellow at production detail (the window's preview reads 4.02 g at its own detail), about $2.4k to make at placeholder rates, not a quote.\n- **Looked at:** three-quarter and side views: a smooth, low head with nothing to catch, and a clean join to the band.\n\nAccept it to finish the job, or tell me what to change."
      }
-    ]
+    ],
+    "usage": {
+     "input_tokens": 0,
+     "cache_read_input_tokens": 40794,
+     "cache_creation_input_tokens": 2004,
+     "output_tokens": 362
+    }
    }
   }
  ]

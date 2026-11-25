@@ -896,7 +896,10 @@ async function execute(host: RunHost, job: Job): Promise<BetaToolResultBlockPara
     }
     result = shapeResult({ toolUseId: id, output: run.value, images: run.images, notes: run.notes })
   } catch (err) {
-    if (host.signal.aborted) throw host.signal.reason
+    if (host.signal.aborted) {
+      await recordAppliedBeforeStop(host, job, started)
+      throw host.signal.reason
+    }
     isError = true
     const message =
       err instanceof AppError
@@ -928,6 +931,45 @@ async function execute(host: RunHost, job: Job): Promise<BetaToolResultBlockPara
     assetIds: assetIdsOf(value),
   })
   return result
+}
+
+/**
+ * The run was stopped (canceled, paused by a person's edit) while a call was still finishing, for
+ * example while the kernel evaluated a change the call had already committed. The change stays,
+ * so the call must not go back to the model as "Not run": its step is completed with what is
+ * known, and the stop goes on. A call that changed nothing is closed as not run, as before.
+ */
+async function recordAppliedBeforeStop(host: RunHost, job: Job, started: number): Promise<void> {
+  const { ctx, runId } = host
+  const id = job.call.id
+  const changes = await ctx.repo.changes.many({
+    where: and(eq(t.designChange.runId, runId), eq(t.designChange.toolCallId, id)),
+    orderBy: asc(t.designChange.seq),
+  })
+  if (!changes.length) return
+  const value = { applied: changes.map((c) => ({ changeId: c.id, label: c.label, seq: c.seq })) }
+  const result = shapeResult({
+    toolUseId: id,
+    output: value,
+    notes: [
+      'Applied. The run was stopped before the evaluation of this change came back, so read the piece again before relying on its numbers.',
+    ],
+  })
+  const changeIds = changes.map((c) => c.id)
+  await completeStep(ctx, runId, id, {
+    output: { value, result } satisfies ToolStepOutput,
+    isError: false,
+    ms: Date.now() - started,
+    changeIds,
+  })
+  host.emit({
+    type: 'tool.finished',
+    toolCallId: id,
+    name: job.def.command,
+    isError: false,
+    changeIds,
+    assetIds: [],
+  })
 }
 
 function assetIdsOf(value: unknown): string[] {

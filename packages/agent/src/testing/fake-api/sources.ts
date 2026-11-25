@@ -8,7 +8,14 @@
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describeMessages, align, type Recording, recordedMessages, remap, stripImages } from './recording'
+import {
+  align,
+  describeMessages,
+  type Recording,
+  recordedMessages,
+  remap,
+  stripImages,
+} from './recording'
 import type { FakeReply } from './reply'
 import type { ReplySource, SourceRequest } from './server'
 
@@ -42,9 +49,11 @@ export interface ReplayReport {
   /** Requests whose shape differed from the recording (message count, roles, block types). */
   structural: { n: number; problems: string[] }[]
   /** Text that differed once ids were paired. */
-  drift: { n: number; at: string; recorded: string; live: string }[]
+  drift: { n: number; at: string; recorded: string; live: string; after: string }[]
   /** Model, structured flag or frozen-prefix changes against the recording. */
   mismatches: { n: number; problem: string }[]
+  /** Recorded calls the client abandoned that the replay never made (see `next`). */
+  skipped: number[]
 }
 
 export interface ReplaySource extends ReplySource {
@@ -56,21 +65,37 @@ export interface ReplaySource extends ReplySource {
 export function replaySource(rec: Recording): ReplaySource {
   const expected = recordedMessages(rec)
   const ids = new Map<string, string>()
-  const report: ReplayReport = { served: 0, structural: [], drift: [], mismatches: [] }
+  const report: ReplayReport = { served: 0, structural: [], drift: [], mismatches: [], skipped: [] }
   let i = 0
   return {
     report,
     get remaining() {
-      return rec.exchanges.length - i
+      let left = 0
+      for (let k = i; k < rec.exchanges.length; k++) if (!rec.exchanges[k]!.aborted) left++
+      return left
     },
     async next(req) {
+      const live = Array.isArray(req.body.messages) ? req.body.messages : []
+      // A call the client abandoned when recorded may never be made in a replay (the client went
+      // away before sending it): skip it when the live request is already further on.
+      while (rec.exchanges[i]?.aborted && rec.exchanges[i]!.request.messageCount !== live.length) {
+        report.skipped.push(rec.exchanges[i]!.n)
+        i++
+      }
       const e = rec.exchanges[i]
-      if (!e) throw new Error(`replay ${rec.journey}: request ${req.n} is beyond the ${rec.exchanges.length} recorded`)
+      if (!e)
+        throw new Error(
+          `replay ${rec.journey}: request ${req.n} is beyond the ${rec.exchanges.length} recorded`,
+        )
       const want = expected[i]!
       i++
-      if (e.request.model !== req.model) report.mismatches.push({ n: req.n, problem: `model ${req.model}, recorded ${e.request.model}` })
-      if (e.request.structured !== req.structured) report.mismatches.push({ n: req.n, problem: 'structured flag differs' })
-      const live = Array.isArray(req.body.messages) ? req.body.messages : []
+      if (e.request.model !== req.model)
+        report.mismatches.push({
+          n: req.n,
+          problem: `model ${req.model}, recorded ${e.request.model}`,
+        })
+      if (e.request.structured !== req.structured)
+        report.mismatches.push({ n: req.n, problem: 'structured flag differs' })
       const a = align(want, live, ids)
       if (a.structural.length) report.structural.push({ n: req.n, problems: a.structural })
       for (const d of a.drift) report.drift.push({ n: req.n, ...d })
@@ -78,11 +103,23 @@ export function replaySource(rec: Recording): ReplaySource {
       if (e.aborted) {
         // The recorded client went away mid-call; wait for the live one to do the same.
         await new Promise<void>((resolve, reject) => {
-          const timer = setTimeout(() => reject(new Error(`replay ${rec.journey}: request ${req.n} was aborted when recorded, but not now`)), 120_000)
-          req.signal.addEventListener('abort', () => {
-            clearTimeout(timer)
-            resolve()
-          }, { once: true })
+          const timer = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  `replay ${rec.journey}: request ${req.n} was aborted when recorded, but not now`,
+                ),
+              ),
+            120_000,
+          )
+          req.signal.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(timer)
+              resolve()
+            },
+            { once: true },
+          )
         })
         throw new Error('the client went away (as recorded)')
       }
@@ -125,7 +162,12 @@ export function agentSource(opts: AgentSourceOptions): ReplySource {
         conversations.push(conv)
       }
       let from = 0
-      while (from < conv.messages.length && from < json.length && conv.messages[from] === json[from]) from++
+      while (
+        from < conv.messages.length &&
+        from < json.length &&
+        conv.messages[from] === json[from]
+      )
+        from++
       conv.messages = json
 
       // Images of the new messages, as files to look at.
@@ -136,7 +178,10 @@ export function agentSource(opts: AgentSourceOptions): ReplySource {
           if (!isObj(v)) return
           if (v.type === 'image' && isObj(v.source) && typeof v.source.data === 'string') {
             const ext = String(v.source.media_type).split('/')[1] ?? 'bin'
-            const file = join(opts.dir, `req-${tag}-img-${images.length + 1}.${ext === 'jpeg' ? 'jpg' : ext}`)
+            const file = join(
+              opts.dir,
+              `req-${tag}-img-${images.length + 1}.${ext === 'jpeg' ? 'jpg' : ext}`,
+            )
             writeFileSync(file, Buffer.from(v.source.data, 'base64'))
             images.push(file)
             return
@@ -145,22 +190,33 @@ export function agentSource(opts: AgentSourceOptions): ReplySource {
         }
         visit(m)
       })
-      const tools = Array.isArray(req.body.tools) ? (req.body.tools as Json[]).map((t) => t.name) : []
+      const tools = Array.isArray(req.body.tools)
+        ? (req.body.tools as Json[]).map((t) => t.name)
+        : []
       const format = isObj(req.body.output_config) ? req.body.output_config.format : undefined
       const view = [
-        `#${req.n} ${req.model} ${req.structured ? 'STRUCTURED OUTPUT (answer with one text block of JSON matching the schema in req-' + tag + '.json output_config.format)' : 'turn'}`,
+        `#${req.n} ${req.model} ${req.structured ? `STRUCTURED OUTPUT (answer with one text block of JSON matching the schema in req-${tag}.json output_config.format)` : 'turn'}`,
         `conversation: ${isNew ? 'NEW' : 'continues'}; ${messages.length} messages; ${tools.length} tools; showing from message ${from}`,
-        format ? `schema keys: ${Object.keys(isObj(format) && isObj(format.schema) && isObj(format.schema.properties) ? format.schema.properties : {}).join(', ')}` : '',
+        format
+          ? `schema keys: ${Object.keys(isObj(format) && isObj(format.schema) && isObj(format.schema.properties) ? format.schema.properties : {}).join(', ')}`
+          : '',
         images.length ? `images: ${images.join(', ')}` : '',
         '',
         describeMessages(messages, from),
       ]
         .filter((l) => l !== '')
         .join('\n')
-      writeFileSync(join(opts.dir, `req-${tag}.json`), JSON.stringify(stripImages(req.body), null, 1))
+      writeFileSync(
+        join(opts.dir, `req-${tag}.json`),
+        JSON.stringify(stripImages(req.body), null, 1),
+      )
       writeFileSync(
         join(opts.dir, `req-${tag}.meta.json`),
-        JSON.stringify({ n: req.n, model: req.model, betas: (req.headers['anthropic-beta'] ?? '').split(',').filter(Boolean) }),
+        JSON.stringify({
+          n: req.n,
+          model: req.model,
+          betas: (req.headers['anthropic-beta'] ?? '').split(',').filter(Boolean),
+        }),
       )
       writeFileSync(join(opts.dir, `req-${tag}.txt`), `${view}\n`)
 
@@ -168,7 +224,10 @@ export function agentSource(opts: AgentSourceOptions): ReplySource {
       const deadline = Date.now() + (opts.timeoutMs ?? 2 * 60 * 60 * 1000)
       for (;;) {
         if (req.signal.aborted) {
-          writeFileSync(join(opts.dir, `req-${tag}.aborted`), 'The client went away before the reply.\n')
+          writeFileSync(
+            join(opts.dir, `req-${tag}.aborted`),
+            'The client went away before the reply.\n',
+          )
           throw new Error('the client went away')
         }
         if (existsSync(reply)) {

@@ -9,6 +9,7 @@
  * Token counts are estimates (a quarter of the JSON bytes, images by their patches): exact enough
  * to see reads, writes and cost move, not the real tokenizer.
  */
+// biome-ignore-all lint/suspicious/useIterableCallbackReturn: push returns nothing worth keeping; the callbacks are statements
 import { createHash } from 'node:crypto'
 import { breakpointsOf, imageSize } from './rules'
 import { MIN_CACHEABLE_TOKENS } from './spec'
@@ -26,13 +27,33 @@ interface Segment {
 }
 
 function tokensOf(block: unknown): number {
-  if (isObj(block) && block.type === 'image' && isObj(block.source) && typeof block.source.data === 'string') {
-    const size = imageSize(Buffer.from(block.source.data, 'base64'), String(block.source.media_type))
+  // An image saved without its bytes (recordings keep its size): the same patches as the original.
+  if (
+    isObj(block) &&
+    block.type === 'image' &&
+    isObj(block.source) &&
+    typeof block.source.width === 'number' &&
+    typeof block.source.height === 'number'
+  )
+    return Math.min(4784, Math.ceil(block.source.width / 28) * Math.ceil(block.source.height / 28))
+  if (
+    isObj(block) &&
+    block.type === 'image' &&
+    isObj(block.source) &&
+    typeof block.source.data === 'string'
+  ) {
+    const size = imageSize(
+      Buffer.from(block.source.data, 'base64'),
+      String(block.source.media_type),
+    )
     if (size) return Math.min(4784, Math.ceil(size.w / 28) * Math.ceil(size.h / 28))
   }
   if (isObj(block) && block.type === 'tool_result' && Array.isArray(block.content)) {
     const { content, ...rest } = block
-    return Math.ceil(JSON.stringify(rest).length / 4) + content.reduce<number>((n, b) => n + tokensOf(b), 0)
+    return (
+      Math.ceil(JSON.stringify(rest).length / 4) +
+      content.reduce<number>((n, b) => n + tokensOf(b), 0)
+    )
   }
   return Math.ceil(JSON.stringify(block).length / 4)
 }
@@ -52,13 +73,20 @@ export function segmentsOf(body: Json): Segment[] {
   }
   ;(Array.isArray(body.tools) ? body.tools : []).forEach((t, i) => push(`tools.${i}`, t, 'tool'))
   if (typeof body.system === 'string') push('system.0', body.system, 'system')
-  else (Array.isArray(body.system) ? body.system : []).forEach((b, i) => push(`system.${i}`, b, 'system'))
+  else
+    (Array.isArray(body.system) ? body.system : []).forEach((b, i) =>
+      push(`system.${i}`, b, 'system'),
+    )
   ;(Array.isArray(body.messages) ? body.messages : []).forEach((m, i) => {
     if (!isObj(m)) return
     const content = typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content
     if (!Array.isArray(content)) return
     content.forEach((b, j) =>
-      push(`messages.${i}.content.${j}`, { role: m.role, ...(b as Json) }, isObj(b) ? String(b.type) : ''),
+      push(
+        `messages.${i}.content.${j}`,
+        { role: m.role, ...(b as Json) },
+        isObj(b) ? String(b.type) : '',
+      ),
     )
   })
   return out

@@ -17,6 +17,7 @@ import {
   type FakeApi,
   type FakeReply,
   type ReplyBlock,
+  type ReplySource,
   startFakeApi,
 } from '@pave/agent/testing/fake-api'
 import type { CreateAppOptions } from '../app'
@@ -64,9 +65,12 @@ export function replyOf(turn: ScriptedTurn): FakeReply {
     reply.fault = {
       type: 'http',
       status: turn.error.status as 400,
-      message: (turn.error.error as { error?: { message?: string } } | undefined)?.error?.message ?? turn.error.message,
+      message:
+        (turn.error.error as { error?: { message?: string } } | undefined)?.error?.message ??
+        turn.error.message,
     }
-  else if (turn.error) throw new Error('TestModel: over the fake API a turn can fail only with an SDK error')
+  else if (turn.error)
+    throw new Error('TestModel: over the fake API a turn can fail only with an SDK error')
   if (turn.failAfterContent) reply.fault = { type: 'drop', afterBlocks: content.length }
   return reply
 }
@@ -93,20 +97,29 @@ export class TestModel {
     return this
   }
 
-  /** Starts the fake API (no-op for the direct transport). */
-  async start(): Promise<this> {
+  /**
+   * Starts the fake API (no-op for the direct transport). `source` replaces the queue of turns:
+   * a recording replayed through the real loop, for example.
+   */
+  async start(opts: { source?: ReplySource } = {}): Promise<this> {
     if (this.transport !== 'fake' || this.api) return this
     this.api = await startFakeApi({
       // A refused request fails the run; say why where the test output shows it.
       onExchange: (e) => {
-        if (e.violation) console.error(`fake Claude API refused a request (${e.violation.rule}): ${e.violation.message}`)
+        if (e.violation)
+          console.error(
+            `fake Claude API refused a request (${e.violation.rule}): ${e.violation.message}`,
+          )
         if (e.sourceError) console.error(`fake Claude API could not serve a turn: ${e.sourceError}`)
       },
-      source: {
+      source: opts.source ?? {
         next: async (req) => {
           const run = this.#runs.get(req.headers[RUN_HEADER] ?? '')
           const n = ++this.#n
-          if (process.env.PAVE_TEST_DEBUG) console.log(`fake request ${n} from ${req.headers[RUN_HEADER]} (${this.queue.length} queued)`)
+          if (process.env.PAVE_TEST_DEBUG)
+            console.log(
+              `fake request ${n} from ${req.headers[RUN_HEADER]} (${this.queue.length} queued)`,
+            )
           const next = this.queue.shift()
           const turn =
             typeof next === 'function'
@@ -219,14 +232,16 @@ export async function assistantServer(
   opts: {
     env?: Record<string, string | undefined>
     auth?: 'local' | 'accounts'
-    check?: (key: string) => KeyCheck
+    check?: (key: string) => KeyCheck | Promise<KeyCheck>
+    /** Where the fake API's answers come from (default: the test model's queue of turns). */
+    source?: ReplySource
     /** Also run the real engines (kernel workers): captures and fits that need geometry. */
     engines?: boolean
     /** More engines to register (search, capture, …). */
     services?: Partial<Services>
   } & Pick<CreateAppOptions, 'config'> = {},
 ): Promise<AssistantServer> {
-  const model = await new TestModel().start()
+  const model = await new TestModel().start({ source: opts.source })
   const checks: string[] = []
   let parts: AssistantParts | null = null
   const server = await testServer({
@@ -245,7 +260,12 @@ export async function assistantServer(
         model: model.factory,
         checkKey: async (key) => {
           checks.push(key)
-          return opts.check?.(key) ?? { ok: true, models: ['claude-opus-5-5', 'claude-sonnet-5-5'] }
+          return (
+            (await opts.check?.(key)) ?? {
+              ok: true,
+              models: ['claude-opus-5-5', 'claude-sonnet-5-5'],
+            }
+          )
         },
       })
       if (!opts.engines) return { ...opts.services, ...parts.services }

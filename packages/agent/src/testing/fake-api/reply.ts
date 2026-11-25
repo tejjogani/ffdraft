@@ -10,7 +10,13 @@ export type ReplyBlock =
   | { type: 'thinking'; thinking: string }
   | { type: 'tool_use'; name: string; input: unknown; id?: string }
 
-export type RefusalCategory = 'cyber' | 'bio' | 'frontier_llm' | 'reasoning_extraction' | 'general_harms' | null
+export type RefusalCategory =
+  | 'cyber'
+  | 'bio'
+  | 'frontier_llm'
+  | 'reasoning_extraction'
+  | 'general_harms'
+  | null
 
 export type Fault =
   /**

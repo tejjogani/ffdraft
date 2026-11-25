@@ -350,6 +350,58 @@ describe('stopping a run', () => {
     expect(await shape(thread.id)).toEqual(['user:text', 'system:text'])
   })
 
+  it('after a call changed the design: the model is told the change was applied, not that it did not run', async () => {
+    // Found by replaying a recorded CAD job: a person's edit paused the job while the kernel was
+    // evaluating the assistant's just-committed change, and the call went back as "Not run".
+    const piece = await api.call('pieces.create', {
+      templateId: 'solitaire',
+      title: 'Stopped mid-call',
+    })
+    const registry = s.server.runtime.services
+    const real = registry.isConfigured('geometry') ? registry.get('geometry') : null
+    let evaluating!: () => void
+    const started = new Promise<void>((r) => (evaluating = r))
+    registry.register('geometry', {
+      capabilities: {},
+      // The evaluation that follows the commit only ends when the run is stopped.
+      evaluate: (_d: unknown, opts: { signal?: AbortSignal }) =>
+        new Promise((_, reject) => {
+          evaluating()
+          opts.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
+        }),
+    } as never)
+    try {
+      model.push({
+        content: [
+          tool(
+            'design_apply',
+            {
+              pieceId: piece.id,
+              label: 'Wider band',
+              ops: [{ t: 'update', id: 'band', patch: { widthTop: 2.4 } }],
+            },
+            'toolu_mid',
+          ),
+        ],
+      })
+      const { run, thread } = await send('Widen the band', {
+        context: { pieceId: piece.id, selection: [] },
+      })
+      await started
+      expect((await api.call('pieces.get', { id: piece.id })).version).toBe(piece.version + 1)
+      await api.call('runs.cancel', { runId: run.id })
+      await settled(s.parts, run.id)
+      const { messages } = await api.call('threads.get', { id: thread.id })
+      const answer = JSON.stringify(messages.at(-1)!.content)
+      expect(answer).toContain('toolu_mid')
+      expect(answer).not.toContain('Not run')
+      expect(answer).toMatch(/applied/i)
+    } finally {
+      if (real) registry.register('geometry', real)
+      else registry.unregister('geometry')
+    }
+  })
+
   it('while a client tool runs: the call is closed as not run', async () => {
     const c = await ctx()
     const piece = await api.call('pieces.create', { title: 'Look at me' })

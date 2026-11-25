@@ -10,6 +10,7 @@
  * request_id}`) and status. The fake is deliberately at least as strict as the docs: where two
  * documents differ, the stricter reading is enforced and the rule says so.
  */
+// biome-ignore-all lint/suspicious/useIterableCallbackReturn: each check reports through c.fail and returns early; nothing reads the callbacks' values
 import { createHash } from 'node:crypto'
 import {
   EFFORTS,
@@ -118,7 +119,8 @@ export const RULES: readonly RuleInfo[] = [
   {
     id: 'compaction.beta',
     doc: `${SKILL}SKILL.md § Compaction (requires compact-2026-01-12); § Context Editing`,
-    summary: 'compact_20260112 needs compact-2026-01-12; clear_* edits need context-management-2025-06-27.',
+    summary:
+      'compact_20260112 needs compact-2026-01-12; clear_* edits need context-management-2025-06-27.',
   },
   {
     id: 'cache.breakpoints',
@@ -135,7 +137,8 @@ export const RULES: readonly RuleInfo[] = [
   {
     id: 'tools.eager_input_streaming',
     doc: `${SKILL}shared/tool-use-concepts.md § Eager input streaming; ${LIVE}agents-and-tools/tool-use/tool-reference (eager_input_streaming: user-defined tools only)`,
-    summary: 'eager_input_streaming is a boolean on the tool definition itself, on user-defined tools only.',
+    summary:
+      'eager_input_streaming is a boolean on the tool definition itself, on user-defined tools only.',
   },
   {
     id: 'strict.schema',
@@ -312,7 +315,10 @@ export function validateMessages(req: IncomingRequest, opts: ValidateOptions): V
   // tool_choice
   const tc = body.tool_choice
   if (isObj(tc) && (tc.type === 'any' || tc.type === 'tool') && model !== 'claude-haiku-5-5')
-    c.fail('tool_choice.forced', 'tool_choice: type "tool" and "any" are not supported for this model.')
+    c.fail(
+      'tool_choice.forced',
+      'tool_choice: type "tool" and "any" are not supported for this model.',
+    )
 
   checkFallbacks(c, model, body, betas)
 
@@ -321,13 +327,19 @@ export function validateMessages(req: IncomingRequest, opts: ValidateOptions): V
   if (isObj(cm) && Array.isArray(cm.edits))
     for (const e of cm.edits as Json[]) {
       if (e.type === 'compact_20260112' && !betas.has('compact-2026-01-12'))
-        c.fail('compaction.beta', 'context_management.edits: compact_20260112 requires the compact-2026-01-12 beta')
+        c.fail(
+          'compaction.beta',
+          'context_management.edits: compact_20260112 requires the compact-2026-01-12 beta',
+        )
       if (
         typeof e.type === 'string' &&
         e.type.startsWith('clear_') &&
         !betas.has('context-management-2025-06-27')
       )
-        c.fail('compaction.beta', `context_management.edits: ${e.type} requires the context-management-2025-06-27 beta`)
+        c.fail(
+          'compaction.beta',
+          `context_management.edits: ${e.type} requires the context-management-2025-06-27 beta`,
+        )
     }
 
   const tools = Array.isArray(body.tools) ? (body.tools as unknown[]) : []
@@ -355,7 +367,7 @@ function checkThinking(
   thinking: unknown,
   effort: string,
   betas: Set<string>,
-): void {
+) {
   if (thinking === undefined) return
   if (!isObj(thinking)) return c.fail('thinking.shape', 'thinking: must be an object')
   const type = thinking.type
@@ -366,16 +378,28 @@ function checkThinking(
     )
   if (type === 'disabled') {
     if (model === 'claude-haiku-5-5' && (effort === 'xhigh' || effort === 'max'))
-      return c.fail('thinking.shape', `output_config.effort '${effort}' is not supported when thinking is disabled on this model.`)
+      return c.fail(
+        'thinking.shape',
+        `output_config.effort '${effort}' is not supported when thinking is disabled on this model.`,
+      )
     if (model === 'claude-sonnet-5-5')
-      return c.fail('thinking.shape', 'To turn thinking off on this model, send "thinking": {"type": "between_tools"} instead of {"type": "disabled"}.')
+      return c.fail(
+        'thinking.shape',
+        'To turn thinking off on this model, send "thinking": {"type": "between_tools"} instead of {"type": "disabled"}.',
+      )
     if (model !== 'claude-haiku-5-5')
       return c.fail('thinking.shape', `"thinking.type.disabled" is not supported for this model.`)
   } else if (type === 'between_tools') {
     if (model !== 'claude-sonnet-5-5')
-      return c.fail('thinking.shape', '"thinking.type.between_tools" is not supported for this model.')
+      return c.fail(
+        'thinking.shape',
+        '"thinking.type.between_tools" is not supported for this model.',
+      )
     if (effort === 'xhigh' || effort === 'max')
-      return c.fail('thinking.shape', `output_config.effort '${effort}' is not supported when thinking is disabled on this model.`)
+      return c.fail(
+        'thinking.shape',
+        `output_config.effort '${effort}' is not supported when thinking is disabled on this model.`,
+      )
     const extra = Object.keys(thinking).filter((k) => k !== 'type')
     if (extra.length)
       return c.fail('thinking.shape', `thinking.${extra[0]}: not allowed with between_tools`)
@@ -388,7 +412,10 @@ function checkThinking(
   if (thinking.display !== undefined) {
     if (thinking.display === 'updates') {
       if (!betas.has('thinking-display-updates-2026-08-18'))
-        c.fail('thinking.display', 'thinking.display "updates" requires the thinking-display-updates-2026-08-18 beta')
+        c.fail(
+          'thinking.display',
+          'thinking.display "updates" requires the thinking-display-updates-2026-08-18 beta',
+        )
     } else if (thinking.display !== 'summarized' && thinking.display !== 'omitted')
       c.fail('thinking.display', `thinking.display: unknown value ${String(thinking.display)}`)
   }
@@ -396,13 +423,19 @@ function checkThinking(
     if (!betas.has('thinking-binding-controls-2026-08-01'))
       c.fail('thinking.block_binding', 'thinking.block_binding: Extra inputs are not permitted')
     if (type !== 'adaptive')
-      c.fail('thinking.block_binding', 'thinking.block_binding is accepted only with adaptive thinking')
+      c.fail(
+        'thinking.block_binding',
+        'thinking.block_binding is accepted only with adaptive thinking',
+      )
     const bb = thinking.block_binding
     if (
       !isObj(bb) ||
       (bb.prefix_mismatch_behavior !== 'error' && bb.prefix_mismatch_behavior !== 'drop_block')
     )
-      c.fail('thinking.block_binding', 'thinking.block_binding.prefix_mismatch_behavior: must be "error" or "drop_block"')
+      c.fail(
+        'thinking.block_binding',
+        'thinking.block_binding.prefix_mismatch_behavior: must be "error" or "drop_block"',
+      )
   }
 }
 
@@ -414,22 +447,31 @@ const FALLBACK_TARGETS: Record<FakeModel, readonly string[]> = {
   'claude-haiku-5-5': [],
 }
 
-function checkFallbacks(c: Check, model: FakeModel, body: Json, betas: Set<string>): void {
+function checkFallbacks(c: Check, model: FakeModel, body: Json, betas: Set<string>) {
   if (body.fallbacks === undefined) return
   const f = body.fallbacks
   if (f === 'default') {
     if (!betas.has('server-side-fallback-2026-07-01'))
-      c.fail('fallbacks.shape', 'fallbacks: "default" requires the server-side-fallback-2026-07-01 beta')
+      c.fail(
+        'fallbacks.shape',
+        'fallbacks: "default" requires the server-side-fallback-2026-07-01 beta',
+      )
     return
   }
   if (!Array.isArray(f)) return c.fail('fallbacks.shape', 'fallbacks: must be "default" or a list')
-  if (!betas.has('server-side-fallback-2026-07-01') && !betas.has('server-side-fallback-2026-06-01'))
+  if (
+    !betas.has('server-side-fallback-2026-07-01') &&
+    !betas.has('server-side-fallback-2026-06-01')
+  )
     c.fail('fallbacks.shape', 'fallbacks requires a server-side-fallback beta')
   if (model === 'claude-haiku-5-5')
     return c.fail('fallbacks.shape', 'fallbacks: this model has no server-side fallback')
   for (const e of f as unknown[])
     if (!isObj(e) || !FALLBACK_TARGETS[model].includes(e.model as string))
-      c.fail('fallbacks.shape', `fallbacks: ${JSON.stringify(e)} is not a permitted fallback for ${model}`)
+      c.fail(
+        'fallbacks.shape',
+        `fallbacks: ${JSON.stringify(e)} is not a permitted fallback for ${model}`,
+      )
 }
 
 const TOOL_KEYS = new Set([
@@ -455,23 +497,43 @@ function checkTools(c: Check, tools: unknown[]): void {
     const userDefined = t.type === undefined || t.type === 'custom'
     if (!userDefined) {
       if ('eager_input_streaming' in t)
-        c.fail('tools.eager_input_streaming', `${path}.eager_input_streaming: not valid on ${String(t.type)}`, 400, path)
+        c.fail(
+          'tools.eager_input_streaming',
+          `${path}.eager_input_streaming: not valid on ${String(t.type)}`,
+          400,
+          path,
+        )
       return
     }
     for (const k of Object.keys(t))
       if (!TOOL_KEYS.has(k))
         c.fail('tools.definition', `${path}.${k}: Extra inputs are not permitted`, 400, path)
     if (typeof t.name !== 'string' || !TOOL_NAME.test(t.name))
-      c.fail('tools.definition', `${path}.name: String should match pattern '^[a-zA-Z0-9_-]{1,128}$'`, 400, path)
+      c.fail(
+        'tools.definition',
+        `${path}.name: String should match pattern '^[a-zA-Z0-9_-]{1,128}$'`,
+        400,
+        path,
+      )
     else if (names.has(t.name))
       c.fail('tools.definition', `${path}.name: tool names must be unique (${t.name})`, 400, path)
     else names.add(t.name)
     if (t.description !== undefined && typeof t.description !== 'string')
       c.fail('tools.definition', `${path}.description: must be a string`, 400, path)
     if (!isObj(t.input_schema) || t.input_schema.type !== 'object')
-      c.fail('tools.definition', `${path}.input_schema: the root must be a JSON Schema of type "object"`, 400, path)
+      c.fail(
+        'tools.definition',
+        `${path}.input_schema: the root must be a JSON Schema of type "object"`,
+        400,
+        path,
+      )
     if ('eager_input_streaming' in t && typeof t.eager_input_streaming !== 'boolean')
-      c.fail('tools.eager_input_streaming', `${path}.eager_input_streaming: must be a boolean`, 400, path)
+      c.fail(
+        'tools.eager_input_streaming',
+        `${path}.eager_input_streaming: must be a boolean`,
+        400,
+        path,
+      )
     if ('strict' in t && typeof t.strict !== 'boolean')
       c.fail('tools.definition', `${path}.strict: must be a boolean`, 400, path)
     if (t.strict === true && isObj(t.input_schema))
@@ -519,14 +581,22 @@ const UNSUPPORTED_KEYWORDS = [
 /** The structured-outputs schema subset (strict tools and output formats share it). */
 function checkSchemaSubset(c: Check, schema: unknown, path: string): void {
   const visit = (s: unknown, p: string): void => {
-    if (Array.isArray(s)) return s.forEach((x, i) => visit(x, `${p}.${i}`))
+    if (Array.isArray(s)) {
+      for (const [i, x] of s.entries()) visit(x, `${p}.${i}`)
+      return
+    }
     if (!isObj(s)) return
     for (const k of UNSUPPORTED_KEYWORDS)
       if (k in s) c.fail('strict.schema', `${p}: '${k}' is not supported in strict schemas`, 400, p)
     if ('$ref' in s && typeof s.$ref === 'string' && !s.$ref.startsWith('#'))
       c.fail('strict.schema', `${p}: external $ref is not supported`, 400, p)
     if ('minItems' in s && s.minItems !== 0 && s.minItems !== 1)
-      c.fail('strict.schema', `${p}: minItems ${String(s.minItems)} is not supported (only 0 or 1)`, 400, p)
+      c.fail(
+        'strict.schema',
+        `${p}: minItems ${String(s.minItems)} is not supported (only 0 or 1)`,
+        400,
+        p,
+      )
     const objectLike = s.type === 'object' || (Array.isArray(s.type) && s.type.includes('object'))
     if (objectLike && s.additionalProperties !== false)
       c.fail('strict.schema', `${p}: additionalProperties must be set to false for objects`, 400, p)
@@ -539,7 +609,12 @@ function checkSchemaSubset(c: Check, schema: unknown, path: string): void {
     if (typeof s.pattern === 'string' && /\\[1-9bB]|\(\?[=!<]/.test(s.pattern))
       c.fail('strict.schema', `${p}: the pattern uses an unsupported regex feature`, 400, p)
     if (Array.isArray(s.enum) && s.enum.some((v) => typeof v === 'object' && v !== null))
-      c.fail('strict.schema', `${p}: enum values must be strings, numbers, booleans or null`, 400, p)
+      c.fail(
+        'strict.schema',
+        `${p}: enum values must be strings, numbers, booleans or null`,
+        400,
+        p,
+      )
     for (const [k, v] of Object.entries(s)) {
       if (k === 'enum' || k === 'const' || k === 'required' || k === 'default') continue
       if (k === 'properties' && isObj(v)) {
@@ -555,7 +630,10 @@ function countParams(schema: unknown): { optional: number; union: number } {
   let optional = 0
   let union = 0
   const visit = (s: unknown): void => {
-    if (Array.isArray(s)) return s.forEach(visit)
+    if (Array.isArray(s)) {
+      for (const x of s) visit(x)
+      return
+    }
     if (!isObj(s)) return
     if (isObj(s.properties)) {
       const required = new Set(Array.isArray(s.required) ? (s.required as string[]) : [])
@@ -565,7 +643,13 @@ function countParams(schema: unknown): { optional: number; union: number } {
       }
     }
     for (const [k, v] of Object.entries(s))
-      if (k !== 'enum' && k !== 'const' && k !== 'required' && k !== 'default' && typeof v === 'object')
+      if (
+        k !== 'enum' &&
+        k !== 'const' &&
+        k !== 'required' &&
+        k !== 'default' &&
+        typeof v === 'object'
+      )
         visit(v)
   }
   visit(schema)
@@ -586,7 +670,10 @@ function checkStrictLimits(c: Check, tools: unknown[], format: Json | null): voi
   if (optional > 24)
     c.fail('strict.limits', `Schemas contain too many optional parameters (${optional}, limit 24)`)
   if (union > 16)
-    c.fail('strict.limits', `Schemas contain too many parameters with union types (${union}, limit 16)`)
+    c.fail(
+      'strict.limits',
+      `Schemas contain too many parameters with union types (${union}, limit 16)`,
+    )
 }
 
 /** Every explicit cache_control in the request, in render order (tools → system → messages). */
@@ -611,10 +698,15 @@ export function breakpointsOf(body: Json, tools: unknown[]): { path: string; ttl
 
 function checkCache(c: Check, body: Json, tools: unknown[]): void {
   const explicit = breakpointsOf(body, tools)
-  const auto = isObj(body.cache_control) ? [(body.cache_control.ttl as string | undefined) ?? '5m'] : []
+  const auto = isObj(body.cache_control)
+    ? [(body.cache_control.ttl as string | undefined) ?? '5m']
+    : []
   const total = explicit.length + auto.length
   if (total > 4)
-    c.fail('cache.breakpoints', `A maximum of 4 blocks with cache_control may be provided. Found ${total}.`)
+    c.fail(
+      'cache.breakpoints',
+      `A maximum of 4 blocks with cache_control may be provided. Found ${total}.`,
+    )
   const ttls = [...explicit.map((b) => b.ttl), ...auto]
   let seenShort = false
   for (const t of ttls) {
@@ -647,9 +739,20 @@ function checkMessages(c: Check, messages: unknown[]): void {
       return c.fail('messages.roles', `${path}.role: must be user, assistant or system`, 400, path)
     const content = typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content
     if (!Array.isArray(content))
-      return c.fail('messages.content_types', `${path}.content: must be a string or a list`, 400, path)
+      return c.fail(
+        'messages.content_types',
+        `${path}.content: must be a string or a list`,
+        400,
+        path,
+      )
     if (m.role === 'system') {
-      if (i === 0) c.fail('messages.system_placement', `${path}: a system message cannot be messages[0]`, 400, path)
+      if (i === 0)
+        c.fail(
+          'messages.system_placement',
+          `${path}: a system message cannot be messages[0]`,
+          400,
+          path,
+        )
       const prev = messages[i - 1]
       const prevServerTool =
         isObj(prev) &&
@@ -673,7 +776,12 @@ function checkMessages(c: Check, messages: unknown[]): void {
         )
       content.forEach((b, j) => {
         if (!isObj(b) || b.type !== 'text')
-          c.fail('messages.system_placement', `${path}.content.${j}: system messages are text only`, 400, path)
+          c.fail(
+            'messages.system_placement',
+            `${path}.content.${j}: system messages are text only`,
+            400,
+            path,
+          )
       })
       return
     }
@@ -681,7 +789,12 @@ function checkMessages(c: Check, messages: unknown[]): void {
     content.forEach((b, j) => {
       const bp = `${path}.content.${j}`
       if (!isObj(b) || typeof b.type !== 'string' || !allowed.has(b.type))
-        return c.fail('messages.content_types', `${bp}: block type ${isObj(b) ? String(b.type) : typeof b} is not allowed in a ${String(m.role)} message`, 400, bp)
+        return c.fail(
+          'messages.content_types',
+          `${bp}: block type ${isObj(b) ? String(b.type) : typeof b} is not allowed in a ${String(m.role)} message`,
+          400,
+          bp,
+        )
       if (b.type === 'text' && typeof b.text !== 'string')
         c.fail('messages.content_types', `${bp}.text: must be a string`, 400, bp)
       if (b.type === 'text' && b.text === '')
@@ -689,29 +802,49 @@ function checkMessages(c: Check, messages: unknown[]): void {
       if (b.type === 'tool_result' && Array.isArray(b.content))
         b.content.forEach((x, k) => {
           if (!isObj(x) || !RESULT_BLOCKS.has(x.type as string))
-            c.fail('messages.content_types', `${bp}.content.${k}: not allowed in a tool_result`, 400, bp)
+            c.fail(
+              'messages.content_types',
+              `${bp}.content.${k}: not allowed in a tool_result`,
+              400,
+              bp,
+            )
           if (isObj(x) && x.type === 'text' && x.text === '')
-            c.fail('messages.content_types', `${bp}.content.${k}: text content blocks must be non-empty`, 400, bp)
+            c.fail(
+              'messages.content_types',
+              `${bp}.content.${k}: text content blocks must be non-empty`,
+              400,
+              bp,
+            )
         })
     })
   })
 
   // The first message must be from the user.
   if (roleOf(messages[0]) !== 'user')
-    c.fail('messages.roles', `messages.0: the first message must use the "user" role`, 400, 'messages.0')
+    c.fail(
+      'messages.roles',
+      `messages.0: the first message must use the "user" role`,
+      400,
+      'messages.0',
+    )
 
   // Prefill: the last turn (system messages aside) must not be the assistant's.
   let last = messages.length - 1
   while (last >= 0 && roleOf(messages[last]) === 'system') last--
   if (last >= 0 && roleOf(messages[last]) === 'assistant')
-    c.fail('prefill.removed', 'This model does not support assistant message prefill. The conversation must end with a user message.')
+    c.fail(
+      'prefill.removed',
+      'This model does not support assistant message prefill. The conversation must end with a user message.',
+    )
 
   // Tool pairing.
   const answered = new Set<string>()
   messages.forEach((m, i) => {
     if (!isObj(m) || !Array.isArray(m.content)) return
     if (m.role === 'assistant') {
-      const ids = (m.content as Json[]).filter((b) => b?.type === 'tool_use').map((b) => b.id as string)
+      const ids = (m.content as Json[])
+        .filter((b) => b?.type === 'tool_use')
+        .map((b) => b.id as string)
       if (!ids.length) return
       const next = messages[i + 1]
       const path = `messages.${i + 1}`
@@ -727,7 +860,9 @@ function checkMessages(c: Check, messages: unknown[]): void {
         return
       }
       const blocks = next.content as Json[]
-      const results = blocks.filter((b) => b?.type === 'tool_result').map((b) => b.tool_use_id as string)
+      const results = blocks
+        .filter((b) => b?.type === 'tool_result')
+        .map((b) => b.tool_use_id as string)
       const missing = ids.filter((id) => !results.includes(id))
       if (missing.length)
         c.fail(
@@ -739,24 +874,46 @@ function checkMessages(c: Check, messages: unknown[]): void {
       const firstOther = blocks.findIndex((b) => b?.type !== 'tool_result')
       const lastResult = blocks.map((b) => b?.type).lastIndexOf('tool_result')
       if (firstOther !== -1 && firstOther < lastResult)
-        c.fail('messages.tool_pairing', `${path}: tool_result blocks must come first in the content, before any text`, 400, path)
+        c.fail(
+          'messages.tool_pairing',
+          `${path}: tool_result blocks must come first in the content, before any text`,
+          400,
+          path,
+        )
       for (const id of results) {
         if (!ids.includes(id))
-          c.fail('messages.tool_pairing', `${path}: unexpected \`tool_use_id\` found in \`tool_result\` blocks: ${id}. Each \`tool_result\` block must have a corresponding \`tool_use\` block in the previous message.`, 400, path)
+          c.fail(
+            'messages.tool_pairing',
+            `${path}: unexpected \`tool_use_id\` found in \`tool_result\` blocks: ${id}. Each \`tool_result\` block must have a corresponding \`tool_use\` block in the previous message.`,
+            400,
+            path,
+          )
         if (answered.has(id))
-          c.fail('messages.tool_pairing', `${path}: tool_use_id ${id} was answered twice`, 400, path)
+          c.fail(
+            'messages.tool_pairing',
+            `${path}: tool_use_id ${id} was answered twice`,
+            400,
+            path,
+          )
         answered.add(id)
       }
     } else if (m.role === 'user') {
       const prev = messages[i - 1]
       const prevIds = new Set(
         isObj(prev) && prev.role === 'assistant' && Array.isArray(prev.content)
-          ? (prev.content as Json[]).filter((b) => b?.type === 'tool_use').map((b) => b.id as string)
+          ? (prev.content as Json[])
+              .filter((b) => b?.type === 'tool_use')
+              .map((b) => b.id as string)
           : [],
       )
       for (const b of m.content as Json[])
         if (b?.type === 'tool_result' && !prevIds.has(b.tool_use_id as string))
-          c.fail('messages.tool_pairing', `messages.${i}: unexpected \`tool_use_id\` found in \`tool_result\` blocks: ${String(b.tool_use_id)}. Each \`tool_result\` block must have a corresponding \`tool_use\` block in the previous message.`, 400, `messages.${i}`)
+          c.fail(
+            'messages.tool_pairing',
+            `messages.${i}: unexpected \`tool_use_id\` found in \`tool_result\` blocks: ${String(b.tool_use_id)}. Each \`tool_result\` block must have a corresponding \`tool_use\` block in the previous message.`,
+            400,
+            `messages.${i}`,
+          )
     }
   })
 }
@@ -770,13 +927,13 @@ export function imageSize(buf: Buffer, mediaType: string): { w: number; h: numbe
       return { w: buf.readUInt16LE(6), h: buf.readUInt16LE(8) }
     if (mediaType === 'image/webp' && buf.toString('ascii', 8, 12) === 'WEBP') {
       const chunk = buf.toString('ascii', 12, 16)
-      if (chunk === 'VP8X')
-        return { w: 1 + buf.readUIntLE(24, 3), h: 1 + buf.readUIntLE(27, 3) }
+      if (chunk === 'VP8X') return { w: 1 + buf.readUIntLE(24, 3), h: 1 + buf.readUIntLE(27, 3) }
       if (chunk === 'VP8L') {
         const b = buf.readUInt32LE(21)
         return { w: (b & 0x3fff) + 1, h: ((b >> 14) & 0x3fff) + 1 }
       }
-      if (chunk === 'VP8 ') return { w: buf.readUInt16LE(26) & 0x3fff, h: buf.readUInt16LE(28) & 0x3fff }
+      if (chunk === 'VP8 ')
+        return { w: buf.readUInt16LE(26) & 0x3fff, h: buf.readUInt16LE(28) & 0x3fff }
     }
     if (mediaType === 'image/jpeg' && buf[0] === 0xff && buf[1] === 0xd8) {
       let i = 2
@@ -784,7 +941,13 @@ export function imageSize(buf: Buffer, mediaType: string): { w: number; h: numbe
         if (buf[i] !== 0xff) return null
         const marker = buf[i + 1]!
         const len = buf.readUInt16BE(i + 2)
-        if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc)
+        if (
+          marker >= 0xc0 &&
+          marker <= 0xcf &&
+          marker !== 0xc4 &&
+          marker !== 0xc8 &&
+          marker !== 0xcc
+        )
           return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) }
         i += 2 + len
       }
@@ -816,7 +979,10 @@ export function imagesOf(messages: unknown[]): { path: string; block: Json }[] {
 function checkImages(c: Check, messages: unknown[], _system: unknown): void {
   const images = imagesOf(messages)
   if (images.length > IMAGE_LIMITS.maxPerRequest)
-    c.fail('images.limits', `Too many images: ${images.length} (the limit is ${IMAGE_LIMITS.maxPerRequest})`)
+    c.fail(
+      'images.limits',
+      `Too many images: ${images.length} (the limit is ${IMAGE_LIMITS.maxPerRequest})`,
+    )
   const many = images.length > IMAGE_LIMITS.manyImagesThreshold
   for (const { path, block } of images) {
     const src = block.source
@@ -826,7 +992,12 @@ function checkImages(c: Check, messages: unknown[], _system: unknown): void {
     }
     if (src.type !== 'base64') continue // url and file sources are fetched by the API
     if (!IMAGE_LIMITS.mediaTypes.includes(src.media_type as string)) {
-      c.fail('images.limits', `${path}.source.media_type: Input should be ${IMAGE_LIMITS.mediaTypes.join(', ')}`, 400, path)
+      c.fail(
+        'images.limits',
+        `${path}.source.media_type: Input should be ${IMAGE_LIMITS.mediaTypes.join(', ')}`,
+        400,
+        path,
+      )
       continue
     }
     const data = src.data
@@ -835,19 +1006,39 @@ function checkImages(c: Check, messages: unknown[], _system: unknown): void {
       continue
     }
     if (data.length > IMAGE_LIMITS.maxBase64Bytes) {
-      c.fail('images.limits', `${path}: image exceeds 10 MB maximum: ${data.length} bytes`, 400, path)
+      c.fail(
+        'images.limits',
+        `${path}: image exceeds 10 MB maximum: ${data.length} bytes`,
+        400,
+        path,
+      )
       continue
     }
     const size = imageSize(Buffer.from(data, 'base64'), src.media_type as string)
     if (!size) {
-      c.fail('images.limits', `${path}: Could not process image (the data is not a ${String(src.media_type)})`, 400, path)
+      c.fail(
+        'images.limits',
+        `${path}: Could not process image (the data is not a ${String(src.media_type)})`,
+        400,
+        path,
+      )
       continue
     }
     const side = Math.max(size.w, size.h)
     if (side > IMAGE_LIMITS.maxSide)
-      c.fail('images.limits', `${path}: image dimensions exceed max allowed size: ${IMAGE_LIMITS.maxSide} pixels`, 400, path)
+      c.fail(
+        'images.limits',
+        `${path}: image dimensions exceed max allowed size: ${IMAGE_LIMITS.maxSide} pixels`,
+        400,
+        path,
+      )
     else if (many && side > IMAGE_LIMITS.manyImagesSide)
-      c.fail('images.limits', `${path}: image dimensions exceed max allowed size for many-image requests: ${IMAGE_LIMITS.manyImagesSide} pixels`, 400, path)
+      c.fail(
+        'images.limits',
+        `${path}: image dimensions exceed max allowed size for many-image requests: ${IMAGE_LIMITS.manyImagesSide} pixels`,
+        400,
+        path,
+      )
   }
 }
 

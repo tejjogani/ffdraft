@@ -20,7 +20,14 @@ import { checkBinding, prefixHash, signThinking, type Transformation } from './b
 import { PromptCache } from './cache'
 import { conformError } from './conform'
 import { type FakeReply, outputTokensOf, type ReplyBlock } from './reply'
-import { betasOf, errorBody, type IncomingRequest, validateHeaders, validateMessages, type Violation } from './rules'
+import {
+  betasOf,
+  errorBody,
+  type IncomingRequest,
+  type Violation,
+  validateHeaders,
+  validateMessages,
+} from './rules'
 import { FAKE_MODELS, isFakeModel, MODEL_SPECS } from './spec'
 
 type Json = Record<string, unknown>
@@ -92,14 +99,29 @@ export const DEFAULT_FAKE_KEY = 'sk-ant-fake-key'
 
 const requestId = () => `req_fake_${randomBytes(9).toString('base64url')}`
 
-function sendError(res: ServerResponse, status: number, type: string, message: string, headers: Record<string, string> = {}) {
+function sendError(
+  res: ServerResponse,
+  status: number,
+  type: string,
+  message: string,
+  headers: Record<string, string> = {},
+) {
   const id = requestId()
   res.writeHead(status, { 'content-type': 'application/json', 'request-id': id, ...headers })
   res.end(JSON.stringify(errorBody({ type, message }, id)))
 }
 
 const errorType = (status: number): string =>
-  ({ 400: 'invalid_request_error', 401: 'authentication_error', 403: 'permission_error', 404: 'not_found_error', 413: 'request_too_large', 429: 'rate_limit_error', 500: 'api_error', 529: 'overloaded_error' })[status] ?? 'api_error'
+  ({
+    400: 'invalid_request_error',
+    401: 'authentication_error',
+    403: 'permission_error',
+    404: 'not_found_error',
+    413: 'request_too_large',
+    429: 'rate_limit_error',
+    500: 'api_error',
+    529: 'overloaded_error',
+  })[status] ?? 'api_error'
 
 async function readBody(req: IncomingMessage, limit: number): Promise<Buffer | null> {
   const chunks: Buffer[] = []
@@ -125,12 +147,26 @@ function modelEntry(id: (typeof FAKE_MODELS)[number]) {
 }
 
 /** The content blocks of the final message, with ids and signatures. */
-function materialise(blocks: readonly ReplyBlock[], model: string, prefix: string, n: number): Json[] {
+function materialise(
+  blocks: readonly ReplyBlock[],
+  model: string,
+  prefix: string,
+  n: number,
+): Json[] {
   return blocks.map((b, i) => {
     if (b.type === 'text') return { type: 'text', text: b.text, citations: null }
     if (b.type === 'thinking')
-      return { type: 'thinking', thinking: b.thinking, signature: signThinking(model, prefix, b.thinking) }
-    return { type: 'tool_use', id: b.id ?? `toolu_fake${n}_${i}_${randomBytes(4).toString('hex')}`, name: b.name, input: b.input }
+      return {
+        type: 'thinking',
+        thinking: b.thinking,
+        signature: signThinking(model, prefix, b.thinking),
+      }
+    return {
+      type: 'tool_use',
+      id: b.id ?? `toolu_fake${n}_${i}_${randomBytes(4).toString('hex')}`,
+      name: b.name,
+      input: b.input,
+    }
   })
 }
 
@@ -146,19 +182,47 @@ function blockEvents(content: Json[], chunk: number, cutLastTool: boolean): Json
   return content.map((b, index) => {
     const ev: Json[] = []
     if (b.type === 'text') {
-      ev.push({ type: 'content_block_start', index, content_block: { type: 'text', text: '', citations: null } })
+      ev.push({
+        type: 'content_block_start',
+        index,
+        content_block: { type: 'text', text: '', citations: null },
+      })
       for (const t of split(b.text as string, chunk))
-        if (t) ev.push({ type: 'content_block_delta', index, delta: { type: 'text_delta', text: t } })
+        if (t)
+          ev.push({ type: 'content_block_delta', index, delta: { type: 'text_delta', text: t } })
     } else if (b.type === 'thinking') {
-      ev.push({ type: 'content_block_start', index, content_block: { type: 'thinking', thinking: '', signature: '' } })
+      ev.push({
+        type: 'content_block_start',
+        index,
+        content_block: { type: 'thinking', thinking: '', signature: '' },
+      })
       for (const t of split(b.thinking as string, chunk))
-        if (t) ev.push({ type: 'content_block_delta', index, delta: { type: 'thinking_delta', thinking: t } })
-      ev.push({ type: 'content_block_delta', index, delta: { type: 'signature_delta', signature: b.signature } })
+        if (t)
+          ev.push({
+            type: 'content_block_delta',
+            index,
+            delta: { type: 'thinking_delta', thinking: t },
+          })
+      ev.push({
+        type: 'content_block_delta',
+        index,
+        delta: { type: 'signature_delta', signature: b.signature },
+      })
     } else if (b.type === 'tool_use') {
-      ev.push({ type: 'content_block_start', index, content_block: { type: 'tool_use', id: b.id, name: b.name, input: {} } })
+      ev.push({
+        type: 'content_block_start',
+        index,
+        content_block: { type: 'tool_use', id: b.id, name: b.name, input: {} },
+      })
       let json = JSON.stringify(b.input)
-      if (cutLastTool && index === lastTool) json = json.slice(0, Math.max(1, Math.floor(json.length / 2)))
-      for (const t of split(json, chunk)) ev.push({ type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: t } })
+      if (cutLastTool && index === lastTool)
+        json = json.slice(0, Math.max(1, Math.floor(json.length / 2)))
+      for (const t of split(json, chunk))
+        ev.push({
+          type: 'content_block_delta',
+          index,
+          delta: { type: 'input_json_delta', partial_json: t },
+        })
     } else {
       ev.push({ type: 'content_block_start', index, content_block: b })
     }
@@ -173,7 +237,8 @@ const frame = (e: Json) => `event: ${String(e.type)}\ndata: ${JSON.stringify(e)}
 function sourceProblem(reply: FakeReply, body: Json, structured: boolean): string | null {
   if (!reply || !Array.isArray(reply.content)) return 'the reply has no content array'
   const tools = new Map<string, Json>()
-  for (const t of Array.isArray(body.tools) ? (body.tools as Json[]) : []) if (typeof t.name === 'string') tools.set(t.name, t)
+  for (const t of Array.isArray(body.tools) ? (body.tools as Json[]) : [])
+    if (typeof t.name === 'string') tools.set(t.name, t)
   const ids = new Set<string>()
   for (const b of reply.content) {
     if (b.type === 'tool_use') {
@@ -215,7 +280,13 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
   const exchanges: Exchange[] = []
   let n = 0
   /** An HTTP fault still owed to the next requests, and the reply to give after it. */
-  let owed: { status: number; message: string; retryAfter?: number; left: number; then: FakeReply | null } | null = null
+  let owed: {
+    status: number
+    message: string
+    retryAfter?: number
+    left: number
+    then: FakeReply | null
+  } | null = null
 
   const log = (e: Exchange) => {
     exchanges.push(e)
@@ -228,22 +299,60 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
     const headers = req.headers as Record<string, string | undefined>
     const betas = betasOf(headers)
     if (!raw) {
-      log({ n: null, at, path: '/v1/messages', model: null, structured: false, betas, violation: { rule: 'body.required', status: 413, type: 'request_too_large', message: 'Request exceeds the maximum allowed number of bytes.' } })
-      return sendError(res, 413, 'request_too_large', 'Request exceeds the maximum allowed number of bytes.')
+      log({
+        n: null,
+        at,
+        path: '/v1/messages',
+        model: null,
+        structured: false,
+        betas,
+        violation: {
+          rule: 'body.required',
+          status: 413,
+          type: 'request_too_large',
+          message: 'Request exceeds the maximum allowed number of bytes.',
+        },
+      })
+      return sendError(
+        res,
+        413,
+        'request_too_large',
+        'Request exceeds the maximum allowed number of bytes.',
+      )
     }
     let body: unknown
     try {
       body = JSON.parse(raw.toString('utf8'))
     } catch {
-      const v: Violation = { rule: 'body.required', status: 400, type: 'invalid_request_error', message: 'The request body is not valid JSON.' }
-      log({ n: null, at, path: '/v1/messages', model: null, structured: false, betas, violation: v })
+      const v: Violation = {
+        rule: 'body.required',
+        status: 400,
+        type: 'invalid_request_error',
+        message: 'The request body is not valid JSON.',
+      }
+      log({
+        n: null,
+        at,
+        path: '/v1/messages',
+        model: null,
+        structured: false,
+        betas,
+        violation: v,
+      })
       return sendError(res, 400, v.type, v.message)
     }
     const incoming: IncomingRequest = { headers, body }
     const b = (isObj(body) ? body : {}) as Json
     const model = typeof b.model === 'string' ? b.model : null
     const structured = isObj(b.output_config) && b.output_config.format !== undefined
-    const base = { at, path: '/v1/messages', model, structured, betas, ...(opts.keepBodies ? { body: b } : {}) }
+    const base = {
+      at,
+      path: '/v1/messages',
+      model,
+      structured,
+      betas,
+      ...(opts.keepBodies ? { body: b } : {}),
+    }
     const violations = validateMessages(incoming, { apiKey })
     if (violations.length) {
       const v = violations[0]!
@@ -252,13 +361,23 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
     }
     const binding = checkBinding(b, model!)
     if (binding.error) {
-      const v: Violation = { rule: 'thinking.binding', status: 400, type: 'invalid_request_error', message: binding.error }
+      const v: Violation = {
+        rule: 'thinking.binding',
+        status: 400,
+        type: 'invalid_request_error',
+        message: binding.error,
+      }
       log({ ...base, n: null, violation: v })
       return sendError(res, 400, v.type, v.message)
     }
     const usage = cache.use(model!, b)
     if (usage.total > MODEL_SPECS[model as keyof typeof MODEL_SPECS].contextTokens) {
-      const v: Violation = { rule: 'context.window', status: 400, type: 'invalid_request_error', message: `prompt is too long: ${usage.total} tokens > ${MODEL_SPECS[model as keyof typeof MODEL_SPECS].contextTokens} maximum` }
+      const v: Violation = {
+        rule: 'context.window',
+        status: 400,
+        type: 'invalid_request_error',
+        message: `prompt is too long: ${usage.total} tokens > ${MODEL_SPECS[model as keyof typeof MODEL_SPECS].contextTokens} maximum`,
+      }
       log({ ...base, n: null, violation: v })
       return sendError(res, 400, v.type, v.message)
     }
@@ -269,7 +388,13 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
       o.left--
       if (o.left <= 0 && !o.then) owed = null
       log({ ...base, n: null, fault: `http ${o.status}` })
-      return sendError(res, o.status, errorType(o.status), o.message, o.retryAfter !== undefined ? { 'retry-after': String(o.retryAfter) } : {})
+      return sendError(
+        res,
+        o.status,
+        errorType(o.status),
+        o.message,
+        o.retryAfter !== undefined ? { 'retry-after': String(o.retryAfter) } : {},
+      )
     }
 
     const index = ++n
@@ -295,7 +420,15 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
       stop_reason: null,
       stop_sequence: null,
       stop_details: null,
-      usage: { ...startUsage, cache_creation: null, inference_geo: null, iterations: null, server_tool_use: null, service_tier: 'standard', fallback_credit: null },
+      usage: {
+        ...startUsage,
+        cache_creation: null,
+        inference_geo: null,
+        iterations: null,
+        server_tool_use: null,
+        service_tier: 'standard',
+        fallback_credit: null,
+      },
       container: null,
       context_management: null,
       ...(bindingBeta ? { input_transformations: binding.dropped } : {}),
@@ -307,7 +440,11 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
     const open = (as: string = model!) => {
       if (opened || !stream) return
       opened = true
-      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', 'request-id': requestId() })
+      res.writeHead(200, {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-cache',
+        'request-id': requestId(),
+      })
       res.write(frame({ type: 'message_start', message: startMessage(as) }))
       ping = setInterval(() => res.write(frame({ type: 'ping' })), 10_000)
     }
@@ -319,7 +456,16 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
     const queued = owed?.then ?? null
     owed = null
     try {
-      reply = queued ?? (await opts.source.next({ n: index, model: model!, body: b, structured, headers, signal: ac.signal }))
+      reply =
+        queued ??
+        (await opts.source.next({
+          n: index,
+          model: model!,
+          body: b,
+          structured,
+          headers,
+          signal: ac.signal,
+        }))
     } catch (err) {
       if (early) clearTimeout(early)
       if (ping) clearInterval(ping)
@@ -328,10 +474,17 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
       else log({ ...base, n: index, sourceError: `the source failed: ${message}` })
       if (res.destroyed) return
       if (opened) {
-        res.end(frame({ type: 'error', error: { type: 'api_error', message: `fake source failed: ${message}` } }))
+        res.end(
+          frame({
+            type: 'error',
+            error: { type: 'api_error', message: `fake source failed: ${message}` },
+          }),
+        )
         return
       }
-      return sendError(res, 500, 'api_error', `fake source failed: ${message}`, { 'x-should-retry': 'false' })
+      return sendError(res, 500, 'api_error', `fake source failed: ${message}`, {
+        'x-should-retry': 'false',
+      })
     } finally {
       if (early) clearTimeout(early)
     }
@@ -344,8 +497,16 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
     const problem = sourceProblem(reply, b, structured)
     if (problem) {
       log({ ...base, n: index, reply, sourceError: problem })
-      if (opened) return res.end(frame({ type: 'error', error: { type: 'api_error', message: `fake source error: ${problem}` } }))
-      return sendError(res, 500, 'api_error', `fake source error: ${problem}`, { 'x-should-retry': 'false' })
+      if (opened)
+        return res.end(
+          frame({
+            type: 'error',
+            error: { type: 'api_error', message: `fake source error: ${problem}` },
+          }),
+        )
+      return sendError(res, 500, 'api_error', `fake source error: ${problem}`, {
+        'x-should-retry': 'false',
+      })
     }
 
     const fault = reply.fault
@@ -358,10 +519,24 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
       const message = fault.message ?? `fake ${fault.status}`
       const times = fault.times ?? 1
       const rest = reply.content.length ? { ...reply, fault: undefined } : null
-      if (times > 1 || rest) owed = { status: fault.status, message, retryAfter: fault.retryAfter, left: times - 1, then: rest }
+      if (times > 1 || rest)
+        owed = {
+          status: fault.status,
+          message,
+          retryAfter: fault.retryAfter,
+          left: times - 1,
+          then: rest,
+        }
       log({ ...base, n: index, reply, fault: `http ${fault.status}` })
-      if (opened) return res.end(frame({ type: 'error', error: { type: errorType(fault.status), message } }))
-      return sendError(res, fault.status, errorType(fault.status), message, fault.retryAfter !== undefined ? { 'retry-after': String(fault.retryAfter) } : {})
+      if (opened)
+        return res.end(frame({ type: 'error', error: { type: errorType(fault.status), message } }))
+      return sendError(
+        res,
+        fault.status,
+        errorType(fault.status),
+        message,
+        fault.retryAfter !== undefined ? { 'retry-after': String(fault.retryAfter) } : {},
+      )
     }
 
     // The answer. A refusal with a fallback model switches models mid-turn.
@@ -370,31 +545,59 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
     let content: Json[]
     let servedBy = reply.servedBy ?? model!
     let stopReason: string =
-      reply.stop_reason ?? (reply.content.some((x) => x.type === 'tool_use') ? 'tool_use' : 'end_turn')
+      reply.stop_reason ??
+      (reply.content.some((x) => x.type === 'tool_use') ? 'tool_use' : 'end_turn')
     let stopDetails: Json | null = null
     let iterations: Json[] | null = null
     const outTokens = outputTokensOf(reply.content)
     if (fault?.type === 'refusal') {
       const retried =
-        b.fallbacks === 'default' && spec.fallbackTo !== null && spec.retriedCategories.includes(fault.category ?? '')
+        b.fallbacks === 'default' &&
+        spec.fallbackTo !== null &&
+        spec.retriedCategories.includes(fault.category ?? '')
       if (retried && fault.fallback) {
         servedBy = spec.fallbackTo!
         const after = materialise(fault.fallback, servedBy, prefix, index)
         content = [
           ...materialise(reply.content, model!, prefix, index),
-          { type: 'fallback', from: { model }, to: { model: servedBy }, trigger: { type: 'refusal', category: fault.category } },
+          {
+            type: 'fallback',
+            from: { model },
+            to: { model: servedBy },
+            trigger: { type: 'refusal', category: fault.category },
+          },
           ...after,
         ]
         stopReason = fault.fallback.some((x) => x.type === 'tool_use') ? 'tool_use' : 'end_turn'
         const fbOut = outputTokensOf(fault.fallback)
         iterations = [
-          { type: 'message', model, input_tokens: usage.input_tokens, output_tokens: outTokens, cache_read_input_tokens: usage.cache_read_input_tokens, cache_creation_input_tokens: usage.cache_creation_input_tokens, cache_creation: null },
-          { type: 'fallback_message', model: servedBy, input_tokens: usage.total, output_tokens: fbOut, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, cache_creation: null },
+          {
+            type: 'message',
+            model,
+            input_tokens: usage.input_tokens,
+            output_tokens: outTokens,
+            cache_read_input_tokens: usage.cache_read_input_tokens,
+            cache_creation_input_tokens: usage.cache_creation_input_tokens,
+            cache_creation: null,
+          },
+          {
+            type: 'fallback_message',
+            model: servedBy,
+            input_tokens: usage.total,
+            output_tokens: fbOut,
+            cache_read_input_tokens: 0,
+            cache_creation_input_tokens: 0,
+            cache_creation: null,
+          },
         ]
       } else {
         content = materialise(reply.content, model!, prefix, index)
         stopReason = 'refusal'
-        stopDetails = { type: 'refusal', category: fault.category, explanation: fault.explanation ?? null }
+        stopDetails = {
+          type: 'refusal',
+          category: fault.category,
+          explanation: fault.explanation ?? null,
+        }
       }
     } else {
       content = materialise(reply.content, model!, prefix, index)
@@ -407,16 +610,33 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
           input_tokens: usage.input_tokens,
           cache_read_input_tokens: usage.cache_read_input_tokens,
           cache_creation_input_tokens: usage.cache_creation_input_tokens,
-          output_tokens: iterations ? iterations.reduce((s, it) => s + (it.output_tokens as number), 0) : outTokens,
+          output_tokens: iterations
+            ? iterations.reduce((s, it) => s + (it.output_tokens as number), 0)
+            : outTokens,
         }
     const message: Json = {
       ...startMessage(servedBy),
       content,
       stop_reason: stopReason,
       stop_details: stopDetails,
-      usage: { ...finalUsage, cache_creation: null, inference_geo: null, iterations, server_tool_use: null, service_tier: 'standard', fallback_credit: null },
+      usage: {
+        ...finalUsage,
+        cache_creation: null,
+        inference_geo: null,
+        iterations,
+        server_tool_use: null,
+        service_tier: 'standard',
+        fallback_credit: null,
+      },
     }
-    log({ ...base, n: index, reply, message, ...(fault ? { fault: fault.type } : {}), ...(binding.dropped.length ? { dropped: binding.dropped } : {}) })
+    log({
+      ...base,
+      n: index,
+      reply,
+      message,
+      ...(fault ? { fault: fault.type } : {}),
+      ...(binding.dropped.length ? { dropped: binding.dropped } : {}),
+    })
 
     if (!stream) {
       res.writeHead(200, { 'content-type': 'application/json', 'request-id': requestId() })
@@ -457,7 +677,15 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
     const v = validateHeaders({ headers, body: null }, { apiKey })
     const path = id ? `/v1/models/${id}` : '/v1/models'
     if (v.length) {
-      log({ n: null, at, path, model: null, structured: false, betas: betasOf(headers), violation: v[0]! })
+      log({
+        n: null,
+        at,
+        path,
+        model: null,
+        structured: false,
+        betas: betasOf(headers),
+        violation: v[0]!,
+      })
       return sendError(res, v[0]!.status, v[0]!.type, v[0]!.message)
     }
     log({ n: null, at, path, model: id, structured: false, betas: betasOf(headers) })
@@ -468,7 +696,9 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
       return res.end(JSON.stringify(modelEntry(id)))
     }
     const data = FAKE_MODELS.map(modelEntry)
-    res.end(JSON.stringify({ data, has_more: false, first_id: data[0]!.id, last_id: data.at(-1)!.id }))
+    res.end(
+      JSON.stringify({ data, has_more: false, first_id: data[0]!.id, last_id: data.at(-1)!.id }),
+    )
   }
 
   const server: Server = createServer((req, res) => {

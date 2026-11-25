@@ -191,6 +191,15 @@ playing the designer (it approves what a run asks for and answers each job's `ch
 defaults, but stills only, so the render is one quick take), and checks that each run finished, each design evaluates, the prompt cache is read and no replayed
 thinking block is dropped. Its harness is tested without a key, with scripted turns.
 
+Without a key, every assistant test reaches Claude through the real SDK and a strict fake Claude
+API (`packages/agent/src/testing/fake-api`, described in [fake-claude-api.md](fake-claude-api.md)):
+it validates each request against the documented rules (each rule cites its document), streams
+replies as the real API does, injects errors, refusals, fallbacks and dropped streams, binds
+thinking blocks to their conversation and models the prompt cache. `scripts/test-tiers.sh` runs
+the suite on each tier's model. The founder's journeys were recorded with Claude playing the model
+(`apps/studio/e2e/harness.ts` against the fake in agent mode) and are replayed through the real
+loop by `replay.test.ts`.
+
 ## References beside CAD
 
 A reference panel sits beside the CAD workspace and the Render tab. It searches the keyless open

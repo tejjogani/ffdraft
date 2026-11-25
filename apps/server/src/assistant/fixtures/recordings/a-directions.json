@@ -2,7 +2,7 @@
  "version": 1,
  "journey": "a-directions",
  "description": "A brief becomes a Design job: Claude asks first, proposes three directions, mixes two by chat, and the designer picks the mix",
- "recordedAt": "2026-11-25T08:24:47.092Z",
+ "recordedAt": "2026-11-25T09:21:59.618Z",
  "exchanges": [
   {
    "n": 1,
@@ -60,7 +60,13 @@
        "pieceId": "pc_lR8esiRn4az4P9mY"
       }
      }
-    ]
+    ],
+    "usage": {
+     "input_tokens": 0,
+     "cache_read_input_tokens": 0,
+     "cache_creation_input_tokens": 32836,
+     "output_tokens": 110
+    }
    }
   },
   {
@@ -226,7 +232,13 @@
        ]
       }
      }
-    ]
+    ],
+    "usage": {
+     "input_tokens": 0,
+     "cache_read_input_tokens": 32836,
+     "cache_creation_input_tokens": 428,
+     "output_tokens": 372
+    }
    }
   },
   {
@@ -483,7 +495,13 @@
        ]
       }
      }
-    ]
+    ],
+    "usage": {
+     "input_tokens": 0,
+     "cache_read_input_tokens": 33264,
+     "cache_creation_input_tokens": 633,
+     "output_tokens": 642
+    }
    }
   },
   {
@@ -653,7 +671,13 @@
       "type": "text",
       "text": "All three built and checked, with no warnings:\n\n- **A, Low bezel round**: 3.3 g of 18k yellow, about $2.4k to make. Nothing can catch; the rim hides a sliver of the stone.\n- **B, Oval in low claws**: 2.9 g, about $2.3k. The most light and the longest look; four rounded claw tips to check now and then.\n- **C, East-west emerald**: 4.0 g, about $2.4k. The most distinctive, corners guarded by the half bezel. The spec does not fix the stone's direction, so if you pick C I will check it sits across the finger in CAD.\n\nCosts are rough (placeholder metal and stone rates), not a quote; all leave room in the $4,000 budget for a better stone.\n\nWhich one, or a mix? Choose it on its card, or tell me."
      }
-    ]
+    ],
+    "usage": {
+     "input_tokens": 0,
+     "cache_read_input_tokens": 33897,
+     "cache_creation_input_tokens": 1696,
+     "output_tokens": 268
+    }
    }
   },
   {
@@ -734,7 +758,13 @@
        ]
       }
      }
-    ]
+    ],
+    "usage": {
+     "input_tokens": 0,
+     "cache_read_input_tokens": 35593,
+     "cache_creation_input_tokens": 940,
+     "output_tokens": 143
+    }
    }
   },
   {
@@ -812,7 +842,13 @@
       "type": "text",
       "text": "D is built: A's low bezel round on B's court band, 3.6 g, about $2.4k, no warnings.\n\nOne correction: I called B's band slimmer, but it is 2.2 mm against A's 2 mm, so D's band is a touch wider and about 0.2 g heavier than A. If you wanted the finer band, A is it as it stands.\n\nChoose it on its card, or tell me which to take forward."
      }
-    ]
+    ],
+    "usage": {
+     "input_tokens": 0,
+     "cache_read_input_tokens": 36533,
+     "cache_creation_input_tokens": 552,
+     "output_tokens": 142
+    }
    }
   },
   {
@@ -876,7 +912,13 @@
        "directionId": "D"
       }
      }
-    ]
+    ],
+    "usage": {
+     "input_tokens": 0,
+     "cache_read_input_tokens": 37085,
+     "cache_creation_input_tokens": 823,
+     "output_tokens": 60
+    }
    }
   },
   {
@@ -933,7 +975,13 @@
       "type": "text",
       "text": "D is the design now: the low bezel round on the 2.2 mm court band, 18k yellow, version 1. The piece has moved to CAD, where the CAD job can add the production detail and run every check."
      }
-    ]
+    ],
+    "usage": {
+     "input_tokens": 0,
+     "cache_read_input_tokens": 37908,
+     "cache_creation_input_tokens": 467,
+     "output_tokens": 54
+    }
    }
   }
  ]

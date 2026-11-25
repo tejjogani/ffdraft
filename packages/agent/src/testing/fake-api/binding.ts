@@ -29,7 +29,9 @@ export function prefixHash(body: Json, index: number): string {
 
 export function signThinking(model: string, prefix: string, thinking: string): string {
   const head = Buffer.from(JSON.stringify({ m: model, p: prefix })).toString('base64url')
-  const mac = createHmac('sha256', SECRET).update(`${head}.${sha(thinking)}`).digest('base64url')
+  const mac = createHmac('sha256', SECRET)
+    .update(`${head}.${sha(thinking)}`)
+    .digest('base64url')
   return `fk1.${head}.${mac}`
 }
 
@@ -37,7 +39,9 @@ function readSignature(sig: unknown, thinking: string): { m: string; p: string }
   if (typeof sig !== 'string') return null
   const [tag, head, mac] = sig.split('.')
   if (tag !== 'fk1' || !head || !mac) return null
-  const expect = createHmac('sha256', SECRET).update(`${head}.${sha(thinking)}`).digest('base64url')
+  const expect = createHmac('sha256', SECRET)
+    .update(`${head}.${sha(thinking)}`)
+    .digest('base64url')
   if (expect !== mac) return null
   try {
     const v = JSON.parse(Buffer.from(head, 'base64url').toString()) as { m: string; p: string }

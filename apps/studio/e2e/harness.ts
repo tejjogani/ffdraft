@@ -32,7 +32,11 @@ const save = () => writeFileSync(stateFile, JSON.stringify(state, null, 2))
 const browser = await chromium.launch({
   args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
 })
-const ctx = await browser.newContext({ viewport: { width, height: 900 }, deviceScaleFactor: 1, colorScheme: THEME })
+const ctx = await browser.newContext({
+  viewport: { width, height: 900 },
+  deviceScaleFactor: 1,
+  colorScheme: THEME,
+})
 await ctx.addInitScript((t) => localStorage.setItem('pave:theme', JSON.stringify(t)), THEME)
 const page = await ctx.newPage()
 page.on('pageerror', (e) => console.error('pageerror:', e.message))
@@ -54,12 +58,15 @@ const composer = () => dock().getByRole('textbox', { name: 'Message the assistan
 const openDock = async () => {
   for (let i = 0; i < 4 && !(await dock().isVisible()); i++) {
     await page.keyboard.press('Control+j')
-    await dock().waitFor({ timeout: 3000 }).catch(() => {})
+    await dock()
+      .waitFor({ timeout: 3000 })
+      .catch(() => {})
   }
   await dock().waitFor()
 }
 const closeDock = async () => {
-  if (await dock().isVisible()) await dock().getByRole('button', { name: 'Close assistant' }).click()
+  if (await dock().isVisible())
+    await dock().getByRole('button', { name: 'Close assistant' }).click()
 }
 const foldPlan = async () => {
   const hide = page.getByRole('button', { name: 'Hide the job’s plan' })
@@ -67,7 +74,8 @@ const foldPlan = async () => {
 }
 
 /** Every run, newest first. */
-const runs = async () => (await rpc('traces.runs', { limit: 50 })) as { id: string; status: string; job: unknown }[]
+const runs = async () =>
+  (await rpc('traces.runs', { limit: 50 })) as { id: string; status: string; job: unknown }[]
 const LIVE = ['running', 'awaiting-approval', 'waiting']
 
 /**
@@ -84,7 +92,11 @@ async function play(what: string, done: () => Promise<boolean>, ms = LONG) {
       lastDebug = Date.now()
       await page.screenshot({ path: `${OUT}/debug-${JOURNEY}.png` }).catch(() => {})
     }
-    if (await dock().isVisible().catch(() => false)) {
+    if (
+      await dock()
+        .isVisible()
+        .catch(() => false)
+    ) {
       const q = dock().getByRole('region', { name: 'Quick questions' }).last()
       if (await q.isVisible().catch(() => false)) {
         const go = q.getByRole('button', { name: 'Go', exact: true })
@@ -136,9 +148,23 @@ async function outcome(pieceIds: string[]) {
       version: p.version,
       spec: p.spec,
       design: p.design,
-      directions: (p.directions ?? []).map((d) => ({ letter: d.letter, name: d.name, origin: d.origin })),
-      changes: (Array.isArray(history) ? history : history.changes ?? []).map((c) => ({ actor: c.actor?.type, label: c.label, ops: c.ops?.length })),
-      takes: takes.map((t) => ({ title: t.title, status: t.status, engine: t.engine, animation: t.scene?.animation?.type ?? null, metal: t.scene?.metal ?? null })),
+      directions: (p.directions ?? []).map((d) => ({
+        letter: d.letter,
+        name: d.name,
+        origin: d.origin,
+      })),
+      changes: (Array.isArray(history) ? history : (history.changes ?? [])).map((c) => ({
+        actor: c.actor?.type,
+        label: c.label,
+        ops: c.ops?.length,
+      })),
+      takes: takes.map((t) => ({
+        title: t.title,
+        status: t.status,
+        engine: t.engine,
+        animation: t.scene?.animation?.type ?? null,
+        metal: t.scene?.metal ?? null,
+      })),
     })
   }
   const all = await runs()
@@ -152,7 +178,14 @@ async function outcome(pieceIds: string[]) {
       tier: d.run.tier,
       costUsd: d.run.costUsd,
       tokens: d.run.tokens,
-      job: d.run.job ? { stage: d.run.job.stage, review: d.run.job.review, pausedBy: d.run.job.pausedBy, plan: d.run.job.plan.map((s) => `${s.id}:${s.state}`) } : null,
+      job: d.run.job
+        ? {
+            stage: d.run.job.stage,
+            review: d.run.job.review,
+            pausedBy: d.run.job.pausedBy,
+            plan: d.run.job.plan.map((s) => `${s.id}:${s.state}`),
+          }
+        : null,
       steps: d.steps.map((s) => `${s.kind}:${s.name}:${s.status}${s.isError ? ':error' : ''}`),
     })
   }
@@ -177,19 +210,35 @@ try {
     await field.waitFor()
     await field.fill('sk-ant-wrong-key-0000000000')
     await main.getByRole('button', { name: 'Test', exact: true }).click()
-    await main.getByText(/did not accept/i).first().waitFor({ timeout: 30_000 })
+    await main
+      .getByText(/did not accept/i)
+      .first()
+      .waitFor({ timeout: 30_000 })
     await shot('test-wrong-key')
     await field.fill('sk-ant-api03-fake-harness-key-0000')
     await main.getByRole('button', { name: 'Test', exact: true }).click()
-    await main.getByText(/works|can use/i).first().waitFor({ timeout: 30_000 })
+    await main
+      .getByText(/works|can use/i)
+      .first()
+      .waitFor({ timeout: 30_000 })
     await shot('test-ok')
     await main.getByRole('button', { name: 'Save', exact: true }).click()
-    await main.getByText(/-key|••••|ending/i).first().waitFor({ timeout: 30_000 })
+    await main
+      .getByText(/-key|••••|ending/i)
+      .first()
+      .waitFor({ timeout: 30_000 })
     await page.waitForTimeout(1500)
     await shot('saved')
     const setup = await rpc('assistant.setup.get', {})
-    writeFileSync(`${OUT}/${JOURNEY}.outcome.json`, JSON.stringify({ journey: JOURNEY, setup }, null, 2))
-    if (setup.key?.source !== 'app' && setup.source !== 'app' && !JSON.stringify(setup).includes('"app"'))
+    writeFileSync(
+      `${OUT}/${JOURNEY}.outcome.json`,
+      JSON.stringify({ journey: JOURNEY, setup }, null, 2),
+    )
+    if (
+      setup.key?.source !== 'app' &&
+      setup.source !== 'app' &&
+      !JSON.stringify(setup).includes('"app"')
+    )
       console.warn('setup:', JSON.stringify(setup))
   }
 
@@ -209,8 +258,13 @@ try {
     await page.getByRole('button', { name: 'Start job' }).click()
     await openDock()
     const card = (l: string) =>
-      page.getByRole('region', { name: 'Directions' }).getByRole('article', { name: new RegExp(`^Direction ${l}:`) })
-    await play('three directions', async () => (await card('C').count()) > 0 && (await runStopped()))
+      page
+        .getByRole('region', { name: 'Directions' })
+        .getByRole('article', { name: new RegExp(`^Direction ${l}:`) })
+    await play(
+      'three directions',
+      async () => (await card('C').count()) > 0 && (await runStopped()),
+    )
     await shot('directions-in-dock')
     await closeDock()
     await foldPlan()
@@ -220,7 +274,12 @@ try {
     await play('the mix', async () => (await card('D').count()) > 0 && (await runStopped()))
     await shot('mix-in-dock')
     await say('Go with D')
-    await play('the pick', async () => (await rpc('pieces.get', { id: piece.id })).chosenDirectionId !== null && (await runStopped()))
+    await play(
+      'the pick',
+      async () =>
+        (await rpc('pieces.get', { id: piece.id })).chosenDirectionId !== null &&
+        (await runStopped()),
+    )
     await shot('picked-in-dock')
     await closeDock()
     await foldPlan()
@@ -239,11 +298,18 @@ try {
     await page.getByRole('button', { name: 'Start job' }).click()
     await openDock()
     // Mid-job, once the assistant has changed the design, the designer edits by hand.
-    await play('the job’s first change', async () => (await rpc('pieces.get', { id })).version > start)
+    await play(
+      'the job’s first change',
+      async () => (await rpc('pieces.get', { id })).version > start,
+    )
     await shot('job-working')
     const p = await rpc('pieces.get', { id })
     const band = p.design.order.find((n) => p.design.nodes[n].kind === 'band') ?? 'band'
-    await rpc('design.apply', { pieceId: id, label: 'My band, by hand', ops: [{ t: 'update', id: band, patch: { widthTop: 2.6 } }] })
+    await rpc('design.apply', {
+      pieceId: id,
+      label: 'My band, by hand',
+      ops: [{ t: 'update', id: band, patch: { widthTop: 2.6 } }],
+    })
     await play('the job to pause', async () => (await runs())[0]?.status === 'paused')
     await page.waitForTimeout(1500)
     await shot('paused-by-edit')
@@ -254,7 +320,11 @@ try {
     await openDock()
     await play('the resumed job to finish', async () => {
       const [r] = await runs()
-      return !!r && !LIVE.includes(r.status) && (r.job as { review?: string } | null)?.review === 'pending'
+      return (
+        !!r &&
+        !LIVE.includes(r.status) &&
+        (r.job as { review?: string } | null)?.review === 'pending'
+      )
     })
     await shot('ready-for-review')
     await closeDock()
@@ -279,14 +349,19 @@ try {
     await closeDock()
     const tree = page.getByRole('tree', { name: 'Features' })
     await tree.waitFor({ timeout: 30_000 })
-    const stone = tree.getByRole('treeitem').filter({ hasText: /centre|center|stone|gem/i }).first()
+    const stone = tree
+      .getByRole('treeitem')
+      .filter({ hasText: /centre|center|stone|gem/i })
+      .first()
     await stone.click()
     await page.waitForTimeout(800)
     await page.keyboard.press('Control+j')
     await dock().waitFor()
     await page.waitForTimeout(800)
     await shot('stone-selected')
-    await composer().fill('Is this stone safe for someone who works with her hands? How is it held?')
+    await composer().fill(
+      'Is this stone safe for someone who works with her hands? How is it held?',
+    )
     await composer().press('Enter')
     await page.waitForTimeout(1500)
     await play('the answer', runStopped)
@@ -321,24 +396,48 @@ try {
     await page.waitForTimeout(2000)
     await page.getByRole('button', { name: 'Render with AI' }).click()
     await page.getByRole('button', { name: 'Start job' }).waitFor()
+    // Draft quality: real Blender takes at low samples, so the journey fits this machine.
+    await page
+      .getByRole('radiogroup', { name: 'Quality' })
+      .getByText('Draft', { exact: true })
+      .click()
+      .catch(async () => {
+        await page
+          .getByRole('group', { name: 'Quality' })
+          .getByText('Draft', { exact: true })
+          .click()
+      })
+    await page.waitForTimeout(800)
     await shot('job-plan')
     await page.getByRole('button', { name: 'Start job' }).click()
     await openDock()
-    await play('the render job', async () => {
-      const [r] = await runs()
-      return !!r && !LIVE.includes(r.status)
-    }, 3 * LONG)
+    await play(
+      'the render job',
+      async () => {
+        const [r] = await runs()
+        return !!r && !LIVE.includes(r.status)
+      },
+      3 * LONG,
+    )
     await shot('critique')
     await closeDock()
     await foldPlan()
     await page.waitForTimeout(1500)
     await shot('takes')
     await say('Re-render the hero in 18k rose gold.')
-    await play('the rose gold take', async () => {
-      const [r] = await runs()
-      const takes = await rpc('renders.list', { pieceId: id, limit: 100 })
-      return !!r && !LIVE.includes(r.status) && takes.every((t) => !['queued', 'running'].includes(t.status))
-    }, 2 * LONG)
+    await play(
+      'the rose gold take',
+      async () => {
+        const [r] = await runs()
+        const takes = await rpc('renders.list', { pieceId: id, limit: 100 })
+        return (
+          !!r &&
+          !LIVE.includes(r.status) &&
+          takes.every((t) => !['queued', 'running'].includes(t.status))
+        )
+      },
+      2 * LONG,
+    )
     await shot('rose-gold')
     await closeDock()
     await foldPlan()
@@ -363,7 +462,9 @@ try {
       ['Light', 'And back to 2.2 mm, please.'],
     ]
     for (const [tier, text] of steps) {
-      await dock().getByRole('button', { name: /^Model tier:/ }).click()
+      await dock()
+        .getByRole('button', { name: /^Model tier:/ })
+        .click()
       await page.getByRole('menuitem', { name: new RegExp(`^${tier}`) }).click()
       await page.waitForTimeout(500)
       await say(text)

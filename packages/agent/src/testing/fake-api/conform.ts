@@ -25,7 +25,12 @@ const typeMatches = (v: unknown, t: string): boolean => {
 }
 
 /** The first place `value` breaks `schema`, or null when it conforms. */
-export function conformError(value: unknown, schema: unknown, root: unknown = schema, path = '$'): string | null {
+export function conformError(
+  value: unknown,
+  schema: unknown,
+  root: unknown = schema,
+  path = '$',
+): string | null {
   if (!isObj(schema)) return null
   if (typeof schema.$ref === 'string') {
     const target = schema.$ref
@@ -51,7 +56,10 @@ export function conformError(value: unknown, schema: unknown, root: unknown = sc
   }
   if ('const' in schema && JSON.stringify(schema.const) !== JSON.stringify(value))
     return `${path}: expected ${JSON.stringify(schema.const)}`
-  if (Array.isArray(schema.enum) && !schema.enum.some((e) => JSON.stringify(e) === JSON.stringify(value)))
+  if (
+    Array.isArray(schema.enum) &&
+    !schema.enum.some((e) => JSON.stringify(e) === JSON.stringify(value))
+  )
     return `${path}: ${JSON.stringify(value)} is not one of ${JSON.stringify(schema.enum)}`
   if (isObj(value)) {
     const props = isObj(schema.properties) ? schema.properties : {}
