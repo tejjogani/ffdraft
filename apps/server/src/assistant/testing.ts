@@ -75,6 +75,7 @@ export function replyOf(turn: ScriptedTurn): FakeReply {
   else if (turn.error)
     throw new Error('TestModel: over the fake API a turn can fail only with an SDK error')
   if (turn.failAfterContent) reply.fault = { type: 'drop', afterBlocks: content.length }
+  if (turn.stallAfterContent) reply.fault = { type: 'stall', afterBlocks: content.length }
   return reply
 }
 

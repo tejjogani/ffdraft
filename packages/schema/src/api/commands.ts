@@ -1554,7 +1554,12 @@ export const commands = {
        * review or is paused carries that job on (a change asked for by chat).
        */
       job: z
-        .object({ stage: z.enum(JOB_STAGES), goal: z.string().trim().min(1).max(300).optional() })
+        .object({
+          stage: z.enum(JOB_STAGES),
+          goal: z.string().trim().min(1).max(300).optional(),
+          /** A Render job: the machine time its Start popover showed (its own approval's budget). */
+          machineSeconds: z.number().int().min(0).max(604_800).optional(),
+        })
         .optional(),
       /** The studio window sending it, which client tools are asked first. */
       clientId: z.string().min(1).max(64),

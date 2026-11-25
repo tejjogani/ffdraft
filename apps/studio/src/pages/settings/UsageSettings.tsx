@@ -1,7 +1,16 @@
 import type { METERS } from '@pave/schema'
 import { EmptyState, InlineError, Segmented, Skeleton, Tooltip } from '@pave/ui'
 import { useMemo, useState } from 'react'
-import { compact, dateTime, num, relativeTime, shortDate, usd } from '../../lib/format'
+import {
+  compact,
+  dateTime,
+  modelName,
+  num,
+  relativeTime,
+  shortDate,
+  unitFor,
+  usd,
+} from '../../lib/format'
 import { useRpc } from '../../lib/query'
 import { SettingsTitle } from './SettingsLayout'
 
@@ -79,7 +88,7 @@ export function UsageSettings() {
                             </div>
                           </td>
                           <td className="pr-3 text-right font-mono text-xs text-fg-muted tabular">
-                            {compact(m.quantity)} {m.unit}
+                            {compact(m.quantity)} {unitFor(m.quantity, m.unit)}
                           </td>
                           <td className="w-24 text-right font-mono text-xs tabular">
                             {usd(m.costUsd)}
@@ -118,12 +127,12 @@ export function UsageSettings() {
                         {e.provider}
                         {e.model && (
                           <span className="ml-1.5 font-mono text-2xs text-fg-subtle">
-                            {e.model}
+                            {modelName(e.model)}
                           </span>
                         )}
                       </td>
                       <td className="pr-3 text-right font-mono text-xs text-fg-muted tabular">
-                        {num(e.quantity, 0)} {e.unit}
+                        {num(e.quantity, 0)} {unitFor(e.quantity, e.unit)}
                       </td>
                       <td className="pr-3 text-right font-mono text-xs tabular">
                         {usd(e.costUsd)}

@@ -17,6 +17,7 @@ import { useRunActions } from '../actions'
 import { callLabel, runHasLiveChanges } from '../model'
 import { JobControls } from './JobControls'
 import { JobPlan } from './JobPlan'
+import { planStartsOpen, rememberPlan } from './plan-open'
 import {
   elapsed,
   isOpenJob,
@@ -31,20 +32,43 @@ import {
 import { useElapsed, useStageJob } from './useJob'
 
 export function JobPanel({ pieceId, stage }: { pieceId: string; stage: JobStage }) {
-  const { run } = useStageJob(pieceId, stage)
-  const [open, setOpen] = useState(true)
+  const { run, earlier } = useStageJob(pieceId, stage)
+  // Per job: a new job's plan opens once; a folded one stays folded across reloads.
+  const [opened, setOpened] = useState<Record<string, boolean>>({})
   if (!run?.job) return null
   const state = jobState(run)
   if (!isOpenJob(state)) return null
-  return <JobBar run={run} open={open} onToggle={() => setOpen((o) => !o)} />
+  const open = opened[run.id] ?? planStartsOpen(run.id, run.startedAt)
+  return (
+    <JobBar
+      run={run}
+      earlier={earlier}
+      open={open}
+      onToggle={() => {
+        rememberPlan(run.id, !open)
+        setOpened((o) => ({ ...o, [run.id]: !open }))
+      }}
+    />
+  )
 }
 
-function JobBar({ run, open, onToggle }: { run: Run; open: boolean; onToggle: () => void }) {
+function JobBar({
+  run,
+  earlier,
+  open,
+  onToggle,
+}: {
+  run: Run
+  /** What the runs this job carried on from spent, added so the bar shows the whole job. */
+  earlier: { costUsd: number; ms: number }
+  open: boolean
+  onToggle: () => void
+}) {
   const job = run.job!
   const state = jobState(run)
   const working = isWorking(state)
   const { current, finished, total } = planProgress(job)
-  const ms = useElapsed(run.startedAt, run.endedAt, working)
+  const ms = useElapsed(run.startedAt, run.endedAt, working) + earlier.ms
   const navigate = useNavigate()
 
   return (
@@ -66,11 +90,12 @@ function JobBar({ run, open, onToggle }: { run: Run; open: boolean; onToggle: ()
         >
           {JOB_STATE_LABEL[state]}
         </span>
-        <span className="min-w-0 flex-1 truncate text-sm text-fg-muted">
+        {/* Below a phone's width the goal would be cut to a letter: the plan has it. */}
+        <span className="min-w-0 flex-1 truncate text-sm text-fg-muted max-sm:hidden">
           {working && current ? `${current.label}…` : job.goal}
         </span>
         <span className="font-mono text-xs text-fg-subtle tabular">
-          {finished}/{total} · {elapsed(ms)} · {usd(run.costUsd)}
+          {finished}/{total} · {elapsed(ms)} · {usd(run.costUsd + earlier.costUsd)}
         </span>
         <JobControls
           run={run}

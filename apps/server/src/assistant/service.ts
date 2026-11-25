@@ -109,7 +109,16 @@ export class Assistant implements AssistantService {
     // The AI job this run is: a new one for a stage, one carried on by Resume, or the thread's
     // last job carried on by a message about it (asked before the thread is settled, which
     // stops a running job).
-    let job: AiJob | null = carried ?? (input.job ? newJob(input.job.stage, input.job.goal) : null)
+    let job: AiJob | null =
+      carried ??
+      (input.job
+        ? {
+            ...newJob(input.job.stage, input.job.goal),
+            ...(input.job.machineSeconds !== undefined
+              ? { machineSeconds: input.job.machineSeconds }
+              : {}),
+          }
+        : null)
     if (!job && input.threadId) {
       const last = await ctx.repo.runs.first(
         eq(t.agentRun.threadId, input.threadId),

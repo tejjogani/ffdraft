@@ -115,6 +115,13 @@ describe('the validator', () => {
     ],
     ['fallbacks.shape', (_h, b) => (b.fallbacks = [{ model: 'claude-haiku-5-5' }])],
     [
+      'fallbacks.target',
+      (_h, b) => {
+        b.model = 'claude-sonnet-5-5'
+        b.fallbacks = 'default'
+      },
+    ],
+    [
       'compaction.beta',
       (h) =>
         (h['anthropic-beta'] =
@@ -290,6 +297,41 @@ describe('the validator', () => {
     expect(rulesOf(haiku.headers, { ...haiku.body, tool_choice: { type: 'any' } })).not.toContain(
       'tool_choice.forced',
     )
+  })
+
+  it('refuses fallbacks of any form on Haiku 5.5, which has no server-side fallback', () => {
+    const haiku = harnessBody('claude-haiku-5-5')
+    const headers = withBetas(['server-side-fallback-2026-07-01'])
+    expect(rulesOf(headers, { ...haiku.body, fallbacks: 'default' })).toContain('fallbacks.shape')
+  })
+
+  it('checks the request is valid on the fallback model too: Sonnet 5 takes no system messages', () => {
+    // shared/model-migration.md (refusal section): the request with an entry's overrides merged
+    // in must be valid as a direct request to that model. shared/prompt-caching.md: mid-
+    // conversation system messages are not available on Claude Sonnet 5.
+    const sonnet = harnessBody('claude-sonnet-5-5')
+    const headers = withBetas(['server-side-fallback-2026-07-01'])
+    expect(rulesOf(headers, { ...sonnet.body, fallbacks: 'default' })).toContain('fallbacks.target')
+    expect(
+      rulesOf(headers, { ...sonnet.body, fallbacks: [{ model: 'claude-sonnet-5' }] }),
+    ).toContain('fallbacks.target')
+    // Without a system message the same fallback is fine.
+    const plain = {
+      ...sonnet.body,
+      messages: sonnet.body.messages.filter((m) => (m.role as string) !== 'system'),
+      fallbacks: 'default',
+    }
+    expect(rulesOf(headers, plain)).not.toContain('fallbacks.target')
+    // Opus 5.5 falls back to models that take system messages.
+    const opus = harnessBody('claude-opus-5-5')
+    expect(rulesOf(opus.headers, opus.body)).toEqual([])
+  })
+
+  it('the harness request of every tier model passes, with no fallback the target would refuse', () => {
+    for (const m of FAKE_MODELS) {
+      const body = harnessBody(m)
+      expect([m, rulesOf(body.headers, body.body)]).toEqual([m, []])
+    }
   })
 })
 

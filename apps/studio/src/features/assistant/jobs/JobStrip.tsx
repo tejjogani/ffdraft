@@ -33,7 +33,7 @@ export function JobStrip({ run }: { run: Run }) {
       </div>
       {current && working && <p className="truncate text-sm">{current.label}…</p>}
       <div className="flex items-center justify-between gap-2">
-        <JobControls run={run} showChat={false} />
+        <JobControls run={run} showChat={false} primary={false} />
         {run.pieceId && (
           <Link
             to={STAGE_PATH[run.job.stage]}

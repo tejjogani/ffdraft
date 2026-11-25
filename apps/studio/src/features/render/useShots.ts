@@ -16,7 +16,7 @@ import { queryClient, rpcKey, useRpc } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { reportPlanLimit } from '../plans/plan-limit'
 import { ensureShotsSaved } from './shot-actions'
-import { type Shot, shotList, takeMedia } from './shots'
+import { type Shot, shotForTake, shotList, takeMedia } from './shots'
 
 export function useShots(pieceId: string) {
   const piece = useRpc('pieces.get', { id: pieceId })
@@ -146,9 +146,17 @@ export function useShots(pieceId: string) {
     star: (t: RenderJob) =>
       act('Couldn’t star it', () => rpc.call('renders.update', { id: t.id, starred: !t.starred })),
     pick: (t: RenderJob) =>
-      act('Couldn’t swap it in', () =>
-        t.sceneId ? rpc.call('scenes.update', { id: t.sceneId, takeId: t.id }) : Promise.resolve(),
-      ),
+      act('Couldn’t put it in the set', async () => {
+        // A variant or one-off take has no shot of its own: it becomes one, made from exactly the
+        // scene it rendered, with this take in the set. Never a silent no-op.
+        const target = shotForTake(t)
+        const sceneId =
+          'sceneId' in target
+            ? target.sceneId
+            : (await rpc.call('scenes.create', { pieceId, ...target.create })).id
+        await rpc.call('scenes.update', { id: sceneId, takeId: t.id })
+        if (!t.sceneId) toast.success('Added to the set as a new shot')
+      }),
     cover: (t: RenderJob) =>
       act('Couldn’t set the cover', async () => {
         await rpc.call('pieces.update', {

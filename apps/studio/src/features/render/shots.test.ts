@@ -1,6 +1,15 @@
 import { type RenderJob, RenderSceneSchema, type SavedScene } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
-import { motionLabel, pickOf, secondsLeft, shotList, takeLabel, takeMedia, takesOf } from './shots'
+import {
+  motionLabel,
+  pickOf,
+  secondsLeft,
+  shotForTake,
+  shotList,
+  takeLabel,
+  takeMedia,
+  takesOf,
+} from './shots'
 
 const scene = RenderSceneSchema.parse({})
 const saved = (id: string, takeId: string | null = null): SavedScene => ({
@@ -104,5 +113,18 @@ describe('a take’s files', () => {
   it('names the motion and its length', () => {
     expect(motionLabel(turntable)).toBe('360° turntable · 6 s')
     expect(motionLabel(still)).toBeNull()
+  })
+})
+
+describe('shotForTake', () => {
+  it('uses the take’s own shot, or makes one for a variant that has none', () => {
+    expect(shotForTake(take('t1', '2026-11-24T10:00:00.000Z'))).toEqual({ sceneId: 'scn_1' })
+    const variant = take('t2', '2026-11-24T10:00:00.000Z', {
+      sceneId: null,
+      variantLabel: '18k rose gold',
+    })
+    expect(shotForTake(variant)).toEqual({
+      create: { title: 'Hero · 18k rose gold', scene: variant.scene },
+    })
   })
 })

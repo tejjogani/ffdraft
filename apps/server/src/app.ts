@@ -12,6 +12,7 @@ import { AppError, notFound } from './errors'
 import { EventBus } from './events'
 import { mountAssets } from './http/assets'
 import { mountEvents } from './http/events'
+import { localGuard } from './http/local-guard'
 import { mountRpc } from './http/rpc'
 import { mountStudio } from './http/static'
 import type { App, Env } from './http/types'
@@ -98,6 +99,8 @@ function buildRoutes(runtime: Runtime, routes: CreateAppOptions['routes']): App 
   const app = new Hono<Env>()
 
   if (config.logRequests) app.use('/api/*', logger())
+  // Before anything answers: with no sign-in, only requests addressed to this computer count.
+  if (config.auth === 'local') app.use('/api/*', localGuard(config))
   app.use('/api/*', cors({ origin: config.corsOrigins, credentials: true }))
 
   app.onError((err, c) => {

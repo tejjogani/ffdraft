@@ -30,6 +30,8 @@ import { type Command, useRegisterCommands } from '../../lib/commands'
 import { usePieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
 import { useRpc } from '../../lib/query'
 import { assistant, openAssistant } from '../../stores/assistant'
+import { jobState } from '../assistant/jobs/status'
+import { useStageJob } from '../assistant/jobs/useJob'
 import { EngineDialog, engineLabel } from './EngineDialog'
 import { ShotInspector } from './ShotInspector'
 import { addShot, saveHouseShot, takeShotIntent } from './shot-actions'
@@ -41,6 +43,8 @@ import { Viewfinder } from './Viewfinder'
 
 export function RenderStudio({ pieceId }: { pieceId: string }) {
   const s = useShots(pieceId)
+  const renderJob = useStageJob(pieceId, 'render').run
+  const jobInReview = renderJob ? jobState(renderJob) === 'review' : false
   // Production detail, as Blender takes use: the viewfinder frames and fingerprints the take.
   const { evaluation } = usePieceEvaluation(pieceId, 'production')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
@@ -308,7 +312,8 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               </Button>
               <Button
                 size="sm"
-                variant="primary"
+                // While a Render job waits for review, its Accept is the one ink action here.
+                variant={jobInReview ? 'secondary' : 'primary'}
                 icon={Camera}
                 disabled={!shot}
                 onClick={() => shot && void s.render([shot])}

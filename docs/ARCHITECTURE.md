@@ -272,7 +272,11 @@ is metered on `llm` and the provider's on `image`, both as Design work on the bo
 
 - **Tenancy and auth** — Better Auth with organisations; `org_id` on every row behind a scoped
   repository; roles owner / admin / designer / viewer / guest. Self-hosted and desktop use run
-  in `local` mode with no sign-in ([research](./research/05-platform.md)).
+  in `local` mode with no sign-in ([research](./research/05-platform.md)). Because local mode
+  trusts every request, `apps/server/src/http/local-guard.ts` answers `/api/*` only when the
+  request is addressed to this computer (localhost, 127.0.0.1, [::1], or the hosts of
+  `PAVE_PUBLIC_URL` and the dev origins) and refuses changes sent from another site's page: a
+  DNS-rebinding page is same-origin to the browser, and only the Host header gives it away.
 - **Storage** — Postgres through Drizzle; embedded PGlite when no database is configured, so
   the same schema runs as a single process. Content-addressed blobs on disk or S3.
 - **Usage** — an append-only ledger of metered events (model tokens, images, searches, 3D
@@ -283,7 +287,10 @@ is metered on `llm` and the provider's on `image`, both as Design work on the bo
   are counted per calendar month (UTC). `apps/server/src/plans.ts` is the one owner: each
   counted action claims a numbered slot before its work starts (a unique index decides races),
   keyed by the work so a retry counts once, and gives it back when the work fails or is
-  canceled. The studio claims before exporting in the browser (`plan.claim`, `plan.settle`).
+  canceled. The studio has the server make Rhino and STEP files (`design.export`), which counts
+  only a file it delivered; a client that exports on its own claims first (`plan.claim`) and
+  can never give a slot back (`plan.settle` takes only `delivered: true`; an unsettled claim
+  counts after half an hour), since the server cannot know whether that file was saved.
   Over the limit the server answers `plan_limit` (402); there is no checkout yet. `PAVE_PLAN`
   switches plans on a local install for testing.
 - **The Pavé file** — `.pave` is the native file: a zip with a manifest, the design and its

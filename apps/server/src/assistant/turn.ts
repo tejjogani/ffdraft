@@ -192,8 +192,9 @@ async function designerEdits(
   })
   const names = new Map<string, string>()
   if (rows.some((r) => r.actorUserId)) {
+    // Addressed to the model, "you" would read as the model itself.
     for (const m of await ctx.repo.members())
-      names.set(m.user.id, m.user.id === ctx.user.id ? 'you' : m.user.name)
+      names.set(m.user.id, m.user.id === ctx.user.id ? 'the designer' : m.user.name)
   }
   return rows.map((r) => ({
     seq: r.seq,

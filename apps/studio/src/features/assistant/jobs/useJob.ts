@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react'
 import { useRpc } from '../../../lib/query'
 import { newerRun } from '../model'
 import { useRunStream } from '../run-stream'
-import { latestJob } from './status'
+import { earlierJobTotals, latestJob } from './status'
 
 /** The run as the stream last told it, else as stored. */
 export function useLiveRun(stored: Run | null) {
@@ -21,7 +21,10 @@ export function useLiveRun(stored: Run | null) {
 /** The newest job of a stage on a piece. */
 export function useStageJob(pieceId: string, stage: JobStage) {
   const runs = useRpc('traces.runs', { pieceId, limit: 20 })
-  return useLiveRun(latestJob(runs.data, stage))
+  const live = useLiveRun(latestJob(runs.data, stage))
+  // What the runs it carried on from spent: the bar shows the whole job.
+  const earlier = live.run ? earlierJobTotals(live.run, runs.data) : { costUsd: 0, ms: 0 }
+  return { ...live, earlier }
 }
 
 /** Milliseconds since `from`, ticking every second while `ticking`. */

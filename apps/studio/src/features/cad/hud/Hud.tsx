@@ -1,7 +1,8 @@
 /**
  * The facts strip over the viewport: weight, carats, stone count, and whether the piece is
- * ready to cast. Draft numbers are approximate (seats are not cut), so they carry "≈"; only a
- * production check of the current version may say "Ready to cast". Only the verdict is a live
+ * ready to cast. Draft numbers are approximate (seats are not cut), so they carry "≈"; once the
+ * production check of the current version has run, its figures replace them (the same ones the
+ * overview shows), and only it may say "Ready to cast". Only the verdict is a live
  * region: the numbers change on every edit and would be re-announced each time.
  */
 import type { Diagnostic, Evaluation } from '@pave/kernel'
@@ -38,17 +39,22 @@ export function Hud({
   onFix,
 }: HudProps) {
   if (!evaluation) return null
-  const r = evaluation.report
+  // The production check's figures once it has run on this version (the ones the overview and
+  // cards show); the draft's, marked approximate, until then.
+  const exact = check.state === 'done'
+  const r = check.state === 'done' ? check.report : evaluation.report
   const metal = r.metals.toSorted((a, b) => b.massG - a.massG)[0]
   return (
     <div className="chip-solid flex h-9 max-w-full min-w-0 items-center gap-3 rounded-lg pr-1.5 pl-3.5 text-xs whitespace-nowrap">
       <span className="flex min-w-0 items-center gap-1.5 max-sm:shrink-0">
-        <span
-          className="shrink-0 font-mono text-fg-subtle"
-          title="Approximate until a production check: seats are not cut yet"
-        >
-          ≈
-        </span>
+        {!exact && (
+          <span
+            className="shrink-0 font-mono text-fg-subtle"
+            title="Approximate until a production check: seats are not cut yet"
+          >
+            ≈
+          </span>
+        )}
         {/* The number never shrinks; the metal's name gives way (and on a phone, goes). */}
         <span className="shrink-0 font-mono text-fg tabular">{grams(r.metalMassG)}</span>
         {metal && (

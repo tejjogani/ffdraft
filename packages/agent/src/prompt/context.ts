@@ -79,9 +79,21 @@ const PIN_PICTURE: Record<ContextPin['picture'], (assetId: string | null) => str
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
+/**
+ * Text that comes from the workspace (titles, names, file names, pasted pages, museum records)
+ * rather than from the server, on one line and in quotes. This message carries operator
+ * authority: a newline in a title must not start a line that reads as an instruction.
+ */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what is stripped
+const CONTROL = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g
+const flat = (s: string) => s.replace(CONTROL, ' ').replace(/\s+/g, ' ').trim()
+const q = (s: string, n = 200) => JSON.stringify(clip(flat(s), n))
+
 function pinLine(p: ContextPin, n: number): string {
-  const terms = [p.provider, p.credit && clip(p.credit, 160), p.license].filter(Boolean).join('; ')
-  return `${n}. “${p.title || 'Untitled'}” (id ${p.id}${terms ? `; ${terms}` : ''}; ${PIN_PICTURE[p.picture](p.assetId)})${p.plane ? `; laid in the ${p.plane} view as an image plane` : ''}`
+  const terms = [p.provider, p.credit && clip(flat(p.credit), 160), p.license && flat(p.license)]
+    .filter(Boolean)
+    .join('; ')
+  return `${n}. ${q(p.title || 'Untitled')} (id ${p.id}${terms ? `; ${terms}` : ''}; ${PIN_PICTURE[p.picture](p.assetId)})${p.plane ? `; laid in the ${p.plane} view as an image plane` : ''}`
 }
 
 const line = (label: string, value: string) => `${label}: ${value}`
@@ -97,14 +109,14 @@ export function renderContext(c: TurnContext): string {
     out.push(
       line(
         'Open piece',
-        `${p.title} (id ${p.id}; ${p.kind}${p.archetype ? `, ${p.archetype}` : ''}; stage ${p.stage}; design version ${p.version})`,
+        `${q(p.title)} (id ${p.id}; ${p.kind}${p.archetype ? `, ${p.archetype}` : ''}; stage ${p.stage}; design version ${p.version})`,
       ),
     )
     if (p.nodes?.length)
       out.push(
         line(
           'Nodes',
-          p.nodes.map((n) => `${n.id} (${n.kind}${n.name ? ` "${n.name}"` : ''})`).join(', '),
+          p.nodes.map((n) => `${n.id} (${n.kind}${n.name ? ` ${q(n.name, 80)}` : ''})`).join(', '),
         ),
       )
     if (p.directions?.length)
@@ -112,7 +124,7 @@ export function renderContext(c: TurnContext): string {
         line(
           'Directions',
           p.directions
-            .map((d) => `${d.letter} "${d.name}" (id ${d.id}${d.chosen ? ', chosen' : ''})`)
+            .map((d) => `${d.letter} ${q(d.name, 80)} (id ${d.id}${d.chosen ? ', chosen' : ''})`)
             .join(', '),
         ),
       )
@@ -124,18 +136,20 @@ export function renderContext(c: TurnContext): string {
         ? c.selection
             .map(
               (s) =>
-                `${s.nodeId}${s.instance !== undefined ? ` stone ${s.instance + 1}` : ''} (${s.kind}${s.name ? ` "${s.name}"` : ''})`,
+                `${s.nodeId}${s.instance !== undefined ? ` stone ${s.instance + 1}` : ''} (${s.kind}${s.name ? ` ${q(s.name, 80)}` : ''})`,
             )
             .join(', ')
         : 'nothing',
     ),
   )
-  if (c.board) out.push(line('Board', `${c.board.title} (id ${c.board.id})`))
+  if (c.board) out.push(line('Board', `${q(c.board.title)} (id ${c.board.id})`))
   if (c.attachments.length)
     out.push(
       line(
         'Attachments',
-        c.attachments.map((a) => `${a.name} (asset ${a.assetId}, ${a.mime})`).join(', '),
+        c.attachments
+          .map((a) => `${q(a.name, 120)} (asset ${a.assetId}, ${flat(a.mime)})`)
+          .join(', '),
       ),
     )
   if (c.references.length)
@@ -145,7 +159,7 @@ export function renderContext(c: TurnContext): string {
         c.references
           .map(
             (r) =>
-              `${r.title} (id ${r.id}${r.viewOnly ? ', view only: its details are known, its image is not shown' : ''})`,
+              `${q(r.title)} (id ${r.id}${r.viewOnly ? ', view only: its details are known, its image is not shown' : ''})`,
           )
           .join(', '),
       ),
@@ -158,7 +172,7 @@ export function renderContext(c: TurnContext): string {
   if (c.designerEdits.length)
     out.push(
       'Edits by people since your last turn (build on them; do not undo them):',
-      ...c.designerEdits.map((e) => `- v${e.seq} ${e.label} (${e.by})`),
+      ...c.designerEdits.map((e) => `- v${e.seq} ${q(e.label)} (by ${q(e.by, 80)})`),
     )
   if (c.plan) out.push(line('Plan', c.plan))
   if (c.images) out.push(line('Image generation', c.images))

@@ -16,6 +16,7 @@ import { motion } from 'motion/react'
 import { type KeyboardEvent, type PointerEvent, useEffect, useRef } from 'react'
 import { FloatingWindow } from '../components/FloatingWindow'
 import { AssistantPanel } from '../features/assistant'
+import { followTarget } from '../features/assistant/follow'
 import { pillSummary, stageOfPath } from '../features/assistant/jobs/status'
 import { useLiveRun } from '../features/assistant/jobs/useJob'
 import { defaultRect } from '../lib/float-window'
@@ -35,9 +36,8 @@ function useRouteContext(): AssistantContext {
 }
 
 /**
- * Opening another piece brings up that piece's latest conversation (or a new one), unless the
- * conversation shown is already about it or about no piece at all (a chat started on Home that
- * is making this piece).
+ * Opening a piece (or loading the page on one) brings up that piece's latest conversation, as
+ * `followTarget` decides.
  */
 function useFollowPiece(pieceId: string | null | undefined) {
   const threads = useRpc(
@@ -45,13 +45,19 @@ function useFollowPiece(pieceId: string | null | undefined) {
     { pieceId: pieceId ?? '', limit: 1 },
     { enabled: !!pieceId },
   )
-  const last = useRef(pieceId)
+  // Starts empty, so the first load of a piece is followed too, not only a change of piece.
+  const last = useRef<string | null>(null)
   useEffect(() => {
     if (!pieceId || last.current === pieceId || !threads.data) return
     last.current = pieceId
     const s = useAssistant.getState()
-    if (!s.activeThreadId || !s.threadPieceId || s.threadPieceId === pieceId) return
-    s.openThread(threads.data[0]?.id ?? null)
+    const target = followTarget({
+      activeThreadId: s.activeThreadId,
+      threadPieceId: s.threadPieceId,
+      pieceId,
+      latestThreadId: threads.data[0]?.id ?? null,
+    })
+    if (target) s.openThread(target.open)
   }, [pieceId, threads.data])
 }
 

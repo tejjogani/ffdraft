@@ -631,6 +631,22 @@ export function planDesign(input: PieceSpecInput): RecipeResult {
   return { design: designFrom(kind, fitNodes(nodes, notes)), notes }
 }
 
+/**
+ * Why a design built for a spec is empty, in plain words, or null when it has something in it.
+ * A `custom` archetype (what a photo read answers for a piece no recipe fits, a trophy say) and
+ * a kind/archetype pair with no recipe both build nothing; every step must say so rather than
+ * report an empty design as a success.
+ */
+export function emptyBuildReason(
+  spec: Pick<PieceSpec, 'kind' | 'archetype'>,
+  design: Design,
+): string | null {
+  if (Object.keys(design.nodes).length > 0) return null
+  const kind = spec.kind as PieceKind
+  const options = RECIPES[kind].filter((a) => a !== 'custom').join(', ')
+  return `Nothing can be built from this spec: there is no recipe for a ${spec.archetype === 'custom' ? 'custom' : spec.archetype} ${kind}. Pick the nearest archetype (${options}) and adjust it, or model the piece by hand.`
+}
+
 /** Builds the first editable design for a spec. */
 export function buildDesign(input: PieceSpecInput): Design {
   return planDesign(input).design

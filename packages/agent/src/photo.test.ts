@@ -117,6 +117,21 @@ describe('specFromRead', () => {
     expect(() => planDesign(spec)).not.toThrow()
   })
 
+  it('starts a piece no recipe fits (custom: a trophy, say) from the nearest buildable route, and says so', () => {
+    const trophy: PhotoRead = {
+      ...SOLITAIRE_READ,
+      kind: { value: 'pendant', visible: 'yes' },
+      archetype: { value: 'custom', visible: 'yes' },
+      stones: [],
+      body: { shape: 'trophy cup', thicknessToHeight: 0.2, sculpted: true, visible: 'yes' },
+    }
+    const { spec, assumed } = specFromRead(trophy)
+    expect(spec.archetype).toBe('medallion')
+    expect(assumed.join(' ')).toMatch(/no recipe.*custom/i)
+    // It builds something to shape from.
+    expect(Object.keys(planDesign(spec).design.nodes).length).toBeGreaterThan(0)
+  })
+
   it('uses the designer’s scale when given, and every schema field stays valid', () => {
     const { spec, assumed } = specFromRead(SOLITAIRE_READ, { centreCarat: 2, ringSizeUs: 7 })
     expect(assumed.join(' ')).not.toMatch(/ct|US/)

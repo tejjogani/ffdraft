@@ -9,6 +9,7 @@
  * is passed in and never printed.
  */
 import { deflateSync } from 'node:zlib'
+import { BadRequestError } from '@anthropic-ai/sdk'
 import type {
   BetaMessage,
   BetaMessageParam,
@@ -16,6 +17,7 @@ import type {
 import type { AssistantModelId } from '@pave/schema'
 import {
   anthropicModel,
+  BETA,
   buildRequest,
   classifyStop,
   contextMessage,
@@ -23,8 +25,10 @@ import {
   messageUsage,
   StreamAdapter,
   toApiMessages,
+  turnFallbacks,
 } from './anthropic'
 import { buildReadRequest, parseReadMessage } from './photo'
+import { MODELS } from './pricing'
 import { renderContext } from './prompt/index'
 import { parseToolCall } from './tools'
 
@@ -139,6 +143,45 @@ async function readPhoto(
   }
 }
 
+/**
+ * Sends one turn with `fallbacks: "default"` where the harness leaves it off (`turnFallbacks`),
+ * and notes what the API says. Informational, never a failure: the harness works either way; an
+ * accepted request means a refused turn on this tier could be rescued by the API instead.
+ */
+async function probeTurnFallbacks(
+  apiKey: string,
+  model: AssistantModelId,
+  r: TierCheckResult,
+): Promise<void> {
+  if (MODELS[model].fallbacks !== 'default' || turnFallbacks(model)) return
+  const client = anthropicModel({ apiKey, maxRetries: 1 })
+  const base = buildRequest({
+    model,
+    messages: toApiMessages([
+      { role: 'user', content: [{ type: 'text', text: 'Reply with the single word: ready.' }] },
+      context(),
+    ]),
+  })
+  const params = {
+    ...base,
+    fallbacks: 'default' as const,
+    betas: [...(base.betas ?? []), BETA.fallback],
+  }
+  try {
+    const message = await client.stream(params, {}).finalMessage()
+    r.costUsd += messageUsage(message).costUsd
+    r.notes.push(
+      'fallbacks with system messages: accepted by the API (turns on this tier could ask for server-side fallbacks)',
+    )
+  } catch (err) {
+    if (err instanceof BadRequestError)
+      r.notes.push(
+        'fallbacks with system messages: refused by the API, as the harness assumes (refusals on this tier are handled by the run)',
+      )
+    else r.notes.push(`fallbacks probe did not finish: ${mapError(err, { model }).message}`)
+  }
+}
+
 /** Three turns and a photo read on one model. Never throws: failures are in the result. */
 export async function checkTier(apiKey: string, model: AssistantModelId): Promise<TierCheckResult> {
   const r: TierCheckResult = { model, ok: true, notes: [], costUsd: 0 }
@@ -201,6 +244,9 @@ export async function checkTier(apiKey: string, model: AssistantModelId): Promis
     }
     // 4. A photo read: structured output with the read's schema, on the same model.
     await readPhoto(apiKey, model, r)
+    // 5. Where turns leave server-side fallbacks off because the fallback model may not take
+    // system messages (Light on Sonnet 5.5), ask the live API whether it would have taken them.
+    await probeTurnFallbacks(apiKey, model, r)
   } catch (err) {
     fail(mapError(err, { model }).message)
   }

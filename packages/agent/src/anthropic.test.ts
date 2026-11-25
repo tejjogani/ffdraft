@@ -3,6 +3,8 @@
  * in-memory `fetch`, which answers with SSE built from the same events the scripted model plays,
  * or with the HTTP errors the API returns. No key and no network.
  */
+
+import { APIError } from '@anthropic-ai/sdk'
 import type {
   BetaContentBlock,
   BetaMessage,
@@ -94,8 +96,9 @@ describe('buildRequest', () => {
       for (const banned of ['temperature', 'top_p', 'top_k', 'stop_sequences'])
         expect(r, banned).not.toHaveProperty(banned)
       expect(JSON.stringify(r)).not.toContain('budget_tokens')
-      // Haiku has no server-side fallback: the parameter must not be sent there.
-      if (model === 'claude-haiku-5-5') {
+      // Haiku has no server-side fallback, and Sonnet 5.5's (Claude Sonnet 5) takes no system
+      // messages, which every turn carries: the parameter must not be sent on either.
+      if (model === 'claude-haiku-5-5' || model === 'claude-sonnet-5-5') {
         expect(r).not.toHaveProperty('fallbacks')
         expect(r.betas).not.toContain(BETA.fallback)
       } else {
@@ -118,7 +121,7 @@ describe('buildRequest', () => {
 
   it('can leave out compaction and thinking binding', () => {
     const r = buildRequest({
-      model: 'claude-sonnet-5-5',
+      model: 'claude-opus-5-5',
       messages: [{ role: 'user', content: 'x' }],
       features: { compaction: false, dropMismatchedThinking: false },
     })
@@ -295,6 +298,31 @@ describe('through the SDK', () => {
       )
         expect(mapped.message).toMatch(/retention.*Standard/s)
     }
+  })
+
+  it('names retention only as a possible cause of a 400 on Fable, leading with the API’s own words', () => {
+    const err = APIError.generate(
+      400,
+      {
+        type: 'error',
+        error: {
+          type: 'invalid_request_error',
+          message: 'tools.12.input_schema: Schema is too complex for strict mode',
+        },
+      },
+      undefined,
+      new Headers(),
+    )
+    const mapped = mapError(err, { model: 'claude-fable-5-2' })
+    expect(mapped.message).toMatch(
+      /^Claude’s API rejected the request for Claude Fable 5\.2: tools\.12/,
+    )
+    expect(mapped.message).toMatch(/may be/)
+    // The raw JSON body never reaches the designer's sentence.
+    expect(mapped.message).not.toContain('{')
+    const other = mapError(err, { model: 'claude-opus-5-5' })
+    expect(other.message).not.toMatch(/retention/)
+    expect(other.message).not.toContain('{')
   })
 
   it('reports a stopped run as interrupted', async () => {

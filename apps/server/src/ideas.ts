@@ -8,7 +8,13 @@
  *  - Estimate: what a spec would weigh and cost, from the canon's build of it, before building.
  */
 import { lintDesign } from '@pave/canon'
-import { newId, type Piece, type PieceSpec, type SpecEstimate } from '@pave/schema'
+import {
+  emptyBuildReason,
+  newId,
+  type Piece,
+  type PieceSpec,
+  type SpecEstimate,
+} from '@pave/schema'
 import { and, asc, eq, isNull } from 'drizzle-orm'
 import { getAssetRow } from './assets/assets'
 import { type Ctx, invoke, publish } from './context'
@@ -136,6 +142,18 @@ export async function estimateSpec(
   const spec = input.spec ?? piece.spec
   if (!spec) throw badRequest('This piece has no spec yet: save one with pieces.setSpec first')
   const { design, notes: recipeNotes } = designFor(spec)
+  // Nothing to measure: say so first, and give no price for a piece that would not exist.
+  const empty = emptyBuildReason(spec, design)
+  if (empty)
+    return {
+      metalMassG: 0,
+      caratTotal: 0,
+      stoneCount: 0,
+      metal: spec.metal.alloy,
+      boundsMm: { x: 0, y: 0, z: 0 },
+      costUsd: null,
+      notes: [empty, ...recipeNotes.filter((n) => n !== empty)].slice(0, 6),
+    }
   const geometry = ctx.services.require('geometry')
   const summary = await geometry.evaluate(
     design,

@@ -230,13 +230,9 @@ function DirectionCard({
             )}
           </ul>
         )}
-        <div className="mt-auto flex items-center gap-1.5 pt-1">
-          <Button
-            size="sm"
-            variant={chosen ? 'secondary' : 'primary'}
-            disabled={busy}
-            onClick={onChoose}
-          >
+        <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-1">
+          {/* Secondary: several cards side by side must not make a row of black buttons. */}
+          <Button size="sm" variant="secondary" disabled={busy} onClick={onChoose}>
             {chosen ? 'Choose again' : 'Choose'}
           </Button>
           {canMix && (

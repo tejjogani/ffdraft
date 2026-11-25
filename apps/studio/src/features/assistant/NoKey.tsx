@@ -5,6 +5,7 @@
  */
 import { AiMark } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
+import { useAssistant } from '../../stores/assistant'
 import { KeyForm, useIsAdmin } from './KeyForm'
 
 const CONSOLE_KEYS_URL = 'https://platform.claude.com/settings/keys'
@@ -29,7 +30,15 @@ export function NoKey() {
             API keys page of the Claude Console
           </a>
           , then paste it here. Tiers, prices and this month’s spend are in{' '}
-          <Link to="/settings/ai" className="underline">
+          <Link
+            to="/settings/ai"
+            className="underline"
+            // On a phone the dock covers the whole screen: close it, or the page it opens stays
+            // hidden underneath and the tap seems to do nothing.
+            onClick={() => {
+              if (window.matchMedia('(max-width: 639px)').matches) useAssistant.getState().close()
+            }}
+          >
             Settings, AI
           </Link>
           .

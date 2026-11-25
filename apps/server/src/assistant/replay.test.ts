@@ -271,6 +271,9 @@ const UNBUILT_FACTS = 'metal caratTotal 0 metalMassG 0 stoneCount 0'
 const explained = (d: { recorded: string; live: string; after: string }) =>
   (volatile(d.recorded) && volatile(d.live)) ||
   (d.recorded === UNBUILT_FACTS && d.live === 'null') ||
+  // The context names the person's own edits "by the designer" (it said "you", which, addressed
+  // to the model, read as the model); the recordings predate the change.
+  (d.recorded === 'you' && d.live === 'by the designer' && /^n- v\d+ /.test(d.after)) ||
   // The piece's facts the studio window keeps up to date as it evaluates; none is open here.
   /\bfacts\b/.test(d.after) ||
   // A capture a studio window drew when recorded is drawn on the server here, and says so.

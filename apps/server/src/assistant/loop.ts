@@ -31,6 +31,7 @@ import {
   evaluationNote,
   invalidInputResult,
   jobApproves,
+  jobMachineBudget,
   MAX_RETAKES,
   parseToolCall,
   recordAnswers,
@@ -51,6 +52,7 @@ import {
   type RunErrorCode,
   StreamAdapter,
   toApiMessages,
+  turnFallbacks,
 } from '@pave/agent/anthropic'
 import { lintDesign } from '@pave/canon'
 import { roughCost } from '@pave/production'
@@ -67,6 +69,7 @@ import type {
   RenderJob,
   Run,
   SavedScene,
+  Tokens,
 } from '@pave/schema'
 import { resolveAnswers } from '@pave/schema'
 import { and, asc, desc, eq, gt, inArray, isNull, max, ne, or } from 'drizzle-orm'
@@ -351,12 +354,12 @@ export async function step(host: RunHost): Promise<StepOutcome> {
   if (last?.role === 'assistant') {
     const calls = toolUses(last.content)
     if (calls.length) return runTools(host, calls)
-    // An assistant turn without calls ends the run, unless the API paused it to be sent back.
+    // An assistant turn without calls ends the run, unless compaction paused it to be sent back.
     const lastModel = await ctx.repo.steps.first(
       and(eq(t.agentStep.runId, runId), eq(t.agentStep.kind, 'model')),
       desc(t.agentStep.idx),
     )
-    if (lastModel?.stopReason !== 'pause_turn' && lastModel?.stopReason !== 'compaction') {
+    if (lastModel?.stopReason !== 'compaction') {
       await closeOut(ctx, runId, { status: 'done', emit: host.emit.bind(host) })
       return 'finished'
     }
@@ -374,6 +377,30 @@ async function fail(host: RunHost, code: RunErrorCode, message: string): Promise
     emit: host.emit.bind(host),
   })
   return 'finished'
+}
+
+/** One model call into the ledger (keyed by run and step) and the run's cost. */
+async function meterModelCall(
+  host: RunHost,
+  idx: number,
+  usage: { model: string; tokens: Tokens; costUsd: number },
+): Promise<void> {
+  const { ctx, runId } = host
+  await recordUsage(ctx, {
+    meter: 'llm',
+    provider: 'anthropic',
+    model: usage.model,
+    quantity:
+      usage.tokens.input + usage.tokens.output + usage.tokens.cacheRead + usage.tokens.cacheWrite,
+    unit: 'tokens',
+    costUsd: usage.costUsd,
+    idempotencyKey: `${runId}:${idx}:llm`,
+    runId,
+    pieceId: host.pieceId,
+    stage: host.stage,
+  })
+  await addUsage(ctx, runId, usage)
+  host.emit({ type: 'usage', tokens: usage.tokens, costUsd: usage.costUsd })
 }
 
 async function callModel(host: RunHost, messages: MessageRow[], run: Run): Promise<StepOutcome> {
@@ -409,6 +436,10 @@ async function callModel(host: RunHost, messages: MessageRow[], run: Run): Promi
     for await (const event of stream) for (const body of adapter.push(event)) host.emit(body)
     message = await stream.finalMessage()
   } catch (err) {
+    // Billed even though no final message came: the input the API reported and the output it
+    // streamed. Recorded before stopping or retrying, so the budget and the run cap see it.
+    const partial = adapter.partialUsage()
+    if (partial) await meterModelCall(host, idx, partial)
     if (host.signal.aborted) throw host.signal.reason
     const mapped = mapError(err, { model: host.model })
     await addStep(ctx, runId, {
@@ -419,6 +450,7 @@ async function callModel(host: RunHost, messages: MessageRow[], run: Run): Promi
       output: { error: mapped.message },
       isError: true,
       ms: Date.now() - started,
+      ...(partial ? { usage: { ...partial.tokens, costUsd: partial.costUsd } } : {}),
     })
     // An optional request feature the API does not take: try once more without them.
     if (isRequestRejected(err) && !host.featureRetry) {
@@ -436,21 +468,7 @@ async function callModel(host: RunHost, messages: MessageRow[], run: Run): Promi
   host.streamRetries = 0
 
   const usage = messageUsage(message)
-  await recordUsage(ctx, {
-    meter: 'llm',
-    provider: 'anthropic',
-    model: message.model,
-    quantity:
-      usage.tokens.input + usage.tokens.output + usage.tokens.cacheRead + usage.tokens.cacheWrite,
-    unit: 'tokens',
-    costUsd: usage.costUsd,
-    idempotencyKey: `${runId}:${idx}:llm`,
-    runId,
-    pieceId: host.pieceId,
-    stage: host.stage,
-  })
-  await addUsage(ctx, runId, usage)
-  host.emit({ type: 'usage', tokens: usage.tokens, costUsd: usage.costUsd })
+  await meterModelCall(host, idx, { model: message.model, ...usage })
 
   const outcome = classifyStop(message)
   await addStep(ctx, runId, {
@@ -487,7 +505,7 @@ async function callModel(host: RunHost, messages: MessageRow[], run: Run): Promi
         host,
         'refusal',
         `Claude declined this request${outcome.category ? ` (${outcome.category})` : ''}. Try rephrasing it${
-          host.model === 'claude-haiku-5-5' ? ', or switch to a stronger tier' : ''
+          turnFallbacks(host.model as AssistantModelId) ? '' : ', or switch to a stronger tier'
         }.`,
       )
     case 'max_tokens':
@@ -510,6 +528,19 @@ async function callModel(host: RunHost, messages: MessageRow[], run: Run): Promi
         'This conversation no longer fits the model’s memory. Start a new conversation.',
       )
     case 'continue':
+      await store()
+      // A paused turn is resumed by sending it back as it is, which only works after server
+      // tools (the turn then ends in their results). The assistant has none: sending a turn that
+      // ends in its own text is a prefill, which these models refuse. Keep what it said and end
+      // the run; its tool calls, if any, still run next.
+      if (
+        message.stop_reason === 'pause_turn' &&
+        !effectiveContent(message.content).some((b) => b.type === 'tool_use')
+      ) {
+        await closeOut(ctx, runId, { status: 'done', emit: host.emit.bind(host) })
+        return 'finished'
+      }
+      return 'continue'
     case 'tools':
       await store()
       return 'continue'
@@ -569,6 +600,59 @@ async function generateSummary(host: RunHost, def: ToolDef, input: unknown): Pro
   const brief = await host.ctx.repo.imageBriefs.first(eq(t.imageBrief.id, i.briefId))
   const prompt = (i.prompt ?? brief?.prompt ?? '').trim()
   return `Generate ${i.count} image${i.count === 1 ? '' : 's'} from this prompt: “${prompt.length > 400 ? `${prompt.slice(0, 400)}…` : prompt}” Each is checked before it is kept. This is paid.`
+}
+
+/**
+ * The inputs of the takes a job has started (not denied), in this run and the runs it carries on
+ * from, oldest first. Bounded: a job is carried on a handful of times, not hundreds.
+ */
+async function jobRenderInputs(
+  host: RunHost,
+  runId: string,
+  job: AiJob,
+  steps: StepRow[],
+): Promise<unknown[]> {
+  const inputs = steps.filter((s) => s.name === 'renders.create' && s.status !== 'denied')
+  const out: unknown[] = inputs.map((s) => s.input)
+  let next = job.continues
+  for (let hops = 0; next && next !== runId && hops < 20; hops++) {
+    const earlier = await loadSteps(host.ctx, next)
+    out.unshift(
+      ...earlier
+        .filter((s) => s.name === 'renders.create' && s.status !== 'denied')
+        .map((s) => s.input),
+    )
+    const prev = await host.ctx.repo.runs.first(eq(t.agentRun.id, next))
+    next = prev?.job?.continues ?? null
+  }
+  return out
+}
+
+/**
+ * Estimated machine time of takes (renders.create inputs). A take that cannot be estimated
+ * counts as too long, so it asks rather than slipping through.
+ */
+async function takesSeconds(host: RunHost, inputs: readonly unknown[]): Promise<number> {
+  let total = 0
+  for (const raw of inputs) {
+    const i = raw as Partial<CommandParsedInput<'renders.create'>>
+    try {
+      const e = (await host.deps.runtime.execute(
+        'renders.estimate',
+        {
+          pieceId: i.pieceId,
+          takes: [{ sceneId: i.sceneId, scene: i.scene }],
+          autoTune: i.autoTune ?? false,
+          engine: i.engine ?? 'auto',
+        },
+        host.ctx,
+      )) as CommandOutput<'renders.estimate'>
+      total += e.seconds
+    } catch {
+      return Number.POSITIVE_INFINITY
+    }
+  }
+  return total
 }
 
 /** What a paid call will cost, when its service can say; null otherwise. */
@@ -716,8 +800,11 @@ async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepO
   const mutations: Job[] = []
   let waiting = false
   const run = await ctx.repo.runs.first(eq(t.agentRun.id, runId))
-  // Calls a Render job's plan already approved, made so far in this run.
-  let preapproved = steps.filter((s) => s.name === 'renders.create' && s.status !== 'denied').length
+  // Takes a Render job has started so far, over every run of the job (a message carrying the job
+  // on does not start a fresh allowance), and the machine time they were estimated at.
+  const jobTakes = run?.job ? await jobRenderInputs(host, runId, run.job, steps) : []
+  let preapproved = jobTakes.length
+  let machineSpent: number | null = null
   const allowances = lastFreeTracker(ctx)
 
   for (const call of calls) {
@@ -784,10 +871,18 @@ async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepO
     if (lastFree) admission = { kind: 'approve' }
     else if (
       admission.kind === 'approve' &&
-      jobApproves(run?.job ?? null, parsed.command, preapproved)
+      run?.job &&
+      jobApproves(run.job, parsed.command, preapproved)
     ) {
-      admission = { kind: 'run' }
-      preapproved++
+      // Only takes that fit the plan the person saw: within the machine time of its estimate.
+      // A bigger, finer or longer take asks, with its own estimate on the card.
+      machineSpent ??= await takesSeconds(host, jobTakes)
+      const seconds = await takesSeconds(host, [parsed.input])
+      if (machineSpent + seconds <= jobMachineBudget(run.job)) {
+        admission = { kind: 'run' }
+        preapproved++
+        machineSpent += seconds
+      }
     }
     if (parsed.command === 'renders.create' && run?.job) {
       const retake = await retakeLimit(host, parsed.input as { retryOf?: string })
@@ -1131,7 +1226,7 @@ async function answerOf(host: RunHost, job: Job): Promise<CommandRun> {
 
 /** The photo read, on the run's own client and tier, billed to the run. */
 async function readInRun(host: RunHost, job: Job, ctx: Ctx): Promise<CommandRun> {
-  const { output, tokens, costUsd } = await readPhotos({
+  const { output } = await readPhotos({
     ctx,
     client: host.client,
     model: host.model as AssistantModelId,
@@ -1143,9 +1238,11 @@ async function readInRun(host: RunHost, job: Job, ctx: Ctx): Promise<CommandRun>
       pieceId: host.pieceId,
       stage: host.stage,
     },
+    spent: async (usage) => {
+      await addUsage(host.ctx, host.runId, usage)
+      host.emit({ type: 'usage', tokens: usage.tokens, costUsd: usage.costUsd })
+    },
   })
-  await addUsage(host.ctx, host.runId, { tokens, costUsd })
-  host.emit({ type: 'usage', tokens, costUsd })
   return { value: output }
 }
 

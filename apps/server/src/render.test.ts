@@ -259,6 +259,49 @@ describe('saved shots and takes', () => {
     expect(failed).toMatchObject({ engine: 'blender', status: 'failed' })
   })
 
+  it('gives a piece with an automatic cover its first finished still as the cover', async () => {
+    const submit = vi.fn<Services['renderQueue']['submit']>(async () => {})
+    server.runtime.services.register('renderQueue', {
+      capabilities: { blender: true },
+      submit,
+      cancel: async () => {},
+    })
+    const still = await putAsset(ctx, {
+      bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+      name: 'hero.png',
+      mime: 'image/png',
+      kind: 'image',
+    })
+    const piece = await api.call('pieces.create', { templateId: 'solitaire' })
+    expect(piece).toMatchObject({ coverAssetId: null, coverAuto: true })
+    await api.call('renders.create', { pieceId: piece.id, scene: {} })
+    await submit.mock.calls.at(-1)![2].update({
+      status: 'done',
+      progress: 1,
+      assetIds: [still.id],
+      seconds: 30,
+    })
+    expect((await api.call('pieces.get', { id: piece.id })).coverAssetId).toBe(still.id)
+
+    // A cover someone chose stays.
+    const chosen = await api.call('pieces.create', { templateId: 'solitaire' })
+    await api.call('pieces.update', { id: chosen.id, coverAssetId: still.id })
+    const other = await putAsset(ctx, {
+      bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1]),
+      name: 'top.png',
+      mime: 'image/png',
+      kind: 'image',
+    })
+    await api.call('renders.create', { pieceId: chosen.id, scene: {} })
+    await submit.mock.calls.at(-1)![2].update({
+      status: 'done',
+      progress: 1,
+      assetIds: [other.id],
+      seconds: 30,
+    })
+    expect((await api.call('pieces.get', { id: chosen.id })).coverAssetId).toBe(still.id)
+  })
+
   it('hands work left unfinished by a restart back to its services, as whoever queued it', async () => {
     server.runtime.services.register('renderQueue', {
       capabilities: { blender: true },

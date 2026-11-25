@@ -115,3 +115,15 @@ export function motionLabel(take: Pick<RenderJob, 'scene'>): string | null {
   }
   return `${names[a.type] ?? a.type} · ${a.seconds} s`
 }
+
+/**
+ * The shot a take goes into when it is used in the set: its own, or (a variant or one-off take,
+ * which has none) a new shot made from exactly the scene it rendered.
+ */
+export function shotForTake(
+  take: Pick<RenderJob, 'sceneId' | 'title' | 'variantLabel' | 'scene'>,
+): { sceneId: string } | { create: { title: string; scene: RenderJob['scene'] } } {
+  if (take.sceneId) return { sceneId: take.sceneId }
+  const title = (take.variantLabel ? `${take.title} · ${take.variantLabel}` : take.title).trim()
+  return { create: { title: (title || 'Take').slice(0, 80), scene: take.scene } }
+}

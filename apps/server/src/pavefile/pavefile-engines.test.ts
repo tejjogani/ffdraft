@@ -1,6 +1,6 @@
 /**
- * A .pave file with the real kernel: the exact geometry inside is a real STEP solid and the
- * display mesh a real GLB, both written without claiming an export, and the reopened piece
+ * A .pave file with the real kernel: the display mesh inside is a real GLB, written without
+ * claiming an export, the exact STEP (a counted export) is left out, and the reopened piece
  * evaluates to the same facts as the one it was saved from.
  */
 import { unzipSync } from 'fflate'
@@ -16,14 +16,14 @@ beforeAll(async () => {
 }, BOOT_TIMEOUT)
 afterAll(() => server.dispose())
 
-it('carries real STEP and GLB geometry and reopens to the same facts, never counted', async () => {
+it('carries real GLB geometry, no STEP, and reopens to the same facts, never counted', async () => {
   const piece = await api.call('pieces.create', { templateId: 'solitaire', title: 'Real' })
   const { asset, notes } = await api.call('pieces.saveFile', { id: piece.id })
   expect(notes).toEqual([])
   const bytes = await assetBytes(api, asset)
   const entries = unzipSync(bytes)
-  const step = new TextDecoder().decode(entries['geometry/exact.step']!.subarray(0, 200))
-  expect(step).toMatch(/^ISO-10303-21;/)
+  // The exact STEP is a counted export, so the free file never carries it.
+  expect(entries['geometry/exact.step']).toBeUndefined()
   const glb = entries['geometry/display.glb']!
   expect(new TextDecoder().decode(glb.subarray(0, 4))).toBe('glTF')
 

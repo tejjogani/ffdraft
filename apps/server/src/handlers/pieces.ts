@@ -1,6 +1,7 @@
 import {
   buildDesign,
   type Design,
+  emptyBuildReason,
   emptyDesign,
   originNeedsAttestation,
   PAVE_MIME,
@@ -262,6 +263,8 @@ export const pieces: HandlerGroup<'pieces'> = {
     const piece = await getPiece(ctx, id)
     const [row] = await ctx.repo.pieces.update(eq(t.piece.id, id), {
       spec,
+      // The spec says what the piece is: a ring respecified as a pendant becomes a pendant.
+      kind: spec.kind,
       stage: advance(piece.stage, 'spec'),
       updatedAt: new Date(),
     })
@@ -273,7 +276,11 @@ export const pieces: HandlerGroup<'pieces'> = {
     const piece = await getPiece(ctx, id)
     if (!piece.spec)
       throw conflict('This piece has no saved spec yet; save one with pieces.setSpec first')
-    const ops = replaceDesignOps(piece.design, buildDesign(piece.spec))
+    const built = buildDesign(piece.spec)
+    // An empty build is a failure, not a success with nothing in it: the design stays as it was.
+    const empty = emptyBuildReason(piece.spec, built)
+    if (empty) throw conflict(empty)
+    const ops = replaceDesignOps(piece.design, built)
     const { version } =
       ops.length === 0
         ? { version: piece.version }

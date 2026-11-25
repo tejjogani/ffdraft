@@ -299,7 +299,7 @@ answers with a message saying so, and Standard works.
 | "Claude's API did not accept the API key" (401) | The key is wrong, revoked or cut short. Paste it again in Settings, AI and press Test, or fix the `.env` line and restart |
 | "This API key is not allowed to use …" (403), or "… is not available to this API key" | The key's workspace cannot use that model. Pick another tier, or point the tier at a model the key can use (Test lists them) |
 | "Claude is busy or this key has hit its rate limit" (429) | Wait a minute and press Retry. New Console accounts start with low limits; they rise with use |
-| "Claude declined this request" (a refusal) | Claude's safety checks stopped the turn (except on Haiku, Claude's API first lets a fallback model try). Rephrase, or try another tier. Changes made before it stay |
+| "Claude declined this request" (a refusal) | Claude's safety checks stopped the turn (on Power and Standard, Claude's API first lets a fallback model try; on Light it does not). Rephrase, or try another tier. Changes made before it stay |
 | "Could not reach Claude's API" | No internet, or a firewall or proxy blocks `api.anthropic.com`. Test in Settings, AI says the same |
 | Power fails with a message about data retention | See the note on Claude Fable 5.2 above; use Standard |
 | "Paused at $3 · Continue" | The run reached its cost cap. Press Continue to go on |
@@ -491,7 +491,7 @@ turn it on, then restart Pavé. A value set in your terminal wins over the file.
 | `PAVE_SEED` | `1` | `0` skips the welcome workspace on a fresh data folder |
 | `PAVE_AUTH` | `local` | `local`: no sign-in, one person. `accounts`: sign-in, organisations, invitations |
 | `BETTER_AUTH_SECRET` | — | Required with `accounts`: 32 or more random characters |
-| `PAVE_PUBLIC_URL` | `http://localhost:8787` | The address people reach Pavé at, when it is not your own computer |
+| `PAVE_PUBLIC_URL` | `http://localhost:8787` | The address people reach Pavé at, when it is not your own computer. Without sign-in (local mode) the server answers only requests addressed to localhost, 127.0.0.1, [::1] or this address, which stops other websites from reaching it |
 | `DATABASE_URL` | — | A PostgreSQL 18 address. Without it Pavé uses its own built-in database in the data folder |
 | `PAVE_MAX_UPLOAD_MB` | `200` | Largest file that can be uploaded |
 | `PAVE_KERNEL_WORKERS` | from the computer: 2 on 8 GB, 3 on 16 GB, at most 4, and one processor left free | How many geometry jobs run at once |

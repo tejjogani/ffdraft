@@ -9,8 +9,8 @@ import { useBrowserTakes } from '../features/render/browser-takes'
 import { useClientToolRelay } from '../lib/client-tools'
 import { useShortcutListener } from '../lib/commands'
 import { useServerEvents } from '../lib/events'
-import { useRpc } from '../lib/query'
 import { useNarrow } from '../lib/narrow'
+import { useRpc } from '../lib/query'
 import { isUnauthorized } from '../lib/rpc'
 import { SessionContext } from '../lib/session'
 import { AuthScreen } from '../pages/auth/AuthScreen'
@@ -31,8 +31,8 @@ export function Root() {
     return (
       <div className="app-drag flex h-dvh items-center justify-center bg-bg-subtle">
         <EmptyState
-          title="Can’t reach the studio"
-          description={session.error.message}
+          title="Can’t reach the Pavé server"
+          description="Is Pavé still running? Start it again with pnpm start in the Pavé folder, then try again."
           action={
             <Button className="app-no-drag" onClick={() => void session.refetch()}>
               Try again

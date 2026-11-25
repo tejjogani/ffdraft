@@ -128,6 +128,8 @@ export async function placeTakePlane(
   const geometry = ctx.services.isConfigured('geometry') ? ctx.services.get('geometry') : null
   if (!geometry?.subject) return null
   const piece = await getPiece(ctx, pieceId)
+  // Nothing built: there is no width to scale the picture to, and nothing to model over yet.
+  if (Object.keys(piece.design.nodes).length === 0) return null
   const subject = await geometry.subject(piece.design, serviceContext(ctx), {
     pieceId,
     ...(signal ? { signal } : {}),

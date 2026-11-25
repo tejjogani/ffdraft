@@ -244,7 +244,8 @@ describe('what the model is shown of pinned references', () => {
     expect(blocks.map((b) => b.type)).toEqual(['text', 'image', 'text'])
     // The context names both pins; the view-only one by its details only.
     const context = systemText(first)
-    expect(context).toContain(`“${metResult.title}” (id ${open!.id}; met;`)
+    // Titles are quoted in the context (the text here is the content's JSON, so \" ).
+    expect(context).toContain(`\\"${metResult.title}\\" (id ${open!.id}; met;`)
     expect(context).toContain('its picture is in the message above, labelled')
     expect(context).toContain(`(id ${viewOnly.id}; web; view only:`)
     expect(context).toContain('Not shown to you (view-only references')

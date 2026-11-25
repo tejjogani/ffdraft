@@ -15,13 +15,20 @@ export function JobControls({
   size = 'sm',
   onTakeOver,
   showChat = true,
+  primary = true,
 }: {
   run: Run
   size?: 'sm' | 'md'
   /** After Take over: e.g. go to the stage's tab. */
   onTakeOver?: () => void
   showChat?: boolean
+  /**
+   * Whether Resume and Accept are the view's ink action. The dock's copy of a job is not: the
+   * job bar on the piece has the one primary button.
+   */
+  primary?: boolean
 }) {
+  const main = primary ? ('primary' as const) : ('secondary' as const)
   const a = useRunActions()
   const state = jobState(run)
   const fail = (what: string) => (e: Error) => toast.error(`Couldn’t ${what}`, e.message)
@@ -78,7 +85,7 @@ export function JobControls({
       <div className="flex flex-wrap items-center gap-1.5">
         <Button
           size={size}
-          variant="primary"
+          variant={main}
           icon={Play}
           disabled={a.resuming}
           onClick={() => void a.resume(run.id).catch(fail('resume the job'))}
@@ -94,7 +101,7 @@ export function JobControls({
       <div className="flex flex-wrap items-center gap-1.5">
         <Button
           size={size}
-          variant="primary"
+          variant={main}
           icon={Check}
           disabled={a.accept.isPending}
           onClick={() => a.accept.mutate({ runId: run.id }, { onError: fail('accept it') })}

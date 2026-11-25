@@ -32,7 +32,7 @@ Names are fixed; there is nothing else in a file.
 | `assets.json` | Every picture the records point at: the id they use, its entry, name, type and size |
 | `assets/<sha256>.<ext>` | The pictures themselves, named by the SHA-256 of their bytes (identical pictures are stored once) |
 | `thumbnails/cover.webp` | The cover, 256 px wide, for file browsers |
-| `geometry/exact.step` | The exact solid (B-rep) as evaluated when the file was saved |
+| `geometry/exact.step` | Not written any more (a STEP is a counted export); files from earlier versions may carry it, and readers accept it |
 | `geometry/display.glb` | The display meshes, with stones and materials |
 
 All JSON is UTF-8. Ids inside a file are the ids the piece had where it was saved; they only
@@ -81,10 +81,9 @@ Not inside:
   the piece's pins, the history of shot changes, members and settings.
 
 The geometry is a cache for viewers and future fast opening. The design is the truth: opening
-rebuilds from it and does not read the STEP or GLB. The STEP inside is never offered as a STEP
-export of its own. It is, however, an ordinary entry in an ordinary zip: anyone who unzips a
-`.pave` file can read it with another CAD tool. If paid STEP exports must not be obtainable this
-way, drop `geometry/exact.step` from `save.ts` (readers already accept files without it).
+rebuilds from it and does not read the GLB. The exact STEP is left out: a `.pave` is free, and
+an ordinary zip, so a STEP inside it would be an uncounted STEP export for anyone who unzipped
+it. Files saved by earlier versions may still carry `geometry/exact.step`; they open as before.
 
 ## Opening
 

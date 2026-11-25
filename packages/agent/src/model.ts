@@ -47,6 +47,11 @@ export interface ScriptedTurn {
    * mid-answer, or a tool input the SDK could not parse.
    */
   failAfterContent?: unknown
+  /**
+   * Stream the content, then wait with nothing more until the request is aborted: a long answer
+   * the designer stops (or a server shutting down).
+   */
+  stallAfterContent?: boolean
 }
 
 export interface ScriptedModel extends ModelClient {
@@ -226,13 +231,21 @@ export function scriptedModel(turns: readonly ScriptedTurn[]): ScriptedModel {
           if (turn.error) throw turn.error
           const message = messageFor(turn, index, String(params.model))
           const events = eventsFor(message)
-          const cut = turn.failAfterContent ? events.length - 2 : events.length
+          const cut =
+            turn.failAfterContent || turn.stallAfterContent ? events.length - 2 : events.length
           for (const event of events.slice(0, cut)) {
             if (signal?.aborted) throw new ScriptAbortError()
             await Promise.resolve()
             yield event
           }
           if (turn.failAfterContent) throw turn.failAfterContent
+          if (turn.stallAfterContent) {
+            await new Promise<void>((resolve) => {
+              if (signal?.aborted) resolve()
+              signal?.addEventListener('abort', () => resolve(), { once: true })
+            })
+            throw new ScriptAbortError()
+          }
           settle!.resolve(message)
         } catch (err) {
           settle!.reject(err)

@@ -405,12 +405,16 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
     const stream = b.stream === true
     const bindingBeta = betas.includes('thinking-binding-controls-2026-08-01')
     const messageId = `msg_fake_${index}_${randomBytes(6).toString('hex')}`
-    const startUsage = {
-      input_tokens: usage.input_tokens,
-      cache_read_input_tokens: usage.cache_read_input_tokens,
-      cache_creation_input_tokens: usage.cache_creation_input_tokens,
+    // The input usage message_start reports: the reply's own numbers once it is known (a test
+    // or a replay sets them), else the fake's estimate (a slow source opens the stream early).
+    let reported: FakeReply['usage'] | null = null
+    const startUsage = () => ({
+      input_tokens: reported?.input_tokens ?? usage.input_tokens,
+      cache_read_input_tokens: reported?.cache_read_input_tokens ?? usage.cache_read_input_tokens,
+      cache_creation_input_tokens:
+        reported?.cache_creation_input_tokens ?? usage.cache_creation_input_tokens,
       output_tokens: 1,
-    }
+    })
     const startMessage = (m: string) => ({
       id: messageId,
       type: 'message',
@@ -421,7 +425,7 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
       stop_sequence: null,
       stop_details: null,
       usage: {
-        ...startUsage,
+        ...startUsage(),
         cache_creation: null,
         inference_geo: null,
         iterations: null,
@@ -509,6 +513,7 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
       })
     }
 
+    reported = reply.usage ?? null
     const fault = reply.fault
     if (fault?.type === 'reset') {
       log({ ...base, n: index, reply, fault: 'reset' })
@@ -645,8 +650,12 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
     // A server-side fallback keeps the request's model in message_start, as the turn began there.
     open(fault?.type === 'refusal' ? model! : servedBy)
     const perBlock = blockEvents(content, chunk, fault?.type === 'max_tokens_in_tool')
-    const dropAfter = fault?.type === 'drop' ? (fault.afterBlocks ?? 1) : Number.POSITIVE_INFINITY
+    const dropAfter =
+      fault?.type === 'drop' || fault?.type === 'stall'
+        ? (fault.afterBlocks ?? 1)
+        : Number.POSITIVE_INFINITY
     for (let i = 0; i < perBlock.length; i++) {
+      if (i >= dropAfter && fault?.type === 'stall') break
       if (i >= dropAfter) {
         // A connection dropped mid-stream: no message_stop, the socket just closes.
         res.destroy()
@@ -655,6 +664,11 @@ export async function startFakeApi(opts: FakeApiOptions): Promise<FakeApi> {
       for (const e of perBlock[i]!) res.write(frame(e))
       // Yield so the client sees the stream arrive in pieces.
       await new Promise((r) => setImmediate(r))
+    }
+    if (fault?.type === 'stall') {
+      // Keeps the stream open until the client gives up (Stop, shutdown): never finishes.
+      await new Promise<void>((r) => res.once('close', () => r()))
+      return
     }
     if (dropAfter <= perBlock.length) {
       res.destroy()

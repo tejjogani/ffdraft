@@ -14,6 +14,7 @@ import { Link } from '@tanstack/react-router'
 import { Hammer, Lock, RefreshCw, ShieldAlert, Sparkles, Wand2, X } from 'lucide-react'
 import { useRef, useState } from 'react'
 import { assetUrl } from '../../lib/assets'
+import { modelName } from '../../lib/format'
 import { invalidateFor, queryClient, useRpc } from '../../lib/query'
 import { type RpcError, rpc } from '../../lib/rpc'
 import { useSession } from '../../lib/session'
@@ -515,8 +516,8 @@ function BriefCard({
         />
       </div>
       <p className="text-3xs text-fg-subtle">
-        {perImage(brief.estimate.perImageUsd)} an image · prompt by {brief.claudeModel} (
-        {usd(brief.claudeUsd)})
+        {perImage(brief.estimate.perImageUsd)} an image · prompt by {modelName(brief.claudeModel)},
+        prompt alone ({usd(brief.claudeUsd)})
       </p>
     </div>
   )

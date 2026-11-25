@@ -98,6 +98,32 @@ export function latestJob(runs: readonly Run[] | undefined, stage: JobStage): Ru
   return runs?.find((r) => r.job?.stage === stage) ?? null
 }
 
+/**
+ * What the runs a job carried on from (Resume, a change asked for in review) already spent:
+ * their cost and the time they ran, followed through `continues` among the runs at hand. The bar
+ * adds the current run's own, so a resumed job shows the whole job, not only its last run.
+ */
+export function earlierJobTotals(
+  run: Pick<Run, 'job'>,
+  runs: readonly Pick<Run, 'id' | 'costUsd' | 'startedAt' | 'endedAt' | 'job'>[] | undefined,
+): { costUsd: number; ms: number } {
+  const byId = new Map((runs ?? []).map((r) => [r.id, r]))
+  const seen = new Set<string>()
+  let costUsd = 0
+  let ms = 0
+  let next = run.job?.continues ?? null
+  while (next && !seen.has(next)) {
+    seen.add(next)
+    const r = byId.get(next)
+    if (!r) break
+    costUsd += r.costUsd
+    if (r.startedAt && r.endedAt)
+      ms += Math.max(0, new Date(r.endedAt).getTime() - new Date(r.startedAt).getTime())
+    next = r.job?.continues ?? null
+  }
+  return { costUsd, ms }
+}
+
 /** "1:05" from milliseconds. */
 export function elapsed(ms: number): string {
   const s = Math.max(0, Math.round(ms / 1000))

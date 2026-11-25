@@ -51,6 +51,8 @@ export function StartJob({
   const { capabilities } = useSession()
   const [open, setOpen] = useState(!!defaultOpen)
   const [goal, setGoal] = useState(recipe.goal)
+  // The machine time the Render plan shows: the job approves its own takes only within it.
+  const [machineSeconds, setMachineSeconds] = useState<number | null>(null)
   // The goal the render plan last wrote, so a person's own words are never overwritten.
   const renderGoal = useRef(recipe.goal)
   const [tier, setTier] = useState<AssistantTier | null>(null)
@@ -90,7 +92,13 @@ export function StartJob({
     const said = refs.length ? SHOT_REFS_GOAL.trim() : goal.trim() || recipe.goal
     try {
       await send(said, {
-        job: { stage, goal: goal.trim() || undefined },
+        job: {
+          stage,
+          goal: goal.trim() || undefined,
+          ...(stage === 'render' && machineSeconds !== null
+            ? { machineSeconds: Math.round(machineSeconds) }
+            : {}),
+        },
         threadId: null,
         pieceId,
         bare: true,
@@ -205,6 +213,7 @@ export function StartJob({
               renderGoal.current = g
               setGoal((current) => (current === recipe.goal || current === prev ? g : current))
             }}
+            onMachineSeconds={setMachineSeconds}
           />
         )}
         <div>
@@ -238,7 +247,15 @@ export function StartJob({
  * standard set would take of this computer's time, and the free renders left. The quality and
  * the allowance become part of the job's goal; the shots, look and motion come from the answers.
  */
-function RenderPlan({ pieceId, onGoal }: { pieceId: string; onGoal: (goal: string) => void }) {
+function RenderPlan({
+  pieceId,
+  onGoal,
+  onMachineSeconds,
+}: {
+  pieceId: string
+  onGoal: (goal: string) => void
+  onMachineSeconds: (seconds: number | null) => void
+}) {
   const piece = useRpc('pieces.get', { id: pieceId })
   const saved = useRpc('scenes.list', { pieceId })
   const engine = useRpc('renders.engine', {})
@@ -258,6 +275,8 @@ function RenderPlan({ pieceId, onGoal }: { pieceId: string; onGoal: (goal: strin
     { enabled: planned.length > 0 },
   )
   const browser = engine.data ? !engine.data.available : false
+  const seconds = estimate.data?.seconds ?? null
+  useEffect(() => onMachineSeconds(seconds), [seconds, onMachineSeconds])
   // Blender takes count against the plan; the job plans within what is left.
   const plan = useRpc('plan.get', {})
   const renders = plan.data?.allowances.find((a) => a.allowance === 'render')

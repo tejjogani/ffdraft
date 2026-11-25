@@ -4,8 +4,8 @@
  * when it is submitted, and again when it is resumed after a restart (see `Runtime.recover`).
  */
 import { COUNTED_EXPORT_FORMATS, renderCost } from '@pave/schema'
-import { and, eq, inArray } from 'drizzle-orm'
-import type { Ctx } from './context'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
+import { type Ctx, publish } from './context'
 import * as t from './db/schema'
 import { AppError } from './errors'
 import { packageKey, renderKeys, settle } from './plans'
@@ -37,7 +37,26 @@ export async function updateRender(ctx: Ctx, id: string, patch: RenderJobPatch) 
     for (const key of renderKeys(row.id, renderCost(row.requestedScene ?? row.scene)))
       await settle(ctx, key, delivered ? 'used' : 'released')
   }
+  if (row?.status === 'done') await coverFromTake(ctx, row)
   return row
+}
+
+/**
+ * A piece whose cover is automatic and still empty gets its first finished still: cards and the
+ * overview show the jewellery, not a placeholder. A cover a person chose is never replaced, and
+ * an animation's frames are not a cover.
+ */
+async function coverFromTake(
+  ctx: Ctx,
+  take: { pieceId: string | null; assetIds: string[]; scene: { animation?: unknown } | null },
+) {
+  const still = take.assetIds[0]
+  if (!take.pieceId || !still || take.scene?.animation) return
+  const rows = await ctx.repo.pieces.update(
+    and(eq(t.piece.id, take.pieceId), eq(t.piece.coverAuto, true), isNull(t.piece.coverAssetId))!,
+    { coverAssetId: still },
+  )
+  if (rows.length) publish(ctx, { type: 'piece.updated', pieceId: take.pieceId })
 }
 
 /** Writes an image-to-3D update unless the job has already settled. */

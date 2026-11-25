@@ -12,6 +12,7 @@ import { type FormEvent, useState } from 'react'
 import { invalidateFor, queryClient, useRpc } from '../../lib/query'
 import { type RpcError, rpc } from '../../lib/rpc'
 import { activeOrg, useSession } from '../../lib/session'
+import { keyProblem, saveAfterCheck } from './key-input'
 
 type Check = CommandOutput<'assistant.key.test'>
 
@@ -71,20 +72,37 @@ export function KeyForm({ compact = false }: { compact?: boolean }) {
       setBusy(null)
     }
   }
-  const test = () =>
-    run('test', async () => {
+  const test = () => {
+    const problem = keyProblem(key)
+    if (problem) return setError(problem)
+    return run('test', async () => {
       setCheck(await rpc.call('assistant.key.test', key.trim() ? { apiKey: key.trim() } : {}))
     })
+  }
   const save = (e?: FormEvent) => {
     e?.preventDefault()
     if (!key.trim()) return
+    const problem = keyProblem(key)
+    if (problem) return setError(problem)
     void run('save', async () => {
+      // The same check as Test first: a key Claude refused is not saved as if it worked.
+      const checked = await rpc.call('assistant.key.test', { apiKey: key.trim() })
+      const go = saveAfterCheck(checked)
+      if (go === 'refuse') {
+        setCheck(checked)
+        return
+      }
       await rpc.call('assistant.key.set', { apiKey: key.trim() })
       setKey('')
       setCheck(null)
       setReplacing(false)
       refreshSetup()
-      toast.success('Claude API key saved', 'The assistant is on.')
+      if (go === 'save') toast.success('Claude API key saved', 'The assistant is on.')
+      else
+        toast({
+          title: 'Claude API key saved',
+          description: `It could not be checked just now: ${checked.message}`,
+        })
     })
   }
   const remove = () =>
@@ -146,6 +164,7 @@ export function KeyForm({ compact = false }: { compact?: boolean }) {
             onChange={(e) => {
               setKey(e.target.value)
               setCheck(null)
+              setError(null)
             }}
             placeholder="sk-ant-…"
             aria-label="Claude API key"
@@ -213,7 +232,8 @@ function Notice({
         'flex items-start gap-2 rounded-md px-3 py-2 text-sm',
         tone === 'ok' && 'bg-[color-mix(in_oklab,var(--ok)_9%,transparent)] text-fg',
         tone === 'warn' && 'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-fg',
-        tone === 'danger' && 'bg-[color-mix(in_oklab,var(--danger)_9%,transparent)] text-fg',
+        // Errors are said quietly, in one line, with no box (the design note's rule).
+        tone === 'danger' && 'px-0 py-0 text-fg',
       )}
     >
       <Icon

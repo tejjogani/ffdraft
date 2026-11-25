@@ -51,3 +51,19 @@ export const compact = (v: number): string =>
 
 export const plural = (n: number, one: string, many = `${one}s`): string =>
   `${num(n, 0)} ${n === 1 ? one : many}`
+
+/** "33 seconds", "1 second", "1.2K tokens": a unit the ledger stores in the singular, counted. */
+export const unitFor = (quantity: number, unit: string): string =>
+  quantity === 1 || /s$/.test(unit) ? unit : `${unit}s`
+
+/** Claude's display names where people read them; anything else as it is. */
+const MODEL_NAMES: Record<string, string> = {
+  'claude-fable-5-2': 'Claude Fable 5.2',
+  'claude-opus-5-5': 'Claude Opus 5.5',
+  'claude-sonnet-5-5': 'Claude Sonnet 5.5',
+  'claude-haiku-5-5': 'Claude Haiku 5.5',
+  'claude-opus-5': 'Claude Opus 5',
+  'claude-opus-4-8': 'Claude Opus 4.8',
+  'claude-sonnet-5': 'Claude Sonnet 5',
+}
+export const modelName = (id: string): string => MODEL_NAMES[id] ?? id

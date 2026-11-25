@@ -6,7 +6,7 @@
  * then the code, not the model, turns it into a spec draft and says whether a cut-out works.
  */
 import { type ModelClient, specQuestions } from '@pave/agent'
-import { mapError, messageUsage } from '@pave/agent/anthropic'
+import { mapError, messageUsage, StreamAdapter } from '@pave/agent/anthropic'
 import { buildReadRequest, parseReadMessage, ReadError, specFromRead } from '@pave/agent/photo'
 import {
   type AssistantModelId,
@@ -32,6 +32,8 @@ export interface ReadCall {
   signal?: AbortSignal
   /** The ledger's idempotency key and attribution. */
   usage: { key: string; runId: string | null; pieceId: string | null; stage?: JobStage | null }
+  /** Adds what the read cost to its run, on every path where tokens were billed. */
+  spent?: (usage: { tokens: Tokens; costUsd: number }) => Promise<unknown>
 }
 
 export async function readPhotos(
@@ -56,11 +58,32 @@ export async function readPhotos(
     ...(input.kindHint ? { kindHint: input.kindHint } : {}),
     ...(input.note ? { note: input.note } : {}),
   })
+  const meter = async (usage: { model: string; tokens: Tokens; costUsd: number }) => {
+    await recordUsage(ctx, {
+      meter: 'llm',
+      provider: 'anthropic',
+      model: usage.model,
+      quantity:
+        usage.tokens.input + usage.tokens.output + usage.tokens.cacheRead + usage.tokens.cacheWrite,
+      unit: 'tokens',
+      costUsd: usage.costUsd,
+      idempotencyKey: call.usage.key,
+      runId: call.usage.runId,
+      pieceId: call.usage.pieceId,
+      stage: call.usage.stage ?? null,
+    })
+    await call.spent?.(usage)
+  }
   let message: Awaited<ReturnType<ReturnType<ModelClient['stream']>['finalMessage']>>
+  const adapter = new StreamAdapter()
   try {
     const stream = call.client.stream(params, call.signal ? { signal: call.signal } : {})
+    for await (const event of stream) adapter.push(event)
     message = await stream.finalMessage()
   } catch (err) {
+    // A read that broke off or was stopped is still billed for what the API had streamed.
+    const partial = adapter.partialUsage()
+    if (partial) await meter(partial)
     if (call.signal?.aborted) throw call.signal.reason
     // Typed SDK errors become the same plain sentences a turn would show.
     throw new AppError('conflict', mapError(err, { model: call.model }).message)
@@ -68,19 +91,7 @@ export async function readPhotos(
 
   // Billed whether or not the answer is usable: the tokens were spent.
   const usage = messageUsage(message)
-  await recordUsage(ctx, {
-    meter: 'llm',
-    provider: 'anthropic',
-    model: message.model,
-    quantity:
-      usage.tokens.input + usage.tokens.output + usage.tokens.cacheRead + usage.tokens.cacheWrite,
-    unit: 'tokens',
-    costUsd: usage.costUsd,
-    idempotencyKey: call.usage.key,
-    runId: call.usage.runId,
-    pieceId: call.usage.pieceId,
-    stage: call.usage.stage ?? null,
-  })
+  await meter({ model: message.model, ...usage })
 
   let read: ReturnType<typeof parseReadMessage>
   try {
