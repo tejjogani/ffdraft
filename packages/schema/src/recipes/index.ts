@@ -212,6 +212,12 @@ function ring(spec: PieceSpec, notes: string[]): NodeInput[] {
 }
 
 /** Default letter height of an engraving, the least that engraves cleanly, and advance per letter per mm of height. */
+/**
+ * Shortest iced name whose block letters take pavé, mm: at 10 mm Tej and Isabella took no
+ * 1.1 mm stone at all and Amara two; from 14 mm every name is set (sparsely at 14).
+ */
+const ICED_NAME_MIN = 14
+
 const ENGRAVING_SIZE = 1.4
 const ENGRAVING_MIN = 0.6
 const ENGRAVING_ADVANCE = 0.7
@@ -283,6 +289,11 @@ function pendant(spec: PieceSpec, notes: string[]): NodeInput[] {
       bevel: 'round',
       bevelSize: 0.25,
     })
+    const tall = b?.heightMm ?? 9
+    if (iced && tall < ICED_NAME_MIN)
+      notes.push(
+        `At ${tall} mm a name's letters are too thin to take ${paveMax(spec)} mm stones with their seat walls, so the pavé comes out sparse or empty: make the name ${ICED_NAME_MIN} mm tall or more for an iced name.`,
+      )
   } else if (a === 'medallion') {
     nodes.push({
       id: 'body',

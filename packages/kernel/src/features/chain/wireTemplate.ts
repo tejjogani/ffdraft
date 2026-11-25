@@ -49,6 +49,46 @@ function grindBrep(shape: Shape3D, flat: number): Shape3D {
   }
 }
 
+/**
+ * A coarse centreline pushed out at its bends so its straight runs touch the true curve instead
+ * of cutting across inside it. Swept through few stations, a link's wire cut the inside of its
+ * bends, where the next link passes: every pair of a long fine chain coarsened at draft
+ * overlapped (curb 1 mm, 900 mm: 1091 of 1091 pairs), though production was clean. Each sample
+ * moves away from its bend's centre by ρ(1/cos(φ/2) − 1), φ the turn there and ρ its radius,
+ * which takes points on a circle to the polygon round it.
+ */
+function circumscribed(line: Centreline): Centreline {
+  const { points, closed } = line
+  const n = points.length / 3
+  const out = new Float64Array(points)
+  for (let i = 0; i < n; i++) {
+    if (!closed && (i === 0 || i === n - 1)) continue
+    const at = (k: number) => {
+      const j = ((k % n) + n) % n
+      return [points[j * 3]!, points[j * 3 + 1]!, points[j * 3 + 2]!] as const
+    }
+    const p = at(i)
+    const a = at(i - 1)
+    const b = at(i + 1)
+    const u = [p[0] - a[0], p[1] - a[1], p[2] - a[2]]
+    const v = [b[0] - p[0], b[1] - p[1], b[2] - p[2]]
+    const lu = Math.hypot(u[0]!, u[1]!, u[2]!)
+    const lv = Math.hypot(v[0]!, v[1]!, v[2]!)
+    if (lu < 1e-12 || lv < 1e-12) continue
+    const cos = (u[0]! * v[0]! + u[1]! * v[1]! + u[2]! * v[2]!) / (lu * lv)
+    const turn = Math.acos(Math.max(-1, Math.min(1, cos)))
+    if (turn < 1e-6) continue
+    // Toward the bend's centre: from p to the midpoint of its neighbours.
+    const m = [(a[0] + b[0]) / 2 - p[0], (a[1] + b[1]) / 2 - p[1], (a[2] + b[2]) / 2 - p[2]]
+    const lm = Math.hypot(m[0]!, m[1]!, m[2]!)
+    if (lm < 1e-12) continue
+    const radius = (lu + lv) / 2 / (2 * Math.sin(turn / 2))
+    const push = radius * (1 / Math.cos(turn / 2) - 1)
+    for (let k = 0; k < 3; k++) out[i * 3 + k] = p[k]! - (m[k]! / lm) * push
+  }
+  return { ...line, points: out }
+}
+
 /** Fewest sweep stations a link is meshed with when a long fine chain is coarsened to budget. */
 const MIN_STATIONS = 8
 
@@ -59,7 +99,11 @@ const MIN_STATIONS = 8
  * WASM objects.
  */
 export function wireTemplate(link: WireLink, stations: number): Template {
-  const sweep = (count: number) => sweepAlong(link.centreline(count), link.profile)
+  const sweep = (count: number) =>
+    sweepAlong(
+      count < stations ? circumscribed(link.centreline(count)) : link.centreline(count),
+      link.profile,
+    )
   return {
     crease: LINK_CREASE,
     mesh(quality: Quality) {

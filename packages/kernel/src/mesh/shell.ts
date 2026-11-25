@@ -250,6 +250,8 @@ const DRAIN_RINGS = [0, 0.5, 1]
 const DRAIN_PROBES = 12
 /** The start cap sits this far inside the cavity, below the lowest point of its back face, mm. */
 const DRAIN_CAP_INSET = 0.05
+/** Metal this steeply toward +Y (cosine) from a point of a hole is the back skin it opens through. */
+const BACK_SKIN = 0.5
 /** Spots tried per hole, spread over the half of the cavity's back face toward its end. */
 const DRAIN_TRIES = 40
 
@@ -352,10 +354,16 @@ function drainHoles(cavity: Manifold, back: number, outer: TriangleBvh, wall: nu
       const up = outer.raycast(x + dx, from, z + dz, 0, 1, 0)
       return Number.isFinite(up) ? from + up : back
     })
-    // The cap, and the wall up to a wall's depth under the skin it leaves through there.
+    // The cap and the wall, up to the skin the hole leaves through: metal closer than the wall
+    // counts unless it lies toward the back (up the hole, the skin it opens through, however
+    // that skin slopes); under a pip or beside an edge it lies to the side or in front.
     for (const [k, [dx, dz]] of offsets.entries()) {
-      for (let y = start; y === start || y <= exits[k]! - wall; y += wall / 2) {
-        if (outer.closest(x + dx, y, z + dz, hit, wall)) return null
+      for (let y = start; y === start || y < exits[k]!; y += wall / 2) {
+        if (
+          outer.closest(x + dx, y, z + dz, hit, wall) &&
+          hit.y - y < BACK_SKIN * Math.sqrt(hit.d2)
+        )
+          return null
         if (k === 0) break
       }
     }

@@ -182,13 +182,21 @@ describe('bail fit', () => {
           flatBack: 0.5,
           hollow: 1.25,
         },
-        { id: 'bail', kind: 'bail', host: 'body', style: 'hidden', opening: 5, width: 2.5, wire: 1.2 },
+        {
+          id: 'bail',
+          kind: 'bail',
+          host: 'body',
+          style: 'hidden',
+          opening: 5,
+          width: 2.5,
+          wire: 1.2,
+        },
       ]),
     )
     const weak = e.diagnostics.find((d) => d.code === 'bail.weakJoint')
     expect(weak?.level).toBe('warning')
     expect(weak!.value!).toBeLessThan(weak!.limit!)
-    expect(weak?.message).toMatch(/only \d+ % of the loop's back run/)
+    expect(weak?.message).toMatch(/less than a wire's length of its back run/)
     expect(weak?.fix?.ops).toEqual([{ t: 'update', id: 'bail', patch: { style: 'tube' } }])
   }, 60_000)
 

@@ -349,7 +349,9 @@ describe('recipes', () => {
     expect([25, 45, 100, 120].map(trophy)).toEqual(['hidden', 'hidden', 'hidden', 'hidden'])
     expect([150, 200].map(trophy)).toEqual(['tube', 'tube'])
     // The bail on a very large piece is the largest the node takes, not one the fit clamps.
-    const huge = planDesign(pendant({ archetype: 'icedPendant', body: { heightMm: 200 }, stones: pave }))
+    const huge = planDesign(
+      pendant({ archetype: 'icedPendant', body: { heightMm: 200 }, stones: pave }),
+    )
     expect((huge.design.nodes.bail as NodeOf<'bail'>).opening).toBe(20)
     expect(huge.notes.join(' ')).not.toMatch(/Bail/)
   })
@@ -362,6 +364,17 @@ describe('recipes', () => {
     const iced = body([{ role: 'pave', widthMm: 1.1 }])
     expect(iced.source).toMatchObject({ type: 'text', font: 'block' })
     expect(body([]).source).toMatchObject({ type: 'text', font: 'script' })
+    // Under 14 mm the letters take no stone with its seat wall, and the plan says so.
+    const notes = (heightMm: number) =>
+      planDesign(
+        pendant({
+          archetype: 'namePendant',
+          body: { heightMm, text: 'Tej' },
+          stones: [{ role: 'pave', widthMm: 1.1 }],
+        }),
+      ).notes.join(' ')
+    expect(notes(10)).toMatch(/too thin to take 1.1 mm stones/)
+    expect(notes(14)).not.toMatch(/too thin/)
   })
 
   it('agrees with the canon on a hidden bail’s opening', () => {

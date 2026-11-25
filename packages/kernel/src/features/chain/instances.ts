@@ -33,6 +33,11 @@ export interface Template {
   brep?(): Shape3D
   /** Dihedral angle above which the display mesh shows a hard edge (default: the kernel's). */
   crease?: number
+  /**
+   * Meshed at the quality asked for and never coarsened to the budget: a part with one copy
+   * (a clasp), which costs little and would lose its shape at a link's share of the triangles.
+   */
+  fixed?: boolean
 }
 
 export interface Instance {
@@ -108,9 +113,12 @@ export function instancedSolid(
     const key = qualityKey(quality)
     let entry = cache.get(key)
     if (!entry) {
-      const share = budgetFor(quality) / instances.length
+      const copies = instances.filter((i) => !templates[i.template]!.fixed).length
+      const share = budgetFor(quality) / Math.max(1, copies)
       entry = templates.map((t) => {
-        const { tris, reduced } = budgeted(t, quality, share)
+        const { tris, reduced } = t.fixed
+          ? { tris: t.mesh(quality), reduced: false }
+          : budgeted(t, quality, share)
         const display =
           t.crease === undefined
             ? tessellationOf(tris)

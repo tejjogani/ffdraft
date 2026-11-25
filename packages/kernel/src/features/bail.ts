@@ -74,10 +74,12 @@ const STRAP_SKIN = 0.4
  */
 const STRAP_SHARES = [0.85, 0.5]
 /**
- * Least share of a full lap of a hidden loop's back run (wire × width × its height) that must be
- * cast into the piece: on a solid back about 0.7 is, and a rim and a strap give 0.3 and more.
+ * Least metal of a hidden loop cast into its host, as lengths of its back run (each wire × width
+ * × wire) wholly in the metal. Over an open back held only where its runs end, a 16 mm trophy's
+ * loop had a fifth of one; a strap or a solid back gives one or many. A share of the whole back
+ * run would wrongly fault a long loop held well by a strap.
  */
-const JOINT_SHARE = 0.25
+const JOINT_WIRES = 1
 
 const sinkFor = (wire: number) => Math.max(SINK, SINK_PER_WIRE * wire)
 
@@ -892,9 +894,9 @@ export const bail = defineFeature('bail', (node, ctx) => {
         limit: 0.02,
       })
   }
-  // How much of the loop is cast into the piece: on a solid back about 70 % of a full lap of its
-  // back run is in the metal. Over an open back held at the ends of its back run only (a small
-  // scooped trophy whose neck is too thin for a strap) it was under a tenth, with nothing said.
+  // How much of the loop is cast into the piece. Over an open back held at the ends of its back
+  // run only (a small scooped trophy whose neck is too thin for a strap) it was a fifth of a
+  // wire's length of the run, with nothing said.
   const joint =
     host && supported && node.style === 'hidden'
       ? jointVolume(
@@ -902,18 +904,16 @@ export const bail = defineFeature('bail', (node, ctx) => {
           host.bodies.map((b) => b.solid),
         )
       : Infinity
-  const lap = node.wire * node.width * (node.opening + node.wire)
-  if (topOnly || joint < JOINT_SHARE * lap)
+  const least = JOINT_WIRES * node.wire * node.wire * node.width
+  if (topOnly || joint < least)
     ctx.report({
       level: 'warning',
       code: 'bail.weakJoint',
       message: topOnly
         ? 'The back is open under the hidden bail and no metal below it takes a strap, so the loop is held by the top rim alone: a thin joint that a chain pulls on. Use a bail on top, or close the back under the loop.'
-        : `The back is open under the hidden bail, so only ${((100 * joint) / lap).toFixed(0)} % of the loop's back run is cast into the piece: a thin joint that a chain pulls on. Use a bail on top, or close the back under the loop.`,
+        : `The back is open under the hidden bail, so only ${joint.toFixed(1)} mm³ of the loop is cast into the piece, less than a wire's length of its back run (${least.toFixed(1)} mm³): a thin joint that a chain pulls on. Use a bail on top, or close the back under the loop.`,
       at: [...opening],
-      ...(Number.isFinite(joint)
-        ? { value: joint, limit: Number((JOINT_SHARE * lap).toFixed(2)) }
-        : {}),
+      ...(Number.isFinite(joint) ? { value: joint, limit: Number(least.toFixed(2)) } : {}),
       fix: {
         label: 'Use a tube bail on top',
         ops: [{ t: 'update' as const, id: node.id, patch: { style: 'tube' } }],

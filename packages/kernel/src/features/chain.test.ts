@@ -158,23 +158,32 @@ describe('chain', () => {
       const result = scene.nodes.get('c')!
       const data = result.data as ChainData
       expect(data.closed).toBe(false)
-      expect(result.bodies).toHaveLength(2)
-      // The clasp is two pieces (the lobster and its ring, the box and its tongue) that never
-      // touch each other, each cast onto the end link it hangs from.
-      const clasp = result.bodies[1]!.solid.manifold(scene.quality).decompose()
-      const links = result.bodies[0]!.solid.manifold(scene.quality)
+      expect(data.clasp?.style).toBe(
+        (node as { style: string }).style === 'tennis' ? 'box' : 'lobster',
+      )
+      // The clasp is part of the chain's one body: its pieces (the lobster and its ring, the box
+      // and its tongue) and the end links are separate shells that never touch, as links are.
+      expect(result.bodies).toHaveLength(1)
+      const { end0, end1 } = result.frames
+      const near = (b: { min: number[]; max: number[] }) =>
+        [0, 0.25, 0.5, 0.75, 1].some((t) =>
+          [0, 1, 2].every((k) => {
+            const p = end0!.origin[k]! + t * (end1!.origin[k]! - end0!.origin[k]!)
+            return p >= b.min[k]! - 1 && p <= b.max[k]! + 1
+          }),
+        )
+      const shells = result.bodies[0]!.solid.manifold(scene.quality).decompose()
       try {
-        expect(clasp).toHaveLength(2)
-        const between = clasp[0]!.intersect(clasp[1]!)
-        expect(between.volume()).toBeLessThan(1e-6)
-        between.delete()
-        for (const piece of clasp) {
-          const held = piece.intersect(links)
-          expect(held.volume()).toBeGreaterThan(1e-3)
-          held.delete()
-        }
+        const here = shells.filter((m) => near(m.boundingBox() as never))
+        expect(here.length).toBeGreaterThanOrEqual(4)
+        for (let i = 0; i < here.length; i++)
+          for (let j = i + 1; j < here.length; j++) {
+            const shared = here[i]!.intersect(here[j]!)
+            expect(shared.volume()).toBeLessThan(1e-6)
+            shared.delete()
+          }
       } finally {
-        for (const m of clasp) m.delete()
+        for (const m of shells) m.delete()
       }
       // Its ends are published at the back of the loop, above everything else.
       const top = result.bodies[0]!.solid.bounds().max[2]

@@ -5,9 +5,10 @@
  *
  * Clasp-local space: x runs along the chord from the end of the last link on one side (A, at
  * x = 0) to the start of the first link on the other (B), y across the chain in its plane, z
- * toward the chain's face. Each end is soldered to its link: it reaches SOLDER into it, so the
- * two cast as one, as a chain end is soldered to its ring. The clasp is two pieces that never
- * touch: the lobster (or box) on A, the ring (or tongue) on B, caught in it.
+ * toward the chain's face. Like the links, the clasp is separate pieces that never touch: the
+ * lobster (or box) against A's last link, the ring (or tongue) against B's first, caught in it,
+ * each stopping the clearance short of its link. A chain is bought or cast apart and assembled
+ * (the kernel never fuses its shells), and a jeweler solders the clasp's ends on then.
  */
 import type { Manifold } from 'manifold-3d'
 import { type Deletable, QUALITY, type Quality, runtime } from '../../core'
@@ -27,14 +28,17 @@ export interface Clasp {
   style: ClaspStyle
   /** The clasp's length along the chain, mm (the lobster, or the box). */
   length: number
-  /** Distance from A's end to B's end (each end reaching SOLDER into its link). */
+  /** Distance from A's last link to B's first, along the chord. */
   span: number
   /** The clasp's metal, in clasp-local space; `own` takes each temporary. */
   parts(own: <T extends Deletable>(m: T) => T, quality: Quality): Manifold[]
 }
 
-/** How far each end of the clasp reaches into its link, mm. */
-export const soldered = (wire: number) => 0.5 * wire
+/**
+ * How far each end of the clasp reaches into its link, mm: negative, it stops the clearance
+ * short, so its shells stay apart from the links' as the links' do from each other.
+ */
+const END_REACH = -CLASP_CLEARANCE
 
 /** A wire ring of centreline radius r round the y axis, centred at x = cx, as a Manifold. */
 function ringAboutY(cx: number, r: number, wire: number, quality: Quality): Manifold {
@@ -63,18 +67,18 @@ const lobsterLength = (linkWidth: number) => Math.min(25, Math.max(10, 2 * linkW
 
 /**
  * A lobster clasp and its ring spanning `span` (at least `lobsterMin(...)`): the lobster's eye
- * is soldered to A; the ring's near side passes through the claw where it is widest, and its far
- * side is soldered to B. The ring grows to take up the span, so the clasp meets both ends
+ * is against A; the ring's near side passes through the claw where it is widest, and its far
+ * side is against B. The ring grows to take up the span, so the clasp meets both ends
  * whatever whole number of links it replaces.
  */
 export function lobsterClasp(linkWidth: number, wire: number, span: number): Clasp {
   const L = lobsterLength(linkWidth)
   const eye = lobsterEyeWire(L, wire)
-  const solder = soldered(eye)
+  const reach = END_REACH
   // The ring's near side crosses the claw's plane at 0.75 of its length (inside the claw), its
   // far side past the claw's top; it reaches B.
-  const near = 0.75 * L - solder
-  const r = (span + solder - eye / 2 - near) / 2
+  const near = 0.75 * L - reach
+  const r = (span + reach - eye / 2 - near) / 2
   return {
     style: 'lobster',
     length: L,
@@ -90,7 +94,7 @@ export function lobsterClasp(linkWidth: number, wire: number, span: number): Cla
 function lobsterPlaced(L: number, eye: number, quality: Quality): Manifold {
   const claw = manifoldFromTriangles(lobsterMesh(L, eye, quality))
   try {
-    return claw.transform(multiply(translation([-soldered(eye), 0, 0]), LOBSTER_AXES) as never)
+    return claw.transform(multiply(translation([-END_REACH, 0, 0]), LOBSTER_AXES) as never)
   } finally {
     claw.delete()
   }
@@ -109,8 +113,8 @@ export function lobsterMin(linkWidth: number, wire: number): number {
   const key = `${L}:${eye}`
   const known = shortest.get(key)
   if (known !== undefined) return known
-  const solder = soldered(eye)
-  const near = 0.75 * L - solder
+  const reach = END_REACH
+  const near = 0.75 * L - reach
   const lobster = lobsterPlaced(L, eye, QUALITY.draft)
   let span = Infinity
   try {
@@ -123,7 +127,7 @@ export function lobsterMin(linkWidth: number, wire: number): number {
       if (touches) continue
       // A little more, so the ring clears the claw by the clearance and not by a hair.
       const rr = r + CLASP_CLEARANCE
-      span = near + 2 * rr + eye / 2 - solder
+      span = near + 2 * rr + eye / 2 - reach
       break
     }
   } finally {
@@ -140,10 +144,10 @@ export function lobsterMin(linkWidth: number, wire: number): number {
  */
 export function boxClasp(width: number, height: number, span: number): Clasp {
   const wall = Math.max(0.4, 0.1 * width)
-  const solder = soldered(wall)
+  const reach = END_REACH
   const c = CLASP_CLEARANCE
   // The plate on B is a wall thick; the box takes the rest of the span.
-  const box = span + 2 * solder - c - wall
+  const box = span + 2 * reach - c - wall
   const W = width
   const H = height
   return {
@@ -166,13 +170,9 @@ export function boxClasp(width: number, height: number, span: number): Clasp {
         )
         // Extruded along z, then turned so it runs along x (w across y, h along z).
         const solid = own(section.extrude(x1 - x0))
-        return own(
-          own(solid.transform(LOBSTER_AXES as never)).translate(
-            [x0, 0, 0],
-          ),
-        )
+        return own(own(solid.transform(LOBSTER_AXES as never)).translate([x0, 0, 0]))
       }
-      const start = -solder
+      const start = -reach
       const mouth = start + box
       const outer = block(W, H, r, start, mouth)
       const cavity = block(
@@ -201,7 +201,7 @@ export function boxClasp(width: number, height: number, span: number): Clasp {
 /** The shortest span a box clasp takes: a box 1.4 line widths long. */
 export function boxMin(width: number): number {
   const wall = Math.max(0.4, 0.1 * width)
-  return 1.4 * width - 2 * soldered(wall) + CLASP_CLEARANCE + wall
+  return 1.4 * width - 2 * END_REACH + CLASP_CLEARANCE + wall
 }
 
 /** Unit vector from a to b. */

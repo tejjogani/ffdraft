@@ -28,9 +28,10 @@ import {
   transformPoint,
   translation,
 } from '../geometry/vec'
+import { trianglesFromManifold } from '../solid/solid'
 import { boxClasp, boxMin, type Clasp, lobsterClasp, lobsterMin, toward } from './chain/clasp'
 import { type ChainPath, drapePath, linkFrames, straightPath } from './chain/drape'
-import { type Instance, instancedSolid } from './chain/instances'
+import { type Instance, instancedSolid, type Template } from './chain/instances'
 import { type LinkSet, wireChain } from './chain/links'
 import { type ChainSection, holeProfile, seatHeight } from './chain/seat'
 import { NoRoomForHinge, type TennisLink, tennisLink } from './chain/tennis'
@@ -213,19 +214,26 @@ function claspAt(
   return null
 }
 
-/** The clasp's metal placed in the chain (node-local space). */
-function claspSolid(clasp: Clasp, place: Mat4, quality: BuildContext['quality']): Solid {
-  const { manifold: mf } = runtime()
-  const owned: { delete(): void }[] = []
-  const own = <T extends { delete(): void }>(m: T): T => {
-    owned.push(m)
-    return m
-  }
-  try {
-    const whole = own(mf.Manifold.union(clasp.parts(own, quality)))
-    return solidFromManifold(whole.transform(place as never))
-  } finally {
-    for (const m of owned) m.delete()
+/**
+ * The clasp as one more part of the chain's body, in clasp-local space: one copy, placed by its
+ * frame, meshed at full quality (a link's share of the triangle budget would lose its shape).
+ */
+function claspTemplate(clasp: Clasp): Template {
+  return {
+    fixed: true,
+    mesh: (quality) => {
+      const { manifold: mf } = runtime()
+      const owned: { delete(): void }[] = []
+      const own = <T extends { delete(): void }>(m: T): T => {
+        owned.push(m)
+        return m
+      }
+      try {
+        return trianglesFromManifold(own(mf.Manifold.union(clasp.parts(own, quality))))
+      } finally {
+        for (const m of owned) m.delete()
+      }
+    },
   }
 }
 
@@ -297,7 +305,14 @@ export const chain = defineFeature('chain', (node, ctx) => {
       limit: node.wire,
     })
 
-  const { solid, reduced } = instancedSolid(plan.templates, instances)
+  // The clasp is one more part of the chain's one body: its shells stay apart from the links'.
+  const templates = clasp ? [...plan.templates, claspTemplate(clasp.clasp)] : plan.templates
+  if (clasp)
+    instances.push({
+      template: templates.length - 1,
+      matrix: multiply(place, frameMatrix(clasp.frame)),
+    })
+  const { solid, reduced } = instancedSolid(templates, instances)
   if (reduced(ctx.quality))
     ctx.report({
       level: 'info',
@@ -305,7 +320,6 @@ export const chain = defineFeature('chain', (node, ctx) => {
       message: `The ${n} links were meshed coarser than ${ctx.detail} detail to keep the chain's triangle count down; its volume and weight are unaffected.`,
     })
 
-  const claspPlace = clasp ? multiply(place, frameMatrix(clasp.frame)) : null
   const ends = clasp
     ? {
         end0: transformFrame(place, clasp.frame),
@@ -325,8 +339,5 @@ export const chain = defineFeature('chain', (node, ctx) => {
     closed: path.closed && !clasp,
     ...(clasp ? { clasp: { style: clasp.clasp.style, length: clasp.clasp.length } } : {}),
   }
-  const bodies = [{ solid, ...metalOf(node) }]
-  if (clasp && claspPlace)
-    bodies.push({ solid: claspSolid(clasp.clasp, claspPlace, ctx.quality), ...metalOf(node) })
-  return { bodies, stones, data, ...(ends ? { frames: ends } : {}) }
+  return { bodies: [{ solid, ...metalOf(node) }], stones, data, ...(ends ? { frames: ends } : {}) }
 })
