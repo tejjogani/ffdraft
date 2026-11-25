@@ -126,20 +126,20 @@ describe('bail fit', () => {
       stones: [{ role: 'pave', widthMm: 1.3 }],
     } as PieceSpecInput)
 
-  it.each([20, 45, 100])(
+  it.each([25, 45, 100])(
     'holds a hidden bail on a %s mm scooped trophy at both ends of its back run',
     async (heightMm) => {
       const design = trophy(heightMm)
       expect((design.nodes.bail as { style: string }).style).toBe('hidden')
       const draft = await kernel.scene(design)
-      // The loop's metal that overlaps the body: about a full lap of the back run, where the rim
-      // alone gave 12–18 % of one.
+      // The loop's metal that overlaps the body: a good share of a full lap of the back run (a
+      // solid back gives about 0.7 of one), where the rim alone gave 12–18 %.
       const bail = draft.nodes.get('bail')!.bodies.map((b) => b.solid.manifold(QUALITY.draft))
       const body = draft.nodes.get('body')!.bodies[0]!.solid.manifold(QUALITY.draft)
       const joint = bail.reduce((sum, m) => sum + m.intersect(body).volume(), 0)
       const node = design.nodes.bail as { wire: number; width: number; opening: number }
       const lap = node.wire * node.width * (node.opening + node.wire)
-      expect(joint).toBeGreaterThan(0.5 * lap)
+      expect(joint).toBeGreaterThan(0.3 * lap)
       const e = await kernel.evaluate(design, { detail: 'production' })
       const codes = e.diagnostics.map((d) => d.code)
       for (const code of ['wall.thin', 'bail.unsupported', 'bail.weakJoint', 'metal.disconnected'])
@@ -166,6 +166,29 @@ describe('bail fit', () => {
     )
     const weak = e.diagnostics.find((d) => d.code === 'bail.weakJoint')
     expect(weak?.level).toBe('warning')
+    expect(weak?.fix?.ops).toEqual([{ t: 'update', id: 'bail', patch: { style: 'tube' } }])
+  }, 60_000)
+
+  it('says when a hidden loop over an open back is cast into the piece only at its ends', async () => {
+    // A 16 mm trophy scooped from the back: its loop's runs touch the rim and the metal under
+    // the scoop, but the neck below is too thin to strap to (a tenth of a lap, said nothing).
+    const e = await kernel.evaluate(
+      designFrom('pendant', [
+        {
+          id: 'body',
+          kind: 'meshBody',
+          source: { type: 'builtin', name: 'trophy' },
+          height: 16,
+          flatBack: 0.5,
+          hollow: 1.25,
+        },
+        { id: 'bail', kind: 'bail', host: 'body', style: 'hidden', opening: 5, width: 2.5, wire: 1.2 },
+      ]),
+    )
+    const weak = e.diagnostics.find((d) => d.code === 'bail.weakJoint')
+    expect(weak?.level).toBe('warning')
+    expect(weak!.value!).toBeLessThan(weak!.limit!)
+    expect(weak?.message).toMatch(/only \d+ % of the loop's back run/)
     expect(weak?.fix?.ops).toEqual([{ t: 'update', id: 'bail', patch: { style: 'tube' } }])
   }, 60_000)
 

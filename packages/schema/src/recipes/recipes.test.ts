@@ -330,10 +330,12 @@ describe('recipes', () => {
       bail(pendant({ archetype: 'icedPendant', body: { heightMm: 32, text: 'A' }, stones: pave }))
         .style,
     ).toBe('hidden')
-    // A sculpt is hidden up to the size whose open back a strap still spans, then a tube.
+    // A sculpt is hidden from the size whose neck takes a strap up to the size whose open back
+    // a strap still spans; outside that, a bail on top.
     const trophy = (heightMm: number) =>
       bail(pendant({ archetype: 'icedPendant', body: { heightMm }, stones: pave })).style
-    expect([45, 100, 120].map(trophy)).toEqual(['hidden', 'hidden', 'hidden'])
+    expect([16, 20].map(trophy)).not.toContain('hidden')
+    expect([25, 45, 100, 120].map(trophy)).toEqual(['hidden', 'hidden', 'hidden', 'hidden'])
     expect([150, 200].map(trophy)).toEqual(['tube', 'tube'])
   })
 

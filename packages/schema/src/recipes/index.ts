@@ -383,6 +383,12 @@ function pendant(spec: PieceSpec, notes: string[]): NodeInput[] {
  * back is too long to strap (a 150 mm trophy found no metal to land on: bail.weakJoint).
  */
 const HIDDEN_MAX = 120
+/**
+ * Shortest sculpted body a hidden bail is planned for, mm. Below it the scooped back leaves only
+ * the rim and a neck too thin to strap to: a 20 mm trophy held its loop by a tenth of a lap of
+ * its back run (the kernel's bail.weakJoint), so a small sculpt hangs from a bail on top.
+ */
+const HIDDEN_MIN = 25
 
 /**
  * Whether a hidden bail suits this body at all, before its size is checked. A sculpted body has
@@ -393,7 +399,8 @@ const HIDDEN_MAX = 120
  */
 function hiddenFits(body: NodeInput | undefined): boolean {
   if (!body) return false
-  if (body.kind === 'meshBody') return (body.height ?? 0) <= HIDDEN_MAX
+  if (body.kind === 'meshBody')
+    return (body.height ?? 0) >= HIDDEN_MIN && (body.height ?? 0) <= HIDDEN_MAX
   if (body.kind !== 'vectorBody' || body.source?.type !== 'text') return false
   return Array.from((body.source.text ?? '').trim()).length === 1
 }

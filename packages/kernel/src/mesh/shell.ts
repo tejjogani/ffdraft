@@ -105,7 +105,7 @@ export function hollowBody(body: Manifold, envelope: Manifold, wall: number): Ho
         continue
       }
       outer ??= new TriangleBvh(trianglesFromManifold(body))
-      const holes = drainHoles(piece, back, outer)
+      const holes = drainHoles(piece, back, outer, wall)
       owned.push(...holes)
       if (holes.length === 0) continue
       tools.push(piece, ...holes)
@@ -245,16 +245,39 @@ function withoutDebris(m: Manifold, grid: DistanceGrid, wall: number): Manifold 
   })
 }
 
+/** Where a hole's start cap and wall are probed: rings at these shares of its radius, 12 round. */
+const DRAIN_RINGS = [0, 0.5, 1]
+const DRAIN_PROBES = 12
+/** The start cap sits this far inside the cavity, below the lowest point of its back face, mm. */
+const DRAIN_CAP_INSET = 0.05
+/** Spots tried per hole, spread over the half of the cavity's back face toward its end. */
+const DRAIN_TRIES = 40
+/** Metal kept between a hole and the outside, as a share of the wall (the cavity's own tolerance). */
+const DRAIN_WALL_SHARE = 1 - 2 * CAVITY_TOLERANCE
+
 /**
  * Escape holes along +Y from the highest and lowest back-facing points of one cavity, each out
  * through the first skin of `outer` (the body) it meets: on a crown or a ring, the far side of
  * the piece also lies toward the back, and a hole run on to the back plane would pierce it too.
+ *
+ * A hole is a Ø2 mm cylinder, so it reaches a millimetre either side of its axis. Its start cap
+ * lies wholly inside the cavity, just under the cavity's back face across the whole disc: a cap
+ * dug deeper, or overhanging the cavity's edge, ends in the metal beside the cavity and leaves a
+ * skin a few hundredths thick under a pip or an edge, which breaks through in casting. A spot
+ * where the hole would come closer than `wall` to the outside anywhere but where it leaves
+ * through the back is passed over for the next one in toward the middle of the cavity.
  */
-function drainHoles(cavity: Manifold, back: number, outer: TriangleBvh): Manifold[] {
+function drainHoles(
+  cavity: Manifold,
+  back: number,
+  outer: TriangleBvh,
+  wall: number,
+): Manifold[] {
   const { manifold: mf } = runtime()
   const { positions: p, indices } = trianglesFromManifold(cavity)
   let top: [number, number, number] | null = null
   let bottom: [number, number, number] | null = null
+  const backFaces: [number, number, number][] = []
   for (let t = 0; t < indices.length; t += 3) {
     const a = indices[t]! * 3
     const b = indices[t + 1]! * 3
@@ -275,27 +298,106 @@ function drainHoles(cavity: Manifold, back: number, outer: TriangleBvh): Manifol
       (p[a + 1]! + p[b + 1]! + p[c + 1]!) / 3,
       (p[a + 2]! + p[b + 2]! + p[c + 2]!) / 3,
     ]
+    backFaces.push(centre)
     if (!top || centre[2] > top[2]) top = centre
     if (!bottom || centre[2] < bottom[2]) bottom = centre
   }
   if (!top || !bottom) return []
-  // Each hole is inset by its radius toward the middle so its rim stays over the cavity.
-  const spots: [number, number, number][] =
-    top[2] - bottom[2] > 4 * DRAIN_RADIUS
-      ? [
-          [top[0], top[1], top[2] - DRAIN_RADIUS],
-          [bottom[0], bottom[1], bottom[2] + DRAIN_RADIUS],
-        ]
-      : [[top[0], top[1], (top[2] + bottom[2]) / 2]]
+  const middleZ = (top[2] + bottom[2]) / 2
   const bvh = new TriangleBvh({ positions: p, indices })
-  return spots.map(([x, y, z]) => {
-    // The hole starts inside the cavity, but no deeper than half way across it: where the
-    // cavity is a thin sheet, a hole starting a full diameter in digs into the front wall
-    // from inside and leaves it a tenth of a millimetre thick.
-    const across = bvh.raycast(x, y + 1e-3, z, 0, -1, 0, 2e-3)
-    const start = y - Math.min(2 * DRAIN_RADIUS, across / 2)
-    const exit = outer.raycast(x, y, z, 0, 1, 0)
-    const end = Number.isFinite(exit) ? Math.min(back, y + exit) + 1 : back + 1
+  const above = Math.max(back, cavity.boundingBox().max[1]) + 1
+  const hit: ClosestHit = { d2: 0, x: 0, y: 0, z: 0, triangle: -1 }
+  const minMetal = wall * DRAIN_WALL_SHARE
+
+  /** The cavity's spans along Y over (x, z), as [front, back] pairs, from the back down. */
+  const spans = (x: number, z: number): [number, number][] => {
+    const out: [number, number][] = []
+    let depth = 0
+    let enter = 0
+    for (const c of bvh.crossings(x, above, z, 0, -1, 0)) {
+      if (c.w > 0 && depth++ === 0) enter = above - c.t
+      else if (c.w < 0 && --depth === 0) out.push([above - c.t, enter])
+    }
+    return out
+  }
+  const offsets: [number, number][] = DRAIN_RINGS.flatMap((share) =>
+    share === 0
+      ? [[0, 0] as [number, number]]
+      : Array.from({ length: DRAIN_PROBES }, (_, k): [number, number] => {
+          const a = (k / DRAIN_PROBES) * 2 * Math.PI
+          return [share * DRAIN_RADIUS * Math.cos(a), share * DRAIN_RADIUS * Math.sin(a)]
+        }),
+  )
+
+  /**
+   * The hole on axis (x, z) out of the cavity span whose back face is nearest `near`: its start
+   * and end along Y, or null when its disc does not fit inside the cavity or it would come
+   * closer than the wall to the outside.
+   */
+  const fit = (x: number, z: number, near: number): { start: number; end: number } | null => {
+    // The cavity's span over each probe, in the layer of the one over the axis. A probe off the
+    // cavity's edge (a crown's point is a slit narrower than the hole) has none: the cap there
+    // is in metal, which the wall check below measures.
+    const columns: ([number, number] | null)[] = []
+    for (const [dx, dz] of offsets) {
+      const ref = columns[0]?.[1] ?? near
+      const list = spans(x + dx, z + dz).filter(
+        // Another layer of the cavity, or a back face steeper than 45° across the disc.
+        (span) => Math.abs(span[1] - ref) <= DRAIN_RADIUS,
+      )
+      const span = list.length
+        ? list.reduce((a, b) => (Math.abs(b[1] - ref) < Math.abs(a[1] - ref) ? b : a))
+        : null
+      if (!span && columns.length === 0) return null
+      columns.push(span)
+    }
+    const inside = columns.filter((c): c is [number, number] => c !== null)
+    const start = Math.min(...inside.map((c) => c[1])) - DRAIN_CAP_INSET
+    // Where the hole leaves: the first skin above the cap, per probe.
+    const exits = offsets.map(([dx, dz], k) => {
+      const from = columns[k]?.[1] ?? start
+      const up = outer.raycast(x + dx, from, z + dz, 0, 1, 0)
+      return Number.isFinite(up) ? from + up : back
+    })
+    // The cap, and the wall up to a wall's depth under the skin it leaves through there.
+    for (const [k, [dx, dz]] of offsets.entries()) {
+      for (let y = start; y === start || y <= exits[k]! - wall; y += wall / 2) {
+        if (outer.closest(x + dx, y, z + dz, hit, minMetal)) return null
+        if (k === 0) break
+      }
+    }
+    return { start, end: Math.min(back, Math.max(...exits)) + 1 }
+  }
+
+  /**
+   * The first spot that takes a hole, trying back-facing points of the cavity from one end of
+   * it toward its middle (`order` lists them from that end). The highest and lowest points are
+   * best for the investment to run out, but on a crown the cavity there is a slit in a point
+   * narrower than the hole, and the band lower down is where one fits.
+   */
+  const place = (order: readonly [number, number, number][], share: number) => {
+    const step = Math.max(1, Math.floor((order.length * share) / DRAIN_TRIES))
+    for (let k = 0; k < order.length * share; k += step) {
+      const [x, y, z] = order[k]!
+      const found = fit(x, z, y)
+      if (found) return { x, z, ...found }
+    }
+    return null
+  }
+
+  const byHeight = [...backFaces].sort((a, b) => b[2] - a[2])
+  const holes =
+    top[2] - bottom[2] > 4 * DRAIN_RADIUS
+      ? [place(byHeight, 0.5), place([...byHeight].reverse(), 0.5)]
+      : [place([...byHeight].sort((a, b) => Math.abs(a[2] - middleZ) - Math.abs(b[2] - middleZ)), 1)]
+  const kept = holes.filter((h): h is NonNullable<typeof h> => h !== null)
+  // Two holes that met in the middle would overlap: one is enough there.
+  if (
+    kept.length === 2 &&
+    Math.hypot(kept[0]!.x - kept[1]!.x, kept[0]!.z - kept[1]!.z) < 4 * DRAIN_RADIUS
+  )
+    kept.pop()
+  return kept.map(({ x, z, start, end }) => {
     const cylinder = mf.Manifold.cylinder(end - start, DRAIN_RADIUS, DRAIN_RADIUS, 24)
     // Cylinder axis +Z → +Y, from inside the cavity out through the back.
     const turned = cylinder.rotate([-90, 0, 0])

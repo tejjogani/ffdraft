@@ -10,6 +10,7 @@ import {
   metalOf,
   type NodeResult,
   QUALITY,
+  runtime,
   type Solid,
   type Stone,
 } from '../core'
@@ -67,6 +68,16 @@ const LEG_SPREAD = 0.18
 const STRAP_LAP = 2
 /** Metal a strap leaves in front of it where it is sunk into the host, mm. */
 const STRAP_SKIN = 0.4
+/**
+ * A strap's width as shares of the loop's, tried in turn: as wide as the loop where the metal
+ * below takes it, narrower on a small piece whose neck is narrower than the loop (a 20 mm trophy).
+ */
+const STRAP_SHARES = [0.85, 0.5]
+/**
+ * Least share of a full lap of a hidden loop's back run (wire × width × its height) that must be
+ * cast into the piece: on a solid back about 0.7 is, and a rim and a strap give 0.3 and more.
+ */
+const JOINT_SHARE = 0.25
 
 const sinkFor = (wire: number) => Math.max(SINK, SINK_PER_WIRE * wire)
 
@@ -186,9 +197,9 @@ function build(
       // The rim tab is narrower again and stops short of the strap's back, inside it.
       const strap = s
         ? [
-            bar(s.top, s.bottom, s.front, rear, 0.85 * width),
+            bar(s.top, s.bottom, s.front, rear, s.across),
             ...(s.rim.front < s.front - 0.05
-              ? [bar(s.top, s.rim.bottom, s.rim.front, rear - 0.05 * wire, 0.7 * width)]
+              ? [bar(s.top, s.rim.bottom, s.rim.front, rear - 0.05 * wire, 0.8 * s.across)]
               : []),
           ]
         : []
@@ -275,7 +286,14 @@ interface HiddenPlace {
    * back plane from `top` (up in the rim) down to `bottom` (lapped on the metal below), reaching
    * forward to `front` so it is sunk into the metal at both ends.
    */
-  strap?: { top: number; bottom: number; front: number; rim: { bottom: number; front: number } }
+  strap?: {
+    top: number
+    bottom: number
+    front: number
+    /** The strap's width along x. */
+    across: number
+    rim: { bottom: number; front: number }
+  }
   /** Only the top of the back run meets metal and no metal below takes a strap. */
   topOnly?: boolean
 }
@@ -570,9 +588,7 @@ function standPoint(
       h: number,
       rim: number,
     ): { strap: NonNullable<HiddenPlace['strap']> } | { topOnly: true } => {
-      const across = [x - 0.45 * node.width, x, x + 0.45 * node.width]
       const lap = STRAP_LAP * node.wire
-      const backs = (z: number) => across.map((sx) => legAt(sx, z))
       /** Where the metal met from behind at (sx, z) ends toward the front. */
       const frontFace = (sx: number, z: number): number => {
         const t = hits(meshes, [sx, behind, z], [sx, bounds.min[1] - 1, z]).sort((a, b) => a - b)
@@ -581,36 +597,52 @@ function standPoint(
       // Up into the rim as high as the loop's own top, no higher: above it the rim's back edge
       // is rounded off and the strap's end would stand out of it.
       const top = zc + h / 2 + node.wire / 2
-      for (let z = zc - h / 2 - STEP; z - lap >= bounds.min[2]; z -= STEP) {
-        // Where the strap meets metal: the top of the back run in the rim, and the landing.
-        const heights = [zc + h / 2, z, z - lap / 2, z - lap]
-        const found = heights.slice(1).flatMap(backs)
-        if (found.some((y) => y === null)) continue
-        // Sunk into the metal at both ends, but never out through its front: a trophy's neck,
-        // where the strap lands, is thinner than the cup's rim.
-        const skin = Math.max(...heights.flatMap((hz) => across.map((sx) => frontFace(sx, hz))))
-        // A landing's back is rarely flat (a trophy's neck is turned): the strap sinks into the
-        // metal by the middle of its back faces, and lands only where that leaves it sunk.
-        const backs2 = (found as number[]).sort((a, b) => a - b)
-        const landing = Math.min(rim, backs2[Math.floor(backs2.length / 2)]!)
-        const front = Math.max(landing - Math.max(need, node.wire), skin + STRAP_SKIN)
-        if (front > landing - need / 2) continue
-        // The rim, where the chain pulls, is usually far deeper than the landing (a cup's top
-        // wall runs right through the piece): a tab sinks the strap's top end into it.
-        const rimHeights = [zc + h / 2, zc + h / 2 + node.wire / 2]
-        const rimSkin = Math.max(
-          ...rimHeights.flatMap((hz) => across.map((sx) => frontFace(sx, hz))),
-        )
-        const rimFront = Math.min(front, Math.max(rimSkin + STRAP_SKIN, rim - 3 * node.wire))
-        return {
-          strap: {
-            top,
-            bottom: z - lap,
-            front,
-            rim: { bottom: zc + h / 2 - node.wire / 2, front: rimFront },
-          },
+      for (let z = zc - h / 2 - STEP; z - lap >= bounds.min[2]; z -= STEP)
+        for (const share of STRAP_SHARES) {
+          // Samples just outside the strap's edges and on its centre.
+          const edge = (share / 2 + 0.025) * node.width
+          const across = [x - edge, x, x + edge]
+          const backs = (hz: number) => across.map((sx) => legAt(sx, hz))
+          // Where the strap meets metal: the top of the back run in the rim, and the landing.
+          const heights = [zc + h / 2, z, z - lap / 2, z - lap]
+          const found = heights.slice(1).flatMap(backs)
+          if (found.some((y) => y === null)) continue
+          // Sunk into the metal at both ends, but never out through its front: a trophy's neck,
+          // where the strap lands, is thinner than the cup's rim. The neck is turned, so its
+          // front is read all down the landing, not at its ends: sampled at three heights, a
+          // waist between them let the strap's end show through the front of a 30 mm trophy.
+          const landingHeights = Array.from(
+            { length: Math.ceil(lap / STEP) + 1 },
+            (_, i) => z - Math.min(lap, i * STEP),
+          )
+          const skin = Math.max(
+            ...[heights[0]!, ...landingHeights].flatMap((hz) =>
+              across.map((sx) => frontFace(sx, hz)),
+            ),
+          )
+          // A landing's back is rarely flat (a trophy's neck is turned): the strap sinks into the
+          // metal by the middle of its back faces, and lands only where that leaves it sunk.
+          const sorted = (found as number[]).sort((a, b) => a - b)
+          const landing = Math.min(rim, sorted[Math.floor(sorted.length / 2)]!)
+          const front = Math.max(landing - Math.max(need, node.wire), skin + STRAP_SKIN)
+          if (front > landing - need / 2) continue
+          // The rim, where the chain pulls, is usually far deeper than the landing (a cup's top
+          // wall runs right through the piece): a tab sinks the strap's top end into it.
+          const rimHeights = [zc + h / 2, zc + h / 2 + node.wire / 2]
+          const rimSkin = Math.max(
+            ...rimHeights.flatMap((hz) => across.map((sx) => frontFace(sx, hz))),
+          )
+          const rimFront = Math.min(front, Math.max(rimSkin + STRAP_SKIN, rim - 3 * node.wire))
+          return {
+            strap: {
+              top,
+              bottom: z - lap,
+              front,
+              across: share * node.width,
+              rim: { bottom: zc + h / 2 - node.wire / 2, front: rimFront },
+            },
+          }
         }
-      }
       return { topOnly: true }
     }
     const tan = Math.tan((HIDDEN_TILT * Math.PI) / 180)
@@ -781,6 +813,20 @@ function stonesHidden(
   return out
 }
 
+/** Volume of the bail's metal that lies inside its host's, mm³: what casts them as one. */
+function jointVolume(solids: readonly Solid[], host: readonly Solid[]): number {
+  const { manifold: mf } = runtime()
+  // Each side is united first: the strap and its rim tab overlap inside the rim.
+  const bail = mf.Manifold.union(solids.map((s) => s.manifold(QUALITY.draft)))
+  const piece = mf.Manifold.union(host.map((s) => s.manifold(QUALITY.draft)))
+  const shared = bail.intersect(piece)
+  try {
+    return shared.volume()
+  } finally {
+    for (const m of [bail, piece, shared]) m.delete()
+  }
+}
+
 /**
  * Share of a hidden bail seen from the front through the host (a letter's counter, a pierced
  * plate): rays straight back across the bail's outline that meet its metal before the host's.
@@ -846,13 +892,28 @@ export const bail = defineFeature('bail', (node, ctx) => {
         limit: 0.02,
       })
   }
-  if (topOnly)
+  // How much of the loop is cast into the piece: on a solid back about 70 % of a full lap of its
+  // back run is in the metal. Over an open back held at the ends of its back run only (a small
+  // scooped trophy whose neck is too thin for a strap) it was under a tenth, with nothing said.
+  const joint =
+    host && supported && node.style === 'hidden'
+      ? jointVolume(
+          solids,
+          host.bodies.map((b) => b.solid),
+        )
+      : Infinity
+  const lap = node.wire * node.width * (node.opening + node.wire)
+  if (topOnly || joint < JOINT_SHARE * lap)
     ctx.report({
       level: 'warning',
       code: 'bail.weakJoint',
-      message:
-        'The back is open under the hidden bail and no metal below it takes a strap, so the loop is held by the top rim alone: a thin joint that a chain pulls on. Use a bail on top, or close the back under the loop.',
+      message: topOnly
+        ? 'The back is open under the hidden bail and no metal below it takes a strap, so the loop is held by the top rim alone: a thin joint that a chain pulls on. Use a bail on top, or close the back under the loop.'
+        : `The back is open under the hidden bail, so only ${((100 * joint) / lap).toFixed(0)} % of the loop's back run is cast into the piece: a thin joint that a chain pulls on. Use a bail on top, or close the back under the loop.`,
       at: [...opening],
+      ...(Number.isFinite(joint)
+        ? { value: joint, limit: Number((JOINT_SHARE * lap).toFixed(2)) }
+        : {}),
       fix: {
         label: 'Use a tube bail on top',
         ops: [{ t: 'update' as const, id: node.id, patch: { style: 'tube' } }],

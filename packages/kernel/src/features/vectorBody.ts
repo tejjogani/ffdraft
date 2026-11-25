@@ -240,7 +240,9 @@ export const vectorBody = defineFeature('vectorBody', async (node, ctx) => {
     // the name reads, so it is reported, with the way to turn it off.
     if (node.join === 'underline')
       outline = own(underline(outline, Math.max(UNDERLINE_MIN, UNDERLINE_SHARE * node.height)))
-    const joined = joinIslands(outline, TIE_WIDTH, SEGMENTS)
+    // Only an i or a j has a dot to set down onto its stem; every other mark is an accent.
+    const tittles = /[ij]/.test(node.source.text)
+    const joined = joinIslands(outline, TIE_WIDTH, SEGMENTS, tittles)
     if (joined) {
       outline = own(joined.section)
       ctx.report({

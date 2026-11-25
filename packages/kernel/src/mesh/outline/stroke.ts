@@ -45,14 +45,24 @@ export const TIE_WIDTH = 0.5
 
 /** A loose part below this share of the largest is a mark — the dot of an i, an accent. */
 const MARK_SHARE = 0.15
-/** A mark is set down onto its letter until it overlaps it by this share of the tie width. */
+/** A tittle is set down onto its stem until it overlaps it by this share of the tie width. */
 const MARK_OVERLAP = 0.3
 /**
- * …moving down onto metal under it: within its own width, give or take this share of it (an
+ * A mark links to metal under it: within its own width, give or take this share of it (an
  * italic stem slants under its dot). The nearest metal is sometimes the side of the next
  * letter's ascender, which would take the dot instead.
  */
 const MARK_REACH = 0.25
+/**
+ * A tittle stands over a stem about as wide as itself: the metal under it, across three of its
+ * widths, averages at most this many of them. An accent stands over a letter's whole top (the
+ * bar of an E, the bowl of an e) or over one arm of a wide letter, in a pair (the dots of Ü).
+ */
+const TITTLE_STEM = 1.6
+/** …and close over it: the gap is at most this share of the letter's height. */
+const TITTLE_GAP = 0.25
+/** A sprue that holds an accent is at most this share of the accent's width. */
+const SPRUE_SHARE = 0.5
 
 type Ring = readonly (readonly [number, number])[]
 type Link = { a: [number, number]; b: [number, number]; d: number }
@@ -62,10 +72,16 @@ type Link = { a: [number, number]; b: [number, number]; d: number }
  * nearest part first:
  *  - Letters get a tie `width` wide, side to side where both stand at full height: kept within
  *    the band both letters share (half a tie in from its top and bottom), a tie never sticks
- *    out over the cap line or under the baseline. The shortest link when no such one exists.
- *  - A mark (the dot of an i, an accent) is set down onto its letter, closing the gap: a tie
- *    across the gap reads as more stem and the i as an l, and one sideways to the next letter
- *    crosses an l or a t and reads as a bar.
+ *    out over the cap line or under the baseline, and each end lands on an edge as wide as the
+ *    tie, so it meets the letter flush instead of standing proud of it. The shortest link when
+ *    no such one exists.
+ *  - The dot of an i or a j (when `tittles` says the text has one) is set down onto its stem,
+ *    closing the gap: a tie across the gap reads as more stem and the i as an l, and one
+ *    sideways to the next letter crosses an l or a t and reads as a bar.
+ *  - Any other mark (an acute, a grave, the dots of an umlaut, a tilde, a ring) stays where the
+ *    font put it, so the name keeps its spelling and its height, and hangs from its letter on a
+ *    short, narrow sprue straight down inside its own column. A mark with no metal straight
+ *    under it stays loose (the caller reports the loose pieces).
  * Returns the joined outline and how many parts were joined, or null when it is already one
  * piece. The caller owns the result.
  */
@@ -73,6 +89,7 @@ export function joinIslands(
   outline: CrossSection,
   width: number,
   segments: number,
+  tittles = true,
 ): { section: CrossSection; ties: number } | null {
   const { manifold: mf } = runtime()
   const pieces = outline.decompose()
@@ -83,36 +100,71 @@ export function joinIslands(
     const rings = pieces.map((p) => p.toPolygons() as Ring[])
     const boxes = pieces.map((p) => p.bounds())
     const spans = boxes.map(({ min, max }) => [min[1], max[1]] as const)
+    const isMark = pieces.map((p) => p.area() < MARK_SHARE * largest)
     const r = width / 2
     const joined = new Set([0])
     const left = new Set(rings.keys())
     left.delete(0)
     const parts: CrossSection[] = [pieces[0]!]
     const made: CrossSection[] = []
+    /** Two marks side by side at one height: the dots of an umlaut or a diaeresis. */
+    const paired = (k: number) =>
+      rings.some((_, m) => {
+        if (m === k || !isMark[m]) return false
+        const a = boxes[k]!
+        const b = boxes[m]!
+        const w = a.max[0] - a.min[0]
+        const overlap = Math.min(a.max[1], b.max[1]) - Math.max(a.min[1], b.min[1])
+        const apart = Math.max(b.min[0] - a.max[0], a.min[0] - b.max[0])
+        return overlap > 0.5 * (a.max[1] - a.min[1]) && apart < 2 * w
+      })
+    /** Whether mark k, linked down to piece j at point b, is the dot of an i or a j. */
+    const isTittle = (k: number, j: number, b: [number, number]): boolean => {
+      if (!tittles || rings[k]!.length !== 1 || paired(k)) return false
+      const { min, max } = boxes[k]!
+      const w = max[0] - min[0]
+      const h = max[1] - min[1]
+      if (min[1] - b[1] > TITTLE_GAP * (spans[j]![1] - spans[j]![0])) return false
+      const cx = (min[0] + max[0]) / 2
+      const window = mf.CrossSection.square([3 * w, h]).translate([cx - 1.5 * w, b[1] - h])
+      const under = mf.CrossSection.intersection(pieces[j]!, window)
+      try {
+        return under.area() / h <= TITTLE_STEM * w
+      } finally {
+        window.delete()
+        under.delete()
+      }
+    }
     try {
       while (left.size > 0) {
-        let best = null as (Link & { piece: number }) | null
+        let best = null as (Link & { piece: number; to: number; flush: boolean }) | null
         // Constrained links first (letters within their shared band, marks straight down), over
         // every loose part; the shortest link only when no loose part has a constrained one.
         for (const constrained of [true, false]) {
           for (const k of left) {
-            const mark = pieces[k]!.area() < MARK_SHARE * largest
             for (const j of joined) {
               const lo = Math.max(spans[k]![0], spans[j]![0]) + r
               const hi = Math.min(spans[k]![1], spans[j]![1]) - r
-              if (constrained && !mark && lo > hi) continue
-              const accept = !constrained
-                ? undefined
-                : mark
-                  ? (a: [number, number], b: [number, number]) => {
-                      const { min, max } = boxes[k]!
-                      const slack = MARK_REACH * (max[0] - min[0])
-                      return b[1] < a[1] && b[0] >= min[0] - slack && b[0] <= max[0] + slack
-                    }
-                  : (a: [number, number], b: [number, number]) =>
-                      a[1] >= lo && a[1] <= hi && b[1] >= lo && b[1] <= hi
+              if (constrained && !isMark[k] && lo > hi) continue
+              // A mark links only down, inside its own column, whatever `constrained` says.
+              const accept = isMark[k]
+                ? (a: [number, number], b: [number, number]) => {
+                    const { min, max } = boxes[k]!
+                    const slack = MARK_REACH * (max[0] - min[0])
+                    return b[1] < a[1] && b[0] >= min[0] - slack && b[0] <= max[0] + slack
+                  }
+                : constrained
+                  ? (a: [number, number], b: [number, number]) =>
+                      a[1] >= lo &&
+                      a[1] <= hi &&
+                      b[1] >= lo &&
+                      b[1] <= hi &&
+                      flush(rings[k]!, a, b, r) &&
+                      flush(rings[j]!, b, a, r)
+                  : undefined
               const link = nearestLink(rings[k]!, rings[j]!, best?.d ?? Infinity, accept)
-              if (link && (!best || link.d < best.d)) best = { piece: k, ...link }
+              if (link && (!best || link.d < best.d))
+                best = { piece: k, to: j, flush: constrained, ...link }
             }
           }
           if (best) break
@@ -121,8 +173,8 @@ export function joinIslands(
         const k = best.piece
         left.delete(k)
         joined.add(k)
-        if (pieces[k]!.area() < MARK_SHARE * largest) {
-          // a lies on the mark, b on its letter: move the mark along a→b past b.
+        if (isMark[k] && isTittle(k, best.to, best.b)) {
+          // a lies on the dot, b on its stem: move the dot along a→b past b.
           const shift = (best.d + MARK_OVERLAP * width) / Math.max(best.d, 1e-9)
           const dx = (best.b[0] - best.a[0]) * shift
           const dy = (best.b[1] - best.a[1]) * shift
@@ -130,8 +182,18 @@ export function joinIslands(
           made.push(moved)
           parts.push(moved)
           rings[k] = rings[k]!.map((ring) => ring.map(([x, y]) => [x + dx, y + dy] as const))
+        } else if (isMark[k]) {
+          const s = sprue(rings[k]!, rings[best.to]!, boxes[k]!, width)
+          if (!s) {
+            // No metal straight under the accent: it stays loose, where the font put it.
+            joined.delete(k)
+            parts.push(pieces[k]!)
+            continue
+          }
+          made.push(s)
+          parts.push(pieces[k]!, s)
         } else {
-          const t = tie(best.a, best.b, r, segments)
+          const t = best.flush ? tie(best.a, best.b, r) : capsule(best.a, best.b, r, segments)
           made.push(t)
           parts.push(pieces[k]!, t)
         }
@@ -147,6 +209,69 @@ export function joinIslands(
   }
 }
 
+/** Whether (x, y) is inside rings filled even-odd. */
+function insideRings(rings: readonly Ring[], x: number, y: number): boolean {
+  let inside = false
+  for (const ring of rings)
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i]!
+      const [xj, yj] = ring[j]!
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside
+    }
+  return inside
+}
+
+/**
+ * Whether a tie of half-width r from `end` (on the part `rings`) toward `other` meets that part
+ * across its whole width: both corners of its end, a little inside the part, are metal. A tie
+ * whose corner hangs past the edge it meets (the top of an L's foot, a rounded shoulder) stands
+ * proud of the letter and leaves a step.
+ */
+function flush(
+  rings: readonly Ring[],
+  end: [number, number],
+  other: [number, number],
+  r: number,
+): boolean {
+  const len = Math.hypot(other[0] - end[0], other[1] - end[1]) || 1
+  const ux = (other[0] - end[0]) / len
+  const uy = (other[1] - end[1]) / len
+  // Into the part (against the tie's direction), by a fifth of the half-width.
+  const ix = end[0] - ux * 0.2 * r
+  const iy = end[1] - uy * 0.2 * r
+  return insideRings(rings, ix - uy * r, iy + ux * r) && insideRings(rings, ix + uy * r, iy - ux * r)
+}
+
+/**
+ * A narrow vertical sprue from an accent (rings, bounds) straight down to the letter under it,
+ * inside the accent's own column: SPRUE_SHARE of its width, at most the tie width and at least
+ * the casting minimum. Null when no metal lies straight under the accent's column.
+ */
+function sprue(
+  mark: readonly Ring[],
+  letter: readonly Ring[],
+  box: { min: readonly number[]; max: readonly number[] },
+  width: number,
+): CrossSection | null {
+  const w = Math.min(width, Math.max(MIN_STROKE, SPRUE_SHARE * (box.max[0]! - box.min[0]!)))
+  const r = w / 2
+  const lo = box.min[0]! + r
+  const hi = box.max[0]! - r
+  if (lo > hi) return null
+  const link = nearestLink(
+    mark,
+    letter,
+    Infinity,
+    (a, b) =>
+      b[1] < a[1] &&
+      Math.abs(a[0] - b[0]) <= 0.05 * r &&
+      a[0] >= lo &&
+      a[0] <= hi &&
+      flush(mark, a, b, r) &&
+      flush(letter, b, a, r),
+  )
+  return link ? tie(link.a, link.b, r) : null
+}
 /**
  * The outline standing on a bar under its full width: `height` mm deep, overlapping the
  * bottom of the outline by half of that. The caller owns the result.
@@ -165,8 +290,32 @@ export function underline(outline: CrossSection, height: number): CrossSection {
   }
 }
 
+/**
+ * A bar of half-width r between two points, reaching r past each into the parts it joins (both
+ * ends were checked to meet metal across the bar's width, see {@link flush}).
+ */
+function tie(a: [number, number], b: [number, number], r: number): CrossSection {
+  const { manifold: mf } = runtime()
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1
+  const ux = (b[0] - a[0]) / len
+  const uy = (b[1] - a[1]) / len
+  const points: [number, number][] = []
+  for (const [x, y, s] of [
+    [a[0], a[1], -1],
+    [b[0], b[1], 1],
+  ] as const)
+    for (const side of [1, -1])
+      points.push([x + s * ux * r - side * uy * r, y + s * uy * r + side * ux * r])
+  return mf.CrossSection.hull([[points]])
+}
+
 /** A capsule of radius r between two points, reaching r past each so it overlaps both parts. */
-function tie(a: [number, number], b: [number, number], r: number, segments: number): CrossSection {
+function capsule(
+  a: [number, number],
+  b: [number, number],
+  r: number,
+  segments: number,
+): CrossSection {
   const { manifold: mf } = runtime()
   const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1
   const ux = (b[0] - a[0]) / len
