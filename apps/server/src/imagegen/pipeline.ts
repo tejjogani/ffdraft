@@ -20,7 +20,7 @@ import type {
   BetaMessage,
   BetaMessageStreamParams,
 } from '@anthropic-ai/sdk/resources/beta/messages/messages'
-import { mapError, messageUsage } from '@pave/agent/anthropic'
+import { mapError, messageUsage, StreamAdapter } from '@pave/agent/anthropic'
 import {
   type BriefImage,
   buildBriefRequest,
@@ -40,6 +40,7 @@ import {
   type GuardrailDecision,
   type ImageBrief,
   type Reference,
+  type Tokens,
 } from '@pave/schema'
 import { desc, eq, inArray, sql } from 'drizzle-orm'
 import { putAsset, readAsset } from '../assets/assets'
@@ -123,30 +124,37 @@ async function ask(
   suffix: string,
   board: BoardRow,
 ): Promise<{ message: BetaMessage; costUsd: number }> {
+  const meter = async (usage: { model: string; tokens: Tokens; costUsd: number }) => {
+    await recordUsage(ctx, {
+      meter: 'llm',
+      provider: 'anthropic',
+      model: usage.model,
+      quantity:
+        usage.tokens.input + usage.tokens.output + usage.tokens.cacheRead + usage.tokens.cacheWrite,
+      unit: 'tokens',
+      costUsd: usage.costUsd,
+      idempotencyKey: `${claude.key}:${suffix}`,
+      runId: claude.runId,
+      pieceId: projectOf(board),
+      stage: 'design',
+    })
+    await claude.spent(usage.tokens, usage.costUsd)
+  }
   let message: BetaMessage
+  const adapter = new StreamAdapter()
   try {
-    message = await claude.client
-      .stream(params, ctx.signal ? { signal: ctx.signal } : {})
-      .finalMessage()
+    const stream = claude.client.stream(params, ctx.signal ? { signal: ctx.signal } : {})
+    for await (const event of stream) adapter.push(event)
+    message = await stream.finalMessage()
   } catch (err) {
+    // Billed for what the API had already streamed, even though no answer came.
+    const partial = adapter.partialUsage()
+    if (partial) await meter(partial)
     if (ctx.signal?.aborted) throw ctx.signal.reason
     throw new AppError('conflict', mapError(err, { model: claude.model }).message)
   }
   const usage = messageUsage(message)
-  await recordUsage(ctx, {
-    meter: 'llm',
-    provider: 'anthropic',
-    model: message.model,
-    quantity:
-      usage.tokens.input + usage.tokens.output + usage.tokens.cacheRead + usage.tokens.cacheWrite,
-    unit: 'tokens',
-    costUsd: usage.costUsd,
-    idempotencyKey: `${claude.key}:${suffix}`,
-    runId: claude.runId,
-    pieceId: projectOf(board),
-    stage: 'design',
-  })
-  await claude.spent(usage.tokens, usage.costUsd)
+  await meter({ model: message.model, ...usage })
   return { message, costUsd: usage.costUsd }
 }
 

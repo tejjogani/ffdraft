@@ -247,7 +247,18 @@ describe('a Free plan', () => {
     expect(await used(api)).toEqual({ render: 0, export: 2 })
   })
 
-  it('lets the studio claim a browser export first, give it back, or hand it to the server', async () => {
+  it('never lets a client give an export back: only a failed server export returns its slot', async () => {
+    // The studio exports Rhino and STEP through design.export now; a claim made from outside
+    // could otherwise be given back after the file was saved in the browser, for free exports.
+    for (let i = 0; i < 3; i++) {
+      const c = await api.call('plan.claim', { pieceId, format: 'step', key: `loop-key-${i}` })
+      const refused = await api.fail('plan.settle', { claimId: c.claimId!, delivered: false })
+      expect(refused.status).toBe(409)
+    }
+    expect(await used(api)).toEqual({ render: 0, export: 3 })
+  })
+
+  it('lets a client claim an export first, settle it, or hand it to the server', async () => {
     const stl = await api.call('plan.claim', { pieceId, format: 'stl', key: 'tab1-try1' })
     expect(stl).toMatchObject({ claimId: null, counted: false })
 
@@ -258,21 +269,22 @@ describe('a Free plan', () => {
     const again = await api.call('plan.claim', { pieceId, format: 'step', key: 'tab1-try2' })
     expect(again.claimId).toBe(a.claimId)
     expect(await used(api)).toEqual({ render: 0, export: 1 })
-    // The browser export failed: the export goes back, once.
-    await api.call('plan.settle', { claimId: a.claimId!, delivered: false })
-    expect(await used(api)).toEqual({ render: 0, export: 0 })
+    // Settled as delivered, once.
+    await api.call('plan.settle', { claimId: a.claimId!, delivered: true })
+    expect(await used(api)).toEqual({ render: 0, export: 1 })
     expect((await api.fail('plan.settle', { claimId: a.claimId!, delivered: true })).status).toBe(
       409,
     )
-    expect(
-      (await api.fail('plan.claim', { pieceId, format: 'step', key: 'tab1-try2' })).status,
-    ).toBe(409)
+    // The same key again is still that one claim, counted once.
+    const settledAgain = await api.call('plan.claim', { pieceId, format: 'step', key: 'tab1-try2' })
+    expect(settledAgain.claimId).toBe(a.claimId)
+    expect(await used(api)).toEqual({ render: 0, export: 1 })
 
     // The browser's exporter failed and the server exported instead, under the same claim.
     const b = await api.call('plan.claim', { pieceId, format: '3dm', key: 'tab1-try3' })
     await api.call('design.export', { pieceId, format: '3dm', claimId: b.claimId! })
-    expect(await used(api)).toEqual({ render: 0, export: 1 })
-    const [row] = await ctx.repo.planClaims.many()
+    expect(await used(api)).toEqual({ render: 0, export: 2 })
+    const row = (await ctx.repo.planClaims.many()).find((r) => r.id === b.claimId)
     expect(row).toMatchObject({ state: 'used', subject: '3dm' })
     // A claim settled already, or for another format, is not reused.
     expect(
@@ -284,7 +296,7 @@ describe('a Free plan', () => {
     ).toBe(409)
   })
 
-  it('gives back a studio export claim nobody settled, after half an hour', async () => {
+  it('counts a client export claim nobody settled, after half an hour', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     const start = new Date()
     vi.setSystemTime(start)
@@ -298,8 +310,8 @@ describe('a Free plan', () => {
     await api.call('plan.settle', { claimId: working.claimId!, delivered: true })
 
     vi.setSystemTime(new Date(start.getTime() + 31 * 60_000))
-    expect(await used(api)).toEqual({ render: 0, export: 1 })
-    // Too late to count it now: the export was given back.
+    // The server never learns whether a client's file was saved: an abandoned claim counts.
+    expect(await used(api)).toEqual({ render: 0, export: 2 })
     expect(
       (await api.fail('plan.settle', { claimId: abandoned.claimId!, delivered: true })).status,
     ).toBe(409)

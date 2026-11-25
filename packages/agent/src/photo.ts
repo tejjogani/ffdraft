@@ -16,6 +16,7 @@ import type {
   BetaMessageStreamParams,
 } from '@anthropic-ai/sdk/resources/beta/messages/messages'
 import {
+  type Archetype,
   type AssistantModelId,
   gemDimsFromCarat,
   type MetalId,
@@ -144,6 +145,18 @@ const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x
  * the designer gave one; every other width follows from it through the read's ratios, which is
  * why the proportions survive a wrong scale: a different scale moves all of them together.
  */
+/** The buildable archetype nearest a custom piece of each kind: a plain body, band or setting. */
+const NEAREST_BUILDABLE: Record<PieceKind, Archetype> = {
+  ring: 'band',
+  pendant: 'medallion',
+  necklace: 'medallion',
+  brooch: 'medallion',
+  other: 'medallion',
+  earrings: 'studs',
+  bracelet: 'cuban',
+  chain: 'cuban',
+}
+
 export function specFromRead(
   read: PhotoRead,
   o: { centreCarat?: number; ringSizeUs?: number; title?: string } = {},
@@ -170,9 +183,17 @@ export function specFromRead(
     return stone
   })
 
+  // No recipe builds a custom piece, so it would build nothing. Start from the nearest route that
+  // builds something of the same kind to shape from, and say so.
+  const archetype =
+    read.archetype.value === 'custom' ? NEAREST_BUILDABLE[kind] : read.archetype.value
+  if (archetype !== read.archetype.value)
+    assumed.push(
+      `no recipe builds a custom ${kind}: it starts as a ${archetype} with the photo's outline, to shape by hand`,
+    )
   const spec: PieceSpecInput = {
     kind,
-    archetype: read.archetype.value,
+    archetype,
     title: o.title ?? `From a photo: ${read.archetype.value} ${kind}`.slice(0, 120),
     summary: read.observations.slice(0, 1200),
     metal: { alloy: METAL_FOR[read.metal.colour], finish: read.metal.finish, plating: 'none' },

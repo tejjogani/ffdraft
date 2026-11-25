@@ -153,9 +153,12 @@ describe('saving and opening a .pave file', () => {
       formatVersion: 1,
       app: { name: 'Pavé' },
       piece: { title: 'Solitaire', kind: 'ring' },
-      contents: { changes: 0, geometry: ['step', 'glb'] },
+      contents: { changes: 0, geometry: ['glb'] },
     })
-    expect(new TextDecoder().decode(entries['geometry/exact.step'])).toMatch(/^ISO-10303-21;/)
+    // The exact STEP is a counted export: a free .pave never carries it (opening rebuilds the
+    // geometry from the design), so it cannot be unzipped out of the file.
+    expect(entries['geometry/exact.step']).toBeUndefined()
+    expect(new TextDecoder().decode(entries['geometry/display.glb'])).toBe('glTF-binary')
     expect(new TextDecoder().decode(entries[PAVE_ENTRIES.checksum])).toBe(
       `${sha256(entries['manifest.json']!)}  manifest.json\n`,
     )
@@ -343,7 +346,7 @@ describe('the evaluated geometry', () => {
       const piece = await slowApi.call('pieces.create', { templateId: 'solitaire' })
       const ctx = await slow.runtime.context(slow.runtime.local!)
       const file = await savePieceFile(ctx, piece.id, { geometryBudgetMs: 300 })
-      expect(aborted).toBe(2)
+      expect(aborted).toBe(1)
       expect(file.notes).toEqual([
         expect.stringMatching(/took longer than 0 s, so the file carries the design without it/),
       ])

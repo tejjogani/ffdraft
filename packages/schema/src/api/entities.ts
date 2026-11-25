@@ -1030,6 +1030,11 @@ export const AiJobSchema = z.object({
   /** Why a paused job stopped: a person paused it, took over, or edited the piece by hand. */
   pausedBy: z.enum(['pause', 'takeover', 'edit']).nullable(),
   /**
+   * The machine time (seconds) the person saw in the Start popover for a Render job. The takes
+   * the job approves on its own stay within it; anything beyond asks. Absent: a default budget.
+   */
+  machineSeconds: z.number().int().min(0).max(604_800).nullable().optional(),
+  /**
    * What the person answered to the job's quick questions (chat.ask), under the step that asked,
    * so the plan shows what was settled and a resumed job does not ask again. Absent on jobs
    * stored before questions were recorded.

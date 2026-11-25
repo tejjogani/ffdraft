@@ -39,6 +39,11 @@ export interface ModelInfo {
    * must not carry the parameter and a refusal is handled by the run.
    */
   fallbacks: 'default' | 'none'
+  /**
+   * Whether the model the API falls back to accepts mid-conversation `role: "system"` messages.
+   * When it does not, a request carrying them must not ask for server-side fallbacks.
+   */
+  fallbackTakesSystemMessages: boolean
   /** The organisation must keep 30-day data retention to use it (otherwise every request 400s). */
   needsRetention: boolean
   /** The API's default effort; requests always set effort explicitly, this is for the record. */
@@ -62,6 +67,7 @@ export const MODELS = {
     label: 'Claude Fable 5.2',
     rates: rates(8, 40, 0.2),
     fallbacks: 'default',
+    fallbackTakesSystemMessages: true,
     needsRetention: true,
     defaultEffort: 'high',
     contextTokens: 1_000_000,
@@ -72,6 +78,7 @@ export const MODELS = {
     label: 'Claude Opus 5.5',
     rates: rates(4, 20, 0.2),
     fallbacks: 'default',
+    fallbackTakesSystemMessages: true,
     needsRetention: false,
     defaultEffort: 'medium',
     contextTokens: 1_000_000,
@@ -82,6 +89,10 @@ export const MODELS = {
     label: 'Claude Sonnet 5.5',
     rates: rates(2, 10, 0.1),
     fallbacks: 'default',
+    // Its fallback, Claude Sonnet 5, takes no mid-conversation system messages, and a request with
+    // fallbacks must be valid on the fallback model: turns (which carry the context message) go
+    // without; single calls with no system message (the photo read, image briefs) keep them.
+    fallbackTakesSystemMessages: false,
     needsRetention: false,
     defaultEffort: 'high',
     contextTokens: 1_000_000,
@@ -93,6 +104,7 @@ export const MODELS = {
     rates: rates(0.1, 0.5, 0.01),
     longPrompt: { aboveTokens: 100_000, rates: rates(0.5, 2.5, 0.05) },
     fallbacks: 'none',
+    fallbackTakesSystemMessages: false,
     needsRetention: false,
     defaultEffort: 'medium',
     contextTokens: 1_000_000,

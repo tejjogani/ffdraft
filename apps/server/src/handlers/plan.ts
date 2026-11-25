@@ -12,7 +12,8 @@ export const plan: HandlerGroup<'plan'> = {
     return planStatus(ctx)
   },
 
-  // The studio exports in the browser, so it asks first: the server still decides what counts.
+  // A client that exports on its own asks first. The studio exports Rhino and STEP through
+  // design.export instead, where the server does the work and counts only what it delivered.
   'plan.claim': async (ctx, { pieceId, format, key }) => {
     const piece = await getPiece(ctx, pieceId)
     assertAttested(piece)
@@ -30,7 +31,14 @@ export const plan: HandlerGroup<'plan'> = {
   'plan.settle': async (ctx, { claimId, delivered }) => {
     const row = await getClaim(ctx, claimId)
     if (row.userId !== ctx.user.id) throw forbidden('That claim is someone else’s')
-    const settled = await settle(ctx, row.idempotencyKey, delivered ? 'used' : 'released')
+    // The server cannot know whether a file made outside it was saved: a client giving the slot
+    // back would make the allowance endless (claim, export, give back). Only a failed server
+    // export (design.export) returns a slot.
+    if (!delivered)
+      throw conflict(
+        'An export claim cannot be given back. A Rhino or STEP export that fails on the server is never counted.',
+      )
+    const settled = await settle(ctx, row.idempotencyKey, 'used')
     if (!settled) throw conflict(`That claim is already ${row.state}`)
     return planStatus(ctx)
   },

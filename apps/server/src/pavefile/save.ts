@@ -1,7 +1,7 @@
 /**
  * Saving a piece as a .pave file. Free and never counted: the plan counts Rhino and STEP exports
- * (`design.export`), and nothing here goes through it. The exact geometry inside is written by
- * the geometry service directly, so it never claims an export either.
+ * (`design.export`), and nothing here goes through it. The display mesh inside is written by the
+ * geometry service directly; the exact STEP is left out, so the file is never a free STEP.
  *
  * Pictures travel only where their rights allow passing them on (`RIGHTS_THAT_TRAVEL`); a pinned
  * reference whose picture stays behind keeps its details (title, credit, licence, rights) so the
@@ -42,10 +42,12 @@ export const APP_VERSION: string = createRequire(import.meta.url)('../../package
 export const MAX_HOPS = 32
 /** How long saving waits for the evaluated geometry before saving without it. */
 export const GEOMETRY_BUDGET_MS = 90_000
-const GEOMETRY_ENTRIES = [
-  ['step', PAVE_ENTRIES.exact],
-  ['glb', PAVE_ENTRIES.display],
-] as const
+/**
+ * Only the display mesh. The exact STEP is a counted export (the plan's Rhino/STEP allowance);
+ * a free file that carried it could be unzipped for an uncounted STEP. Opening rebuilds the
+ * geometry from the design, so nothing is lost. (Older files with geometry/exact.step still open.)
+ */
+const GEOMETRY_ENTRIES = [['glb', PAVE_ENTRIES.display]] as const
 
 const sha256 = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex')
 const json = (value: unknown) => new TextEncoder().encode(`${JSON.stringify(value, null, 1)}\n`)
@@ -190,7 +192,7 @@ export async function savePieceFile(
     )
 
   // ── Geometry: a cache for viewers; the design is the truth ─────────────────────────────────
-  const geometry: ('step' | 'glb')[] = []
+  const geometry: 'glb'[] = []
   const engine = ctx.services.optional('geometry')
   if (!engine)
     notes.push(
@@ -201,8 +203,8 @@ export async function savePieceFile(
       'The piece is made from artwork nobody has confirmed they may use yet, so the file carries the design without its geometry. Confirm the rights on its Overview, then save again.',
     )
   else {
-    // Both at once (the kernel pool has more than one worker), under one deadline: the design is
-    // the truth, so a slow machine saves without the cache rather than keeping the person waiting.
+    // Under one deadline: the design is the truth, so a slow machine saves without the cache
+    // rather than keeping the person waiting.
     const budget = AbortSignal.any([
       AbortSignal.timeout(geometryBudgetMs),
       ...(ctx.signal ? [ctx.signal] : []),
@@ -228,7 +230,7 @@ export async function savePieceFile(
     if (failed.length)
       notes.push(
         budget.aborted
-          ? `The evaluated geometry took longer than ${Math.round(geometryBudgetMs / 1000)} s, so the file carries the design without ${failed.length === 2 ? 'it' : 'part of it'}. Opening rebuilds it from the design.`
+          ? `The evaluated geometry took longer than ${Math.round(geometryBudgetMs / 1000)} s, so the file carries the design without it. Opening rebuilds it from the design.`
           : `Some of the evaluated geometry could not be made (${String((failed[0] as PromiseRejectedResult).reason?.message ?? failed[0])}); the design is complete without it.`,
       )
   }

@@ -32,6 +32,11 @@ export type Fault =
     }
   /** Stream the first `afterBlocks` content blocks (default 1), then drop the connection. */
   | { type: 'drop'; afterBlocks?: number }
+  /**
+   * Stream the first `afterBlocks` content blocks (default all), then keep the stream open with
+   * nothing more until the client closes it: a long answer the designer stops.
+   */
+  | { type: 'stall'; afterBlocks?: number }
   /** Close the connection before any response (the SDK sees a connection error). */
   | { type: 'reset' }
   /**

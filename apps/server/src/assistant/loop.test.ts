@@ -736,6 +736,65 @@ describe('the ledger', () => {
     )
     expect(detail.run.costUsd).toBeCloseTo(price(STANDARD) + 0.003, 6)
   })
+
+  it('records a call whose stream broke off: the input the API reported is billed all the same', async () => {
+    model.push(
+      {
+        content: [text('Half an answer'), tool('pieces_list', {})],
+        usage: { input_tokens: 200_000, output_tokens: 20_000 },
+        failAfterContent: true,
+      },
+      { content: [text('Done.')], usage: { input_tokens: 100, output_tokens: 10 } },
+    )
+    const { run } = await send('List my pieces')
+    const detail = await finish(run.id)
+    expect(detail.run.status).toBe('done')
+    const c = await ctx()
+    const rows = await c.repo.usage.many({ where: eq(t.usageEvent.runId, run.id) })
+    const models = detail.steps.filter((x) => x.kind === 'model')
+    expect(models.map((m) => m.isError)).toEqual([true, false])
+    expect(rows.map((r) => r.idempotencyKey).sort()).toEqual(
+      models.map((m) => `${run.id}:${m.index}:llm`).sort(),
+    )
+    // At least the 200K input tokens of the broken call, at the Standard model's input rate.
+    const floor = (200_000 * MODELS[STANDARD].rates.input) / 1e6
+    expect(detail.run.costUsd).toBeGreaterThan(floor)
+    expect(model.problems()).toEqual([])
+  })
+
+  it('a paused turn (no server tools to resume) is kept and ends the run, with no prefill sent', async () => {
+    const before = model.api?.exchanges.length ?? 0
+    model.push({ content: [text('Working on it…')], stop_reason: 'pause_turn' })
+    const { run, thread } = await send('Go on')
+    const detail = await finish(run.id)
+    expect(detail.run.status).toBe('done')
+    expect((await shape(thread.id)).at(-1)).toBe('assistant:text')
+    if (model.api) expect(model.api.exchanges.length - before).toBe(1)
+    expect(model.problems()).toEqual([])
+  })
+
+  it('records a call stopped mid-answer before the run ends', async () => {
+    model.push({
+      content: [text('Thinking about a long answer')],
+      usage: { input_tokens: 150_000, output_tokens: 5 },
+      stallAfterContent: true,
+    })
+    const before = model.api?.exchanges.length ?? 0
+    const { run } = await send('Write me a long answer')
+    // Wait until the answer has started streaming, then stop it.
+    for (let i = 0; i < 100 && (model.api?.exchanges.length ?? 1) <= before; i++)
+      await new Promise((r) => setTimeout(r, 20))
+    await new Promise((r) => setTimeout(r, 100))
+    await api.call('runs.cancel', { runId: run.id })
+    const detail = await finish(run.id)
+    expect(detail.run.status).toBe('canceled')
+    const c = await ctx()
+    const rows = await c.repo.usage.many({ where: eq(t.usageEvent.runId, run.id) })
+    expect(rows).toHaveLength(1)
+    const floor = (150_000 * MODELS[STANDARD].rates.input) / 1e6
+    expect(rows[0]!.costMicros / 1e6).toBeGreaterThan(floor)
+    expect(detail.run.costUsd).toBeGreaterThan(floor)
+  })
 })
 
 describe('the run event stream', () => {

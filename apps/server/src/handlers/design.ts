@@ -185,6 +185,17 @@ export const design: HandlerGroup<'design'> = {
     const summary = await ctx.services
       .get('geometry')
       .evaluate(piece.design, { detail: input.detail, pieceId: piece.id }, serviceContext(ctx))
+    // All zeros with no diagnostics reads as "fine"; an empty design is worth saying out loud.
+    if (Object.keys(piece.design.nodes).length === 0)
+      summary.diagnostics = [
+        ...summary.diagnostics,
+        {
+          level: 'warning',
+          code: 'empty_design',
+          message:
+            'The design is empty: there is nothing to measure or check. Build it from a spec, start from a template, or model it.',
+        },
+      ]
     // Facts come from one detail level only, so a draft answer never overwrites production facts.
     if (input.detail === FACTS_DETAIL) await storeFacts(ctx, piece.id, piece.version, summary)
     return summary

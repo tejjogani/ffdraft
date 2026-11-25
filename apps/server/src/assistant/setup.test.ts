@@ -282,7 +282,9 @@ describe('.env and the tiers', () => {
     // .env wins over settings for Standard.
     const standard = await runOn()
     expect(standard.run).toMatchObject({ tier: 'standard', model: 'claude-sonnet-5-5' })
-    expect(standard.request.fallbacks).toBe('default')
+    // Sonnet 5.5's fallback (Claude Sonnet 5) takes no system messages, which every turn carries:
+    // its turns go without server-side fallbacks, and a refusal is handled by the run.
+    expect(standard.request.fallbacks).toBeUndefined()
 
     // Haiku has no server-side fallback: neither the parameter nor its beta is sent.
     const light = await runOn('light')

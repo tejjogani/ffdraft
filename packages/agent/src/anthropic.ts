@@ -42,7 +42,7 @@ import {
   type Tokens,
 } from '@pave/schema'
 import type { ModelClient, ModelStream } from './model'
-import { type Effort, MODELS, usageCost } from './pricing'
+import { type Effort, MODELS, type ResponseUsage, usageCost } from './pricing'
 import { SYSTEM_BLOCKS } from './prompt/index'
 import { toolDefs } from './tools'
 
@@ -128,12 +128,23 @@ export interface BuildRequest {
   features?: Partial<RequestFeatures>
 }
 
+/**
+ * Whether a turn on this model asks for server-side fallbacks. Every turn carries the context
+ * system message, and a fallback request must be valid on the model it falls back to; Haiku has
+ * no fallback and Sonnet 5.5's (Claude Sonnet 5) takes no system messages, so a refusal there is
+ * handled by the run.
+ */
+export const turnFallbacks = (model: AssistantModelId): boolean => {
+  const info = MODELS[model]
+  return info.fallbacks === 'default' && info.fallbackTakesSystemMessages
+}
+
 /** One turn's request. Everything but `model` and `messages` is fixed for the model. */
 export function buildRequest({ model, messages, features }: BuildRequest): BetaMessageStreamParams {
   const f = { ...DEFAULT_FEATURES, ...features }
-  const info = MODELS[model]
+  const fallbacks = turnFallbacks(model)
   const betas = [
-    ...(info.fallbacks === 'default' ? [BETA.fallback] : []),
+    ...(fallbacks ? [BETA.fallback] : []),
     ...(f.dropMismatchedThinking ? [BETA.binding] : []),
     ...(f.compaction ? [BETA.compaction] : []),
   ]
@@ -159,8 +170,7 @@ export function buildRequest({ model, messages, features }: BuildRequest): BetaM
     ...(f.compaction
       ? { context_management: { edits: [{ type: 'compact_20260112' as const }] } }
       : {}),
-    // Haiku has no server-side fallback; sending the parameter there would be refused.
-    ...(info.fallbacks === 'default' ? { fallbacks: 'default' as const } : {}),
+    ...(fallbacks ? { fallbacks: 'default' as const } : {}),
     ...(betas.length ? { betas } : {}),
   }
 }
@@ -183,28 +193,67 @@ export class StreamAdapter {
   servedBy: string | null = null
   /** What the API did to replayed thinking blocks, for the step's trace. */
   inputTransformations: BetaInputTransformation[] = []
+  /** The model the turn began on and the usage reported so far (message_start, then deltas). */
+  #started: { model: string; usage: ResponseUsage } | null = null
+  /** Characters of output streamed so far, for an estimate when no delta reported output yet. */
+  #streamedChars = 0
 
   push(event: BetaRawMessageStreamEvent): RunEventBody[] {
     switch (event.type) {
       case 'message_start':
         this.servedBy = event.message.model
         this.inputTransformations = event.message.input_transformations ?? []
+        this.#started = { model: event.message.model, usage: { ...event.message.usage } }
         return []
-      case 'message_delta':
+      case 'message_delta': {
         if (event.input_transformations) this.inputTransformations = event.input_transformations
+        // Delta usage is cumulative; a null field means "unchanged since message_start".
+        const u = this.#started?.usage
+        if (u) {
+          u.output_tokens = event.usage.output_tokens
+          if (event.usage.input_tokens != null) u.input_tokens = event.usage.input_tokens
+          if (event.usage.cache_read_input_tokens != null)
+            u.cache_read_input_tokens = event.usage.cache_read_input_tokens
+          if (event.usage.cache_creation_input_tokens != null)
+            u.cache_creation_input_tokens = event.usage.cache_creation_input_tokens
+          if (event.usage.iterations) u.iterations = event.usage.iterations
+        }
         return []
+      }
       case 'content_block_start':
         if (event.content_block.type === 'fallback') this.servedBy = event.content_block.to.model
         return []
       case 'content_block_delta':
-        if (event.delta.type === 'text_delta')
+        if (event.delta.type === 'text_delta') {
+          this.#streamedChars += event.delta.text.length
           return [{ type: 'text.delta', index: event.index, text: event.delta.text }]
-        if (event.delta.type === 'thinking_delta' && event.delta.thinking)
+        }
+        if (event.delta.type === 'thinking_delta' && event.delta.thinking) {
+          this.#streamedChars += event.delta.thinking.length
           return [{ type: 'thinking.delta', index: event.index, text: event.delta.thinking }]
+        }
+        if (event.delta.type === 'input_json_delta')
+          this.#streamedChars += event.delta.partial_json.length
         return []
       default:
         return []
     }
+  }
+
+  /**
+   * What a stream that ended without its final message (dropped, stopped, shut down) had already
+   * been billed for: the input the API reported in message_start and the output streamed so far.
+   * The output is the larger of what a delta reported and a rough estimate from the characters
+   * seen, so a budget is not under-counted. Null when the API never started answering.
+   */
+  partialUsage(): { model: string; tokens: Tokens; costUsd: number } | null {
+    if (!this.#started) return null
+    const { model, usage } = this.#started
+    const estimate = Math.ceil(this.#streamedChars / 4)
+    const u: ResponseUsage = usage.iterations?.length
+      ? usage
+      : { ...usage, output_tokens: Math.max(usage.output_tokens, estimate) }
+    return { model, ...usageCost(model, u) }
   }
 }
 
@@ -293,6 +342,13 @@ const modelLabel = (model: string) =>
     ? MODELS[model as AssistantModelId].label
     : model
 
+/** The API's own error sentence (from the typed error's body), never the whole JSON body. */
+function apiMessage(err: APIError): string {
+  const body = err.error as { error?: { message?: unknown }; message?: unknown } | undefined
+  const said = body?.error?.message ?? body?.message
+  return typeof said === 'string' && said ? said.replace(/\.$/, '') : `HTTP ${err.status}`
+}
+
 /**
  * Maps an SDK error to a run error code and a sentence for the designer. Typed classes only:
  * the API's wording is not a contract.
@@ -329,15 +385,19 @@ export function mapError(err: unknown, ctx: { model: string; aborted?: boolean }
     const info = (ASSISTANT_MODELS as readonly string[]).includes(ctx.model)
       ? MODELS[ctx.model as AssistantModelId]
       : null
+    const said = apiMessage(err)
+    // A 400 does not say why in a form we may rely on: retention is named as a possible cause
+    // only, after the API's own words, so a schema problem does not send the founder to his
+    // data-retention settings.
     if (info?.needsRetention)
       return {
         code: 'model_unavailable',
-        message: `Claude’s API refused the request for ${info.label}. It needs 30-day data retention on your Anthropic organisation; switch this conversation to Standard, or point Power at another model in Settings, AI. (${err.message})`,
+        message: `Claude’s API rejected the request for ${info.label}: ${said}. ${info.label} needs 30-day data retention on your Anthropic organisation; if that may be the cause, switch this conversation to Standard, or point Power at another model in Settings, AI.`,
         retryable: false,
       }
     return {
       code: 'internal',
-      message: `Claude’s API rejected the request: ${err.message}`,
+      message: `Claude’s API rejected the request: ${said}`,
       retryable: false,
     }
   }

@@ -181,6 +181,48 @@ describe('a Render job on the Free plan', () => {
   })
 })
 
+describe('a Render job’s own approval', () => {
+  it('covers only takes within the machine time the person saw; anything heavier asks', async () => {
+    const piece = await api.call('pieces.create', { templateId: 'solitaire' })
+    const heavy = {
+      pieceId: piece.id,
+      title: 'Huge',
+      scene: {
+        look: 'catalog-white',
+        animation: { type: 'turntable', seconds: 20, fps: 60 },
+        output: { width: 8192, height: 8192, quality: 'final' },
+      },
+    }
+    s.model.push(
+      {
+        content: [
+          tool('renders_create', shot(piece.id, 'Small'), 'toolu_m1'),
+          tool('renders_create', heavy, 'toolu_m2'),
+        ],
+        stop_reason: 'tool_use',
+      },
+      { content: [text('The small take is under way.')], stop_reason: 'end_turn' },
+    )
+    // The Start popover showed about a minute of machine time.
+    const { run } = await send('Render the set', {
+      context: { pieceId: piece.id },
+      job: { stage: 'render', machineSeconds: 60 },
+    })
+    await until(run.id, 'awaiting-approval')
+    const asked = awaiting(run.id)
+    expect(asked.map((e) => e.toolCallId)).toEqual(['toolu_m2'])
+    expect((await api.call('renders.list', { pieceId: piece.id })).map((t) => t.title)).toEqual([
+      'Small',
+    ])
+    await api.call('runs.decide', { runId: run.id, toolCallId: 'toolu_m2', decision: 'deny' })
+    await until(run.id, 'waiting')
+    for (const handle of takes.values())
+      await handle.update({ status: 'done', progress: 1, assetIds: [], seconds: 10 })
+    takes.clear()
+    await until(run.id, 'done')
+  })
+})
+
 describe('exports by the assistant and over MCP', () => {
   it('asks before the last free Rhino export and refuses MCP past the limit', async () => {
     await use('export', 4)

@@ -114,7 +114,13 @@ export const RULES: readonly RuleInfo[] = [
     id: 'fallbacks.shape',
     doc: `${SKILL}typescript/claude-api/README.md § Refusal Fallbacks; shared/model-migration.md § Haiku 5.5 Safeguards, § Sonnet 5.5 Safeguards and fallback, § Fable 5.2 Structured outputs, safeguards and fallback`,
     summary:
-      'fallbacks needs server-side-fallback-2026-07-01 ("default" form) or -06-01/-07-01 (list form); Haiku 5.5 takes no list; a list names only the model’s permitted targets.',
+      'fallbacks needs server-side-fallback-2026-07-01 ("default" form) or -06-01/-07-01 (list form); Haiku 5.5 takes no fallbacks in any form; a list names only the model’s permitted targets.',
+  },
+  {
+    id: 'fallbacks.target',
+    doc: `${SKILL}shared/model-migration.md § refusal stop reason (the request with an entry's overrides merged in must be valid as a direct request to that entry's model); shared/prompt-caching.md § Mid-conversation system messages (not available on Claude Sonnet 5)`,
+    summary:
+      'A request with fallbacks must be valid on each fallback model: role "system" messages with a Claude Sonnet 5 fallback are refused.',
   },
   {
     id: 'compaction.beta',
@@ -447,16 +453,43 @@ const FALLBACK_TARGETS: Record<FakeModel, readonly string[]> = {
   'claude-haiku-5-5': [],
 }
 
+/**
+ * Fallback models that do not take mid-conversation `role: "system"` messages
+ * (shared/prompt-caching.md § Mid-conversation system messages: "Not available on Claude Sonnet 5
+ * ... treat it as unsupported and catch the 400").
+ */
+const NO_SYSTEM_MESSAGES = new Set(['claude-sonnet-5'])
+
+/**
+ * The request as it would run on a fallback model must be valid there too
+ * (shared/model-migration.md, refusal section: "The request with an entry's overrides merged in
+ * must be valid as a direct request to that entry's model"). Checked up front, as the docs say
+ * the API does for a request a fallback entry could not serve.
+ */
+function checkFallbackTargets(c: Check, targets: readonly string[], body: Json) {
+  const messages = Array.isArray(body.messages) ? (body.messages as unknown[]) : []
+  const hasSystem = messages.some((m) => isObj(m) && m.role === 'system')
+  for (const target of targets)
+    if (hasSystem && NO_SYSTEM_MESSAGES.has(target))
+      c.fail(
+        'fallbacks.target',
+        `fallbacks: the request is not valid on ${target}: role 'system' is not supported on this model`,
+      )
+}
+
 function checkFallbacks(c: Check, model: FakeModel, body: Json, betas: Set<string>) {
   if (body.fallbacks === undefined) return
   const f = body.fallbacks
+  // shared/model-migration.md § Migrating to Claude Haiku 5.5: no server-side fallback, in any form.
+  if (MODEL_SPECS[model].fallbackTo === null)
+    return c.fail('fallbacks.shape', 'fallbacks: this model has no server-side fallback')
   if (f === 'default') {
     if (!betas.has('server-side-fallback-2026-07-01'))
       c.fail(
         'fallbacks.shape',
         'fallbacks: "default" requires the server-side-fallback-2026-07-01 beta',
       )
-    return
+    return checkFallbackTargets(c, [MODEL_SPECS[model].fallbackTo!], body)
   }
   if (!Array.isArray(f)) return c.fail('fallbacks.shape', 'fallbacks: must be "default" or a list')
   if (
@@ -464,14 +497,17 @@ function checkFallbacks(c: Check, model: FakeModel, body: Json, betas: Set<strin
     !betas.has('server-side-fallback-2026-06-01')
   )
     c.fail('fallbacks.shape', 'fallbacks requires a server-side-fallback beta')
-  if (model === 'claude-haiku-5-5')
-    return c.fail('fallbacks.shape', 'fallbacks: this model has no server-side fallback')
   for (const e of f as unknown[])
     if (!isObj(e) || !FALLBACK_TARGETS[model].includes(e.model as string))
       c.fail(
         'fallbacks.shape',
         `fallbacks: ${JSON.stringify(e)} is not a permitted fallback for ${model}`,
       )
+  checkFallbackTargets(
+    c,
+    (f as unknown[]).flatMap((e) => (isObj(e) && typeof e.model === 'string' ? [e.model] : [])),
+    body,
+  )
 }
 
 const TOOL_KEYS = new Set([

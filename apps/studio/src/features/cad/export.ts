@@ -1,9 +1,9 @@
 /**
- * Exports, labelled by purpose. They run in the export worker (production detail: seats cut,
- * metal fused and watertight), so the viewport stays responsive; when that fails the server's
- * `design.export` is the fallback. A piece made from someone's artwork needs a person's
- * attestation first, as the server would require. Rhino and STEP are claimed from the plan's
- * allowance on the server first; the other formats are never counted.
+ * Exports, labelled by purpose. Uncounted formats run in the export worker (production detail:
+ * seats cut, metal fused and watertight), so the viewport stays responsive; when that fails the
+ * server's `design.export` is the fallback. Rhino and STEP count against the plan, so the server
+ * always makes them and counts only what it delivered. A piece made from someone's artwork needs
+ * a person's attestation first, as the server would require.
  */
 import type { ExportFormat } from '@pave/kernel'
 import { type Design, exportCounts, originNeedsAttestation, type Piece } from '@pave/schema'
@@ -38,13 +38,6 @@ export interface ExportContext {
 export const exportFormats = (available: readonly string[]): ExportFormat[] =>
   (Object.keys(EXPORT_PURPOSE) as ExportFormat[]).filter((f) => available.includes(f))
 
-/**
- * One key per export attempt, so a retried claim is counted once. Not `crypto.randomUUID`: that
- * needs a secure context, and the studio may be opened over plain http on a LAN address.
- */
-const attemptKey = () =>
-  `x${[...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(16).padStart(2, '0')).join('')}`
-
 export async function runExport(
   piece: Piece,
   design: Design,
@@ -61,51 +54,39 @@ export async function runExport(
   }
   const name = piece.title || 'Untitled piece'
   const pending = toast({ title: `Preparing ${format.toUpperCase()}…`, timeout: 0 })
-  // Rhino and STEP count against the plan: the server hands out one before the browser exports.
-  // It is settled below: used once the file is saved, given back if the export fails or the save
-  // is canceled. (When the server exports instead, it settles the claim itself.)
-  let claimId: string | null = null
-  let settledByServer = false
-  const settle = (delivered: boolean) => {
-    if (!claimId || settledByServer) return
-    const id = claimId
-    claimId = null
-    void rpc
-      .call('plan.settle', { claimId: id, delivered })
-      .catch(() => {})
-      .finally(() => invalidateFor(queryClient, 'plan'))
-  }
   try {
-    if (exportCounts(format))
-      claimId = (await rpc.call('plan.claim', { pieceId: piece.id, format, key: attemptKey() }))
-        .claimId
-    let blob: Blob
-    let notes: string[]
+    let blob!: Blob
+    let notes!: string[]
     let extension: string = format
-    try {
-      const result = await exportDesign(design, format)
-      blob = new Blob([result.bytes as BlobPart], { type: result.mime })
-      notes = result.notes
-      extension = result.extension.replace(/^\./, '')
-    } catch (local) {
-      // The in-browser exporter failed; the server may have a geometry engine that can.
-      const { asset, notes: serverNotes } = await rpc
-        .call('design.export', {
-          pieceId: piece.id,
-          format,
-          ...(claimId ? { claimId } : {}),
-        })
-        .catch(() => {
-          throw local
-        })
-      settledByServer = true
+    const fromServer = async () => {
+      const { asset, notes: serverNotes } = await rpc.call('design.export', {
+        pieceId: piece.id,
+        format,
+      })
+      invalidateFor(queryClient, 'plan')
       blob = await (await fetch(assetUrl(asset.id))).blob()
       notes = serverNotes
+    }
+    if (exportCounts(format)) {
+      // Rhino and STEP count against the plan, so the server makes them: it counts only a file
+      // it delivered, and a failed export is never counted.
+      await fromServer()
+    } else {
+      try {
+        const result = await exportDesign(design, format)
+        blob = new Blob([result.bytes as BlobPart], { type: result.mime })
+        notes = result.notes
+        extension = result.extension.replace(/^\./, '')
+      } catch (local) {
+        // The in-browser exporter failed; the server's geometry engine may manage.
+        await fromServer().catch(() => {
+          throw local
+        })
+      }
     }
     toast.dismiss(pending)
     const purpose = EXPORT_PURPOSE[format]
     const saved = await saveFile(blob, safeFileName(name, extension), purpose.hint)
-    settle(saved)
     if (!saved) return
     if (purpose.makes && context.problems > 0)
       toast({
@@ -122,7 +103,6 @@ export async function runExport(
       })
   } catch (e) {
     toast.dismiss(pending)
-    settle(false)
     if (reportPlanLimit(e)) return
     toast.error(
       `Couldn’t export ${format.toUpperCase()}`,

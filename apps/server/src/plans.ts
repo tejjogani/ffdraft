@@ -52,19 +52,26 @@ const CLAIM_ATTEMPTS = 25
  */
 export const STALE_EXPORT_MS = 30 * 60_000
 
-/** Gives back export claims held past {@link STALE_EXPORT_MS}; their slots can be taken again. */
+/**
+ * Settles export claims held past {@link STALE_EXPORT_MS}. A server export cut short by a restart
+ * delivered nothing, so its slot is given back. A client's claim is counted: the server never
+ * learns whether that file was saved, and giving it back would let a client export for free by
+ * never settling.
+ */
 export async function releaseStale(ctx: Ctx, now = new Date()): Promise<void> {
-  await ctx.repo.planClaims.update(
+  const before = new Date(now.getTime() - STALE_EXPORT_MS)
+  const stale = (prefix: string) =>
     and(
       eq(t.planClaim.state, 'held'),
-      lt(t.planClaim.createdAt, new Date(now.getTime() - STALE_EXPORT_MS)),
-      or(
-        like(t.planClaim.idempotencyKey, 'browser:%'),
-        like(t.planClaim.idempotencyKey, 'export:%'),
-      ),
-    )!,
-    { state: 'released', slot: null, settledAt: now },
-  )
+      lt(t.planClaim.createdAt, before),
+      like(t.planClaim.idempotencyKey, prefix),
+    )!
+  await ctx.repo.planClaims.update(stale('export:%'), {
+    state: 'released',
+    slot: null,
+    settledAt: now,
+  })
+  await ctx.repo.planClaims.update(stale('browser:%'), { state: 'used', settledAt: now })
 }
 
 /** The plan the organisation is on, and what set it. */

@@ -196,6 +196,26 @@ export function jobApproves(job: AiJob | null, tool: string, used: number): bool
   return !!approved && (approved.tools as readonly string[]).includes(tool) && used < approved.limit
 }
 
+/** The machine time a Render job approves on its own when no Start popover gave one. */
+export const DEFAULT_JOB_MACHINE_SECONDS = 30 * 60
+/** The most a Render job approves on its own, whatever its popover said. */
+export const MAX_JOB_MACHINE_SECONDS = 4 * 60 * 60
+/** Room over the popover's estimate: a retake or one more shot of the same kind still fits. */
+const MACHINE_SLACK = 1.5
+
+/**
+ * How much machine time (seconds, estimated) the takes a Render job approves on its own may add
+ * up to, over every run of the job: the plan the person saw, with some room. A heavier take
+ * (bigger, final quality, a long animation) asks, with its own estimate on the card.
+ */
+export function jobMachineBudget(job: AiJob): number {
+  const seen = job.machineSeconds
+  return Math.min(
+    MAX_JOB_MACHINE_SECONDS,
+    seen === null || seen === undefined ? DEFAULT_JOB_MACHINE_SECONDS : seen * MACHINE_SLACK,
+  )
+}
+
 type Plan = AiJob['plan']
 
 const withStates = (plan: Plan, state: (step: Plan[number], i: number) => PlanStepState): Plan =>
