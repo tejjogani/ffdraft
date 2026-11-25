@@ -7,7 +7,7 @@
  */
 import { type Design, nodeTitle } from '@pave/schema'
 import { ContextMenu, type ContextMenuHandle, MenuGroup, MenuItem, MenuSeparator } from '@pave/ui'
-import { Eye, EyeOff, Focus, Plus, Trash2 } from 'lucide-react'
+import { Camera, Eye, EyeOff, Focus, Plus, Trash2 } from 'lucide-react'
 import type { Ref } from 'react'
 import { runCommand } from '../../../lib/commands'
 import { AskAiSection } from '../../assistant/AskAiSection'
@@ -74,6 +74,10 @@ export function ViewportMenu({ handle, subject, design, readOnly, onDelete }: Vi
                 shortcut="a"
               >
                 Add a feature…
+              </MenuItem>
+              {/* The next stage from where the person is looking: this camera as a new shot. */}
+              <MenuItem icon={Camera} onClick={() => runCommand('view.renderThis')}>
+                Render this view
               </MenuItem>
             </>
           )}

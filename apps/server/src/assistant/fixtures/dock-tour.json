@@ -1,0 +1,270 @@
+{
+  "runs": [
+    [
+      {
+        "paceMs": 70,
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "A halo engagement ring: settle the spec first, then build."
+          },
+          {
+            "type": "text",
+            "text": "A cushion centre in a single halo is a good fit for an engagement ring that reads larger than its carat. I will set a 1.2 ct cushion in four claws, frame it with a row of 1.3 mm melee, and carry pavé a little way down the shoulders. 18k white gold with rhodium keeps the halo bright. First I will start a piece for it."
+          },
+          {
+            "type": "tool_use",
+            "name": "pieces_create",
+            "input": {
+              "title": "Cushion halo ring",
+              "kind": "ring"
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Here is the spec I propose."
+          },
+          {
+            "type": "tool_use",
+            "name": "pieces_setSpec",
+            "input": {
+              "id": "{{pieceId}}",
+              "spec": {
+                "kind": "ring",
+                "archetype": "halo",
+                "title": "Cushion halo",
+                "summary": "A 1.2 ct cushion framed by a single pavé halo.",
+                "style": ["glamorous"],
+                "metal": {
+                  "alloy": "au18k-white",
+                  "plating": "rhodium"
+                },
+                "ring": {
+                  "size": {
+                    "system": "us",
+                    "value": 6
+                  }
+                },
+                "stones": [
+                  {
+                    "role": "center",
+                    "cut": "cushion",
+                    "carat": 1.2
+                  },
+                  {
+                    "role": "halo",
+                    "widthMm": 1.3
+                  },
+                  {
+                    "role": "accent",
+                    "widthMm": 1.3,
+                    "setting": "pave"
+                  }
+                ],
+                "openQuestions": ["Is US 6 the right ring size?"]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "It is ready to build. One open question: the ring size, which I set to US 6."
+          },
+          {
+            "type": "tool_use",
+            "name": "pieces_buildFromSpec",
+            "input": {
+              "id": "{{pieceId}}"
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "design_apply",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "label": "Named the centre stone",
+              "ops": [
+                {
+                  "t": "update",
+                  "id": "center",
+                  "patch": {
+                    "name": "Cushion centre"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 20,
+        "content": [
+          {
+            "type": "text",
+            "text": "Built. The **1.2 ct cushion** sits in four claws inside a single halo of 1.3 mm melee, with pavé on the shoulders.\n\n- Metal: 18k white gold, rhodium plated\n- Size: US 6\n\nWant a thinner band, or a different metal?"
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "error": {
+          "status": 429,
+          "type": "rate_limit_error",
+          "message": "Number of request tokens has exceeded your per-minute rate limit"
+        },
+        "content": []
+      }
+    ],
+    [
+      {
+        "usage": {
+          "input_tokens": 12000,
+          "output_tokens": 180000
+        },
+        "content": [
+          {
+            "type": "text",
+            "text": "Let me look at the piece first."
+          },
+          {
+            "type": "tool_use",
+            "name": "pieces_get",
+            "input": {
+              "id": "{{pieceId}}"
+            }
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "paceMs": 40,
+        "content": [
+          {
+            "type": "text",
+            "text": "Making the centre stone bigger."
+          },
+          {
+            "type": "tool_use",
+            "name": "design_apply",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "label": "Widened the centre stone to 7.5 mm",
+              "ops": [
+                {
+                  "t": "update",
+                  "id": "center",
+                  "patch": {
+                    "width": 7.5
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 260,
+        "content": [
+          {
+            "type": "text",
+            "text": "The centre stone is wider now, and the halo follows it, so the frame still sits tight around the cushion. I am checking that the claws still reach over the girdle and that the gallery clears the finger. The weight goes up a little: about 0.2 g of gold and a larger centre. Tell me if you want the shoulders thinner to balance it."
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "pieces_get",
+            "input": {
+              "id": "{{pieceId}}"
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "design_apply",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "label": "Thinned the band to 1.8 mm",
+              "ops": [
+                {
+                  "t": "update",
+                  "id": "band",
+                  "patch": {
+                    "widthTop": 1.8,
+                    "widthBottom": 1.8
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 400,
+        "content": [
+          {
+            "type": "text",
+            "text": "The band is at 1.8 mm now. Next I am going to build out the gallery under the head and check the claw heights against the cushion's crown, then look at the whole piece from the side to make sure the profile stays low enough for everyday wear. After that I will check the weight and the melee count against the spec."
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "paceMs": 30,
+        "content": [
+          {
+            "type": "text",
+            "text": "Picking up from your edit: I will keep your band and finish the head."
+          },
+          {
+            "type": "tool_use",
+            "name": "design_apply",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "label": "Set the claws to 0.9 mm",
+              "ops": [
+                {
+                  "t": "update",
+                  "id": "head",
+                  "patch": {
+                    "prongDiameter": 0.9
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "paceMs": 20,
+        "content": [
+          {
+            "type": "text",
+            "text": "Done. Your band is as you left it; the claws are 0.9 mm and still reach over the girdle. Look it over and accept it, or tell me what to change."
+          }
+        ]
+      }
+    ]
+  ]
+}

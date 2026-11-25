@@ -70,6 +70,14 @@ The scripts in `docs/agents/workflows/` are working examples; copy the closest o
 - **Usage limits.** Each account has a weekly limit. When it is close, finish what the founder will test before starting research.
 - **Models.** Use the most capable model the account allows for research, plans, judging and final review (Fable 5.2); Opus 5.5 at high effort for builders, fixers and verifiers.
 
+### Lessons from running many agents on one machine
+
+- **Stop only your own processes, by PID.** Every agent runs the same servers. Record each PID when you start a process and stop only those; never `pkill`, `killall` or any name pattern. Give each job its own port range. (25 Nov: one agent's `pkill` stopped another's server mid-test.)
+- **Do not message an agent that is running inside a workflow.** A message can start a second copy of it, and the two then collide in the same folder. To redirect a workflow agent, stop the workflow, edit its script and start it again. (25 Nov: two copies of a builder and of a verifier ran at once.)
+- **Backup loops must report failed pushes,** not hide them, and builders make no temporary commits on a branch that is being backed up: a temporary commit that was pushed and later replaced locally makes every later push fail silently.
+- **Do not commit in a checkout while a merge is open there.** Scheduled jobs check for a merge in progress and uncommitted changes first.
+- **A test whose result depends on machine speed is a product risk,** because the founder's laptop is slower or busier than expected: compare what must match, and treat timing-dependent values as such.
+
 ## 6. Rules that never bend
 
 - The Diaex repository is **read-only** from Pavé's work: never modify it, never run anything that writes there, never open `.env` or other secret files, never print secrets. Changes to Diaex go through the Diaex agent with `docs/integrations/diaex-agent-brief.md`.

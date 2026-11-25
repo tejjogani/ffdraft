@@ -1,11 +1,12 @@
 import type { PieceSummary } from '@pave/schema'
+import type { ReactNode } from 'react'
 import { Skeleton } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
 import { factsLine } from '../lib/domain'
 import { PieceCover } from './PieceCover'
 
-/** Gallery card: a 4:5 cover, the title, one muted line of facts. */
-export function PieceCard({ piece }: { piece: PieceSummary }) {
+/** Gallery card: a 4:5 cover, the title, one muted line of facts, and an optional line under it. */
+export function PieceCard({ piece, meta }: { piece: PieceSummary; meta?: ReactNode }) {
   return (
     <Link
       to="/pieces/$id"
@@ -19,6 +20,7 @@ export function PieceCard({ piece }: { piece: PieceSummary }) {
       <div className="mt-2.5 px-0.5">
         <div className="truncate text-sm font-medium text-fg">{piece.title || 'Untitled'}</div>
         <div className="mt-0.5 truncate text-xs text-fg-subtle">{factsLine(piece)}</div>
+        {meta && <div className="mt-1.5">{meta}</div>}
       </div>
     </Link>
   )

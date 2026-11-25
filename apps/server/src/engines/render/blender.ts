@@ -28,6 +28,8 @@ const BOOT_WAIT_MS = 20_000
 
 export class BlenderSetup {
   readonly #file: string | null
+  /** Where `PAVE_PYTHON` and `PAVE_BLENDER` are read when no Blender was chosen. */
+  readonly #env: NodeJS.ProcessEnv | undefined
   /** Saves run one after another, each writing the state current when it starts. */
   #saving: Promise<void> = Promise.resolve()
   #blenderPath: string | null = null
@@ -37,8 +39,9 @@ export class BlenderSetup {
   /** Settles once this run's own probe has finished. */
   readonly probed: Promise<void>
 
-  constructor(opts: { file: string | null }) {
+  constructor(opts: { file: string | null; env?: NodeJS.ProcessEnv }) {
     this.#file = opts.file
+    this.#env = opts.env
     const loaded = this.#load().then((saved) => {
       this.#blenderPath = saved?.blenderPath ?? null
       const last = saved?.status
@@ -48,7 +51,7 @@ export class BlenderSetup {
     })
     this.probed = loaded
       .then(async () => {
-        this.#status = await probe(this.#blenderPath, this.#status.device)
+        this.#status = await probe(this.#blenderPath, this.#status.device, this.#env)
         await this.#save()
       })
       .catch((err: unknown) => {
@@ -77,14 +80,15 @@ export class BlenderSetup {
   }
 
   /** What `renderWithBlender` needs to run the chosen Blender. */
-  runtime(): Pick<RuntimeOptions, 'blenderPath'> {
-    return this.#blenderPath === null ? {} : { blenderPath: this.#blenderPath }
+  runtime(): Pick<RuntimeOptions, 'blenderPath' | 'env'> {
+    if (this.#blenderPath !== null) return { blenderPath: this.#blenderPath }
+    return this.#env ? { env: this.#env } : {}
   }
 
   /** Probes `blenderPath` (null = discover again) and switches to it only if it works. */
   async configure(blenderPath: string | null): Promise<RenderEngineStatus> {
     await this.probed
-    const probed = await probe(blenderPath, null)
+    const probed = await probe(blenderPath, null, this.#env)
     if (!probed.available) return probed
     this.#blenderPath = blenderPath
     this.#status = probed
@@ -128,8 +132,9 @@ export class BlenderSetup {
 async function probe(
   blenderPath: string | null,
   device: string | null,
+  env: NodeJS.ProcessEnv | undefined,
 ): Promise<RenderEngineStatus> {
-  const found = await detectBlender(blenderPath === null ? {} : { blenderPath })
+  const found = await detectBlender(blenderPath !== null ? { blenderPath } : env ? { env } : {})
   return {
     available: found.available,
     version: found.version ?? null,

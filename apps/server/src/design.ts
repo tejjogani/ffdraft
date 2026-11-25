@@ -15,6 +15,7 @@ import {
 } from '@pave/schema'
 import { and, eq, inArray } from 'drizzle-orm'
 import { type Ctx, publish } from './context'
+import { drawClayCover } from './covers'
 import * as t from './db/schema'
 import { AppError, badRequest, conflict } from './errors'
 import { createId } from './ids'
@@ -240,6 +241,7 @@ export async function storeFacts(
     },
   )
   if (rows.length) publish(ctx, { type: 'piece.updated', pieceId })
+  return rows.length > 0
 }
 
 /** How long a piece must stay unchanged before its facts are re-evaluated. */
@@ -274,6 +276,8 @@ export function refreshFacts(ctx: Ctx, pieceId: string, version: number, design:
   entry.timer.unref()
 }
 
+const isAbort = (err: unknown) => err instanceof Error && err.name === 'AbortError'
+
 async function flush(byPiece: Map<string, FactsRefresh>, key: string, pieceId: string) {
   const entry = byPiece.get(key)
   if (!entry) return
@@ -287,11 +291,14 @@ async function flush(byPiece: Map<string, FactsRefresh>, key: string, pieceId: s
     const summary = await ctx.services
       .get('geometry')
       .evaluate(design, { detail: FACTS_DETAIL, pieceId, background: true }, serviceContext(ctx))
-    await storeFacts(ctx, pieceId, version, summary)
+    if (await storeFacts(ctx, pieceId, version, summary))
+      await drawClayCover(ctx, pieceId, version, design, summary).catch((err: unknown) => {
+        // A missing cover leaves the card's placeholder; it is not worth failing the refresh.
+        if (!isAbort(err)) console.error(`Drawing a cover of piece ${pieceId} failed:`, err)
+      })
   } catch (err) {
     // The server closing under a pending refresh is not a failure worth reporting.
-    if (!(err instanceof Error && err.name === 'AbortError'))
-      console.error(`Evaluating piece ${pieceId} v${version} failed:`, err)
+    if (!isAbort(err)) console.error(`Evaluating piece ${pieceId} v${version} failed:`, err)
   } finally {
     entry.running = false
     if (entry.next && !entry.timer) void flush(byPiece, key, pieceId)

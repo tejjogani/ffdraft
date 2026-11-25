@@ -4,7 +4,7 @@ import { Link } from '@tanstack/react-router'
 import { ChevronRight, Wrench } from 'lucide-react'
 import { useState } from 'react'
 import { Stat, StatGrid } from '../../components/Stats'
-import { compact, dateTime, relativeTime, usd } from '../../lib/format'
+import { compact, dateTime, modelName, relativeTime, usd } from '../../lib/format'
 import { useRpc } from '../../lib/query'
 import { SettingsTitle } from './SettingsLayout'
 
@@ -14,6 +14,8 @@ const STATUS_TONE: Record<Run['status'], ChipTone> = {
   failed: 'danger',
   canceled: 'neutral',
   'awaiting-approval': 'warn',
+  waiting: 'select',
+  paused: 'warn',
 }
 const STATUS_LABEL: Record<Run['status'], string> = {
   running: 'Running',
@@ -21,6 +23,8 @@ const STATUS_LABEL: Record<Run['status'], string> = {
   failed: 'Failed',
   canceled: 'Canceled',
   'awaiting-approval': 'Needs approval',
+  waiting: 'Waiting for a render',
+  paused: 'Paused',
 }
 
 const duration = (r: Run) =>
@@ -59,7 +63,7 @@ export function TracesSettings() {
                 className="group flex h-12 items-center gap-3 px-1 transition-colors hover:bg-bg-hover"
               >
                 <AiMark className="size-3" />
-                <span className="min-w-0 flex-1 truncate font-mono text-xs">{r.model}</span>
+                <span className="min-w-0 flex-1 truncate text-xs">{modelName(r.model)}</span>
                 <Chip tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Chip>
                 <span className="hidden w-20 text-right font-mono text-xs text-fg-muted tabular sm:block">
                   {compact(tokens(r))} tok
@@ -97,7 +101,7 @@ export function TraceDetail({ runId }: { runId: string }) {
       </Link>
       <SettingsTitle
         title="Run"
-        description={`${run.model} · started ${dateTime(run.startedAt)}`}
+        description={`${modelName(run.model)} · started ${dateTime(run.startedAt)}`}
       />
       <StatGrid className="mb-8 sm:grid-cols-5">
         <Stat label="Status" value={STATUS_LABEL[run.status]} />

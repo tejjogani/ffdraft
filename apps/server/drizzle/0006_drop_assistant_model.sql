@@ -1,0 +1,1 @@
+ALTER TABLE "org_settings" DROP COLUMN "assistant_model";

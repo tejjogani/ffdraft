@@ -1,4 +1,4 @@
-import type { Piece } from '@pave/schema'
+import type { JobStage, Piece } from '@pave/schema'
 import {
   AiChip,
   Button,
@@ -15,43 +15,54 @@ import {
   MenuSeparator,
   MenuSub,
   Skeleton,
-  Spinner,
   Swatch,
   tabClass,
-  tabListClass,
 } from '@pave/ui'
 import { Link, Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
-import { Copy, Folder, FolderInput, MoreHorizontal, Trash2 } from 'lucide-react'
-import { type ReactNode, Suspense, useEffect, useState } from 'react'
+import { Copy, FileDown, Folder, FolderInput, Images, MoreHorizontal, Trash2 } from 'lucide-react'
+import { type ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { KindGlyph } from '../../components/KindGlyph'
 import { Column, PageHeader } from '../../components/Page'
 import { StagePicker } from '../../components/StageChip'
+import { JobPanel } from '../../features/assistant/jobs/JobPanel'
+import { StageStepper } from '../../features/assistant/jobs/StageStepper'
+import { StartJob } from '../../features/assistant/jobs/StartJob'
+import { TryVariants } from '../../features/directions/TryVariants'
+import { savePaveFile } from '../../features/pavefile'
+import { DOCK_PANEL_PX, ReferenceDock } from '../../features/references/ReferencePanel'
+import { useReferencePanel } from '../../features/references/store'
 import { type Command, useRegisterCommands } from '../../lib/commands'
-import { KIND_LABEL, metalLabel, metalSwatch } from '../../lib/domain'
+import { hasFacts, KIND_LABEL, metalLabel, metalSwatch } from '../../lib/domain'
 import { carats, grams } from '../../lib/format'
 import { useDeletePiece, useUpdatePiece } from '../../lib/pieces'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { assistant } from '../../stores/assistant'
 
+/** The tabs after the stage stepper (Design → CAD → Render). */
 const TABS = [
-  { to: '/pieces/$id', label: 'Overview', exact: true },
-  { to: '/pieces/$id/design', label: 'Design' },
-  { to: '/pieces/$id/render', label: 'Render' },
   { to: '/pieces/$id/on-model', label: 'On model' },
   { to: '/pieces/$id/sourcing', label: 'Sourcing' },
   { to: '/pieces/$id/production', label: 'Production' },
   { to: '/pieces/$id/history', label: 'History' },
 ] as const
 
-/** The piece page: a Notion-like header (icon, title, properties) above stage tabs. */
+/**
+ * The piece page: a Notion-like header (icon, title, properties) above its tabs. The middle
+ * tabs are the piece's three stages in order, Design, CAD and Render, each done by hand or by
+ * an AI job; a stage's job shows in a bar under the tabs while it wants attention.
+ */
 export function PiecePage({ id }: { id: string }) {
   const piece = useRpc('pieces.get', { id })
   const matchRoute = useMatchRoute()
-  // Design and Render are workspaces: the title block folds into the header to give them room.
-  const bleed = !!(
-    matchRoute({ to: '/pieces/$id/design', params: { id } }) ||
-    matchRoute({ to: '/pieces/$id/render', params: { id } })
-  )
+  const stage: JobStage | null = matchRoute({ to: '/pieces/$id/directions', params: { id } })
+    ? 'design'
+    : matchRoute({ to: '/pieces/$id/design', params: { id } })
+      ? 'cad'
+      : matchRoute({ to: '/pieces/$id/render', params: { id } })
+        ? 'render'
+        : null
+  // CAD and Render are workspaces: the title block folds into the header to give them room.
+  const bleed = stage === 'cad' || stage === 'render'
 
   if (piece.isError)
     return (
@@ -78,56 +89,130 @@ export function PiecePage({ id }: { id: string }) {
   const p = piece.data
   return (
     <div className="flex min-h-full flex-col">
-      <PieceHeader piece={p} />
+      <PieceHeader piece={p} stage={stage} />
       {!bleed && (
         <Column className="pb-0!">{p ? <PieceHero piece={p} /> : <HeroSkeleton />}</Column>
       )}
       <div className="sticky top-11 z-10 bg-bg">
         <div className={bleed ? '' : 'mx-auto w-full max-w-[880px] px-6 sm:px-12'}>
-          <nav aria-label="Piece sections" className={cn(tabListClass, bleed && 'px-4')}>
+          {/* On a phone the row scrolls sideways inside itself, never the page. */}
+          <nav
+            aria-label="Piece sections"
+            className={cn(
+              // The hairline is drawn inside the row (not a border) so a scrolling row keeps
+              // the active tab's underline on top of it.
+              'scroll-fade-x relative flex items-center gap-4 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--line)]',
+              bleed && 'px-4',
+            )}
+          >
+            <Link
+              to="/pieces/$id"
+              params={{ id }}
+              activeOptions={{ exact: true }}
+              activeProps={{ 'aria-current': 'page' }}
+              className={cn(
+                tabClass,
+                'aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-0 aria-[current=page]:after:bottom-0 aria-[current=page]:after:h-px aria-[current=page]:after:bg-fg',
+              )}
+            >
+              Overview
+            </Link>
+            {p && <StageStepper piece={p} className="mx-1" />}
             {TABS.map((t) => (
               <Link
                 key={t.to}
                 to={t.to}
                 params={{ id }}
-                activeOptions={{ exact: 'exact' in t }}
                 activeProps={{ 'aria-current': 'page' }}
                 className={cn(
                   tabClass,
-                  'aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-0 aria-[current=page]:after:-bottom-px aria-[current=page]:after:h-px aria-[current=page]:after:bg-fg',
+                  'aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-0 aria-[current=page]:after:bottom-0 aria-[current=page]:after:h-px aria-[current=page]:after:bg-fg',
                 )}
               >
                 {t.label}
               </Link>
             ))}
             {bleed && p && (
-              <div className="ml-auto">
-                <PieceStage piece={p} />
+              <div className="ml-auto flex items-center gap-1 pl-3">
+                {stage === 'cad' && <TryVariants piece={p} />}
+                <ReferencesToggle />
+                <PieceStage piece={p} labelled />
               </div>
             )}
           </nav>
         </div>
+        {p && stage && <JobPanel pieceId={p.id} stage={stage} />}
       </div>
       <Outlet />
     </div>
   )
 }
 
-/** Wraps each tab: workspaces fill the remaining page; documents sit in the reading column. */
-export function PieceTab({ bleed, children }: { bleed: boolean; children: ReactNode }) {
-  const content = <Suspense fallback={<Spinner className="mx-auto mt-16" />}>{children}</Suspense>
-  if (bleed) return <div className="relative min-h-0 flex-1">{content}</div>
+/**
+ * Wraps each tab: workspaces fill the remaining page, with the reference panel beside them;
+ * documents sit in the reading column.
+ */
+export function PieceTab({
+  bleed,
+  pieceId,
+  children,
+}: {
+  bleed: boolean
+  pieceId: string
+  children: ReactNode
+}) {
+  const content = <Suspense fallback={<TabSkeleton bleed={bleed} />}>{children}</Suspense>
+  if (bleed) return <Workbench pieceId={pieceId}>{content}</Workbench>
   return <Column className="pt-8">{content}</Column>
 }
 
-function PieceStage({ piece }: { piece: Piece }) {
-  const update = useUpdatePiece()
+/** A workspace tab and the reference panel: docked when there is room, else a sheet. */
+function Workbench({ pieceId, children }: { pieceId: string; children: ReactNode }) {
+  const piece = useRpc('pieces.get', { id: pieceId })
+  const box = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState(1440)
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!el) return
+    setWidth(el.clientWidth)
+    const observer = new ResizeObserver(([entry]) => setWidth(entry!.contentRect.width))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
   return (
-    <StagePicker stage={piece.stage} onChange={(stage) => update.mutate({ id: piece.id, stage })} />
+    <div ref={box} className="relative flex min-h-0 flex-1">
+      <div className="relative min-w-0 flex-1">{children}</div>
+      {piece.data && <ReferenceDock piece={piece.data} docked={width >= DOCK_PANEL_PX} />}
+    </div>
   )
 }
 
-function PieceHeader({ piece }: { piece: Piece | undefined }) {
+/** Shows or hides the reference panel (a sheet on narrow screens). */
+function ReferencesToggle() {
+  const open = useReferencePanel((s) => s.open)
+  const toggle = useReferencePanel((s) => s.toggle)
+  return (
+    <IconButton
+      icon={Images}
+      label={open ? 'Hide references' : 'Show references'}
+      aria-pressed={open}
+      onClick={toggle}
+    />
+  )
+}
+
+function PieceStage({ piece, labelled }: { piece: Piece; labelled?: boolean }) {
+  const update = useUpdatePiece()
+  return (
+    <StagePicker
+      stage={piece.stage}
+      labelled={labelled}
+      onChange={(stage) => update.mutate({ id: piece.id, stage })}
+    />
+  )
+}
+
+function PieceHeader({ piece, stage }: { piece: Piece | undefined; stage: JobStage | null }) {
   const collections = useRpc('collections.list', {})
   const collection = collections.data?.find((c) => c.id === piece?.collectionId)
   const navigate = useNavigate()
@@ -145,6 +230,14 @@ function PieceHeader({ piece }: { piece: Piece | undefined }) {
           group: 'Piece',
           icon: Copy,
           run: () => duplicate.mutate({ id: piece.id }),
+        },
+        {
+          id: 'piece.saveFile',
+          title: 'Save as Pavé file',
+          group: 'Piece',
+          icon: FileDown,
+          keywords: ['export', 'download', '.pave', 'file'],
+          run: () => void savePaveFile(piece),
         },
         {
           id: 'piece.delete',
@@ -178,6 +271,8 @@ function PieceHeader({ piece }: { piece: Piece | undefined }) {
         actions={
           piece && (
             <>
+              {/* The stage's AI job: the plan shows before anything starts. */}
+              {stage && <StartJob pieceId={piece.id} stage={stage} />}
               <Button
                 variant="ghost"
                 size="sm"
@@ -191,6 +286,13 @@ function PieceHeader({ piece }: { piece: Piece | undefined }) {
               >
                 <MenuItem icon={Copy} onClick={() => duplicate.mutate({ id: piece.id })}>
                   Duplicate
+                </MenuItem>
+                <MenuItem
+                  icon={FileDown}
+                  description="Free, never counted"
+                  onClick={() => void savePaveFile(piece)}
+                >
+                  Save as Pavé file
                 </MenuItem>
                 <MenuSub label="Move to collection" icon={FolderInput}>
                   <CollectionChoices piece={piece} />
@@ -256,7 +358,7 @@ function PieceHero({ piece }: { piece: Piece }) {
         placeholder="Untitled"
         aria-label="Piece title"
         maxLength={120}
-        className="w-full bg-transparent font-serif text-display text-fg placeholder:text-fg-faint outline-none focus-visible:outline-none"
+        className="w-full bg-transparent font-serif text-title text-fg placeholder:text-fg-faint outline-none focus-visible:outline-none sm:text-display"
       />
       <div className="mt-4 -ml-1.5 flex flex-wrap items-center gap-x-1 gap-y-1 text-sm">
         <PieceStage piece={piece} />
@@ -280,7 +382,7 @@ function PieceHero({ piece }: { piece: Piece }) {
         >
           <CollectionChoices piece={piece} />
         </Menu>
-        {piece.facts && (
+        {hasFacts(piece.facts) && (
           <div className="ml-auto flex items-center gap-4 pl-4 font-mono text-xs text-fg-muted tabular">
             <Fact label="Metal">{grams(piece.facts.metalMassG)}</Fact>
             {piece.facts.stoneCount > 0 && (
@@ -334,6 +436,18 @@ function HeroSkeleton() {
       <Skeleton className="mb-5 h-[70px] w-14 rounded-md" />
       <Skeleton className="h-11 w-2/3" />
       <Skeleton className="mt-5 h-6 w-1/2" />
+    </div>
+  )
+}
+
+/** A tab's code is loading: the shape of what comes, not a spinner. */
+function TabSkeleton({ bleed }: { bleed: boolean }) {
+  if (bleed) return <div className="stage absolute inset-0" aria-busy="true" />
+  return (
+    <div className="flex flex-col gap-3" aria-busy="true">
+      <Skeleton className="h-5 w-40" />
+      <Skeleton className="h-24 w-full" />
+      <Skeleton className="h-24 w-full" />
     </div>
   )
 }

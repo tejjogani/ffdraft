@@ -50,7 +50,7 @@ function ToastList() {
       key={t.id}
       toast={t}
       className={cn(
-        'glass shadow-pop relative flex items-start gap-2.5 rounded-lg p-3 pr-9 text-fg select-none',
+        'glass-strong shadow-pop relative flex items-start gap-2.5 rounded-lg p-3 pr-9 text-fg select-none',
         'transition-[opacity,translate] duration-180 ease-out',
         'translate-x-(--toast-swipe-movement-x) data-starting-style:translate-y-2 data-starting-style:opacity-0',
         'data-ending-style:opacity-0 data-limited:hidden',

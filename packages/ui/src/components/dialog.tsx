@@ -34,7 +34,7 @@ export interface DialogProps {
   className?: string
 }
 
-/** A dialog on a frosted surface; a body taller than the window scrolls between title and footer. */
+/** A dialog on the strong frosted surface (it holds reading); a body taller than the window scrolls between title and footer. */
 export function Dialog({
   open,
   onOpenChange,
@@ -63,7 +63,7 @@ export function Dialog({
             dock && { top: dock.top, right: dock.right, width: dock.width, height: dock.height }
           }
           className={cn(
-            'glass shadow-pop fixed z-50 flex flex-col rounded-xl pb-4 text-fg outline-none',
+            'glass-strong shadow-pop fixed z-50 flex flex-col rounded-xl pb-4 text-fg outline-none',
             docked
               ? 'top-20 right-4 max-h-[calc(100dvh-6rem)] w-[min(360px,calc(100vw-32px))]'
               : 'top-[18vh] left-1/2 max-h-[calc(82dvh-1rem)] w-[min(440px,calc(100vw-32px))] -translate-x-1/2',
@@ -124,7 +124,7 @@ export function Sheet({
         <Base.Backdrop className={backdrop} />
         <Base.Popup
           className={cn(
-            'glass shadow-pop fixed top-2 bottom-2 z-50 flex w-[min(440px,calc(100vw-16px))] flex-col rounded-xl text-fg outline-none',
+            'glass-strong shadow-pop fixed top-2 bottom-2 z-50 flex w-[min(440px,calc(100vw-16px))] flex-col rounded-xl text-fg outline-none',
             'transition-[opacity,translate] duration-180 ease-out data-starting-style:opacity-0 data-ending-style:opacity-0',
             side === 'right'
               ? 'right-2 data-starting-style:translate-x-2 data-ending-style:translate-x-2'

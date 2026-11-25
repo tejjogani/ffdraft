@@ -124,6 +124,24 @@ function untrack(child?: ChildProcess): void {
   process.off('SIGTERM', onSignal)
 }
 
+/**
+ * Variables a render process may see. Blender, its add-ons and the scripts it runs get what they
+ * need to find tools, temp space, a GPU and colour config, never the server's secrets (the
+ * Claude and image-provider keys and the auth secret that apps/server/.env loads into the
+ * environment). Names are compared upper-cased: Windows treats them without case.
+ */
+const CHILD_ENV = [
+  /^(PATH|PATHEXT|HOME|USERPROFILE|HOMEDRIVE|HOMEPATH|TEMP|TMP|TMPDIR|SYSTEMROOT|SYSTEMDRIVE|WINDIR|COMSPEC|APPDATA|LOCALAPPDATA|PROGRAMDATA|PROGRAMFILES|PROGRAMFILES\(X86\)|NUMBER_OF_PROCESSORS|PROCESSOR_ARCHITECTURE|OS|USER|USERNAME|LOGNAME|SHELL|LANG|LANGUAGE|TZ|DISPLAY|WAYLAND_DISPLAY|LD_LIBRARY_PATH|OCIO)$/,
+  /^(LC|XDG|PAVE_RENDER|BLENDER|CYCLES|CUDA|NVIDIA|HIP|ROCR|HSA|OPTIX|ONEAPI|SYCL|DYLD|__NV)_/,
+]
+
+export function childEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {}
+  for (const [k, v] of Object.entries(env))
+    if (v !== undefined && CHILD_ENV.some((re) => re.test(k.toUpperCase()))) out[k] = v
+  return out
+}
+
 function run(
   command: string,
   args: string[],
@@ -141,7 +159,7 @@ function run(
       windowsHide: true,
       // stdin stays open for the worker's lifetime: it exits when the pipe closes (we died).
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, PAVE_RENDER_STDIN_WATCH: '1' },
+      env: { ...childEnv(), PAVE_RENDER_STDIN_WATCH: '1' },
     })
     track(child)
     let stdout = ''

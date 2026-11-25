@@ -1,10 +1,32 @@
 /** The floating controls over the viewport: history, display, framing, x-ray; and on the right, saving and export. */
 import type { ExportFormat } from '@pave/kernel'
-import { Button, cn, IconButton, Menu, MenuGroup, MenuItem, Segmented, Tooltip } from '@pave/ui'
-import { ChevronDown, Crosshair, Download, Focus, Gauge, Redo2, ScanEye, Undo2 } from 'lucide-react'
+import { exportCounts } from '@pave/schema'
+import {
+  Button,
+  cn,
+  IconButton,
+  Menu,
+  MenuGroup,
+  MenuItem,
+  MenuSeparator,
+  Segmented,
+  Tooltip,
+} from '@pave/ui'
+import {
+  Camera,
+  ChevronDown,
+  Crosshair,
+  Download,
+  Focus,
+  Gauge,
+  Redo2,
+  ScanEye,
+  Undo2,
+} from 'lucide-react'
 import type { ReactNode } from 'react'
 import { runCommand } from '../../../lib/commands'
 import type { SaveState } from '../../../lib/design-session/store'
+import { useRpc } from '../../../lib/query'
 import { DISPLAY_MODES } from '../commands'
 import { EXPORT_PURPOSE } from '../export'
 import { SavePill } from '../hud/SavePill'
@@ -20,7 +42,16 @@ function Cluster({ children, className }: { children: ReactNode; className?: str
 
 const Divider = () => <span aria-hidden className="mx-1 h-4 w-px bg-line-strong" />
 
-export function ViewToolbar({ canUndo, canRedo }: { canUndo: boolean; canRedo: boolean }) {
+/** The view's tools. `compact` (a narrow view) moves "Render this view" into the Views menu. */
+export function ViewToolbar({
+  canUndo,
+  canRedo,
+  compact = false,
+}: {
+  canUndo: boolean
+  canRedo: boolean
+  compact?: boolean
+}) {
   const display = useWorkspace((s) => s.display)
   const xray = useWorkspace((s) => s.xray)
   return (
@@ -63,7 +94,22 @@ export function ViewToolbar({ canUndo, canRedo }: { canUndo: boolean; canRedo: b
             {v === 'hero' ? 'Hero' : v[0]!.toUpperCase() + v.slice(1)}
           </MenuItem>
         ))}
+        {compact && (
+          <>
+            <MenuSeparator />
+            <MenuItem icon={Camera} onClick={() => runCommand('view.renderThis')}>
+              Render this view
+            </MenuItem>
+          </>
+        )}
       </Menu>
+      {!compact && (
+        <IconButton
+          icon={Camera}
+          label="Render this view"
+          onClick={() => runCommand('view.renderThis')}
+        />
+      )}
       <IconButton
         icon={ScanEye}
         label="X-ray metal"
@@ -87,6 +133,11 @@ export function FileToolbar({
   simplified: boolean
   compact: boolean
 }) {
+  // Rhino and STEP count against the plan; the menu says what is left before anyone asks.
+  const plan = useRpc('plan.get', {})
+  const cad = plan.data?.allowances.find((a) => a.allowance === 'export')
+  const cadLimit = cad?.limit ?? null
+  const cadLeft = cad && cadLimit !== null ? cad.left : null
   return (
     <div className="flex items-center gap-2">
       {simplified && (
@@ -119,11 +170,28 @@ export function FileToolbar({
               </Button>
             }
           >
+            {/* The native file first: everything about the piece, and never counted. */}
+            <MenuGroup label="Pavé">
+              <MenuItem
+                description="Design, history, references and shots · Always free"
+                tag="PAVE"
+                onClick={() => runCommand('piece.saveFile')}
+              >
+                Pavé file
+              </MenuItem>
+            </MenuGroup>
+            <MenuSeparator />
             <MenuGroup label="Download">
               {formats.map((f) => (
                 <MenuItem
                   key={f}
-                  description={EXPORT_PURPOSE[f].hint}
+                  description={`${EXPORT_PURPOSE[f].hint} · ${
+                    !exportCounts(f)
+                      ? 'Free'
+                      : cadLeft !== null
+                        ? `${cadLeft} of ${cadLimit} free left this month`
+                        : 'Counted on your plan'
+                  }`}
                   tag={f.toUpperCase()}
                   onClick={() => runCommand(`design.export.${f}`)}
                 >

@@ -10,6 +10,7 @@ import {
   ArrowDown,
   ArrowUp,
   Box,
+  Camera,
   Crosshair,
   Download,
   Eye,
@@ -37,6 +38,7 @@ import type { WheelDevice } from '../../components/stage/wheel'
 import { type Command, useRegisterCommands } from '../../lib/commands'
 import type { DesignSession } from '../../lib/design-session/store'
 import { restartKernel } from '../../lib/kernel/client'
+import { planeHasFocus } from '../references/store'
 import { EXPORT_PURPOSE } from './export'
 import type { Issue } from './hud/issues'
 import { move, setIncluded } from './ops'
@@ -66,6 +68,8 @@ export interface CadCommandContext {
   fix(d: Diagnostic): void
   addStep(step: NextStep): void
   undoRun(): void
+  /** Copies this view's camera into a new shot and opens it in the Render tab. */
+  renderThisView(): void
 }
 
 const VIEWS: { id: CameraPreset; title: string; key: string }[] = [
@@ -142,7 +146,8 @@ export function useCadCommands(c: CadCommandContext): void {
       icon: Undo2,
       shortcut: 'mod+z',
       inEditable: false,
-      when: () => c.canUndo,
+      // A selected reference picture with changes to undo takes the shortcut first.
+      when: () => c.canUndo && !planeHasFocus(ws().pieceId ?? '', 'undo'),
       run: () => c.session?.undo(),
     },
     {
@@ -152,7 +157,7 @@ export function useCadCommands(c: CadCommandContext): void {
       icon: Redo2,
       shortcut: 'mod+shift+z',
       inEditable: false,
-      when: () => c.canRedo,
+      when: () => c.canRedo && !planeHasFocus(ws().pieceId ?? '', 'redo'),
       run: () => c.session?.redo(),
     },
     {
@@ -314,6 +319,13 @@ export function useCadCommands(c: CadCommandContext): void {
       icon: Focus,
       shortcut: 'f',
       run: () => c.viewer.current?.frameAll(true, ws().selection),
+    },
+    {
+      id: 'view.renderThis',
+      title: 'Render this view',
+      group: 'View',
+      icon: Camera,
+      run: () => c.renderThisView(),
     },
     {
       id: 'view.zoomIn',

@@ -3,8 +3,9 @@
  * crosses: a design in; facts, file bytes (transferred, not copied) or a package out.
  */
 import type { ExportFormat, ExportResult } from '@pave/kernel/types'
+import type { Camera as MatchCamera, PhotoFitOutcome, ViewSeed } from '@pave/match'
 import type { Manifest, PieceInfo, ProductionOptions, RenderImage } from '@pave/production'
-import type { Design, EvaluationSummary, PieceSpec } from '@pave/schema'
+import type { Design, EvaluationSummary, PieceSpec, View } from '@pave/schema'
 import type { RenderSubject } from '../../services'
 
 /** What the package builder needs besides the design; the worker evaluates it itself. */
@@ -20,7 +21,43 @@ export type KernelTask =
   | { kind: 'evaluate'; design: Design; detail: 'draft' | 'production' }
   | { kind: 'export'; design: Design; format: ExportFormat; stones: boolean }
   | { kind: 'renderInput'; design: Design }
+  /** The subject summary alone (bounds, support points), for framing without a render. */
+  | { kind: 'subject'; design: Design }
   | { kind: 'package'; design: Design; build: PackageBuild }
+  /** Shaded clay pictures (RGBA, `size`×`size`) from the software rasteriser. */
+  | {
+      kind: 'picture'
+      design: Design
+      views: View[]
+      size: number
+      focus: string[]
+      /** Instead of `views`: pictures through these exact cameras, at their own sizes (shots). */
+      shots?: PictureShot[]
+      /** The metal's colour (RGB, 0–255); the rasteriser's warm grey when omitted. */
+      metal?: [number, number, number]
+    }
+  /** Fit the design's outline numbers to one photo's matte (`match.fit`). */
+  | { kind: 'photoFit'; design: Design; fit: PhotoFitTask }
+
+/** A picture through a render shot's camera, converted to the rasteriser's camera. */
+export interface PictureShot {
+  camera: MatchCamera
+  width: number
+  height: number
+}
+
+export interface PhotoFitTask {
+  matte: Uint8Array
+  width: number
+  height: number
+  view?: ViewSeed
+  budgetMs: number
+}
+
+/** What crosses back from a fit: the outcome without its fitted design (the ops rebuild it). */
+export type PhotoFitResult = Omit<PhotoFitOutcome, 'result'> & {
+  result: Omit<PhotoFitOutcome['result'], 'design'>
+}
 
 export type TaskKind = KernelTask['kind']
 
@@ -28,7 +65,10 @@ export interface TaskResults {
   evaluate: EvaluationSummary
   export: ExportResult
   renderInput: { glb: Uint8Array; subject: RenderSubject }
+  subject: RenderSubject
   package: { zip: Uint8Array; manifest: Manifest; root: string; timings: Record<string, number> }
+  picture: { images: Uint8Array[]; summary: EvaluationSummary }
+  photoFit: PhotoFitResult
 }
 
 /** What the pool tells a worker when it starts. */

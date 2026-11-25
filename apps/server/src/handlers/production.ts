@@ -6,6 +6,7 @@ import { conflict } from '../errors'
 import { createId } from '../ids'
 import { packageHandle } from '../jobs'
 import { getPiece } from '../lookups'
+import { claim, packageKey, settle } from '../plans'
 import { publishJob, serviceContext } from '../service-context'
 import { assertAttested, toPiece } from './pieces'
 import type { HandlerGroup } from './types'
@@ -57,15 +58,25 @@ export const production: HandlerGroup<'production'> = {
       { revision: max(t.productionPackage.revision) },
       eq(t.productionPackage.pieceId, pieceId),
     )
-    const row = await ctx.repo.packages.insert({
-      id: createId('pkg'),
-      pieceId,
-      revision: (last?.revision ?? 0) + 1,
-      sourceVersion: piece.version,
-      status: 'queued',
-      request,
-      createdBy: ctx.user.id,
-    })
+    const id = createId('pkg')
+    // Its Rhino and STEP files count as one export, claimed before the build is queued; the build
+    // settling settles the claim (updatePackage), released if no such file came out.
+    if (request.cadFiles)
+      await claim(ctx, { allowance: 'export', key: packageKey(id), subject: 'package', pieceId })
+    const row = await ctx.repo.packages
+      .insert({
+        id,
+        pieceId,
+        revision: (last?.revision ?? 0) + 1,
+        sourceVersion: piece.version,
+        status: 'queued',
+        request,
+        createdBy: ctx.user.id,
+      })
+      .catch(async (err: unknown) => {
+        await settle(ctx, packageKey(id), 'released')
+        throw err
+      })
     const pkg = toPackage(row)
     const job = { kind: 'production' as const, id: pkg.id, pieceId }
     const handle = packageHandle(ctx, job)

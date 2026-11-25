@@ -4,7 +4,17 @@
  * traces; every write here is safe to repeat where the loop may resume (messages by
  * `clientMessageId`, tool steps by `toolCallId`).
  */
-import type { Feedback, Message, Run, Step, Thread, Tokens } from '@pave/schema'
+import type {
+  AiJob,
+  JobStage,
+  AssistantTier,
+  Feedback,
+  Message,
+  Run,
+  Step,
+  Thread,
+  Tokens,
+} from '@pave/schema'
 import { and, eq, inArray, max, ne, sql } from 'drizzle-orm'
 import type { Ctx } from './context'
 import * as t from './db/schema'
@@ -16,7 +26,7 @@ import { fromMicros, toMicros } from './usage'
 type RunStatus = Run['status']
 
 /** Runs that may still change; a run that ended keeps its status. */
-const LIVE_RUN: RunStatus[] = ['running', 'awaiting-approval']
+const LIVE_RUN: RunStatus[] = ['running', 'awaiting-approval', 'waiting']
 
 export const toThread = (r: typeof t.thread.$inferSelect): Thread => ({
   id: r.id,
@@ -42,6 +52,7 @@ export const toRun = (r: typeof t.agentRun.$inferSelect): Run => ({
   pieceId: r.pieceId,
   userId: r.userId,
   model: r.model,
+  tier: r.tier,
   origin: r.origin,
   status: r.status,
   tokens: {
@@ -55,6 +66,8 @@ export const toRun = (r: typeof t.agentRun.$inferSelect): Run => ({
   endedAt: r.endedAt?.toISOString() ?? null,
   error: r.error,
   errorCode: r.errorCode,
+  job: r.job ?? null,
+  stage: r.stage ?? null,
 })
 
 export const toStep = (r: typeof t.agentStep.$inferSelect): Step => ({
@@ -83,6 +96,7 @@ export const toFeedback = (r: typeof t.runFeedback.$inferSelect): Feedback => ({
   source: r.source,
   kind: r.kind,
   changeId: r.changeId,
+  target: r.target ?? null,
   detail: r.note ?? '',
   userId: r.userId,
   at: r.createdAt.toISOString(),
@@ -118,12 +132,18 @@ export async function startRun(
   ctx: Ctx,
   input: {
     model: string
+    /** The tier the run was asked for; omitted for MCP runs. */
+    tier?: AssistantTier | null
     threadId?: string | null
     pieceId?: string | null
     parentRunId?: string | null
     /** Design version the model is shown, so the run can be replayed against it. */
     baseSeq?: number | null
     origin?: Run['origin']
+    /** An AI job's stage, goal and plan. */
+    job?: AiJob | null
+    /** The stage its spend counts against; a job's own stage wins. */
+    stage?: JobStage | null
   },
 ): Promise<Run> {
   await ensure(getThread, ctx, input.threadId)
@@ -133,13 +153,23 @@ export async function startRun(
     id: createId('run'),
     userId: ctx.user.id,
     model: input.model,
+    tier: input.tier ?? null,
     origin: input.origin ?? 'studio',
     status: 'running',
     threadId: input.threadId ?? null,
     pieceId: input.pieceId ?? null,
     parentRunId: input.parentRunId ?? null,
     baseSeq: input.baseSeq ?? null,
+    job: input.job ?? null,
+    stage: input.job?.stage ?? input.stage ?? null,
   })
+  return toRun(row)
+}
+
+/** Replaces an AI job's record on its run (its plan moved, or its review ended). */
+export async function setJob(ctx: Ctx, runId: string, job: AiJob): Promise<Run> {
+  const [row] = await ctx.repo.runs.update(eq(t.agentRun.id, runId), { job })
+  if (!row) throw notFound('Run', runId)
   return toRun(row)
 }
 
@@ -267,7 +297,12 @@ export async function decideStep(
   ctx: Ctx,
   runId: string,
   toolCallId: string,
-  input: { decision: 'approve' | 'deny'; note?: string | null },
+  input: {
+    decision: 'approve' | 'deny'
+    note?: string | null
+    /** A `chat.ask` answer: option ids by question id. */
+    answers?: Record<string, string[]>
+  },
 ): Promise<Step> {
   const step = await ctx.repo.steps.first(
     and(eq(t.agentStep.runId, runId), eq(t.agentStep.toolCallId, toolCallId)),
@@ -285,6 +320,7 @@ export async function decideStep(
         decidedBy: ctx.user.id,
         decidedAt: new Date().toISOString(),
         note: input.note ?? null,
+        ...(input.answers ? { answers: input.answers } : {}),
       },
     },
   )
@@ -297,12 +333,13 @@ export async function decideStep(
 }
 
 /**
- * Puts a run that was waiting for approval back to `running`. Returns the run as it is; a run
- * that is not waiting (already resumed, canceled or finished) is left unchanged.
+ * Puts a run that was waiting (for approval, or for its takes) back to `running`. Returns the
+ * run as it is; a run that is not waiting (already resumed, canceled or finished) is left
+ * unchanged.
  */
 export async function resumeRun(ctx: Ctx, runId: string): Promise<Run> {
   const [row] = await ctx.repo.runs.update(
-    and(eq(t.agentRun.id, runId), eq(t.agentRun.status, 'awaiting-approval'))!,
+    and(eq(t.agentRun.id, runId), inArray(t.agentRun.status, ['awaiting-approval', 'waiting']))!,
     { status: 'running', endedAt: null },
   )
   return toRun(row ?? (await getRun(ctx, runId)))
@@ -389,15 +426,19 @@ export async function finishRun(
     costUsd?: number
     error?: string | null
     errorCode?: Run['errorCode']
+    /** The job record as the run ends (its plan settled, its review opened). */
+    job?: AiJob
   },
 ): Promise<Run> {
   const [row] = await ctx.repo.runs.update(
     and(eq(t.agentRun.id, runId), inArray(t.agentRun.status, LIVE_RUN))!,
     {
       status: input.status,
+      ...(input.job ? { job: input.job } : {}),
       error: input.error ?? null,
       errorCode: input.errorCode ?? null,
-      endedAt: input.status === 'awaiting-approval' ? null : new Date(),
+      endedAt:
+        input.status === 'awaiting-approval' || input.status === 'waiting' ? null : new Date(),
       ...(input.tokens
         ? {
             tokensIn: input.tokens.input,
