@@ -1,0 +1,16 @@
+{"engine": "mitsuba 3.9.1", "variant": "llvm_ad_spectral", "camera": "hero", "mode": "nodisp", "res": 512, "spp": 264, "max_depth": 32, "load_s": 0.07, "first_pass_s": 2.17, "render_s": 25.14, "out": "mitsuba_hero_nodisp.npy"}
+{"engine": "mitsuba 3.9.1", "variant": "llvm_ad_spectral", "camera": "hero", "mode": "disp", "res": 512, "spp": 517, "max_depth": 32, "load_s": 0.03, "first_pass_s": 1.03, "render_s": 39.94, "out": "mitsuba_hero_disp.npy"}
+{"engine": "cycles 5.3.0", "camera": "hero", "mode": "disp", "res": 512, "spp": 256, "max_depth": 32, "device": "CPU", "threads": 2, "render_s": 184.61, "out": "cycles_hero_disp.npy"}
+{"engine": "ptgem (own spike)", "camera": "hero", "res": 512, "spp": 512, "max_depth": 32, "dispersion": 1, "gem": "half-spaces", "threads": 2, "bvh_build_s": 0.632, "render_s": 184.89, "cpu_s": 133.8, "rays": 432573428, "mrays_per_s": 2.34}
+{"engine": "luxcore 2.11.2", "camera": "hero", "mode": "disp", "res": 512, "spp": 192, "max_depth": 32, "render_s": 239.17, "cpu_s": 176.5, "load1": 5.2, "out": "luxcore_hero_disp.npy"}
+{"engine": "mitsuba 3.9.1", "variant": "llvm_ad_spectral", "camera": "macro", "mode": "nodisp", "res": 512, "spp": 264, "max_depth": 32, "load_s": 0.1, "first_pass_s": 4.19, "render_s": 82.08, "cpu_s": 63.6, "load1": 9.8, "out": "mitsuba_macro_nodisp.npy"}
+{"engine": "mitsuba 3.9.1", "variant": "llvm_ad_spectral", "camera": "macro", "mode": "disp", "res": 512, "spp": 517, "max_depth": 32, "load_s": 0.05, "first_pass_s": 2.41, "render_s": 105.09, "cpu_s": 111.0, "load1": 6.2, "out": "mitsuba_macro_disp.npy"}
+{"engine": "cycles 5.3.0", "camera": "macro", "mode": "disp", "res": 512, "spp": 256, "max_depth": 32, "device": "CPU", "threads": 2, "render_s": 132.64, "cpu_s": 250.7, "load1": 2.6, "out": "cycles_macro_disp.npy"}
+{"engine": "ptgem (own spike)", "camera": "macro", "res": 512, "spp": 512, "max_depth": 32, "dispersion": 1, "gem": "half-spaces", "threads": 2, "bvh_build_s": 0.095, "render_s": 143.47, "cpu_s": 264.3, "rays": 558784392, "mrays_per_s": 3.89}
+{"engine": "luxcore 2.11.2", "camera": "macro", "mode": "disp", "res": 512, "spp": 192, "max_depth": 32, "render_s": 116.62, "cpu_s": 218.7, "load1": 2.2, "out": "luxcore_macro_disp.npy"}
+{"engine": "cycles 5.3.0", "camera": "hero", "mode": "disp_oidn", "res": 512, "spp": 64, "max_depth": 32, "device": "CPU", "threads": 2, "render_s": 25.05, "cpu_s": 46.4, "load1": 2.2, "out": "cycles_hero_disp_oidn.npy"}
+{"engine": "cycles 5.3.0", "camera": "macro", "mode": "nodisp", "res": 512, "spp": 256, "max_depth": 32, "device": "CPU", "threads": 2, "render_s": 130.46, "cpu_s": 243.2, "load1": 2.3, "out": "cycles_macro_nodisp.npy"}
+{"engine": "luxcore 2.11.2", "camera": "hero", "mode": "caustic", "res": 512, "spp": 192, "max_depth": 32, "render_s": 88.86, "cpu_s": 127.4, "load1": 3.1, "out": "luxcore_hero_caustic.npy"}
+{"engine": "ptgem (own spike)", "camera": "macro", "res": 512, "spp": 512, "max_depth": 32, "dispersion": 1, "gem": "triangles+bvh", "threads": 2, "bvh_build_s": 0.096, "render_s": 301.03, "cpu_s": 462.7, "rays": 558782016, "mrays_per_s": 1.86}
+{"engine": "ptgem (own spike)", "camera": "macro", "res": 512, "spp": 512, "max_depth": 32, "dispersion": 0, "gem": "half-spaces", "threads": 2, "bvh_build_s": 0.094, "render_s": 223.33, "cpu_s": 261.4, "rays": 558105043, "mrays_per_s": 2.50}
+DONE
