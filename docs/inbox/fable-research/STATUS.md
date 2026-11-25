@@ -69,7 +69,7 @@ Ten research subagents, one per topic, one file each (topic 22 was added on the 
 | `docs/research/17-pave-file-format.md` | The native file format | Done; plan being written |
 | `docs/research/18-low-end-machines.md` | Low-end machines | Done |
 | `docs/research/19-erp-and-pos-apis.md` | ERP, POS and accounting APIs | Done; plan being written |
-| `docs/research/20-accounts-and-identity.md` | Accounts and identity | Done; plan being written |
+| `docs/research/20-accounts-and-identity.md` | Accounts and identity | Done; plan `docs/plans/accounts-and-developer-api.md` written, under review |
 | `docs/research/21-connectors-and-developer-api.md` | Connectors and developer API | Done; plans being written |
 | `docs/research/22-rhino-full-parity.md` | Every Rhino 8 CAD capability (and Rhino 9's additions) against the plan and the product | Done; plan being written |
 
