@@ -70,9 +70,9 @@ Ten research subagents, one per topic, one file each (topic 22 was added on the 
 | `docs/research/16-ai-models-on-model.md` | AI human models, on-model imagery | Done; plan `docs/plans/brand-models-v2.md` written, under review |
 | `docs/research/17-pave-file-format.md` | The native file format | Done; plan `docs/plans/pave-file-format.md` written, under review |
 | `docs/research/18-low-end-machines.md` | Low-end machines | Done |
-| `docs/research/19-erp-and-pos-apis.md` | ERP, POS and accounting APIs | Done; plan being written |
+| `docs/research/19-erp-and-pos-apis.md` | ERP, POS and accounting APIs | Done; plan `docs/plans/integrations-hub.md` written, under review |
 | `docs/research/20-accounts-and-identity.md` | Accounts and identity | Done; plan `docs/plans/accounts-and-developer-api.md` written, under review |
-| `docs/research/21-connectors-and-developer-api.md` | Connectors and developer API | Done; plans being written |
+| `docs/research/21-connectors-and-developer-api.md` | Connectors and developer API | Done; both plans written, under review |
 | `docs/research/22-rhino-full-parity.md` | Every Rhino 8 CAD capability (and Rhino 9's additions) against the plan and the product | Done; plan being written |
 
 ## Next
