@@ -37,9 +37,9 @@ Kept on purpose and pinned by a test: a stone in a lot with no price of its own 
 
 Not reached: DFM check thresholds, drawing dimensions, render looks and cameras, the other Blender worker modules, the heavy match and canon suites.
 
-## 2. Server: `claude/bugsweep-server` (8 commits, done)
+## 2. Server: `claude/bugsweep-server` (9 commits, done)
 
-Checks run: 13 server test files pass (two runs: 68 passed and 40 passed, each with 1 expected failure, which is finding 8 below); `pnpm -s typecheck` exits 0; the formatter clean on changed files; `drizzle-kit generate` against a scratch copy reports no schema drift. Eight tests added. **Not run:** the engine suites that need the kernel or Blender; engine code is unchanged. Note: the server runs on Postgres (embedded PGlite or `pg`), not SQLite.
+Checks run: 13 server test files pass (two runs: 68 passed and 40 passed, each with 1 expected failure, which was finding 8 below); after finding 8 was fixed, 11 server test files were re-run (96 tests, all passing, no expected failure) and `pnpm --filter @pave/server typecheck` is clean; `pnpm -s typecheck` exits 0 at the earlier head; the formatter clean on changed files; `drizzle-kit generate` against a scratch copy reports no schema drift. Eleven tests added. **Not run:** the engine suites that need the kernel or Blender; engine code is unchanged. Note: the server runs on Postgres (embedded PGlite or `pg`), not SQLite.
 
 | # | Severity | Where (under `apps/server/src`) | What was wrong | Commit |
 |---|---|---|---|---|
@@ -50,7 +50,7 @@ Checks run: 13 server test files pass (two runs: 68 passed and 40 passed, each w
 | 5 | Minor | `http/rpc.ts` | A command's request body had no size limit. Now 64 MB, 413 beyond. | `1171b6c` |
 | 6 | Minor | `handlers/production.ts` | Concurrent `production.create` calls collided on the revision number and returned 500. They now get consecutive revisions. | `37656a5` |
 | 7 | Minor | `recovery.ts` | A run whose assistant failed to resume at boot stayed `running` for good. It is now failed as interrupted. | `24a300a` |
-| 8 | **Major, not fixed** | `app.ts`, `config.ts` | **A local install answers to any Host name.** A DNS-rebinding page is same-origin with the server, so fix 2 does not stop it: it can read and change the whole workspace and call `renders.configureEngine`, which probes a path as an executable. Recorded as an expected failure in `http.test.ts` (`4cf476c`). A Host allowlist (loopback, the public URL, `HOST`) would stop it but could lock out people who use a LAN address. **Needs a decision.** Research 20 found the same gap independently; `docs/plans/accounts-and-developer-api.md` plans the fix as its first step. |
+| 8 | Major | `app.ts`, `config.ts` | A local install answered to any Host name. A DNS-rebinding page is same-origin with the server, so fix 2 does not stop it: it could read and change the whole workspace and call `renders.configureEngine`, which probes a path as an executable. The founder chose loopback plus an explicit allow-list (25 Nov). In local mode the server now refuses, on every route, any host name other than loopback, the public URL, the dev origins, the address in `HOST` and the names in the new `PAVE_ALLOWED_HOSTS` setting. Accounts mode is unchanged. **For people who open a local install by a LAN address: they must now list that address in `PAVE_ALLOWED_HOSTS`** (the refusal message says so; the README has the line). | `6c87baf` |
 
 ### Seen but not fixed
 
@@ -137,7 +137,7 @@ Not reached: the mesh pipeline (repair, shell, simplify), fonts, DFM checks, the
 
 ## 5. Totals
 
-Four branches, 35 commits, 37 defects fixed (17 major), 115 tests added. Open and needing a decision: the any-Host-name gap on a local install (major), keyboard shortcuts firing behind dialogs (major, unverified), currency mixing in cost estimates, and the smaller items listed under each branch. Nothing was checked in a browser, and Blender was not installed on the machine.
+Four branches, 36 commits, 38 defects fixed (18 major), 118 tests added. Open and needing a decision: keyboard shortcuts firing behind dialogs (major, unverified), currency mixing in cost estimates, and the smaller items listed under each branch. Nothing was checked in a browser, and Blender was not installed on the machine.
 
 ## 6. Pull request text, ready to paste
 
@@ -157,12 +157,13 @@ https://claude.ai/code/session_016tMMHaaq3eF5cAC9rFpKCe
 
 ### `claude/bugsweep-server`
 
-**Title:** Server bug sweep: guest access, cross-site writes, unstorable text, orphaned jobs and three smaller fixes
+**Title:** Server bug sweep: guest access, cross-site writes, unknown host names, unstorable text, orphaned jobs and three smaller fixes
 
 **Description:**
 
-What: seven server defects fixed, each with a test that failed first, and one recorded as an expected failure.
+What: eight server defects fixed, each with a test that failed first.
 
+- A local install answered to any host name, so a page using DNS rebinding could read and change the whole workspace. In local mode the server now answers only to loopback, the public URL, the dev origins, the address in `HOST` and the names in the new `PAVE_ALLOWED_HOSTS` setting. Accounts mode is unchanged. Anyone opening a local install by a LAN address must add that address to `PAVE_ALLOWED_HOSTS`.
 - Guests could download organisation assets and watch the live event stream; both now need the viewer role.
 - On a local install, any website could run empty-body commands and upload files; writes from an untrusted Origin are refused with 403.
 - A lone surrogate or NUL in command input caused a 500, and in the surrogate case left a change with no audit row; such input is refused with 400 before anything is written.
@@ -173,9 +174,9 @@ What: seven server defects fixed, each with a test that failed first, and one re
 
 Why: found in a sweep of `apps/server` for authorisation, input handling, job durability and database issues.
 
-How verified: 8 new tests. 13 server test files pass (68 and 40 passed in two runs, each with 1 expected failure). `pnpm -s typecheck` exits 0. The formatter is clean on changed files. `drizzle-kit generate` reports no schema drift.
+How verified: 11 new tests. 11 server test files pass at the head (96 tests); `pnpm --filter @pave/server typecheck` is clean; the formatter is clean on changed files. `drizzle-kit generate` reported no schema drift before the last commit, which changes no schema.
 
-Not included: a local install still answers to any Host name (DNS rebinding), recorded as `it.fails` in `http.test.ts` and waiting for a decision on which hosts to allow; production package builds are not cancelled when their piece is deleted; no migration for the missing indexes; no change to `packages/schema`. The engine suites (kernel, Blender) were not run; engine code is unchanged.
+Not included: production package builds are not cancelled when their piece is deleted; no migration for the missing indexes; no change to `packages/schema`. The engine suites (kernel, Blender) were not run; engine code is unchanged.
 
 ### `claude/bugsweep-studio`
 

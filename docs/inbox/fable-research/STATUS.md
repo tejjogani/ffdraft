@@ -1,6 +1,6 @@
 # Lane B and C research: status
 
-_Branch `claude/fable-research`. Items B1 and C1 from the board, run as one session from `docs/agents/LAPTOP-RESEARCH-PROMPT.md`, plus two things the founder added on the day. Updated 25 November 2026. **State: all research, plans, reviews and fixes are done. Nothing is pushed yet** (see "How this session ran")._
+_Branch `claude/fable-research`. Items B1 and C1 from the board, run as one session from `docs/agents/LAPTOP-RESEARCH-PROMPT.md`, plus two things the founder added on the day. Updated 25 November 2026. **State: all research, plans, reviews and fixes are done; the founder's first decisions are recorded below. Nothing is pushed yet** (see "How this session ran")._
 
 ## Summary for the founder
 
@@ -9,7 +9,7 @@ _Branch `claude/fable-research`. Items B1 and C1 from the board, run as one sess
 - **Ten research files** (`docs/research/13` to `22`), each with every outside claim labelled verified at source, search result only, or estimate. Topic 22 was added on your word: a full audit of Rhino's CAD features against the product.
 - **Six plans** (`docs/plans/`), each reviewed by a fresh adversarial reviewer and then fixed. The reviews found 10 blockers and 80 majors between them; all were fixed in the plans, none was waved away. The reviews are kept in `docs/inbox/fable-research/reviews/`.
 - **A renderer spike**: one ring rendered in Mitsuba, Cycles, LuxCore, a small tracer of our own in C and its WebGPU port. Scripts, timings and a side-by-side image are in `docs/research/spikes/15-renderer/`.
-- **A bug sweep** of the integration branch, as you asked: four branches, 35 commits, 37 defects fixed (17 major), 115 tests added. Details and what still needs a decision: `BUGSWEEP.md` beside this file.
+- **A bug sweep** of the integration branch, as you asked: four branches, 36 commits, 38 defects fixed (18 major), 118 tests added. Details and what still needs a decision: `BUGSWEEP.md` beside this file.
 
 ### What I found, in order of weight
 
@@ -48,25 +48,25 @@ Each plan's section 4 ends with its full list and my recommendation for each. Th
 
 | # | Decision | Recommended |
 |---|---|---|
-| 1 | Which host names a local install answers to | Loopback plus an explicit allow-list setting; other machines on the LAN enter by a pasted link |
+| 1 | Which host names a local install answers to | Loopback plus an explicit allow-list setting; other machines on the LAN enter by a pasted link **Decided: loopback plus an explicit allow-list. Built on `claude/bugsweep-server` (`6c87baf`).** |
 | 2 | Our own renderer (plan A) or Cycles standalone as a sidecar (plan B, native only, 8 to 12 weeks against 25 to 33) | Plan A, but only if your Air's measurement is green |
 | 3 | A rented Mac and Windows GPU machine for the renderer build, about €150 to €170 a month | Yes: without them no builder can run the renderer on a real GPU |
 | 4 | Are renders on the user's own GPU free or counted? | Free for good; paid means Blender-grade takes and render-node jobs |
-| 5 | Exact geometry inside the `.pave` file. You asked for it; the plan recommends none, because it hands out the paid export | None in the file |
+| 5 | Exact geometry inside the `.pave` file. You asked for it; the plan recommends none, because it hands out the paid export | None in the file **Decided: none in the file.** |
 | 6 | Learning from edits: a condition of the free plan, or opt-in per organisation (an earlier decision said opt-in) | Opt-in until hosting exists; a free-plan condition needs counsel first |
 | 7 | Publish the file's envelope spec, or keep it closed | Publish the envelope now, the design schema later |
 | 8 | Allow open surfaces as objects (reverses "bodies are closed" to "metal is closed") | Yes, as a separate surface class |
-| 9 | SubD: castable-mesh grade first, exact NURBS conversion only if a spike passes; accept it may never ship | Yes |
+| 9 | SubD: castable-mesh grade first, exact NURBS conversion only if a spike passes; accept it may never ship | Yes **Decided: yes. Keep trying for exact conversion.** |
 | 10 | The Edge: ask the vendor for permission, get counsel's view, drop it, or ship only a generic file the jeweler maps | Ask the vendor and counsel; ship the generic file meanwhile |
 | 11 | Data read back from Shopify or Xero never reaches a model, a trace or a saved file | Yes |
 | 12 | Stop connectors after Shopify one-way until a customer pays for stock read-back | Yes |
-| 13 | On-model pictures: concept first, composite after a measured go | Concept first |
-| 14 | May unreleased designs go to Higgsfield (it may train on content unless enterprise)? | Public designs only |
+| 13 | On-model pictures: concept first, composite after a measured go | Concept first **Decided: concept first, composite on a go.** |
+| 14 | May unreleased designs go to Higgsfield (it may train on content unless enterprise)? | Public designs only **Decided: yes for the founder's own organisation, moving to its enterprise plan later.** |
 | 15 | Up to $100 of measurement spend on your image keys, about two hours of labelling | Yes |
-| 16 | Which legal entity registers the Google, Microsoft and Apple sign-in apps (also the `LICENSE` holder) | Yours to name; it blocks three steps and takes calendar time |
+| 16 | Which legal entity registers the Google, Microsoft and Apple sign-in apps (also the `LICENSE` holder) | Yours to name; it blocks three steps and takes calendar time **Decided: the same organisation that runs the diamond marketplace. It has a D-U-N-S number and an Apple developer account already.** |
 | 17 | Local limits on free renders and exports are honest-customer limits; hard limits only when hosted | Accept |
-| 18 | Who casts for the first paying user (shrink scaling and the sprue stay off until answered) | Yours to say |
-| 19 | A trade-mark and file-extension search for `.pave`, done by a person. No agent could check it: the search rules forbid the word | Before any outside release |
+| 18 | Who casts for the first paying user (shrink scaling and the sprue stay off until answered) | Yours to say **Decided: the caster handles shrinkage. Shrink scaling and the sprue stay off.** |
+| 19 | A trade-mark and file-extension search for `.pave`, done by a person. No agent could check it: the search rules forbid the word | Before any outside release **Decided: keep the name for now; it can change later.** |
 | 20 | Diatech Make (Dubai) is a browser rival with a name close to the diamond marketplace's. Please confirm it is unrelated | — |
 
 ### What is not verified
@@ -76,6 +76,36 @@ Each plan's section 4 ends with its full list and my recommendation for each. Th
 - Parts of research 14 (V-Ray, Corona, Redshift, Octane details) and the gem-rendering literature in research 15 are working knowledge, marked as estimates: the web-search budget ran out.
 - Effort figures in every plan are estimates by the agents who wrote them. Nothing was built.
 - Several vendor pages would not open (Intuit, parts of Xero, SAP, Lightspeed, JewelCAD). Those rows are marked.
+
+## Decisions the founder has taken (25 November, 09:47 Pacific)
+
+Recorded from his reply in chat. Where his reply was short, the reading taken is stated, so he can correct it.
+
+**Freeform CAD and Rhino parity** (`docs/plans/freeform-cad-additions.md`)
+- Our own OpenCascade build: accepted.
+- SubD: castable-mesh grade first; exact NURBS conversion stays conditional on its spike. On the chance that exact conversion never ships: "hopefully we can fix it". So the spike stays in, and public wording stays honest until it passes.
+- Counsel on the OpenCascade licence duties: yes, instruct. The change to `LICENSE` and the product terms is approved in principle; counsel sets the wording. **For lane A:** step 10 of the additions plan (the notice, the licences screen, the source bundle or written offer, the replaceable engine file) can be scheduled.
+- Casting: the caster handles shrinkage. The product generates the exports, learns from how casters use them, and adds shrink handling later. Shrink scaling and the sprue stay off, and the RFQ keeps its line telling the caster to apply their own shrinkage.
+- Still open: surfaces as objects (he asked what it means; explained in chat), and the stopping point after step 21 (explained in chat).
+
+**Brand models and on-model pictures** (`docs/plans/brand-models-v2.md`)
+- Concept pictures first; the composite track only on a go from the first spike.
+- Higgsfield: no "public designs only" limit for his own organisation; move to Higgsfield's enterprise plan later. Reading taken: this is his choice for his own designs. For other organisations the default stays "public designs only", and an admin can loosen it after reading the provider's clause, as the plan already allows. Stills never go to Higgsfield in any case: they go straight to the Gemini and OpenAI APIs, and Higgsfield is only the second choice for video.
+- Body views are kept, with the Portrait and Figure shots.
+- On-model scene renders count against the 5 free renders a month.
+- Still open: the measurement spend (he asked what it is; explained in chat).
+
+**The file** (`docs/plans/pave-file-format.md`)
+- No exact geometry in the file.
+- The paid exports move to the server. He sees the product as installed software first, usable on the web as well. **Request to lane A:** make the server the only writer of STEP and Rhino files (a server export path already exists as the fallback in `apps/studio/src/features/cad/export.ts`), so the allowance is checked where the file is made. On an installed copy the server is the app's own process on the user's machine, so this closes the browser bypass and is enforceable when hosted; on a machine the user owns it remains an honest-customer limit.
+- The `.pave` name stays for now and can change later. The file plan already has readers identify a file by its manifest, not its extension, so a rename stays cheap.
+
+**Accounts** (`docs/plans/accounts-and-developer-api.md`)
+- Host names: loopback plus an explicit allow-list. **Built:** commit `6c87baf` on `claude/bugsweep-server` adds the `PAVE_ALLOWED_HOSTS` setting and refuses unknown host names on a local install; the expected-failure test now passes. The accounts plan's step 1 still adds the route-by-route guard on top.
+- After copying a project online, the local copy stays the working copy.
+- Apple sign-in at launch: yes. The organisation has a D-U-N-S number and already publishes an iPhone app, so the Apple developer account exists.
+- The sign-in apps (Google, Microsoft, Apple) are registered by the same organisation that runs the diamond marketplace. He added "one unified account for diaex and this". **Reading not yet confirmed:** either the same company accounts with the providers (taken as decided), or one login for people across both products, which the plan does not do today (it links an organisation to a marketplace company by OAuth and keeps sign-in separate). Asked in chat.
+- Storage caps for online copies: 2 GB on Free and 100 GB on Pro are accepted as the starting numbers.
 
 ## The files
 
@@ -121,7 +151,7 @@ Three items in the first `.pave` version on `claude/assistant-build` (details in
 
 Two security gaps in the server, to fix before the founder installs a build that stores his key (research 20):
 
-4. The local server has no Host or Origin check (`apps/server/src/app.ts`, around lines 95 to 128). A DNS-rebinding page or any local program can call it and spend the stored Claude key. The bug-sweep branch `claude/bugsweep-server` fixes the cross-site write half (commit `e813c79`). The Host half (DNS rebinding) is still open and recorded there as an expected failure; it needs a decision on which hosts to allow.
+4. The local server has no Host or Origin check (`apps/server/src/app.ts`, around lines 95 to 128). A DNS-rebinding page or any local program can call it and spend the stored Claude key. The bug-sweep branch `claude/bugsweep-server` fixes the cross-site write half (commit `e813c79`). The Host half (DNS rebinding) is fixed there too (`6c87baf`), after the founder chose loopback plus an explicit allow-list.
 5. Accounts mode accepts unverified emails, and the auth library links a social sign-in to an existing account by email. That allows a pre-registration takeover once Google or Microsoft sign-in is switched on. Also, one auth secret both signs sessions and derives the key that seals customers' AI keys.
 
 A render setting that looks wrong (research 14):
@@ -156,7 +186,7 @@ You asked on 25 November for an agent team to look for bugs, obvious misses and 
 
 | Branch | Area | Result |
 |---|---|---|
-| `claude/bugsweep-server` | `apps/server` | 7 fixes, 1 open major (any host name is answered), 8 tests |
+| `claude/bugsweep-server` | `apps/server` | 8 fixes, including the host allow-list the founder decided on; 11 tests |
 | `claude/bugsweep-studio` | `apps/studio`, `packages/ui` | 14 defects fixed in 11 commits, 65 tests |
 | `claude/bugsweep-packages` | production, render, match, canon, sourcing, installers | 7 fixes, 11 tests |
 | `claude/bugsweep-kernel` | `packages/kernel`, `packages/schema` | 9 fixes (two export memory leaks), 31 tests |
@@ -167,7 +197,7 @@ Each branch is based on `claude/busy-bardeen-o482lo` at `cb7dcd0` and is meant t
 
 - It ran in a cloud workspace linked to the founder's laptop, not on macOS itself. That is why no Metal timing exists.
 - **Pushing was refused** for this session: the repository is readable here but not authorised for push. All work is in local commits on `claude/fable-research` and the four `claude/bugsweep-*` branches. It reaches GitHub when the founder authorises the repository for the session, or pushes the git bundles from his laptop.
-- The integration branch was merged in at `aa86f49` (status commits only).
+- The integration branch was merged in at `bd29afc` (status and board commits only).
 - The board gives C1 its own branch and status file; this session followed the newer laptop prompt and kept B1 and C1 together here.
 
 ## Things in the repo that look out of date
