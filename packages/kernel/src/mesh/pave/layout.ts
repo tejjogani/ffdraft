@@ -431,6 +431,7 @@ class Packer {
     nb: Vec3,
     db: number,
     holeB: number,
+    holeOnly = false,
   ): boolean {
     const depthA = this.seatDepth(0, da) - this.o.sink * da
     const depthB = this.seatDepth(0, db) - this.o.sink * db
@@ -446,7 +447,7 @@ class Packer {
       const r = Math.max(cone, holeB > 0 && z < 0 ? rhB : 0)
       return radial < Math.max(0, r) + CLASH_WALL
     }
-    for (let k = 0; k <= 4; k++) {
+    for (let k = 0; k <= 4 && !holeOnly; k++) {
       const z = -(k / 4) * depthA
       const rho = (da / 2) * (1 - k / 4)
       const centre = add(a, scale(na, z))
@@ -611,7 +612,24 @@ class Packer {
         this.surface.thickness(sample) - SEAT_DEPTH_PER_MM * d,
         this.ringSpare(sample, d, rh, 4) + this.seatDepth(rh, d) - SEAT_DEPTH_PER_MM * d,
       ) - FLOOR_METAL
-    return this.holeClearOfCavity(c, n, d, Math.min(Math.max(spare, 0), MAX_HOLE_PER_MM * d))
+    const hole = this.holeClearOfCavity(c, n, d, Math.min(Math.max(spare, 0), MAX_HOLE_PER_MM * d))
+    return this.holeClearOfSkin(c, n, d, hole)
+  }
+
+  /**
+   * How deep a drill hole may go, at most `hole`, keeping CAVITY_HOLE_WALL of metal beyond its
+   * rim to the body's outside in every direction. The metal straight under the seat is measured
+   * along the axis only: a hole beside a corner, or under a dice pip, runs past the side face
+   * and opens into it a little lower down.
+   */
+  private holeClearOfSkin(c: Vec3, n: Vec3, d: number, hole: number): number {
+    if (hole <= 0) return hole
+    const culet = add(c, scale(n, -(this.seatDepth(0, d) - this.o.sink * d)))
+    const keep = (RULES.seatHole * d) / 2 + CAVITY_HOLE_WALL
+    for (let z = 0; z <= hole + EPS; z += HOLE_WALK)
+      if (this.surface.metalAround(add(culet, scale(n, -z)), keep) < keep)
+        return Math.max(0, z - HOLE_WALK)
+    return hole
   }
 
   /**
@@ -673,8 +691,10 @@ class Packer {
 
   /**
    * Drill holes are sized after placement (each from the metal under its own seat), so a hole
-   * that would reach a seat cut from another face is dropped: the stone keeps its seat, and the
-   * piece gains no tunnel.
+   * that would reach another seat or hole is dropped: the stone keeps its seat, and the piece
+   * gains no tunnel. Seats cut from another face are tested whole; on one face only the holes
+   * are, since neighbouring seats there meet at the surface by design, but on a hollow (a
+   * cup's inside, the root of a stem) the holes of a ring of stones lean together under it.
    */
   private trimHoles(): void {
     this.stones.forEach((s, i) => {
@@ -682,21 +702,11 @@ class Packer {
       const c = s.position
       this.grid.near(c[0], c[1], c[2], 2 * (s.diameter + this.largest) + s.hole, (j) => {
         const o = this.stones[j]!
-        if (j === i || s.hole <= 0 || dot(s.normal, o.normal) > CLASH_COS) return
-        if (
-          this.coneHits(
-            c,
-            s.normal,
-            s.diameter,
-            s.hole,
-            o.position,
-            o.normal,
-            o.diameter,
-            o.hole,
-          ) ||
-          this.coneHits(o.position, o.normal, o.diameter, o.hole, c, s.normal, s.diameter, s.hole)
-        )
-          s.hole = 0
+        if (j === i || s.hole <= 0) return
+        const holeOnly = dot(s.normal, o.normal) > CLASH_COS
+        const a = [c, s.normal, s.diameter, s.hole] as const
+        const b = [o.position, o.normal, o.diameter, o.hole] as const
+        if (this.coneHits(...a, ...b, holeOnly) || this.coneHits(...b, ...a, holeOnly)) s.hole = 0
       })
     })
   }

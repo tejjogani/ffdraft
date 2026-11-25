@@ -336,6 +336,30 @@ describe('pavé on a hollow trophy at production', () => {
   }, 120_000)
 })
 
+describe('pavé of large stones on sculpted hosts at production', () => {
+  // A bead on the trophy's cup reached down to the stem's collar, and drill holes of a ring of
+  // stones in a hollow leaned together (on the dice, one ran past a side face under a pip):
+  // each added a handle to the casting.
+  it('adds no handles to the trophy or the dice', async () => {
+    for (const [name, height] of [
+      ['trophy', 45],
+      ['dice', 14],
+    ] as const) {
+      const design = designFrom('pendant', [
+        { id: 'b', kind: 'meshBody', source: { type: 'builtin', name }, height },
+        { id: 'ice', kind: 'pave', host: 'b', region: { type: 'all' }, sizeMax: 3, sizeMin: 3 },
+      ])
+      const scene = await kernel.scene(design, { detail: 'production' })
+      const host = genus(scene.nodes.get('b')!.bodies[0]!.solid.manifold(QUALITY.production))
+      const { seated, beads } = seatedHost(scene, 'b')
+      const joined = seated.add(beads)
+      expect(genus(seated), `${name}: seats`).toBe(host)
+      expect(genus(joined), `${name}: beads`).toBe(host)
+      for (const m of [seated, joined]) m.delete()
+    }
+  }, 120_000)
+})
+
 describe('pavé too large to cut', () => {
   it('says which stone size would fit the budget, without measuring every stone', async () => {
     const design = designFrom('pendant', [

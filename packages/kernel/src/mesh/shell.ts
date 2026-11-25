@@ -259,11 +259,12 @@ const DRAIN_TRIES = 40
  * the piece also lies toward the back, and a hole run on to the back plane would pierce it too.
  *
  * A hole is a Ø2 mm cylinder, so it reaches a millimetre either side of its axis. Its start cap
- * lies wholly inside the cavity, just under the cavity's back face across the whole disc: a cap
- * dug deeper, or overhanging the cavity's edge, ends in the metal beside the cavity and leaves a
- * skin a few hundredths thick under a pip or an edge, which breaks through in casting. A spot
- * where the hole would come closer than `wall` to the outside anywhere but where it leaves
- * through the back is passed over for the next one in toward the middle of the cavity.
+ * sits just under the lowest point of the cavity's back face across the disc: a cap dug deeper,
+ * or overhanging the cavity's edge, ends in the metal beside the cavity and can leave a skin a
+ * few hundredths thick under a pip or an edge, which breaks through in casting. So the cap and
+ * the wall are probed, and a spot where the hole would come closer than `wall` to the outside
+ * anywhere but where it leaves through the back is passed over for the next one in toward the
+ * middle of the cavity.
  */
 function drainHoles(cavity: Manifold, back: number, outer: TriangleBvh, wall: number): Manifold[] {
   const { manifold: mf } = runtime()
@@ -323,7 +324,7 @@ function drainHoles(cavity: Manifold, back: number, outer: TriangleBvh, wall: nu
 
   /**
    * The hole on axis (x, z) out of the cavity span whose back face is nearest `near`: its start
-   * and end along Y, or null when its disc does not fit inside the cavity or it would come
+   * and end along Y, or null when there is no cavity over the axis or the hole would come
    * closer than the wall to the outside.
    */
   const fit = (x: number, z: number, near: number): { start: number; end: number } | null => {

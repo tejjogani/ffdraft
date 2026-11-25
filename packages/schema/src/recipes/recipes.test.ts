@@ -235,6 +235,17 @@ describe('recipes', () => {
     expect(chain.wire).toBeGreaterThanOrEqual(0.8)
   })
 
+  it('closes every chain with a clasp: a box on a tennis line, a lobster on the rest', () => {
+    // Without one the Cuban was a closed loop and the tennis bracelet a closed ring.
+    const clasp = (id: string) =>
+      (buildDesign(TEMPLATES.find((t) => t.id === id)!.spec).nodes.chain as NodeOf<'chain'>).clasp
+    expect(clasp('cuban')).toBe('lobster')
+    expect(clasp('tennis')).toBe('box')
+    expect(clasp('iced-trophy')).toBe('lobster')
+    expect(clasp('iced-initial')).toBe('box')
+    expect(clasp('name-pendant')).toBe('lobster')
+  })
+
   it('sizes the bail from the chain it carries and the piece it hangs', () => {
     const bail = (spec: PieceSpecInput) => buildDesign(spec).nodes.bail as NodeOf<'bail'>
     // Fine round chain: a ring that passes the link plus 1.5 mm.

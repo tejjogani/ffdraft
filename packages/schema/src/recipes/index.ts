@@ -553,6 +553,9 @@ function chainNode(spec: PieceSpec, notes: string[], through?: string): NodeInpu
     stone: accent?.stone ?? 'diamond',
     ...(c.style === 'tennis' && line ? { cut: line.cut } : {}),
     ...(through ? { through } : {}),
+    // A chain is put on by its clasp: a tennis line closes in a box clasp, any other in a
+    // lobster (a closed loop could not be put on at all).
+    clasp: c.style === 'tennis' ? 'box' : 'lobster',
   }
 }
 

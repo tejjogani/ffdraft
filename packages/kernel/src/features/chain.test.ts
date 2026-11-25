@@ -114,6 +114,82 @@ describe('chain', () => {
     30_000,
   )
 
+  it.each<[string, NodeInput]>([
+    [
+      'cable 1.2 mm, lobster',
+      {
+        id: 'c',
+        kind: 'chain',
+        style: 'cable',
+        linkWidth: 1.2,
+        wire: 0.3,
+        length: 457,
+        clasp: 'lobster',
+      },
+    ],
+    [
+      'Cuban 10 mm, lobster',
+      {
+        id: 'c',
+        kind: 'chain',
+        style: 'cuban',
+        linkWidth: 10,
+        wire: 2.6,
+        length: 559,
+        clasp: 'lobster',
+      },
+    ],
+    [
+      'tennis 3.4 mm, box',
+      {
+        id: 'c',
+        kind: 'chain',
+        style: 'tennis',
+        linkWidth: 3.4,
+        wire: 0.88,
+        length: 180,
+        clasp: 'box',
+      },
+    ],
+  ])(
+    'opens a draped %s clasp at the back, so it can be put on',
+    async (_, node) => {
+      const scene = await kernel.scene(designFrom('chain', [node]))
+      const result = scene.nodes.get('c')!
+      const data = result.data as ChainData
+      expect(data.closed).toBe(false)
+      expect(result.bodies).toHaveLength(2)
+      // The clasp is two pieces (the lobster and its ring, the box and its tongue) that never
+      // touch each other, each cast onto the end link it hangs from.
+      const clasp = result.bodies[1]!.solid.manifold(scene.quality).decompose()
+      const links = result.bodies[0]!.solid.manifold(scene.quality)
+      try {
+        expect(clasp).toHaveLength(2)
+        const between = clasp[0]!.intersect(clasp[1]!)
+        expect(between.volume()).toBeLessThan(1e-6)
+        between.delete()
+        for (const piece of clasp) {
+          const held = piece.intersect(links)
+          expect(held.volume()).toBeGreaterThan(1e-3)
+          held.delete()
+        }
+      } finally {
+        for (const m of clasp) m.delete()
+      }
+      // Its ends are published at the back of the loop, above everything else.
+      const top = result.bodies[0]!.solid.bounds().max[2]
+      for (const end of [result.frames.end0!, result.frames.end1!])
+        expect(end.origin[2]).toBeGreaterThan(
+          top - 0.2 * (top - result.bodies[0]!.solid.bounds().min[2]),
+        )
+      const production = await kernel.evaluate(designFrom('chain', [node]), {
+        detail: 'production',
+      })
+      expect(production.diagnostics.filter((d) => d.level !== 'info')).toEqual([])
+    },
+    120_000,
+  )
+
   it('threads every link through its neighbour (pitch solver)', () => {
     for (const style of WIRE_STYLES) {
       const chain = wireChain(style, 3, 0.7)

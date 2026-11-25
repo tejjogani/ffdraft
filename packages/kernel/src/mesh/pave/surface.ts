@@ -9,7 +9,7 @@
  */
 import { add, cross, dot, normalize, scale, sub, type Vec3 } from '../../geometry/vec'
 import type { IndexedTriangles } from '../../solid/meshing'
-import { TriangleBvh } from '../bvh'
+import { type ClosestHit, TriangleBvh } from '../bvh'
 import { StaticPointGrid } from '../grid'
 import { MinHeap } from '../heap'
 import { seededRandom } from '../random'
@@ -45,6 +45,7 @@ export class PaveSurface {
   readonly concave: Float64Array
   private readonly grid: StaticPointGrid
   private bvh: TriangleBvh | null = null
+  private readonly closestHit: ClosestHit = { d2: 0, x: 0, y: 0, z: 0, triangle: -1 }
   private readonly thicknessCache: Float64Array
   private readonly host: IndexedTriangles
   /** Region label per host triangle. */
@@ -172,6 +173,14 @@ export class PaveSurface {
     return this.bvh.firstHit(o[0], o[1], o[2], n[0], n[1], n[2], lift, reach).triangle < 0
   }
 
+  /** Distance from a point to the host's surface, up to `cap` (returned when it is farther). */
+  metalAround(p: Vec3, cap: number): number {
+    this.bvh ??= new TriangleBvh(this.host)
+    return this.bvh.closest(p[0], p[1], p[2], this.closestHit, cap)
+      ? Math.sqrt(this.closestHit.d2)
+      : cap
+  }
+
   /**
    * Whether no host metal lies within `radius` of a point in the air above the surface (a
    * bead's centre), looking along the normal n, square to it and between: rays straight up, at
@@ -189,7 +198,10 @@ export class PaveSurface {
       const level = Math.sqrt(1 - up * up)
       for (let k = 0; k < 8; k++) {
         const a = (k * Math.PI) / 4
-        const d = add(scale(n, up), add(scale(u, level * Math.cos(a)), scale(v, level * Math.sin(a))))
+        const d = add(
+          scale(n, up),
+          add(scale(u, level * Math.cos(a)), scale(v, level * Math.sin(a))),
+        )
         if (blocked(d)) return false
       }
     }
