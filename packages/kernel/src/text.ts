@@ -5,11 +5,14 @@
  * (licence texts sit next to the files in ./fonts):
  *   sans   Inter                 serif  Playfair Display
  *   script Great Vibes           block  Bebas Neue
- * They are the Latin subsets as published by Fontsource (WOFF). Characters a font lacks are
- * drawn with its "missing glyph" box, as any text renderer would.
+ * They are the Latin subsets as published by Fontsource (WOFF). Latin Extended-A letters they
+ * lack (Ż, Ł, Č, Ő, ş, ğ …) are composed from their base letter and the font's own marks
+ * (fonts/compose.ts); other characters a font lacks are drawn with its "missing glyph" box, as
+ * any text renderer would.
  */
 import type { Font, PathCommand } from 'opentype.js'
 import * as opentypeModule from 'opentype.js'
+import { composeLetter } from './fonts/compose'
 import { gposKerning, type PairKerning } from './fonts/gposKerning'
 import type { Vec2 } from './geometry/vec'
 import { loadBundledAsset } from './runtime/host'
@@ -149,8 +152,17 @@ export function layoutText(font: Font, text: string, size: number, tolerance = 0
     let pen = 0
     // One glyph per character: opentype.js cannot apply every substitution table these fonts
     // carry (contextual alternates), and engraved text does not need ligatures.
-    const run = Array.from(line, (character) => font.charToGlyph(character))
-    const ids = Array.from(line, (character) => font.charToGlyphIndex(character))
+    const characters = Array.from(line)
+    // A letter the font lacks is composed from its base letter and the font's marks (see
+    // fonts/compose.ts); it spaces and kerns as its base letter.
+    const outlineOf = (c: string) =>
+      contoursOf(font.charToGlyph(c).getPath(0, 0, em).commands, tolerance)
+    const composed = characters.map((c) =>
+      font.charToGlyphIndex(c) === 0 ? composeLetter(font, c, em, outlineOf) : null,
+    )
+    const letters = characters.map((c, i) => composed[i]?.base ?? c)
+    const run = letters.map((character) => font.charToGlyph(character))
+    const ids = letters.map((character) => font.charToGlyphIndex(character))
     run.forEach((glyph, i) => {
       const from = pen
       pen += (glyph.advanceWidth ?? 0) * unit
@@ -160,8 +172,11 @@ export function layoutText(font: Font, text: string, size: number, tolerance = 0
         const k = font.getKerningValue(glyph, next) || (extra?.(ids[i]!, ids[i + 1]!) ?? 0)
         pen += k * unit
       }
-      const contours = contoursOf(glyph.getPath(from, index * lineHeight, em).commands, tolerance)
-      if (contours.length > 0) glyphs.push({ contours, from, to: pen, line: index })
+      const shapes = composed[i]?.shapes.map((shape) =>
+        shape.map((c) => c.map(([x, y]): Vec2 => [x + from, y - index * lineHeight])),
+      ) ?? [contoursOf(glyph.getPath(from, index * lineHeight, em).commands, tolerance)]
+      for (const contours of shapes)
+        if (contours.length > 0) glyphs.push({ contours, from, to: pen, line: index })
     })
     width = Math.max(width, pen)
   })

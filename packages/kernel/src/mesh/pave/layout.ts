@@ -592,15 +592,7 @@ class Packer {
   private place(p: Vec3, n: Vec3, d: number, sample: number): number {
     const index = this.stones.length
     const c = this.girdle(p, n, d)
-    // The hole takes only the metal left under the seat across its own width as well.
-    const rh = (RULES.seatHole * d) / 2
-    const spare =
-      Math.min(
-        this.surface.thickness(sample) - SEAT_DEPTH_PER_MM * d,
-        this.ringSpare(sample, d, rh, 4) + this.seatDepth(rh, d) - SEAT_DEPTH_PER_MM * d,
-      ) - FLOOR_METAL
-    const hole = this.holeClearOfCavity(c, n, d, Math.min(Math.max(spare, 0), MAX_HOLE_PER_MM * d))
-    this.stones.push({ position: c, normal: n, diameter: d, hole })
+    this.stones.push({ position: c, normal: n, diameter: d, hole: this.holeFor(c, n, d, sample) })
     this.depth.push(this.surface.depth[sample]!)
     this.grid.add(c[0], c[1], c[2])
     // No stone centre can ever be this close to the new stone again.
@@ -610,12 +602,26 @@ class Packer {
     return index
   }
 
+  /** Depth of the drill hole under a seat of diameter d with its girdle at c, over sample. */
+  private holeFor(c: Vec3, n: Vec3, d: number, sample: number): number {
+    // The hole takes only the metal left under the seat across its own width as well.
+    const rh = (RULES.seatHole * d) / 2
+    const spare =
+      Math.min(
+        this.surface.thickness(sample) - SEAT_DEPTH_PER_MM * d,
+        this.ringSpare(sample, d, rh, 4) + this.seatDepth(rh, d) - SEAT_DEPTH_PER_MM * d,
+      ) - FLOOR_METAL
+    return this.holeClearOfCavity(c, n, d, Math.min(Math.max(spare, 0), MAX_HOLE_PER_MM * d))
+  }
+
   /**
    * A ladder size that ended up with a stone or two is a parcel bought for nothing and a stray
    * on the bench: each such stone becomes the nearest smaller size in use, on the same spot. A
    * smaller stone fits wherever a larger one did — its seat is shallower and narrower, so every
-   * gap, margin and wall the larger one kept still holds. A larger one would need every check
-   * again, so a stray smaller than every size in use stays.
+   * gap, margin and wall the larger one kept still holds. A stray smaller than every size in
+   * use becomes the smallest of them where that passes every check a placed stone passes (its
+   * neighbours, the edge, the curvature, the metal under it, the setter's reach), and stays
+   * otherwise.
    */
   private mergeStraySizes(): void {
     const count = new Map<number, number>()
@@ -623,17 +629,46 @@ class Packer {
     const used = [...count].filter(([, n]) => n > STRAY).map(([d]) => d)
     for (const [i, s] of this.stones.entries()) {
       if (count.get(s.diameter)! > STRAY) continue
-      const d = used.filter((size) => size < s.diameter).sort((a, b) => b - a)[0]
-      if (d === undefined) continue
       const surface = add(s.position, scale(s.normal, this.o.sink * s.diameter))
+      const d = used.filter((size) => size < s.diameter).sort((a, b) => b - a)[0]
+      if (d !== undefined) {
+        this.stones[i] = {
+          position: this.girdle(surface, s.normal, d),
+          normal: s.normal,
+          diameter: d,
+          // The smaller seat ends higher, so the same hole stops as far from the far wall.
+          hole: Math.min(s.hole, MAX_HOLE_PER_MM * d),
+        }
+        continue
+      }
+      const up = used.filter((size) => size > s.diameter).sort((a, b) => a - b)[0]
+      const hit = up === undefined ? null : this.snap(surface)
+      if (up === undefined || !hit || !this.fitsInstead(i, hit, up)) continue
+      const c = this.girdle(hit.p, hit.n, up)
       this.stones[i] = {
-        position: this.girdle(surface, s.normal, d),
-        normal: s.normal,
-        diameter: d,
-        // The smaller seat ends higher, so the same hole stops as far from the far wall.
-        hole: Math.min(s.hole, MAX_HOLE_PER_MM * d),
+        position: c,
+        normal: hit.n,
+        diameter: up,
+        hole: this.holeFor(c, hit.n, up, hit.sample),
       }
     }
+  }
+
+  /** {@link fits} for a stone of diameter d at hit taking the place of stone i. */
+  private fitsInstead(i: number, hit: { sample: number; p: Vec3; n: Vec3 }, d: number): boolean {
+    // The allowed size there, whatever front was being grown last.
+    const front = this.front
+    this.front = this.openField()
+    const allowed = this.sizeFor(hit.sample, hit.p)
+    this.front = front
+    if (allowed < d - EPS) return false
+    const c = this.girdle(hit.p, hit.n, d)
+    let ok = true
+    this.grid.near(c[0], c[1], c[2], d / 2 + this.largest / 2 + this.o.gap, (j, d2) => {
+      const min = (d + this.stones[j]!.diameter) / 2 + this.o.gap
+      if (j !== i && d2 < (min - EPS) * (min - EPS)) ok = false
+    })
+    return ok && !this.clashNear(c, hit.n, d) && this.settable(hit.p, hit.n, d)
   }
 
   /**

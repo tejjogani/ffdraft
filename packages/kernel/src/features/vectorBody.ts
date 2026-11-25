@@ -9,6 +9,7 @@
 import type { NodeOf } from '@pave/schema'
 import type { CrossSection, Manifold } from 'manifold-3d'
 import { type BuildContext, defineFeature, metalOf, runtime, solidFromManifold } from '../core'
+import { canCompose } from '../fonts/compose'
 import { OutlineDistance } from '../mesh/outline/distance'
 import { edgeProfile, flatProfile, membraneDome, profiledSlab } from '../mesh/outline/profile'
 import { SHAPES } from '../mesh/outline/shapes'
@@ -134,9 +135,16 @@ async function drawableText(text: string, font: FontId, ctx: BuildContext): Prom
   const has = (c: string) => c === '\n' || face.charToGlyphIndex(c) !== 0
   const replaced = new Map<string, string>()
   const missing = new Set<string>()
+  const composed = new Set<string>()
   const kept: string[] = []
   for (const c of Array.from(text)) {
     if (has(c)) {
+      kept.push(c)
+      continue
+    }
+    // Drawn from its base letter and the font's own marks (text.ts layoutText).
+    if (canCompose(face, c)) {
+      composed.add(c)
       kept.push(c)
       continue
     }
@@ -154,8 +162,14 @@ async function drawableText(text: string, font: FontId, ctx: BuildContext): Prom
         ? `The ${font} font has no letters for ${list}; choose another font or other characters`
         : 'The text is empty',
     )
-  // An error, not a warning: Ł set as L spells another name, which no customer accepts. None
-  // of the bundled fonts has these letters, so there is no font to offer as the fix.
+  if (composed.size > 0)
+    ctx.report({
+      level: 'info',
+      code: 'text.composed',
+      message: `The ${font} font has no ${[...composed].map(quote).join(' ')}, so ${composed.size > 1 ? 'they were' : 'it was'} composed from the base letter and the font's own accents; check the accents read as intended.`,
+    })
+  // An error, not a warning: a letter set as its base spells another name, which no customer
+  // accepts. No bundled font has it and it cannot be composed, so there is no font to offer.
   if (replaced.size > 0)
     ctx.report({
       level: 'error',

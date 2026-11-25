@@ -252,8 +252,6 @@ const DRAIN_PROBES = 12
 const DRAIN_CAP_INSET = 0.05
 /** Spots tried per hole, spread over the half of the cavity's back face toward its end. */
 const DRAIN_TRIES = 40
-/** Metal kept between a hole and the outside, as a share of the wall (the cavity's own tolerance). */
-const DRAIN_WALL_SHARE = 1 - 2 * CAVITY_TOLERANCE
 
 /**
  * Escape holes along +Y from the highest and lowest back-facing points of one cavity, each out
@@ -267,12 +265,7 @@ const DRAIN_WALL_SHARE = 1 - 2 * CAVITY_TOLERANCE
  * where the hole would come closer than `wall` to the outside anywhere but where it leaves
  * through the back is passed over for the next one in toward the middle of the cavity.
  */
-function drainHoles(
-  cavity: Manifold,
-  back: number,
-  outer: TriangleBvh,
-  wall: number,
-): Manifold[] {
+function drainHoles(cavity: Manifold, back: number, outer: TriangleBvh, wall: number): Manifold[] {
   const { manifold: mf } = runtime()
   const { positions: p, indices } = trianglesFromManifold(cavity)
   let top: [number, number, number] | null = null
@@ -307,7 +300,6 @@ function drainHoles(
   const bvh = new TriangleBvh({ positions: p, indices })
   const above = Math.max(back, cavity.boundingBox().max[1]) + 1
   const hit: ClosestHit = { d2: 0, x: 0, y: 0, z: 0, triangle: -1 }
-  const minMetal = wall * DRAIN_WALL_SHARE
 
   /** The cavity's spans along Y over (x, z), as [front, back] pairs, from the back down. */
   const spans = (x: number, z: number): [number, number][] => {
@@ -362,7 +354,7 @@ function drainHoles(
     // The cap, and the wall up to a wall's depth under the skin it leaves through there.
     for (const [k, [dx, dz]] of offsets.entries()) {
       for (let y = start; y === start || y <= exits[k]! - wall; y += wall / 2) {
-        if (outer.closest(x + dx, y, z + dz, hit, minMetal)) return null
+        if (outer.closest(x + dx, y, z + dz, hit, wall)) return null
         if (k === 0) break
       }
     }
@@ -389,7 +381,12 @@ function drainHoles(
   const holes =
     top[2] - bottom[2] > 4 * DRAIN_RADIUS
       ? [place(byHeight, 0.5), place([...byHeight].reverse(), 0.5)]
-      : [place([...byHeight].sort((a, b) => Math.abs(a[2] - middleZ) - Math.abs(b[2] - middleZ)), 1)]
+      : [
+          place(
+            [...byHeight].sort((a, b) => Math.abs(a[2] - middleZ) - Math.abs(b[2] - middleZ)),
+            1,
+          ),
+        ]
   const kept = holes.filter((h): h is NonNullable<typeof h> => h !== null)
   // Two holes that met in the middle would overlap: one is enough there.
   if (

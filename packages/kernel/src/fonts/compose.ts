@@ -64,7 +64,8 @@ const CEDILLA_NECK = 0.03
 function recipe(font: Font, c: string): { base: string; marks: string[]; stroke?: string } | null {
   const has = (g: string) => font.charToGlyphIndex(g) !== 0
   const stroke = STROKES[c]
-  if (stroke) return has(stroke.base) && has('-') ? { base: stroke.base, marks: [], stroke: c } : null
+  if (stroke)
+    return has(stroke.base) && has('-') ? { base: stroke.base, marks: [], stroke: c } : null
   const parts = Array.from(c.normalize('NFD'))
   const base = parts[0]
   const marks = parts.slice(1)
@@ -161,11 +162,13 @@ function slice(contours: readonly Contour[], y: number): [number, number][] {
 /**
  * The composed letter: its base glyph (for the advance and kerning) and its shapes, each filled
  * even-odd on its own (a stroke overlaps the stem it crosses, so it cannot share the base's
- * fill), in the coordinates `outline` gives for a glyph. Null when the font cannot compose c.
+ * fill), in the coordinates `outline` gives for a glyph set `em` mm to the em. Null when the
+ * font cannot compose c.
  */
 export function composeLetter(
   font: Font,
   c: string,
+  em: number,
   outline: Contours,
 ): { base: string; shapes: Contour[][] } | null {
   const r = recipe(font, c)
@@ -193,7 +196,6 @@ export function composeLetter(
     const which = upper ? 0 : 1
     const donorBase = outline(spec.base[which])
     const donorBox = bounds(donorBase)
-    const em = font.unitsPerEm > 0 ? (box.maxY - box.minY) / 0.7 : 1
     let mark = spec.below
       ? clip(outline(spec.donor[which]), donorBox.minY + CEDILLA_NECK * em, false)
       : clip(outline(spec.donor[which]), donorBox.maxY + 1e-4 * em, true)
@@ -218,14 +220,17 @@ export function composeLetter(
     if (spec.change === 'flip') mark = reflected(mark, ([x, y]) => [x, 2 * mcy - y])
     if (spec.change === 'mirror') mark = reflected(mark, ([x, y]) => [2 * mcx - x, y])
     if (spec.change === 'double') {
-      const half = (k: number) => mapped(mark, ([x, y]) => [mcx + (x - mcx) * 0.8 + k * 0.55 * w, mcy + (y - mcy) * 0.8])
+      const half = (k: number) =>
+        mapped(mark, ([x, y]) => [mcx + (x - mcx) * 0.8 + k * 0.55 * w, mcy + (y - mcy) * 0.8])
       mark = [...half(-1), ...half(1)]
     }
     if (spec.change === 'breve') {
       // The lower half of the ring, as thick as the ring's own band.
       const inner = mark.length > 1 ? bounds([mark[1]!]) : null
       const outerR = w / 2
-      const band = inner ? Math.max(0.15 * outerR, (w - (inner.maxX - inner.minX)) / 2) : 0.3 * outerR
+      const band = inner
+        ? Math.max(0.15 * outerR, (w - (inner.maxX - inner.minX)) / 2)
+        : 0.3 * outerR
       const cy = markBox.minY + outerR
       const arc: Contour = []
       const n = 16
@@ -263,10 +268,9 @@ export function composeLetter(
       // Keep the gap the donor leaves above its base, over the top of what is below (the base,
       // or the mark already set over it).
       dy = top - donorBox.maxY
-      if (spec.change === 'dot' && upper) dy = top - donorBox.maxY
     }
     mark = mapped(mark, ([x, y]) => [x + dx, y + dy])
-    if (!spec.below) top = bounds(mark).maxY + (markBox.minY - donorBox.maxY)
+    if (!spec.below) top = bounds(mark).maxY
     shapes.push(mark)
   }
   return { base: r.base, shapes }

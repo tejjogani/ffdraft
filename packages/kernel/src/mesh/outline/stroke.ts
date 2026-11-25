@@ -61,8 +61,10 @@ const MARK_REACH = 0.25
 const TITTLE_STEM = 1.6
 /** …and close over it: the gap is at most this share of the letter's height. */
 const TITTLE_GAP = 0.25
-/** A sprue that holds an accent is at most this share of the accent's width. */
+/** A sprue that holds an accent is at most this share of the accent's width… */
 const SPRUE_SHARE = 0.5
+/** …and at most this share of its letter's height long: never down through a counter. */
+const SPRUE_REACH = 0.2
 
 type Ring = readonly (readonly [number, number])[]
 type Link = { a: [number, number]; b: [number, number]; d: number }
@@ -183,7 +185,8 @@ export function joinIslands(
           parts.push(moved)
           rings[k] = rings[k]!.map((ring) => ring.map(([x, y]) => [x + dx, y + dy] as const))
         } else if (isMark[k]) {
-          const s = sprue(rings[k]!, rings[best.to]!, boxes[k]!, width)
+          const letter = spans[best.to]![1] - spans[best.to]![0]
+          const s = sprue(rings[k]!, rings[best.to]!, boxes[k]!, width, SPRUE_REACH * letter)
           if (!s) {
             // No metal straight under the accent: it stays loose, where the font put it.
             joined.delete(k)
@@ -223,7 +226,7 @@ function insideRings(rings: readonly Ring[], x: number, y: number): boolean {
 
 /**
  * Whether a tie of half-width r from `end` (on the part `rings`) toward `other` meets that part
- * across its whole width: both corners of its end, a little inside the part, are metal. A tie
+ * across its whole width: both corners of its end, r inside the part, are metal. A tie
  * whose corner hangs past the edge it meets (the top of an L's foot, a rounded shoulder) stands
  * proud of the letter and leaves a step.
  */
@@ -236,42 +239,76 @@ function flush(
   const len = Math.hypot(other[0] - end[0], other[1] - end[1]) || 1
   const ux = (other[0] - end[0]) / len
   const uy = (other[1] - end[1]) / len
-  // Into the part (against the tie's direction), by a fifth of the half-width.
-  const ix = end[0] - ux * 0.2 * r
-  const iy = end[1] - uy * 0.2 * r
-  return insideRings(rings, ix - uy * r, iy + ux * r) && insideRings(rings, ix + uy * r, iy - ux * r)
+  // Into the part (against the tie's direction) as far as the tie reaches into it.
+  const ix = end[0] - ux * r
+  const iy = end[1] - uy * r
+  return (
+    insideRings(rings, ix - uy * r, iy + ux * r) && insideRings(rings, ix + uy * r, iy - ux * r)
+  )
 }
+
+/** Metal intervals [bottom, top] where rings (even-odd) cross the vertical line at x, upward. */
+function column(rings: readonly Ring[], x: number): [number, number][] {
+  const ys: number[] = []
+  for (const ring of rings)
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i]!
+      const [xj, yj] = ring[j]!
+      if (xi > x !== xj > x) ys.push(yi + ((x - xi) * (yj - yi)) / (xj - xi))
+    }
+  ys.sort((p, q) => p - q)
+  const out: [number, number][] = []
+  for (let k = 0; k + 1 < ys.length; k += 2) out.push([ys[k]!, ys[k + 1]!])
+  return out
+}
+
+/** Step across an accent's column when looking for a sprue, mm. */
+const SPRUE_STEP = 0.05
+/** A sprue reaches the sprue's width into the accent and the letter, at most this far, mm. */
+const SPRUE_GRIP = 0.05
 
 /**
  * A narrow vertical sprue from an accent (rings, bounds) straight down to the letter under it,
  * inside the accent's own column: SPRUE_SHARE of its width, at most the tie width and at least
- * the casting minimum. Null when no metal lies straight under the accent's column.
+ * the casting minimum, no longer than `reach`. Each end is cut square across metal: the accent
+ * over its whole width at the top, the letter at the bottom, so it never pokes out beside
+ * either. Null when no metal lies within reach straight under the accent.
  */
 function sprue(
   mark: readonly Ring[],
   letter: readonly Ring[],
   box: { min: readonly number[]; max: readonly number[] },
   width: number,
+  reach: number,
 ): CrossSection | null {
   const w = Math.min(width, Math.max(MIN_STROKE, SPRUE_SHARE * (box.max[0]! - box.min[0]!)))
   const r = w / 2
-  const lo = box.min[0]! + r
-  const hi = box.max[0]! - r
-  if (lo > hi) return null
-  const link = nearestLink(
-    mark,
-    letter,
-    Infinity,
-    (a, b) =>
-      b[1] < a[1] &&
-      Math.abs(a[0] - b[0]) <= 0.05 * r &&
-      a[0] >= lo &&
-      a[0] <= hi &&
-      flush(mark, a, b, r) &&
-      flush(letter, b, a, r),
-  )
-  return link ? tie(link.a, link.b, r) : null
+  let best: { x: number; bottom: number; top: number } | null = null
+  for (let x = box.min[0]! + r; x <= box.max[0]! - r + 1e-9; x += SPRUE_STEP) {
+    let top = Number.NEGATIVE_INFINITY
+    let bottom = Number.POSITIVE_INFINITY
+    let ok = true
+    for (const xs of [x - r, x, x + r]) {
+      // The accent's lowest metal over this line, and the letter's first metal under that.
+      const above = column(mark, xs)[0]
+      const under = above && column(letter, xs).filter(([, t]) => t <= above[0])
+      const below = under?.at(-1)
+      if (!above || !below || above[1] - above[0] < SPRUE_GRIP) {
+        ok = false
+        break
+      }
+      top = Math.max(top, above[0])
+      bottom = Math.min(bottom, below[1])
+    }
+    if (ok && top - bottom <= reach && (!best || top - bottom < best.top - best.bottom))
+      best = { x, bottom, top }
+  }
+  if (!best) return null
+  const { manifold: mf } = runtime()
+  const height = best.top - best.bottom + 2 * SPRUE_GRIP
+  return mf.CrossSection.square([w, height]).translate([best.x - r, best.bottom - SPRUE_GRIP])
 }
+
 /**
  * The outline standing on a bar under its full width: `height` mm deep, overlapping the
  * bottom of the outline by half of that. The caller owns the result.

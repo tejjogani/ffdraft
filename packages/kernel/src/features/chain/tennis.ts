@@ -5,9 +5,14 @@
  * tube one wall thick whose top edge carries the pavilion (the stone's girdle overhangs it by
  * half a wall), closed below by a plate with a light hole of ≈ 0.66 × stone Ø
  * (docs/research/01-cad.md §2). Four prongs rise from the box corners and lean in over the
- * girdle. The hinge is a pair of interlocking rings under the plate — horizontal at the back on
- * two posts, vertical at the front — so links swing both ways like a cable chain without ever
- * touching. Every ring and post lands on plate metal, clear of the light hole.
+ * girdle. The hinge lies flat under the plates, as a tennis line is made: each link carries a
+ * flat tongue — a closed wire loop on two posts under its front edge — reaching under the next
+ * link, where it passes through two staples (wire arches under that link's back edge). The line
+ * bends down round a wrist and sideways as the tongue slides and turns in its staples, never
+ * touching, and stands only about two hinge wires below the boxes: a pair of rings hung their
+ * own diameter below and showed on the wrist. Links too narrow to carry staples beside their
+ * light hole keep the rings (ringHinge). Every post and staple leg lands on plate metal, clear
+ * of the light hole.
  */
 import { GEM_CUTS, type GemCutId, type GemDims, gemDims, snapToMelee } from '@pave/schema'
 import type { Manifold } from 'manifold-3d'
@@ -16,7 +21,8 @@ import { circleLoop } from '../../geometry/loop'
 import { frameFromZ, frameMatrix, type Vec3 } from '../../geometry/vec'
 import { weldWithin } from '../../mesh/weld'
 import { manifoldFromTriangles, trianglesFromManifold } from '../../solid/solid'
-import { sampleCurve, segmentsFor, sweepAlong } from './centreline'
+import { type Centreline, sampleCurve, segmentsFor, sweepAlong } from './centreline'
+import type { WireLoop } from './contact'
 import type { Template } from './instances'
 
 export interface TennisLink {
@@ -32,9 +38,15 @@ export interface TennisLink {
   middle: number
   /** Prong wire actually used (thinner than asked when the stone is too small to carry it). */
   prong: number
+  /**
+   * The hinge's wires as closed centrelines in link-local space, for checks that it stays
+   * threaded and clear: `ahead` (under the front edge) is threaded by the next link's `behind`.
+   * Flat: the tongue, and each staple closed through the plate it stands from.
+   */
+  hinge: { ahead: WireLoop[]; behind: WireLoop[]; flat: boolean }
 }
 
-/** The link is too narrow for its hinge: the rings and posts would land in the light hole. */
+/** The link is too narrow for any hinge: its posts would land in the light hole. */
 export class NoRoomForHinge extends Error {
   constructor(stoneWidth: number) {
     super(
@@ -73,6 +85,14 @@ const SLIVER = 1e-3
 const WELD = 1e-4
 /** A prong wire ends this share of its radius short of its tip ball's centre. */
 const TIP_INSET = 0.4
+/** Air round the tongue inside each staple, beyond the clearance, so the hinge moves freely, mm. */
+const HINGE_PLAY = 0.1
+/**
+ * The most a link turns against its neighbour on a wrist, radians (a 3.7 mm pitch round a
+ * 28 mm radius is 0.13): the tongue slides along its staples by this times its depth under the
+ * line's centre, and keeps that much wire either side of them.
+ */
+const LINK_TURN = 0.15
 
 /** Distance from the stone's centre to its girdle in the direction `angle` (from +x). */
 function girdleReach(cut: GemCutId, dims: GemDims, angle: number): number {
@@ -132,35 +152,16 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
   const pitch = lx + gap
   const halfY = Math.max(ly / 2, ...prongs.map((p) => Math.abs(p.tip[1]) + prong / 2))
 
-  // Hinge: a horizontal ring hangs on two posts under the back wall, and the next link's
-  // vertical front ring, on a post under its front edge, threads it. Two rings of radius R and
-  // wire `ring` stay threaded and clear while their centres are `ring` to `2R − ring` apart; the
-  // centres sit at the middle of that range where the box gap allows, so the hinge swings both
-  // ways, and R grows only as far as the gap between the boxes needs.
   const ring = Math.max(0.3, 0.35 * prong)
-  const back = lx / 2 - wall / 2 - ring / 2
-  const frontmost = lx / 2 - ring / 2
-  const span = pitch - back - frontmost
-  const R = Math.max(1.8 * ring, (span + ring + CLEARANCE) / 2 + CLEARANCE)
-  const centres = Math.max(span, R)
-  const front = -(pitch - centres - back)
   const lightHole = (LIGHT_HOLE * stoneWidth) / 2
-  // Inside the plate's rounded outline and outside its light hole, by half a ring wire.
-  const onPlate = (x: number, y: number) => {
-    const inset = ring / 2 - 1e-9
-    const qx = Math.abs(x) - (lx / 2 - corner)
-    const qy = Math.abs(y) - (ly / 2 - corner)
-    const inside =
-      qx > 0 && qy > 0
-        ? Math.hypot(qx, qy) <= corner - inset
-        : Math.abs(x) <= lx / 2 - inset && Math.abs(y) <= ly / 2 - inset
-    return inside && Math.hypot(x, y) - ring / 2 >= lightHole
-  }
-  if (!onPlate(front, 0) || !onPlate(back, R)) throw new NoRoomForHinge(stoneWidth)
-  // The rings hang one ring wire below the plate, so the front ring's arc passes under the
-  // previous link's plate without touching it.
-  const ringZ = bottom - R - ring - CLEARANCE
-  const lowest = ringZ - R - ring / 2
+  // Neighbouring boxes rotate about the hinge; their inner corners close by width·θ/2.
+  const minBend = (pitch * 2 * halfY) / (2 * (gap - CLEARANCE))
+  const box: Box = { lx, ly, corner, wall, bottom, crown, pitch, ring, lightHole, minBend }
+  // The flat hinge where the plate has room for its staples; on the narrowest links, whose
+  // light hole leaves only a rim of plate, the rings below.
+  const hinge = flatHinge(box) ?? ringHinge(box)
+  if (!hinge) throw new NoRoomForHinge(stoneWidth)
+  const lowest = hinge.lowest
 
   const mesh = (quality: Quality) => {
     const { manifold: mf } = runtime()
@@ -197,35 +198,7 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
         parts.push(own(cylinderBetween(mf, base, end, prong / 2, seg(prong / 2))))
         parts.push(own(own(mf.Manifold.sphere(prong * 0.5, seg(prong / 2))).translate(tip)))
       }
-      const loop = (normal: 'y' | 'z', x: number) => {
-        const line = sampleCurve(
-          (t) => {
-            const c = Math.cos(2 * Math.PI * t) * R
-            const s = Math.sin(2 * Math.PI * t) * R
-            return normal === 'z' ? [x + c, s, ringZ] : [x + c, 0, ringZ + s]
-          },
-          () => (normal === 'z' ? [0, 0, 1] : [0, 1, 0]),
-          16,
-          true,
-        )
-        const swept = sweepAlong(line, circleLoop(ring / 2))
-        try {
-          return own(manifoldFromTriangles(swept.triangles(quality)))
-        } finally {
-          swept.dispose()
-        }
-      }
-      parts.push(loop('y', front), loop('z', back))
-      const post = (x: number, y: number, from: number) =>
-        own(cylinderBetween(mf, [x, y, from], [x, y, bottom + wall / 2], ring / 2, seg(ring / 2)))
-      // Posts start a quarter wire inside their ring, not on its centre line, for the same
-      // reason: a post cap centred in the ring's tube touches its surface exactly.
-      const into = ring / 4
-      parts.push(
-        post(front, 0, ringZ + R - into),
-        post(back, R, ringZ - into),
-        post(back, -R, ringZ - into),
-      )
+      parts.push(...hinge.parts(own, quality))
       // Collapse the slivers where wires cross the box's faces at a glancing angle: below a
       // micron they round to zero-area facets once written as float32 (STL, 3MF). Simplifying
       // leaves a few edges a little longer than that, which still collapse once the link is
@@ -246,8 +219,6 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
 
   assertOneShell(mesh)
 
-  // Neighbouring boxes rotate about the hinge; their inner corners close by width·θ/2.
-  const minBend = (pitch * 2 * halfY) / (2 * (gap - CLEARANCE))
   return {
     template: { mesh },
     dims,
@@ -257,6 +228,239 @@ export function tennisLink(width: number, wire: number, cut: GemCutId): TennisLi
     half: { y: halfY, z: (crown - lowest) / 2 },
     middle: (crown + lowest) / 2,
     prong,
+    hinge: { ahead: hinge.ahead, behind: hinge.behind, flat: hinge.flat },
+  }
+}
+
+/** What a hinge needs to know of its link's box (link-local, mm). */
+interface Box {
+  lx: number
+  ly: number
+  corner: number
+  wall: number
+  /** Underside of the plate. */
+  bottom: number
+  /** Top of the stone. */
+  crown: number
+  pitch: number
+  /** Hinge wire. */
+  ring: number
+  lightHole: number
+  /** Tightest sideways bend of the line, mm. */
+  minBend: number
+}
+
+interface Hinge {
+  lowest: number
+  /** The hinge's metal; `own` takes each temporary for deletion when the link is built. */
+  parts(own: <T extends Deletable>(m: T) => T, quality: Quality): Manifold[]
+  ahead: WireLoop[]
+  behind: WireLoop[]
+  flat: boolean
+}
+
+/** Inside the plate's rounded outline and outside its light hole, by half a hinge wire. */
+function onPlate(b: Box, x: number, y: number): boolean {
+  const inset = b.ring / 2 - 1e-9
+  const qx = Math.abs(x) - (b.lx / 2 - b.corner)
+  const qy = Math.abs(y) - (b.ly / 2 - b.corner)
+  const inside =
+    qx > 0 && qy > 0
+      ? Math.hypot(qx, qy) <= b.corner - inset
+      : Math.abs(x) <= b.lx / 2 - inset && Math.abs(y) <= b.ly / 2 - inset
+  return inside && Math.hypot(x, y) - b.ring / 2 >= b.lightHole
+}
+
+/** The wire swept round a centreline, as a Manifold. */
+function sweptWire(line: Centreline, radius: number, quality: Quality): Manifold {
+  const solid = sweepAlong(line, circleLoop(radius))
+  try {
+    return manifoldFromTriangles(solid.triangles(quality))
+  } finally {
+    solid.dispose()
+  }
+}
+
+/** `count` points of a curve as a closed polyline (an open curve is closed by its chord). */
+function polyline(point: (t: number) => Vec3, count: number, open: boolean): Float64Array {
+  const out = new Float64Array(count * 3)
+  for (let i = 0; i < count; i++) out.set(point(open ? i / (count - 1) : i / count), i * 3)
+  return out
+}
+
+/**
+ * The flat hinge: a tongue on two posts under the front edge, through two staples under the next
+ * link's back edge, laid out at the widest stance the plate carries. The play is sized for the
+ * line's bends: on a wrist the next link's plate drops onto the tongue by LINK_TURN times the
+ * tongue's reach past the line's pivot, so the tongue hangs that much lower; sideways each staple
+ * shifts across the tongue's wire by the turn times its own reach, so its legs stand that much
+ * wider. Both depend on where the staples land, so the layout is settled in a few passes.
+ * Null when the plate has no room for it.
+ */
+function flatHinge(b: Box): Hinge | null {
+  const { ring, pitch } = b
+  const sideTurn = pitch / b.minBend
+  const plateMid = b.bottom + b.wall / 2
+  /** The x nearest the plate's edge on the side `sign` where every y in `ys` lands on plate. */
+  const edgeX = (sign: 1 | -1, ys: number[]): number | null => {
+    for (let x = b.lx / 2; x > 0; x -= 0.01)
+      if (ys.every((y) => onPlate(b, sign * x, y))) return sign * x
+    return null
+  }
+  let drop = CLEARANCE
+  let play = HINGE_PLAY
+  for (let pass = 0; pass < 6; pass++) {
+    const tongueZ = b.bottom - drop - ring / 2
+    // Staple legs stand this far either side of the tongue's side wire (centre to centre).
+    const straddle = ring + play
+    const lowest = tongueZ - straddle - ring / 2
+    const middle = (b.crown + lowest) / 2
+    let layout: { half: number; post: number; staple: number; slide: number } | null = null
+    for (let half = b.ly / 2; half >= straddle + ring && !layout; half -= 0.01) {
+      // The tongue slides in its staples on a wrist (turning about the line's middle) and
+      // sideways (turning about its centre): as far as the larger, plus its play.
+      const slide = HINGE_PLAY + Math.max(LINK_TURN * (middle - tongueZ), sideTurn * half)
+      const post = edgeX(1, [half, -half])
+      const staple = edgeX(-1, [
+        half - straddle,
+        half + straddle,
+        -half + straddle,
+        -half - straddle,
+      ])
+      if (post === null || staple === null) continue
+      // The staples' back legs stay inside the tongue's loop as it slides.
+      if (pitch + staple - post < ring + slide) continue
+      layout = { half, post, staple, slide }
+    }
+    if (!layout) return null
+    const { half, post, staple, slide } = layout
+    // The tongue reaches past the next link's staples by its slide.
+    const front = pitch + staple + ring + slide
+    const needDrop = CLEARANCE + LINK_TURN * (front - pitch / 2)
+    const needPlay = HINGE_PLAY + sideTurn * (pitch / 2 + staple)
+    if (needDrop > drop + 1e-6 || needPlay > play + 1e-6) {
+      drop = Math.max(drop, needDrop)
+      play = Math.max(play, needPlay)
+      continue
+    }
+    const corner = 0.4 * Math.min(half, (front - post) / 2)
+    const tongue = roundedRect(post, front, half, corner, tongueZ)
+    /** A staple round the tongue's side wire at y = side: legs up into the plate, a round foot. */
+    const staplePoint =
+      (side: number) =>
+      (t: number): Vec3 => {
+        // Down the first leg, round the foot (a half circle about the tongue's wire), up the other.
+        const leg = plateMid - tongueZ
+        const arc = Math.PI * straddle
+        const s = t * (2 * leg + arc)
+        if (s <= leg) return [staple, side - straddle, plateMid - s]
+        if (s >= leg + arc) return [staple, side + straddle, tongueZ + (s - leg - arc)]
+        const a = Math.PI + ((s - leg) / arc) * Math.PI
+        return [staple, side + straddle * Math.cos(a), tongueZ + straddle * Math.sin(a)]
+      }
+    const sides = [half, -half]
+    return {
+      lowest,
+      flat: true,
+      parts: (own, quality) => {
+        const { manifold: mf } = runtime()
+        return [
+          own(
+            sweptWire(
+              sampleCurve(tongue, () => [0, 0, 1], 48, true),
+              ring / 2,
+              quality,
+            ),
+          ),
+          ...sides.map((side) =>
+            own(
+              sweptWire(
+                sampleCurve(staplePoint(side), () => [1, 0, 0], 24, false),
+                ring / 2,
+                quality,
+              ),
+            ),
+          ),
+          // The posts start a quarter wire inside the tongue, not on its centre line: a post cap
+          // centred in the wire's tube touches its surface exactly and leaves zero-area facets.
+          ...sides.map((side) =>
+            own(
+              cylinderBetween(
+                mf,
+                [post, side, tongueZ - ring / 4],
+                [post, side, plateMid],
+                ring / 2,
+                segmentsFor(ring / 2, quality.chord, 10, 40),
+              ),
+            ),
+          ),
+        ]
+      },
+      ahead: [{ points: polyline(tongue, 64, false), radius: ring / 2 }],
+      behind: sides.map((side) => ({
+        points: polyline(staplePoint(side), 33, true),
+        radius: ring / 2,
+      })),
+    }
+  }
+  return null
+}
+
+/**
+ * The ring hinge, for links too narrow for staples: a horizontal ring hangs on two posts under
+ * the back wall, and the next link's vertical front ring, on a post under its front edge,
+ * threads it. Two rings of radius R and wire `ring` stay threaded and clear while their centres
+ * are `ring` to `2R − ring` apart; the centres sit at the middle of that range where the box gap
+ * allows, so the hinge swings both ways, and R grows only as far as the gap between the boxes
+ * needs. The rings hang one ring wire below the plate, so the front ring's arc passes under the
+ * previous link's plate without touching it. Null when its posts would land in the light hole.
+ */
+function ringHinge(b: Box): Hinge | null {
+  const { ring, pitch } = b
+  const back = b.lx / 2 - b.wall / 2 - ring / 2
+  const frontmost = b.lx / 2 - ring / 2
+  const span = pitch - back - frontmost
+  const R = Math.max(1.8 * ring, (span + ring + CLEARANCE) / 2 + CLEARANCE)
+  const centres = Math.max(span, R)
+  const front = -(pitch - centres - back)
+  if (!onPlate(b, front, 0) || !onPlate(b, back, R)) return null
+  const ringZ = b.bottom - R - ring - CLEARANCE
+  const point =
+    (normal: 'y' | 'z', x: number) =>
+    (t: number): Vec3 => {
+      const c = Math.cos(2 * Math.PI * t) * R
+      const s = Math.sin(2 * Math.PI * t) * R
+      return normal === 'z' ? [x + c, s, ringZ] : [x + c, 0, ringZ + s]
+    }
+  return {
+    lowest: ringZ - R - ring / 2,
+    flat: false,
+    parts: (own, quality) => {
+      const { manifold: mf } = runtime()
+      const seg = segmentsFor(ring / 2, quality.chord, 10, 40)
+      const loop = (normal: 'y' | 'z', x: number) =>
+        own(
+          sweptWire(
+            sampleCurve(point(normal, x), () => (normal === 'z' ? [0, 0, 1] : [0, 1, 0]), 16, true),
+            ring / 2,
+            quality,
+          ),
+        )
+      const post = (x: number, y: number, from: number) =>
+        own(cylinderBetween(mf, [x, y, from], [x, y, b.bottom + b.wall / 2], ring / 2, seg))
+      // Posts start a quarter wire inside their ring, not on its centre line, for the same
+      // reason as the tongue's.
+      const into = ring / 4
+      return [
+        loop('y', front),
+        loop('z', back),
+        post(front, 0, ringZ + R - into),
+        post(back, R, ringZ - into),
+        post(back, -R, ringZ - into),
+      ]
+    },
+    ahead: [{ points: polyline(point('z', back), 48, false), radius: ring / 2 }],
+    behind: [{ points: polyline(point('y', front), 48, false), radius: ring / 2 }],
   }
 }
 
@@ -290,5 +494,51 @@ function cylinderBetween(
     return unit.transform(frameMatrix(frame) as never)
   } finally {
     unit.delete()
+  }
+}
+
+/**
+ * A point round a rounded rectangle in the plane z = `z`, from x0 to x1 and ±half in y, with
+ * corners of radius r, for t in [0, 1) evenly by length.
+ */
+function roundedRect(x0: number, x1: number, half: number, r: number, z: number) {
+  const sx = x1 - x0 - 2 * r
+  const sy = 2 * half - 2 * r
+  const quarter = (Math.PI / 2) * r
+  // Straight runs and quarter arcs, anticlockwise from the middle of the back (x0) side.
+  const runs: { length: number; at: (u: number) => [number, number] }[] = []
+  const arc = (cx: number, cy: number, from: number) => ({
+    length: quarter,
+    at: (u: number): [number, number] => [
+      cx + r * Math.cos(from + (u * Math.PI) / 2),
+      cy + r * Math.sin(from + (u * Math.PI) / 2),
+    ],
+  })
+  const line = (ax: number, ay: number, bx: number, by: number) => ({
+    length: Math.hypot(bx - ax, by - ay),
+    at: (u: number): [number, number] => [ax + (bx - ax) * u, ay + (by - ay) * u],
+  })
+  runs.push(
+    line(x0, 0, x0, -half + r),
+    arc(x0 + r, -half + r, Math.PI),
+    line(x0 + r, -half, x1 - r, -half),
+    arc(x1 - r, -half + r, 1.5 * Math.PI),
+    line(x1, -half + r, x1, half - r),
+    arc(x1 - r, half - r, 0),
+    line(x1 - r, half, x0 + r, half),
+    arc(x0 + r, half - r, 0.5 * Math.PI),
+    line(x0, half - r, x0, 0),
+  )
+  const total = 2 * sx + 2 * sy + 4 * quarter
+  return (t: number): Vec3 => {
+    let s = (((t % 1) + 1) % 1) * total
+    for (const run of runs) {
+      if (s <= run.length || run === runs[runs.length - 1]) {
+        const [x, y] = run.at(run.length > 0 ? Math.min(1, s / run.length) : 0)
+        return [x, y, z]
+      }
+      s -= run.length
+    }
+    return [x0, 0, z]
   }
 }
