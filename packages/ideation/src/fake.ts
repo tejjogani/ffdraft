@@ -84,7 +84,7 @@ function hash(s: string): number {
 }
 
 /** A ring seen from the front: a gold band, a coloured stone on top, a pale ground. */
-export function ringPng(size: number, hue: number): Uint8Array {
+export function ringPng(size: number, hue: number): Uint8Array<ArrayBuffer> {
   const rgba = new Uint8Array(size * size * 4)
   const c = size / 2
   const outer = size * 0.32
@@ -140,8 +140,15 @@ function chunk(type: string, data: Uint8Array): Uint8Array {
   return out
 }
 
-/** A minimal RGBA PNG (8-bit, no filtering), enough for tests and for sharp to read. */
-export function encodePng(rgba: Uint8Array, width: number, height: number): Uint8Array {
+/**
+ * A minimal RGBA PNG (8-bit, no filtering), enough for tests and for sharp to read. Backed by a
+ * plain ArrayBuffer, so it can be a fetch Response body as it is.
+ */
+export function encodePng(
+  rgba: Uint8Array,
+  width: number,
+  height: number,
+): Uint8Array<ArrayBuffer> {
   const raw = new Uint8Array((width * 4 + 1) * height)
   for (let y = 0; y < height; y++) {
     raw[y * (width * 4 + 1)] = 0
