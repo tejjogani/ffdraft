@@ -94,7 +94,10 @@ describe('runExport', () => {
 
   it('falls back to the server’s export when the browser’s fails', async () => {
     vi.mocked(exportDesign).mockRejectedValue(new Error('The geometry engine stopped'))
-    vi.mocked(rpc.call).mockResolvedValue({ asset: { id: 'as_9' }, notes: ['From the server'] })
+    vi.mocked(rpc.call).mockResolvedValue({
+      asset: { id: 'as_9' },
+      notes: ['From the server'],
+    } as never)
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => new Response(new Uint8Array(5))),
@@ -108,7 +111,7 @@ describe('runExport', () => {
 
   it('never saves the server’s error page as the exported file', async () => {
     vi.mocked(exportDesign).mockRejectedValue(new Error('The geometry engine stopped'))
-    vi.mocked(rpc.call).mockResolvedValue({ asset: { id: 'as_9' }, notes: [] })
+    vi.mocked(rpc.call).mockResolvedValue({ asset: { id: 'as_9' }, notes: [] } as never)
     vi.stubGlobal(
       'fetch',
       vi.fn(
