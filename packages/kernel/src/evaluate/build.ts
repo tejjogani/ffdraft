@@ -101,6 +101,14 @@ function checkGeometry(placed: Placed, env: BuildEnvironment): void {
     throw new Error(
       `it places ${count(placed.stones.length)} stones; the limit is ${count(NODE_LIMITS.stones)}. Use fewer copies or larger stones`,
     )
+  // The schema keeps stone sizes positive, but a document from storage or an import is only
+  // checked for shape at the boundary: a stone of zero or negative size would be counted,
+  // weighed as zero or negative carats and handed to the viewer with a matrix of NaN.
+  for (const { dims } of placed.stones)
+    if (![dims.width, dims.length, dims.depth].every((v) => v > 0 && Number.isFinite(v)))
+      throw new Error(
+        `it places a stone with no usable size (${dims.width} × ${dims.length} mm); give the stone a size above zero`,
+      )
   const budget = NODE_LIMITS.triangles[env.detail]
   let triangles = 0
   for (const solid of solids) {

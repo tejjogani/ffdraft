@@ -602,6 +602,44 @@ describe('documents that are not valid designs', () => {
   })
 })
 
+describe('stones with no size', () => {
+  // A size below the schema's range reaches the kernel from storage or an import (the boundary
+  // leaves ranges to the features). A stone of zero or negative size must not be placed: it
+  // was counted, weighed as negative carats, and given a matrix of NaN for the viewer.
+  const ring = (): Design =>
+    designFrom('ring', [
+      { id: 'band', kind: 'ringShank' },
+      { id: 'g', kind: 'gem', placement: { type: 'ringTop', shank: 'band' } },
+      { id: 'row', kind: 'gemRow', host: 'band', center: 180, coverage: 60 },
+    ])
+  const withNode = (design: Design, id: string, patch: object): Design =>
+    ({
+      ...design,
+      nodes: { ...design.nodes, [id]: { ...design.nodes[id]!, ...patch } },
+    }) as Design
+
+  it.each([
+    ['g', { width: 0 }],
+    ['g', { width: -3 }],
+    ['row', { stoneWidth: 0 }],
+    ['row', { stoneWidth: -1.5 }],
+  ])('%s with %j fails that node and leaves the stone report sane', async (id, patch) => {
+    for (const detail of ['draft', 'production'] as const) {
+      const e = await kernel.evaluate(withNode(ring(), id, patch), { detail })
+      expect(failedMessage(e, id), detail).toMatch(/stone .* size/)
+      expect(e.stones.filter((s) => s.nodeId === id)).toEqual([])
+      for (const s of e.stones) {
+        expect(s.carat).toBeGreaterThan(0)
+        expect(s.matrix.every(Number.isFinite)).toBe(true)
+      }
+      expect(e.report.caratTotal).toBeGreaterThanOrEqual(0)
+      expect(e.report.stoneCount).toBe(e.stones.length)
+      // The band is untouched by the bad stone.
+      expect(e.parts.length).toBeGreaterThan(0)
+    }
+  })
+})
+
 describe('selective finishing', () => {
   it('a mirrored copy is finished like its source, and its regions name the source', async () => {
     // A plated stud with a bare post, mirrored: each casting is "plated except Post".
