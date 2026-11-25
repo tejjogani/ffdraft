@@ -17,6 +17,7 @@ Not written yet. It lands here when the plans have been reviewed.
 - Research 18, low-end machines: `docs/research/18-low-end-machines.md`. The Air is a fine CAD machine and a poor render machine: its GPU scores about 302 to 354 on Blender Open Data against 2,285 for an RTX 3060. A one-minute still is fine; a 5-second turntable is an estimated 1 to 7 hours locally, or roughly 15 to 55 cents on a rented GPU. 8 GB of memory is the real limit. Render.com has no GPU.
 - Research 20, accounts and identity: `docs/research/20-accounts-and-identity.md`. Keep Better Auth (the only option that runs in-process, so the same code serves an offline laptop and hosted; no licence cost). Local installs get a profile, not a login. Connecting to hosted is a device link plus a one-time claim, with a signed entitlement lease of about two weeks.
 - Research 19, ERP, POS and accounting APIs: `docs/research/19-erp-and-pos-apis.md`. Tally is the better first live target (XML on port 9000, JSON from release 7.0, and a local install can post to it directly; the port has no authentication). The Edge has no API. Shopify does not feed The Edge or Jewel360: both push to Shopify and take no new stock from it. Shopify's and Xero's terms forbid using API data to train or improve AI.
+- Research 16, AI human models and on-model imagery: `docs/research/16-ai-models-on-model.md`. No image or video model keeps a jewelry design true, so the pipeline is render-first: render the CAD on a simple proxy, let the model paint the brand model around it, paste the true render back, then gate with checks. Default provider Gemini, fallback OpenAI. Higgsfield's help centre says it may train on user content unless enterprise, so unreleased designs should not go there by default. Video by API has shrunk: Veo 3.1 left the Gemini API on 22 Oct 2026 and OpenAI's video API closed on 24 Sep 2026. Estimated cost: $0.30 to $0.70 per accepted still, $1.50 to $4 per accepted 5-second clip.
 
 ## Requests and findings for lane A (from the research so far)
 
@@ -36,6 +37,7 @@ Also: `docs/pave-file.md` says adding an entry or a field is not a breaking chan
 Corrections to earlier research:
 
 - The Edge's "Item Data Import" only updates existing items. New items come in through "Receive Invoice, Import Invoice", whose blank template is downloadable only inside the program. The Edge connector is therefore two files; the create file needs one customer's template.
+- `04-ideation-models.md` part B is stale on video models and on FLUX (now FLUX 3). The image-provider code's location is stated two ways (`apps/server/src/providers/image` and `packages/ideation`); neither exists. The assistant branch's schema already has `fidelity: 'concept' | 'composite'` while `render-and-models.md` cuts composite.
 - `10-market.md` line 90 and `08-channels.md` line 95 treat Shopify as a route into The Edge and Jewel360. It is not: both systems only push to Shopify.
 - The server uses PGlite (embedded Postgres), not SQLite. Queues are ordinary tables in both local and hosted modes.
 - Etsy now lists webhook events for commercial and personal apps (`08-channels.md` flagged this as a contradiction).
@@ -55,7 +57,7 @@ Ten research subagents, one per topic, one file each (topic 22 was added on the 
 | `docs/research/13-jewelry-cad-features.md` | Full jewelry CAD feature set | Done |
 | `docs/research/14-jewelry-rendering.md` | Rendering state of the art for jewelry | Running |
 | `docs/research/15-own-renderer.md` | Our own renderer (priority) | Running |
-| `docs/research/16-ai-models-on-model.md` | AI human models, on-model imagery | Running |
+| `docs/research/16-ai-models-on-model.md` | AI human models, on-model imagery | Done; plan being written |
 | `docs/research/17-pave-file-format.md` | The native file format | Done; plan being written |
 | `docs/research/18-low-end-machines.md` | Low-end machines | Done |
 | `docs/research/19-erp-and-pos-apis.md` | ERP, POS and accounting APIs | Done; plan being written |
@@ -108,6 +110,12 @@ From research 21 (connectors):
 8. Add a stock-unit record for tagged one-of-a-kind pieces? It changes the publishing plan's "variants are never stored" rule.
 9. Is a small hosted webhook relay acceptable before full hosting, and who runs it?
 10. Fold `channels` and `sourcing` into one connector package now, or keep them apart?
+
+From research 16 (on-model imagery):
+30. Approve a $20 to $30 measurement spike on your keys before the fidelity thresholds are fixed?
+31. May unreleased designs be sent to Higgsfield, given its training clause?
+32. Add a Black Forest Labs key for true mask inpainting? Open a Google Cloud project for Veo and Google's output indemnity, or stay on the Gemini key?
+33. Ship "composite" (true render pasted back) in the first release, or concept images with a fidelity gate first?
 
 From research 19 (ERP and POS):
 26. Which Tally release and jewellery package does the pilot workshop run?
