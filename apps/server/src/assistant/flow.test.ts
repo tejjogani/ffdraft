@@ -11,7 +11,7 @@
  *   compare); a view-only reference never leaves.
  */
 import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/messages/messages'
-import type { PhotoRead, Run, RunEvent } from '@pave/schema'
+import { type PhotoRead, type Run, type RunEvent, resolveDesign } from '@pave/schema'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { BOOT_TIMEOUT, type Client, client } from '../test/harness'
@@ -214,7 +214,8 @@ describe('update the design to a new reference', () => {
     async () => {
       const pieceId = (await api.call('pieces.create', { templateId: 'solitaire' })).id
       const before = await api.call('pieces.get', { id: pieceId })
-      const claws = (before.design.nodes.head as { prongCount: number }).prongCount
+      // Four claws as built: the count follows the stone's rule, so it is not stored.
+      const claws = (resolveDesign(before.design).nodes.head as { prongCount: number }).prongCount
       expect(claws).toBe(4)
       const ref = await upload('new-reference.png', { r: 236, g: 234, b: 228 })
       const [pin] = await api.call('references.pin', {
@@ -280,7 +281,11 @@ describe('update the design to a new reference', () => {
       // And undo the whole job in one step.
       await api.call('design.revert', { pieceId, runId: run.id })
       const undone = await api.call('pieces.get', { id: pieceId })
-      expect((undone.design.nodes.head as { prongCount: number }).prongCount).toBe(claws)
+      // Back to the head as it was: the claw count follows the stone again.
+      expect(undone.design.nodes.head).toEqual(before.design.nodes.head)
+      expect((resolveDesign(undone.design).nodes.head as { prongCount: number }).prongCount).toBe(
+        claws,
+      )
     },
     SLOW,
   )

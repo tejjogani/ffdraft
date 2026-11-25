@@ -6,7 +6,7 @@
  * observability check. Scale stays where the design put it: the ring size or the body height
  * holds it, and the camera's span absorbs the rest.
  */
-import type { Design } from '@pave/schema'
+import { type Design, resolveDesign } from '@pave/schema'
 import { VIEW_SEEDS, type ViewSeed } from './camera'
 import { fitDesign } from './fit'
 import { Stop } from './guard'
@@ -43,10 +43,13 @@ export interface PhotoFitPlan {
 
 /** The numbers to fit on this design, with ties (both sides of a band move together). */
 export function photoFitPlan(design: Design): PhotoFitPlan {
+  // The numbers as built: a follow field left to the stone (the claw wire) has no stored value,
+  // but it is in the outline all the same (paramsFor starts from the same resolved design).
+  const built = resolveDesign(design)
   const ties: Record<string, string[]> = {}
   const has = (key: string) => {
     const [id, field] = key.split('.') as [string, string]
-    const node = design.nodes[id] as Record<string, unknown> | undefined
+    const node = built.nodes[id] as Record<string, unknown> | undefined
     return typeof node?.[field] === 'number'
   }
   if (has('band.widthBottom')) ties['band.widthTop'] = ['band.widthBottom']
@@ -59,7 +62,7 @@ export function photoFitPlan(design: Design): PhotoFitPlan {
     if (params.length >= MAX_FIT_KEYS) break
     if (!has(key)) continue
     const [id, field] = key.split('.') as [string, string]
-    const start = (design.nodes[id] as unknown as Record<string, number>)[field]!
+    const start = (built.nodes[id] as unknown as Record<string, number>)[field]!
     try {
       const [p] = paramsFor(design, [key], {
         bands: { [key]: [start * 0.6, start * 1.4] },

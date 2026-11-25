@@ -32,6 +32,7 @@ import {
   buildDesign,
   type CommandOutput,
   type Run,
+  resolveDesign,
   type Step,
   TEMPLATES,
 } from '@pave/schema'
@@ -532,7 +533,8 @@ export async function runSmoke(opts: SmokeOptions): Promise<SmokeReport> {
         if (made) {
           const piece = await s.api.call('pieces.get', { id: made })
           // The centre stone's setting: the claw count is one thing a photo read must get right.
-          const setting = Object.values(piece.design.nodes).find(
+          // As built: a claw count left to the stone's rule is not stored, but it is the count.
+          const setting = Object.values(resolveDesign(piece.design).nodes).find(
             (x) => x.kind === 'setting' && 'prongCount' in x,
           ) as { style: string; prongCount: number } | undefined
           if (setting)

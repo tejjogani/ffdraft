@@ -9,6 +9,7 @@
  */
 import { createHash } from 'node:crypto'
 import {
+  DESIGN_VERSION,
   type Design,
   originNeedsAttestation,
   PAVE_ENTRIES,
@@ -373,7 +374,8 @@ describe('versions', () => {
       entries['piece.json'] = strToU8(JSON.stringify(record))
     })
     const opened = await open(api, old)
-    expect(opened.piece.design.schemaVersion).toBe(1)
+    // Brought up to today's version (through version 1, read with the meaning it had then).
+    expect(opened.piece.design.schemaVersion).toBe(DESIGN_VERSION)
     // The missing field comes back as its default; everything else is as it was.
     const expected = structuredClone(piece.design)
     ;(expected.nodes[shankId] as { splitGap: number }).splitGap = 2
