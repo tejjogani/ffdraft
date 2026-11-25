@@ -21,16 +21,13 @@ export const CLAWS_BY_CUT: Record<GemCutId, number> = {
 const claws = GEM_CUT_IDS.map((c) => `${c} ${CLAWS_BY_CUT[c]}`).join(', ')
 
 export const STONE_SKILL = `## Skill: replacing or resizing a stone
-Use for any change of a stone's cut, size, carat, colour (its material) or quality: "make the centre a 2 ct oval", "all the melee in sapphire", "a lab diamond instead".
+Use for any change of a stone's cut, size, carat, colour (its material) or quality: "make the centre a 2 ct oval", "all the melee in sapphire", "a lab diamond instead". A message sent from a stone's "Ask AI" menu arrives with that stone as the selection.
 
-If your tools include design_replaceStone, use it for these changes instead of writing ops: it moves the mount with the stone and reports what changed. Otherwise make the change with design.apply on the stone's node and, in the same call, its mount, so the setting still fits:
-- the setting's prongCount for the new cut (typical claws: ${claws}; a round or oval of 7.4 mm or more takes 6), unless the designer chose a count;
-- the setting's prongDiameter: 0.15 × the stone's width, kept between 0.8 and 1.4 mm;
-- a cathedral band's shoulderHeight: just under the new girdle height above the band;
-- side stones (three-stone): they keep their size and move so each girdle sits 0.5 mm from the new centre; change their size only when asked, or say when they fall outside 0.45 to 0.75 of the centre's width;
-- a shoulder row's skipCenter: wide enough to clear the new head and halo.
-
-What to keep when nothing is said: a single stone keeps its carat when the cut changes (that is how it is bought), and the new width follows from the carat; melee in a row, halo or pavé keeps its millimetres, snapped to a stock size. A colour change keeps the size, so the mount does not move. Say what you kept: "Kept 1.50 ct: the 7.4 mm round is now a 9.2 × 6.6 mm oval".
+Make these changes with design_replaceStone, never with hand-written ops: it changes the stone and the mount follows (claws, wire, side stones, shoulders and the shoulder row), while the ring size, metal, setting style and anything the designer set by hand stay. Target the stone by its node id; for one stone of a row, halo or pavé give its \`instance\` too; scope \`all\` changes every stone of the field, \`alike\` both side stones or both studs. Give the size as widthMm or carat, not both.
+When the designer asks what a change would cost or weigh, or the change is large (another cut, more than half a carat), call it with dryRun first and report its delta (metal weight, carats, stone count) and warnings; apply once they agree, or at once when they asked plainly for the change.
+After it applies, say in one line what changed and what was kept, from the reply's notes: "Kept 1.50 ct: the 7.4 mm round is now a 9.2 × 6.6 mm oval". Pass on every warning: a stone linked to a real stone (sourcing) loses the link when its cut, size or colour changes, and the reply names it.
+What is kept when nothing is said: a single stone keeps its carat when the cut changes (that is how it is bought), so the width follows from the carat; melee in a row, halo or pavé keeps its millimetres, snapped to a stock size; a colour change keeps the size, so the mount does not move.
+One stone inside a row, halo or pavé cannot change size or cut on its own (they share seats and spacing): design_replaceStone refuses it. Offer to change the whole field (scope \`all\`), or to add a separate stone there.
 Never change the band, the metal, the setting style or the other stones as part of a stone change.
-A stone linked to a real stone (it has sourcing) loses the link when its cut, size or colour changes: set sourcing to null in the same change and tell the designer which stone was unlinked.
-One stone inside a row, halo or pavé field cannot change size or cut on its own (they share seats and spacing). Offer to change the whole field, or to add a separate stone there.`
+
+Adding a new stone (not changing one) is a design_apply edit; give it a setting that fits: prongCount for the cut (typical claws: ${claws}; a round or oval of 7.4 mm or more takes 6) and prongDiameter 0.15 × the stone's width, kept between 0.8 and 1.4 mm.`

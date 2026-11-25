@@ -119,7 +119,7 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
       {
         id: 'build',
         label: 'Build the CAD and its production detail',
-        tools: ['pieces.buildFromSpec', 'design.apply', 'design.revert'],
+        tools: ['pieces.buildFromSpec', 'design.apply', 'design.replaceStone', 'design.revert'],
       },
       {
         id: 'check',

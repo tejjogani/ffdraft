@@ -305,29 +305,19 @@ export const metalOps = (design: Design, ids: readonly string[], metal: MetalId)
 
 // ── Ask AI ───────────────────────────────────────────────────────────────────────────────────
 
-/**
- * Whether the assistant can take a question yet. The conversation panel does not send threads
- * so far (features/assistant/index.tsx); flip this when it does, and the row enables itself
- * wherever the deployment has an AI key.
- */
-export const ASSISTANT_READY = false
-
 export interface AskAi {
   label: string
-  /** Why the row is disabled; absent when it can be used. */
-  disabled?: string
+  /** The row's second line: without a Claude key, the assistant opens on its key form first. */
+  hint?: string
 }
 
 /**
- * Why the assistant cannot take a question here, or nothing when it can: the one reason every
- * entry point shows (the menus' Ask AI row, the palette's "Ask the assistant").
+ * What an entry point to the assistant says before it opens (the menus' Ask AI row): without a
+ * key it still opens, on the form that connects Claude, so the row says so rather than going
+ * dead.
  */
-export function assistantUnavailable(
-  capabilities: Pick<Capabilities, 'assistant'>,
-): string | undefined {
-  if (!ASSISTANT_READY) return 'The assistant is coming soon'
-  if (!capabilities.assistant) return 'Add an AI key in Settings to ask'
-  return undefined
+export function assistantHint(capabilities: Pick<Capabilities, 'assistant'>): string | undefined {
+  return capabilities.assistant ? undefined : 'Connect Claude first, in the assistant'
 }
 
 export function askAi(subject: Subject, capabilities: Pick<Capabilities, 'assistant'>): AskAi {
@@ -337,8 +327,31 @@ export function askAi(subject: Subject, capabilities: Pick<Capabilities, 'assist
       : subject.type === 'part'
         ? 'Ask AI about this part…'
         : 'Ask AI about this piece…'
-  const disabled = assistantUnavailable(capabilities)
-  return disabled ? { label, disabled } : { label }
+  const hint = assistantHint(capabilities)
+  return hint ? { label, hint } : { label }
+}
+
+/**
+ * What "Ask AI" hands the assistant (`openAssistant`): the piece, what was right-clicked as the
+ * selection (one stone of a field as `nodeId:index`, as the CAD workspace selects it), and a
+ * draft to finish. A stone's draft starts the replacement the assistant makes with
+ * design.replaceStone; a part or the piece gets no draft, so one already typed is kept.
+ */
+export function askAiRequest(subject: Subject): {
+  pieceId: string
+  selection: string[]
+  draft?: string
+} {
+  if (subject.type === 'piece') return { pieceId: subject.pieceId, selection: [] }
+  if (subject.type === 'part') return { pieceId: subject.pieceId, selection: [subject.nodeId] }
+  const one = subject.instance !== undefined
+  return {
+    pieceId: subject.pieceId,
+    selection: [one ? `${subject.nodeId}:${subject.instance}` : subject.nodeId],
+    // A whole row, halo or pavé (clicked off any one stone) is about all its stones.
+    draft:
+      !one && (subject.count ?? 1) > 1 ? 'Replace these stones with ' : 'Replace this stone with ',
+  }
 }
 
 /** Whether a cut is cut to more than one length : width (an oval, a pear; not a round). */

@@ -86,6 +86,28 @@ describe('the assistant window', () => {
     expect(assistant.useAssistant.getState()).toMatchObject({ isOpen: true, collapsed: false })
   })
 
+  it('Ask AI on a stone opens it on that stone, with the replacement started', async () => {
+    stubStorage()
+    const { assistant } = await load()
+    const { askAiRequest } = await import('../features/assistant/quick-intents')
+    assistant.useAssistant.getState().setDraft('something typed before')
+    assistant.openAssistant(
+      askAiRequest({ type: 'stone', pieceId: 'pc_1', nodeId: 'halo', instance: 2, count: 16 }),
+    )
+    expect(assistant.useAssistant.getState()).toMatchObject({
+      isOpen: true,
+      selection: { pieceId: 'pc_1', nodeIds: ['halo:2'] },
+      draft: 'Replace this stone with ',
+    })
+    // Asking about a part keeps the draft and points at the part.
+    assistant.useAssistant.getState().setDraft('make it')
+    assistant.openAssistant(askAiRequest({ type: 'part', pieceId: 'pc_1', nodeId: 'band' }))
+    expect(assistant.useAssistant.getState()).toMatchObject({
+      selection: { pieceId: 'pc_1', nodeIds: ['band'] },
+      draft: 'make it',
+    })
+  })
+
   it('keeps no draft or selection across a reload', async () => {
     stubStorage()
     const { assistant } = await load()

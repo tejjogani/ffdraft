@@ -4,11 +4,11 @@ exports[`the frozen system prompt > has a stable hash (snapshot) that covers the
 {
   "chars": [
     7082,
-    37671,
+    38114,
     10638,
-    12458,
+    14049,
   ],
-  "hash": "prompt-1a7ea15ae5d5db",
+  "hash": "prompt-0a6c29332629fd",
 }
 `;
 
@@ -35,9 +35,9 @@ Shared value lists:
   - url: string
   - priceUsd: number
   - measured: object
-    - length (required): number
-    - width (required): number
-    - depth (required): number
+    - length (required): number 0.3–40
+    - width (required): number 0.3–40
+    - depth (required): number 0.1–40
   - certificate: string
 ## ringShank: Ring band. A ring shank / band sized to a finger.
 - material: <metal> = "au18k-yellow"
@@ -52,7 +52,7 @@ Shared value lists:
 - thicknessTop: number 0.9–5 mm = 1.8
 - thicknessBottom: number 0.9–5 mm = 1.6
 - shoulder: plain | cathedral | split = "plain". cathedral = arches rising to the head; split = band divides in two near the head.
-- shoulderHeight: number 0.5–8 mm = 3. only when shoulder is cathedral
+- shoulderHeight: number 0.5–8 mm. only when shoulder is cathedral. Auto: the arches rise to just under the girdle of the stone on the band.
 - splitGap: number 0.5–6 mm = 2. only when shoulder is split
 - baseShape: round | euro = "round". euro = squared-off base that resists spinning.
 ## gem: Stone. A single gemstone.
@@ -61,11 +61,12 @@ Shared value lists:
 - quality: <quality>, optional
 - sourcing: <sourcing>, optional
 - width: number 0.6–40 mm = 6.5. Girdle width (diameter for rounds). 6.5 mm round ≈ 1 ct diamond.
-- lw: number 0.8–5 = 1. Ignored for round; clamped to what the cut allows.
+- lw: number 0.8–5. Ignored for round; clamped to what the cut allows. Auto: the cut’s own ratio.
 - placement: one of = {"type":"free"}
   - type "ringTop":
     - shank (required): id of a ringShank node
-    - angle: number -180–180° = 0. 0 = top of the ring; positive toward +X.
+    - angle: number -180–180°. 0 = top of the ring; positive toward +X. Auto: 0, or packed beside the stones at the top for a side stone.
+    - side: left | right. A side stone sits 0.5 mm from the girdle of the stone beside it, and moves when that stone changes size.
     - elevation: number 0–8 mm = 1.2. Gap between the finger and the lowest point of the stone.
     - spin: number -180–180° = 0. Turn about the stone’s own axis.
   - type "surface":
@@ -81,12 +82,13 @@ Shared value lists:
 - plating: <plating> = "none"
 - gem (required): id of a gem node
 - style: prong | basket | bezel | halfBezel | flush = "prong". prong = claws only; basket = claws joined by gallery rails; bezel = full metal rim; halfBezel = two arcs; flush = stone sunk into the host.
-- prongCount: integer 3–8 = 4. only when style is prong or basket
-- prongDiameter: number 0.5–2.5 mm = 1. only when style is prong or basket
+- prongCount: integer 3–8. only when style is prong or basket. Auto: the usual count for the stone’s shape and size.
+- prongDiameter: number 0.5–2.5 mm. only when style is prong or basket. Auto: sized to the stone.
 - prongTip: round | claw | tab | double = "round". only when style is prong or basket
-- prongSpin: number -90–90° = 45. only when style is prong or basket. 45 puts four prongs on the corners; 0 on the compass points.
+- prongSpin: number -90–90°. only when style is prong or basket. 0 = a claw along the band. Auto: symmetric about the band for the claw count (four at 45, six at 0, three at 30). Shapes with points or corners put claws on them instead.
 - taper: number 0–0.8 = 0.35. only when style is prong or basket. How strongly the head narrows toward its base.
 - rails: integer 0–2 = 1. only when style is basket
+- arcs: auto | ends | sides = "auto". only when style is halfBezel. Which part of the stone the two arcs hold. ends = the two ends of its length; sides = across it. Auto: on the points of a pointed stone, on the ends of a long one, across a round or square one.
 - wall: number 0.3–2 mm = 0.55. only when style is bezel or halfBezel
 ## halo: Halo. A ring of small stones following the outline of a centre stone.
 - material: <metal> = "au18k-yellow"
@@ -97,11 +99,13 @@ Shared value lists:
 - quality: <quality>, optional
 - sourcing: <sourcing>, optional
 - around (required): id of a gem node
+- head: id of a setting node. The head holding the centre stone: the halo leaves room for its claws or bezel. Auto: the head on the same stone.
 - stoneWidth: number 0.8–3.5 mm = 1.3
 - rows: integer 1–3 = 1
 - offset: number 0.05–1.5 mm = 0.25
 - gap: number 0.05–0.6 mm = 0.15
 - drop: number -1–3 mm = 0.4. How far the halo sits below the centre stone’s girdle.
+- clearClaws: boolean = true. Keep the centre stone’s claws clear of the halo stones: each claw stands in a notch between two stones, and round a claw on a sharp point (a pear’s, a marquise’s) the row steps out. Off: the layout of halos made before this option, stones evenly round at the gap to the centre stone with the claws crossing them.
 ## gemRow: Stone row. Stones set along a ring band: pavé shoulders, channel, eternity.
 - cut: <cut> = "round"
 - stone: <stone> = "diamond"
@@ -110,10 +114,10 @@ Shared value lists:
 - host (required): id of a ringShank node
 - setting: pave | channel | sharedProng | bar | flush = "pave"
 - stoneWidth: number 0.8–6 mm = 1.5
-- graduateTo: number 0.8–6 mm = 1.5. Stone size at the ends of the row; equal to Stone size for no graduation.
+- graduateTo: number 0.8–6 mm. Stone size at the ends of the row. Auto: equal to Stone size (no graduation).
 - coverage: number 10–360° = 150. Arc of the band that carries stones. 180 = half eternity, 360 = full eternity.
 - center: number -180–180° = 0
-- skipCenter: number 0–180° = 0. Arc left clear around the centre (for a head).
+- skipCenter: number 0–180°. Arc left clear around the centre (for a head). Auto: clears the heads, claws and halo on the band by 0.4 mm.
 - rows: integer 1–5 = 1
 - gap: number 0.05–1 mm = 0.15
 ## pave: Pavé. Automatically packs graded stones over a surface.
@@ -151,6 +155,7 @@ Shared value lists:
 - bevel: flat | chamfer | round | pillow = "round". pillow inflates the whole face into a soft dome.
 - bevelSize: number 0–5 mm = 0.4
 - border: number 0–3 mm = 0. Adds a polished rim around the edge — the frame for a pavé field.
+- join: auto | off | underline = "auto". Text: tie loose letters and dots on so it casts as one piece, leave them loose, or stand the letters on a bar.
 ## meshBody: Sculpted body. An imported, scanned or AI-generated mesh made castable: scaled, flat-backed, hollowed.
 - material: <metal> = "au18k-yellow"
 - finish: <finish> = "polished"
@@ -218,8 +223,8 @@ Shared value lists:
 - material: <metal> = "au18k-yellow"
 - finish: <finish> = "polished"
 - plating: <plating> = "none"
-- cut: <cut> = "round"
-- stone: <stone> = "diamond"
+- cut: <cut> = "round". only when style is tennis
+- stone: <stone> = "diamond". only when style is tennis
 - quality: <quality>, optional
 - sourcing: <sourcing>, optional
 - style: cable | curb | cuban | figaro | rope | box | tennis = "cable"
@@ -228,6 +233,7 @@ Shared value lists:
 - wire: number 0.3–6 mm = 0.8
 - through: id of a bail node
 - layout: drape | straight = "drape"
+- clasp: none | lobster | box = "none". Opens a draped chain at the back so it can be put on.
 ## finding: Finding. Posts, backs, jump rings, clasps.
 - material: <metal> = "au18k-yellow"
 - finish: <finish> = "polished"

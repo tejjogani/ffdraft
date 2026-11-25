@@ -1261,7 +1261,9 @@ async function afterCommand(
     host.seen.set(p.id, p.version)
   }
   if (
-    (command === 'design.apply' || command === 'design.revert') &&
+    (command === 'design.apply' ||
+      command === 'design.revert' ||
+      (command === 'design.replaceStone' && out?.applied === true)) &&
     typeof out?.version === 'number'
   )
     host.seen.set(input.pieceId as string, out.version)

@@ -11,7 +11,8 @@ import {
 import { describe, expect, it } from 'vitest'
 import {
   askAi,
-  assistantUnavailable,
+  askAiRequest,
+  assistantHint,
   CARAT_STEPS,
   fmtCarat,
   metalOps,
@@ -239,21 +240,42 @@ describe('quick intents for a part and for the piece', () => {
 })
 
 describe('Ask AI', () => {
-  it('names what it is about and stays disabled with a short reason until the assistant ships', () => {
+  it('names what it is about, and is never dead: without a key it says Claude connects first', () => {
     const stone = askAi({ type: 'stone', pieceId: 'p', nodeId: 'center' }, { assistant: true })
-    expect(stone.label).toBe('Ask AI about this stone…')
-    expect(stone.disabled).toBeTruthy()
-    expect(askAi({ type: 'part', pieceId: 'p', nodeId: 'band' }, { assistant: false }).label).toBe(
-      'Ask AI about this part…',
-    )
+    expect(stone).toEqual({ label: 'Ask AI about this stone…' })
+    const part = askAi({ type: 'part', pieceId: 'p', nodeId: 'band' }, { assistant: false })
+    expect(part.label).toBe('Ask AI about this part…')
+    expect(part.hint).toBe('Connect Claude first, in the assistant')
     expect(askAi({ type: 'piece', pieceId: 'p' }, { assistant: false }).label).toBe(
       'Ask AI about this piece…',
     )
   })
 
-  it('gives the palette the same reason as the menu row', () => {
+  it('gives every entry point the same second line', () => {
     const subject: Subject = { type: 'piece', pieceId: 'p' }
     for (const assistant of [true, false])
-      expect(assistantUnavailable({ assistant })).toBe(askAi(subject, { assistant }).disabled)
+      expect(assistantHint({ assistant })).toBe(askAi(subject, { assistant }).hint)
+  })
+
+  it('hands the assistant the piece, what was clicked as the selection, and a draft for a stone', () => {
+    expect(askAiRequest({ type: 'stone', pieceId: 'p', nodeId: 'center', count: 1 })).toEqual({
+      pieceId: 'p',
+      selection: ['center'],
+      draft: 'Replace this stone with ',
+    })
+    // One stone of a field, as the CAD workspace selects it.
+    expect(
+      askAiRequest({ type: 'stone', pieceId: 'p', nodeId: 'halo', instance: 3, count: 18 }),
+    ).toEqual({ pieceId: 'p', selection: ['halo:3'], draft: 'Replace this stone with ' })
+    // The whole field.
+    expect(askAiRequest({ type: 'stone', pieceId: 'p', nodeId: 'halo', count: 18 }).draft).toBe(
+      'Replace these stones with ',
+    )
+    // A part or the piece keeps whatever the person had typed.
+    expect(askAiRequest({ type: 'part', pieceId: 'p', nodeId: 'band' })).toEqual({
+      pieceId: 'p',
+      selection: ['band'],
+    })
+    expect(askAiRequest({ type: 'piece', pieceId: 'p' })).toEqual({ pieceId: 'p', selection: [] })
   })
 })

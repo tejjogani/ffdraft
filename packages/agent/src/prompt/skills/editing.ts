@@ -7,6 +7,7 @@ Use when the designer asks for a change to a piece that has a design.
   - band thinner, wider, heavier: ringShank widthTop, widthBottom, thicknessTop, thicknessBottom (keep the base no wider than the top unless asked);
   - ring size: ringShank size;
   - stone sits higher or lower: the gem's placement.elevation;
+  - another stone (cut, size, carat, colour, quality): not ops but design_replaceStone, which moves the mount with it (the stone skill below);
   - more or fewer claws, claw shape: the setting's prongCount, prongTip; bezel instead of claws: style bezel;
   - metal: material on every metal node of the piece (band, settings, halo, bail, chain, findings), keeping the karat unless asked; rhodium plating for white gold when they want it bright white;
   - pavé on the shoulders: a gemRow on the band with skipCenter wide enough to clear the head (and the halo, if any); an eternity is coverage 360 with no head;

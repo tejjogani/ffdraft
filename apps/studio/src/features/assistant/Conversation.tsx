@@ -36,7 +36,12 @@ import { ShotReferences } from './ShotReferences'
 import { QuietCalls, ToolChip } from './ToolChip'
 
 /** Node ids an edit's ops touch, for the CAD workspace's tint. */
-function touched(input: unknown): string[] {
+function touched(name: string, input: unknown): string[] {
+  // A stone change names its stone; the mount that follows it is that stone's.
+  if (name === 'design.replaceStone') {
+    const i = input as { target?: { nodeId?: string }; dryRun?: boolean } | null
+    return i?.target?.nodeId && !i.dryRun ? [i.target.nodeId] : []
+  }
   const ops = (input as { ops?: Op[] } | null)?.ops ?? []
   return ops.flatMap((op) => {
     if (op.t === 'add') return [(op.node as { id: string }).id]
@@ -62,8 +67,10 @@ export function usePublishActivity(
   const calls = items.flatMap((i) => (i.kind === 'calls' && i.runId === run?.id ? i.calls : []))
   const running = calls.findLast((c) => c.status === 'running')
   const nodeIds = calls
-    .filter((c) => c.status === 'done' && c.name === 'design.apply')
-    .flatMap((c) => touched(c.input))
+    .filter(
+      (c) => c.status === 'done' && (c.name === 'design.apply' || c.name === 'design.replaceStone'),
+    )
+    .flatMap((c) => touched(c.name, c.input))
   const key = `${nodeIds.join(',')}|${running?.label ?? ''}`
   // biome-ignore lint/correctness/useExhaustiveDependencies: `key` stands for nodeIds and the label
   useEffect(() => {
