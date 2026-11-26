@@ -298,6 +298,7 @@ export const reference = pgTable(
     title: text('title').notNull().default(''),
     note: text('note').notNull().default(''),
     source: jsonb('source').$type<Reference['source']>(),
+    importedFrom: jsonb('imported_from').$type<NonNullable<Reference['importedFrom']>>(),
     rights: text('rights').$type<Reference['rights']>().notNull(),
     tags: jsonb('tags').$type<string[]>().notNull().default([]),
     palette: jsonb('palette').$type<string[]>().notNull().default([]),

@@ -3,10 +3,12 @@ import {
   formatRingSize,
   type GemCutId,
   type GemMaterialId,
+  measuredUsable,
   RING_SIZE_SYSTEMS,
   type RingSize,
   type RingSizeSystem,
   ringInnerDiameter,
+  stoneDims,
 } from '@pave/schema'
 import { NumberField, Segmented, Select } from '@pave/ui'
 import { useState } from 'react'
@@ -34,9 +36,16 @@ const round2 = (v: number) => Math.round(v * 100) / 100
 export function StoneSizeWidget({ row, label }: WidgetProps) {
   const edit = useFieldEdit()
   const node = edit.node as unknown as { cut?: GemCutId; stone?: GemMaterialId; lw?: number }
-  const spec: StoneSpec = { cut: node.cut ?? 'round', stone: node.stone ?? 'diamond', lw: node.lw }
+  const gem = edit.node.kind === 'gem' ? edit.node : undefined
+  const spec: StoneSpec = {
+    cut: node.cut ?? 'round',
+    stone: node.stone ?? 'diamond',
+    lw: node.lw,
+    sourcing: gem?.sourcing,
+  }
+  const measured = gem && measuredUsable(gem.sourcing?.measured) ? stoneDims(gem) : null
   const { field } = row
-  const width = typeof row.value === 'number' ? row.value : 1
+  const width = measured?.width ?? (typeof row.value === 'number' ? row.value : 1)
   const min = field.min ?? 0.5
   const max = field.max ?? 40
   const melee = field.meta.snap === 'melee'
@@ -57,7 +66,7 @@ export function StoneSizeWidget({ row, label }: WidgetProps) {
       min={0.01}
       step={0.01}
       unit="ct"
-      disabled={edit.readOnly}
+      disabled={edit.readOnly || measured !== null}
       aria-label={`${field.title} in carats`}
       onChange={(ct) => ct && edit.preview(row.path, widthForCarat(spec, ct, min, max))}
       onCommit={(ct) => ct && edit.commit(row.path, widthForCarat(spec, ct, min, max))}
@@ -75,7 +84,7 @@ export function StoneSizeWidget({ row, label }: WidgetProps) {
       max={max}
       step={melee ? 0.05 : 0.01}
       unit="mm"
-      disabled={edit.readOnly}
+      disabled={edit.readOnly || measured !== null}
       aria-label={`${field.title} in millimetres`}
       onChange={(v) => v !== null && edit.preview(row.path, v)}
       onCommit={(v) => v !== null && edit.commit(row.path, snapWidth(v, field.meta.snap))}

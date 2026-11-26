@@ -6,7 +6,7 @@
  *
  * Everything here is a registered command on the server; the board keeps only its view and the
  * selected tile. From a picture or sketch, "Take to CAD" starts the CAD job from it; a 3D model
- * opens as CAD. The same component is a piece's Design stage and a board in Ideas.
+ * opens as CAD. The same component is used in the project and the studio's Moodboards.
  */
 import type { Board, Reference } from '@pave/schema'
 import {

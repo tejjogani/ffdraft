@@ -11,7 +11,7 @@
  * and the picture lies in the front view as an image plane. The CAD reference window shows the
  * linked board; Try variants adds a variant in CAD; the model opens as CAD. Then the project page
  * with its three sections and costs, the folder with its sub-folder's totals, the sub-folder's
- * projects with stage progress and cost, and a board in Ideas with Start CAD. Saves screenshots
+ * projects with stage progress and cost, and a studio moodboard with Start CAD. Saves screenshots
  * and a report.
  *
  *   pnpm --filter @pave/studio build
@@ -340,16 +340,16 @@ try {
   await page.locator('[data-project-cost]').first().waitFor({ timeout: 60_000 })
   await shot('12b-subfolder-gallery')
 
-  // A board in Ideas, on its own, with Start CAD.
+  // A studio moodboard with Start CAD.
   const loose = await rpc('boards.create', { title: 'Trophy pendant ideas' })
   await rpc('references.save', {
     boardId: loose.id,
     items: [{ note: 'The club’s trophy, on a pendant: about 30 mm, a plain bail.' }],
   })
-  await page.goto(`${BASE}/ideas`)
-  await page.getByRole('list', { name: 'Boards' }).waitFor({ timeout: 60_000 })
+  await page.goto(`${BASE}/moodboards`)
+  await page.getByRole('list', { name: 'Moodboards' }).waitFor({ timeout: 60_000 })
   await shot('13-ideas')
-  await page.goto(`${BASE}/ideas/${loose.id}`)
+  await page.goto(`${BASE}/moodboards/${loose.id}`)
   await board().waitFor()
   await page.getByRole('button', { name: 'Start CAD' }).click()
   await page.waitForTimeout(600)

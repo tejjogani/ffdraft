@@ -47,7 +47,7 @@ export function useGlobalCommands(): void {
           params: { id: board.pieceId },
           search: { board: board.id },
         })
-      else void navigate({ to: '/ideas/$boardId', params: { boardId: board.id } })
+      else void navigate({ to: '/moodboards/$boardId', params: { boardId: board.id } })
     },
   })
   const createCollection = useRpcMutation('collections.create', {
@@ -100,7 +100,7 @@ export function useGlobalCommands(): void {
       group: 'Create',
       icon: Lightbulb,
       keywords: ['idea', 'board', 'references'],
-      run: () => createBoard.mutate({ title: 'Untitled board', pieceId }),
+      run: () => createBoard.mutate({ title: 'Untitled moodboard' }),
     },
     {
       id: 'file.openPave',
@@ -130,12 +130,12 @@ export function useGlobalCommands(): void {
         }))
       : ([
           {
-            id: 'nav.ideas',
-            title: 'Ideas',
+            id: 'nav.moodboards',
+            title: 'Moodboards',
             group: 'Navigate',
             icon: Lightbulb,
             keywords: ['boards', 'moodboards'],
-            run: go('/ideas'),
+            run: go('/moodboards'),
           },
           {
             id: 'nav.renders',

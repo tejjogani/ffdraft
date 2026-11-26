@@ -47,7 +47,7 @@ export function useUiTools(): void {
         const tab = input.tab ?? (ids.length ? 'design' : 'overview')
         await router.navigate({ to: `/pieces/${encodeURIComponent(input.pieceId)}${tabPath(tab)}` })
       } else if (input.boardId)
-        await router.navigate({ to: `/ideas/${encodeURIComponent(input.boardId)}` })
+        await router.navigate({ to: `/moodboards/${encodeURIComponent(input.boardId)}` })
       return { ok: true as const }
     })
     return () => {

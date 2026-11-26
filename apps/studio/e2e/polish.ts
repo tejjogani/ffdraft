@@ -284,7 +284,7 @@ try {
     ['28-upgrade', '/upgrade'],
     ['29-renders', '/renders'],
     ['30-library', '/library'],
-    ['31-ideas', '/ideas'],
+    ['31-moodboards', '/moodboards'],
     ['32-history', `/pieces/${halo.id}/history`],
     ['33-notfound', '/no-such-page'],
     ['34-piece-notfound', '/pieces/pc_missing'],

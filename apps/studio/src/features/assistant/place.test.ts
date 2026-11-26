@@ -14,7 +14,7 @@ describe('placeOf', () => {
   })
 
   it('reads a board, and nothing elsewhere', () => {
-    expect(placeOf('/ideas/bd_9')).toEqual({ pieceId: null, tab: null, boardId: 'bd_9' })
+    expect(placeOf('/moodboards/bd_9')).toEqual({ pieceId: null, tab: null, boardId: 'bd_9' })
     expect(placeOf('/settings/ai')).toEqual({ pieceId: null, tab: null, boardId: null })
   })
 

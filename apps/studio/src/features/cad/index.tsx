@@ -513,6 +513,7 @@ function Workspace({ piece }: { piece: Piece }) {
   )
   const inspector = (
     <Inspector
+      pieceId={pieceId}
       design={view}
       session={session}
       evaluation={evaluation}
