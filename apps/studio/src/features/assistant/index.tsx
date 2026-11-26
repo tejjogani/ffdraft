@@ -7,7 +7,8 @@
  * the thread list, or the empty state's starters) above the one composer.
  */
 import type { JobStage } from '@pave/schema'
-import { AiMark } from '@pave/ui'
+import { AiMark, buttonClass } from '@pave/ui'
+import { Link } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { useRegisterCommands } from '../../lib/commands'
 import { useRpc } from '../../lib/query'
@@ -79,9 +80,38 @@ export function AssistantPanel({
   stage?: JobStage | null
 }) {
   const { capabilities } = useSession()
-  if (!capabilities.assistant) return <NoKey />
+  if (!capabilities.assistant) return <OfflineProjectPanel context={context} />
   return (
     <Panel key={context.pieceId ?? context.boardId ?? 'studio'} context={context} stage={stage} />
+  )
+}
+
+function OfflineProjectPanel({ context }: { context: AssistantContext }) {
+  const active = useAssistant((state) =>
+    context.pieceId && state.threadPieceId === context.pieceId ? state.activeThreadId : null,
+  )
+  const thread = useRpc('threads.get', { id: active ?? '' }, { enabled: Boolean(active) })
+  if (!active || thread.data?.thread.context.pieceId !== context.pieceId) return <NoKey />
+  return (
+    <div className="flex h-full flex-col">
+      <div className="min-h-0 flex-1">
+        <Conversation
+          threadId={active}
+          page={context}
+          inline={{
+            transcriptClassName: 'px-4',
+            pending: true,
+            send: () => {},
+            rephrase: () => {},
+          }}
+        />
+      </div>
+      <div className="border-t border-line p-3">
+        <Link to="/settings/ai" className={buttonClass({ size: 'sm' })}>
+          Connect Claude to continue
+        </Link>
+      </div>
+    </div>
   )
 }
 
@@ -95,7 +125,7 @@ function Panel({
   const [focus, setFocus] = useState<'auto' | 'project' | JobStage>('auto')
   const stage = focus === 'auto' ? pageStage : focus === 'project' ? null : focus
   const isCurrent = useCurrentView()
-  const threadId = useAssistant((s) => s.activeThreadId)
+  const selectedThread = useAssistant((s) => s.activeThreadId)
   const showThreads = useAssistant((s) => s.showThreads)
   const draft = useAssistant((s) => s.draft)
   const attachments = useAssistant((s) => s.attachments)
@@ -106,8 +136,13 @@ function Panel({
   const { send, pending, error, clearError } = useSend({ ...context, stage })
   const actions = useRunActions()
 
-  const thread = useRpc('threads.get', { id: threadId ?? '' }, { enabled: !!threadId })
-  const run = thread.data?.run ?? null
+  const thread = useRpc('threads.get', { id: selectedThread ?? '' }, { enabled: !!selectedThread })
+  const threadId =
+    !context.pieceId || thread.data?.thread.context.pieceId === context.pieceId
+      ? selectedThread
+      : null
+  const checkingThread = Boolean(context.pieceId && selectedThread && thread.isPending)
+  const run = threadId ? (thread.data?.run ?? null) : null
   const running = run?.status === 'running'
   // A conversation that no longer exists (deleted elsewhere) gives way to a new one.
   useEffect(() => {
@@ -213,6 +248,7 @@ function Panel({
           onRemoveAttachment={(id) => st().removeAttachment(id)}
           onSubmit={submit}
           sending={pending}
+          disabled={checkingThread}
           focusNonce={focusNonce}
           placeholder={threadId ? 'Reply…' : 'Ask anything, or drop a photo…'}
           chips={<ContextChips page={context} />}

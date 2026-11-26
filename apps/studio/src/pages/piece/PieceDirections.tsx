@@ -22,9 +22,13 @@ import {
 } from '@pave/ui'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { Hammer, LayoutTemplate } from 'lucide-react'
+import { useState } from 'react'
 import { SpecCard } from '../../components/SpecCard'
 import { DesignBoard } from '../../features/ideate'
+import { BuildCadWithClaude } from '../../features/ideate/BuildCadWithClaude'
+import { takeToCadRefusal } from '../../features/ideate/board'
 import { ImportMoodboard } from '../../features/ideate/ImportMoodboard'
+import { selectedDesignFor } from '../../features/ideate/selected-design'
 import { invalidateFor, queryClient, useRpc } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { useCurrentView } from '../../lib/use-current-view'
@@ -39,6 +43,10 @@ export function PieceDirections({ pieceId }: { pieceId: string }) {
   const linked = useRpc('boards.list', { pieceId })
   const { board: pick } = useSearch({ from: '/pieces/$id' })
   const navigate = useNavigate()
+  const [discussId, setDiscussId] = useState<string | null>(null)
+  const boards = ordered(linked.data ?? [])
+  const board = boards.find((b) => b.id === pick) ?? boards[0] ?? null
+  const boardData = useRpc('boards.get', { id: board?.id ?? '' }, { enabled: Boolean(board) })
   if (!piece.data || !linked.data)
     return (
       <div className="flex flex-col gap-4">
@@ -47,11 +55,24 @@ export function PieceDirections({ pieceId }: { pieceId: string }) {
       </div>
     )
   const p = piece.data
-  const boards = ordered(linked.data)
-  const board = boards.find((b) => b.id === pick) ?? boards[0] ?? null
+  const savedDesign = selectedDesignFor(p, undefined)
+  const initialReference = boardData.data?.references.find(
+    (reference) =>
+      savedDesign?.boardId === board?.id &&
+      reference.id === savedDesign?.referenceId &&
+      reference.assetId === savedDesign?.assetId,
+  )
+  const discussion = boardData.data?.references.find(
+    (reference) => reference.id === discussId && !takeToCadRefusal(reference),
+  )
   return (
     <div className="@container flex min-w-0 flex-col gap-7">
-      <ProjectConversation piece={p} boardId={board?.id} />
+      <ProjectConversation
+        piece={p}
+        boardId={board?.id}
+        reference={discussion}
+        onClearReference={() => setDiscussId(null)}
+      />
       <div className="grid min-w-0 items-start gap-6 @[56rem]:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
         <SpecCard
           key={p.id}
@@ -60,10 +81,13 @@ export function PieceDirections({ pieceId }: { pieceId: string }) {
             document.querySelector<HTMLElement>('#design-conversation textarea')?.focus()
           }
         />
-        <section aria-label="Design references" className="min-w-0">
+        <section id="design-board" aria-label="Design references" className="min-w-0 scroll-mt-16">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-semibold">Design board</h2>
             <StageActions piece={p} board={board} />
+          </div>
+          <div className="mb-3">
+            <BuildCadWithClaude pieceId={p.id} />
           </div>
           {boards.length > 1 && (
             <Segmented<string>
@@ -82,7 +106,21 @@ export function PieceDirections({ pieceId }: { pieceId: string }) {
             />
           )}
           {board ? (
-            <LinkedBoard key={board.id} board={board} />
+            boardData.data ? (
+              <DesignBoard
+                key={board.id}
+                board={boardData.data.board}
+                references={boardData.data.references}
+                projectWorkspace
+                initialSelectedReferenceId={initialReference?.id}
+                onDiscussReference={(reference) => {
+                  setDiscussId(reference.id)
+                  document.querySelector<HTMLElement>('#design-conversation textarea')?.focus()
+                }}
+              />
+            ) : (
+              <Skeleton className="h-80 rounded-lg" />
+            )
           ) : (
             <DesignBoard key={p.id} pieceId={p.id} projectWorkspace />
           )}
@@ -90,12 +128,6 @@ export function PieceDirections({ pieceId }: { pieceId: string }) {
       </div>
     </div>
   )
-}
-
-function LinkedBoard({ board }: { board: Board }) {
-  const data = useRpc('boards.get', { id: board.id })
-  if (!data.data) return <Skeleton className="h-80 rounded-lg" />
-  return <DesignBoard board={data.data.board} references={data.data.references} projectWorkspace />
 }
 
 /** Import studio references or start CAD. */

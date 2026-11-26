@@ -79,6 +79,10 @@ try {
   await page.getByRole('button', { name: 'Select Gallery shape study', exact: true }).click()
   const selected = page.getByRole('region', { name: 'Selected item', exact: true })
   await selected.getByText('Gallery shape study', { exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Build CAD with Claude', exact: true }).click()
+  await page.getByRole('link', { name: 'Open manual CAD', exact: true }).waitFor()
+  assert.equal(await page.getByRole('link', { name: 'Connect Claude', exact: true }).count(), 2)
+  await selected.getByText('Gallery shape study', { exact: true }).waitFor()
   const captures = process.env.PAVE_E2E_SCREENSHOTS
   if (captures) {
     await mkdir(captures, { recursive: true })
@@ -170,13 +174,7 @@ try {
     const referenceAssetId = await addImage(assistantBase, a.id)
     await page.reload()
     await page.getByRole('button', { name: 'Select Gallery shape study', exact: true }).click()
-    await page
-      .getByRole('region', { name: 'Selected item', exact: true })
-      .getByRole('button', {
-        name: 'Build CAD from this image',
-        exact: true,
-      })
-      .click()
+    await page.getByRole('button', { name: 'Build CAD with Claude', exact: true }).click()
     await page.waitForURL(`**/pieces/${a.id}/design`)
     const handoff = messages.find((request) => request.job?.stage === 'cad')
     assert.ok(handoff)

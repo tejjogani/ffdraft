@@ -10,6 +10,7 @@ import { invalidateFor, queryClient, useRpcMutation } from '../../lib/query'
 import { type RpcError, rpc } from '../../lib/rpc'
 import { useCurrentView } from '../../lib/use-current-view'
 import { type AssistantContext, useAssistant } from '../../stores/assistant'
+import { resolveProjectThread } from './project-thread'
 
 /** A fresh id for a message, so a retried send stores it once. */
 export const newMessageId = (): string =>
@@ -28,6 +29,9 @@ export interface SendOptions {
   bare?: boolean
   /** Photos to send instead of the composer's (a job started from a photo). */
   attachments?: string[]
+  referenceIds?: string[]
+  boardId?: string
+  clientMessageId?: string
 }
 
 /** Sends from the dock's state: its conversation, chips, photos and tier. */
@@ -37,34 +41,39 @@ export function useSend(page: AssistantContext) {
   const [error, setError] = useState<RpcError | null>(null)
   const send = async (text: string, opts: SendOptions = {}) => {
     const s = useAssistant.getState()
-    const threadId = opts.threadId !== undefined ? opts.threadId : s.activeThreadId
     const usePage = !s.dropPageContext
-    const pagePiece = page.pieceId
     const pieceId =
-      opts.pieceId ?? pagePiece ?? (opts.bare ? undefined : s.selection?.pieceId) ?? undefined
-    const tier = opts.tier ?? (threadId ? s.tierByThread[threadId] : s.draftTier) ?? undefined
+      opts.pieceId ?? page.pieceId ?? (opts.bare ? undefined : s.selection?.pieceId) ?? undefined
     const photos = opts.attachments ?? (opts.bare ? [] : s.attachments.map((a) => a.id))
-    const input: CommandInput<'threads.send'> = {
-      ...(threadId ? { threadId } : {}),
-      text,
-      attachments: photos,
-      context: {
-        ...(pieceId ? { pieceId } : {}),
-        ...(usePage && page.boardId && (!opts.pieceId || opts.pieceId === pagePiece)
-          ? { boardId: page.boardId }
-          : {}),
-        selection:
-          !opts.bare && s.selection && s.selection.pieceId === pieceId ? s.selection.nodeIds : [],
-        ...(pieceId && page.stage ? { stage: page.stage } : {}),
-      },
-      ...(tier ? { tier } : {}),
-      ...(opts.job ? { job: opts.job } : {}),
-      clientId,
-      clientMessageId: newMessageId(),
-    }
     setPending(true)
     setError(null)
     try {
+      const threadId =
+        opts.threadId !== undefined
+          ? opts.threadId
+          : pieceId
+            ? await resolveProjectThread(pieceId)
+            : s.activeThreadId
+      const tier = opts.tier ?? (threadId ? s.tierByThread[threadId] : s.draftTier) ?? undefined
+      const boardId =
+        opts.boardId ?? (usePage && pieceId === (page.pieceId ?? undefined) ? page.boardId : null)
+      const input: CommandInput<'threads.send'> = {
+        ...(threadId ? { threadId } : {}),
+        text,
+        attachments: photos,
+        ...(opts.referenceIds ? { referenceIds: opts.referenceIds } : {}),
+        context: {
+          ...(pieceId ? { pieceId } : {}),
+          ...(boardId ? { boardId } : {}),
+          selection:
+            !opts.bare && s.selection && s.selection.pieceId === pieceId ? s.selection.nodeIds : [],
+          ...(pieceId && page.stage ? { stage: page.stage } : {}),
+        },
+        ...(tier ? { tier } : {}),
+        ...(opts.job ? { job: opts.job } : {}),
+        clientId,
+        clientMessageId: opts.clientMessageId ?? newMessageId(),
+      }
       const out = await rpc.call('threads.send', input)
       invalidateFor(queryClient, 'runs')
       if (!isCurrent()) return out
