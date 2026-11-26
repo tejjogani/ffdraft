@@ -1,6 +1,6 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 15:52 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 16:36 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## Diaex sign-in and access gate: review fixes (lane A, A8b)
 
@@ -12,7 +12,8 @@ _Generated 26 Nov 2026 15:52 UTC by `docs/agents/sync_status.py` from the workfl
 
 | Agent | State | Outcome |
 |---|---|---|
-| view:fix:1 | running or interrupted |  |
+| view:fix:1 | done | All seven findings are dealt with, and the fixes are committed as **b466c27** on cad/viewport in /home/user/ffdraft-view (not pushed). Two of them are only partly fixed: the trace from the founder's Mac is what tunes mo… |
+| view:verify:1 | running or interrupted |  |
 
 ## Spec: the card is the gate, word reading only adds notes (lane A, A7)
 
@@ -28,7 +29,8 @@ _Generated 26 Nov 2026 15:52 UTC by `docs/agents/sync_status.py` from the workfl
 | Agent | State | Outcome |
 |---|---|---|
 | fix:1 | done | FIX-3-1 REPORT, render/realism worktree /home/user/ffdraft-render Two local commits on render/realism, not pushed: - 1b8bcea: code and tests - 14c12ed: skill, research note and sheets Every number below comes from a bef… |
-| verify:1 | running or interrupted |  |
+| verify:1 | done | 5 major, 6 minor. FAIL. I re-rendered everything at render/realism HEAD 14c12ed (worktree clean) through the product's own chain. That was 15 previews at 768 px and 64 samples: … |
+| fix:2 | running or interrupted |  |
 
 ## Studio experience: third fix round (lane A, A11)
 
@@ -113,7 +115,7 @@ _Generated 26 Nov 2026 15:52 UTC by `docs/agents/sync_status.py` from the workfl
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: deb661c Status: CAD view fix round started; render verifying; spec second pass of the card gate
+Branch `claude/busy-bardeen-o482lo`, head: 5c52c04 Board: spec passed its check; Diaex gate fixes under way
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -144,7 +146,7 @@ Branch `claude/busy-bardeen-o482lo`, head: deb661c Status: CAD view fix round st
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: deb661c Status: CAD view fix round started; render verifying; spec second pass of the card gate
+Branch `claude/busy-bardeen-o482lo`, head: 5c52c04 Board: spec passed its check; Diaex gate fixes under way
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -186,7 +188,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: deb661c Status: CAD view fix round started; render verifying; spec second pass of the card gate
+Branch `claude/busy-bardeen-o482lo`, head: 5c52c04 Board: spec passed its check; Diaex gate fixes under way
 
 | Agent | State | Outcome |
 |---|---|---|
