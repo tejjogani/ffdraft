@@ -782,6 +782,27 @@ export const RenderEngineStatusSchema = z.object({
 })
 export type RenderEngineStatus = z.infer<typeof RenderEngineStatusSchema>
 
+/** Progress of the local, version-pinned Blender installation. */
+export const RenderInstallStatusSchema = z.object({
+  supported: z.boolean(),
+  phase: z.enum([
+    'checking',
+    'idle',
+    'downloading',
+    'verifying',
+    'extracting',
+    'checkingEngine',
+    'ready',
+    'failed',
+    'cancelled',
+  ]),
+  version: z.string(),
+  downloadedBytes: z.number().int().nonnegative(),
+  totalBytes: z.number().int().nonnegative(),
+  reason: z.string().nullable().optional(),
+})
+export type RenderInstallStatus = z.infer<typeof RenderInstallStatusSchema>
+
 // ── Brand models ─────────────────────────────────────────────────────────────────────────────
 
 /** Brand models are adults only. */

@@ -35,7 +35,7 @@ export interface TakeOptions {
   /** The piece and design version rendered: part of the take's scene hash. */
   design: { pieceId: string; version: number }
   workDir: string
-  runtime: Pick<RuntimeOptions, 'blenderPath'>
+  runtime: Pick<RuntimeOptions, 'blenderPath' | 'pythonPath'>
   signal: AbortSignal
   timeoutMs(scene: RenderScene): number
   onProgress(progress: number): void

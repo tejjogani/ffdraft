@@ -51,6 +51,7 @@ import type {
   ProductionPackage,
   Reference,
   RenderEngineStatus,
+  RenderInstallStatus,
   RenderJob,
   Run,
   SearchResult,
@@ -341,6 +342,9 @@ export interface RenderEngineService extends Service {
   status(sctx: ServiceContext): Promise<RenderEngineStatus>
   /** Probes `blenderPath` (null = discover again) and saves it only if it works. */
   configure(blenderPath: string | null, sctx: ServiceContext): Promise<RenderEngineStatus>
+  installStatus?(): RenderInstallStatus
+  install?(): RenderInstallStatus
+  cancelInstall?(): Promise<RenderInstallStatus>
 }
 
 export type ModelShotPatch = Partial<
