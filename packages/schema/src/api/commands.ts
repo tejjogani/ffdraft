@@ -8,9 +8,15 @@
  * So "what can the user do", "what can the agent do" and "what can an external agent do" are
  * the same list, with the same validation, permissions, metering and trace capture.
  */
+
 import { z } from 'zod'
 import { ChangeSchema, DesignSchema, OpSchema, PIECE_KINDS } from '../design/design'
 import { DirectionSchema, MIX_PARTS } from '../design/directions'
+import {
+  IntakeDetailsSchema,
+  IntakeSelectionInputSchema,
+  PieceIntakeSchema,
+} from '../design/intake'
 import { StoneChangeSchema, StoneTargetSchema } from '../design/intents'
 import { StoneSourcing } from '../design/nodes'
 import { PhotoReadSchema } from '../design/photo-read'
@@ -501,6 +507,18 @@ export const commands = {
       assetIds: z.array(id).max(8).default([]),
     }),
     output: z.object({ pieceId: id, boardId: id }),
+  }),
+  'pieces.confirmIntake': def({
+    description:
+      'Save the designer’s confirmed partial measurements and visual choice for this project without building CAD.',
+    kind: 'mutation',
+    input: z.object({
+      pieceId: id,
+      boardId: id,
+      details: IntakeDetailsSchema.optional(),
+      selection: IntakeSelectionInputSchema.nullable().optional(),
+    }),
+    output: PieceIntakeSchema,
   }),
   'pieces.addIntakeAssets': def({
     description:
@@ -1130,7 +1148,7 @@ export const commands = {
   }),
   'references.read': def({
     description:
-      'Read one to four photos of one piece (uploaded image assets): its kind, the camera angle, the archetype, each group of stones (cut, arrangement, setting, claws), the band profile and proportions as ratios, the metal, and what the photos hide, each part marked visible, partly or not. Call it first when the designer wants a design from a photo or a picture from the design board; ask its `questions` with chat.ask, then build from `specDraft` (changed by the answers) through pieces.setSpec. It is a separate Claude call on the conversation’s tier and costs a little.',
+      'Read one to four photos of one piece (uploaded image assets): its kind, the camera angle, the archetype, each group of stones (cut, arrangement, setting, claws), the band profile and proportions as ratios, the metal, and what the photos hide, each part marked visible, partly or not. Call it first when the designer wants a design from a photo or a picture from the design board; use the saved specification and ask only unresolved questions with chat.ask. For new designs, confirm the specDraft before saving it with pieces.setSpec. It is a separate Claude call on the conversation’s tier and costs a little.',
     kind: 'mutation',
     tool: true,
     input: z.object({
@@ -1156,6 +1174,20 @@ export const commands = {
        */
       questions: z.array(QuickQuestionSchema),
       model: z.string(),
+    }),
+  }),
+  'match.traceOutline': def({
+    description:
+      'Trace the silhouette and holes of a selected project logo or flat artwork on a plain background. The returned SVG path can supply the source of an editable vectorBody. Use the agreed height, thickness and metal from the project spec. Preview only.',
+    kind: 'query',
+    tool: true,
+    input: z.object({ pieceId: id, referenceId: id }),
+    output: z.object({
+      path: z.string(),
+      width: z.number(),
+      height: z.number(),
+      version: z.number().int(),
+      islands: z.number().int(),
     }),
   }),
   'match.fit': def({
@@ -1771,7 +1803,7 @@ export const commands = {
   }),
   'chat.ask': def({
     description:
-      'Ask the designer one to three short questions as quick replies, and wait for their answer: each with two to six options and the good default already picked (`defaults`), so one press of Go answers with no typing. Ask only what changes the work and cannot be read from the piece or the brief (for directions: the budget, the metal, who wears it; for CAD: the ring size, the centre stone, the setting the spec leaves open; for renders: what the images are for, aspect ratios, which animations); never more than three, except before building from a picture, when you pass the five spec questions references.read returns, as they are. Write `intro` as one plain sentence saying what you saw and what you are about to do. The result is what they picked; if they type a message instead, that message is the answer.',
+      'Ask the designer one to three short questions as quick replies, and wait for their answer: each with two to six options and the good default already picked (`defaults`), so one press of Go answers with no typing. Ask only what changes the work and cannot be read from the piece or the brief (for directions: the budget, the metal, who wears it; for CAD: the ring size, the centre stone, the setting the spec leaves open; for renders: what the images are for, aspect ratios, which animations); never more than three, except on a new photo-only brief, when up to five unresolved spec questions from references.read are allowed. Keep saved project decisions. Write `intro` as one plain sentence saying what you saw and what you are about to do. The result is what they picked; if they type a message instead, that message is the answer.',
     kind: 'query',
     tool: { confirm: true },
     input: z.object({

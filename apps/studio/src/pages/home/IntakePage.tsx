@@ -1,4 +1,4 @@
-import type { AssistantTier, Piece, Reference } from '@pave/schema'
+import { type AssistantTier, METALS, type Piece, type Reference } from '@pave/schema'
 import { Button, buttonClass, cn, InlineError, Markdown, Skeleton } from '@pave/ui'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowRight, Check, FileBox } from 'lucide-react'
@@ -11,7 +11,7 @@ import { TierPicker } from '../../features/assistant/TierPicker'
 import { takeToCadRefusal } from '../../features/ideate/board'
 import { useReferencePanel } from '../../features/references/store'
 import { assetUrl } from '../../lib/assets'
-import { invalidateFor, queryClient, useRpc } from '../../lib/query'
+import { invalidateFor, queryClient, rpcKey, useRpc } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { useSession } from '../../lib/session'
 import { useCurrentView } from '../../lib/use-current-view'
@@ -112,12 +112,36 @@ function IntakeConversation({
   )
   const photos = references.filter((r) => !isConcept(r) && r.type !== 'note')
   const concepts = references.filter(isConcept)
-  const chosen = concepts.find((r) => r.id === search.concept)
+  const selection = piece.intake?.selection
+  const conceptId = piece.intake ? selection?.conceptId : search.concept
+  const visualId = piece.intake ? selection?.visualId : search.visual
+  const chosen = concepts.find((r) => r.id === conceptId)
   const visualChoices = photos.filter((r) => !takeToCadRefusal(r))
   const selectedVisual =
-    chosen && !takeToCadRefusal(chosen) ? chosen : visualChoices.find((r) => r.id === search.visual)
+    chosen && !takeToCadRefusal(chosen) ? chosen : visualChoices.find((r) => r.id === visualId)
   const fixedChain = piece.kind === 'pendant' ? chainFromBrief(piece.brief) : null
   const ai = capabilities.assistant && !models.length
+  const details = piece.intake?.details
+  const confirmed = [
+    details?.heightMm && `${details.heightMm} mm`,
+    details?.metal ? METALS[details.metal].label : details?.metalDescription,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  const persistSelection = async (
+    choice: { conceptId: string; visualId: string | null } | null,
+  ) => {
+    const intake = await rpc.call('pieces.confirmIntake', {
+      pieceId: piece.id,
+      boardId,
+      selection: choice,
+    })
+    queryClient.setQueryData<Piece>(
+      rpcKey('pieces.get', { id: piece.id }),
+      (old) => old && { ...old, intake },
+    )
+    return intake
+  }
   const refresh = () => {
     invalidateFor(queryClient, 'pieces')
     invalidateFor(queryClient, 'boards')
@@ -140,9 +164,17 @@ function IntakeConversation({
           })
         : []
       refresh()
-      if (ai && !text.trim() && chosen && media.length) {
+      if (!text.trim() && chosen && media.length) {
         const sketch = added.find((r) => !takeToCadRefusal(r))
-        if (sketch && isCurrent()) selectVisual(sketch.id)
+        if (sketch) {
+          await persistSelection({ conceptId: chosen.id, visualId: sketch.id })
+          if (isCurrent())
+            await navigate({
+              to: '/',
+              search: { ...search, concept: chosen.id, visual: sketch.id },
+              replace: true,
+            })
+        }
       } else if (ai) {
         const originalAssets = piece.origin?.sourceAssetIds ?? []
         const out = await sendIntake({
@@ -159,6 +191,7 @@ function IntakeConversation({
           tier: overrideTier ?? tier,
           messageId: threadId ? sendRetry.current.id : firstMessageId(piece.id),
         })
+        if (chosen) await persistSelection(null)
         if (!isCurrent()) return
         await navigate({
           to: '/',
@@ -182,10 +215,24 @@ function IntakeConversation({
     }
   }
 
-  const select = (id: string) =>
-    void navigate({ to: '/', search: { ...search, concept: id, visual: undefined }, replace: true })
-  const selectVisual = (id: string) =>
-    void navigate({ to: '/', search: { ...search, visual: id }, replace: true })
+  const select = async (concept: Reference, visual: string | null) => {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      await persistSelection({ conceptId: concept.id, visualId: visual })
+      if (isCurrent())
+        await navigate({
+          to: '/',
+          search: { ...search, concept: concept.id, visual: visual ?? undefined },
+          replace: true,
+        })
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
   const build = async (ref: Reference, target: 'design' | 'render' = 'design') => {
     if (busy || assistantBusy) return
     setBusy(true)
@@ -209,6 +256,7 @@ function IntakeConversation({
       } else {
         if (!selectedVisual?.assetId)
           throw new Error('Choose the design image or sketch to use in CAD.')
+        await persistSelection({ conceptId: ref.id, visualId: selectedVisual.id })
         const pin = await rpc.call('pieces.takeToCad', {
           pieceId: piece.id,
           referenceId: selectedVisual.id,
@@ -297,7 +345,7 @@ function IntakeConversation({
                 aria-pressed={ref.id === chosen?.id}
                 aria-label={ref.title}
                 disabled={busy || assistantBusy}
-                onClick={() => select(ref.id)}
+                onClick={() => void select(ref, takeToCadRefusal(ref) ? null : ref.id)}
                 className={cn(
                   'flex min-w-0 flex-col overflow-hidden rounded-lg border text-left hover:bg-bg-hover',
                   ref.id === chosen?.id ? 'border-line-strong bg-bg-muted' : 'border-line',
@@ -347,7 +395,7 @@ function IntakeConversation({
                         key={ref.id}
                         aria-pressed={selectedVisual?.id === ref.id}
                         disabled={busy || assistantBusy}
-                        onClick={() => selectVisual(ref.id)}
+                        onClick={() => void select(chosen, ref.id)}
                         className={cn(
                           'flex max-w-56 items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs hover:bg-bg-hover',
                           selectedVisual?.id === ref.id
@@ -391,6 +439,7 @@ function IntakeConversation({
         <span className="text-fg-muted">
           {ai ? 'Project brief saved' : 'Manual design intake'}
           {fixedChain && ` · ${fixedChain}`}
+          {confirmed && ` · ${confirmed}`}
         </span>
         <Link
           to="/pieces/$id/directions"

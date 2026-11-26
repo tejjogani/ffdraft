@@ -8,7 +8,7 @@
  */
 import type { JobStage } from '@pave/schema'
 import { AiMark } from '@pave/ui'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRegisterCommands } from '../../lib/commands'
 import { useRpc } from '../../lib/query'
 import { useSession } from '../../lib/session'
@@ -80,10 +80,20 @@ export function AssistantPanel({
 }) {
   const { capabilities } = useSession()
   if (!capabilities.assistant) return <NoKey />
-  return <Panel context={context} stage={stage} />
+  return (
+    <Panel key={context.pieceId ?? context.boardId ?? 'studio'} context={context} stage={stage} />
+  )
 }
 
-function Panel({ context, stage }: { context: AssistantContext; stage: JobStage | null }) {
+function Panel({
+  context,
+  stage: pageStage,
+}: {
+  context: AssistantContext
+  stage: JobStage | null
+}) {
+  const [focus, setFocus] = useState<'auto' | 'project' | JobStage>('auto')
+  const stage = focus === 'auto' ? pageStage : focus === 'project' ? null : focus
   const isCurrent = useCurrentView()
   const threadId = useAssistant((s) => s.activeThreadId)
   const showThreads = useAssistant((s) => s.showThreads)
@@ -134,7 +144,7 @@ function Panel({ context, stage }: { context: AssistantContext; stage: JobStage 
         {showThreads ? (
           <ThreadList pieceId={context.pieceId} />
         ) : threadId ? (
-          <Conversation threadId={threadId} page={context} />
+          <Conversation threadId={threadId} page={{ ...context, stage }} />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
             <AiMark className="size-5" />
@@ -176,6 +186,22 @@ function Panel({ context, stage }: { context: AssistantContext; stage: JobStage 
           <p role="alert" className="mb-2 text-xs text-danger">
             {error.message}
           </p>
+        )}
+        {context.pieceId && (
+          <label className="mb-2 flex items-center gap-2 text-xs font-medium">
+            AI focus
+            <select
+              className="rounded-md border border-line bg-bg-subtle px-2 py-1 text-fg"
+              value={focus}
+              onChange={(e) => setFocus(e.target.value as typeof focus)}
+            >
+              <option value="auto">Follow this tool</option>
+              <option value="project">Whole project</option>
+              <option value="design">Design board &amp; spec</option>
+              <option value="cad">CAD builder</option>
+              <option value="render">Render studio</option>
+            </select>
+          </label>
         )}
         <Composer
           value={draft}

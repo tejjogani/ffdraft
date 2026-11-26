@@ -59,6 +59,7 @@ import { useSend } from '../assistant/actions'
 import { movePin, pin, removeFromView, unpin } from './actions'
 import { GeneratedTab } from './GeneratedTab'
 import { ProvenanceButton, type ProvenanceFacts, providerLabel, RightsChip } from './Provenance'
+import { TraceOutline } from './TraceOutline'
 import { SketchPad } from './SketchPad'
 import { type PanelSource, PIN_DRAG_TYPE, type ReferenceTab, useReferencePanel } from './store'
 import { WebReferenceSearch } from './WebReferenceSearch'
@@ -295,6 +296,7 @@ function PinTile({
   const select = useReferencePanel((s) => s.select)
   const setOpen = useReferencePanel((s) => s.setOpen)
   const navigate = useNavigate()
+  const [traceOpen, setTraceOpen] = useState(false)
   const [capturing, setCapturing] = useState(false)
   const picture = pictureOf(r)
   const placeable = !!r.assetId && !readOnly
@@ -335,6 +337,9 @@ function PinTile({
       onDragEnd={() => setDragging(null)}
       className="group flex gap-2.5 rounded-lg bg-bg p-1.5 shadow-[0_0_0_1px_var(--line)]"
     >
+      {traceOpen && (
+        <TraceOutline piece={piece} reference={r} onClose={() => setTraceOpen(false)} />
+      )}
       <div className="relative flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-md bg-bg-muted">
         {picture ? (
           <img
@@ -383,6 +388,11 @@ function PinTile({
               {r.plane && (
                 <MenuItem icon={EyeOff} onClick={() => void removeFromView(piece.id, r)}>
                   Take out of the view
+                </MenuItem>
+              )}
+              {r.assetId && r.type !== 'model' && r.rights !== 'viewOnly' && (
+                <MenuItem icon={Images} onClick={() => setTraceOpen(true)}>
+                  Trace a flat outline
                 </MenuItem>
               )}
               {forAi && (

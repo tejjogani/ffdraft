@@ -94,6 +94,7 @@ export const QUERY_NAMES = [
   'design.history',
   'design.evaluate',
   'sourcing.search',
+  'match.traceOutline',
   'sourcing.stone',
   'boards.list',
   'boards.get',

@@ -1,4 +1,4 @@
-import type { Piece, Reference } from '@pave/schema'
+import { intakeDetailsFromWords, type Piece, type Reference } from '@pave/schema'
 import { Button, InlineError, Input, Textarea } from '@pave/ui'
 import { useId, useState } from 'react'
 import { useRpcMutation } from '../../lib/query'
@@ -31,10 +31,11 @@ export function ManualIntake({
   references: Reference[]
 }) {
   const id = useId()
-  const [metal, setMetal] = useState('')
-  const [stones, setStones] = useState('')
-  const [size, setSize] = useState('')
-  const [chain, setChain] = useState('')
+  const [metal, setMetal] = useState(piece.intake?.details.metalDescription ?? '')
+  const [stones, setStones] = useState(piece.intake?.details.stoneMm?.toString() ?? '')
+  const [size, setSize] = useState(piece.intake?.details.heightMm?.toString() ?? '')
+  const [thickness, setThickness] = useState(piece.intake?.details.thicknessMm?.toString() ?? '')
+  const [chain, setChain] = useState(piece.intake?.details.chain ?? '')
   const [title, setTitle] = useState('')
   const [idea, setIdea] = useState('')
   const [skipRef, setSkipRef] = useState(false)
@@ -45,14 +46,29 @@ export function ManualIntake({
   const styleRefs = references.filter(
     (r) => r.type === 'image' && r.assetId && !original.has(r.assetId),
   )
+  const confirm = useRpcMutation('pieces.confirmIntake', { meta: { silent: true } })
   const save = useRpcMutation('references.proposeConcepts', { meta: { silent: true } })
   if (saved) return null
 
-  const submit = () => {
+  const submit = async () => {
+    const confirmed = intakeDetailsFromWords({
+      height: pendant ? size : undefined,
+      thickness: pendant ? thickness : undefined,
+      metal,
+      stone: stones,
+      chain: pendant ? fixedChain || chain : undefined,
+    })
+    try {
+      await confirm.mutateAsync({ pieceId: piece.id, boardId, details: confirmed })
+    } catch {
+      // Keep the inputs visible. The mutation's error is shown below.
+      return
+    }
     const details = [
       pendant && (fixedChain || chain.trim() || 'Chain undecided'),
       metal.trim() ? `Metal colour: ${metal.trim()}` : 'Metal colour undecided',
       stones.trim() ? `Stone sizes: ${stones.trim()}` : 'Stone sizes undecided',
+      thickness.trim() ? `Body thickness: ${thickness.trim()}` : '',
       size.trim() ? `Overall size: ${size.trim()}` : 'Overall size undecided',
       styleRefs.length
         ? `Style reference: ${styleRefs
@@ -78,7 +94,7 @@ export function ManualIntake({
       className="mt-6 flex flex-col gap-4 border-t border-line pt-5"
       onSubmit={(e) => {
         e.preventDefault()
-        submit()
+        void submit()
       }}
     >
       <div>
@@ -135,6 +151,18 @@ export function ManualIntake({
             placeholder={pendant ? '32 mm' : 'Size or dimensions'}
           />
         </label>
+        {pendant && (
+          <label className={field} htmlFor={`${id}-thickness`}>
+            Body thickness
+            <Input
+              id={`${id}-thickness`}
+              value={thickness}
+              onChange={(e) => setThickness(e.target.value)}
+              maxLength={100}
+              placeholder="2 mm"
+            />
+          </label>
+        )}
       </div>
       {!pendant && (
         <div className="grid gap-3">
@@ -176,6 +204,7 @@ export function ManualIntake({
           </label>
         </div>
       )}
+      {confirm.error && <InlineError message={confirm.error.message} />}
       {save.error && <InlineError message={save.error.message} />}
       <Button
         className="self-start"
@@ -183,6 +212,7 @@ export function ManualIntake({
         type="submit"
         variant="primary"
         disabled={
+          confirm.isPending ||
           save.isPending ||
           (!skipRef && styleRefs.length === 0) ||
           (!pendant && (!title.trim() || !idea.trim()))

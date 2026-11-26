@@ -13,19 +13,52 @@
                   "id": "metal",
                   "question": "What metal colour?",
                   "options": [
-                    { "id": "white", "label": "18k white gold" },
-                    { "id": "yellow", "label": "18k yellow gold" }
+                    {
+                      "id": "white",
+                      "label": "18k white gold"
+                    },
+                    {
+                      "id": "yellow",
+                      "label": "18k yellow gold"
+                    }
                   ],
-                  "defaults": ["white"]
+                  "defaults": [
+                    "white"
+                  ]
                 },
                 {
                   "id": "melee",
                   "question": "What stone size?",
                   "options": [
-                    { "id": "small", "label": "1.2 mm" },
-                    { "id": "large", "label": "1.6 mm" }
+                    {
+                      "id": "small",
+                      "label": "1.2 mm"
+                    },
+                    {
+                      "id": "large",
+                      "label": "1.6 mm"
+                    }
                   ],
-                  "defaults": ["small"]
+                  "defaults": [
+                    "small"
+                  ]
+                },
+                {
+                  "id": "height",
+                  "question": "What pendant height?",
+                  "options": [
+                    {
+                      "id": "medium",
+                      "label": "32 mm"
+                    },
+                    {
+                      "id": "small",
+                      "label": "25 mm"
+                    }
+                  ],
+                  "defaults": [
+                    "medium"
+                  ]
                 }
               ]
             }
@@ -64,12 +97,22 @@
         ]
       },
       {
-        "content": [{ "type": "text", "text": "Choose a concept, then select the sketch or image that shows its silhouette." }]
+        "content": [
+          {
+            "type": "text",
+            "text": "Choose a concept, then select the sketch or image that shows its silhouette."
+          }
+        ]
       }
     ],
     [
       {
-        "content": [{ "type": "text", "text": "I have the selected design image and the original logo. I’ll use the design for the shape and preserve the confirmed dimensions." }]
+        "content": [
+          {
+            "type": "text",
+            "text": "I have the selected design image and the original logo. I’ll use the design for the shape and preserve the confirmed dimensions."
+          }
+        ]
       }
     ]
   ]

@@ -236,6 +236,7 @@ export async function assistantServer(
   opts: {
     env?: Record<string, string | undefined>
     auth?: 'local' | 'accounts'
+    transport?: 'fake' | 'direct'
     check?: (key: string) => KeyCheck | Promise<KeyCheck>
     /** Where the fake API's answers come from (default: the test model's queue of turns). */
     source?: ReplySource
@@ -247,7 +248,7 @@ export async function assistantServer(
     images?: ImageGenOptions
   } & Pick<CreateAppOptions, 'config'> = {},
 ): Promise<AssistantServer> {
-  const model = await new TestModel().start({ source: opts.source })
+  const model = await new TestModel({ transport: opts.transport }).start({ source: opts.source })
   const checks: string[] = []
   let parts: AssistantParts | null = null
   const server = await testServer({

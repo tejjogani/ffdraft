@@ -21,7 +21,7 @@ describe('the dock follows the piece', () => {
     ).toBeNull()
   })
 
-  it('keeps a conversation about this piece or about no piece; switches from another piece’s', () => {
+  it('keeps this piece’s conversation and switches to it from unscoped and other project threads', () => {
     expect(
       followTarget({
         activeThreadId: 't1',
@@ -37,7 +37,7 @@ describe('the dock follows the piece', () => {
         pieceId: 'p1',
         latestThreadId: 't9',
       }),
-    ).toBeNull()
+    ).toEqual({ open: 't9' })
     expect(
       followTarget({
         activeThreadId: 't1',

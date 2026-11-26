@@ -32,6 +32,7 @@ import { projectFolder } from '../../features/projects/folder'
 import { ProjectSwitcher } from '../../features/projects/ProjectSwitcher'
 import { DOCK_PANEL_PX, ReferenceDock } from '../../features/references/ReferencePanel'
 import { useReferencePanel } from '../../features/references/store'
+import { TraceSelectedDesign } from '../../features/references/TraceOutline'
 import { type Command, useRegisterCommands } from '../../lib/commands'
 import { hasFacts, KIND_LABEL, metalLabel, metalSwatch } from '../../lib/domain'
 import { carats, grams } from '../../lib/format'
@@ -78,7 +79,12 @@ export function PiecePage({ id }: { id: string }) {
         <div className="sticky top-11 z-10 bg-bg">
           {bleed && (
             <div className="flex items-center justify-end gap-1 px-3 py-1">
-              {stage === 'cad' && <TryVariants piece={p} />}
+              {stage === 'cad' && (
+                <>
+                  <TraceSelectedDesign piece={p} />
+                  <TryVariants piece={p} />
+                </>
+              )}
               <ReferencesToggle />
             </div>
           )}
@@ -334,7 +340,7 @@ function PieceHero({ piece }: { piece: Piece }) {
           placeholder="Untitled"
           aria-label="Piece title"
           maxLength={120}
-          className="min-w-0 flex-1 bg-transparent font-serif text-title text-fg placeholder:text-fg-faint outline-none focus-visible:outline-none sm:text-display"
+          className="min-w-0 flex-1 bg-transparent rounded-sm font-sans text-[24px] font-semibold leading-tight tracking-[-0.035em] text-fg placeholder:text-fg-faint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-select sm:text-[30px]"
         />
       </div>
       <div className="mt-3 -ml-1.5 flex flex-wrap items-center gap-x-1 gap-y-1 text-sm">

@@ -6,8 +6,9 @@
  * to a fit computed on an older version (the overlap gate sees the apply like any other edit).
  */
 import { checkTarget, FIT_FLOOR, underFloor } from '@pave/match'
-import { conflict, NotConfiguredError } from '../errors'
-import { getPiece } from '../lookups'
+import { contours } from 'd3-contour'
+import { badRequest, conflict, NotConfiguredError, notFound } from '../errors'
+import { getBoard, getPiece, getReference } from '../lookups'
 import { photoMatte } from '../photos'
 import { assertSendable } from '../references/rights'
 import { serviceContext } from '../service-context'
@@ -16,6 +17,37 @@ import type { HandlerGroup } from './types'
 const round = (x: number) => Number(x.toFixed(3))
 
 export const match: HandlerGroup<'match'> = {
+  'match.traceOutline': async (ctx, { pieceId, referenceId }) => {
+    const piece = await getPiece(ctx, pieceId)
+    const ref = await getReference(ctx, referenceId)
+    const board = await getBoard(ctx, ref.boardId)
+    if (board.pieceId !== pieceId && board.pinsFor !== pieceId)
+      throw notFound('Project reference', referenceId)
+    if (!ref.assetId) throw badRequest('Choose a saved picture to trace.')
+    await assertSendable(ctx, [ref.assetId])
+    const { matte, width, height, plain, reason } = await photoMatte(ctx, ref.assetId)
+    if (!plain) throw badRequest(reason)
+    const rings = contours().size([width, height]).contour(Array.from(matte), 0.5).coordinates
+    if (!rings.length || rings.length > 80)
+      throw badRequest('Use a single logo or a clearer outline on a plain background.')
+    const paths: string[] = []
+    for (const polygon of rings) {
+      for (const ring of polygon) {
+        // Marching squares repeats a point at each pixel on straight edges. Keep corners and holes.
+        const points = ring.slice(0, -1).filter(([x, y], i, all) => {
+          const before = all[(i + all.length - 1) % all.length]!
+          const after = all[(i + 1) % all.length]!
+          return (x! - before[0]!) * (after[1]! - y!) !== (y! - before[1]!) * (after[0]! - x!)
+        })
+        if (points.length >= 3)
+          paths.push('M' + points.map(([x, y]) => `${x},${y}`).join('L') + 'Z')
+      }
+    }
+    const path = paths.join(' ')
+    if (!path || path.length > 60000)
+      throw badRequest('Simplify the artwork or crop to a single outline.')
+    return { path, width, height, version: piece.version, islands: rings.length }
+  },
   'match.fit': async (ctx, input) => {
     // Fitting a design to someone's view-only picture would be copying it, whoever asks.
     await assertSendable(ctx, [input.assetId], () => 'That photo')

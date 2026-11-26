@@ -9,7 +9,11 @@ const start = (requestId: string, assetIds: string[] = []) =>
   api.call('pieces.startIntake', { requestId, brief, assetIds })
 
 beforeAll(async () => {
-  server = await assistantServer({ env: { ANTHROPIC_API_KEY: 'sk-ant-test-home-intake' } })
+  // Inject disallowed tool calls to verify the execution guard even if a model ignores its tool list.
+  server = await assistantServer({
+    transport: 'direct',
+    env: { ANTHROPIC_API_KEY: 'sk-ant-test-home-intake' },
+  })
   api = client(server.server)
 }, BOOT_TIMEOUT)
 afterAll(async () => server.server.dispose())
@@ -140,4 +144,115 @@ it('refuses cross-project reads and conversation reuse during a project brainsto
     clientMessageId: 'scoped-brainstorm-wrong-project',
   })
   expect(reused.status).toBe(400)
+})
+
+it('persists the chosen concept, visual and confirmed partial measurements on the piece', async () => {
+  const p = await start('durable-intake-details')
+  const upload = new FormData()
+  upload.set(
+    'file',
+    new Blob(
+      [
+        '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64"/></svg>',
+      ],
+      { type: 'image/svg+xml' },
+    ),
+    'outline.svg',
+  )
+  const { id } = (await (
+    await api.request('/api/assets', { method: 'POST', body: upload })
+  ).json()) as { id: string }
+  const [visual] = await api.call('pieces.addIntakeAssets', { ...p, assetIds: [id] })
+  const [concept] = await api.call('references.proposeConcepts', {
+    boardId: p.boardId,
+    concepts: [{ title: 'Logo outline', note: 'Preserve the logo silhouette.' }],
+  })
+  await api.call('pieces.confirmIntake', {
+    ...p,
+    details: { heightMm: 32, metal: 'au18k-white', stoneMm: 1.2, chain: 'Cuban chain' },
+    selection: { conceptId: concept!.id, visualId: visual!.id },
+  })
+  const piece = await api.call('pieces.get', { id: p.pieceId })
+  expect(piece).toMatchObject({
+    brief,
+    kind: 'pendant',
+    spec: null,
+    intake: {
+      details: { heightMm: 32, metal: 'au18k-white', stoneMm: 1.2, chain: 'Cuban chain' },
+      selection: {
+        boardId: p.boardId,
+        conceptId: concept!.id,
+        visualId: visual!.id,
+        visualAssetId: id,
+      },
+    },
+  })
+  expect(piece.intake?.details.thicknessMm).toBeUndefined()
+  const other = await start('distinct-client-visual')
+  expect(
+    (
+      await api.fail('pieces.confirmIntake', {
+        ...other,
+        selection: { conceptId: concept!.id, visualId: visual!.id },
+      })
+    ).status,
+  ).toBe(404)
+})
+
+it('persists only measurements that the designer confirms in intake quick replies', async () => {
+  const p = await start('confirmed-quick-reply')
+  server.model.push(
+    {
+      content: [
+        tool(
+          'chat_ask',
+          {
+            intro: 'Confirm the height and metal',
+            questions: [
+              {
+                id: 'height',
+                question: 'Pendant height?',
+                options: [
+                  { id: 'tall', label: '32 mm' },
+                  { id: 'small', label: '25 mm' },
+                ],
+                defaults: ['small'],
+              },
+              {
+                id: 'metal',
+                question: 'Alloy?',
+                options: [
+                  { id: 'white', label: '18k White Gold' },
+                  { id: 'yellow', label: '18k Yellow Gold' },
+                ],
+                defaults: ['yellow'],
+              },
+            ],
+          },
+          't_confirm_intake',
+        ),
+      ],
+    },
+    { content: [text('32 mm in white gold.')] },
+  )
+  const sent = await api.call('threads.send', {
+    text: brief,
+    context: { ...p, intake: true },
+    clientId: 'home-test',
+    clientMessageId: 'confirm-intake-quick-reply',
+  })
+  await settled(server.parts, sent.run.id)
+  const pieceBefore = await api.call('pieces.get', { id: p.pieceId })
+  expect(pieceBefore.intake?.details.heightMm).toBeUndefined()
+  await api.call('runs.decide', {
+    runId: sent.run.id,
+    toolCallId: 't_confirm_intake',
+    decision: 'approve',
+    answers: { height: ['tall'], metal: ['white'] },
+  })
+  await settled(server.parts, sent.run.id)
+  const piece = await api.call('pieces.get', { id: p.pieceId })
+  expect(piece.intake?.details).toMatchObject({ heightMm: 32, metal: 'au18k-white' })
+  expect(piece.intake?.details.thicknessMm).toBeUndefined()
+  expect(piece.spec).toBeNull()
 })

@@ -18,6 +18,15 @@ const DESIGN_TOOLS = new Set([
   'references.read',
 ])
 
+export function designToolsFor(
+  mode: 'intake' | 'brainstorm',
+  scoped: boolean,
+): ReadonlySet<string> {
+  return mode === 'intake'
+    ? DESIGN_TOOLS
+    : new Set(['chat.ask', ...(scoped ? BRAINSTORM_TOOLS : [])])
+}
+
 export function intakeContext(input: CommandParsedInput<'threads.send'>): string {
   if (input.context.brainstorm)
     return `${BRAINSTORM} Discuss the designer’s ideas, questions and alternatives. The designer can choose to start a project or job separately. Do not start one, generate media, change a project, or navigate.\n\n`
