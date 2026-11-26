@@ -61,8 +61,8 @@ export function ContextChips({ page }: { page: AssistantContext }) {
   return (
     <>
       {page.pieceId && piece.data && (
-        <Chip icon={<Gem aria-hidden />} outline>
-          {piece.data.title || 'Untitled piece'}
+        <Chip outline icon={<Gem aria-hidden />} className="max-w-full">
+          <span className="max-w-44 truncate">{piece.data.title || 'Untitled piece'}</span>
         </Chip>
       )}
       {!drop && page.boardId && board.data && (
