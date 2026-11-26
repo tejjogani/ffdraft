@@ -4,12 +4,14 @@ import {
   type EvaluationSummary,
   IntentError,
   type IntentResult,
+  NODE_SCHEMAS,
   type Op,
   OpError,
   replaceStone,
   type StoredChange,
 } from '@pave/schema'
 import { and, desc, eq, lt, sql } from 'drizzle-orm'
+import { z } from 'zod'
 import { putAsset } from '../assets/assets'
 import * as t from '../db/schema'
 import { commitChange, FACTS_DETAIL, storeFacts, toStoredChange } from '../design'
@@ -175,6 +177,19 @@ class UnchangedStone extends Error {
 }
 
 export const design: HandlerGroup<'design'> = {
+  'design.describe': async (ctx, { pieceId, nodeId }) => {
+    const piece = await getPiece(ctx, pieceId)
+    if (!Object.hasOwn(piece.design.nodes, nodeId)) throw notFound('Feature', nodeId)
+    const node = piece.design.nodes[nodeId]!
+    return {
+      pieceId,
+      nodeId,
+      version: piece.version,
+      kind: node.kind,
+      values: node,
+      schema: z.toJSONSchema(NODE_SCHEMAS[node.kind], { io: 'input' }),
+    }
+  },
   'design.apply': async (ctx, input) =>
     commitChange(ctx, {
       pieceId: input.pieceId,

@@ -71,3 +71,47 @@ it('keeps a project thread while changing focus and records the instructions act
   expect(steps.find((s) => s.name === 'pieces.get')).toMatchObject({ isError: true })
   expect(JSON.stringify(server.model.requests.at(-1)!.messages)).not.toContain('Pendant B')
 })
+
+it('links a scoped CAD inspection and write to the run trace and undoable project history', async () => {
+  const project = await api.call('pieces.create', { templateId: 'solitaire' })
+  const other = await api.call('pieces.create', { templateId: 'solitaire' })
+  const inspect = { pieceId: project.id, nodeId: 'band' }
+  const edit = {
+    pieceId: project.id,
+    baseVersion: project.version,
+    label: 'Thicken the base to 1.8 mm',
+    ops: [{ t: 'update', id: 'band', patch: { thicknessBottom: 1.8 } }],
+  }
+  server.model.push(
+    {
+      content: [tool('design_describe', { ...inspect, pieceId: other.id }, 'foreign')],
+      stop_reason: 'tool_use',
+    },
+    { content: [tool('design_describe', inspect, 'inspect')], stop_reason: 'tool_use' },
+    { content: [tool('design_apply', edit, 'apply')], stop_reason: 'tool_use' },
+    { content: [text('The base is now 1.8 mm.')], stop_reason: 'end_turn' },
+  )
+  const { run } = await api.call('threads.send', {
+    text: 'Thicken just the base to 1.8 mm',
+    clientId: 'test',
+    clientMessageId: 'thicken-base',
+    context: { pieceId: project.id, stage: 'cad' },
+  })
+  await settled(server.parts, run.id)
+  const { steps } = await api.call('traces.run', { id: run.id })
+  expect(steps.filter((s) => s.name === 'design.describe').map((s) => s.isError)).toEqual([
+    true,
+    false,
+  ])
+  expect(steps.find((s) => s.name === 'design.apply')).toMatchObject({
+    input: edit,
+    isError: false,
+  })
+  const [change] = await api.call('design.history', { pieceId: project.id })
+  expect(change).toMatchObject({ actor: { type: 'agent', runId: run.id }, ops: edit.ops })
+  const edited = await api.call('design.describe', inspect)
+  expect(edited.values.thicknessBottom).toBe(1.8)
+  await api.call('design.revert', { pieceId: project.id, runId: run.id })
+  expect((await api.call('design.describe', inspect)).values).toEqual(project.design.nodes.band)
+  expect((await api.call('pieces.get', { id: other.id })).version).toBe(other.version)
+})

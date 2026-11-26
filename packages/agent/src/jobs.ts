@@ -95,6 +95,7 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
           'references.search',
           'references.read',
           'design.history',
+          'design.describe',
           'match.traceOutline',
           'freeform.analyze',
         ],
