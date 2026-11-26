@@ -46,6 +46,7 @@ import {
 } from 'react'
 import { assetUrl } from '../../lib/assets'
 import { useRpcMutation } from '../../lib/query'
+import { useSession } from '../../lib/session'
 import { ProvenanceButton, providerLabel, RightsChip } from '../references/Provenance'
 import { SketchPad } from '../references/SketchPad'
 import { WebReferenceSearch } from '../references/WebReferenceSearch'
@@ -87,9 +88,11 @@ export function DesignBoard({
   pieceId,
   references = [],
   readOnly = false,
+  projectWorkspace = false,
 }: ({ board: Board; pieceId?: never } | { board?: never; pieceId: string }) & {
   references?: Reference[]
   readOnly?: boolean
+  projectWorkspace?: boolean
 }) {
   const boardId = board?.id
   const target: BoardTarget = boardId ? { boardId } : { pieceId: pieceId! }
@@ -108,6 +111,16 @@ export function DesignBoard({
   const takeToCad = useTakeToCad()
   const openAsCad = useOpenAsCad()
   const chosen = references.find((r) => r.id === selected) ?? null
+  const selection = chosen && board && !readOnly && (
+    <SelectionBar
+      key={chosen.id}
+      reference={chosen}
+      projectWorkspace={projectWorkspace}
+      onTakeToCad={() => takeToCad(board, chosen)}
+      onOpenAsCad={() => openAsCad(board, chosen)}
+      onClose={() => setSelected(null)}
+    />
+  )
 
   const changeView = (v: View) => {
     setView(v)
@@ -208,8 +221,18 @@ export function DesignBoard({
       onDrop={onDrop}
     >
       {empty && (
-        <div className="rounded-lg border border-line bg-bg-subtle px-5 py-10 sm:px-9 sm:py-14">
-          <h3 className="font-serif text-title text-fg">
+        <div
+          className={cn(
+            'rounded-lg border border-line bg-bg-subtle',
+            projectWorkspace ? 'p-4' : 'px-5 py-10 sm:px-9 sm:py-14',
+          )}
+        >
+          <h3
+            className={cn(
+              'text-fg',
+              projectWorkspace ? 'text-base font-medium' : 'font-serif text-title',
+            )}
+          >
             {readOnly ? 'No references yet' : 'Collect references for your design'}
           </h3>
           {!readOnly && (
@@ -218,7 +241,7 @@ export function DesignBoard({
                 Bring in a photo of a piece you like, save a link, or get an idea down as a sketch
                 or note.
               </p>
-              <div className="mt-6 flex flex-wrap gap-2">
+              <div className={cn('flex flex-wrap gap-2', projectWorkspace ? 'mt-3' : 'mt-6')}>
                 <Button
                   variant="primary"
                   icon={FileImage}
@@ -258,6 +281,7 @@ export function DesignBoard({
       )}
 
       {empty && referenceSearch}
+      {projectWorkspace && selection}
 
       {(!empty || (board && !readOnly)) && (
         <div
@@ -401,14 +425,7 @@ export function DesignBoard({
         />
       )}
 
-      {chosen && board && !readOnly && (
-        <SelectionBar
-          reference={chosen}
-          onTakeToCad={() => void takeToCad(board, chosen)}
-          onOpenAsCad={() => void openAsCad(board, chosen)}
-          onClose={() => setSelected(null)}
-        />
-      )}
+      {!projectWorkspace && selection}
 
       <Sheet open={sketching} onOpenChange={setSketching} title="Sketch an idea">
         <SketchPad
@@ -715,24 +732,42 @@ function SelectionBar({
   onTakeToCad,
   onOpenAsCad,
   onClose,
+  projectWorkspace,
 }: {
   reference: Reference
-  onTakeToCad: () => void
-  onOpenAsCad: () => void
+  onTakeToCad: () => Promise<void>
+  onOpenAsCad: () => Promise<void>
   onClose: () => void
+  projectWorkspace: boolean
 }) {
   const refusal = takeToCadRefusal(r)
+  const { assistant } = useSession().capabilities
   const [going, setGoing] = useState(false)
-  const go = (fn: () => void) => {
+  const go = (fn: () => Promise<void>) => {
     setGoing(true)
-    fn()
+    void fn().finally(() => setGoing(false))
   }
   return (
     <section
       aria-label="Selected item"
-      className="glass-pane sticky bottom-4 z-10 mx-auto flex w-fit max-w-full flex-wrap items-center gap-2 rounded-full px-3 py-2 shadow-lg"
+      className={cn(
+        'z-10 flex max-w-full flex-wrap items-center gap-2',
+        projectWorkspace
+          ? 'sticky top-12 rounded-lg border border-line bg-bg-subtle p-3'
+          : 'glass-pane sticky bottom-4 mx-auto w-fit rounded-full px-3 py-2 shadow-lg',
+      )}
     >
-      <span className="max-w-56 truncate px-1 text-sm">{r.title || kindWord(r)}</span>
+      <div className={cn('min-w-0', projectWorkspace ? 'flex-1 basis-40' : 'max-w-56 px-1')}>
+        {projectWorkspace && <p className="text-xs text-fg-muted">Selected design</p>}
+        <p className="truncate text-sm font-medium">{r.title || kindWord(r)}</p>
+        {projectWorkspace && !refusal && r.type !== 'model' && (
+          <p className="mt-0.5 text-xs text-fg-muted">
+            {assistant
+              ? 'Use this image for the CAD shape.'
+              : 'Place this image beside CAD for tracing.'}
+          </p>
+        )}
+      </div>
       {r.type === 'model' ? (
         <Button
           size="sm"
@@ -744,13 +779,17 @@ function SelectionBar({
           Open as CAD
         </Button>
       ) : refusal ? (
-        <Tooltip content={refusal}>
-          <span>
-            <Button size="sm" variant="primary" icon={Hammer} disabled>
-              Take to CAD
-            </Button>
-          </span>
-        </Tooltip>
+        projectWorkspace ? (
+          <p className="text-xs text-fg-muted">{refusal}</p>
+        ) : (
+          <Tooltip content={refusal}>
+            <span>
+              <Button size="sm" variant="primary" icon={Hammer} disabled>
+                Take to CAD
+              </Button>
+            </span>
+          </Tooltip>
+        )
       ) : (
         <Button
           size="sm"
@@ -759,7 +798,13 @@ function SelectionBar({
           disabled={going}
           onClick={() => go(onTakeToCad)}
         >
-          {going ? 'Starting…' : 'Take to CAD'}
+          {going
+            ? 'Starting…'
+            : projectWorkspace
+              ? assistant
+                ? 'Build CAD from this image'
+                : 'Open image in CAD'
+              : 'Take to CAD'}
         </Button>
       )}
       <Button size="sm" variant="ghost" onClick={onClose}>

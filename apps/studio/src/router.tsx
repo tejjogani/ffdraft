@@ -106,6 +106,7 @@ const pieceTab = (
   path: string,
   Component: React.ComponentType<{ pieceId: string }>,
   bleed = false,
+  wide = false,
 ) =>
   createRoute({
     getParentRoute: () => pieceRoute,
@@ -113,7 +114,7 @@ const pieceTab = (
     component: function Tab() {
       const { id } = pieceRoute.useParams()
       return (
-        <PieceTab bleed={bleed} pieceId={id}>
+        <PieceTab bleed={bleed} wide={wide} pieceId={id}>
           <Component pieceId={id} />
         </PieceTab>
       )
@@ -186,7 +187,7 @@ const routeTree = rootRoute.addChildren([
   collectionRoute,
   pieceRoute.addChildren([
     pieceTab('/', PieceOverview),
-    pieceTab('directions', PieceDirections),
+    pieceTab('directions', PieceDirections, false, true),
     pieceTab('design', PieceDesign, true),
     pieceTab('render', PieceRender, true),
     pieceTab('on-model', PieceOnModel),
