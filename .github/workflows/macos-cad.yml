@@ -66,6 +66,8 @@ jobs:
           PAVE_AUTH: local
           PAVE_SEED: "false"
           PAVE_TEST_BROWSER: webkit
+          # Hosted VMs use the CPU for the Cycles smoke render.
+          PAVE_CYCLES_DEVICE: CPU
           INSTALL_BLENDER: ${{ inputs.install_blender || false }}
         run: |
           node -e 'if (process.platform !== "darwin" || process.arch !== "arm64") process.exit(1); console.log(process.platform, process.arch, process.version)'
