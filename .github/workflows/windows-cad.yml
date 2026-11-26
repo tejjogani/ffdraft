@@ -63,6 +63,18 @@ jobs:
           New-Item -ItemType Directory -Path $logs | Out-Null
           $stdout = Join-Path $logs 'install.stdout.log'
           $stderr = Join-Path $logs 'install.stderr.log'
+          $failures = [System.Collections.Generic.List[string]]::new()
+          function Test-PaveStage($name, [scriptblock]$checks) {
+            Write-Host "::group::$name"
+            try {
+              & $checks
+            } catch {
+              $failures.Add($name)
+              Write-Warning $_
+            } finally {
+              Write-Host '::endgroup::'
+            }
+          }
           Write-Host '::group::Install and start Pavé from PowerShell'
           $launcher = Start-Process -FilePath pwsh -ArgumentList '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', './install.ps1', '--start' -WorkingDirectory $PWD -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
           $deadline = (Get-Date).AddMinutes(4)
@@ -88,27 +100,28 @@ jobs:
             if ($studio.Content -notmatch '<div id="root"') { throw 'The Windows server did not serve Studio.' }
             Write-Host '::endgroup::'
 
-            Write-Host '::group::Verify Python CAD against the running Windows server'
-            python -m unittest discover -s packages/pave-python/tests -v
-            Write-Host '::endgroup::'
-
-            Write-Host '::group::Verify the CAD guide and manual editing in Chromium'
-            pnpm exec tsx apps/studio/e2e/cad-guide.ts $env:PAVE_TEST_URL
-            pnpm exec tsx apps/studio/e2e/manual-cad.ts $env:PAVE_TEST_URL
-            Write-Host '::endgroup::'
-
-            Write-Host '::group::Install and verify managed Blender through Studio'
-            pnpm exec tsx apps/studio/e2e/render-engine-setup.ts $env:PAVE_TEST_URL $logs
-            $engine = Invoke-RestMethod -Method Post -Uri "$env:PAVE_TEST_URL/api/rpc/renders.engine" -ContentType 'application/json' -Body '{}'
-            if (-not $engine.available -or (Split-Path -Leaf $engine.path) -ne 'blender.exe') {
-              throw 'Pavé did not select the managed Windows Blender executable.'
+            Test-PaveStage 'Verify Python CAD against the running Windows server' {
+              python -m unittest discover -s packages/pave-python/tests -v
             }
-            $version = @(& $engine.path --version)
-            $version | Select-Object -First 1 | Write-Output
-            if ($version[0] -notmatch '^Blender 5\.3\.') {
-              throw 'The managed Blender executable failed its version check.'
+            Test-PaveStage 'Verify the CAD guide in Chromium' {
+              pnpm exec tsx apps/studio/e2e/cad-guide.ts $env:PAVE_TEST_URL
             }
-            Write-Host '::endgroup::'
+            Test-PaveStage 'Verify manual CAD editing in Chromium' {
+              pnpm exec tsx apps/studio/e2e/manual-cad.ts $env:PAVE_TEST_URL
+            }
+            Test-PaveStage 'Install and verify managed Blender through Studio' {
+              pnpm exec tsx apps/studio/e2e/render-engine-setup.ts $env:PAVE_TEST_URL $logs
+              $engine = Invoke-RestMethod -Method Post -Uri "$env:PAVE_TEST_URL/api/rpc/renders.engine" -ContentType 'application/json' -Body '{}'
+              if (-not $engine.available -or (Split-Path -Leaf $engine.path) -ne 'blender.exe') {
+                throw 'Pavé did not select the managed Windows Blender executable.'
+              }
+              $version = @(& $engine.path --version)
+              $version | Select-Object -First 1 | Write-Output
+              if ($version[0] -notmatch '^Blender 5\.3\.') {
+                throw 'The managed Blender executable failed its version check.'
+              }
+            }
+            if ($failures.Count) { throw "Failed Windows checks: $($failures -join ', ')" }
           } finally {
             if (-not $launcher.HasExited) {
               $PSNativeCommandUseErrorActionPreference = $false
