@@ -115,7 +115,18 @@ export function mergePatch(target: unknown, patch: unknown): unknown {
   return out
 }
 
-const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
+/** JSON object key order can change in storage. Array order is part of the value. */
+export function sameJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (Array.isArray(a))
+    return Array.isArray(b) && a.length === b.length && a.every((value, i) => sameJson(value, b[i]))
+  if (!isObject(a) || !isObject(b)) return false
+  const keys = Object.keys(a)
+  return (
+    keys.length === Object.keys(b).length &&
+    keys.every((key) => Object.hasOwn(b, key) && sameJson(a[key], b[key]))
+  )
+}
 
 /**
  * The merge patch that turns `from` into `to`. Undo is computed from the stored node before and
@@ -132,7 +143,6 @@ export function diffPatch(
     const before = from[k]
     if (sameJson(before, v)) continue
     if (isObject(before) && isObject(v)) {
-      // Parsing can reorder an object's keys without changing a value; that is not a change.
       const inner = diffPatch(before, v)
       if (Object.keys(inner).length > 0) out[k] = inner
     } else out[k] = v

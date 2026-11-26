@@ -46,8 +46,14 @@ Front, Top or Right plane, then set an extrusion depth. Each solid keeps its ori
 plane in the design. **Edit profile** in the inspector reopens them. The operation uses the design
 history, survives Pavé file save and reopen, and exports to free STL at the drawn scale.
 
-The remaining milestones below cover standalone curves, snaps, attached construction planes,
-open curve tools, and operations that take more than one curve.
+**Available next slice.** **Draw curve** creates an independent open or closed polyline in the
+CAD viewport. Click the Front, Top, or Right plane or type millimetre coordinates. Endpoint and
+midpoint snaps use other curves on that plane. **Edit points** reopens the curve, and its point IDs
+remain stable across edits, Undo/Redo, and Pavé file reopen. Construction curves contribute no
+metal to manufacturing exports.
+
+The remaining milestones below cover smooth curves, additional curve tools, attached
+construction planes, and operations that use curves to make solids.
 
 **The first five minutes.**
 

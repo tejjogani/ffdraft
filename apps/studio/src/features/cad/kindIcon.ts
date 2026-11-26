@@ -43,4 +43,5 @@ export const KIND_ICON: Record<NodeKind, LucideIcon> = {
   engraving: PenLine,
   pattern: Repeat2,
   group: Folder,
+  curve: Spline,
 }

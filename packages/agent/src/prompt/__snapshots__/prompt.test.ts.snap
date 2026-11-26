@@ -6,9 +6,9 @@ exports[`the frozen system prompt > has a stable hash (snapshot) that covers the
     7082,
     40264,
     10638,
-    14338,
+    14609,
   ],
-  "hash": "prompt-1dc54af27f4c3d",
+  "hash": "prompt-14ce817da532eb",
 }
 `;
 
@@ -263,5 +263,9 @@ Shared value lists:
 - angle: number 1–360° = 360. only when type is polar
 - spacing: number 0.1–200 mm = 5. only when type is linear
 ## group: Group
-- children (required): list of string (0–500 items)"
+- children (required): list of string (0–500 items)
+## curve: Construction curve. An editable planar polyline in millimetres.
+- plane (required): front | top | right
+- points (required): list of object (2–128 items). Ordered vertices with stable ids and horizontal and vertical coordinates in mm.
+- closed: boolean = false"
 `;

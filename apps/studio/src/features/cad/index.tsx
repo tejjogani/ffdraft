@@ -15,9 +15,12 @@ import {
   labelForOps,
   type NodeInput,
   type NodeKind,
+  type NodeOf,
+  newId,
   nodeTitle,
   type Piece,
   type PieceSpecInput,
+  sameJson,
 } from '@pave/schema'
 import {
   AiMark,
@@ -63,6 +66,8 @@ import { renderThisView } from '../render/shot-actions'
 import { useViewportTools } from './capture-tool'
 import { useCadCommands } from './commands'
 import { captureCover } from './cover'
+import { CurveEditor } from './curves/CurveEditor'
+import { CurveOverlay } from './curves/CurveOverlay'
 import { EmptyDesign } from './empty/EmptyDesign'
 import { exportFormats, runExport } from './export'
 import { ChangeChip } from './hud/ChangeChip'
@@ -245,6 +250,7 @@ function Workspace({ piece }: { piece: Piece }) {
   const [menuSubject, setMenuSubject] = useState<Subject>({ type: 'piece', pieceId })
   const [addOpen, setAddOpen] = useState(false)
   const [profile, setProfile] = useState<{ original?: ProfileNode } | null>(null)
+  const [curve, setCurve] = useState<{ original?: NodeOf<'curve'> } | null>(null)
   const [confirm, setConfirm] = useState<{ ids: string[]; dependents: string[] } | null>(null)
   const root = useRef<HTMLDivElement>(null)
   const width = useWidth(root)
@@ -255,7 +261,19 @@ function Workspace({ piece }: { piece: Piece }) {
   const [sheet, setSheet] = useState<'outliner' | 'inspector' | null>(null)
   const [marker, setMarker] = useState<MarkerSpot | null>(null)
   const [stepping, setStepping] = useState<string | null>(null)
-  const formats = exportFormats(kernel.formats)
+  const formats = view.order.some((id) => view.nodes[id]?.kind !== 'curve')
+    ? exportFormats(kernel.formats)
+    : []
+  const curves = useMemo(
+    () =>
+      (evaluation?.curves ?? []).filter(
+        (c) =>
+          c.nodeId !== curve?.original?.id &&
+          view.nodes[c.nodeId]?.visible &&
+          !hidden.includes(c.nodeId),
+      ),
+    [evaluation?.curves, view, hidden, curve],
+  )
   const mountedVersion = useRef(version)
 
   useViewportTools(pieceId, session)
@@ -344,7 +362,43 @@ function Workspace({ piece }: { piece: Piece }) {
     ws().select([node.id])
   }
 
-  const drawProfile = () => setProfile({})
+  const drawProfile = () => {
+    if (!curve) setProfile({})
+  }
+  const drawCurve = () => {
+    if (!profile && !curve) setCurve({})
+  }
+  const saveCurve = (definition: Pick<NodeOf<'curve'>, 'plane' | 'points' | 'closed'>) => {
+    if (!session || readOnly) throw new Error('This design is read-only.')
+    const original = curve?.original
+    if (!original) {
+      const id = newId('curve')
+      session.commit(addPrepared(view, { id, kind: 'curve', ...definition }), {
+        label: 'Drew a construction curve',
+      })
+      ws().select([id])
+    } else {
+      const current = session.get().view.nodes[original.id]
+      if (
+        current?.kind !== 'curve' ||
+        current.plane !== original.plane ||
+        current.closed !== original.closed ||
+        !sameJson(current.points, original.points)
+      )
+        throw new Error(
+          'This curve changed while it was open. Reopen it to edit the latest version.',
+        )
+      if (
+        current.plane !== definition.plane ||
+        current.closed !== definition.closed ||
+        !sameJson(current.points, definition.points)
+      )
+        session.commit([{ t: 'update', id: original.id, patch: definition }], {
+          label: 'Edited construction curve points',
+        })
+    }
+    setCurve(null)
+  }
   const saveProfile = (source: DrawnProfile, thickness: number) => {
     if (!session || readOnly) throw new Error('This design is read-only.')
     const original = profile?.original
@@ -446,6 +500,7 @@ function Workspace({ piece }: { piece: Piece }) {
     hasRun: !!run,
     openAddMenu: () => setAddOpen(true),
     drawProfile,
+    drawCurve,
     renderThisView: () => {
       const camera = viewer.current?.shotCamera()
       if (!camera) return
@@ -556,6 +611,12 @@ function Workspace({ piece }: { piece: Piece }) {
       readOnly={readOnly}
       onDelete={requestDelete}
       onEditProfile={(original) => setProfile({ original })}
+      onEditCurve={(original) => {
+        if (!curve && !profile) {
+          setSheet(null)
+          setCurve({ original })
+        }
+      }}
       empty={
         <PiecePanel
           piece={piece}
@@ -606,6 +667,21 @@ function Workspace({ piece }: { piece: Piece }) {
           onHover={(p) => ws().setHover(p)}
           onContextMenu={openViewportMenu}
         >
+          <CurveOverlay
+            viewer={viewerHandle}
+            curves={curves}
+            selected={selection}
+            onPick={(nodeId, additive) => ws().pick({ nodeId }, additive)}
+          />
+          {curve && !readOnly && (
+            <CurveEditor
+              viewer={viewerHandle}
+              snapSources={curves}
+              {...(curve.original ? { original: curve.original } : {})}
+              onSave={saveCurve}
+              onCancel={() => setCurve(null)}
+            />
+          )}
           {!empty && (
             <ViewportMenu
               handle={menu}
@@ -635,41 +711,46 @@ function Workspace({ piece }: { piece: Piece }) {
             />
           )}
           {/* On a phone the two toolbars do not fit one row: saving and export wrap below. */}
-          <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex flex-wrap items-start justify-between gap-2 [&>*]:pointer-events-auto">
-            <div className="flex min-w-0 items-center gap-2">
-              {!dockOutliner && (
-                <IconButton
-                  icon={PanelLeft}
-                  label="Features"
-                  onClick={() => setSheet('outliner')}
-                  className="glass size-9 shrink-0 rounded-lg shadow-sm"
+          {!curve && (
+            <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex flex-wrap items-start justify-between gap-2 [&>*]:pointer-events-auto">
+              <div className="flex min-w-0 items-center gap-2">
+                {!dockOutliner && (
+                  <IconButton
+                    icon={PanelLeft}
+                    label="Features"
+                    onClick={() => setSheet('outliner')}
+                    className="glass size-9 shrink-0 rounded-lg shadow-sm"
+                  />
+                )}
+                <ViewToolbar
+                  canUndo={undoable}
+                  canRedo={redoable}
+                  compact={compact}
+                  {...(!empty && !readOnly
+                    ? { onDrawProfile: drawProfile, onDrawCurve: drawCurve }
+                    : {})}
                 />
-              )}
-              <ViewToolbar
-                canUndo={undoable}
-                canRedo={redoable}
-                compact={compact}
-                {...(!empty && !readOnly ? { onDrawProfile: drawProfile } : {})}
-              />
-            </div>
-            <div className="ml-auto flex shrink-0 items-center gap-2">
-              <FileToolbar
-                save={save}
-                formats={empty ? [] : formats}
-                simplified={simplified}
-                compact={compact}
-              />
-              {!dockInspector && (
-                <IconButton
-                  icon={PanelRight}
-                  label="Inspector"
-                  onClick={() => setSheet('inspector')}
-                  className="glass size-9 shrink-0 rounded-lg shadow-sm"
+              </div>
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                <FileToolbar
+                  save={save}
+                  formats={formats}
+                  canSaveFile={!empty}
+                  simplified={simplified}
+                  compact={compact}
                 />
-              )}
+                {!dockInspector && (
+                  <IconButton
+                    icon={PanelRight}
+                    label="Inspector"
+                    onClick={() => setSheet('inspector')}
+                    className="glass size-9 shrink-0 rounded-lg shadow-sm"
+                  />
+                )}
+              </div>
             </div>
-          </div>
-          {workingRunId && (
+          )}
+          {!curve && workingRunId && (
             <div className="pointer-events-none absolute inset-x-0 top-16 z-30 flex justify-center">
               <div
                 role="status"
@@ -691,7 +772,7 @@ function Workspace({ piece }: { piece: Piece }) {
               </div>
             </div>
           )}
-          {run && !workingRunId && (
+          {!curve && run && !workingRunId && (
             <div className="absolute inset-x-0 top-16 z-20 flex justify-center">
               <ChangeChip
                 run={run}
@@ -704,16 +785,16 @@ function Workspace({ piece }: { piece: Piece }) {
               />
             </div>
           )}
-          {empty ? (
+          {empty && !curve ? (
             <EmptyDesign
               pieceId={pieceId}
               design={view}
               assistantAvailable={auth.capabilities.assistant}
               onBuild={buildFromSpec}
               onImport={importNode}
-              {...(!readOnly ? { onDrawProfile: drawProfile } : {})}
+              {...(!readOnly ? { onDrawProfile: drawProfile, onDrawCurve: drawCurve } : {})}
             />
-          ) : (
+          ) : !empty ? (
             <StageStatus
               status={status}
               coverAssetId={piece.coverAssetId}
@@ -722,8 +803,8 @@ function Workspace({ piece }: { piece: Piece }) {
               hasEvaluation={!!evaluation}
               onRetry={retry}
             />
-          )}
-          {!empty && (
+          ) : null}
+          {!empty && !curve && (
             <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex items-end justify-between gap-3 [&>*]:pointer-events-auto">
               <div className="flex min-w-0 flex-wrap gap-1.5">
                 {!compact &&

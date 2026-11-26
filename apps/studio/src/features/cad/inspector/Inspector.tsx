@@ -3,7 +3,7 @@
  * "Fine-tune" reveals the `advanced` fields. With nothing selected it shows the piece itself.
  */
 import type { Evaluation } from '@pave/kernel'
-import { type Design, nodeTitle } from '@pave/schema'
+import { type Design, type NodeOf, nodeTitle } from '@pave/schema'
 import { Button, Chip, cn, ScrollArea, Switch } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
 import { ArrowUpRight, PencilRuler, Scale, SlidersHorizontal, Trash2 } from 'lucide-react'
@@ -28,6 +28,7 @@ export interface InspectorProps {
   readOnly: boolean
   onDelete(ids: string[]): void
   onEditProfile(node: ProfileNode): void
+  onEditCurve(node: NodeOf<'curve'>): void
   empty: React.ReactNode
 }
 
@@ -40,6 +41,7 @@ export function Inspector({
   readOnly,
   onDelete,
   onEditProfile,
+  onEditCurve,
   empty,
 }: InspectorProps) {
   const selection = useWorkspace((s) => s.selection)
@@ -117,6 +119,21 @@ export function Inspector({
         {/* Keyed by feature: another feature's form opens at its top, not where this one was scrolled. */}
         <ScrollArea key={node.id} className="flex-1">
           <div className="flex flex-col pb-6">
+            {node.kind === 'curve' && (
+              <section
+                aria-label="Construction curve points"
+                className="flex flex-col items-start gap-2 border-b border-line px-4 py-3"
+              >
+                <p className="text-xs text-fg-muted">
+                  {node.points.length} points on the {node.plane} plane
+                </p>
+                {!readOnly && selection.length === 1 && (
+                  <Button size="sm" icon={PencilRuler} onClick={() => onEditCurve(node)}>
+                    Edit points
+                  </Button>
+                )}
+              </section>
+            )}
             {drawn && (
               <section
                 aria-label="Drawn profile"

@@ -27,6 +27,7 @@ import {
   type Op,
   OpError,
   type StoredChange,
+  sameJson,
   squashOps,
 } from '@pave/schema'
 
@@ -250,8 +251,6 @@ export function cancelGesture(s: SessionState): SessionState {
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
 
-const equal = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
-
 /**
  * The part of an inverse patch whose values the forward patch wrote and nobody has changed
  * since. A variant object (one with `type`) is restored whole or not at all, since half of one
@@ -270,9 +269,9 @@ function guardPatch(
     if (isObject(before) && isObject(wrote) && !('type' in wrote)) {
       const sub = guardPatch(before, wrote, now)
       if (Object.keys(sub).length) out[k] = sub
-    } else if (equal(now, wrote === null ? undefined : mergePatch(undefined, wrote))) {
+    } else if (sameJson(now, wrote === null ? undefined : mergePatch(undefined, wrote))) {
       out[k] = before
-    } else if (isObject(wrote) && isObject(now) && equal(mergePatch(cur[k], wrote), now)) {
+    } else if (isObject(wrote) && isObject(now) && sameJson(mergePatch(cur[k], wrote), now)) {
       // A variant still exactly as written (merge-patch over its previous value).
       out[k] = before
     }
