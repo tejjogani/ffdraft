@@ -1,6 +1,6 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 18:45 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 19:03 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## Render: settle the release state (better earlier stones, each later change kept only if a blind side-by-side says so)
 
@@ -17,7 +17,9 @@ _Generated 26 Nov 2026 18:45 UTC by `docs/agents/sync_status.py` from the workfl
 | draft:harness | done | I wrote the harness-first build plan to /tmp/claude-0/-home-user/24192795-28e0-5484-b947-9462017ba677/scratchpad/plan-own-cad/draft-harness.md. It is about 330 lines in the style of spec-truth.md: what exists today, Exp… |
 | draft:engine | done | The plan is written: 508 lines in the spec-truth.md style. Its target path is docs/plans/own-cad-and-routing.md, the name BOARD row A15 uses. I read survey-code.md and research.md in full. I also checked the code the pl… |
 | draft:experience | done | I wrote the experience-angle build plan to draft-experience.md (about 460 lines). It follows spec-truth.md's plan style: what exists today; experience (the four journeys screen by screen); structure; contracts; prompt; … |
-| synthesise | running or interrupted |  |
+| synthesise | done | I merged the three drafts into one plan at /tmp/claude-0/-home-user/24192795-28e0-5484-b947-9462017ba677/scratchpad/plan-own-cad/plan.md (about 600 lines, in spec-truth.md's style). It starts from the experience draft a… |
+| critic | done | Completeness critique of plan.md (/tmp/claude-0/-home-user/24192795-28e0-5484-b947-9462017ba677/scratchpad/plan-own-cad/plan.md). Read-only. Code claims were checked in /home/user/ffdraft-spec and /home/user/ffdraft-ui.… |
+| revise | done | I revised plan.md against all 13 points of the critique. I checked the main code claims in the two worktrees first, and they held: the people's setSpec callers, DRAFT_WRITES, commands.ts l.1200, photo skill l.20, PROMPT… |
 
 ## Polish: spec (two amendments in one turn, whole message on the card) then Diaex (expiry during an outage, per-user check limit)
 
@@ -25,7 +27,8 @@ _Generated 26 Nov 2026 18:45 UTC by `docs/agents/sync_status.py` from the workfl
 |---|---|---|
 | spec:fix | done | I fixed all eleven findings (M1, m1–m10) in /home/user/ffdraft-spec on branch spec/truth and committed them as db80257 (not pushed). Every check passes: typecheck, schema, canon, agent, the full server suite twice, stud… |
 | spec:verify | done | 1 blocker, 4 minor. FAIL: one blocker remains. On spec/truth at db80257, M1 is only partly fixed. When an amendment changes a whole group line ('ring', 'body' or 'chain'), its car… |
-| diaex:fix | running or interrupted |  |
+| diaex:fix | done | All six findings are dealt with and committed as 5492aac on diaex/connect in /home/user/ffdraft-ai (not pushed). The typecheck, all four suites and the access e2e at both sizes pass. Sign in with Diaex and the gate work… |
+| diaex:verify | running or interrupted |  |
 
 ## Diaex sign-in and access gate: review fixes (lane A, A8b)
 
@@ -144,7 +147,7 @@ _Generated 26 Nov 2026 18:45 UTC by `docs/agents/sync_status.py` from the workfl
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 5b5f8af Status: CAD view checking its second pass; render verifying; spec polish checked, Diaex polish; plan drafting
+Branch `claude/busy-bardeen-o482lo`, head: e27281d Board: render settles its release state by blind side-by-side
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -175,7 +178,7 @@ Branch `claude/busy-bardeen-o482lo`, head: 5b5f8af Status: CAD view checking its
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 5b5f8af Status: CAD view checking its second pass; render verifying; spec polish checked, Diaex polish; plan drafting
+Branch `claude/busy-bardeen-o482lo`, head: e27281d Board: render settles its release state by blind side-by-side
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -217,7 +220,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 5b5f8af Status: CAD view checking its second pass; render verifying; spec polish checked, Diaex polish; plan drafting
+Branch `claude/busy-bardeen-o482lo`, head: e27281d Board: render settles its release state by blind side-by-side
 
 | Agent | State | Outcome |
 |---|---|---|
