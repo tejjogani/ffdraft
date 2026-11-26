@@ -1,0 +1,337 @@
+import type {
+  Brep,
+  File3dm,
+  File3dmLayerTable,
+  GeometryBase,
+  Mesh,
+  RhinoModule,
+  UnitSystem,
+} from 'rhino3dm'
+import { writeStl } from '../mesh/stl'
+import { freeRhino, loadRhino3dm } from '../runtime/rhino'
+import type { IndexedTriangles } from '../solid/meshing'
+import type { Bounds } from '../types'
+
+const MAX_FILE_MIB = 64
+export const MAX_RHINO_FILE_BYTES = MAX_FILE_MIB * 1024 * 1024
+const MAX_OBJECTS = 5_000
+const MAX_VERTICES = 3_000_000
+const MAX_TRIANGLES = 1_000_000
+const MAX_BREP_FACES = 20_000
+
+const MESH_IN_RHINO =
+  'In Rhino, run Mesh on the originals and use Export Selected to save the resulting meshes as a .3dm with model units.'
+const EXPLODE_IN_RHINO = 'Use Explode in Rhino to turn block instances into placed objects.'
+const TOO_COMPLEX =
+  'This Rhino model exceeds the import complexity limit. Export fewer objects or use a coarser mesh.'
+
+interface RhinoObjectLabel {
+  name: string
+  layer: string | null
+}
+
+export interface RhinoMeshObject extends RhinoObjectLabel {
+  /** Binary STL in Rhino's world coordinates, converted to millimetres with Z up. */
+  bytes: Uint8Array<ArrayBuffer>
+  bounds: Bounds
+}
+
+export interface RhinoSkippedObject extends RhinoObjectLabel {
+  reason: string
+}
+
+export interface RhinoImport {
+  units: string
+  objects: readonly RhinoMeshObject[]
+  skipped: readonly RhinoSkippedObject[]
+}
+
+interface RemainingGeometry {
+  vertices: number
+  triangles: number
+  brepFaces: number
+}
+
+class SkippedGeometry extends Error {}
+
+function withHandles<T>(read: (hold: <H extends object | null>(handle: H) => H) => T): T {
+  const handles: object[] = []
+  try {
+    return read((handle) => {
+      if (handle) handles.push(handle)
+      return handle
+    })
+  } finally {
+    for (const handle of handles.reverse()) freeRhino(handle)
+  }
+}
+
+function validateArchive(bytes: Uint8Array): void {
+  if (bytes.byteLength > MAX_RHINO_FILE_BYTES)
+    throw new Error(`Rhino files are limited to ${MAX_FILE_MIB} MB. Export a smaller selection.`)
+
+  const header = new TextDecoder().decode(bytes.subarray(0, 32))
+  const version = Number(/^3D Geometry File Format +([0-9]+)$/.exec(header)?.[1])
+  if (header.length !== 32 || !Number.isInteger(version) || version < 1)
+    throw new Error('The selected file is not a Rhino .3dm file.')
+
+  // Some Rhino 1 archives predate the end marker. In later archives it records the exact file size.
+  if (version === 1) return
+  const width = version < 50 ? 4 : 8
+  const at = bytes.byteLength - (4 + width * 2)
+  if (at < 32) throw new Error('The Rhino file is incomplete. Save or download it again.')
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const readSize = (offset: number) =>
+    width === 4 ? view.getUint32(offset, true) : Number(view.getBigUint64(offset, true))
+  if (
+    view.getUint32(at, true) !== 0x7fff ||
+    readSize(at + 4) !== width ||
+    readSize(at + 4 + width) !== bytes.byteLength
+  ) {
+    throw new Error('The Rhino file is incomplete or damaged. Save or download it again.')
+  }
+}
+
+function fileUnits(rhino: RhinoModule, units: UnitSystem): { name: string; mm: number } {
+  // rhino3dm exposes OpenNURBS unit names in JS, but does not expose UnitScale.
+  const u = rhino.UnitSystem
+  const known = new Map<UnitSystem, [string, number]>([
+    [u.Angstroms, ['angstroms', 1e-7]],
+    [u.Nanometers, ['nanometres', 1e-6]],
+    [u.Microns, ['microns', 1e-3]],
+    [u.Millimeters, ['millimetres', 1]],
+    [u.Centimeters, ['centimetres', 10]],
+    [u.Decimeters, ['decimetres', 100]],
+    [u.Meters, ['metres', 1e3]],
+    [u.Dekameters, ['dekametres', 1e4]],
+    [u.Hectometers, ['hectometres', 1e5]],
+    [u.Kilometers, ['kilometres', 1e6]],
+    [u.Megameters, ['megametres', 1e9]],
+    [u.Gigameters, ['gigametres', 1e12]],
+    [u.Microinches, ['microinches', 25.4e-6]],
+    [u.Mils, ['mils', 0.0254]],
+    [u.Inches, ['inches', 25.4]],
+    [u.Feet, ['feet', 304.8]],
+    [u.Yards, ['yards', 914.4]],
+    [u.Miles, ['miles', 1609344]],
+    [u.PrinterPoints, ['printer points', 25.4 / 72]],
+    [u.PrinterPicas, ['printer picas', 25.4 / 6]],
+    [u.NauticalMiles, ['nautical miles', 1852e3]],
+    [u.AstronomicalUnits, ['astronomical units', 1.4959787e14]],
+    [u.LightYears, ['light years', 9.4607304725808e18]],
+    [u.Parsecs, ['parsecs', 3.08567758e19]],
+  ])
+  const knownUnit = known.get(units)
+  if (!knownUnit)
+    throw new Error(
+      'This file has missing or custom units. Set standard model units in Rhino and save it again.',
+    )
+  return { name: knownUnit[0], mm: knownUnit[1] }
+}
+
+function addTriangle(
+  indices: Uint32Array,
+  at: number,
+  positions: Float32Array,
+  a: number,
+  b: number,
+  c: number,
+): void {
+  const ax = positions[a * 3]!
+  const ay = positions[a * 3 + 1]!
+  const az = positions[a * 3 + 2]!
+  const ux = positions[b * 3]! - ax
+  const uy = positions[b * 3 + 1]! - ay
+  const uz = positions[b * 3 + 2]! - az
+  const vx = positions[c * 3]! - ax
+  const vy = positions[c * 3 + 1]! - ay
+  const vz = positions[c * 3 + 2]! - az
+  if (uy * vz === uz * vy && uz * vx === ux * vz && ux * vy === uy * vx)
+    throw new SkippedGeometry('The mesh contains a collapsed triangle in millimetres.')
+  indices[at] = a
+  indices[at + 1] = b
+  indices[at + 2] = c
+}
+
+/** A triangle mesh is copied out of WASM before the document is freed. */
+function readMesh(mesh: Mesh, mm: number, budget: RemainingGeometry): IndexedTriangles {
+  return withHandles((hold) => {
+    const vertices = hold(mesh.vertices())
+    const faces = hold(mesh.faces())
+    const vertexCount = vertices.count
+    const faceCount = faces.count
+    if (vertexCount < 3 || faceCount < 1)
+      throw new SkippedGeometry('The mesh has no triangle geometry.')
+    if (vertexCount > budget.vertices || faceCount > budget.triangles) throw new Error(TOO_COMPLEX)
+    budget.vertices -= vertexCount
+
+    // A quad has four distinct indices. Rhino stores a triangle as [a, b, c, c].
+    for (let i = 0; i < faceCount; i++) {
+      const corners = faces.get(i)
+      if (
+        corners.length !== 4 ||
+        corners.some((v) => !Number.isInteger(v) || v < 0 || v >= vertexCount)
+      )
+        throw new SkippedGeometry('The mesh has a face with invalid vertex indices.')
+    }
+    const quadCount = faces.quadCount
+    const triangleCount = faceCount + quadCount
+    if (triangleCount > budget.triangles) throw new Error(TOO_COMPLEX)
+    budget.triangles -= triangleCount
+    if (quadCount > 0 && !faces.convertQuadsToTriangles())
+      throw new SkippedGeometry('Rhino could not triangulate a polygon in this mesh.')
+    if (faces.count !== triangleCount)
+      throw new SkippedGeometry('Some mesh faces could not be triangulated.')
+
+    const positions = new Float32Array(vertexCount * 3)
+    for (let i = 0; i < vertexCount; i++) {
+      const point = vertices.point3dAt(i)
+      for (let k = 0; k < 3; k++) {
+        const value = Math.fround(point[k]! * mm)
+        if (!Number.isFinite(value))
+          throw new SkippedGeometry('The mesh has invalid vertex coordinates.')
+        positions[i * 3 + k] = value
+      }
+    }
+    const indices = new Uint32Array(triangleCount * 3)
+    for (let i = 0; i < triangleCount; i++) {
+      const [a, b, c] = faces.get(i)
+      addTriangle(indices, i * 3, positions, a!, b!, c!)
+    }
+    return { positions, indices }
+  })
+}
+
+function readBrep(
+  rhino: RhinoModule,
+  brep: Brep,
+  mm: number,
+  budget: RemainingGeometry,
+): IndexedTriangles[] {
+  return withHandles((hold) => {
+    const faces = hold(brep.faces())
+    const faceCount = faces.count
+    if (faceCount > budget.brepFaces) throw new Error(TOO_COMPLEX)
+    budget.brepFaces -= faceCount
+    const missing = () =>
+      new SkippedGeometry(`The BRep lacks a complete saved render mesh. ${MESH_IN_RHINO}`)
+    if (faceCount < 1) throw missing()
+    const meshes: IndexedTriangles[] = []
+    for (let i = 0; i < faceCount; i++) {
+      meshes.push(
+        withHandles((holdFace) => {
+          const face = holdFace(faces.get(i))
+          const mesh = holdFace(face.getMesh(rhino.MeshType.Render))
+          if (!mesh) throw missing()
+          return readMesh(mesh, mm, budget)
+        }),
+      )
+    }
+    return meshes
+  })
+}
+
+function objectMeshes(
+  rhino: RhinoModule,
+  geometry: GeometryBase,
+  mm: number,
+  budget: RemainingGeometry,
+): IndexedTriangles[] {
+  if (geometry instanceof rhino.Mesh) return [readMesh(geometry, mm, budget)]
+  if (geometry instanceof rhino.Brep) return readBrep(rhino, geometry, mm, budget)
+  if (geometry instanceof rhino.Extrusion)
+    return withHandles((hold) => {
+      const mesh = hold(geometry.getMesh(rhino.MeshType.Render))
+      if (mesh) return [readMesh(mesh, mm, budget)]
+      throw new SkippedGeometry(`The extrusion lacks a saved render mesh. ${MESH_IN_RHINO}`)
+    })
+  if (geometry instanceof rhino.InstanceReference)
+    throw new SkippedGeometry(`Block instance. ${EXPLODE_IN_RHINO}`)
+  if (geometry instanceof rhino.Curve) throw new SkippedGeometry('Rhino curve.')
+  if (geometry instanceof rhino.Point || geometry instanceof rhino.PointCloud)
+    throw new SkippedGeometry('Rhino point or point cloud.')
+  if (geometry instanceof rhino.Surface || geometry instanceof rhino.SubD)
+    throw new SkippedGeometry(`This Rhino surface has no supported mesh. ${MESH_IN_RHINO}`)
+  throw new SkippedGeometry('Unsupported Rhino object type.')
+}
+
+function meshBounds(meshes: readonly IndexedTriangles[]): Bounds {
+  const min: Bounds['min'] = [Infinity, Infinity, Infinity]
+  const max: Bounds['max'] = [-Infinity, -Infinity, -Infinity]
+  for (const { indices, positions } of meshes) {
+    for (const index of indices) {
+      for (const axis of [0, 1, 2] as const) {
+        const point = positions[index * 3 + axis]!
+        min[axis] = Math.min(min[axis], point)
+        max[axis] = Math.max(max[axis], point)
+      }
+    }
+  }
+  return { min, max }
+}
+
+function layerPath(layers: File3dmLayerTable, index: number): string | null {
+  return withHandles((hold) => {
+    const layer = hold(layers.findIndex(index))
+    return layer?.fullPath?.trim() || layer?.name?.trim() || null
+  })
+}
+
+/** Reads native Rhino meshes and complete render caches without changing their placement. */
+export async function readRhino3dm(bytes: Uint8Array): Promise<RhinoImport> {
+  validateArchive(bytes)
+  const rhino = await loadRhino3dm()
+  return withHandles((hold) => {
+    let doc: File3dm
+    try {
+      doc = hold(rhino.File3dm.fromByteArray(bytes))
+      if (!doc) throw new Error('OpenNURBS could not read the archive')
+    } catch (cause) {
+      throw new Error('The Rhino file could not be read. Save or download it again.', { cause })
+    }
+    const objects = hold(doc.objects())
+    const count = objects.count
+    if (count > MAX_OBJECTS) throw new Error(TOO_COMPLEX)
+    const layers = hold(doc.layers())
+    const settings = hold(doc.settings())
+    const units = fileUnits(rhino, settings.modelUnitSystem)
+    const result: RhinoMeshObject[] = []
+    const skipped: RhinoSkippedObject[] = []
+    const layerNames = new Map<number, string | null>()
+    const budget: RemainingGeometry = {
+      vertices: MAX_VERTICES,
+      triangles: MAX_TRIANGLES,
+      brepFaces: MAX_BREP_FACES,
+    }
+
+    for (let i = 0; i < count; i++) {
+      withHandles((holdObject) => {
+        const object = holdObject(objects.get(i))
+        const attrs = object && holdObject(object.attributes())
+        const layerIndex = attrs?.layerIndex ?? -1
+        if (!layerNames.has(layerIndex)) layerNames.set(layerIndex, layerPath(layers, layerIndex))
+        const layer = layerNames.get(layerIndex) ?? null
+        const name = attrs?.name?.trim() || layer?.split('::').at(-1) || `Rhino object ${i + 1}`
+        try {
+          if (attrs?.isInstanceDefinitionObject)
+            throw new SkippedGeometry(`Geometry inside a block definition. ${EXPLODE_IN_RHINO}`)
+          if (attrs?.activeSpace === rhino.ActiveSpace.PageSpace)
+            throw new SkippedGeometry('Rhino layout object outside model space.')
+          const geometry = object && holdObject(object.geometry())
+          if (!geometry) throw new SkippedGeometry('The object has no readable geometry.')
+          const meshes = objectMeshes(rhino, geometry, units.mm, budget)
+          result.push({
+            name,
+            layer,
+            bytes: writeStl(meshes, 'Pave STL from Rhino .3dm, millimetres'),
+            bounds: meshBounds(meshes),
+          })
+        } catch (error) {
+          if (!(error instanceof SkippedGeometry)) throw error
+          skipped.push({ name, layer, reason: error.message })
+        }
+      })
+    }
+    return { units: units.name, objects: result, skipped }
+  })
+}

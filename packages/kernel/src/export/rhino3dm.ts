@@ -6,45 +6,11 @@
  * centre lines and stone girdles as curves, millimetre units. STEP is the exact B-rep route.
  */
 import { METALS } from '@pave/schema'
-import type { RhinoModule } from 'rhino3dm'
 import { defineExporter, type Scene } from '../core'
 import type { ChainData } from '../features/chain'
 import { fromFrame } from '../geometry/vec'
-import { isNode, readPackageFile } from '../runtime/host'
+import { freeRhino as free, loadRhino3dm } from '../runtime/rhino'
 import { type MeshObject, metalNotes, objectColor, sceneObjects } from './meshes'
-
-let loading: Promise<RhinoModule> | null = null
-
-/**
- * rhino3dm, loaded on first use from its ES-module build (the CommonJS entry names Node's `ws`
- * package, which breaks browser bundles). Node reads the binary from the installed package, as
- * the core does for its WASM; in a browser the bundler serves it and Vite's `?url` import gives
- * its address — so 3DM export needs no setup from the host, in a Worker or anywhere else.
- */
-function loadRhino(): Promise<RhinoModule> {
-  loading ??= (async () => {
-    const { default: factory } = await import('rhino3dm/rhino3dm.module.js')
-    if (isNode()) return factory({ wasmBinary: await readPackageFile('rhino3dm/rhino3dm.wasm') })
-    const { default: url } = await import('rhino3dm/rhino3dm.wasm?url')
-    return factory({ locateFile: () => url })
-  })().catch((error) => {
-    loading = null
-    throw error
-  })
-  return loading
-}
-
-/**
- * Frees a wrapped object's WASM memory with Embind's `delete()`, which rhino3dm's typings omit.
- * The object and string tables define a `delete(key)` of their own (remove an entry) that
- * hides it, so Embind's is looked up where it lives: on the last prototype of the chain.
- */
-function free(o: object): void {
-  let embind: (() => void) | undefined
-  for (let proto = Object.getPrototypeOf(o); proto; proto = Object.getPrototypeOf(proto))
-    if (Object.hasOwn(proto, 'delete')) embind = (proto as { delete: () => void }).delete
-  embind?.call(o)
-}
 
 const rgba = (hex: string) => ({
   r: Number.parseInt(hex.slice(1, 3), 16),
@@ -101,7 +67,7 @@ function girdle(stone: MeshObject & { kind: 'stone' }): number[][] {
 }
 
 async function write3dm(scene: Scene, objects: readonly MeshObject[]): Promise<Uint8Array> {
-  const rhino = await loadRhino()
+  const rhino = await loadRhino3dm()
   const doc = new rhino.File3dm()
   // The document's tables, fetched once and freed with it. Each call to `doc.objects()` (or
   // `layers()`, `settings()`, `strings()`) makes a WASM-side object that keeps the whole model
@@ -223,5 +189,4 @@ export const rhino3dm = defineExporter({
   },
 })
 
-/** Exposed for the round-trip test, which reads files back with the same module. */
-export const loadRhino3dm = loadRhino
+export { loadRhino3dm } from '../runtime/rhino'
