@@ -60,6 +60,7 @@ try {
     const questions = page.getByRole('region', { name: 'Quick questions' })
     await questions.getByText('What metal colour?').waitFor()
     await questions.getByText('What stone size?').waitFor()
+    await questions.getByText('What pendant height?').waitFor()
     assert.equal(await questions.getByText(/what chain|which chain|want a chain/i).count(), 0)
     await questions.getByRole('button', { name: 'Go', exact: true }).click()
     await page.getByText(/continue without a style reference/i).waitFor()
@@ -102,11 +103,16 @@ try {
       sketch.id,
       beforeHandoff.board.id,
       '1.2 mm',
+      '32',
       '18k white gold',
       'Cuban chain',
     ]) {
       assert.ok(jobContext.includes(fact), `CAD job context is missing ${fact}`)
     }
+    const durable = await rpc('pieces.get', { id: pieceId })
+    assert.equal(durable.intake.details.heightMm, 32)
+    assert.equal(durable.intake.details.metal, 'au18k-white')
+    assert.equal(durable.intake.selection.visualAssetId, sketch.assetId)
     await page.goBack()
     await page.waitForURL((url) => url.searchParams.get('intake') === pieceId)
     await page.getByRole('button', { name: 'Raised medallion', exact: true }).waitFor()
@@ -122,6 +128,8 @@ try {
     assert.equal(await page.getByRole('textbox', { name: 'Chain preference' }).count(), 0)
     await page.getByRole('textbox', { name: 'Metal colour' }).fill('18k white gold')
     await page.getByRole('textbox', { name: 'Stone sizes' }).fill('1.2 mm')
+    await page.getByRole('textbox', { name: 'Pendant height' }).fill('32 mm')
+    await page.getByRole('textbox', { name: 'Body thickness' }).fill('2.4 mm')
     await page.getByRole('checkbox', { name: 'Continue without a style reference' }).check()
     await page.getByRole('button', { name: 'Show manual concepts' }).click()
     await page.getByRole('button', { name: 'Raised logo', exact: true }).click()
@@ -132,6 +140,70 @@ try {
     await noDock()
     if (screenshot) await page.screenshot({ path: screenshot })
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+
+    const outline =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="150"><rect width="120" height="150" fill="white"/><path fill="black" d="M22 12H98L110 38L82 135H38L10 38Z"/></svg>'
+    await attach('selected-outline.svg', outline)
+    await page.getByRole('img', { name: 'selected-outline.svg' }).waitFor()
+    await page.getByRole('button', { name: 'Save to Design board' }).click()
+    await page.waitForURL((url) => url.searchParams.has('visual'))
+    const durable = await rpc('pieces.get', { id: pieceId })
+    assert.equal(durable.spec, null)
+    assert.deepEqual(durable.intake.details, {
+      heightMm: 32,
+      metal: 'au18k-white',
+      metalDescription: '18k white gold',
+      thicknessMm: 2.4,
+      stoneMm: 1.2,
+      chain: 'Cuban chain',
+    })
+    assert.notEqual(durable.intake.selection.visualAssetId, original.assetId)
+    await page.getByRole('button', { name: 'Open in CAD', exact: true }).click()
+    await page.waitForURL(`**/pieces/${pieceId}/design`)
+    await page.goBack()
+    await page.waitForURL((url) => url.searchParams.get('intake') === pieceId)
+
+    // A new studio context has only database state. Reopen the same client from Projects.
+    const reopened = await browser.newPage({ viewport: { width: 1440, height: 900 } })
+    await reopened.goto(`${base}/pieces`)
+    await reopened.locator(`main a[href="/pieces/${pieceId}"]`).click()
+    await reopened
+      .getByRole('navigation', { name: 'Project tools' })
+      .getByRole('link', { name: /^CAD/ })
+      .click()
+    await reopened.getByRole('button', { name: 'Trace selected design' }).click()
+    const trace = reopened.getByRole('dialog', { name: 'Trace a flat outline' })
+    await trace.getByRole('img', { name: 'Traced outline' }).waitFor()
+    assert.equal(await trace.getByRole('spinbutton', { name: 'Height (mm)' }).inputValue(), '32')
+    assert.equal(
+      await trace.getByRole('spinbutton', { name: 'Thickness (mm)' }).inputValue(),
+      '2.4',
+    )
+    assert.equal(await trace.getByRole('combobox', { name: 'Metal' }).inputValue(), 'au18k-white')
+    await trace.getByRole('button', { name: 'Add outline to CAD' }).click()
+    await trace.waitFor({ state: 'hidden' })
+    const evaluated = await rpc('design.evaluate', { pieceId, detail: 'draft' })
+    const built = await rpc('pieces.get', { id: pieceId })
+    assert.equal(built.brief, brief)
+    const body = built.design.nodes[built.design.order[0]]
+    assert.equal(body.kind, 'vectorBody')
+    assert.equal(body.name, 'selected-outline.svg')
+    const sourceTrace = await rpc('match.traceOutline', {
+      pieceId,
+      referenceId: durable.intake.selection.visualId,
+    })
+    assert.equal(body.source.d, sourceTrace.path)
+    assert.equal(body.material, 'au18k-white')
+    assert.equal(body.height, 32)
+    assert.equal(body.thickness, 2.4)
+    assert.ok(evaluated.metalMassG > 0)
+    assert.equal(evaluated.metals[0].material, 'au18k-white')
+    assert.ok(
+      Object.values(evaluated.boundsMm).some(
+        (dimension) => Math.abs(Number(dimension) - 32) < 0.01,
+      ),
+    )
+    await reopened.close()
 
     await page.getByRole('link', { name: 'New brief' }).click()
     await page

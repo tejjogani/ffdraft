@@ -71,13 +71,14 @@ import type {
   SavedScene,
   Tokens,
 } from '@pave/schema'
-import { resolveAnswers } from '@pave/schema'
+import { intakeDetailsFromWords, resolveAnswers } from '@pave/schema'
 import { and, asc, desc, eq, gt, inArray, isNull, max, ne, or } from 'drizzle-orm'
 import { readAsset } from '../assets/assets'
 import { framingRefusal } from '../cinema'
 import { type ClaudeCall, type Ctx, publish } from '../context'
 import * as t from '../db/schema'
 import { AppError } from '../errors'
+import { saveIntakeDecisions } from '../home-intake'
 import { getPiece } from '../lookups'
 import { serviceContext } from '../service-context'
 import {
@@ -1218,6 +1219,30 @@ async function answerOf(host: RunHost, job: Job): Promise<CommandRun> {
   )
   const { questions } = job.input as CommandParsedInput<'chat.ask'>
   const value = resolveAnswers(questions, step?.approval?.answers)
+  if (host.pieceId && step?.approval?.decision === 'approve') {
+    const mode = await designModeForRun(host.ctx, host.runId)
+    if (mode?.kind === 'intake') {
+      const byId = new Map(
+        value.answers.map((answer) => [
+          answer.id,
+          answer.chosen.length === 1 ? answer.chosen[0]?.label : undefined,
+        ]),
+      )
+      const details = intakeDetailsFromWords({
+        metal: byId.get('metal'),
+        height: byId.get('height'),
+        thickness: byId.get('thickness'),
+        stone: byId.get('melee'),
+        chain: byId.get('chain'),
+      })
+      if (Object.keys(details).length)
+        await saveIntakeDecisions(host.ctx, {
+          pieceId: host.pieceId,
+          boardId: mode.boardId,
+          details,
+        })
+    }
+  }
   const said = value.answers
     .map(
       (a) =>

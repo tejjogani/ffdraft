@@ -356,6 +356,9 @@ export async function contextText(
     ...(media.moodboard ? { moodboard: media.moodboard } : {}),
   })
   const notes = [
+    piece?.intake &&
+      Object.keys(piece.intake.details).length &&
+      `Confirmed intake decisions: ${JSON.stringify(piece.intake.details)}`,
     media.skipped.length &&
       `Not shown to you (a format you cannot read): ${media.skipped.join(', ')}.`,
     media.withheld.length &&
