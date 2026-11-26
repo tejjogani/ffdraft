@@ -519,6 +519,8 @@ database) is not documented yet.
 
 ## Using it from scripts
 
+The [Python CAD client](packages/pave-python/README.md) can inspect a feature, edit its dimensions, evaluate the result and undo it. The [CAD command roadmap](docs/plans/cad-command-api.md) tracks the Rhino-style tools and their geometry checks.
+
 Everything the application does goes through one list of commands, and each is reachable at
 `POST /api/rpc/<command>` with a JSON body. On your own computer no key is needed.
 
