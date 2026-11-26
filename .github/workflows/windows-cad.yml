@@ -1,0 +1,137 @@
+name: Windows CAD smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/windows-cad.yml
+      - install.ps1
+      - scripts/install.mjs
+      - apps/server/src/engines/**
+      - apps/studio/e2e/**
+      - apps/studio/src/features/cad/**
+      - apps/studio/src/features/render/**
+      - packages/kernel/**
+      - packages/pave-python/**
+      - packages/schema/**
+      - pnpm-lock.yaml
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22.23.1
+          architecture: x64
+          cache: pnpm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: 3.13.2
+          architecture: x64
+      - name: Install the Python client and pinned Chromium browser
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          python -m pip install -e ./packages/pave-python
+          $playwright = Join-Path $env:RUNNER_TEMP 'pave-playwright'
+          npm install --prefix $playwright --no-save playwright@1.63.0
+          $modulePath = Join-Path $playwright 'node_modules'
+          node (Join-Path $modulePath 'playwright/cli.js') install chromium
+          "NODE_PATH=$modulePath" >> $env:GITHUB_ENV
+      # Keep the launcher and its clients in one step. The Windows runner ends the launcher
+      # process when the step that created it exits.
+      - name: Verify Windows installation, CAD, Python and Blender
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          node -e 'if (process.platform !== "win32" || process.arch !== "x64") process.exit(1); console.log(process.platform, process.arch, process.version)'
+          $env:HOST = '127.0.0.1'
+          $env:PORT = '18976'
+          $env:PAVE_AUTH = 'local'
+          $env:PAVE_SEED = 'false'
+          $env:PAVE_DATA_DIR = Join-Path $env:RUNNER_TEMP 'Pave Windows data'
+          $env:PAVE_TEST_URL = "http://127.0.0.1:$env:PORT"
+          $logs = Join-Path $env:RUNNER_TEMP 'pave-windows-logs'
+          New-Item -ItemType Directory -Path $logs | Out-Null
+          $stdout = Join-Path $logs 'install.stdout.log'
+          $stderr = Join-Path $logs 'install.stderr.log'
+          $failures = [System.Collections.Generic.List[string]]::new()
+          function Test-PaveStage($name, [scriptblock]$checks) {
+            Write-Host "::group::$name"
+            try {
+              & $checks
+            } catch {
+              $failures.Add($name)
+              Write-Warning $_
+            } finally {
+              Write-Host '::endgroup::'
+            }
+          }
+          Write-Host '::group::Install and start Pavé from PowerShell'
+          $launcher = Start-Process -FilePath pwsh -ArgumentList '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', './install.ps1', '--start' -WorkingDirectory $PWD -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+          $deadline = (Get-Date).AddMinutes(4)
+          $ready = $false
+          try {
+            while ((Get-Date) -lt $deadline -and -not $launcher.HasExited) {
+              try {
+                if ((Invoke-WebRequest "$env:PAVE_TEST_URL/health" -TimeoutSec 3).StatusCode -eq 200) {
+                  $ready = $true
+                  break
+                }
+              } catch {
+                # The installer is still running, so the application may not be listening yet.
+              }
+              Start-Sleep -Seconds 1
+            }
+            Get-Content $stdout
+            Get-Content $stderr
+            if (-not $ready -or -not (Select-String -Path $stdout -SimpleMatch 'Pavé is ready.')) {
+              throw 'The Windows installer did not complete and serve Pavé with --start.'
+            }
+            $studio = Invoke-WebRequest $env:PAVE_TEST_URL
+            if ($studio.Content -notmatch '<div id="root"') { throw 'The Windows server did not serve Studio.' }
+            Write-Host '::endgroup::'
+
+            Test-PaveStage 'Verify Python CAD against the running Windows server' {
+              python -m unittest discover -s packages/pave-python/tests -v
+            }
+            Test-PaveStage 'Verify the CAD guide in Chromium' {
+              pnpm exec tsx apps/studio/e2e/cad-guide.ts $env:PAVE_TEST_URL
+            }
+            Test-PaveStage 'Verify manual CAD editing in Chromium' {
+              pnpm exec tsx apps/studio/e2e/manual-cad.ts $env:PAVE_TEST_URL
+            }
+            Test-PaveStage 'Install and verify managed Blender through Studio' {
+              pnpm exec tsx apps/studio/e2e/render-engine-setup.ts $env:PAVE_TEST_URL $logs
+              $engine = Invoke-RestMethod -Method Post -Uri "$env:PAVE_TEST_URL/api/rpc/renders.engine" -ContentType 'application/json' -Body '{}'
+              if (-not $engine.available -or (Split-Path -Leaf $engine.path) -ne 'blender.exe') {
+                throw 'Pavé did not select the managed Windows Blender executable.'
+              }
+              $version = @(& $engine.path --version)
+              $version | Select-Object -First 1 | Write-Output
+              if ($version[0] -notmatch '^Blender 5\.3\.') {
+                throw 'The managed Blender executable failed its version check.'
+              }
+              pnpm exec tsx apps/studio/e2e/managed-blender-render.ts $env:PAVE_TEST_URL (Join-Path $logs '04-blender-take.png')
+            }
+            if ($failures.Count) { throw "Failed Windows checks: $($failures -join ', ')" }
+          } finally {
+            if (-not $launcher.HasExited) {
+              $PSNativeCommandUseErrorActionPreference = $false
+              taskkill.exe /pid $launcher.Id /t /f
+            }
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-cad-smoke-logs
+          path: ${{ runner.temp }}/pave-windows-logs
+          if-no-files-found: ignore

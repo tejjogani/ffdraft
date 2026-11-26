@@ -16,7 +16,10 @@ try {
   const page = await context.newPage()
   page.setDefaultTimeout(15_000)
   const rpc = async (name: string, data: object) => {
-    const response = await page.request.post(`${base}/api/rpc/${name}`, { data })
+    const response = await page.request.post(`${base}/api/rpc/${name}`, {
+      data,
+      maxRetries: name === 'pieces.get' || name === 'design.evaluate' ? 1 : 0,
+    })
     assert.ok(response.ok(), `${name}: ${response.status()} ${await response.text()}`)
     return response.json()
   }
@@ -119,7 +122,7 @@ try {
   assert.ok(await carat.isDisabled())
   assert.ok(await width.isDisabled())
   assert.equal(Number(await width.inputValue()), fit.measured.width)
-  await inspector.getByText(/width and carat weight are fixed/i).waitFor()
+  await inspector.getByText(/carat weight is estimated/i).waitFor()
   await inspector.getByRole('link', { name: 'Change fitted diamond' }).waitFor()
 
   const halo = await rpc('pieces.create', { title: 'Melee CAD proof', templateId: 'halo' })
