@@ -1,6 +1,12 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 11:50 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 12:21 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+
+## Studio experience: third fix round (lane A, A11)
+
+| Agent | State | Outcome |
+|---|---|---|
+| fix:1 | running or interrupted |  |
 
 ## Spec as the source of truth: third fix round (lane A, A7)
 
@@ -21,7 +27,7 @@ _Generated 26 Nov 2026 11:50 UTC by `docs/agents/sync_status.py` from the workfl
 | verify:1 | done | 2 blocker, 10 major, 9 minor. FAIL. Nine of the 22 findings were fixed and hold up in the browser: B1, B3, B5, M2, F1, F3, F4, F5 and F6. B1 checked out by measurement: the project page and… |
 | fix:2 | done | I fixed every blocker and major on ui/focus in /home/user/ffdraft-ui, and most of the minors. There are four commits after 3c7dec0: ae7d29f, 5d59fe5, 1f18ac8 and dcb4d46. Nothing is pushed. Tests, typecheck and the stud… |
 | verify:2 | done | 1 blocker, 4 major, 5 minor. Not ready to sign off: one blocker and four majors remain. Fixed and confirmed with my own screenshots: V2 (a pick brings Inspector forward, including the dock… |
-| e2e:upkeep | running or interrupted |  |
+| e2e:upkeep | done | commit 37db3c8. I updated all 15 walkthrough scripts the builders named to match the screens on ui/focus, and ran each against a real server with the fake assistant. All 15 now pass, at 1440 in light. I removed no script: every screen … |
 
 ## Render realism: every look tested in Blender, black acrylic, the render skill (lane A, A12)
 
@@ -34,7 +40,7 @@ _Generated 26 Nov 2026 11:50 UTC by `docs/agents/sync_status.py` from the workfl
 | fix:1 | done | Ten of the twelve findings are fixed or improved, each checked on a before-and-after render that I looked at whole and cropped on the stone and the ground. Two are not fixed: F8 (red pavé seats inside the rose-gold shan… |
 | verify:1 | done | 1 blocker, 4 major, 2 minor. FAIL. I re-rendered at HEAD f8569f6 under verify-1/, with the fixer's harness, 768 px, preview tier, 2 threads: studs in six looks, the three-stone in six, the… |
 | fix:2 | done | I fixed the findings on branch render/realism in /home/user/ffdraft-render and committed once as 810d46e (not pushed). Every change was judged on a before-and-after pair that I opened whole and cropped on the stone, ban… |
-| verify:2 | running or interrupted |  |
+| verify:2 | done | 4 major, 3 minor. FAIL. 2 of 5 findings are fixed (V1 and V5's stone colour). The other 3 are partly fixed, and there are 2 regressions plus one false claim in the fixer's repor… |
 
 ## CAD viewport: speed, full rotation, Rhino navigation (lane A, A13)
 
@@ -73,7 +79,7 @@ _Generated 26 Nov 2026 11:50 UTC by `docs/agents/sync_status.py` from the workfl
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 1de0fec Status: spec verifying its second fix round; studio and render still working
+Branch `claude/busy-bardeen-o482lo`, head: 32286e1 Board: spec work in its third fix round
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -104,7 +110,7 @@ Branch `claude/busy-bardeen-o482lo`, head: 1de0fec Status: spec verifying its se
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 1de0fec Status: spec verifying its second fix round; studio and render still working
+Branch `claude/busy-bardeen-o482lo`, head: 32286e1 Board: spec work in its third fix round
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -146,7 +152,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 1de0fec Status: spec verifying its second fix round; studio and render still working
+Branch `claude/busy-bardeen-o482lo`, head: 32286e1 Board: spec work in its third fix round
 
 | Agent | State | Outcome |
 |---|---|---|
