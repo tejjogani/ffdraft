@@ -168,7 +168,9 @@ describe('replaceStone: sourcing', () => {
           sourcing: {
             provider: 'diaex',
             sku: 'D123',
+            url: 'https://supplier.example/D123',
             priceUsd: 5400,
+            certificate: 'D123-CERT',
             measured: { length: 6.45, width: 6.41, depth: 3.95 },
           },
         },
@@ -197,6 +199,140 @@ describe('replaceStone: sourcing', () => {
     expect(r.ops).toEqual([
       { t: 'update', id: 'center', patch: { sourcing: fit, cut: 'oval', width: 6.5, lw: 1.4 } },
     ])
+  })
+
+  it('a fitted replacement removes omitted details of the previous source as one undoable edit', () => {
+    const base = linked()
+    const fit = {
+      provider: 'diaex',
+      sku: 'D234',
+      measured: { length: 6.68, width: 6.62, depth: 4.21 },
+    }
+    const change = { fit }
+    const target = { nodeId: 'center' }
+    const { ops } = replaceStone(base, target, change)
+    const { design, inverse } = applyOps(base, ops)
+    expect((design.nodes.center as NodeOf<'gem'>).sourcing).toEqual(fit)
+    expect(replaceStone(design, target, change).ops).toEqual([])
+    expect(applyOps(design, inverse).design).toEqual(base)
+  })
+
+  it.each([
+    ['halo', { nodeId: 'halo' }],
+    ['halo', { nodeId: 'row', instance: 0 }],
+    ['three-stone', { nodeId: 'side1', scope: 'alike' as const }],
+    ['studs', { nodeId: 'stone' }],
+    ['solitaire', { nodeId: 'center', instance: 1 }],
+  ] as const)(
+    'rejects a single inventory stone for a shared or missing seat on %s (%j)',
+    (id, target) => {
+      const fit = { provider: 'diaex', sku: 'ONE', measured: { length: 4.3, width: 3.3, depth: 2 } }
+      expect(() => replaceStone(template(id), target, { cut: 'oval', fit })).toThrow(IntentError)
+    },
+  )
+
+  it('keeps its partner independent when fitting one of two alike side stones', () => {
+    const fit = { provider: 'diaex', sku: 'LEFT', measured: { length: 4.7, width: 3.3, depth: 2 } }
+    const result = replaceStone(template('three-stone'), { nodeId: 'side1' }, { fit })
+    expect(result.ops).toEqual([expect.objectContaining({ id: 'side1' })])
+    expect(result.warnings.find((w) => w.code === 'side.pair')?.suggestion).toBeUndefined()
+  })
+
+  it('rejects a gemstone inside a group repeated by a pattern', () => {
+    const design = applyOps(template('solitaire'), [
+      { t: 'add', node: { id: 'setting-group', kind: 'group', children: ['center', 'head'] } },
+      { t: 'add', node: { id: 'copies', kind: 'pattern', sources: ['setting-group'] } },
+    ]).design
+    const fit = { provider: 'diaex', sku: 'ONE', measured: { length: 6.6, width: 6.4, depth: 4 } }
+    expect(() => replaceStone(design, { nodeId: 'center' }, { fit })).toThrow(/repeated/)
+  })
+
+  it('rejects a gemstone repeated as a child of two separate groups', () => {
+    const design = applyOps(template('solitaire'), [
+      { t: 'add', node: { id: 'first-group', kind: 'group', children: ['center'] } },
+      { t: 'add', node: { id: 'second-group', kind: 'group', children: ['center'] } },
+    ]).design
+    const fit = { provider: 'diaex', sku: 'ONE', measured: { length: 6.6, width: 6.4, depth: 4 } }
+    expect(() => replaceStone(design, { nodeId: 'center' }, { fit })).toThrow(/repeated/)
+  })
+
+  it('rejects a fit when a manual scale would change the actual measured dimensions', () => {
+    const design = applyOps(template('solitaire'), [
+      { t: 'update', id: 'center', patch: { transform: { scale: 1.1 } } },
+    ]).design
+    const fit = { provider: 'diaex', sku: 'ONE', measured: { length: 6.6, width: 6.4, depth: 4 } }
+    expect(() => replaceStone(design, { nodeId: 'center' }, { fit })).toThrow(/scale/)
+  })
+
+  it('allows a single grouped gem when the group has rigid placement', () => {
+    const design = applyOps(template('solitaire'), [
+      {
+        t: 'add',
+        node: {
+          id: 'setting-group',
+          kind: 'group',
+          children: ['center', 'head'],
+          transform: { position: [1, 0, 0] },
+        },
+      },
+    ]).design
+    const fit = { provider: 'diaex', sku: 'ONE', measured: { length: 6.6, width: 6.4, depth: 4 } }
+    expect(replaceStone(design, { nodeId: 'center' }, { fit }).ops).toEqual([
+      expect.objectContaining({ id: 'center' }),
+    ])
+  })
+
+  it('rejects an individual supplier SKU already fitted to another stone of the design', () => {
+    const base = template('three-stone')
+    const fit = { provider: 'diaex', sku: 'LEFT', measured: { length: 4.7, width: 3.3, depth: 2 } }
+    const { ops } = replaceStone(base, { nodeId: 'side1' }, { fit })
+    const { design } = applyOps(base, ops)
+    expect(() => replaceStone(design, { nodeId: 'side2' }, { fit })).toThrow(/already fitted/)
+    expect(replaceStone(design, { nodeId: 'side1' }, { fit }).ops).toEqual([])
+  })
+
+  it('keeps pinned setting parameters and independently sourced side stones on a centre refit', () => {
+    const linked = applyOps(template('three-stone'), [
+      { t: 'update', id: 'head', patch: { prongDiameter: 1.35 } },
+      {
+        t: 'update',
+        id: 'side1',
+        patch: {
+          sourcing: {
+            provider: 'diaex',
+            sku: 'SIDE',
+            measured: { length: 4.3, width: 3.3, depth: 2 },
+          },
+        },
+      },
+    ]).design
+    const fit = {
+      provider: 'diaex',
+      sku: 'CENTER',
+      measured: { length: 8.1, width: 6.1, depth: 4.2 },
+    }
+    const { ops, warnings } = replaceStone(linked, { nodeId: 'center' }, { fit })
+    const { design } = applyOps(linked, ops)
+    const resolved = resolveDesign(design)
+    expect(ops).toEqual([expect.objectContaining({ id: 'center' })])
+    expect(design.nodes.side1).toEqual(linked.nodes.side1)
+    expect(design.nodes.side2).toEqual(linked.nodes.side2)
+    expect((resolved.nodes.head as NodeOf<'setting'>).prongDiameter).toBe(1.35)
+    expect(warnings).toContainEqual(
+      expect.objectContaining({ code: 'pin.offRule', nodeId: 'head' }),
+    )
+    expect((resolved.nodes.side1 as NodeOf<'gem'>).placement).not.toEqual(
+      (resolveDesign(linked).nodes.side1 as NodeOf<'gem'>).placement,
+    )
+  })
+
+  it('keeps precise geometry when measurements exceed nominal field limits', () => {
+    const base = template('solitaire')
+    const measured = { length: 2.7, width: 0.45, depth: 0.21 }
+    const fit = { provider: 'diaex', sku: 'TINY', measured }
+    const { ops } = replaceStone(base, { nodeId: 'center' }, { cut: 'baguette', fit })
+    const { design } = applyOps(base, ops)
+    expect(stoneDims(design.nodes.center as NodeOf<'gem'>)).toEqual(measured)
   })
 })
 
