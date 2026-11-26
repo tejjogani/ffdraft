@@ -14,6 +14,7 @@ import {
   type Node,
   type NodeOf,
   type PieceSpecInput,
+  pipePath,
   resolveDesign,
   ringInnerDiameter,
 } from '@pave/schema'
@@ -325,18 +326,19 @@ function bailFacts(d: Design, b: NodeOf<'bail'> | undefined): Facts {
 }
 
 /** Inner diameter of a closed wire loop (hoops, bangles) from its path points. */
-function hoopDiameter(p: NodeOf<'pipe'>): number | undefined {
-  if (!p.closed || p.points.length < 3) return undefined
-  const n = p.points.length
-  const c = [0, 1, 2].map((k) => p.points.reduce((s, q) => s + q[k]!, 0) / n)
-  const r =
-    p.points.reduce((s, q) => s + Math.hypot(q[0] - c[0]!, q[1] - c[1]!, q[2] - c[2]!), 0) / n
+function hoopDiameter(d: Design, p: NodeOf<'pipe'>): number | undefined {
+  const path = pipePath(p, p.curve === undefined ? undefined : d.nodes[p.curve])
+  if (!path?.closed || path.points.length < 3) return undefined
+  const { points } = path
+  const n = points.length
+  const c = [0, 1, 2].map((k) => points.reduce((s, q) => s + q[k]!, 0) / n)
+  const r = points.reduce((s, q) => s + Math.hypot(q[0] - c[0]!, q[1] - c[1]!, q[2] - c[2]!), 0) / n
   return 2 * r - p.width
 }
 
-function pipeFacts(p: NodeOf<'pipe'> | undefined): Facts {
+function pipeFacts(d: Design, p: NodeOf<'pipe'> | undefined): Facts {
   if (!p) return {}
-  const id = hoopDiameter(p)
+  const id = hoopDiameter(d, p)
   return { pipeW: p.width, ...(id !== undefined ? { hoopID: id } : {}) }
 }
 
@@ -433,7 +435,7 @@ export function pieceFacts(input: Design, o: FactsOptions = {}): Facts {
     ...paveFacts(pave),
     ...chainFacts(nodesOf(d, 'chain')[0]),
     ...bailFacts(d, nodesOf(d, 'bail')[0]),
-    ...pipeFacts(nodesOf(d, 'pipe')[0]),
+    ...pipeFacts(d, nodesOf(d, 'pipe')[0]),
     head: flag(nodesOf(d, 'setting').length > 0 && d.kind === 'ring'),
     sideClear: sideClear(d, hero, band),
     bracelet: flag(d.kind === 'bracelet'),
@@ -539,7 +541,7 @@ export function nodeFacts(input: Design, nodeId: string, piece: Facts = pieceFac
     case 'engraving':
       return { ...piece, outside: flag(n.where !== 'insideBand') }
     case 'pipe':
-      return { ...piece, hoopID: undefined, ...pipeFacts(n), ...alloy }
+      return { ...piece, hoopID: undefined, ...pipeFacts(d, n), ...alloy }
     default:
       return { ...piece, ...alloy }
   }

@@ -67,7 +67,11 @@ export function inspectorModel(node: Node, opts: { advanced?: boolean } = {}): I
       )
     : node.kind === 'curve'
       ? d.fields.filter((f) => !['plane', 'points', 'closed', 'transform'].includes(f.key))
-      : d.fields
+      : node.kind === 'pipe'
+        ? d.fields.filter((f) =>
+            node.curve === undefined ? f.key !== 'curve' : !['points', 'closed'].includes(f.key),
+          )
+        : d.fields
   const rows = rowsFor(fields, value, [], !!opts.advanced)
   const sections: InspectorSection[] = []
   const section = (group: string | undefined) => {
