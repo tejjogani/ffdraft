@@ -1,12 +1,13 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 13:50 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 14:35 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## Spec: the card is the gate, word reading only adds notes (lane A, A7)
 
 | Agent | State | Outcome |
 |---|---|---|
-| fix:1 | running or interrupted |  |
+| fix:1 | done | The decision is applied on spec/truth and committed as **95109a3** (local only, not pushed). Every suite listed below passed, the seven replays included, and apps/studio/e2e/spec.ts passed against a fresh scripted serve… |
+| verify:1 | running or interrupted |  |
 
 ## Render realism: third fix round, stone contrast and fire (lane A, A12)
 
@@ -18,7 +19,9 @@ _Generated 26 Nov 2026 13:50 UTC by `docs/agents/sync_status.py` from the workfl
 
 | Agent | State | Outcome |
 |---|---|---|
-| fix:1 | running or interrupted |  |
+| fix:1 | done | ## Fix-3 on ui/focus (/home/user/ffdraft-ui): report I fixed all 18 findings. Each behaviour change has a test that failed first, either a unit test or an e2e step. For V2-01, V2-02, V2-03, V2-04 and OPEN-01 I also ran … |
+| verify:1 | done | 2 major, 5 minor. Not ready yet. Two majors are still open, both about the floating windows at the founder's laptop size. Every other finding I could reproduce is fixed, except … |
+| fix:2 | running or interrupted |  |
 
 ## Spec as the source of truth: third fix round (lane A, A7)
 
@@ -94,7 +97,7 @@ _Generated 26 Nov 2026 13:50 UTC by `docs/agents/sync_status.py` from the workfl
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 517e990 Status: spec verifying its last fix round; studio and render fixing
+Branch `claude/busy-bardeen-o482lo`, head: 9742e91 Board: spec changes gated by the person's card; word reading only adds notes
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -125,7 +128,7 @@ Branch `claude/busy-bardeen-o482lo`, head: 517e990 Status: spec verifying its la
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 517e990 Status: spec verifying its last fix round; studio and render fixing
+Branch `claude/busy-bardeen-o482lo`, head: 9742e91 Board: spec changes gated by the person's card; word reading only adds notes
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -167,7 +170,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 517e990 Status: spec verifying its last fix round; studio and render fixing
+Branch `claude/busy-bardeen-o482lo`, head: 9742e91 Board: spec changes gated by the person's card; word reading only adds notes
 
 | Agent | State | Outcome |
 |---|---|---|
