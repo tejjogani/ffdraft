@@ -26,12 +26,7 @@ the most colourful thing on the screen, and the chrome around it stays quiet, ex
 | Elevation | `shadow-sm`, `shadow-md`, `shadow-pop` | Only for things that float: chips over the stage, menus, dialogs, windows. |
 | Motion | `ease-out`, `ease-in-out`, `dur-1` 120 ms, `dur-2` 180 ms, `dur-3` 260 ms | Short and purposeful. Everything stops under reduced motion. |
 
-**Type.** Inter at 13 px for the interface (`text-sm`), on a 4 px grid. One scale:
-`3xs` 10 (micro badges on pictures), `2xs` 11, `xs` 12, `sm` 13, `base` 14, `lg` 16, `xl` 20, and in
-the serif (Instrument Serif) `heading` 24 for empty states and greetings, `title` 32 for page titles,
-`display` 44 for a piece's name. Numbers that people compare (grams, carats, millimetres, money,
-tokens) are set in Geist Mono with tabular figures (`font-mono tabular`). No sizes in brackets
-(`text-[13px]`): if a size is missing, it belongs in the scale.
+**Type.** Inter at 13 px for the interface (`text-sm`), on a 4 px grid. Shared type roles set the hierarchy throughout Studio. Use `studio-title` for page and project names (24–30 px), `studio-heading` for sections (18 px), and `studio-option` for cards and tools (14 px). Descriptions use regular 13 px Inter. Numbers that people compare use Geist Mono with tabular figures (`font-mono tabular`).
 
 **Radii.** `xs` 4 (chips, keys), `sm` 6 (rows, inputs), `md` 8 (buttons, small cards), `lg` 12
 (cards, menus, panels), `xl` 16 (dialogs, floating windows), `full` for pills. The only bracketed
@@ -77,7 +72,7 @@ something must be read exactly.
 | One primary (ink) action per view; the rest are secondary or ghost. | Two black buttons side by side. |
 | Separate with space first, a hairline second. | Boxes inside boxes, or shadows on things that do not float. |
 | Show loading as the shape of what comes (`Skeleton`, a slow light sweep). | A page-level spinner. Spinners are only for an action already under way inside its button. |
-| Teach in empty states: a serif heading, one sentence, one action. | “No data”. |
+| Teach in empty states: a short heading, one sentence, one action. | “No data”. |
 | Say errors quietly in one line, with Retry. | Red banners. |
 | Use the AI shimmer on a 1 px border or the spark, while the assistant works or on what it made. | The shimmer as a fill behind text, or on anything a person made. |
 | Keep motion under 300 ms, ease out, and let `prefers-reduced-motion` stop it. | Bounces, loops that never settle, or motion that carries meaning on its own. |

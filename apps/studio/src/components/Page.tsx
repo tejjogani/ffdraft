@@ -1,7 +1,7 @@
 import { cn, IconButton } from '@pave/ui'
 import { Link, type LinkProps } from '@tanstack/react-router'
 import { ChevronLeft, Menu as MenuIcon, PanelLeft } from 'lucide-react'
-import { Fragment, type ReactNode } from 'react'
+import { Fragment, type ReactNode, type Ref } from 'react'
 import { useNarrow } from '../lib/narrow'
 import { isDockedOpen, useAssistant } from '../stores/assistant'
 import { useUI } from '../stores/ui'
@@ -127,15 +127,23 @@ export function PageTitle({
   title,
   description,
   actions,
+  headingRef,
 }: {
   title: ReactNode
   description?: ReactNode
   actions?: ReactNode
+  headingRef?: Ref<HTMLHeadingElement>
 }) {
   return (
     <div className="flex items-end justify-between gap-6 pt-10 pb-6">
       <div className="min-w-0">
-        <h1 className="font-serif text-title text-fg">{title}</h1>
+        <h1
+          ref={headingRef}
+          tabIndex={headingRef ? -1 : undefined}
+          className="studio-title text-fg"
+        >
+          {title}
+        </h1>
         {description && <p className="mt-1 text-sm text-fg-muted">{description}</p>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}

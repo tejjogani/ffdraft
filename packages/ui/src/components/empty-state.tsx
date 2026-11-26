@@ -17,7 +17,7 @@ export function EmptyState({ title, description, action, visual, className }: Em
   return (
     <div className={cn('flex flex-col items-center px-6 py-14 text-center', className)}>
       {visual && <div className="mb-5 text-fg-faint">{visual}</div>}
-      <h3 className="font-serif text-heading text-fg text-balance">{title}</h3>
+      <h3 className="studio-heading text-fg text-balance">{title}</h3>
       {description && (
         <p className="mt-1.5 max-w-sm text-sm text-fg-muted text-pretty">{description}</p>
       )}

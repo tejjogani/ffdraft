@@ -97,7 +97,7 @@ export function CommandPalette({
       onSelect={() => run(item)}
       className={cn(
         floatingRow,
-        'h-8 data-[selected=true]:bg-bg-active data-[disabled=true]:opacity-40',
+        'h-8 [@media(any-pointer:coarse)]:min-h-11 data-[selected=true]:bg-bg-active data-[disabled=true]:opacity-40',
       )}
     >
       {renderIcon(item.icon)}
@@ -158,7 +158,7 @@ export function CommandPalette({
                     }}
                     className={cn(
                       floatingRow,
-                      'h-8 data-[selected=true]:bg-bg-active data-[disabled=true]:text-fg-subtle',
+                      'h-8 [@media(any-pointer:coarse)]:min-h-11 data-[selected=true]:bg-bg-active data-[disabled=true]:text-fg-subtle',
                     )}
                   >
                     {fb.icon}

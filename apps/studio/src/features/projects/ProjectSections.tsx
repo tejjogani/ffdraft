@@ -36,7 +36,7 @@ export function ProjectSections({ piece }: { piece: Piece }) {
   return (
     <section aria-label="Project">
       <ProjectAssistant piece={piece} />
-      <h2 className="font-sans text-[18px] font-semibold leading-6 tracking-[-0.025em]">Project tools</h2>
+      <h2 className="studio-heading">Project tools</h2>
       <nav aria-label="Project tools" className="mt-3 grid grid-cols-2 gap-2 sm:gap-2.5">
         {PROJECT_AREAS.map((area) => {
           const [name, description] = toolCopy[area.title]
@@ -59,7 +59,7 @@ export function ProjectSections({ piece }: { piece: Piece }) {
                 }
               />
               <span className="min-w-0 flex-1">
-                <span className="block font-sans text-[14px] font-semibold leading-[19px] tracking-[-0.015em]">
+                <span className="block studio-option">
                   {name}
                 </span>
                 <span className="mt-0.5 block text-[13px] leading-[18px] text-[color-mix(in_srgb,var(--fg)_76%,var(--bg))]">

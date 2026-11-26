@@ -83,7 +83,7 @@ export function SettingsTitle({
   return (
     <div className="mb-8 flex items-end justify-between gap-6">
       <div>
-        <h1 className="font-serif text-title">{title}</h1>
+        <h1 className="studio-title">{title}</h1>
         {description && <p className="mt-1 text-sm text-fg-muted">{description}</p>}
       </div>
       {actions}

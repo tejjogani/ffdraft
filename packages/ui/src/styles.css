@@ -9,8 +9,7 @@
  *     tables. Two strengths: `glass` for chrome you glance at, `glass-strong` for surfaces you
  *     read. Every glass surface has an opaque fallback (reduced transparency, no backdrop-filter).
  *  4. One ink accent for actions, one blue for selection/focus, one warm shimmer reserved for AI.
- *  5. 13 px UI on a 4 px grid; an editorial serif only for page titles, headings of empty states
- *     and the assistant's greeting.
+ *  5. Inter for interface text, titles and actions; Geist Mono for measurements.
  */
 @import "tailwindcss";
 
@@ -130,7 +129,6 @@
 
 @theme inline {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-serif: "Instrument Serif", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
   --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, "Cascadia Mono", Consolas, monospace;
 
   --color-bg: var(--bg);
@@ -410,4 +408,29 @@
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+
+@utility studio-title {
+  font-family: var(--font-sans);
+  font-size: clamp(1.5rem, 2.5vw, 1.875rem);
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+
+@utility studio-heading {
+  font-family: var(--font-sans);
+  font-size: 1.125rem;
+  line-height: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+@utility studio-option {
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.1875rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
 }

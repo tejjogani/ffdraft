@@ -4,7 +4,6 @@ import {
   Button,
   buttonClass,
   cn,
-  Dialog,
   EmptyState,
   IconButton,
   InlineError,
@@ -20,6 +19,7 @@ import {
 import { Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { Copy, FileDown, Folder, FolderInput, Images, MoreHorizontal, Trash2 } from 'lucide-react'
 import { type ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { DeleteProjectDialog, touchDeleteTarget } from '../../components/DeleteProject'
 import { Column, PageHeader } from '../../components/Page'
 import { PieceCover } from '../../components/PieceCover'
 import { StagePicker } from '../../components/StageChip'
@@ -36,7 +36,7 @@ import { TraceSelectedDesign } from '../../features/references/TraceOutline'
 import { type Command, useRegisterCommands } from '../../lib/commands'
 import { hasFacts, KIND_LABEL, metalLabel, metalSwatch } from '../../lib/domain'
 import { carats, grams } from '../../lib/format'
-import { useDeletePiece, useUpdatePiece } from '../../lib/pieces'
+import { useCanDeleteProject, useUpdatePiece } from '../../lib/pieces'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { useCurrentView } from '../../lib/use-current-view'
 import { assistant } from '../../stores/assistant'
@@ -179,8 +179,9 @@ function PieceHeader({
   const collection = collections.data?.find((c) => c.id === piece?.collectionId)
   const navigate = useNavigate()
   const isCurrent = useCurrentView()
-  const remove = useDeletePiece()
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const canDelete = useCanDeleteProject()
+  const options = useRef<HTMLButtonElement>(null)
   const duplicate = useRpcMutation('pieces.duplicate', {
     onMutate: () => isCurrent,
     onSuccess: (copy, _input, stillHere) =>
@@ -205,13 +206,6 @@ function PieceHeader({
           run: () => void savePaveFile(piece),
         },
         {
-          id: 'piece.delete',
-          title: 'Delete piece',
-          group: 'Piece',
-          icon: Trash2,
-          run: () => setConfirmDelete(true),
-        },
-        {
           id: 'piece.ask',
           title: 'Ask the assistant about this piece',
           group: 'Assistant',
@@ -219,6 +213,14 @@ function PieceHeader({
         },
       ]
     : []
+  if (piece && canDelete)
+    commands.push({
+      id: 'piece.delete',
+      title: 'Delete project',
+      group: 'Piece',
+      icon: Trash2,
+      run: () => setConfirmDelete(true),
+    })
   useRegisterCommands(commands)
 
   return (
@@ -264,7 +266,19 @@ function PieceHeader({
                 <AiChip>Project AI</AiChip>
               </Button>
               <Menu
-                trigger={<IconButton icon={MoreHorizontal} label="Piece options" />}
+                trigger={
+                  <IconButton
+                    icon={MoreHorizontal}
+                    label="Piece options"
+                    className={canDelete ? touchDeleteTarget : undefined}
+                    ref={options}
+                  />
+                }
+                className={
+                  canDelete
+                    ? '[@media(any-pointer:coarse)]:[&_[role=menuitem]]:min-h-11'
+                    : undefined
+                }
                 align="end"
               >
                 <MenuItem icon={Copy} onClick={() => duplicate.mutate({ id: piece.id })}>
@@ -280,33 +294,28 @@ function PieceHeader({
                 <MenuSub label="Move to folder" icon={FolderInput}>
                   <CollectionChoices piece={piece} />
                 </MenuSub>
-                <MenuSeparator />
-                <MenuItem icon={Trash2} danger onClick={() => setConfirmDelete(true)}>
-                  Delete
-                </MenuItem>
+                {canDelete && (
+                  <>
+                    <MenuSeparator />
+                    <MenuItem icon={Trash2} danger onClick={() => setConfirmDelete(true)}>
+                      Delete project
+                    </MenuItem>
+                  </>
+                )}
               </Menu>
             </>
           )
         }
       />
-      <Dialog
-        open={confirmDelete}
-        onOpenChange={setConfirmDelete}
-        title="Delete this piece?"
-        description="Its design, history, renders and packages will be deleted. This can’t be undone."
-        footer={
-          <>
-            <Button onClick={() => setConfirmDelete(false)}>Cancel</Button>
-            <Button
-              variant="danger"
-              disabled={remove.isPending}
-              onClick={() => piece && remove.mutate({ id: piece.id })}
-            >
-              Delete piece
-            </Button>
-          </>
-        }
-      />
+      {canDelete && confirmDelete && piece && (
+        <DeleteProjectDialog
+          key={piece.id}
+          project={piece}
+          onClose={() => setConfirmDelete(false)}
+          cancelFocus={() => options.current}
+          leaveProject
+        />
+      )}
     </>
   )
 }
@@ -340,7 +349,7 @@ function PieceHero({ piece }: { piece: Piece }) {
           placeholder="Untitled"
           aria-label="Piece title"
           maxLength={120}
-          className="min-w-0 flex-1 bg-transparent rounded-sm font-sans text-[24px] font-semibold leading-tight tracking-[-0.035em] text-fg placeholder:text-fg-faint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-select sm:text-[30px]"
+          className="min-w-0 flex-1 bg-transparent rounded-sm studio-title text-fg placeholder:text-fg-faint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-select"
         />
       </div>
       <div className="mt-3 -ml-1.5 flex flex-wrap items-center gap-x-1 gap-y-1 text-sm">

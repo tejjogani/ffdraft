@@ -10,9 +10,10 @@ import {
   type Stage,
 } from '@pave/schema'
 import { Badge, Button, EmptyState, InlineError, Segmented, Select, Skeleton } from '@pave/ui'
-import { Link, useNavigate, useSearch } from '@tanstack/react-router'
+import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-router'
 import { FileUp, Folder, FolderPlus, LayoutGrid, Plus, Rows3 } from 'lucide-react'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { DeleteProjectButton, DeleteProjectDialog } from '../../components/DeleteProject'
 import { KindGlyph } from '../../components/KindGlyph'
 import { Column, PageHeader, PageTitle } from '../../components/Page'
 import { PieceCard, PieceCardSkeleton } from '../../components/PieceCard'
@@ -23,7 +24,7 @@ import { projectFolder } from '../../features/projects/folder'
 import { StageProgress } from '../../features/projects/ProjectSections'
 import { KIND_LABEL, STAGE_LABEL } from '../../lib/domain'
 import { plural } from '../../lib/format'
-import { useCreatePiece } from '../../lib/pieces'
+import { useCanDeleteProject, useCreatePiece } from '../../lib/pieces'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { PieceTable } from './PieceTable'
 
@@ -50,6 +51,21 @@ const SORTS: Record<
  * their totals and its own total (sub-folders included).
  */
 export function PiecesPage({ collectionId }: { collectionId?: string }) {
+  const canDelete = useCanDeleteProject()
+  const [deleting, setDeleting] = useState<{
+    project: PieceSummary
+    trigger: HTMLButtonElement
+  } | null>(null)
+  const heading = useRef<HTMLHeadingElement>(null)
+  const focusProjects = useLocation({
+    select: ({ state }) => 'focusProjects' in state && state.focusProjects === true,
+  })
+  useEffect(() => {
+    if (focusProjects) heading.current?.focus()
+  }, [focusProjects])
+  const onDelete = canDelete
+    ? (project: PieceSummary, trigger: HTMLButtonElement) => setDeleting({ project, trigger })
+    : undefined
   const search = useSearch({ strict: false }) as PiecesSearch
   const navigate = useNavigate()
   const setSearch = (patch: Partial<PiecesSearch>) =>
@@ -138,6 +154,7 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
       <Column wide>
         <PageTitle
           title={title}
+          headingRef={heading}
           description={
             pieces.data
               ? plural(visible.length, 'project') +
@@ -283,29 +300,51 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
                 {view === 'gallery' ? (
                   <Grid>
                     {list.map((p) => (
-                      <PieceCard
-                        key={p.id}
-                        piece={p}
-                        meta={
-                          <>
-                            <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium">
-                              <Folder className="size-3.5 shrink-0" aria-hidden />
-                              {projectFolder(p.collectionId, collections.data)}
-                            </span>
-                            <ProjectMeta piece={p} cost={costs.get(p.id)} />
-                          </>
-                        }
-                      />
+                      <div key={p.id} className="relative">
+                        <PieceCard
+                          piece={p}
+                          meta={
+                            <>
+                              <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium">
+                                <Folder className="size-3.5 shrink-0" aria-hidden />
+                                {projectFolder(p.collectionId, collections.data)}
+                              </span>
+                              <ProjectMeta piece={p} cost={costs.get(p.id)} />
+                            </>
+                          }
+                        />
+                        {onDelete && (
+                          <div className="absolute top-2 right-2 z-1">
+                            <DeleteProjectButton
+                              project={p}
+                              onSelect={(trigger) => onDelete(p, trigger)}
+                            />
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </Grid>
                 ) : (
-                  <PieceTable pieces={list} collections={collections.data} costs={costs} />
+                  <PieceTable
+                    onDelete={onDelete}
+                    pieces={list}
+                    collections={collections.data}
+                    costs={costs}
+                  />
                 )}
               </section>
             ))}
           </div>
         )}
       </Column>
+      {deleting && canDelete && (
+        <DeleteProjectDialog
+          project={deleting.project}
+          onClose={() => setDeleting(null)}
+          cancelFocus={() => (deleting.trigger.isConnected ? deleting.trigger : heading.current)}
+          deletedFocus={() => heading.current}
+        />
+      )}
     </>
   )
 }

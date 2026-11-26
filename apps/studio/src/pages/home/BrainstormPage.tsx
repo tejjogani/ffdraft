@@ -140,7 +140,7 @@ export function BrainstormPage({ id, threadId }: { id: string; threadId?: string
       />
       <div className="mx-auto flex min-h-0 w-full max-w-[900px] flex-1 flex-col px-4 sm:px-10">
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-line pt-5 pb-3">
-          <h1 className="font-serif text-title text-fg">Brainstorm</h1>
+          <h1 className="studio-title text-fg">Brainstorm</h1>
           {brief === null && (
             <Button
               size="sm"

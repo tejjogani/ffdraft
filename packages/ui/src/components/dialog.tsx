@@ -1,6 +1,6 @@
 import { Dialog as Base } from '@base-ui/react/dialog'
 import { X } from 'lucide-react'
-import type { ReactElement, ReactNode } from 'react'
+import type { ComponentProps, ReactElement, ReactNode } from 'react'
 import { cn } from '../cn'
 import { IconButton } from './button'
 
@@ -8,7 +8,8 @@ const backdrop =
   'fixed inset-0 z-50 bg-[rgba(20,18,15,0.18)] dark:bg-black/45 transition-opacity duration-180 ease-out ' +
   'data-starting-style:opacity-0 data-ending-style:opacity-0'
 
-export interface DialogProps {
+export interface DialogProps
+  extends Pick<ComponentProps<typeof Base.Popup>, 'initialFocus' | 'finalFocus'> {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   /** Optional trigger element; omit for controlled dialogs. */
@@ -46,6 +47,8 @@ export function Dialog({
   placement = 'center',
   dock,
   className,
+  initialFocus,
+  finalFocus,
 }: DialogProps) {
   const docked = placement === 'end'
   return (
@@ -59,6 +62,8 @@ export function Dialog({
       <Base.Portal>
         {!docked && <Base.Backdrop className={backdrop} />}
         <Base.Popup
+          initialFocus={initialFocus}
+          finalFocus={finalFocus}
           style={
             dock && { top: dock.top, right: dock.right, width: dock.width, height: dock.height }
           }

@@ -110,7 +110,7 @@ export function ModelDetails({ model }: { model: BrandModel }) {
   return (
     <article className="grid gap-3 rounded-lg border border-line p-4">
       <div>
-        <h3 className="text-xl font-bold">{model.name}</h3>
+        <h3 className="studio-option">{model.name}</h3>
         <p className="text-sm text-fg-muted">
           Ages {model.card.ageRange} ·{' '}
           {model.status === 'approved' ? 'Approved for shoots' : 'Draft model'}

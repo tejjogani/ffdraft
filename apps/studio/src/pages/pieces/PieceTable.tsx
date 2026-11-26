@@ -1,6 +1,7 @@
 import type { Collection, PieceSummary, ProjectCost } from '@pave/schema'
 import { Swatch } from '@pave/ui'
 import { Link, useNavigate } from '@tanstack/react-router'
+import { DeleteProjectButton } from '../../components/DeleteProject'
 import { KindGlyph } from '../../components/KindGlyph'
 import { StageChip } from '../../components/StageChip'
 import { usd } from '../../features/projects/cost'
@@ -14,10 +15,12 @@ const td = 'h-10 px-3 whitespace-nowrap'
 
 /** A dense, hairline table. Rows open the piece; the title cell is the link for keyboards. */
 export function PieceTable({
+  onDelete,
   pieces,
   collections,
   costs,
 }: {
+  onDelete?: (project: PieceSummary, trigger: HTMLButtonElement) => void
   pieces: PieceSummary[]
   collections: Collection[] | undefined
   /** Each project's costs, by piece id (projects.summary). */
@@ -30,6 +33,11 @@ export function PieceTable({
         <thead>
           <tr className="border-b border-line">
             <th className={th}>Title</th>
+            {onDelete && (
+              <th className={th}>
+                <span className="sr-only">Project actions</span>
+              </th>
+            )}
             <th className={th}>Folder</th>
             <th className={th}>Stage</th>
             <th className={th}>Progress</th>
@@ -61,6 +69,11 @@ export function PieceTable({
                   <span className="truncate">{p.title || 'Untitled'}</span>
                 </Link>
               </td>
+              {onDelete && (
+                <td className="px-1">
+                  <DeleteProjectButton project={p} onSelect={(trigger) => onDelete(p, trigger)} />
+                </td>
+              )}
               <td className={`${td} text-fg-muted`}>
                 {projectFolder(p.collectionId, collections)}
               </td>

@@ -252,7 +252,7 @@ export function DesignBoard({
           <h3
             className={cn(
               'text-fg',
-              projectWorkspace ? 'text-base font-medium' : 'font-serif text-title',
+              projectWorkspace ? 'text-base font-medium' : 'studio-title',
             )}
           >
             {readOnly ? 'No references yet' : 'Collect references for your design'}
@@ -627,7 +627,7 @@ function Media({ reference: r }: { reference: Reference }) {
     return <ModelViewer assetId={r.assetId} name={r.title || 'model.stl'} />
   if (r.type === 'note')
     return (
-      <p className="min-h-20 whitespace-pre-wrap bg-[color-mix(in_oklab,var(--warn)_8%,var(--bg))] px-3 py-3 font-serif text-sm leading-6">
+      <p className="min-h-20 whitespace-pre-wrap bg-[color-mix(in_oklab,var(--warn)_8%,var(--bg))] px-3 py-3 font-sans text-sm leading-6">
         {r.note}
       </p>
     )

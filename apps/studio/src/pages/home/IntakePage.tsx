@@ -51,7 +51,7 @@ export function IntakePage({ pieceId, search }: { pieceId: string; search: Intak
         }
       />
       <div className="mx-auto flex min-h-0 w-full max-w-[900px] flex-1 flex-col px-4 sm:px-10">
-        <h1 className="mt-4 mb-2 shrink-0 font-serif text-heading text-fg sm:mt-7 sm:text-title">
+        <h1 className="mt-4 mb-2 shrink-0 studio-title text-fg sm:mt-7">
           {initialTitle}
         </h1>
         {fault ? (
