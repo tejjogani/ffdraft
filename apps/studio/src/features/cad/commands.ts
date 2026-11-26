@@ -62,6 +62,7 @@ export interface CadCommandContext {
   /** Whether the assistant's latest run is on show (and can be undone). */
   hasRun: boolean
   openAddMenu(): void
+  drawProfile(): void
   requestDelete(ids: string[]): void
   exportAs(format: ExportFormat): void
   show(d: Diagnostic): void
@@ -139,6 +140,15 @@ export function useCadCommands(c: CadCommandContext): void {
   const allExcluded = () => selected().every((id) => c.design.nodes[id]!.visible === false)
   const firstFix = () => c.issues.find((i) => i.d.fix)?.d
   const commands: Command[] = [
+    {
+      id: 'design.drawProfile',
+      title: 'Draw profile',
+      group: 'Design',
+      keywords: ['polyline', 'rectangle', 'extrude', 'sketch'],
+      icon: PencilRuler,
+      when: editable,
+      run: c.drawProfile,
+    },
     {
       id: 'design.undo',
       title: 'Undo',

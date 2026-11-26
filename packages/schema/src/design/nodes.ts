@@ -14,6 +14,7 @@ import { GEM_CUT_IDS, GEM_MATERIAL_IDS } from '../domain/gems'
 import { FINISH_IDS, METAL_IDS, PLATING_IDS } from '../domain/metals'
 import { RING_SIZE_SYSTEMS } from '../domain/sizes'
 import { choice, deg, follows, int, mm, ratio, ref, text, toggle, vec3 } from './fields'
+import { DrawnProfile } from './profile'
 
 /** Kinds that produce a solid another feature can attach to, cut into or cover with stones. */
 export const BODY_KINDS = [
@@ -385,6 +386,7 @@ export const VectorBody = z
     source: z
       .discriminatedUnion('type', [
         z.object({ type: z.literal('text'), text: text('Text', 'Pavé'), font: fontChoice }),
+        DrawnProfile,
         z.object({
           type: z.literal('svg'),
           d: z.string().max(200_000).meta({ title: 'Path', widget: 'path' }),
