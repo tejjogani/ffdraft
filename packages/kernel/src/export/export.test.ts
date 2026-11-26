@@ -106,6 +106,29 @@ function parseStl(bytes: Uint8Array): { header: string; triangles: Triangles } {
   }
 }
 
+/** Measures the STL where its triangles cross a plane between the rail vertices. */
+function sectionBounds(
+  { positions }: Triangles,
+  axis: 0 | 1,
+  at: number,
+  half?: 'near' | 'far',
+): Bounds {
+  const cut: number[] = []
+  for (let t = 0; t < positions.length; t += 9)
+    for (let vertex = 0; vertex < 3; vertex++) {
+      const a = t + 3 * vertex
+      const b = t + 3 * ((vertex + 1) % 3)
+      const da = positions[a + axis]! - at
+      const db = positions[b + axis]! - at
+      if (da * db > 0 || da === db) continue
+      const f = da / (da - db)
+      const point = [0, 1, 2].map((k) => positions[a + k]! * (1 - f) + positions[b + k]! * f)
+      if (half === undefined || (half === 'near') === point[1 - axis]! < 5) cut.push(...point)
+    }
+  expect(cut.length).toBeGreaterThan(0)
+  return boundsOf(cut)
+}
+
 /** Splits STL triangle soup into connected shells by shared vertex coordinates. */
 function shellCount({ positions, indices }: Triangles): number {
   const ids = new Map<string, number>()
@@ -159,6 +182,15 @@ describe('wire from a construction curve', () => {
     },
   }
 
+  const coordinates = (vertices: [number, number][]) =>
+    vertices.map(([u, v], i) => ({ id: `p${i}`, u, v }))
+
+  const linked = (points: [number, number][], closed = false, taper = 0): Design =>
+    designFrom('other', [
+      { id: 'path', kind: 'curve', plane: 'top', points: coordinates(points), closed },
+      { id: 'wire', kind: 'pipe', curve: 'path', width: 2, thickness: 1, taper },
+    ])
+
   it('honors the source plane and wire transform in the solid and exported STL', async () => {
     const change = applyOps(source, [addWire])
     const saved = parseDesignDocument(JSON.parse(JSON.stringify(change.design)))
@@ -199,6 +231,175 @@ describe('wire from a construction curve', () => {
       applyOps(extended, [{ t: 'update', id: 'path', patch: { closed: true } }]).design,
     )
     expect(loop.parts[0]!.volumeMm3).toBeGreaterThan(bend.parts[0]!.volumeMm3)
+  })
+
+  it('keeps the right-angle rail centred and mitred through STL export, edit, reopen, and undo', async () => {
+    const initial = linked([
+      [0, 0],
+      [10, 0],
+      [10, 10],
+    ])
+    const measure = async (design: Design, x: number) => {
+      const { parts, diagnostics } = await kernel.evaluate(design, { detail: 'production' })
+      expect(diagnostics.some((d) => d.level === 'error')).toBe(false)
+      expect(parts[0]!.volumeMm3).toBeCloseTo(Math.PI * 0.5 * (x + 10), 1)
+      const { triangles } = parseStl((await exportOf(design, 'stl')).bytes)
+      expect(isClosedManifold(triangles)).toBe(true)
+      expect(shellCount(triangles)).toBe(1)
+      const bounds = boundsOf(triangles.positions)
+      expectBounds(bounds, { min: [0, -0.5, -1], max: [x + 0.5, 10, 1] })
+      for (const station of [2.5, 5, 7.5]) {
+        expectBounds(sectionBounds(triangles, 0, station), {
+          min: [station, -0.5, -1],
+          max: [station, 0.5, 1],
+        })
+        expectBounds(sectionBounds(triangles, 1, station), {
+          min: [x - 0.5, station, -1],
+          max: [x + 0.5, station, 1],
+        })
+      }
+      // The outside generator on both legs meets at the miter, half a thickness past the vertex.
+      expect(
+        triangles.positions.some(
+          (value, i) =>
+            i % 3 === 0 &&
+            value === x + 0.5 &&
+            triangles.positions[i + 1] === -0.5 &&
+            Math.abs(triangles.positions[i + 2]!) < 1e-6,
+        ),
+      ).toBe(true)
+    }
+    await measure(initial, 10)
+    const change = applyOps(initial, [
+      {
+        t: 'update',
+        id: 'path',
+        patch: {
+          points: coordinates([
+            [0, 0],
+            [14, 0],
+            [14, 10],
+          ]),
+        },
+      },
+    ])
+    const reopened = parseDesignDocument(JSON.parse(JSON.stringify(change.design)))
+    await measure(reopened, 14)
+    await measure(applyOps(reopened, change.inverse).design, 10)
+  })
+
+  it('keeps a closed rail square at every miter, including the closure seam', async () => {
+    const design = linked(
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+      ],
+      true,
+    )
+    const { parts, diagnostics } = await kernel.evaluate(design, { detail: 'production' })
+    expect(diagnostics.some((d) => d.level === 'error')).toBe(false)
+    expect(parts[0]!.volumeMm3).toBeCloseTo(Math.PI * 0.5 * 40, 1)
+    const { triangles } = parseStl((await exportOf(design, 'stl')).bytes)
+    expect(isClosedManifold(triangles)).toBe(true)
+    expect(shellCount(triangles)).toBe(1)
+    expectBounds(boundsOf(triangles.positions), { min: [-0.5, -0.5, -1], max: [10.5, 10.5, 1] })
+    for (const axis of [0, 1] as const) {
+      for (const leg of [0, 10]) {
+        const min: [number, number, number] = [leg - 0.5, leg - 0.5, -1]
+        const max: [number, number, number] = [leg + 0.5, leg + 0.5, 1]
+        min[axis] = max[axis] = 5
+        expectBounds(sectionBounds(triangles, axis, 5, leg === 0 ? 'near' : 'far'), { min, max })
+      }
+    }
+  })
+
+  it.each<[string, [number, number][], boolean]>([
+    [
+      'a direction reversal',
+      [
+        [0, 0],
+        [10, 0],
+        [4, 0],
+      ],
+      false,
+    ],
+    [
+      'a nearly zero-length leg',
+      [
+        [0, 0],
+        [0.0000001, 0],
+        [0, 10],
+      ],
+      false,
+    ],
+    [
+      'overlapping miters on a short leg',
+      [
+        [0, 0],
+        [10, 0],
+        [10, 0.3],
+        [0, 0.3],
+      ],
+      false,
+    ],
+    [
+      'a crossing rail',
+      [
+        [0, 0],
+        [10, 10],
+        [0, 10],
+        [10, 0],
+      ],
+      false,
+    ],
+  ])('reports invalid linked wire geometry for %s', async (_, points, closed) => {
+    const { parts, diagnostics } = await kernel.evaluate(linked(points, closed), {
+      detail: 'production',
+    })
+    expect(parts).toHaveLength(0)
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({ code: 'feature.failed', nodeId: 'wire' }),
+    )
+  })
+
+  it('still interpolates an inline path smoothly through the same right-angle points', async () => {
+    const design = designFrom('other', [
+      {
+        id: 'wire',
+        kind: 'pipe',
+        points: [
+          [0, 0, 0],
+          [10, 0, 0],
+          [10, 10, 0],
+        ],
+        width: 2,
+        thickness: 1,
+      },
+    ])
+    const { triangles } = parseStl((await exportOf(design, 'stl')).bytes)
+    const { min, max } = sectionBounds(triangles, 0, 5)
+    expect((min[1] + max[1]) / 2).toBeLessThan(-0.5)
+  })
+
+  it('tapers along straight linked legs and supports pointed ends', async () => {
+    const design = linked(
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+      ],
+      false,
+      1,
+    )
+    const { triangles } = parseStl((await exportOf(design, 'stl')).bytes)
+    expect(isClosedManifold(triangles)).toBe(true)
+    const { min, max } = sectionBounds(triangles, 0, 5)
+    // Slicing perpendicular to a leg also cuts across the taper as the sections skew into the miter.
+    expect(Math.abs((min[1] + max[1]) / 2)).toBeLessThan(0.02)
+    expect(max[2] - min[2]).toBeCloseTo(1.5, 1)
+    expect(boundsOf(triangles.positions).min[0]).toBeCloseTo(0, 2)
   })
 
   it('rejects ambiguous or incompatible sources and still accepts inline points', async () => {
