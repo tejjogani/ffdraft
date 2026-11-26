@@ -20,7 +20,7 @@ export function PieceTable({
   collections,
   costs,
 }: {
-  onDelete: (project: PieceSummary) => void
+  onDelete?: (project: PieceSummary, trigger: HTMLButtonElement) => void
   pieces: PieceSummary[]
   collections: Collection[] | undefined
   /** Each project's costs, by piece id (projects.summary). */
@@ -33,9 +33,11 @@ export function PieceTable({
         <thead>
           <tr className="border-b border-line">
             <th className={th}>Title</th>
-            <th className={th}>
-              <span className="sr-only">Project actions</span>
-            </th>
+            {onDelete && (
+              <th className={th}>
+                <span className="sr-only">Project actions</span>
+              </th>
+            )}
             <th className={th}>Folder</th>
             <th className={th}>Stage</th>
             <th className={th}>Progress</th>
@@ -67,9 +69,11 @@ export function PieceTable({
                   <span className="truncate">{p.title || 'Untitled'}</span>
                 </Link>
               </td>
-              <td className="px-1">
-                <DeleteProjectButton project={p} onSelect={() => onDelete(p)} />
-              </td>
+              {onDelete && (
+                <td className="px-1">
+                  <DeleteProjectButton project={p} onSelect={(trigger) => onDelete(p, trigger)} />
+                </td>
+              )}
               <td className={`${td} text-fg-muted`}>
                 {projectFolder(p.collectionId, collections)}
               </td>

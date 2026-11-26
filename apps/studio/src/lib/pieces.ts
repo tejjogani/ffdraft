@@ -1,8 +1,15 @@
 /** Piece mutations with optimistic updates, shared by every page that edits pieces. */
-import type { CommandInput, Piece, PieceSummary } from '@pave/schema'
+import {
+  type CommandInput,
+  minimumRole,
+  type Piece,
+  type PieceSummary,
+  roleAllows,
+} from '@pave/schema'
 import { toast } from '@pave/ui'
 import { useNavigate } from '@tanstack/react-router'
 import { queryClient, rpcKey, useRpcMutation } from './query'
+import { activeOrg, useSession } from './session'
 import { useCurrentView } from './use-current-view'
 
 type Update = CommandInput<'pieces.update'>
@@ -52,6 +59,11 @@ export function useCreatePiece() {
   })
 }
 
+export function useCanDeleteProject() {
+  const org = activeOrg(useSession())
+  return !!org && roleAllows(org.role, minimumRole('pieces.delete'))
+}
+
 export function useDeletePiece(leaveProject: boolean) {
   const navigate = useNavigate()
   const isCurrent = useCurrentView()
@@ -59,7 +71,8 @@ export function useDeletePiece(leaveProject: boolean) {
     onMutate: () => isCurrent,
     onSuccess: (_out, _input, stillHere) => {
       toast({ title: 'Project deleted' })
-      if (leaveProject && stillHere?.()) void navigate({ to: '/pieces' })
+      if (leaveProject && stillHere?.())
+        void navigate({ to: '/pieces', state: (prev) => ({ ...prev, focusProjects: true }) })
     },
   })
 }

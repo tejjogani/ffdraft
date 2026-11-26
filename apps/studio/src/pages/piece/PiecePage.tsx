@@ -19,8 +19,8 @@ import {
 import { Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { Copy, FileDown, Folder, FolderInput, Images, MoreHorizontal, Trash2 } from 'lucide-react'
 import { type ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { DeleteProjectDialog, touchDeleteTarget } from '../../components/DeleteProject'
 import { Column, PageHeader } from '../../components/Page'
-import { DeleteProjectDialog } from '../../components/DeleteProject'
 import { PieceCover } from '../../components/PieceCover'
 import { StagePicker } from '../../components/StageChip'
 import { JobPanel } from '../../features/assistant/jobs/JobPanel'
@@ -36,7 +36,7 @@ import { TraceSelectedDesign } from '../../features/references/TraceOutline'
 import { type Command, useRegisterCommands } from '../../lib/commands'
 import { hasFacts, KIND_LABEL, metalLabel, metalSwatch } from '../../lib/domain'
 import { carats, grams } from '../../lib/format'
-import { useUpdatePiece } from '../../lib/pieces'
+import { useCanDeleteProject, useUpdatePiece } from '../../lib/pieces'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { useCurrentView } from '../../lib/use-current-view'
 import { assistant } from '../../stores/assistant'
@@ -180,6 +180,8 @@ function PieceHeader({
   const navigate = useNavigate()
   const isCurrent = useCurrentView()
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const canDelete = useCanDeleteProject()
+  const options = useRef<HTMLButtonElement>(null)
   const duplicate = useRpcMutation('pieces.duplicate', {
     onMutate: () => isCurrent,
     onSuccess: (copy, _input, stillHere) =>
@@ -204,13 +206,6 @@ function PieceHeader({
           run: () => void savePaveFile(piece),
         },
         {
-          id: 'piece.delete',
-          title: 'Delete project',
-          group: 'Piece',
-          icon: Trash2,
-          run: () => setConfirmDelete(true),
-        },
-        {
           id: 'piece.ask',
           title: 'Ask the assistant about this piece',
           group: 'Assistant',
@@ -218,6 +213,14 @@ function PieceHeader({
         },
       ]
     : []
+  if (piece && canDelete)
+    commands.push({
+      id: 'piece.delete',
+      title: 'Delete project',
+      group: 'Piece',
+      icon: Trash2,
+      run: () => setConfirmDelete(true),
+    })
   useRegisterCommands(commands)
 
   return (
@@ -263,7 +266,19 @@ function PieceHeader({
                 <AiChip>Project AI</AiChip>
               </Button>
               <Menu
-                trigger={<IconButton icon={MoreHorizontal} label="Piece options" />}
+                trigger={
+                  <IconButton
+                    icon={MoreHorizontal}
+                    label="Piece options"
+                    className={canDelete ? touchDeleteTarget : undefined}
+                    ref={options}
+                  />
+                }
+                className={
+                  canDelete
+                    ? '[@media(any-pointer:coarse)]:[&_[role=menuitem]]:min-h-11'
+                    : undefined
+                }
                 align="end"
               >
                 <MenuItem icon={Copy} onClick={() => duplicate.mutate({ id: piece.id })}>
@@ -279,20 +294,25 @@ function PieceHeader({
                 <MenuSub label="Move to folder" icon={FolderInput}>
                   <CollectionChoices piece={piece} />
                 </MenuSub>
-                <MenuSeparator />
-                <MenuItem icon={Trash2} danger onClick={() => setConfirmDelete(true)}>
-                  Delete project
-                </MenuItem>
+                {canDelete && (
+                  <>
+                    <MenuSeparator />
+                    <MenuItem icon={Trash2} danger onClick={() => setConfirmDelete(true)}>
+                      Delete project
+                    </MenuItem>
+                  </>
+                )}
               </Menu>
             </>
           )
         }
       />
-      {confirmDelete && piece && (
+      {canDelete && confirmDelete && piece && (
         <DeleteProjectDialog
           key={piece.id}
           project={piece}
           onClose={() => setConfirmDelete(false)}
+          cancelFocus={() => options.current}
           leaveProject
         />
       )}
