@@ -1,12 +1,12 @@
 /**
  * The two linked measures the inspector edits on behalf of a field: a stone's size in mm and
- * carats (carats are never stored — only the girdle width is), and a ring's size in the
+ * carats (a fitted supplier stone can also carry its listed weight), and a ring's size in the
  * designer's preferred system (the node is rewritten only when a value is picked).
  */
 import {
+  fittedCarat,
   type GemCutId,
   type GemMaterialId,
-  gemCarat,
   gemDimsFromCarat,
   type RingSize,
   type RingSizeSystem,
@@ -29,7 +29,7 @@ const round = (v: number, step: number) => Number((Math.round(v / step) * step).
 
 /** Estimated carat of one stone of girdle width `width`. */
 export const caratOf = (s: StoneSpec, width: number): number =>
-  gemCarat(s.cut, stoneDims({ ...s, width }), s.stone)
+  fittedCarat(s.cut, stoneDims({ ...s, width }), s.stone, s.sourcing)
 
 /** The girdle width (mm, to 0.01) of a stone of `carat`, clamped to [min, max]. */
 export function widthForCarat(s: StoneSpec, carat: number, min: number, max: number): number {

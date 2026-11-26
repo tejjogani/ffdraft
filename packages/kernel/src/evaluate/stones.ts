@@ -1,5 +1,5 @@
 /** Turns placed stones into public, instanced `StoneInstance`s and the stone report. */
-import { type Design, gemCarat } from '@pave/schema'
+import { type Design, fittedCarat } from '@pave/schema'
 import type { NodeResult, SceneStone } from '../core'
 import { gemUnit } from '../gems/index'
 import { frameMatrix } from '../geometry/vec'
@@ -21,6 +21,7 @@ export function instanceStones(
   const stones: SceneStone[] = []
   const gemMeshes: Record<string, MeshData> = {}
   for (const result of active) {
+    const node = design.nodes[result.id]
     result.stones.forEach((stone, index) => {
       const unit = gemUnit(stone.cut, stone.dims.length / stone.dims.width)
       gemMeshes[unit.key] ??= unit.mesh
@@ -32,7 +33,12 @@ export function instanceStones(
           cut: stone.cut,
           stone: stone.stone,
           dims: stone.dims,
-          carat: gemCarat(stone.cut, stone.dims, stone.stone),
+          carat: fittedCarat(
+            stone.cut,
+            stone.dims,
+            stone.stone,
+            node?.kind === 'gem' ? node.sourcing : undefined,
+          ),
           meshKey: unit.key,
           matrix: [
             ...frameMatrix(stone.frame, [

@@ -6,9 +6,9 @@ exports[`the frozen system prompt > has a stable hash (snapshot) that covers the
     7082,
     41253,
     10638,
-    15238,
+    15321,
   ],
-  "hash": "prompt-0ddc1ea532043a",
+  "hash": "prompt-0b57a0af68c939",
 }
 `;
 
@@ -38,6 +38,7 @@ Shared value lists:
     - length (required): number 0.3–40
     - width (required): number 0.3–40
     - depth (required): number 0.1–40
+  - listedCarat: number ct. Weight reported by the supplier for this fitted stone.
   - certificate: string
 ## ringShank: Ring band. A ring shank / band sized to a finger.
 - material: <metal> = "au18k-yellow"

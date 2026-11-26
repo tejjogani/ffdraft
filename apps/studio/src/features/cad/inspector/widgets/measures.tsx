@@ -92,7 +92,9 @@ export function StoneSizeWidget({ row, label }: WidgetProps) {
       )}
       {measured && (
         <p className="col-span-2 text-xs text-fg-muted">
-          Width and carat weight are fixed by the fitted stone’s measurements.
+          {gem?.sourcing?.listedCarat !== undefined
+            ? 'This fitted stone uses the supplier’s measurements and listed carat weight.'
+            : 'This fitted stone uses the supplier’s measurements. Carat weight is estimated.'}
         </p>
       )}
     </>

@@ -12,7 +12,15 @@
  * (`GEM_CUTS`) and the canon's research (09 §1), so the recipe, the resolver, the stone
  * intent and the kernel's fix suggestions all agree.
  */
-import { culetDepth, GEM_CUTS, type GemCutId, type GemDims, gemDims } from '../domain/gems'
+import {
+  culetDepth,
+  GEM_CUTS,
+  type GemCutId,
+  type GemDims,
+  type GemMaterialId,
+  gemCarat,
+  gemDims,
+} from '../domain/gems'
 import { ringInnerDiameter } from '../domain/sizes'
 import type { Design } from './design'
 import type { Node, NodeOf } from './nodes'
@@ -58,6 +66,26 @@ type Measured = NonNullable<NonNullable<Gem['sourcing']>['measured']>
 /** A measured size the geometry can use: three finite, positive numbers. */
 export const measuredUsable = (m: Measured | undefined): boolean =>
   m !== undefined && [m.length, m.width, m.depth].every((v) => Number.isFinite(v) && v > 0)
+
+/** Use the listing weight only for the stone at its supplied dimensions. A scaled copy is an estimate. */
+export function fittedCarat(
+  cut: GemCutId,
+  dims: GemDims,
+  material: GemMaterialId,
+  sourcing?: Gem['sourcing'],
+): number {
+  const m = sourcing?.measured
+  if (
+    sourcing?.listedCarat !== undefined &&
+    m &&
+    measuredUsable(m) &&
+    dims.width === Math.min(m.length, m.width) &&
+    dims.length === Math.max(m.length, m.width) &&
+    dims.depth === m.depth
+  )
+    return sourcing.listedCarat
+  return gemCarat(cut, dims, material)
+}
 
 /**
  * A stone's real size: the measured stone when one has been sourced (and its record is

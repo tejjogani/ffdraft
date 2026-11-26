@@ -120,6 +120,7 @@ try {
   await page.getByText('Fitted stone · TEST-7', { exact: true }).waitFor()
   const fitted = await rpc('pieces.get', { id: a.id })
   assert.deepEqual(fitted.design.nodes.center.sourcing.measured, stones[6]!.measured)
+  assert.equal(fitted.design.nodes.center.sourcing.listedCarat, stones[6]!.carat)
   assert.deepEqual((await rpc('pieces.get', { id: b.id })).design, b.design)
   await page.goto(`${base}/sourcing`)
   await page.getByLabel('Project', { exact: true }).selectOption(b.id)

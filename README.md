@@ -33,20 +33,20 @@ folders (a folder can hold folders, one level deep), and each shows what every s
 | --- | --- |
 | Workspace: home, projects in folders (with what each stage cost), library of metals, stones, cuts and ring sizes | Works |
 | Templates: 14 starting points, from a solitaire to an iced-out trophy pendant | Works |
-| **Design** tab: the project's design board (uploads, sketch sheets, sketches, pasted Pinterest or Google links, notes, 3D models as inspiration, museum search), **Take to CAD**, **Start CAD**, **Open as CAD** | Works. Google and Pinterest search need their keys (paste links meanwhile) |
+| **Project Design** with a design chat, brief, references, moodboard import and **Build CAD with Claude** | Open Google Images or Pinterest to find references, then add the pictures or links you choose. |
 | **Generate concepts** on the design board: Claude reads your request and the board pictures you pick, writes the prompt for jewelry and checks it, four images from Google Gemini, OpenAI or Higgsfield, each checked before it is kept; vary, refine, take one to CAD | Works with an image provider's key and your Claude key ([below](#concept-images-on-the-design-board)). OpenAI was checked live; Gemini and Higgsfield only against recorded answers |
 | **Try variants** in CAD: built alternatives of the current CAD to compare, mix and choose | Works |
 | **CAD** tab: feature list, inspector, live weight, carats and stone count, manufacturability checks, undo and redo | Works; being tested and fixed, so expect rough edges |
 | **Render** tab: shots, looks, framing a shot by hand in the viewfinder, animations (turntable, orbit, push-in, macro sweep, sparkle pass) as MP4 with a GIF, Blender takes, browser previews without Blender | Works; Blender is optional (animations need it) |
 | The assistant: chat in the dock, AI jobs for each stage, a design from a written brief or from a photo, edits by chat, questions about a selected part | Works with your own Claude API key ([below](#use-the-assistant-with-your-claude-api-key)). Built and tested against recorded stand-ins for Claude, not yet against Claude itself: run `pnpm agent:smoke` once with your key to check it |
-| Reference window beside CAD: museum search, pins with their rights, a sketch pad, generated images, pictures laid in a view as image planes | Works. The museum search was tested with recorded answers only |
+| Reference window beside CAD with Google Images and Pinterest search, pinned references, sketching and image planes | Available in the CAD builder |
 | Exports: STL, 3MF, OBJ, GLB, STEP, 3DM | Works |
 | The Pavé file (`.pave`): save a piece with its history, references and shots, and open it on another computer | Works; always free ([the format](docs/pave-file.md)) |
 | Plans: Free and Pro, with monthly counts of Blender renders and Rhino/STEP exports | Counting works; there is no payment yet |
 | Production package: spec sheet, drawings, files, stone list, cost estimate, checks, as a zip | Works [from a script](#using-it-from-scripts); its screen is not built yet |
 | Connecting Claude Code to Pavé over MCP | Planned, not built |
-| **Ideas**: design boards on their own, linked to a project or not | Works |
-| Brand models, on-model shots, sourcing, publishing | Not built yet. Their pages are placeholders |
+| **Moodboards** | Create a shared moodboard and import selected references into a project design. |
+| On-model and diamond sourcing | Project tools are built. Image generation and inventory results require their respective provider connections. |
 | Desktop app | Not built yet. Pavé runs in your browser from a local server |
 
 ## Install
@@ -60,7 +60,7 @@ You need:
 | Disk space | about 1.5 GB | Allow additional disk space if you add the Blender renderer |
 | A browser | Chrome, Edge, Firefox or Safari, current | The 3D view needs WebGL 2 |
 
-Everything else is installed for you. Works on macOS, Windows and Linux.
+The Mac is the primary trial platform. The CAD editor runs in the browser against a local server. Apple silicon Macs can install Blender from inside Pavé. Windows has its own startup and rendering checks. The managed renderer currently has no Intel Mac package.
 
 **1. Get the code**
 
@@ -213,16 +213,7 @@ window you can drag and resize over the work (drag it to the right edge to dock 
 **Collapse to a pill** shrinks it to a small pill that shows a running job's step. Pavé remembers
 which you chose. On a phone it fills the screen and collapses to the pill.
 
-1. **Design.** Create a piece and open its **Design** tab: **Start the design board**, then drop
-   or paste what the piece should be (a photo of the trophy to put on a pendant, a pendant you
-   like, a scanned sketch sheet, a Pinterest link, a 3D model), sketch on the board, or **Search
-   references** in the open museum collections. **Gather ideas with AI** has the assistant read
-   the brief and the board, ask what is open, pin references and sharpen the brief. Then select a
-   picture and press **Take to CAD**: the CAD job asks the five specs (Go accepts what the
-   picture shows), shows an estimate (metal weight, carats, rough cost) on the spec card, and
-   builds the CAD from the picture with **Build it**, laying the picture in its view as an image
-   plane. Or **Start CAD**, blank or from a template; a 3D model on the board opens with **Open
-   as CAD**. Boards also live on their own under **Ideas**, linked to a project or not.
+1. **Design.** Open the project’s Design board. Add sketches, images or links, or choose **Import moodboard**. Use the project conversation to explore a direction and fill in the spec. Choose **Build CAD with Claude** to open the CAD conversation with that project’s design and specifications.
 2. **CAD.** Press **Make the CAD with AI** to have the assistant take the design to
    production detail: it runs every check and fixes or explains each warning, then reports
    weight, carats and cost. Then keep editing both ways: drag a value in the inspector, or ask
@@ -396,15 +387,12 @@ The **References** button beside the CAD and Render tabs opens the reference win
 beside the model or floats (on a narrow screen it is a sheet), and has three tabs: **References**,
 **Sketch** and **Generated**. The References tab has four sources:
 
-- **Search** the open collections of The Met, the Art Institute of Chicago and the Cleveland
-  Museum of Art, with no key;
+- **Search** Google Images and Pinterest, then return to the project to pin a reference.
 - **This piece**: the photo it was made from and its moodboards;
 - **Boards**: your organisation's moodboards;
 - **Pinned**: paste a link or a picture, or drop files.
 
-Every result and pin shows its source, credit, licence and what you may do with it. A museum
-picture is kept only when the museum marks it open access; a pasted link stays view-only until
-you press **Capture image**. The assistant sees the pictures you may use, and only the details of
+A pasted link stays view-only until you press **Capture image**. The assistant sees the pictures you may use, and only the details of
 view-only ones.
 
 Drag a pinned picture onto the model to lay it in the **Front**, **Top** or **Right** view as an

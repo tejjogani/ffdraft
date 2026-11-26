@@ -8,10 +8,10 @@ import {
   applyOps,
   type Design,
   type EvaluationSummary,
+  fittedCarat,
   GEM_CUTS,
   type GemCutId,
   type GemMaterialId,
-  gemCarat,
   gemDims,
   gemDimsFromCarat,
   IntentError,
@@ -222,7 +222,7 @@ function outcomeOf(n: Gem | Field): StoneOutcome {
     widthMm: dims.width,
     lengthMm: dims.length,
     lw: dims.length / dims.width,
-    carat: gemCarat(n.cut, dims, n.stone),
+    carat: fittedCarat(n.cut, dims, n.stone, n.kind === 'gem' ? n.sourcing : undefined),
   }
 }
 
