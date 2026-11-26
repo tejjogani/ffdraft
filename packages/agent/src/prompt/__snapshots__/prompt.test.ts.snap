@@ -4,11 +4,11 @@ exports[`the frozen system prompt > has a stable hash (snapshot) that covers the
 {
   "chars": [
     7082,
-    38457,
+    40822,
     10638,
     14049,
   ],
-  "hash": "prompt-17c8a92eccf61b",
+  "hash": "prompt-12f26c6d168160",
 }
 `;
 

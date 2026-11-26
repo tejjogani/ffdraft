@@ -65,6 +65,11 @@ function Shell() {
   const collapsed = useUI((s) => s.sidebarCollapsed)
   const narrow = useNarrow()
   const docked = useAssistant(isDockedOpen)
+  const inIntake = useRouterState({
+    select: (s) =>
+      s.location.pathname === '/' &&
+      ('intake' in s.location.search || 'brainstorm' in s.location.search),
+  })
   return (
     // The muted backdrop is what the frosted sidebar sits on (on desktop, the window vibrancy).
     <div className="flex h-dvh overflow-hidden bg-bg-muted">
@@ -88,9 +93,11 @@ function Shell() {
           <Outlet />
         </Suspense>
       </main>
-      <AnimatePresence initial={false}>{docked && <AssistantDock key="dock" />}</AnimatePresence>
+      <AnimatePresence initial={false}>
+        {docked && !inIntake && <AssistantDock key="dock" />}
+      </AnimatePresence>
       {/* Floating or folded to a pill: over the work, not a column of it. */}
-      <AssistantWindow />
+      {!inIntake && <AssistantWindow />}
       <Palette />
       <QuickIntentHost />
       <PlanLimitCard />

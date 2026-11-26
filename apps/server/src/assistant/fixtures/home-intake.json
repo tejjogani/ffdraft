@@ -1,0 +1,76 @@
+{
+  "runs": [
+    [
+      {
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "chat_ask",
+            "input": {
+              "intro": "I’ll keep the Cuban chain. Confirm the metal colour and melee size for the pendant.",
+              "questions": [
+                {
+                  "id": "metal",
+                  "question": "What metal colour?",
+                  "options": [
+                    { "id": "white", "label": "18k white gold" },
+                    { "id": "yellow", "label": "18k yellow gold" }
+                  ],
+                  "defaults": ["white"]
+                },
+                {
+                  "id": "melee",
+                  "question": "What stone size?",
+                  "options": [
+                    { "id": "small", "label": "1.2 mm" },
+                    { "id": "large", "label": "1.6 mm" }
+                  ],
+                  "defaults": ["small"]
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "content": [
+          {
+            "type": "text",
+            "text": "Attach a visual reference for the pendant’s style, or tell me to continue without a style reference."
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "references_proposeConcepts",
+            "input": {
+              "boardId": "brd_design_{{pieceId}}",
+              "concepts": [
+                {
+                  "title": "Cutout silhouette",
+                  "note": "Follow the logo’s outline, including its open counters. Use 1.2 mm pavé in 18k white gold and the Cuban chain."
+                },
+                {
+                  "title": "Raised medallion",
+                  "note": "Raise a polished logo above a pavé disc. Use 1.2 mm pavé, 18k white gold and the Cuban chain."
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "content": [{ "type": "text", "text": "Choose a concept, then select the sketch or image that shows its silhouette." }]
+      }
+    ],
+    [
+      {
+        "content": [{ "type": "text", "text": "I have the selected design image and the original logo. I’ll use the design for the shape and preserve the confirmed dimensions." }]
+      }
+    ]
+  ]
+}

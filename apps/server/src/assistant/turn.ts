@@ -16,6 +16,7 @@ import { pinnedRows } from '../references/pins'
 import { viewOnlyAssets } from '../references/rights'
 import { serviceContext } from '../service-context'
 import { modelImage } from './images'
+import { intakeContext } from './intake'
 
 type Send = CommandParsedInput<'threads.send'>
 type Piece = Awaited<ReturnType<typeof getPiece>>
@@ -157,7 +158,10 @@ export async function userContent(
   const media: TurnMedia = { skipped: [], withheld: [], pins: [] }
   const pins = await pinsForTurn(ctx, run)
   const shown = new Set<string>()
+  const attached = new Set(input.attachments)
   for (const r of pins.send) {
+    // A selected design can also be pinned for the CAD job. Send the attachment once.
+    if (attached.has(r.assetId!)) continue
     const { asset, bytes } = await readAsset(ctx, r.assetId!)
     const image = await modelImage(bytes, asset.mime)
     if (!image) continue
@@ -357,7 +361,7 @@ export async function contextText(
     media.withheld.length &&
       `Not shown to you (view-only references; their pictures never are): ${media.withheld.join(', ')}.`,
   ].filter(Boolean)
-  return notes.length ? `${text}\n${notes.join('\n')}` : text
+  return [`${intakeContext(input)}${text}`, ...notes].join('\n')
 }
 
 /** One line on whether concept images can be generated here, so a job never promises them. */
