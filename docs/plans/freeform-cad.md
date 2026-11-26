@@ -40,6 +40,15 @@ Build brief: the judged synthesis of two independent design proposals ("direct m
 
 **Empty piece.** A fifth door, first in reading order for designers: **Start from a sketch**, "Draw curves and build the piece from them." An inline segmented control asks *What are you making?* Ring · Pendant · Earring · Other, which writes `setKind` and, for Ring, one `curve{shape: ring, size US 6}` on the Front plane (with today's ring-size chip, `viewport/Dimensions.tsx`); Pendant/Earring seed nothing but a framed Front view; Other seeds nothing. The camera goes square-on, the grid fades in, the tool rail appears, and the command bar shows *Type a command, or press /*. The four existing doors stay; drawn bodies can be added to any template too.
 
+**Available first slice.** Open CAD and choose **Draw profile** on a blank piece or in the
+workspace toolbar. Draw a closed polyline or rectangle by clicking or entering millimetres on the
+Front, Top or Right plane, then set an extrusion depth. Each solid keeps its original vertices and
+plane in the design. **Edit profile** in the inspector reopens them. The operation uses the design
+history, survives Pavé file save and reopen, and exports to free STL at the drawn scale.
+
+The remaining milestones below cover standalone curves, snaps, attached construction planes,
+open curve tools, and operations that take more than one curve.
+
 **The first five minutes.**
 
 | Time | The designer | Written |

@@ -5,12 +5,13 @@
 import type { Evaluation } from '@pave/kernel'
 import { type Design, nodeTitle } from '@pave/schema'
 import { Button, Chip, cn, ScrollArea, Switch } from '@pave/ui'
-import { ArrowUpRight, Scale, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { ArrowUpRight, PencilRuler, Scale, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useEffect, useMemo } from 'react'
 import { runCommand } from '../../../lib/commands'
 import type { DesignSession } from '../../../lib/design-session/store'
 import { carats, mm } from '../../../lib/format'
 import { diaexBrowseLink } from '../../sourcing/links'
+import { isProfileNode, type ProfileNode, profileSize } from '../profiles/profile'
 import { useWorkspace } from '../state/workspace'
 import { FieldEditContext, useNodeEdit } from './edit'
 import { FieldControl } from './FieldControl'
@@ -24,6 +25,7 @@ export interface InspectorProps {
   prior: Record<string, Record<string, unknown>> | null
   readOnly: boolean
   onDelete(ids: string[]): void
+  onEditProfile(node: ProfileNode): void
   empty: React.ReactNode
 }
 
@@ -34,6 +36,7 @@ export function Inspector({
   prior,
   readOnly,
   onDelete,
+  onEditProfile,
   empty,
 }: InspectorProps) {
   const selection = useWorkspace((s) => s.selection)
@@ -57,6 +60,7 @@ export function Inspector({
 
   const listed = node.kind === 'gem' && node.sourcing?.provider === 'diaex' ? node.sourcing : null
   const listing = diaexBrowseLink(listed?.url)
+  const drawn = isProfileNode(node) ? node : null
   const included = node.visible !== false
   const picked = stone ? evaluation?.stones.find((s) => s.id === stone) : undefined
   return (
@@ -102,6 +106,27 @@ export function Inspector({
         {/* Keyed by feature: another feature's form opens at its top, not where this one was scrolled. */}
         <ScrollArea key={node.id} className="flex-1">
           <div className="flex flex-col pb-6">
+            {drawn && (
+              <section
+                aria-label="Drawn profile"
+                className="flex flex-col items-start gap-2 border-b border-line px-4 py-3"
+              >
+                <p className="text-xs text-fg-muted">
+                  {drawn.source.plane[0]!.toUpperCase() + drawn.source.plane.slice(1)} plane ·{' '}
+                  <span className="font-mono tabular">
+                    {profileSize(drawn.source)
+                      .map((value) => Number(value.toFixed(2)))
+                      .join(' × ')}{' '}
+                    mm
+                  </span>
+                </p>
+                {!readOnly && selection.length === 1 && (
+                  <Button size="sm" icon={PencilRuler} onClick={() => onEditProfile(drawn)}>
+                    Edit profile
+                  </Button>
+                )}
+              </section>
+            )}
             {model.sections.map((section) => (
               <section key={section.id} className="border-b border-line px-4 py-3 last:border-b-0">
                 {section.title && (

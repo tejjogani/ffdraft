@@ -19,6 +19,7 @@ import {
   Download,
   Focus,
   Gauge,
+  PencilRuler,
   Redo2,
   ScanEye,
   Undo2,
@@ -47,15 +48,29 @@ export function ViewToolbar({
   canUndo,
   canRedo,
   compact = false,
+  onDrawProfile,
 }: {
   canUndo: boolean
   canRedo: boolean
   compact?: boolean
+  onDrawProfile?(): void
 }) {
   const display = useWorkspace((s) => s.display)
   const xray = useWorkspace((s) => s.xray)
   return (
     <Cluster>
+      {onDrawProfile && (
+        <>
+          {compact ? (
+            <IconButton icon={PencilRuler} label="Draw profile" onClick={onDrawProfile} />
+          ) : (
+            <Button variant="ghost" size="sm" icon={PencilRuler} onClick={onDrawProfile}>
+              Draw profile
+            </Button>
+          )}
+          <Divider />
+        </>
+      )}
       <IconButton
         icon={Undo2}
         label="Undo"

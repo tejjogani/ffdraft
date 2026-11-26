@@ -6,9 +6,9 @@ exports[`the frozen system prompt > has a stable hash (snapshot) that covers the
     7082,
     37899,
     10638,
-    14049,
+    14338,
   ],
-  "hash": "prompt-0fae63adee7300",
+  "hash": "prompt-1d128e3a512c1a",
 }
 `;
 
@@ -146,6 +146,10 @@ Shared value lists:
   - type "text":
     - text: string = "Pavé"
     - font: sans | serif | script | block = "sans"
+  - type "profile":
+    - plane (required): front | top | right
+    - mode: polyline | rectangle = "polyline"
+    - points (required): list of list of any (2–2 items) (3–128 items). Ordered [horizontal, vertical] coordinates on the drawing plane; closes from the final point to the first.
   - type "svg":
     - d (required): string
   - type "shape":

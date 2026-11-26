@@ -4,7 +4,9 @@
  * choice (a stone's placement) and for grouped objects (the transform). No node kind has code
  * of its own here or in the components that render this model.
  */
+
 import { describeNode, type FieldInfo, type Node, type NodeKind, visibleFields } from '@pave/schema'
+import { isProfileNode } from '../profiles/profile'
 
 export interface InspectorRow {
   field: FieldInfo
@@ -59,7 +61,12 @@ const countRows = (rows: readonly InspectorRow[]): number =>
 export function inspectorModel(node: Node, opts: { advanced?: boolean } = {}): InspectorModel {
   const d = describeNode(node.kind)
   const value = node as unknown as Record<string, unknown>
-  const rows = rowsFor(d.fields, value, [], !!opts.advanced)
+  const fields = isProfileNode(node)
+    ? d.fields.filter(
+        (f) => !['source', 'height', 'bevel', 'bevelSize', 'border', 'join'].includes(f.key),
+      )
+    : d.fields
+  const rows = rowsFor(fields, value, [], !!opts.advanced)
   const sections: InspectorSection[] = []
   const section = (group: string | undefined) => {
     const id = group ?? 'general'
@@ -74,8 +81,8 @@ export function inspectorModel(node: Node, opts: { advanced?: boolean } = {}): I
   }
   for (const row of rows) section(row.field.meta.group).rows.push(row)
   const advanced = opts.advanced
-    ? countRows(rows) - countRows(rowsFor(d.fields, value, [], false))
-    : countRows(rowsFor(d.fields, value, [], true)) - countRows(rows)
+    ? countRows(rows) - countRows(rowsFor(fields, value, [], false))
+    : countRows(rowsFor(fields, value, [], true)) - countRows(rows)
   // Fine-tuning adds to the form without pushing the essentials down: sections made only of
   // advanced fields (the transform) follow the ones a feature is usually set up with.
   const onlyAdvanced = (s: InspectorSection) => s.rows.every((r) => r.field.meta.advanced)
