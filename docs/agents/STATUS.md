@@ -1,6 +1,6 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 06:58 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 07:36 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## Studio experience: focused editor, project card menu, minimal assistant with a character (lane A, A11)
 
@@ -11,14 +11,15 @@ _Generated 26 Nov 2026 06:58 UTC by `docs/agents/sync_status.py` from the workfl
 | build:assistant | done | commit 1ea6388. Step 3 (points E, F, G, H) is finished on `ui/focus` in /home/user/ffdraft-ui; nothing is pushed. The assistant is now one calm character with a minimal conversation. The four touched packages typecheck, 654 tests pass,… |
 | review:taste | done | 5 blocker, 10 major, 4 minor. Not ready to show the founder yet. Step 1 (deleting, folding the sidebar, a focused CAD), step 2 (a card menu with no tabs) and step 3 (one orb, a much shorter… |
 | review:walk | done | 6 major, 10 minor. FAIL. Most of the founder's first hour works and stays put after a reload. That covers: talking on Home, approving the build, opening the project, pins on Desi… |
-| fix:1 | running or interrupted |  |
+| fix:1 | done | I fixed every blocker and major on ui/focus, and most of the minors; the gaps are listed under "Not done or only partly done". There are 11 commits on top of 1ea6388, the last is 3c7dec0, nothing is pushed and the workt… |
+| verify:1 | running or interrupted |  |
 
 ## Render realism: every look tested in Blender, black acrylic, the render skill (lane A, A12)
 
 | Agent | State | Outcome |
 |---|---|---|
 | fix:release | done | commit 1807a9e. Both release-check majors are fixed and verified in the real thing, and every suite asked for is green; two trial follow-ups the checkpoint's title names (photo-built export, picture sent twice) were never in its diff a… |
-| build:realism | running or interrupted |  |
+| build:realism | done | commit 387c43e. I picked up the realism step from the checkpoint (fd7f6a3) and judged its renders by looking at them again, whole and cropped. Black acrylic and Studio contrast still showed the gold as olive-brown brass over most of th… |
 | review:critic | running or interrupted |  |
 | write:skill | running or interrupted |  |
 
@@ -46,14 +47,15 @@ _Generated 26 Nov 2026 06:58 UTC by `docs/agents/sync_status.py` from the workfl
 | Agent | State | Outcome |
 |---|---|---|
 | plan | done | Plan written and committed (not pushed): /home/user/ffdraft-spec/docs/plans/spec-truth.md (181 lines), commit 47e834a on spec/truth. No code was changed; two throwaway probes ran (gem table, 14 templates) and were delet… |
-| build:engine | running or interrupted |  |
+| build:engine | done | commit ddec501 (on top of merge b1985b8; earlier step-A commits 29f4004 and 857c738 kept). Step A is finished on spec/truth and committed, not pushed. I merged claude/busy-bardeen-o482lo into spec/truth (merge commit b1985b8). Two files conflicted. In apps/server/src/handlers/pieces.ts I kept both import bloc… |
 | review:cheat | running or interrupted |  |
 | review:gems | running or interrupted |  |
 | review:founder | running or interrupted |  |
+| build:agent | running or interrupted |  |
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 4c01312 Status: studio reviews in, fixes under way; viewport second round being verified; looks being tuned
+Branch `claude/busy-bardeen-o482lo`, head: 4e49bed Board: viewport built with one open tradeoff; the spec job resumed
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -84,7 +86,7 @@ Branch `claude/busy-bardeen-o482lo`, head: 4c01312 Status: studio reviews in, fi
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 4c01312 Status: studio reviews in, fixes under way; viewport second round being verified; looks being tuned
+Branch `claude/busy-bardeen-o482lo`, head: 4e49bed Board: viewport built with one open tradeoff; the spec job resumed
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -126,7 +128,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 4c01312 Status: studio reviews in, fixes under way; viewport second round being verified; looks being tuned
+Branch `claude/busy-bardeen-o482lo`, head: 4e49bed Board: viewport built with one open tradeoff; the spec job resumed
 
 | Agent | State | Outcome |
 |---|---|---|
