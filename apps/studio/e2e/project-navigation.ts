@@ -22,11 +22,11 @@ try {
   const stamp = Date.now()
   const a = await rpc('pieces.create', { title: 'Solitaire ' + stamp })
   const b = await rpc('pieces.create', { title: 'Studs ' + stamp })
-  const areas = ['directions', 'design', 'render', 'on-model', 'sourcing', 'production', 'history']
+  const areas = ['directions', 'design', 'render', 'sourcing', 'history', 'on-model', 'production']
   await page.goto(base + '/pieces/' + a.id)
   const menu = page.getByRole('navigation', { name: 'Project tools' })
   await menu.waitFor()
-  const checkStack = async () => {
+  const checkToolGrid = async () => {
     await menu.getByRole('link').last().waitFor()
     const boxes = await menu.getByRole('link').evaluateAll((links) =>
       links.map((link) => {
@@ -36,11 +36,15 @@ try {
     )
     assert.equal(boxes.length, 7)
     assert.ok(
-      boxes.every((box, i) => box.x === boxes[0]!.x && (!i || box.y >= boxes[i - 1]!.bottom)),
-      'Tools must form one vertical stack',
+      boxes.every((box, i) =>
+        i % 2
+          ? box.y === boxes[i - 1]!.y && box.x > boxes[0]!.x
+          : box.x === boxes[0]!.x && (!i || box.y >= boxes[i - 2]!.bottom),
+      ),
+      'Project tool cards must form two columns',
     )
   }
-  await checkStack()
+  await checkToolGrid()
   const hrefs = await menu
     .getByRole('link')
     .evaluateAll((links) => links.map((link) => link.getAttribute('href')).sort())
@@ -83,7 +87,7 @@ try {
       .click()
     await menu.waitFor()
   }
-  await menu.getByRole('link', { name: 'CAD', exact: true }).click()
+  await menu.getByRole('link', { name: 'CAD builder', exact: true }).click()
   const projectTools = page.getByRole('navigation', { name: 'Tools in this project' })
   await projectTools.getByRole('link', { name: 'History' }).click()
   await page.waitForURL('**/pieces/' + a.id + '/history')
@@ -101,7 +105,7 @@ try {
   await page.waitForURL('**/pieces/' + b.id + '/directions?board=' + boardB.id)
   await page.goto(base + '/pieces/' + a.id + '/directions?board=' + boardB.id)
   await page.getByRole('button', { name: 'Add reference photo' }).waitFor()
-  await page.getByRole('button', { name: 'Ask', exact: true }).click()
+  await page.getByRole('button', { name: 'Project AI', exact: true }).click()
   const composer = page.getByRole('textbox', { name: 'Message the assistant' })
   await composer.fill('Solitaire draft')
   await page.getByRole('button', { name: 'Switch project' }).click()
@@ -143,14 +147,14 @@ try {
   assert.equal(new URL(page.url()).pathname, '/pieces/' + b.id)
   await page.goto(base + '/pieces/' + a.id)
   await page.setViewportSize({ width: 390, height: 844 })
-  await checkStack()
+  await checkToolGrid()
   await menu.locator('a[href$="/history"]').click()
   await page.getByRole('button', { name: 'Switch project' }).click()
   await page.getByRole('dialog').getByRole('link', { name: b.title }).click()
   await page.waitForURL('**/pieces/' + b.id + '/history')
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
   console.log(
-    'Passed seven tool round trips, desktop and mobile stacks, sidebar and palette navigation, board and assistant isolation, delayed duplicate, reload and Back.',
+    'Passed seven tool round trips, desktop and mobile two-column menus, sidebar and palette navigation, board and assistant isolation, delayed duplicate, reload and Back.',
   )
 } finally {
   await browser.close()

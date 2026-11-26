@@ -124,6 +124,29 @@ describe('replace the centre stone and the mount follows (draft)', () => {
 })
 
 describe('replace the centre stone (production sample)', () => {
+  it('cuts a new seat and rebuilds the head from both measured candidates', async () => {
+    let design = template('solitaire')
+    for (const { sku, measured, claws } of [
+      { sku: 'A', measured: { length: 7.34, width: 7.29, depth: 4.3 }, claws: 4 },
+      { sku: 'B', measured: { length: 7.57, width: 7.52, depth: 4.59 }, claws: 6 },
+    ]) {
+      const fit = { provider: 'diaex', sku, measured }
+      design = applyOps(design, replaceStone(design, { nodeId: 'center' }, { fit }).ops).design
+      const scene = await kernel.scene(design, { detail: 'production' })
+      expect(scene.evaluation.stones).toHaveLength(1)
+      expect(scene.evaluation.stones[0]?.dims).toEqual(measured)
+      const head = scene.nodes.get('head')!
+      expect(head.status).toBe('ok')
+      expect((head.data as HeadData).claws).toHaveLength(claws)
+      const cutter = scene.nodes.get('center')!.cuts[0]!
+      const { min, max } = cutter.solid.bounds()
+      expect(max[0] - min[0]).toBeCloseTo(measured.width * RULES.seatScale, 2)
+      expect(max[1] - min[1]).toBeCloseTo(measured.length * RULES.seatScale, 2)
+      expect(max[2] - min[2]).toBeCloseTo(measured.depth, 2)
+      expect(scene.evaluation.diagnostics.filter((d) => d.level === 'error')).toEqual([])
+    }
+  }, 120_000)
+
   it('one casting per alloy, for every template with round, princess, pear and emerald', async () => {
     for (const [tid, gemId] of Object.entries(CENTRE))
       for (const cut of ['round', 'princess', 'pear', 'emerald'] as const) {

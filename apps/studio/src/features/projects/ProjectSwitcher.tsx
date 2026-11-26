@@ -4,6 +4,7 @@ import { ArrowLeftRight, Check } from 'lucide-react'
 import { useState } from 'react'
 import { useRpc } from '../../lib/query'
 import { PROJECT_MENU, type ProjectArea } from './areas'
+import { projectFolder } from './folder'
 
 /** Switching keeps the area. The target owns its own boards, shots and selection. */
 export function ProjectSwitcher({ pieceId, area }: { pieceId: string; area?: ProjectArea }) {
@@ -63,7 +64,7 @@ export function ProjectSwitcher({ pieceId, area }: { pieceId: string; area?: Pro
             <span className="min-w-0">
               <span className="block truncate">{p.title || 'Untitled'}</span>
               <span className="block truncate text-xs text-fg-muted">
-                {folders.data?.find((f) => f.id === p.collectionId)?.name ?? 'No collection'}
+                {projectFolder(p.collectionId, folders.data)}
               </span>
             </span>
             {p.id === pieceId && <Check aria-hidden className="size-4 shrink-0" />}

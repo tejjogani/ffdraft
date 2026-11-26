@@ -93,6 +93,8 @@ export const QUERY_NAMES = [
   'projects.summary',
   'design.history',
   'design.evaluate',
+  'sourcing.search',
+  'sourcing.stone',
   'boards.list',
   'boards.get',
   'references.search',
