@@ -11,6 +11,10 @@ A designer should be able to adjust one prong in the inspector, ask Claude to ma
 | Blender | Blender exposes editable scene data and callable operators to Python. Give Pavé operators discoverable arguments and make them callable with explicit targets, even when the editor is closed. [Blender Python API quickstart](https://github.com/blender/blender/blob/main/doc/python_api/rst/info_quickstart.rst) |
 | CadQuery | Workplanes separate the plane of a drawing from its position in 3D. Edge, face and vertex selectors express intent. Carry the plane through each curve operation and design stable subobject selection before exposing general edge edits. [CadQuery workplanes](https://github.com/CadQuery/cadquery/blob/master/doc/workplane.rst) · [Selectors](https://github.com/CadQuery/cadquery/blob/master/doc/selectors.rst) |
 
+## Release targets
+
+Mac is the primary design and hands-on trial platform. Exercise each new CAD command in the Mac browser, from Python and through the project-scoped assistant. Windows x64 has a separate compatibility check for startup, CAD edits, Python and the managed render engine. Track Windows ARM64 separately.
+
 ## The command contract
 
 1. Select a project and read `pieces.get`. Its design contains ordered feature IDs. Coordinates are millimetres, Z is up and angles are degrees. A ring's finger axis is Y.
@@ -29,7 +33,7 @@ The [jewelry command inventory](../research/12-rhino-parity.md) lists the wider 
 | --- | --- | --- |
 | Project and feature discovery | Shared command registry, parametric inspector, editable construction curves, drawn profiles and extrusion | Inspect a band's valid thickness range, edit only its base from Python or the inspector, evaluate its mass, then undo. Refuse an attempt from a project chat to write a different piece. |
 | One prong at a time | Generated prong and basket heads | Change the tip of prong 1 by +0.25 mm. Compare the edited claw and each untouched claw, stone and gallery. Verify setting attachment, reopen and undo. A prong-tip control is a constrained geometric edit. Moving arbitrary vertices still needs a mesh editor. |
-| Wire along a drawn curve | An existing pipe takes inline 3D points | Select an existing construction curve and give the wire a section and dimensions. Move a point, reopen and export. Its wire and metal mass must follow without reselection. |
+| Wire along a drawn curve | **Make wire** links a wire to a drawn construction curve. Existing inline-point pipes remain readable. | Select an existing construction curve and give the wire a section and dimensions. Move a point, reopen and export. Its wire and metal mass must follow without reselection. |
 | Revolve, one-rail sweep, then loft | Existing revolve takes a profile path. The freeform plan specifies rails, sections and orientation. | Revolve a bezel profile. Sweep a shoulder between measured sections. Loft a custom head, edit an earlier section and verify the exported body and orientation. Ship each tool separately. |
 | Solid and edge operations | Parametric booleans; exact edge finishing requires durable subobject selection | Cut a seat, identify the intended edge after a resize, then fillet or chamfer it. Failed construction must leave a recoverable document. Verify the resulting solid independently. |
 | Direct editing and exchange | Imported meshes, point editing for construction curves, existing export routes | Select a mesh vertex or face on a custom mount and move it by a measured amount. Preserve the selection on reopen, undo, and compare exported geometry to the edited shape. Surface control points, trimmed NURBS and SubD need separate milestones and fixtures. |
@@ -38,4 +42,4 @@ The [jewelry command inventory](../research/12-rhino-parity.md) lists the wider 
 
 Project history answers what changed, who changed it, and how to reverse it. An assistant run also has ordered tool inputs, results, errors, and a link to the resulting changes. A useful regression replays a request on a disposable project and verifies the observed shape, bounds, mass or other task-specific result. A tool returning success alone is insufficient. The project-scoping regression includes a refused cross-project read and ensures that the other project keeps its original version.
 
-The organisation's evaluation-use setting defaults off. Keeping local history and reviewing a run are ordinary editing functions. Building a shared corpus would require an opt-in export path with filtering, retention and provenance. No model-training job is part of this interface.
+The organisation's evaluation-use setting defaults off. An opted-in organisation can export anonymised numeric before/after examples for band dimensions and individual prong tips from an explicitly chosen project. The exporter reconstructs each edit from its inverse and writes a local JSONL file. Designers can review ordinary history with evaluation use off. Training and shared dataset infrastructure are future work. [Evaluation example format and export guide](../cad-evaluation-examples.md)

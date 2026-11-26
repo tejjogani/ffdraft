@@ -130,6 +130,33 @@ class Project:
         self._record_write(result)
         return result
 
+    def make_wire(
+        self,
+        curve_id: str,
+        *,
+        wire_id: str,
+        width_mm: float,
+        thickness_mm: float,
+        section: Literal["round", "square", "halfRound"] = "round",
+        base_version: int | None = None,
+        change_id: str | None = None,
+    ) -> JsonObject:
+        """Create a metal wire that follows an existing construction curve on this project."""
+        node = {
+            "id": wire_id,
+            "kind": "pipe",
+            "curve": curve_id,
+            "section": section,
+            "width": width_mm,
+            "thickness": thickness_mm,
+        }
+        return self.apply(
+            [{"t": "add", "node": node}],
+            "Make wire from curve",
+            base_version=base_version,
+            change_id=change_id,
+        )
+
     def set_prong_tip_offset(
         self,
         feature_id: str,

@@ -57,3 +57,13 @@ python -m unittest discover -s packages/pave-python/tests
 ```
 
 To include the live HTTP test, set `PAVE_TEST_URL` to a disposable Pavé server with geometry enabled. The live test creates and edits a solitaire project.
+
+## Sweep a wire along a drawn curve
+
+Select **Draw curve** in the CAD builder and draw the path. Select the curve and choose **Make wire**, or pass its feature ID to Python. The new wire keeps the source curve's plane and closure. Editing a point changes the wire. Width and thickness are in millimetres.
+
+```python
+project.make_wire(
+    "rail", wire_id="custom-wire", width_mm=1.5, thickness_mm=1.0, section="halfRound"
+)
+```
