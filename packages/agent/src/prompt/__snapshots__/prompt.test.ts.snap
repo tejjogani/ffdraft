@@ -6,9 +6,9 @@ exports[`the frozen system prompt > has a stable hash (snapshot) that covers the
     7082,
     41253,
     10638,
-    15321,
+    15616,
   ],
-  "hash": "prompt-0b57a0af68c939",
+  "hash": "prompt-13da1643b9d4a3",
 }
 `;
 
@@ -202,12 +202,13 @@ Shared value lists:
 - plating: <plating> = "none"
 - profile (required): string. SVG path in mm in the (radius, height) half-plane; revolved about Z.
 - angle: number 1–360° = 360
-## pipe: Wire. A wire swept along a curve: vines, bypass bands, hoops, bangles.
+## pipe: Wire. A smooth wire swept along a construction curve or path points.
 - material: <metal> = "au18k-yellow"
 - finish: <finish> = "polished"
 - plating: <plating> = "none"
-- points (required): list of [x, y, z] (2–400 items). A smooth curve is fitted through these.
-- closed: boolean = false
+- curve: id of a curve node. The wire follows this construction curve’s vertices and closure. Use the curve ID or inline path points. Example node {"id":"wire","kind":"pipe","curve":"curve-id","width":1.5,"thickness":1.5}.
+- points: list of [x, y, z] (2–400 items). Inline XYZ points in mm for a smooth sweep.
+- closed: boolean = false. Close an inline path. Linked wires inherit closure from the construction curve.
 - section: round | square | halfRound = "round"
 - width: number 0.4–20 mm = 1.5
 - thickness: number 0.4–20 mm = 1.5

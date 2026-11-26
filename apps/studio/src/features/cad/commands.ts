@@ -10,6 +10,7 @@ import {
   ArrowDown,
   ArrowUp,
   Box,
+  Cable,
   Camera,
   Crosshair,
   Download,
@@ -65,6 +66,7 @@ export interface CadCommandContext {
   openAddMenu(): void
   drawProfile(): void
   drawCurve(): void
+  makeWire(curve: string): void
   requestDelete(ids: string[]): void
   exportAs(format: ExportFormat): void
   show(d: Diagnostic): void
@@ -133,6 +135,10 @@ export function useCadCommands(c: CadCommandContext): void {
   const orbit = (az: number, el: number) => () => c.viewer.current?.orbit(az, el)
   const selected = () => ws().selection.filter((id) => c.design.nodes[id])
   const editable = () => !c.readOnly && !!c.session
+  const selectedCurve = () => {
+    const ids = selected()
+    return ids.length === 1 && c.design.nodes[ids[0]!]?.kind === 'curve' ? ids[0] : undefined
+  }
   /** The single selected feature's position in the list, for moving it. */
   const position = () => {
     const ids = selected()
@@ -150,6 +156,18 @@ export function useCadCommands(c: CadCommandContext): void {
       icon: Spline,
       when: editable,
       run: c.drawCurve,
+    },
+    {
+      id: 'design.makeWire',
+      title: 'Make wire from selected curve',
+      group: 'Design',
+      icon: Cable,
+      keywords: ['pipe', 'sweep', 'construction'],
+      when: () => editable() && selectedCurve() !== undefined,
+      run: () => {
+        const curve = selectedCurve()
+        if (curve) c.makeWire(curve)
+      },
     },
     {
       id: 'design.drawProfile',

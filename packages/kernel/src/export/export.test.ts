@@ -3,7 +3,16 @@
  * manifoldness, names, units and bounding boxes — for an all-exact solitaire ring and for a
  * design with a mesh (sculpted) body.
  */
-import { buildDesign, type Design, designFrom, METALS, TEMPLATES } from '@pave/schema'
+import {
+  applyOps,
+  buildDesign,
+  type Design,
+  designFrom,
+  METALS,
+  type Op,
+  parseDesignDocument,
+  TEMPLATES,
+} from '@pave/schema'
 import { unzipSync } from 'fflate'
 import { importSTEP, measureVolume, type Shape3D } from 'replicad'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -125,6 +134,104 @@ function shellCount({ positions, indices }: Triangles): number {
 
 const exportOf = (design: Design, format: ExportFormat, stones?: boolean): Promise<ExportResult> =>
   kernel.export(design, format, stones === undefined ? {} : { stones })
+
+describe('wire from a construction curve', () => {
+  const source = designFrom('other', [
+    {
+      id: 'path',
+      kind: 'curve',
+      plane: 'front',
+      points: [
+        { id: 'a', u: 0, v: 0 },
+        { id: 'b', u: 12, v: 0 },
+      ],
+    },
+  ])
+  const addWire: Op = {
+    t: 'add',
+    node: {
+      id: 'wire',
+      kind: 'pipe',
+      curve: 'path',
+      width: 2,
+      thickness: 1,
+      transform: { position: [3, 5, 7], rotation: [0, 0, 90], scale: 1.5 },
+    },
+  }
+
+  it('honors the source plane and wire transform in the solid and exported STL', async () => {
+    const change = applyOps(source, [addWire])
+    const saved = parseDesignDocument(JSON.parse(JSON.stringify(change.design)))
+    expect(saved.nodes.path).toEqual(source.nodes.path)
+    const e = await kernel.evaluate(saved, { detail: 'production' })
+    expect(e.parts).toHaveLength(1)
+    expect(e.diagnostics.some((d) => d.level === 'error')).toBe(false)
+    expect(e.parts[0]!.volumeMm3).toBeCloseTo(Math.PI * 0.5 * 12 * 1.5 ** 3, 1)
+    const expected = { min: [1.5, 5, 6.25], max: [4.5, 23, 7.75] } satisfies Bounds
+    expectBounds(e.parts[0]!.bounds, expected)
+    const { triangles } = parseStl((await exportOf(saved, 'stl')).bytes)
+    expect(isClosedManifold(triangles)).toBe(true)
+    expect(shellCount(triangles)).toBe(1)
+    expectBounds(boundsOf(triangles.positions), expected)
+    expect(applyOps(saved, change.inverse).design).toEqual(source)
+  })
+
+  it('rebuilds the linked wire when the path changes, including closure', async () => {
+    const initial = applyOps(source, [addWire]).design
+    const open = await kernel.evaluate(initial)
+    const extended = applyOps(initial, [
+      {
+        t: 'update',
+        id: 'path',
+        patch: {
+          points: [
+            { id: 'a', u: 0, v: 0 },
+            { id: 'b', u: 16, v: 0 },
+            { id: 'c', u: 16, v: 12 },
+            { id: 'd', u: 0, v: 12 },
+          ],
+        },
+      },
+    ]).design
+    const bend = await kernel.evaluate(extended)
+    expect(bend.parts[0]!.bounds.max[1]).toBeGreaterThan(open.parts[0]!.bounds.max[1])
+    const loop = await kernel.evaluate(
+      applyOps(extended, [{ t: 'update', id: 'path', patch: { closed: true } }]).design,
+    )
+    expect(loop.parts[0]!.volumeMm3).toBeGreaterThan(bend.parts[0]!.volumeMm3)
+  })
+
+  it('rejects ambiguous or incompatible sources and still accepts inline points', async () => {
+    const addPipe = (patch: Record<string, unknown>) =>
+      applyOps(source, [{ t: 'add', node: { id: 'wire', kind: 'pipe', ...patch } }])
+    expect(() => addPipe({})).toThrow(/path points|construction curve/i)
+    expect(() =>
+      addPipe({
+        curve: 'path',
+        points: [
+          [0, 0, 0],
+          [5, 0, 0],
+        ],
+      }),
+    ).toThrow()
+    expect(() => addPipe({ curve: 'not-found' })).toThrow(/missing node/)
+    expect(() => addPipe({ curve: 'path', width: 0.2 })).toThrow(/width/)
+    expect(() => addPipe({ curve: 'path', thickness: 21 })).toThrow(/thickness/)
+    expect(() =>
+      applyOps(source, [
+        { t: 'add', node: { kind: 'primitive', id: 'box' } },
+        { t: 'add', node: { kind: 'pipe', id: 'wire', curve: 'box' } },
+      ]),
+    ).toThrow(/construction curve/i)
+    const inline = addPipe({
+      points: [
+        [0, 0, 0],
+        [5, 0, 0],
+      ],
+    }).design
+    expect((await kernel.evaluate(inline)).parts).toHaveLength(1)
+  })
+})
 
 describe.each([
   ['solitaire ring', solitaire],

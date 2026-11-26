@@ -368,6 +368,12 @@ function Workspace({ piece }: { piece: Piece }) {
   const drawCurve = () => {
     if (!profile && !curve) setCurve({})
   }
+  const makeWire = (id: string) => {
+    if (!session || readOnly || profile || curve || session.get().view.nodes[id]?.kind !== 'curve')
+      return
+    add('pipe', id)
+    if (!dockInspector) setSheet('inspector')
+  }
   const saveCurve = (definition: Pick<NodeOf<'curve'>, 'plane' | 'points' | 'closed'>) => {
     if (!session || readOnly) throw new Error('This design is read-only.')
     const original = curve?.original
@@ -501,6 +507,7 @@ function Workspace({ piece }: { piece: Piece }) {
     openAddMenu: () => setAddOpen(true),
     drawProfile,
     drawCurve,
+    makeWire,
     renderThisView: () => {
       const camera = viewer.current?.shotCamera()
       if (!camera) return
@@ -621,6 +628,7 @@ function Workspace({ piece }: { piece: Piece }) {
           setCurve({ original })
         }
       }}
+      onMakeWire={makeWire}
       empty={
         <PiecePanel
           piece={piece}

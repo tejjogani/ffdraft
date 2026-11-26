@@ -1,4 +1,5 @@
 /** Wire swept along a smooth curve through the given points: vines, hoops, bangles, bypass bands. */
+import { type CurvePlane, pipePath } from '@pave/schema'
 import { defineFeature, metalOf } from '../core'
 import {
   ellipseLoop,
@@ -15,6 +16,11 @@ import { add, dot, length, normalize, scale, sub, type Vec3 } from '../geometry/
 
 /** Stations per span between two path points: enough for the sweep to follow a tight bend. */
 const PER_SPAN = 6
+const PLANE_NORMAL: Record<CurvePlane, Vec3> = {
+  front: [0, -1, 0],
+  right: [1, 0, 0],
+  top: [0, 0, 1],
+}
 
 /** Unit normal of the plane a path lies in, or null when it is straight or clearly not planar. */
 function planeOf(points: readonly Vec3[]): Vec3 | null {
@@ -35,12 +41,13 @@ function planeOf(points: readonly Vec3[]): Vec3 | null {
   return off < 0.02 * size ? unit : null
 }
 
-export const pipe = defineFeature('pipe', (node) => {
-  const closed = node.closed && node.points.length >= 3
-  const distinct = node.points.filter(
-    (p, i) => i === 0 || length(sub(p, node.points[i - 1]!)) > 1e-6,
-  )
+export const pipe = defineFeature('pipe', (node, ctx) => {
+  const source = pipePath(node, node.curve === undefined ? undefined : ctx.input(node.curve).node)
+  if (!source) throw new Error('the wire needs a construction curve or inline path points')
+  const { points } = source
+  const distinct = points.filter((p, i) => i === 0 || length(sub(p, points[i - 1]!)) > 1e-6)
   if (distinct.length < 2) throw new Error('the path needs at least two different points')
+  const closed = source.closed && distinct.length >= 3
   const path = smoothPath(distinct, closed, PER_SPAN)
 
   // Section axes: x is "thickness" and y "width". In a planar path y follows the plane's normal,
@@ -56,7 +63,8 @@ export const pipe = defineFeature('pipe', (node) => {
             -Math.PI / 2,
           )
 
-  const plane = planeOf(distinct)
+  // A straight drawn curve still has a plane, so its width follows the correct drawing axis.
+  const plane = source.plane ? PLANE_NORMAL[source.plane] : planeOf(distinct)
   const framesFor = (up: Vec3 | null) =>
     pathFrames(path.points, { closed, tangents: path.tangents, ...(up ? { up } : {}) })
   let frames = framesFor(plane)
