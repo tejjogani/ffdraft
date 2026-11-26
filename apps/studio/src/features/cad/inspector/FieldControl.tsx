@@ -111,7 +111,7 @@ export function FieldControl({ row }: { row: InspectorRow }) {
       </div>
     )
   return (
-    <div className="grid min-h-8 grid-cols-[minmax(0,44%)_minmax(0,1fr)] items-center gap-3">
+    <div className="grid min-h-8 grid-cols-[minmax(0,44%)_minmax(0,1fr)] items-center gap-x-3 gap-y-1">
       {OWNS_LABEL.has(field.widget) ? (
         control(field.widget, row, label)
       ) : (
