@@ -4,11 +4,11 @@
  * ledger, and the request staying append-only.
  */
 import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/messages/messages'
-import { MODELS, ScriptAbortError } from '@pave/agent'
+import { MODELS, type ScriptedTurn } from '@pave/agent'
 import { type RunEvent, TEMPLATES } from '@pave/schema'
 import { and, eq } from 'drizzle-orm'
 import sharp from 'sharp'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import * as t from '../db/schema'
 import { BOOT_TIMEOUT, type Client, client } from '../test/harness'
 import { createAssistant } from './index'
@@ -335,19 +335,64 @@ describe('approvals', () => {
   })
 })
 
+async function waitForRunGate(runId: string, action: string, ready: () => boolean) {
+  try {
+    await vi.waitFor(
+      () => {
+        if (!ready()) throw new Error(`Waiting for ${action}`)
+      },
+      { timeout: 15_000, interval: 20 },
+    )
+  } catch (cause) {
+    const { run, steps } = await api.call('traces.run', { id: runId })
+    const observed = steps.map((step) => `${step.name} (${step.status})`).join(', ') || 'none'
+    throw new Error(
+      `Run did not reach ${action}. Status: ${run.status}. Trace steps: ${observed}.`,
+      { cause },
+    )
+  }
+}
+
+async function waitForModelText(runId: string) {
+  let streaming = false
+  const onEvent = (event: RunEvent) => {
+    if (event.type === 'text.delta') streaming = true
+  }
+  const channel = s.parts.driver.subscribe(runId, 0, { event: onEvent, close: () => {} })
+  channel?.backlog.forEach(onEvent)
+  try {
+    await waitForRunGate(runId, 'the first streamed text', () => streaming)
+  } finally {
+    channel?.unsubscribe()
+  }
+}
+
+/** Each stop test owns a scripted reply. If it fails before delivery, remove that reply. */
+async function cleanUpStoppedRun(runId: string | undefined, turn: ScriptedTurn) {
+  const pending = model.queue.indexOf(turn)
+  if (pending >= 0) model.queue.splice(pending, 1)
+  if (runId && s.parts.driver.isLive(runId)) await api.call('runs.cancel', { runId })
+}
+
 describe('stopping a run', () => {
   it('while the model is answering: nothing half-written is kept', async () => {
-    model.push(
-      ({ signal }) =>
-        new Promise((_, reject) =>
-          signal?.addEventListener('abort', () => reject(new ScriptAbortError())),
-        ),
-    )
-    const { run, thread } = await send('Think for a long time')
-    await new Promise((r) => setTimeout(r, 50))
-    const canceled = await api.call('runs.cancel', { runId: run.id })
-    expect(canceled.status).toBe('canceled')
-    expect(await shape(thread.id)).toEqual(['user:text', 'system:text'])
+    const turn: ScriptedTurn = {
+      content: [text('This answer is still being written.')],
+      stallAfterContent: true,
+    }
+    model.push(turn)
+    let runId: string | undefined
+    try {
+      const { run, thread } = await send('Think for a long time')
+      runId = run.id
+      // Canceling before the model request arrives leaves its scripted reply in the shared queue.
+      await waitForModelText(runId)
+      const canceled = await api.call('runs.cancel', { runId })
+      expect(canceled.status).toBe('canceled')
+      expect(await shape(thread.id)).toEqual(['user:text', 'system:text'])
+    } finally {
+      await cleanUpStoppedRun(runId, turn)
+    }
   })
 
   it('after a call changed the design: the model is told the change was applied, not that it did not run', async () => {
@@ -358,74 +403,97 @@ describe('stopping a run', () => {
       title: 'Stopped mid-call',
     })
     const registry = s.server.runtime.services
-    const real = registry.isConfigured('geometry') ? registry.get('geometry') : null
-    let evaluating!: () => void
-    const started = new Promise<void>((r) => (evaluating = r))
+    const real = registry.optional('geometry')
+    let evaluating = false
     registry.register('geometry', {
       capabilities: {},
-      // The same commit also schedules a background facts refresh. Synchronize with the
-      // evaluation attached to this run so Stop arrives after its abort listener is ready.
-      evaluate: async (_d: unknown, opts: { signal?: AbortSignal }) => {
+      // The same commit also schedules a background facts refresh. Wait for the evaluation
+      // attached to this run, with its abort listener installed.
+      evaluate: async (_d, opts) => {
         const signal = opts.signal
-        if (!signal) throw new Error('Background facts unavailable in this fixture')
+        if (!signal || opts.pieceId !== piece.id)
+          throw new DOMException('Background facts are unavailable in this fixture', 'AbortError')
         signal.throwIfAborted()
         return new Promise((_, reject) => {
           signal.addEventListener('abort', () => reject(signal.reason), { once: true })
-          evaluating()
+          evaluating = true
         })
       },
-    } as never)
+      renderInput: registry.get('geometry').renderInput,
+      export: registry.get('geometry').export,
+    })
+    const turn: ScriptedTurn = {
+      content: [
+        tool(
+          'design_apply',
+          {
+            pieceId: piece.id,
+            label: 'Wider band',
+            ops: [{ t: 'update', id: 'band', patch: { widthTop: 2.4 } }],
+          },
+          'toolu_mid',
+        ),
+      ],
+    }
+    model.push(turn)
+    let runId: string | undefined
     try {
-      model.push({
-        content: [
-          tool(
-            'design_apply',
-            {
-              pieceId: piece.id,
-              label: 'Wider band',
-              ops: [{ t: 'update', id: 'band', patch: { widthTop: 2.4 } }],
-            },
-            'toolu_mid',
-          ),
-        ],
-      })
       const { run, thread } = await send('Widen the band', {
         context: { pieceId: piece.id, selection: [] },
       })
-      await started
+      runId = run.id
+      await waitForRunGate(runId, 'post-write geometry evaluation', () => evaluating)
       expect((await api.call('pieces.get', { id: piece.id })).version).toBe(piece.version + 1)
-      await api.call('runs.cancel', { runId: run.id })
-      await settled(s.parts, run.id)
+      await api.call('runs.cancel', { runId })
+      await settled(s.parts, runId)
       const { messages } = await api.call('threads.get', { id: thread.id })
       const answer = JSON.stringify(messages.at(-1)!.content)
       expect(answer).toContain('toolu_mid')
       expect(answer).not.toContain('Not run')
       expect(answer).toMatch(/applied/i)
     } finally {
-      if (real) registry.register('geometry', real)
-      else registry.unregister('geometry')
+      try {
+        await cleanUpStoppedRun(runId, turn)
+      } finally {
+        if (real) registry.register('geometry', real)
+        else registry.unregister('geometry')
+      }
     }
   })
 
   it('while a client tool runs: the call is closed as not run', async () => {
     const c = await ctx()
     const piece = await api.call('pieces.create', { title: 'Look at me' })
-    // A window that is open but never answers.
-    const off = c.events.subscribe(c.orgId, () => {}, { userId: c.user.id, clientId: 'w1' })
-    model.push({
+    let requestedFor: string | null | undefined
+    const off = c.events.subscribe(
+      c.orgId,
+      (event) => {
+        if (event.type === 'client.request' && event.tool === 'viewport.capture')
+          requestedFor = event.runId
+      },
+      { userId: c.user.id, clientId: 'w1' },
+    )
+    const turn: ScriptedTurn = {
       content: [tool('viewport_capture', { pieceId: piece.id, views: ['front'] })],
-    })
-    const { run, thread } = await send('Look at it', {
-      context: { pieceId: piece.id, selection: [] },
-    })
-    await new Promise((r) => setTimeout(r, 100))
-    const canceled = await api.call('runs.cancel', { runId: run.id })
-    off()
-    expect(canceled.status).toBe('canceled')
-    const detail = await api.call('traces.run', { id: run.id })
-    expect(detail.steps.find((x) => x.name === 'viewport.capture')!.status).toBe('canceled')
-    const { messages } = await api.call('threads.get', { id: thread.id })
-    expect(JSON.stringify(messages.at(-1)!.content)).toMatch(/Not run/)
+    }
+    model.push(turn)
+    let runId: string | undefined
+    try {
+      const { run, thread } = await send('Look at it', {
+        context: { pieceId: piece.id, selection: [] },
+      })
+      runId = run.id
+      await waitForRunGate(runId, 'the viewport request', () => requestedFor === runId)
+      const canceled = await api.call('runs.cancel', { runId })
+      expect(canceled.status).toBe('canceled')
+      const detail = await api.call('traces.run', { id: runId })
+      expect(detail.steps.find((x) => x.name === 'viewport.capture')!.status).toBe('canceled')
+      const { messages } = await api.call('threads.get', { id: thread.id })
+      expect(JSON.stringify(messages.at(-1)!.content)).toMatch(/Not run/)
+    } finally {
+      off()
+      await cleanUpStoppedRun(runId, turn)
+    }
   })
 
   it('while waiting for approval: the waiting call is closed and the run ends', async () => {
@@ -779,26 +847,29 @@ describe('the ledger', () => {
   })
 
   it('records a call stopped mid-answer before the run ends', async () => {
-    model.push({
+    const turn: ScriptedTurn = {
       content: [text('Thinking about a long answer')],
       usage: { input_tokens: 150_000, output_tokens: 5 },
       stallAfterContent: true,
-    })
-    const before = model.api?.exchanges.length ?? 0
-    const { run } = await send('Write me a long answer')
-    // Wait until the answer has started streaming, then stop it.
-    for (let i = 0; i < 100 && (model.api?.exchanges.length ?? 1) <= before; i++)
-      await new Promise((r) => setTimeout(r, 20))
-    await new Promise((r) => setTimeout(r, 100))
-    await api.call('runs.cancel', { runId: run.id })
-    const detail = await finish(run.id)
-    expect(detail.run.status).toBe('canceled')
-    const c = await ctx()
-    const rows = await c.repo.usage.many({ where: eq(t.usageEvent.runId, run.id) })
-    expect(rows).toHaveLength(1)
-    const floor = (150_000 * MODELS[STANDARD].rates.input) / 1e6
-    expect(rows[0]!.costMicros / 1e6).toBeGreaterThan(floor)
-    expect(detail.run.costUsd).toBeGreaterThan(floor)
+    }
+    model.push(turn)
+    let runId: string | undefined
+    try {
+      const { run } = await send('Write me a long answer')
+      runId = run.id
+      await waitForModelText(runId)
+      await api.call('runs.cancel', { runId })
+      const detail = await finish(runId)
+      expect(detail.run.status).toBe('canceled')
+      const c = await ctx()
+      const rows = await c.repo.usage.many({ where: eq(t.usageEvent.runId, runId) })
+      expect(rows).toHaveLength(1)
+      const floor = (150_000 * MODELS[STANDARD].rates.input) / 1e6
+      expect(rows[0]!.costMicros / 1e6).toBeGreaterThan(floor)
+      expect(detail.run.costUsd).toBeGreaterThan(floor)
+    } finally {
+      await cleanUpStoppedRun(runId, turn)
+    }
   })
 })
 
