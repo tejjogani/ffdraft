@@ -1,6 +1,6 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 15:34 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 15:36 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## CAD view fix round, then merging the studio and the CAD view into one branch (lane A, A13b + integration)
 
@@ -107,7 +107,7 @@ _Generated 26 Nov 2026 15:34 UTC by `docs/agents/sync_status.py` from the workfl
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 45be795 Status: studio second pass of its third round; spec verifying the card gate; render fixing
+Branch `claude/busy-bardeen-o482lo`, head: 6ad5225 Board: studio done; CAD view fix round and the first merge under way
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -138,7 +138,7 @@ Branch `claude/busy-bardeen-o482lo`, head: 45be795 Status: studio second pass of
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 45be795 Status: studio second pass of its third round; spec verifying the card gate; render fixing
+Branch `claude/busy-bardeen-o482lo`, head: 6ad5225 Board: studio done; CAD view fix round and the first merge under way
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -180,7 +180,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 45be795 Status: studio second pass of its third round; spec verifying the card gate; render fixing
+Branch `claude/busy-bardeen-o482lo`, head: 6ad5225 Board: studio done; CAD view fix round and the first merge under way
 
 | Agent | State | Outcome |
 |---|---|---|
