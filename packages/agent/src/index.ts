@@ -15,3 +15,5 @@ export * from './prompt/index'
 export * from './shape'
 export * from './spec-questions'
 export * from './tools'
+
+export { focusFor, guideFor } from './prompt/routing'

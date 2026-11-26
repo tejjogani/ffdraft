@@ -39,7 +39,7 @@ export function useSend(page: AssistantContext) {
     const s = useAssistant.getState()
     const threadId = opts.threadId !== undefined ? opts.threadId : s.activeThreadId
     const usePage = !s.dropPageContext
-    const pagePiece = usePage ? page.pieceId : null
+    const pagePiece = page.pieceId
     const pieceId =
       opts.pieceId ?? pagePiece ?? (opts.bare ? undefined : s.selection?.pieceId) ?? undefined
     const tier = opts.tier ?? (threadId ? s.tierByThread[threadId] : s.draftTier) ?? undefined
@@ -50,7 +50,7 @@ export function useSend(page: AssistantContext) {
       attachments: photos,
       context: {
         ...(pieceId ? { pieceId } : {}),
-        ...(usePage && page.boardId ? { boardId: page.boardId } : {}),
+        ...(usePage && page.boardId && (!opts.pieceId || opts.pieceId === pagePiece) ? { boardId: page.boardId } : {}),
         selection:
           !opts.bare && s.selection && s.selection.pieceId === pieceId ? s.selection.nodeIds : [],
         ...(pieceId && page.stage ? { stage: page.stage } : {}),

@@ -27,6 +27,8 @@ import {
   closedResult,
   describeCall,
   endJob,
+  focusFor,
+  guideFor,
   errorResult,
   evaluationNote,
   invalidInputResult,
@@ -423,7 +425,10 @@ async function callModel(host: RunHost, messages: MessageRow[], run: Run): Promi
   }
 
   const idx = await nextIndex(ctx, runId)
+  const guide = guideFor(focusFor({ piece: !!run.pieceId, stage: run.stage, job: run.job?.stage }))
+  const prompt = {focus: guide.focus, skills: guide.skills, hash: guide.hash}
   const params = buildRequest({
+    guide,
     model: host.model as AssistantModelId,
     messages: toApiMessages(messages),
     features: host.features,
@@ -446,7 +451,7 @@ async function callModel(host: RunHost, messages: MessageRow[], run: Run): Promi
       index: idx,
       kind: 'model',
       name: host.model,
-      input: { model: host.model, messages: messages.length, features: host.features },
+      input: { model: host.model, messages: messages.length, features: host.features, prompt },
       output: { error: mapped.message },
       isError: true,
       ms: Date.now() - started,
@@ -475,7 +480,7 @@ async function callModel(host: RunHost, messages: MessageRow[], run: Run): Promi
     index: idx,
     kind: 'model',
     name: host.model,
-    input: { model: host.model, messages: messages.length, features: host.features },
+    input: { model: host.model, messages: messages.length, features: host.features, prompt },
     output: {
       servedBy: adapter.servedBy ?? message.model,
       inputTransformations: adapter.inputTransformations,

@@ -43,6 +43,7 @@ import {
 } from '@pave/schema'
 import type { ModelClient, ModelStream } from './model'
 import { type Effort, MODELS, type ResponseUsage, usageCost } from './pricing'
+import type { PromptGuide } from './prompt/routing'
 import { SYSTEM_BLOCKS } from './prompt/index'
 import { toolDefs } from './tools'
 
@@ -91,9 +92,9 @@ export function apiTools(): BetaTool[] {
 }
 
 /** The system prompt blocks, the last one carrying the cache breakpoint for tools + system. */
-export function systemBlocks(): BetaTextBlockParam[] {
-  return SYSTEM_BLOCKS.map((text, i) =>
-    i === SYSTEM_BLOCKS.length - 1
+export function systemBlocks(blocks: readonly string[] = SYSTEM_BLOCKS): BetaTextBlockParam[] {
+  return blocks.map((text, i) =>
+    i === blocks.length - 1
       ? { type: 'text', text, cache_control: { type: 'ephemeral' } }
       : { type: 'text', text },
   )
@@ -123,6 +124,7 @@ export const contextMessage = (text: string): Pick<Message, 'role' | 'content'> 
 })
 
 export interface BuildRequest {
+  guide?: PromptGuide
   model: AssistantModelId
   messages: BetaMessageParam[]
   features?: Partial<RequestFeatures>
@@ -140,7 +142,7 @@ export const turnFallbacks = (model: AssistantModelId): boolean => {
 }
 
 /** One turn's request. Everything but `model` and `messages` is fixed for the model. */
-export function buildRequest({ model, messages, features }: BuildRequest): BetaMessageStreamParams {
+export function buildRequest({ model, messages, features, guide }: BuildRequest): BetaMessageStreamParams {
   const f = { ...DEFAULT_FEATURES, ...features }
   const fallbacks = turnFallbacks(model)
   const betas = [
@@ -151,7 +153,7 @@ export function buildRequest({ model, messages, features }: BuildRequest): BetaM
   return {
     model,
     max_tokens: MAX_TOKENS,
-    system: systemBlocks(),
+    system: systemBlocks(guide?.blocks),
     tools: apiTools(),
     // Forced tool choice is a 400 on these models; the prompt says when to use which tool.
     tool_choice: { type: 'auto' },
