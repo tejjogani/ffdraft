@@ -1,5 +1,7 @@
 # Handover: where Pavé stands and how to pick it up
 
+**Mac-first CAD trial.** The [current controls, platform checks and remaining CAD work](agents/RESUME-WORKFLOWS.md#mac-first-cad-trial-and-automation) cover the designer, Claude and Python workflows.
+
 **November 26 trial.** Start with the [current worklog and remaining checks](agents/RESUME-WORKFLOWS.md#project-assistant-visual-handoff-and-local-trial). Designers open individual tools from a project and can switch projects within a tool. The assistant can carry a selected design and confirmed measurements from discovery into CAD. The earlier sections below preserve the original plan and handover.
 
 _Written 24 November 2026. Read this first in any new session, then the files it points to. Keep it current: whoever finishes a piece of work updates the "State" and "In flight" sections in the same commit._

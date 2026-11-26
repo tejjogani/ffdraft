@@ -66,7 +66,16 @@ try {
   await setup.getByRole('progressbar', { name: 'Blender download' }).waitFor()
   await setup.getByRole('button', { name: 'Close', exact: true }).click()
   await offer.getByRole('button', { name: 'View progress' }).click()
-  await setup.getByText('Blender is ready', { exact: true }).waitFor({ timeout: 6 * 60_000 })
+  const ready = setup.getByText('Blender is ready', { exact: true })
+  const failure = setup.getByRole('alert')
+  await ready
+    .or(failure)
+    .first()
+    .waitFor({ timeout: 6 * 60_000 })
+  if (await failure.isVisible()) {
+    await shot('03-failed')
+    assert.fail((await failure.textContent()) ?? 'Managed Blender installation failed.')
+  }
   const engine = await rpc('renders.engine')
   assert.equal(engine.available, true)
   assert.match(engine.version, /^5\.3\./)
