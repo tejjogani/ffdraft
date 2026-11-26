@@ -8,9 +8,15 @@
  * So "what can the user do", "what can the agent do" and "what can an external agent do" are
  * the same list, with the same validation, permissions, metering and trace capture.
  */
+
 import { z } from 'zod'
 import { ChangeSchema, DesignSchema, OpSchema, PIECE_KINDS } from '../design/design'
 import { DirectionSchema, MIX_PARTS } from '../design/directions'
+import {
+  IntakeDetailsSchema,
+  IntakeSelectionInputSchema,
+  PieceIntakeSchema,
+} from '../design/intake'
 import { StoneChangeSchema, StoneTargetSchema } from '../design/intents'
 import { StoneSourcing } from '../design/nodes'
 import { PhotoReadSchema } from '../design/photo-read'
@@ -501,6 +507,18 @@ export const commands = {
       assetIds: z.array(id).max(8).default([]),
     }),
     output: z.object({ pieceId: id, boardId: id }),
+  }),
+  'pieces.confirmIntake': def({
+    description:
+      'Save the designer’s confirmed partial measurements and visual choice for this project without building CAD.',
+    kind: 'mutation',
+    input: z.object({
+      pieceId: id,
+      boardId: id,
+      details: IntakeDetailsSchema.optional(),
+      selection: IntakeSelectionInputSchema.nullable().optional(),
+    }),
+    output: PieceIntakeSchema,
   }),
   'pieces.addIntakeAssets': def({
     description:

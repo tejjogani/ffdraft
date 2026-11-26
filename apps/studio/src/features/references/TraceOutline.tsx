@@ -3,6 +3,37 @@ import { Button, controlClass, Dialog, Field, InlineError } from '@pave/ui'
 import { useState } from 'react'
 import { assetUrl } from '../../lib/assets'
 import { useRpc, useRpcMutation } from '../../lib/query'
+import { activeOrg, useSession } from '../../lib/session'
+
+/** The chosen Design image belongs to the project, so it is available from a fresh CAD visit. */
+export function TraceSelectedDesign({ piece }: { piece: Piece }) {
+  const session = useSession()
+  const role = activeOrg(session)?.role
+  const [open, setOpen] = useState(false)
+  const selected = piece.intake?.selection
+  const board = useRpc(
+    'boards.get',
+    { id: selected?.boardId ?? '' },
+    {
+      enabled: !!selected?.visualId && role !== 'viewer' && role !== 'guest',
+    },
+  )
+  const reference =
+    board.data?.board.pieceId === piece.id
+      ? board.data.references.find(
+          (r) => r.id === selected?.visualId && !!r.assetId && r.rights !== 'viewOnly',
+        )
+      : undefined
+  if (!reference || role === 'viewer' || role === 'guest') return null
+  return (
+    <>
+      <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
+        Trace selected design
+      </Button>
+      {open && <TraceOutline piece={piece} reference={reference} onClose={() => setOpen(false)} />}
+    </>
+  )
+}
 
 /** A flat outline is an editable solid. Its scale comes from the designer or the project spec. */
 export function TraceOutline({
@@ -16,9 +47,16 @@ export function TraceOutline({
 }) {
   const trace = useRpc('match.traceOutline', { pieceId: piece.id, referenceId: reference.id })
   const save = useRpcMutation('design.apply')
-  const [height, setHeight] = useState(String(piece.spec?.body?.heightMm ?? 22))
-  const [thickness, setThickness] = useState(String(piece.spec?.body?.thicknessMm ?? 2))
-  const [material, setMaterial] = useState<MetalId>(piece.spec?.metal.alloy ?? 'au18k-yellow')
+  const confirmed = piece.intake?.details
+  const [height, setHeight] = useState(
+    String(piece.spec?.body?.heightMm ?? confirmed?.heightMm ?? (confirmed ? '' : 22)),
+  )
+  const [thickness, setThickness] = useState(
+    String(piece.spec?.body?.thicknessMm ?? confirmed?.thicknessMm ?? (confirmed ? '' : 2)),
+  )
+  const [material, setMaterial] = useState<MetalId | ''>(
+    piece.spec?.metal.alloy ?? confirmed?.metal ?? (confirmed ? '' : 'au18k-yellow'),
+  )
   const [changeId] = useState(() => crypto.randomUUID())
   const preview = trace.data
   return (
@@ -40,6 +78,7 @@ export function TraceOutline({
             className="grid gap-3"
             onSubmit={(e) => {
               e.preventDefault()
+              if (!material || !height || !thickness) return
               save.mutate(
                 {
                   pieceId: piece.id,
@@ -133,8 +172,14 @@ export function TraceOutline({
                   id={id}
                   className={controlClass}
                   value={material}
-                  onChange={(e) => setMaterial(e.target.value as MetalId)}
+                  required
+                  onChange={(e) => setMaterial(e.target.value as MetalId | '')}
                 >
+                  <option value="">
+                    {confirmed?.metalDescription
+                      ? `Choose an alloy for ${confirmed.metalDescription}`
+                      : 'Choose an alloy'}
+                  </option>
                   {Object.entries(METALS).map(([id, m]) => (
                     <option key={id} value={id}>
                       {m.label}
