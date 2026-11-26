@@ -22,14 +22,13 @@ import {
 } from '@pave/ui'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { Hammer, LayoutTemplate } from 'lucide-react'
-import { SectionTitle } from '../../components/Page'
 import { SpecCard } from '../../components/SpecCard'
 import { DesignBoard } from '../../features/ideate'
 import { ImportMoodboard } from '../../features/ideate/ImportMoodboard'
 import { invalidateFor, queryClient, useRpc } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { useCurrentView } from '../../lib/use-current-view'
-import { Brief } from './PieceOverview'
+import { ProjectConversation } from './ProjectConversation'
 
 /** The piece's boards, the design board first (the oldest linked, as the server picks it). */
 const ordered = (boards: Board[]) =>
@@ -51,36 +50,44 @@ export function PieceDirections({ pieceId }: { pieceId: string }) {
   const boards = ordered(linked.data)
   const board = boards.find((b) => b.id === pick) ?? boards[0] ?? null
   return (
-    <div className="flex flex-col gap-10">
-      <SpecCard piece={p} />
-      <section aria-label="Design">
-        <SectionTitle actions={<StageActions piece={p} board={board} />}>Design board</SectionTitle>
-        {boards.length > 1 && (
-          <Segmented<string>
-            size="sm"
-            aria-label="Linked boards"
-            className="mb-3"
-            value={board!.id}
-            onChange={(board) =>
-              void navigate({
-                to: '/pieces/$id/directions',
-                params: { id: pieceId },
-                search: { board },
-              })
-            }
-            options={boards.map((b) => ({ value: b.id, label: b.title }))}
-          />
-        )}
-        {board ? (
-          <LinkedBoard key={board.id} board={board} />
-        ) : (
-          <DesignBoard key={p.id} pieceId={p.id} />
-        )}
-      </section>
-      <section>
-        <SectionTitle>Brief</SectionTitle>
-        <Brief piece={p} />
-      </section>
+    <div className="@container flex min-w-0 flex-col gap-7">
+      <ProjectConversation piece={p} boardId={board?.id} />
+      <div className="grid min-w-0 items-start gap-6 @[56rem]:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+        <SpecCard
+          key={p.id}
+          piece={p}
+          onPlan={() =>
+            document.querySelector<HTMLElement>('#design-conversation textarea')?.focus()
+          }
+        />
+        <section aria-label="Design references" className="min-w-0">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">Design board</h2>
+            <StageActions piece={p} board={board} />
+          </div>
+          {boards.length > 1 && (
+            <Segmented<string>
+              size="sm"
+              aria-label="Linked boards"
+              className="mb-3 max-w-full overflow-x-auto"
+              value={board!.id}
+              onChange={(board) =>
+                void navigate({
+                  to: '/pieces/$id/directions',
+                  params: { id: pieceId },
+                  search: { board },
+                })
+              }
+              options={boards.map((b) => ({ value: b.id, label: b.title }))}
+            />
+          )}
+          {board ? (
+            <LinkedBoard key={board.id} board={board} />
+          ) : (
+            <DesignBoard key={p.id} pieceId={p.id} projectWorkspace />
+          )}
+        </section>
+      </div>
     </div>
   )
 }
@@ -88,7 +95,7 @@ export function PieceDirections({ pieceId }: { pieceId: string }) {
 function LinkedBoard({ board }: { board: Board }) {
   const data = useRpc('boards.get', { id: board.id })
   if (!data.data) return <Skeleton className="h-80 rounded-lg" />
-  return <DesignBoard board={data.data.board} references={data.data.references} />
+  return <DesignBoard board={data.data.board} references={data.data.references} projectWorkspace />
 }
 
 /** Import studio references or start CAD. */

@@ -96,16 +96,22 @@ export function PiecePage({ id }: { id: string }) {
  */
 export function PieceTab({
   bleed,
+  wide = false,
   pieceId,
   children,
 }: {
   bleed: boolean
+  wide?: boolean
   pieceId: string
   children: ReactNode
 }) {
   const content = <Suspense fallback={<TabSkeleton bleed={bleed} />}>{children}</Suspense>
   if (bleed) return <Workbench pieceId={pieceId}>{content}</Workbench>
-  return <Column className="pt-8">{content}</Column>
+  return (
+    <Column wide={wide} className="pt-8">
+      {content}
+    </Column>
+  )
 }
 
 /** A workspace tab and the reference panel: docked when there is room, else a sheet. */
@@ -241,7 +247,9 @@ function PieceHeader({
             <>
               <ProjectSwitcher pieceId={piece.id} area={area} />
               {/* The stage's AI job: the plan shows before anything starts. */}
-              {stage && <StartJob key={stage} pieceId={piece.id} stage={stage} />}
+              {stage && stage !== 'design' && (
+                <StartJob key={stage} pieceId={piece.id} stage={stage} />
+              )}
               <Button
                 variant="ghost"
                 size="sm"
