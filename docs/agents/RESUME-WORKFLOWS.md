@@ -1,5 +1,18 @@
 # Resume the November 26 Pavé workflows
 
+## Mac-first CAD trial and automation
+
+The primary hands-on trial is on Apple silicon Mac. Windows x64 is a key market and has its own verification lane. The local designer can use the CAD builder, guide and manual edits without a Claude key. The [first-time guide](../first-time-cad.md) supplies the in-app steps. The [command roadmap](../plans/cad-command-api.md) lists Rhino, MatrixGold, Blender and CadQuery references, the public API contract and the next geometry milestones.
+
+| Workstream | Merged or tested work | Where to continue |
+| --- | --- | --- |
+| Designer controls | Seven-step guide, visible carat entry, a numbered prong locator and tip offset, and wire swept along a selected construction curve. A Diaex fit stores supplier-listed carats alongside all three measurements. | Select a part in **Features** and edit its **Inspector**. For direct manipulation beyond these controls, advance stable face/edge selection and freeform editing. |
+| Claude and Python tools | Scoped feature discovery, versioned atomic edits, history, evaluation and undo. Tests cover stale writes, idempotent requests, scope refusal, and persistence. | Use the [Python examples](../../packages/pave-python/README.md). Each next command needs a manual action, typed operation, script example and geometry readback. |
+| Render setup and platforms | The local startup offer asks permission, downloads a pinned Blender build, verifies it and can resume setup after a cancelled attempt. Mac checks include WebKit editing, managed Blender 5.3.0 and a real 256 × 256 Cycles image. | Use the platform-specific workflows for ongoing compatibility. The built-in Mac package is for Apple silicon. Keep Windows ARM64 status distinct from x64. |
+| Trace evaluation | Local edit history retains the undoable operations. Assistant changes also link to their run. Opted-in projects can export filtered numeric band and prong examples. | See the [evaluation format and CLI](../cad-evaluation-examples.md). Add operation-specific outcomes as the modeling vocabulary grows. |
+
+The next modeling increment is revolve from an editable profile, followed by a single-rail sweep with explicit profile and orientation. Add independently read export bounds and volume checks with each. Arbitrary mesh-vertex editing and broad Rhino parity remain open work.
+
 **Start with the project menu.** Opening a piece should give the jeweler direct access to its Designs, CAD, Model, Renders and other areas. A reference saved in one area should be available where the jeweler needs it next. Design → CAD → Render describes a journey the assistant can carry out. The designer can enter the project anywhere.
 
 The [founder's feedback and task board](BOARD.md) records the complaints, owners, dependencies and completion criteria. The [master plan](../PLAN.md) describes the product. The [agent worklog](STATUS.md) records 26 workflows, including the review and fix rounds. The [operating model](OPERATING-MODEL.md) explains the responsibilities of the build, research and integration lanes. The [journal index](journals.json) lists the old container's paths. The published worklog abbreviates long agent reports.
