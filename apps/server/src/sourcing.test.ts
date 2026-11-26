@@ -198,6 +198,51 @@ describe('Diaex inventory RPCs', () => {
     ])
   })
 
+  it('uses saved grades and a certificate requirement unless a new color is requested', async () => {
+    const piece = await owner.call('pieces.create', { templateId: 'solitaire' })
+    const target = { pieceId: piece.id, nodeId: 'center' }
+    await owner.call('design.replaceStone', {
+      pieceId: piece.id,
+      target: { nodeId: 'center' },
+      change: {
+        quality: { origin: 'natural', colors: ['F', 'G'], clarities: ['VS1'], certified: true },
+      },
+    })
+    answer = (req) => ({
+      body: signedOutSearch(req, [
+        inventoryStone(),
+        { ...inventoryStone('T-RD-02'), clarity: 'VS2' },
+        { ...inventoryStone('T-RD-03'), color: 'H' },
+        {
+          ...inventoryStone('T-RD-04'),
+          certificate: { lab: null, report_no: null, report_url: null },
+        },
+      ]),
+    })
+    const defaults = await owner.call('sourcing.search', target)
+    expect(defaults.candidates.map(({ sku }) => sku)).toEqual([bestId])
+    expect(requests[0]?.body.requirement).toMatchObject({
+      origin: 'natural',
+      colors: ['F', 'G'],
+      clarities: ['VS1'],
+      certificate: { required: true },
+    })
+    const linkFilters = JSON.parse(new URL(defaults.searchUrl).searchParams.get('f')!)
+    expect(linkFilters).toMatchObject({
+      colors: ['F', 'G'],
+      clarities: ['VS1'],
+      labs: expect.arrayContaining(['GIA']),
+    })
+
+    const overridden = await owner.call('sourcing.search', { ...target, color: 'H' })
+    expect(overridden.candidates.map(({ sku }) => sku)).toEqual(['T-RD-03'])
+    expect(requests[1]?.body.requirement).toMatchObject({
+      colors: ['H'],
+      clarities: ['VS1'],
+      certificate: { required: true },
+    })
+  })
+
   it('finds a selected fancy stone by exact public ID and rechecks current availability', async () => {
     const fancy = {
       ...inventoryStone(),
