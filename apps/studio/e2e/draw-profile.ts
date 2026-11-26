@@ -124,7 +124,7 @@ try {
   }
 
   const projectFile = await savedFile(/Pavé file/, '.pave')
-  await page.goto(base + '/pieces')
+  await page.goto(`${base}/pieces`)
   const chooseFile = page.waitForEvent('filechooser')
   await page.getByRole('button', { name: 'Open Pavé file' }).click()
   await (await chooseFile).setFiles({ ...projectFile, mimeType: 'application/octet-stream' })

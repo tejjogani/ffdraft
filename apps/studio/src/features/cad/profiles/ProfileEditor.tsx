@@ -247,8 +247,6 @@ export function ProfileEditor({
               className="mt-2 flex max-h-28 flex-col gap-1 overflow-y-auto"
             >
               {points.map((value, index) => (
-                // Draft point order is the editing identity; this list never reorders its rows.
-                // biome-ignore lint/suspicious/noArrayIndexKey: each row is a position in the outline
                 <li key={index} className="grid grid-cols-[3.5rem_1fr_1fr_auto] items-center gap-2">
                   <span className="text-xs text-fg-muted">Point {index + 1}</span>
                   {(['horizontal', 'vertical'] as const).map((axis, at) => (
