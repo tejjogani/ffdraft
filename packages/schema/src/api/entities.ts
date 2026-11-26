@@ -5,6 +5,7 @@
 import { z } from 'zod'
 import { ActorSchema, ChangeSchema, DesignSchema, PIECE_KINDS } from '../design/design'
 import { DirectionSchema } from '../design/directions'
+import { PieceIntakeSchema } from '../design/intake'
 import { PieceSpecSchema } from '../design/spec'
 import { GEM_MATERIAL_IDS } from '../domain/gems'
 import { FINISH_IDS, METAL_IDS, PLATING_IDS } from '../domain/metals'
@@ -172,6 +173,8 @@ export const PieceSchema = PieceSummarySchema.extend({
   /** Markdown brief. */
   brief: z.string(),
   spec: PieceSpecSchema.nullable(),
+  /** Decisions made in Home before there is a complete spec. */
+  intake: PieceIntakeSchema.optional(),
   design: DesignSchema,
   /** Sequence number of the last applied change; the optimistic-concurrency token. */
   version: z.number().int(),
