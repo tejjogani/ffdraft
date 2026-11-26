@@ -20,9 +20,15 @@ Select Band, then choose Metal in the Material section of the Inspector. Try 18k
 
 The band and head can use different metals. To change the whole piece at once, right-click empty space in the 3D view and choose Change metal everywhere. To coat a part, open Fine-tune and choose Plating. These controls use material presets. Uploading an arbitrary texture map onto a part is a planned feature.
 
+## Design a different mount
+
+Select Head in Features. Under Style, try Basket. Set Gallery rails to 2, choose Claw under Tip, and adjust Prong wire. Fine-tune gives you Prong rotation and Taper. For an open-sided setting, choose Half bezel and adjust Half-bezel arcs and Bezel wall. The head keeps its link to the centre stone.
+
+A generated head exposes setting dimensions. Editing its individual mesh vertices and faces is outside the current editor. For an additional custom solid, use Draw profile, then select the solid and choose Edit profile to change its outline.
+
 ## Change the centre stone
 
-Select Centre stone in Features. In the Inspector, use Stone to choose the gem material and color, such as ruby or blue sapphire. Use Cut to change its shape. For an unsourced centre stone, enter Width in millimetres or its weight in carats.
+Select Centre stone in Features. In the Inspector, use Stone to choose the gem material and color, such as ruby or blue sapphire. Use Cut to change its shape. For an unsourced centre stone, type a target such as 1.25 in the carat weight field marked ct, then press Enter. Width in millimetres updates from the cut and material. The displayed carat value is a geometry estimate.
 
 To swap the stone and adjust its mount together, right-click the stone in the 3D view and choose Replace stone. Review the replacement before applying it.
 
