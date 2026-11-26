@@ -1,6 +1,6 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 19:36 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 20:38 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## Polish 2: spec (a card applies only the change it showed) then Diaex (sign-in never starved, honest grace dates)
 
@@ -8,13 +8,16 @@ _Generated 26 Nov 2026 19:36 UTC by `docs/agents/sync_status.py` from the workfl
 |---|---|---|
 | spec:fix | done | I'm waiting for the server suite to finish before running anything else. |
 | spec:verify | done | 1 blocker, 1 major, 2 minor. FAIL. B1 is fixed for the cases it named, but one blocker remains: an approved whole-stone card can change which kind of stone a line is (centre to accent) whi… |
-| diaex:fix | running or interrupted |  |
+| diaex:fix | done | All four findings are fixed and committed as ea5da53 on diaex/connect in /home/user/ffdraft-ai (not pushed). Sign in with Diaex and the access gate otherwise work as before. Every new test failed on the old code for the… |
+| diaex:verify | running or interrupted |  |
 
 ## Render judged against real photographs of stones and jewelry (lane A, A12)
 
 | Agent | State | Outcome |
 |---|---|---|
-| real-references | running or interrupted |  |
+| real-references | done | I gathered 35 real photographs, measured each one the way assess.ts and metrics.py measure a render, and wrote targets.md. The three latest renders measured the same way fall short in five places: no fire on black, ston… |
+| settle | running or interrupted |  |
+| judge | running or interrupted |  |
 
 ## Render: settle the release state (better earlier stones, each later change kept only if a blind side-by-side says so)
 
@@ -60,6 +63,7 @@ _Generated 26 Nov 2026 19:36 UTC by `docs/agents/sync_status.py` from the workfl
 | view:fix:2 | done | I committed **30c9cc0** on cad/viewport in /home/user/ffdraft-view, on top of b466c27; nothing was pushed. Before it, HEAD was b466c27 (the reviewed build), not the 81e3d4b the task named. The hand now gets the view bac… |
 | view:verify:2 | done | 3 major, 3 minor. FAIL. The commit under test is 30c9cc0 on cad/viewport. It fixes everything the round-4 tester reported, but three things are still open or new. (1) The hand s… |
 | merge | running or interrupted |  |
+| review | running or interrupted |  |
 
 ## Spec: the card is the gate, word reading only adds notes (lane A, A7)
 
@@ -162,7 +166,7 @@ _Generated 26 Nov 2026 19:36 UTC by `docs/agents/sync_status.py` from the workfl
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: d134540 Status: second spec and Diaex polish; render against real photographs
+Branch `claude/busy-bardeen-o482lo`, head: 5df472f Board: momentum stopping off by default; spec polish state
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -193,7 +197,7 @@ Branch `claude/busy-bardeen-o482lo`, head: d134540 Status: second spec and Diaex
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: d134540 Status: second spec and Diaex polish; render against real photographs
+Branch `claude/busy-bardeen-o482lo`, head: 5df472f Board: momentum stopping off by default; spec polish state
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -235,7 +239,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: d134540 Status: second spec and Diaex polish; render against real photographs
+Branch `claude/busy-bardeen-o482lo`, head: 5df472f Board: momentum stopping off by default; spec polish state
 
 | Agent | State | Outcome |
 |---|---|---|
