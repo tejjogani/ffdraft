@@ -1,0 +1,149 @@
+name: macOS CAD smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      install_blender:
+        description: Download and verify managed Blender
+        type: boolean
+        default: false
+  pull_request:
+    paths:
+      - .github/workflows/macos-cad.yml
+      - install.sh
+      - scripts/install.mjs
+      - apps/server/**
+      - apps/studio/**
+      - packages/agent/**
+      - packages/canon/**
+      - packages/kernel/**
+      - packages/pave-python/**
+      - packages/render/**
+      - packages/schema/**
+      - packages/ui/**
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos-arm64:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22.23.1
+          architecture: arm64
+          cache: pnpm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: 3.13.2
+          architecture: arm64
+      - name: Install the Python client and WebKit
+        run: |
+          python -m pip install -e ./packages/pave-python
+          playwright="$RUNNER_TEMP/pave-playwright"
+          npm install --prefix "$playwright" --no-save playwright@1.63.0
+          node "$playwright/node_modules/playwright/cli.js" install webkit
+          printf 'NODE_PATH=%s\n' "$playwright/node_modules" >> "$GITHUB_ENV"
+
+      - name: Verify installation, CAD, Python and opt-in Blender
+        shell: bash
+        env:
+          HOST: 127.0.0.1
+          PORT: "18977"
+          PAVE_AUTH: local
+          PAVE_SEED: "false"
+          PAVE_TEST_BROWSER: webkit
+          INSTALL_BLENDER: ${{ inputs.install_blender || false }}
+        run: |
+          node -e 'if (process.platform !== "darwin" || process.arch !== "arm64") process.exit(1); console.log(process.platform, process.arch, process.version)'
+          export PAVE_DATA_DIR
+          PAVE_DATA_DIR="$(mktemp -d "$RUNNER_TEMP/Pave macOS data.XXXXXX")"
+          export PAVE_TEST_URL="http://$HOST:$PORT"
+          logs="$RUNNER_TEMP/pave-macos-logs"
+          mkdir -p "$logs"
+
+          # The Blender download runs on installer and renderer PRs, or by explicit dispatch.
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]] && ! git diff --quiet HEAD^1 HEAD -- \
+            .github/workflows/macos-cad.yml install.sh scripts/install.mjs \
+            apps/server/src/engines/render apps/server/src/handlers/render.ts \
+            apps/studio/e2e/render-engine-setup.ts apps/studio/e2e/managed-blender-render.ts \
+            apps/studio/src/features/render packages/render; then
+            INSTALL_BLENDER=true
+          fi
+          if [[ "$INSTALL_BLENDER" != true ]]; then
+            export PAVE_RENDER_NONE=1
+          fi
+
+          # Keep the launcher and its clients in the same step and stop its whole process group.
+          set -m
+          ./install.sh --start > "$logs/install.log" 2>&1 &
+          launcher=$!
+          cleanup() {
+            result=$?
+            if [[ "$result" != 0 ]]; then tail -n 160 "$logs/install.log"; fi
+            kill -TERM -- "-$launcher" 2>/dev/null || true
+            wait "$launcher" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          deadline=$((SECONDS + 480))
+          until curl --silent --fail --max-time 3 "$PAVE_TEST_URL/health" > /dev/null; do
+            if ! kill -0 "$launcher" 2>/dev/null || (( SECONDS >= deadline )); then
+              echo 'The installer did not start Pavé.'
+              exit 1
+            fi
+            sleep 1
+          done
+          grep -F 'Pavé is ready.' "$logs/install.log"
+          curl --silent --fail "$PAVE_TEST_URL" > "$logs/studio.html"
+          grep -Fq '<div id="root"' "$logs/studio.html"
+
+          python -m unittest discover -s packages/pave-python/tests -v
+          pnpm exec tsx apps/studio/e2e/manual-cad.ts "$PAVE_TEST_URL"
+
+          if [[ "$INSTALL_BLENDER" == true ]]; then
+            pnpm exec tsx apps/studio/e2e/render-engine-setup.ts "$PAVE_TEST_URL" "$logs"
+            node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict'
+          import { execFileSync } from 'node:child_process'
+          import { join } from 'node:path'
+
+          const result = await fetch(`${process.env.PAVE_TEST_URL}/api/rpc/renders.engine`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+          })
+          assert.ok(result.ok)
+          const engine = await result.json()
+          assert.ok(engine.available)
+          assert.equal(
+            engine.path,
+            join(process.env.PAVE_DATA_DIR, 'managed/blender/5.3.0/Blender.app/Contents/MacOS/Blender'),
+          )
+          const version = execFileSync(engine.path, ['--version'], { encoding: 'utf8', timeout: 30_000 })
+            .split('\n')[0]
+          assert.match(version, /^Blender 5\.3\.0\b/)
+          console.log(version)
+          NODE
+            pnpm exec tsx apps/studio/e2e/managed-blender-render.ts "$PAVE_TEST_URL" "$logs/blender-take.png"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-cad-smoke-logs
+          path: ${{ runner.temp }}/pave-macos-logs
+          retention-days: 7
+          if-no-files-found: ignore
