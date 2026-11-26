@@ -1,6 +1,6 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 08:35 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 09:36 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## Studio experience: focused editor, project card menu, minimal assistant with a character (lane A, A11)
 
@@ -13,7 +13,9 @@ _Generated 26 Nov 2026 08:35 UTC by `docs/agents/sync_status.py` from the workfl
 | review:walk | done | 6 major, 10 minor. FAIL. Most of the founder's first hour works and stays put after a reload. That covers: talking on Home, approving the build, opening the project, pins on Desi… |
 | fix:1 | done | I fixed every blocker and major on ui/focus, and most of the minors; the gaps are listed under "Not done or only partly done". There are 11 commits on top of 1ea6388, the last is 3c7dec0, nothing is pushed and the workt… |
 | verify:1 | done | 2 blocker, 10 major, 9 minor. FAIL. Nine of the 22 findings were fixed and hold up in the browser: B1, B3, B5, M2, F1, F3, F4, F5 and F6. B1 checked out by measurement: the project page and… |
-| fix:2 | running or interrupted |  |
+| fix:2 | done | I fixed every blocker and major on ui/focus in /home/user/ffdraft-ui, and most of the minors. There are four commits after 3c7dec0: ae7d29f, 5d59fe5, 1f18ac8 and dcb4d46. Nothing is pushed. Tests, typecheck and the stud… |
+| verify:2 | done | 1 blocker, 4 major, 5 minor. Not ready to sign off: one blocker and four majors remain. Fixed and confirmed with my own screenshots: V2 (a pick brings Inspector forward, including the dock… |
+| e2e:upkeep | running or interrupted |  |
 
 ## Render realism: every look tested in Blender, black acrylic, the render skill (lane A, A12)
 
@@ -23,7 +25,8 @@ _Generated 26 Nov 2026 08:35 UTC by `docs/agents/sync_status.py` from the workfl
 | build:realism | done | commit 387c43e. I picked up the realism step from the checkpoint (fd7f6a3) and judged its renders by looking at them again, whole and cropped. Black acrylic and Studio contrast still showed the gold as olive-brown brass over most of th… |
 | review:critic | done | 2 blocker, 5 major, 5 minor. FAIL. None of the six looks would pass on a fine-jewelry product page yet. Black acrylic fails outright on a piece the builder did not tune on. I rendered from… |
 | write:skill | running or interrupted |  |
-| fix:1 | running or interrupted |  |
+| fix:1 | done | Ten of the twelve findings are fixed or improved, each checked on a before-and-after render that I looked at whole and cropped on the stone and the ground. Two are not fixed: F8 (red pavé seats inside the rose-gold shan… |
+| verify:1 | running or interrupted |  |
 
 ## CAD viewport: speed, full rotation, Rhino navigation (lane A, A13)
 
@@ -50,15 +53,15 @@ _Generated 26 Nov 2026 08:35 UTC by `docs/agents/sync_status.py` from the workfl
 |---|---|---|
 | plan | done | Plan written and committed (not pushed): /home/user/ffdraft-spec/docs/plans/spec-truth.md (181 lines), commit 47e834a on spec/truth. No code was changed; two throwaway probes ran (gem table, 14 templates) and were delet… |
 | build:engine | done | commit ddec501 (on top of merge b1985b8; earlier step-A commits 29f4004 and 857c738 kept). Step A is finished on spec/truth and committed, not pushed. I merged claude/busy-bardeen-o482lo into spec/truth (merge commit b1985b8). Two files conflicted. In apps/server/src/handlers/pieces.ts I kept both import bloc… |
-| review:cheat | running or interrupted |  |
-| review:gems | running or interrupted |  |
+| review:cheat | done | 5 blocker, 1 major, 1 minor. FAIL. I ran scripted wrong-model turns through the strict fake Claude API on the real server and kernel. The gate does refuse the obvious attempts: a wrong met… |
+| review:gems | done | 6 major, 4 minor. FAIL on the gem and jewellery lens. The gem tables are right. The check holds every template to its own build, at both draft and production detail. But I repro… |
 | review:founder | running or interrupted |  |
 | build:agent | done | commit 849d56d. I finished step B (the assistant side of the spec work) on spec/truth and committed it as 849d56d. Nothing was pushed. The founder's journey now runs end to end on the fake API, with scripted models standing in for Clau… |
-| build:studio | running or interrupted |  |
+| build:studio | done | commit ba743cc. Step C (the studio) is done and committed on spec/truth as ba743cc. Nothing was pushed. Before building, I merged ui/focus (commit b7d5489) and then claude/busy-bardeen-o482lo (commit 1645a3b). Three files conflicted in… |
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 85a8b37 Status: render looks built and under critique; spec engine step done; studio fixes being verified
+Branch `claude/busy-bardeen-o482lo`, head: e63a63f Status: studio and render in their fix rounds; spec studio step under way
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -89,7 +92,7 @@ Branch `claude/busy-bardeen-o482lo`, head: 85a8b37 Status: render looks built an
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 85a8b37 Status: render looks built and under critique; spec engine step done; studio fixes being verified
+Branch `claude/busy-bardeen-o482lo`, head: e63a63f Status: studio and render in their fix rounds; spec studio step under way
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -131,7 +134,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 85a8b37 Status: render looks built and under critique; spec engine step done; studio fixes being verified
+Branch `claude/busy-bardeen-o482lo`, head: e63a63f Status: studio and render in their fix rounds; spec studio step under way
 
 | Agent | State | Outcome |
 |---|---|---|
