@@ -40,7 +40,7 @@ export function ContextChips({ page }: { page: AssistantContext }) {
   const setDrop = useAssistant((s) => s.setDropPageContext)
   const selection = useAssistant((s) => s.selection)
   const setSelection = useAssistant((s) => s.setSelection)
-  const pieceId = (!drop && page.pieceId) || selection?.pieceId || null
+  const pieceId = page.pieceId || selection?.pieceId || null
   const piece = useRpc('pieces.get', { id: pieceId ?? '' }, { enabled: !!pieceId })
   const board = useRpc(
     'boards.get',
@@ -60,10 +60,10 @@ export function ContextChips({ page }: { page: AssistantContext }) {
 
   return (
     <>
-      {!drop && page.pieceId && piece.data && (
-        <Removable icon={<Gem aria-hidden />} label="the piece" onRemove={() => setDrop(true)}>
+      {page.pieceId && piece.data && (
+        <Chip icon={<Gem aria-hidden />} outline>
           {piece.data.title || 'Untitled piece'}
-        </Removable>
+        </Chip>
       )}
       {!drop && page.boardId && board.data && (
         <Removable

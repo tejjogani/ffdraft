@@ -27,6 +27,8 @@ import {
   closedResult,
   describeCall,
   endJob,
+  focusFor,
+  guideFor,
   errorResult,
   evaluationNote,
   invalidInputResult,
@@ -99,7 +101,7 @@ import { cameraNote } from './camera-note'
 import { captureOnServer } from './capture'
 import type { RunHost } from './host'
 import { modelImage } from './images'
-import { designModeForRun, intakeRefusal } from './intake'
+import { designModeForRun, intakeRefusal, designToolsFor } from './intake'
 import { readPhotos } from './read'
 import { lastReadOf, placeTakePlane } from './take-plane'
 import { expireBrowserTake, takeResult, waitFor } from './takes'
@@ -366,7 +368,7 @@ export async function step(host: RunHost): Promise<StepOutcome> {
       return 'finished'
     }
   }
-  return callModel(host, messages, toRun(run))
+  return callModel(host, messages, toRun(run), run.baseSeq !== null)
 }
 
 // ── The model call ───────────────────────────────────────────────────────────────────────────
@@ -405,7 +407,12 @@ async function meterModelCall(
   host.emit({ type: 'usage', tokens: usage.tokens, costUsd: usage.costUsd })
 }
 
-async function callModel(host: RunHost, messages: MessageRow[], run: Run): Promise<StepOutcome> {
+async function callModel(
+  host: RunHost,
+  messages: MessageRow[],
+  run: Run,
+  startedInProject: boolean,
+): Promise<StepOutcome> {
   const { ctx, runId } = host
   const turns = await ctx.repo.steps.count(
     and(
@@ -425,7 +432,28 @@ async function callModel(host: RunHost, messages: MessageRow[], run: Run): Promi
   }
 
   const idx = await nextIndex(ctx, runId)
+  const mode = await designModeForRun(ctx, runId)
+  const guide = guideFor(
+    // The project version at send time stays fixed if this run creates a new piece midway.
+    focusFor({
+      piece: startedInProject,
+      stage: run.stage,
+      job: run.job?.stage,
+      mode: mode?.kind,
+    }),
+    mode?.kind === 'brainstorm',
+  )
+  const allowedTools = mode && designToolsFor(mode.kind, !!run.pieceId)
+  const prompt = {
+    focus: guide.focus,
+    mode: mode?.kind ?? (run.job ? 'job' : 'chat'),
+    skills: guide.skills,
+    hash: guide.hash,
+    ...(allowedTools && { tools: [...allowedTools] }),
+  }
   const params = buildRequest({
+    guide,
+    ...(allowedTools && { allowedTools }),
     model: host.model as AssistantModelId,
     messages: toApiMessages(messages),
     features: host.features,
@@ -448,7 +476,7 @@ async function callModel(host: RunHost, messages: MessageRow[], run: Run): Promi
       index: idx,
       kind: 'model',
       name: host.model,
-      input: { model: host.model, messages: messages.length, features: host.features },
+      input: { model: host.model, messages: messages.length, features: host.features, prompt },
       output: { error: mapped.message },
       isError: true,
       ms: Date.now() - started,
@@ -477,7 +505,7 @@ async function callModel(host: RunHost, messages: MessageRow[], run: Run): Promi
     index: idx,
     kind: 'model',
     name: host.model,
-    input: { model: host.model, messages: messages.length, features: host.features },
+    input: { model: host.model, messages: messages.length, features: host.features, prompt },
     output: {
       servedBy: adapter.servedBy ?? message.model,
       inputTransformations: adapter.inputTransformations,
@@ -857,6 +885,18 @@ async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepO
         await refuse(errorResult(call.id, reason), parsed.command)
         continue
       }
+    }
+    const input = parsed.input as { pieceId?: string; id?: string }
+    const target = input.pieceId ?? (parsed.command.startsWith('pieces.') ? input.id : undefined)
+    if (host.pieceId && target && target !== host.pieceId) {
+      await refuse(
+        errorResult(
+          call.id,
+          'This conversation belongs to a different project. Switch projects before using that piece.',
+        ),
+        parsed.command,
+      )
+      continue
     }
     let admission = admit(parsed.def, ctx.role)
     if (admission.kind === 'refuse') {

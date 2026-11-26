@@ -82,3 +82,20 @@ The first local trial showed two separate problems. Designers needed project-sco
 - For a diamond swap, show the best candidate and alternatives, honor filters, recheck the chosen stone and fit the setting to its measured dimensions. Keep the chosen project and target stone explicit. Jewelry sold by a different supplier can be picked on Diaex and brought back by public stone ID. Separate a local fixture trial from live partner inventory verification.
 
 **Later walkthrough correction.** The founder tried the large single-column cards and asked for two compact tool cards per row with short descriptions. Keep the vertical tool list inside workspaces. Projects should show each piece’s folder or Default folder and make project AI easy to find. From Home, the intended intake is full-screen: preserve the brief, logo and references, clarify unspecified chain, metal and stone choices, present directions, let the person select one, then build CAD and take feedback.
+
+### Project assistant, visual handoff and local trial
+
+The assistant carries the active project ID on each project turn. In the project chat, **AI focus** lets the designer follow the open tool or choose the whole project, Design, CAD or Render. A job uses its own stage. Home commissions and brainstorming limit which tools Claude can call. The shared identity and per-focus instructions live in `packages/agent/src/prompt/routing.ts`. Each model call records its focus, mode, instruction groups and prompt hash in the run trace. The initial focus stays stable for the duration of a run, including a run that creates a project.
+
+`apps/server/src/assistant/turn.ts` sends the saved brief, specification, confirmed intake decisions and permitted references. The selected visual supplies shape and proportions. The engineering spec supplies dimensions and materials. An unresolved conflict goes back to the designer. `apps/server/src/assistant/project-guides.test.ts` checks a Design-to-CAD conversation, verifies the outgoing specification, and tests that a reference or direct piece lookup from another project cannot enter that conversation.
+
+| Area | Integrated work | Manual trial or outstanding check |
+| --- | --- | --- |
+| Project organization | PRs #7, #10, #12, #16 and #23 cover project switching, folders, compact filled tool cards and a readable spec. | Use Back, switch projects within CAD, and return to each project’s tool menu. |
+| References and Home | PRs #13, #18–20 and #24 cover Google/Pinterest links, moodboard imports, full-screen discovery and persistent confirmed measurements and selected artwork. | Open Home, attach a logo, confirm any missing chain and material choices, select a concept and reopen from Projects. |
+| Editable CAD | PR #21 adds closed profiles and extrusion. PR #22 traces supported flat artwork into editable solids, including holes. | Draw a profile or trace a flat reference, verify the millimetre dimensions, then reopen the file. Organic multi-view reconstruction is a separate operation. |
+| Sourcing | PRs #8, #9, #14 and #17 cover inventory candidates, filters, measured stone changes, setting refit, matching inspector carats and Undo. | Local supplier fixtures verify the swap. A live partner inventory search still requires a supported provider and access. |
+| On model | PR #15 covers model selection, approvals and per-project shot preparation. | Completing a photograph requires a configured on-model image provider. |
+| Modeling and rendering research | The freeform CAD plan records the remaining Rhino operations, including associative sweeps and export readback. | Real trackpad input and blinded comparisons against jewelry photographs remain outstanding. |
+
+Use disposable data directories for browser walks that create projects. The user's running Studio is for trying the product. Browser evidence from a scripted assistant verifies handoffs and tool calls. Real Claude design generation, finished on-model photographs and photographic realism require their respective live checks.

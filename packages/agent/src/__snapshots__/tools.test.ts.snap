@@ -2,7 +2,7 @@
 
 exports[`tool schemas > is sorted and stable (snapshot) 1`] = `
 {
-  "hash": "1e89fa8fba88eb",
+  "hash": "0d9af68c5bf31d",
   "tools": [
     "boards_create mutation",
     "boards_delete mutation confirm strict",
