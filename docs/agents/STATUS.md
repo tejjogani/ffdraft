@@ -1,24 +1,28 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 00:36 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 01:36 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## Studio experience: focused editor, project card menu, minimal assistant with a character (lane A, A11)
 
 | Agent | State | Outcome |
 |---|---|---|
-| build:editor | running or interrupted |  |
+| build:editor | done | commit 75b34cb. Step 1 (points A to D) is finished on `ui/focus` in /home/user/ffdraft-ui; nothing is pushed. The studio typecheck, the 344 studio unit tests, the production build and the Playwright walkthrough (1440x900 and 390x844, l… |
+| build:menu | running or interrupted |  |
 
 ## Render realism: every look tested in Blender, black acrylic, the render skill (lane A, A12)
 
 | Agent | State | Outcome |
 |---|---|---|
-| fix:release | running or interrupted |  |
+| fix:release | done | commit 1807a9e. Both release-check majors are fixed and verified in the real thing, and every suite asked for is green; two trial follow-ups the checkpoint's title names (photo-built export, picture sent twice) were never in its diff a… |
+| build:realism | running or interrupted |  |
 
 ## CAD viewport: speed, full rotation, Rhino navigation (lane A, A13)
 
 | Agent | State | Outcome |
 |---|---|---|
-| build:viewport | running or interrupted |  |
+| build:viewport | done | commit 6138cb9 on local branch cad/viewport in /home/user/ffdraft-view (three commits on top of afe5e03: a86d2be, d972286, 6138cb9). Not pushed. Worktree clean.. The CAD view now follows the hand with no damping, turns all the way over the top and under the piece, uses Rhino's mapping by default, and reopens a piece with its model on screen before the geometry engine is ready. A… |
+| review:viewport | done | 4 major, 3 minor. Not ready for the founder yet: the builder's numbers hold, but four reproduced defects sit in the new default mapping, each on a path he will hit (pendants, a … |
+| fix:1 | running or interrupted |  |
 
 ## Studio focus: settings readability, CAD editor, delete (lane A, A8)
 
@@ -40,7 +44,7 @@ _Generated 26 Nov 2026 00:36 UTC by `docs/agents/sync_status.py` from the workfl
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 98267d7 Board and status: jobs restarted after the usage limit, with the founder's newest feedback as items A11 to A14
+Branch `claude/busy-bardeen-o482lo`, head: 30c620f Status: three jobs under way
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -71,7 +75,7 @@ Branch `claude/busy-bardeen-o482lo`, head: 98267d7 Board and status: jobs restar
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 98267d7 Board and status: jobs restarted after the usage limit, with the founder's newest feedback as items A11 to A14
+Branch `claude/busy-bardeen-o482lo`, head: 30c620f Status: three jobs under way
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -113,7 +117,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 98267d7 Board and status: jobs restarted after the usage limit, with the founder's newest feedback as items A11 to A14
+Branch `claude/busy-bardeen-o482lo`, head: 30c620f Status: three jobs under way
 
 | Agent | State | Outcome |
 |---|---|---|
