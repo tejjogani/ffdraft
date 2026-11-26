@@ -1,6 +1,12 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 15:36 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 15:52 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+
+## Diaex sign-in and access gate: review fixes (lane A, A8b)
+
+| Agent | State | Outcome |
+|---|---|---|
+| fix:1 | running or interrupted |  |
 
 ## CAD view fix round, then merging the studio and the CAD view into one branch (lane A, A13b + integration)
 
@@ -15,7 +21,7 @@ _Generated 26 Nov 2026 15:36 UTC by `docs/agents/sync_status.py` from the workfl
 | fix:1 | done | The decision is applied on spec/truth and committed as **95109a3** (local only, not pushed). Every suite listed below passed, the seven replays included, and apps/studio/e2e/spec.ts passed against a fresh scripted serve… |
 | verify:1 | done | 1 blocker, 1 major, 7 minor. The decision is mostly applied on spec/truth (95109a3), with one blocker still open. None of the 42 honest phrasings is refused any more. Every amendment of an… |
 | fix:2 | done | All findings are fixed except m3, which was optional and which I left out on purpose (reason below). Every check is green. Commit 21de56a is on the local branch spec/truth in /home/user/ffdraft-spec, on top of 95109a3. … |
-| verify:2 | running or interrupted |  |
+| verify:2 | done | 1 major, 10 minor. PASS with open majors/minors, no blockers. On spec/truth at 21de56a, I tried every route the task listed and none could change an agreed spec or leave the CAD … |
 
 ## Render realism: third fix round, stone contrast and fire (lane A, A12)
 
@@ -107,7 +113,7 @@ _Generated 26 Nov 2026 15:36 UTC by `docs/agents/sync_status.py` from the workfl
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 6ad5225 Board: studio done; CAD view fix round and the first merge under way
+Branch `claude/busy-bardeen-o482lo`, head: deb661c Status: CAD view fix round started; render verifying; spec second pass of the card gate
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -138,7 +144,7 @@ Branch `claude/busy-bardeen-o482lo`, head: 6ad5225 Board: studio done; CAD view 
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 6ad5225 Board: studio done; CAD view fix round and the first merge under way
+Branch `claude/busy-bardeen-o482lo`, head: deb661c Status: CAD view fix round started; render verifying; spec second pass of the card gate
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -180,7 +186,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 6ad5225 Board: studio done; CAD view fix round and the first merge under way
+Branch `claude/busy-bardeen-o482lo`, head: deb661c Status: CAD view fix round started; render verifying; spec second pass of the card gate
 
 | Agent | State | Outcome |
 |---|---|---|

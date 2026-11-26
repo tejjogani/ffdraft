@@ -1,5 +1,9 @@
 [
   {
+    "name": "Diaex sign-in and access gate: review fixes (lane A, A8b)",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_d22e6f28-5bf/journal.jsonl"
+  },
+  {
     "name": "CAD view fix round, then merging the studio and the CAD view into one branch (lane A, A13b + integration)",
     "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_eb1ae54f-3e8/journal.jsonl"
   },
