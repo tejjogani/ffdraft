@@ -142,6 +142,26 @@ try {
   assert.equal(await page.getByText(brief, { exact: true }).count(), 0)
   await page.goto(design)
   await log.getByText(question, { exact: true }).waitFor()
+
+  // A lost provider setting changes the UI capability, while saved threads remain on the server.
+  await page.route('**/api/rpc/session.get', async (route) => {
+    const response = await route.fetch()
+    const session = await response.json()
+    await route.fulfill({
+      response,
+      json: { ...session, capabilities: { ...session.capabilities, assistant: false } },
+    })
+  })
+  await page.reload()
+  await log.getByText(question, { exact: true }).waitFor()
+  await dock.getByText(question, { exact: true }).waitFor()
+  await dock.getByRole('link', { name: 'Connect Claude to continue' }).waitFor()
+  const priorSends = sent.length
+  await page.getByRole('button', { name: 'Build CAD with Claude', exact: true }).click()
+  await page.getByRole('link', { name: 'Open manual CAD' }).waitFor()
+  await selection.getByText('Aster shape study', { exact: true }).waitFor()
+  assert.equal(sent.length, priorSends)
+
   console.log(
     'PASS Home, Design and CAD share one project thread and the selected image; another project stays separate.',
   )

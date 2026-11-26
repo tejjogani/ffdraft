@@ -183,7 +183,20 @@ function DesignConversation({
           {error && <InlineError message={error} />}
         </div>
       ) : canWrite ? (
-        <DesignNote key={boardId ?? pieceId} target={boardId ? { boardId } : { pieceId }} />
+        <div className="mt-3 space-y-4">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <p className="text-sm text-fg-muted">Connect Claude to chat about this design.</p>
+            <Link to="/settings/ai" className={buttonClass({ size: 'sm', variant: 'primary' })}>
+              Connect Claude
+            </Link>
+          </div>
+          <details className="border-t border-line pt-3">
+            <summary className="w-fit cursor-pointer text-sm font-medium hover:text-fg-muted">
+              Write a board note
+            </summary>
+            <DesignNote key={boardId ?? pieceId} target={boardId ? { boardId } : { pieceId }} />
+          </details>
+        </div>
       ) : (
         <p className="mt-2 text-sm text-fg-muted">Designers can add to this conversation.</p>
       )}
@@ -212,6 +225,7 @@ function DesignNote({ target }: { target: BoardTarget }) {
           .finally(() => setPending(false))
       }}
     >
+      <p className="text-xs text-fg-muted">This note is saved to the design board.</p>
       <Field label="Design note">
         {(id) => (
           <Textarea
@@ -224,14 +238,9 @@ function DesignNote({ target }: { target: BoardTarget }) {
           />
         )}
       </Field>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" variant="primary" disabled={!note.trim() || pending}>
-          {pending ? 'Saving…' : 'Save to design board'}
-        </Button>
-        <Link to="/settings/ai" className={buttonClass({ variant: 'ghost' })}>
-          Connect Claude
-        </Link>
-      </div>
+      <Button type="submit" variant="secondary" disabled={!note.trim() || pending}>
+        {pending ? 'Saving…' : 'Save to design board'}
+      </Button>
       {error && <InlineError message={error} />}
     </form>
   )

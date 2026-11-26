@@ -58,6 +58,10 @@ try {
   const conversation = page.getByRole('region', { name: 'Design conversation' })
   await conversation.waitFor({ timeout: 8000 })
   await conversation.getByRole('link', { name: 'Connect Claude' }).waitFor()
+  await conversation.getByText('Connect Claude to chat about this design.').waitFor()
+  assert.equal(await conversation.getByLabel('Design note').isVisible(), false)
+  await conversation.getByText('Write a board note', { exact: true }).click()
+  await conversation.getByText('This note is saved to the design board.').waitFor()
   await conversation
     .getByLabel('Design note')
     .fill('Leave room for a low gallery on the Aster ring.')

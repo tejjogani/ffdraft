@@ -53,7 +53,12 @@ function buildPrompt(piece: Piece, reference: Reference) {
         ]
       : []),
     ...(confirmed ? [`Confirmed intake details: ${confirmed}.`] : []),
-    'Preserve the confirmed constraints and ask about missing measurements before building.',
+    ...(spec
+      ? [
+          'Read the full saved spec for materials, measurements, and constraints. Use confirmed intake details for decisions the spec leaves open.',
+        ]
+      : []),
+    'Ask about missing measurements before building.',
   ]
   return instructions.join('\n\n')
 }
