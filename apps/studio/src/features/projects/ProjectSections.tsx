@@ -2,7 +2,7 @@
 import { JOB_STAGES, type Piece, type PieceSummary, type ProjectCost } from '@pave/schema'
 import { AiMark, Button, cn } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
-import { ArrowUpRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { CutIcon } from '../../components/CutIcon'
 import { KindGlyph } from '../../components/KindGlyph'
 import { assetUrl } from '../../lib/assets'
@@ -36,8 +36,7 @@ export function ProjectSections({ piece }: { piece: Piece }) {
     <section aria-label="Project">
       <ProjectAssistant piece={piece} />
       <h2 className="text-[28px] font-bold leading-tight tracking-tight">Project tools</h2>
-      <p className="mt-1.5 mb-5 text-[15px] text-fg-muted">Choose a tool for this piece.</p>
-      <nav aria-label="Project tools" className="grid grid-cols-2 gap-3">
+      <nav aria-label="Project tools" className="mt-4 grid grid-cols-2 gap-2.5 sm:gap-3">
         {PROJECT_AREAS.map((area) => {
           const [name, description] = toolCopy[area.title]
 
@@ -47,8 +46,9 @@ export function ProjectSections({ piece }: { piece: Piece }) {
               to={area.to}
               params={{ id: piece.id }}
               aria-label={name}
+              data-tool={area.title}
               data-stage-section={'stage' in area ? area.stage : undefined}
-              className="group flex min-w-0 flex-col items-start gap-2 rounded-lg border border-line-strong bg-bg p-3 hover:border-fg-muted hover:bg-bg-subtle focus-visible:outline-2 sm:min-h-[84px] sm:flex-row sm:items-center sm:gap-3 sm:px-4"
+              className="project-tool-card group relative flex min-w-0 flex-col items-start gap-2 rounded-lg border p-3.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-select sm:min-h-[80px] sm:flex-row sm:items-center sm:gap-3.5 sm:px-4"
             >
               <ToolPreview
                 area={area}
@@ -58,14 +58,17 @@ export function ProjectSections({ piece }: { piece: Piece }) {
                 }
               />
               <span className="min-w-0 flex-1">
-                <span className="block text-[17px] font-semibold leading-5 tracking-tight sm:text-[18px]">
+                <span className="block text-[17px] font-bold leading-5 tracking-tight sm:text-[18px]">
                   {name}
                 </span>
-                <span className="mt-1 block text-[14px] leading-5 text-fg-muted">
+                <span className="mt-1 block text-[14px] leading-[1.35] text-[color-mix(in_srgb,var(--fg)_76%,var(--bg))]">
                   {description}
                 </span>
               </span>
-              <ArrowUpRight className="hidden size-4 shrink-0 text-fg-muted lg:block" aria-hidden />
+              <ChevronRight
+                className="absolute top-4 right-3 size-3.5 shrink-0 text-fg-muted sm:static sm:size-4"
+                aria-hidden
+              />
             </Link>
           )
         })}
@@ -106,7 +109,7 @@ function ProjectAssistant({ piece }: { piece: Piece }) {
   return (
     <section
       aria-label="Project assistant"
-      className="mb-8 rounded-xl border border-line-strong bg-bg-subtle p-5 sm:p-6"
+      className="mb-7 rounded-xl border border-line-strong bg-bg-muted p-4 sm:p-5"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
@@ -162,7 +165,7 @@ function ToolPreview({
     <span
       aria-hidden
       className={cn(
-        'relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md sm:size-12',
+        'relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md ring-1 ring-black/10 sm:size-10',
         tones[area.title],
       )}
     >
