@@ -368,7 +368,7 @@ export async function step(host: RunHost): Promise<StepOutcome> {
       return 'finished'
     }
   }
-  return callModel(host, messages, toRun(run))
+  return callModel(host, messages, toRun(run), run.baseSeq !== null)
 }
 
 // ── The model call ───────────────────────────────────────────────────────────────────────────
@@ -407,7 +407,12 @@ async function meterModelCall(
   host.emit({ type: 'usage', tokens: usage.tokens, costUsd: usage.costUsd })
 }
 
-async function callModel(host: RunHost, messages: MessageRow[], run: Run): Promise<StepOutcome> {
+async function callModel(
+  host: RunHost,
+  messages: MessageRow[],
+  run: Run,
+  startedInProject: boolean,
+): Promise<StepOutcome> {
   const { ctx, runId } = host
   const turns = await ctx.repo.steps.count(
     and(
@@ -431,7 +436,7 @@ async function callModel(host: RunHost, messages: MessageRow[], run: Run): Promi
   const guide = guideFor(
     // The project version at send time stays fixed if this run creates a new piece midway.
     focusFor({
-      piece: run.baseSeq !== null,
+      piece: startedInProject,
       stage: run.stage,
       job: run.job?.stage,
       mode: mode?.kind,
