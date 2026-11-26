@@ -1,3 +1,5 @@
+export { chainFromBrief } from '@pave/schema'
+
 import type { AssistantTier, CommandInput, Reference } from '@pave/schema'
 import { newMessageId } from '../../features/assistant/actions'
 import { classifyBoardFile, MODEL_EXTENSIONS } from '../../features/ideate/board'
@@ -35,12 +37,6 @@ export const intakeFiles = {
 
 export const isConcept = (ref: Reference) =>
   ref.type === 'generated' || ref.tags.includes('Design concept')
-
-export function chainFromBrief(brief: string): string | null {
-  if (/\b(?:no|without(?: a)?)\s+chain\b/i.test(brief)) return 'No chain'
-  const match = brief.match(/\b(cuban|cable|curb|figaro|rope|box|tennis)\s+(?:link\s+)?chain\b/i)
-  return match ? `${match[1]![0]!.toUpperCase()}${match[1]!.slice(1).toLowerCase()} chain` : null
-}
 
 interface SendIntake {
   pieceId: string

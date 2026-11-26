@@ -1,0 +1,1 @@
+ALTER TABLE "piece" ADD COLUMN "intake" jsonb;
