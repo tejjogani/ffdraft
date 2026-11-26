@@ -17,6 +17,18 @@ try {
   const tools = page.getByRole('navigation', { name: 'Project tools', exact: true })
   const entry = tools.getByRole('link', { name: 'Design board & spec' })
   await entry.waitFor()
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme })
+    await page.waitForFunction((theme) => document.documentElement.dataset.theme === theme, scheme)
+    const painted = await tools.getByRole('link').evaluateAll((links) => {
+      const pageColor = getComputedStyle(document.body).backgroundColor
+      return links.every((link) => {
+        const color = getComputedStyle(link).backgroundColor
+        return color !== 'rgba(0, 0, 0, 0)' && color !== pageColor
+      })
+    })
+    assert.ok(painted, `Every tool needs a full card surface in ${scheme} mode`)
+  }
   const dimensions = await tools.getByRole('link').evaluateAll((links) =>
     links.map((link) => {
       const { top, bottom, height } = link.getBoundingClientRect()
