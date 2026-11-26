@@ -208,7 +208,7 @@ async function capturedAsset(
   }
 }
 
-async function referenceFromItem(ctx: Ctx, item: SaveItem): Promise<NewReference> {
+export async function referenceFromItem(ctx: Ctx, item: SaveItem): Promise<NewReference> {
   await ensure(getPiece, ctx, item.pieceId)
   const text = { title: item.title ?? '', note: item.note ?? '', pieceId: item.pieceId ?? null }
   if (item.result) {
@@ -501,6 +501,21 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
     })
     publish(ctx, { type: 'board.updated', boardId: saved[0]!.boardId })
     return saved
+  },
+
+  'references.proposeConcepts': async (ctx, { boardId, concepts }) => {
+    const board = await getBoard(ctx, boardId)
+    if (!board.pieceId || board.pinsFor) throw badRequest('Choose a project Design board')
+    return insertReferences(
+      ctx,
+      board.id,
+      concepts.map((concept) => ({
+        ...concept,
+        type: 'note',
+        rights: 'own',
+        tags: ['Design concept'],
+      })),
+    )
   },
 
   'references.pins': async (ctx, { pieceId }) => {

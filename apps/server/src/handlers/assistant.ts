@@ -117,7 +117,29 @@ export const assistant: HandlerGroup<
 
   // Everything the message points at is checked to be the caller's before the runtime sees it.
   'threads.send': async (ctx, input) => {
-    if (input.threadId) await ownThread(ctx, input.threadId)
+    const thread = input.threadId ? await ownThread(ctx, input.threadId) : null
+    if (thread && input.context.pieceId && thread.pieceId !== input.context.pieceId)
+      throw badRequest('Start a new conversation for a different project')
+    if (input.context.brainstorm) {
+      const { pieceId, boardId } = input.context
+      if (input.job || input.context.intake) throw badRequest('A brainstorm cannot start a job')
+      if (thread && thread.pieceId !== (pieceId ?? null))
+        throw badRequest('This brainstorm belongs to another project')
+      if (boardId) {
+        const board = await getBoard(ctx, boardId)
+        if (!pieceId || board.pieceId !== pieceId || board.pinsFor)
+          throw badRequest('Choose this project’s Design board')
+      }
+    }
+    if (input.context.intake) {
+      const { pieceId, boardId } = input.context
+      if (!pieceId || !boardId || input.job)
+        throw badRequest('A Home commission needs a project Design board')
+      const board = await getBoard(ctx, boardId)
+      if (board.pieceId !== pieceId || board.pinsFor || (thread && thread.pieceId !== pieceId))
+        throw badRequest('This conversation and Design board must belong to the commission')
+      input.context.stage = 'design'
+    }
     await ensure(getPiece, ctx, input.context.pieceId)
     await ensure(getBoard, ctx, input.context.boardId)
     await ensure(getScene, ctx, input.context.sceneId)

@@ -122,6 +122,10 @@ export const TOOL_CHIPS = {
     running: 'Saving references',
     done: (i) => `Saved ${plural(i.items.length, 'reference')} to the board`,
   },
+  'references.proposeConcepts': {
+    running: 'Saving design concepts',
+    done: (i) => `Saved ${plural(i.concepts.length, 'concept')} to Design`,
+  },
   'references.pins': {
     quiet: true,
     running: 'Reading the pinned references',
