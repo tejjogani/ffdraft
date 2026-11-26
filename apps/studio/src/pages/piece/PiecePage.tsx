@@ -334,7 +334,7 @@ function PieceHero({ piece }: { piece: Piece }) {
           placeholder="Untitled"
           aria-label="Piece title"
           maxLength={120}
-          className="min-w-0 flex-1 bg-transparent font-serif text-title text-fg placeholder:text-fg-faint outline-none focus-visible:outline-none sm:text-display"
+          className="min-w-0 flex-1 bg-transparent rounded-sm font-sans text-[24px] font-semibold leading-tight tracking-[-0.035em] text-fg placeholder:text-fg-faint focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-select sm:text-[30px]"
         />
       </div>
       <div className="mt-3 -ml-1.5 flex flex-wrap items-center gap-x-1 gap-y-1 text-sm">
