@@ -145,6 +145,37 @@ class StudioTest(unittest.TestCase):
         self.assertEqual(preview["after"]["caratTotal"], 1.25)
         self.assertEqual(project.version, 0)
 
+    def test_make_wire_names_its_rail_and_preserves_the_edit_guard(self):
+        project = self.project()
+        self.reply({"version": 1, "change": {"seq": 1}})
+        project.make_wire(
+            "rail",
+            wire_id="custom-band",
+            width_mm=2.4,
+            thickness_mm=1.8,
+            section="halfRound",
+            change_id="make-1",
+        )
+        first = self.request("design.apply")
+        self.assertEqual(first["changeId"], "make-1")
+        self.assertEqual(first["baseVersion"], 0)
+        self.assertEqual(
+            first["ops"],
+            [
+                {
+                    "t": "add",
+                    "node": {
+                        "id": "custom-band",
+                        "kind": "pipe",
+                        "curve": "rail",
+                        "section": "halfRound",
+                        "width": 2.4,
+                        "thickness": 1.8,
+                    },
+                }
+            ],
+        )
+
     def test_prong_offset_rejects_invalid_indices_and_measurements(self):
         project = self.project()
         for prong, offset in [(0, 0), (9, 0), (1, -0.51), (8, 0.51), (1, float("nan"))]:

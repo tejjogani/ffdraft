@@ -24,7 +24,7 @@ The band and head can use different metals. To change the whole piece at once, r
 
 Select Head in Features. Under Style, try Basket. Set Gallery rails to 2, choose Claw under Tip, and adjust Prong wire. Fine-tune gives you Prong rotation and Taper. For an open-sided setting, choose Half bezel and adjust Half-bezel arcs and Bezel wall. The head keeps its link to the centre stone.
 
-A generated head exposes setting dimensions. Editing its individual mesh vertices and faces is outside the current editor. For an additional custom solid, use Draw profile, then select the solid and choose Edit profile to change its outline.
+On a prong or basket head, pick Prong 1. Use the locate button to see which tip it is. Enter 0.25 mm in Tip offset to move it outward, then press Enter. A negative value moves it inward. Editing its individual mesh vertices and faces is outside the current editor. For an additional custom solid, use Draw profile, then select the solid and choose Edit profile to change its outline.
 
 ## Change the centre stone
 
@@ -36,10 +36,12 @@ To swap the stone and adjust its mount together, right-click the stone in the 3D
 
 Open Stone sourcing for the same project. Find the centre stone, choose Find diamonds (Change diamond for a fitted stone), select a candidate and preview the change. Fit this stone applies the supplier’s measured dimensions to the CAD setting.
 
-A fitted diamond uses the listing’s measurements. To try a different size, compare another listing. Inventory results depend on your Diaex connection.
+A fitted diamond uses the listing’s measurements and carat weight. For an older fit without a listed weight, the inspector shows an estimate from its dimensions. To try a different size, compare another listing. Inventory results depend on your Diaex connection.
 
 ## Draw and check your work
 
 Draw profile lets you draw a closed outline or rectangle and extrude it into a solid. Draw curve creates an open or closed construction polyline. Choose Front, Top or Right and click points or enter coordinates in millimetres. The curve can snap to an endpoint or midpoint.
 
 Select the result and use Edit profile or Edit points to revise it. Undo reverses an edit. Open Project history to review changes, or return to the project and open Render studio to set up a shot.
+
+To make a metal wire, draw a construction curve, select it and choose Make wire. Set Wire width and Wire thickness in the inspector. Edit points on the original curve to reshape the wire.

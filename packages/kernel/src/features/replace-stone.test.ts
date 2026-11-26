@@ -130,11 +130,12 @@ describe('replace the centre stone (production sample)', () => {
       { sku: 'A', measured: { length: 7.34, width: 7.29, depth: 4.3 }, claws: 4 },
       { sku: 'B', measured: { length: 7.57, width: 7.52, depth: 4.59 }, claws: 6 },
     ]) {
-      const fit = { provider: 'diaex', sku, measured }
+      const fit = { provider: 'diaex', sku, measured, listedCarat: sku === 'A' ? 1.41 : 1.62 }
       design = applyOps(design, replaceStone(design, { nodeId: 'center' }, { fit }).ops).design
       const scene = await kernel.scene(design, { detail: 'production' })
       expect(scene.evaluation.stones).toHaveLength(1)
       expect(scene.evaluation.stones[0]?.dims).toEqual(measured)
+      expect(scene.evaluation.stones[0]?.carat).toBe(fit.listedCarat)
       const head = scene.nodes.get('head')!
       expect(head.status).toBe('ok')
       expect((head.data as HeadData).claws).toHaveLength(claws)

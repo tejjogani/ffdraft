@@ -75,6 +75,11 @@ export const StoneSourcing = z.object({
       depth: z.number().min(0.1).max(40),
     })
     .optional(),
+  listedCarat: z.number().positive().optional().meta({
+    title: 'Supplier-listed weight',
+    unit: 'ct',
+    description: 'Weight reported by the supplier for this fitted stone.',
+  }),
   certificate: z.string().optional(),
 })
 export type StoneSourcing = z.infer<typeof StoneSourcing>
@@ -519,12 +524,20 @@ export const Pipe = z
     ...base,
     kind: z.literal('pipe'),
     ...metal,
+    curve: ref('Construction curve', ['curve'], {
+      description:
+        'The wire follows this construction curve’s vertices and closure. Use the curve ID or inline path points. Example node {"id":"wire","kind":"pipe","curve":"curve-id","width":1.5,"thickness":1.5}.',
+    }).optional(),
     points: z
       .array(z.tuple([z.number(), z.number(), z.number()]))
       .min(2)
       .max(400)
-      .meta({ title: 'Path points', description: 'A smooth curve is fitted through these.' }),
-    closed: toggle('Closed', false),
+      .optional()
+      .meta({ title: 'Path points', description: 'Inline XYZ points in mm for a smooth sweep.' }),
+    closed: toggle('Closed', false, {
+      description:
+        'Close an inline path. Linked wires inherit closure from the construction curve.',
+    }),
     section: choice('Section', ['round', 'square', 'halfRound'], 'round', {
       labels: { halfRound: 'Half round' },
     }),
@@ -535,9 +548,17 @@ export const Pipe = z
       description: 'Fraction by which the wire thins at its ends.',
     }),
   })
+  .superRefine(({ curve, points }, ctx) => {
+    if ((curve === undefined) === (points === undefined))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['curve'],
+        message: 'Give the wire either a construction curve or inline path points.',
+      })
+  })
   .meta({
     title: 'Wire',
-    description: 'A wire swept along a curve: vines, bypass bands, hoops, bangles.',
+    description: 'A smooth wire swept along a construction curve or path points.',
   })
 
 export const Primitive = z
@@ -776,6 +797,8 @@ export function nodeRefs(n: Node): string[] {
       return n.host ? [n.host] : []
     case 'chain':
       return n.through ? [n.through] : []
+    case 'pipe':
+      return n.curve === undefined ? [] : [n.curve]
     case 'pattern':
       return n.sources
     case 'group':

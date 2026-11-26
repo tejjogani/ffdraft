@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import type { Node, NodeOf } from './nodes'
 import { PROFILE_PLANES, type ProfilePlane } from './profile'
 
 export const CURVE_POINT_LIMIT = 128
@@ -56,4 +57,19 @@ export function pointOnCurvePlane(
   if (plane === 'front') return [x, z]
   if (plane === 'right') return [y, z]
   return [x, y]
+}
+
+/** The resolved centreline for either wire source, in the pipe's pre-transform millimetres. */
+export function pipePath(
+  pipe: NodeOf<'pipe'>,
+  source?: Node,
+): { points: [number, number, number][]; closed: boolean; plane?: CurvePlane } | null {
+  if (pipe.curve === undefined)
+    return pipe.points ? { points: pipe.points, closed: pipe.closed } : null
+  if (source?.kind !== 'curve' || source.id !== pipe.curve) return null
+  return {
+    points: source.points.map(({ u, v }) => pointFromCurvePlane(source.plane, [u, v])),
+    closed: source.closed,
+    plane: source.plane,
+  }
 }

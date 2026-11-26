@@ -363,12 +363,17 @@ describe('stopping a run', () => {
     const started = new Promise<void>((r) => (evaluating = r))
     registry.register('geometry', {
       capabilities: {},
-      // The evaluation that follows the commit only ends when the run is stopped.
-      evaluate: (_d: unknown, opts: { signal?: AbortSignal }) =>
-        new Promise((_, reject) => {
+      // The same commit also schedules a background facts refresh. Synchronize with the
+      // evaluation attached to this run so Stop arrives after its abort listener is ready.
+      evaluate: async (_d: unknown, opts: { signal?: AbortSignal }) => {
+        const signal = opts.signal
+        if (!signal) throw new Error('Background facts unavailable in this fixture')
+        signal.throwIfAborted()
+        return new Promise((_, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true })
           evaluating()
-          opts.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true })
-        }),
+        })
+      },
     } as never)
     try {
       model.push({

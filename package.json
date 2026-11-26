@@ -23,7 +23,8 @@
     "check:install": "node scripts/install.mjs --check",
     "setup:render": "node workers/render/setup.mjs",
     "match:bench": "pnpm --filter @pave/match bench",
-    "agent:smoke": "tsx apps/server/src/smoke-cli.ts"
+    "agent:smoke": "tsx apps/server/src/smoke-cli.ts",
+    "cad:examples": "tsx apps/server/src/cad-examples-cli.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.8",

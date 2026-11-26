@@ -28,6 +28,7 @@ import { nodeTitle } from './describe'
 import { type Design, diffPatch, evaluationOrder, mergePatch, type Op } from './design'
 import {
   clawReach,
+  fittedCarat,
   MOUNT,
   measuredUsable,
   migrateDesign,
@@ -647,7 +648,7 @@ function gemPatch(
   const cut = change.cut ?? node.cut
   const stone = change.stone ?? node.stone
   const before = stoneDims(resolved)
-  const caratBefore = gemCarat(node.cut, before, node.stone)
+  const caratBefore = fittedCarat(node.cut, before, node.stone, node.sourcing)
   const cutRange = GEM_CUTS[cut].lw
 
   if (change.fit?.measured) {
@@ -789,7 +790,9 @@ function labelFor(first: StoneNode, count: number, change: Change, after: Design
   if (n.kind === 'gem') {
     const dims = stoneDims(n)
     if (change.cut || change.widthMm !== undefined || change.carat !== undefined)
-      parts.push(`${ct(gemCarat(n.cut, dims, n.stone))} ${GEM_CUTS[n.cut].label.toLowerCase()}`)
+      parts.push(
+        `${ct(fittedCarat(n.cut, dims, n.stone, n.sourcing))} ${GEM_CUTS[n.cut].label.toLowerCase()}`,
+      )
   } else if (change.cut || change.widthMm !== undefined || change.carat !== undefined)
     parts.push(`${fmt(fieldSize(n).value)} mm ${GEM_CUTS[n.cut].label.toLowerCase()}`)
   if (change.stone) parts.push(materialLabel(change.stone))

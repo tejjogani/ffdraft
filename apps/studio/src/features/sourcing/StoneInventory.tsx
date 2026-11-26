@@ -45,6 +45,7 @@ function changeFor(stone: SourcedDiamond): StoneChange | null {
       sku: stone.sku,
       url: stone.url,
       measured: stone.measured,
+      listedCarat: stone.carat,
       ...(stone.certificate ? { certificate: stone.certificate } : {}),
     },
     stone:

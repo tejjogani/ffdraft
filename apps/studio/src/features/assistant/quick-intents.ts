@@ -10,8 +10,8 @@ import {
   type Capabilities,
   type Design,
   describeNode,
+  fittedCarat,
   GEM_CUTS,
-  gemCarat,
   IntentError,
   type IntentResult,
   labelForOps,
@@ -148,7 +148,7 @@ function stoneStep(
   try {
     if (node.kind === 'gem') {
       const resolved = resolveDesign(design).nodes[node.id] as Gem
-      const carat = gemCarat(node.cut, stoneDims(resolved), node.stone)
+      const carat = fittedCarat(node.cut, stoneDims(resolved), node.stone, node.sourcing)
       const next = nextStep(CARAT_STEPS, carat, dir)
       if (next === null) return { disabled: edge }
       result = replaceStone(design, { nodeId: node.id }, { carat: next })

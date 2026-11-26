@@ -81,3 +81,38 @@ class LiveCadTest(unittest.TestCase):
         project.undo(result["change"]["seq"])
         self.assertEqual(project.features["center"]["width"], old_width)
         self.assertEqual(project.features["head"]["prongTipOffsetsMm"], {"1": 0.25})
+
+        points = [{"id": "a", "u": 0, "v": 0}, {"id": "b", "u": 10, "v": 0}]
+        project.apply(
+            [
+                {
+                    "t": "add",
+                    "node": {
+                        "id": "rail",
+                        "kind": "curve",
+                        "plane": "top",
+                        "points": points,
+                    },
+                }
+            ],
+            "Draw a 10 mm rail",
+        )
+        wire = project.make_wire(
+            "rail", wire_id="custom-wire", width_mm=1, thickness_mm=1
+        )
+        initial_mass = project.evaluate()["metalMassG"]
+        points[1]["u"] = 20
+        stretch = project.apply(
+            [{"t": "update", "id": "rail", "patch": {"points": points}}],
+            "Extend the rail to 20 mm",
+        )
+        self.assertGreater(project.evaluate()["metalMassG"], initial_mass)
+        reopened = studio.project(piece_id)
+        self.assertEqual(reopened.features["custom-wire"]["curve"], "rail")
+        reopened.undo(stretch["change"]["seq"])
+        self.assertAlmostEqual(
+            reopened.evaluate()["metalMassG"], initial_mass, places=5
+        )
+        reopened.undo(wire["change"]["seq"])
+        self.assertNotIn("custom-wire", reopened.features)
+        self.assertIn("rail", reopened.features)
