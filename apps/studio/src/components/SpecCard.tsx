@@ -29,9 +29,12 @@ import {
 import { useNavigate } from '@tanstack/react-router'
 import { Check, CircleHelp, Hammer, Pencil } from 'lucide-react'
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { useUpdatePiece } from '../lib/pieces'
 import { queryClient, rpcKey, useRpcMutation } from '../lib/query'
+import { activeOrg, useSession } from '../lib/session'
 import { useCurrentView } from '../lib/use-current-view'
 import { assistant } from '../stores/assistant'
+import { StartSpecification } from './StartSpecification'
 import { cadMovedOn } from './spec-drift'
 
 const ROLE_LABEL: Record<StoneSpec['role'], string> = {
@@ -102,10 +105,13 @@ export function SpecCard({
   piece,
   variant = 'full',
   footer,
+  onPlan,
 }: {
   piece: Piece
   variant?: 'full' | 'inline'
   footer?: ReactNode
+  /** The Design workspace keeps planning in its own conversation. */
+  onPlan?: () => void
 }) {
   const inline = variant === 'inline'
   const [editing, setEditing] = useState(false)
@@ -123,6 +129,25 @@ export function SpecCard({
   // After a fit to a photo or an edit, the plan no longer describes the CAD; say so.
   const moved = useMemo(() => cadMovedOn(piece.spec, piece.design), [piece.spec, piece.design])
 
+  if (!draft && onPlan)
+    return (
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
+          <h2 className="text-base font-semibold tracking-tight">Design specification</h2>
+          <Button size="sm" variant="ghost" onClick={onPlan}>
+            Discuss the specification
+          </Button>
+        </div>
+        <ClientBrief piece={piece} />
+        <div className="border-t border-line px-4 py-3">
+          <h3 className="text-sm font-medium">Open decisions</h3>
+          <p className="mt-1 text-sm text-fg-muted">
+            Confirm the metal, dimensions and any stones before building CAD.
+          </p>
+        </div>
+        <StartSpecification piece={piece} />
+      </Card>
+    )
   if (!draft)
     return (
       <Card>
@@ -158,20 +183,19 @@ export function SpecCard({
   if (!inline && !editing)
     return (
       <Card>
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line bg-bg-subtle p-5 sm:p-7">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3">
           <div className="min-w-0 flex-1">
-            <h2 className="text-[26px] font-bold leading-tight tracking-tight">
-              Design specification
-            </h2>
-            <p className="mt-2 text-[16px] leading-6">
+            <h2 className="text-base font-semibold tracking-tight">Design specification</h2>
+            <p className="mt-1 text-sm leading-6 text-fg-muted">
               {draft.summary || draft.title || ARCHETYPE_LABEL[draft.archetype]}
             </p>
           </div>
-          <Button icon={Pencil} onClick={() => setEditing(true)}>
+          <Button size="sm" variant="ghost" icon={Pencil} onClick={() => setEditing(true)}>
             Edit specification
           </Button>
         </div>
-        <dl className="grid gap-5 p-5 sm:grid-cols-2 sm:p-7">
+        {onPlan && <ClientBrief piece={piece} />}
+        <dl className="grid gap-x-5 gap-y-3 border-t border-line px-4 py-3 @md/spec:grid-cols-2">
           <SpecFact
             label="Metal"
             value={METALS[draft.metal.alloy].label}
@@ -187,13 +211,12 @@ export function SpecCard({
               label="Ring size"
               value={
                 draft.ring.size.system === 'mm'
-                  ? draft.ring.size.value + ' mm diameter'
-                  : draft.ring.size.system.toUpperCase() + ' ' + draft.ring.size.value
+                  ? `${draft.ring.size.value} mm diameter`
+                  : `${draft.ring.size.system.toUpperCase()} ${draft.ring.size.value}`
               }
               detail={[
-                draft.ring.bandWidthMm && 'Band width ' + draft.ring.bandWidthMm + ' mm',
-                draft.ring.bandThicknessMm &&
-                  'Band thickness ' + draft.ring.bandThicknessMm + ' mm',
+                draft.ring.bandWidthMm && `Band width ${draft.ring.bandWidthMm} mm`,
+                draft.ring.bandThicknessMm && `Band thickness ${draft.ring.bandThicknessMm} mm`,
               ]
                 .filter(Boolean)
                 .join(' · ')}
@@ -206,16 +229,17 @@ export function SpecCard({
                 ROLE_LABEL[stone.role] + (stone.count && stone.count > 1 ? ' stones' : ' stone')
               }
               value={[
-                stone.count && stone.count > 1 ? stone.count + ' ×' : '',
-                stone.carat ? stone.carat + ' ct' : stone.widthMm ? stone.widthMm + ' mm' : '',
+                stone.count && stone.count > 1 ? `${stone.count} ×` : '',
+                stone.carat ? `${stone.carat} ct` : stone.widthMm ? `${stone.widthMm} mm` : '',
                 GEM_CUTS[stone.cut].label.toLowerCase(),
                 GEM_MATERIALS[stone.stone].label.toLowerCase(),
               ]
                 .filter(Boolean)
                 .join(' ')}
               detail={[
+                stone.count === 1 && '1 stone',
                 stone.setting && SETTING_LABEL[stone.setting],
-                stone.prongs && stone.prongs + ' prongs',
+                stone.prongs && `${stone.prongs} prongs`,
                 stone.quality?.color,
                 stone.quality?.clarity,
               ]
@@ -226,27 +250,38 @@ export function SpecCard({
           {draft.body && (
             <SpecFact
               label="Body"
-              value={draft.body.heightMm + ' mm high'}
-              detail={draft.body.shape || draft.body.text}
+              value={`${draft.body.heightMm} mm high`}
+              detail={[
+                draft.body.thicknessMm && `${draft.body.thicknessMm} mm thick`,
+                draft.body.shape || draft.body.text,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
             />
           )}
           {draft.chain && (
             <SpecFact
               label="Chain"
               value={draft.chain.style}
-              detail={draft.chain.lengthMm + ' mm long · ' + draft.chain.widthMm + ' mm wide'}
+              detail={`${draft.chain.lengthMm} mm long · ${draft.chain.widthMm} mm wide`}
             />
           )}
           {draft.engraving && <SpecFact label="Engraving" value={draft.engraving} />}
           {draft.budgetUsd && (
-            <SpecFact label="Budget" value={'$' + draft.budgetUsd.toLocaleString()} />
+            <SpecFact label="Budget" value={`$${draft.budgetUsd.toLocaleString()}`} />
           )}
           {draft.targetWeightG && (
-            <SpecFact label="Target weight" value={draft.targetWeightG + ' g'} />
+            <SpecFact label="Target weight" value={`${draft.targetWeightG} g`} />
           )}
         </dl>
-        {(moved || draft.openQuestions.length > 0 || draft.notes) && (
-          <div className="space-y-2 border-t border-line px-5 py-4 text-base sm:px-7">
+        {(onPlan || moved || draft.openQuestions.length > 0 || draft.notes) && (
+          <div className="space-y-2 border-t border-line px-4 py-3 text-sm text-fg-muted">
+            {onPlan && (
+              <p>
+                Use these materials and measurements in CAD. Select a board image to guide the
+                shape.
+              </p>
+            )}
             {moved && (
               <p data-spec-drift>
                 The CAD has changed since this specification was used. Check the current
@@ -255,7 +290,7 @@ export function SpecCard({
             )}
             {draft.openQuestions.length > 0 && (
               <>
-                <h3 className="font-semibold">Open questions</h3>
+                <h3 className="font-medium text-fg">Open decisions</h3>
                 <ul className="list-disc pl-5">
                   {draft.openQuestions.map((q) => (
                     <li key={q}>{q}</li>
@@ -263,7 +298,8 @@ export function SpecCard({
                 </ul>
               </>
             )}
-            {draft.notes && <p>{draft.notes}</p>}
+            {onPlan && draft.openQuestions.length === 0 && <p>No open decisions recorded.</p>}
+            {draft.notes && <p className="whitespace-pre-wrap">{draft.notes}</p>}
           </div>
         )}
         <BuildFooter piece={piece} openQuestions={draft.openQuestions.length} />
@@ -588,9 +624,65 @@ export function SpecCard({
 function SpecFact({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[14px] font-medium text-fg-muted">{label}</dt>
-      <dd className="mt-1 text-[19px] font-semibold leading-6">{value}</dd>
-      {detail && <dd className="mt-1 text-[14px] text-fg-muted">{detail}</dd>}
+      <dt className="text-xs font-medium text-fg-muted">{label}</dt>
+      <dd className="mt-1 break-words text-sm font-semibold leading-5">{value}</dd>
+      {detail && <dd className="mt-1 text-xs leading-5 text-fg-muted">{detail}</dd>}
+    </div>
+  )
+}
+
+function ClientBrief({ piece }: { piece: Piece }) {
+  const update = useUpdatePiece()
+  const role = activeOrg(useSession())?.role
+  const canEdit = role !== undefined && role !== 'viewer' && role !== 'guest'
+  const [editing, setEditing] = useState(false)
+  const [brief, setBrief] = useState('')
+  return (
+    <div className="px-4 py-3">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-medium">Client brief</h3>
+        {canEdit && !editing && (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setBrief(piece.brief)
+              setEditing(true)
+            }}
+          >
+            Edit brief
+          </Button>
+        )}
+      </div>
+      {editing ? (
+        <form
+          className="mt-2 space-y-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            update.mutate({ id: piece.id, brief }, { onSuccess: () => setEditing(false) })
+          }}
+        >
+          <Textarea
+            aria-label="Client brief"
+            minRows={3}
+            value={brief}
+            onChange={(event) => setBrief(event.target.value)}
+            maxLength={20_000}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" size="sm" variant="primary" disabled={update.isPending}>
+              Save brief
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <p className="mt-1 break-words text-sm leading-6 whitespace-pre-wrap text-fg-muted">
+          {piece.brief || 'Add the client’s priorities and constraints.'}
+        </p>
+      )}
     </div>
   )
 }
@@ -609,13 +701,13 @@ function BuildFooter({ piece, openQuestions }: { piece: Piece; openQuestions: nu
   })
   const hasDesign = piece.design.order.length > 0
   return (
-    <div className="flex flex-wrap items-center justify-end gap-3 border-t border-line px-5 py-4 sm:px-7">
+    <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line px-4 py-3">
       {openQuestions > 0 && (
         <p className="mr-auto text-sm text-fg-muted">Review the open questions before building.</p>
       )}
       {hasDesign && (
         <Button variant="ghost" onClick={() => setConfirm(true)}>
-          Rebuild from spec…
+          Rebuild from specification only…
         </Button>
       )}
       <Button
@@ -628,7 +720,11 @@ function BuildFooter({ piece, openQuestions }: { piece: Piece; openQuestions: nu
             : build.mutate({ id: piece.id })
         }
       >
-        {build.isPending ? 'Building…' : hasDesign ? 'Open current CAD' : 'Build CAD from spec'}
+        {build.isPending
+          ? 'Building…'
+          : hasDesign
+            ? 'Open current CAD'
+            : 'Build from specification only'}
       </Button>
       <Dialog
         open={confirm}
@@ -656,7 +752,7 @@ function Card({ children }: { children: ReactNode }) {
   return (
     <section
       aria-label="Spec"
-      className="overflow-hidden rounded-xl border border-line-strong bg-bg shadow-sm"
+      className="@container/spec min-w-0 overflow-hidden rounded-lg border border-line bg-bg-subtle"
     >
       {children}
     </section>

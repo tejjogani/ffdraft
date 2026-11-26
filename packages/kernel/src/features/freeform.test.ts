@@ -68,6 +68,56 @@ describe('vectorBody', () => {
   ] as const
   const bevels = ['flat', 'chamfer', 'round', 'pillow'] as const
 
+  it('extrudes a measured polygon at its original coordinates on all three planes', async () => {
+    const points = [
+      [2, 4],
+      [14, 4],
+      [14, 9],
+      [7, 9],
+      [7, 12],
+      [2, 12],
+    ] as [number, number][]
+    const cases = [
+      { plane: 'front', min: [2, -2.5, 4], max: [14, 0, 12] },
+      { plane: 'top', min: [2, 4, 0], max: [14, 12, 2.5] },
+      { plane: 'right', min: [0, 2, 4], max: [2.5, 14, 12] },
+    ] as const
+    for (const { plane, min, max } of cases) {
+      const node: VectorInput = {
+        id: 'v',
+        kind: 'vectorBody',
+        source: { type: 'profile', plane, points },
+        thickness: 2.5,
+      }
+      expect(await expectSolid(node)).toBeCloseTo(187.5, 3)
+      const scene = await kernel.scene(pendant(node))
+      const bounds = scene.nodes.get('v')!.bodies[0]!.solid.bounds()
+      for (let axis = 0; axis < 3; axis++) {
+        expect(bounds.min[axis], plane).toBeCloseTo(min[axis]!, 4)
+        expect(bounds.max[axis], plane).toBeCloseTo(max[axis]!, 4)
+      }
+    }
+  })
+
+  it('refuses to save an outline that crosses itself', () => {
+    expect(() =>
+      pendant({
+        id: 'v',
+        kind: 'vectorBody',
+        source: {
+          type: 'profile',
+          plane: 'front',
+          points: [
+            [0, 0],
+            [8, 6],
+            [0, 6],
+            [8, 0],
+          ],
+        },
+      }),
+    ).toThrow(/cross/)
+  })
+
   it('builds every named shape with every edge treatment', async () => {
     for (const [i, shape] of shapes.entries())
       await expectSolid({

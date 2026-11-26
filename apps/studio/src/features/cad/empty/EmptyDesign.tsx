@@ -1,5 +1,5 @@
 /**
- * An empty design: four ways in, none of which needs a key. Start from a template; describe it
+ * An empty design: draw a profile or start with a template, brief or file. Start from a template; describe it
  * to the assistant (or answer three questions when there is none); bring in a mesh, an SVG, a
  * name or a built-in model; or raise a relief from an image.
  */
@@ -22,6 +22,7 @@ import {
   LayoutTemplate,
   type LucideIcon,
   MessageSquareText,
+  PencilRuler,
 } from 'lucide-react'
 import { type ReactNode, useRef, useState } from 'react'
 import { KindGlyph } from '../../../components/KindGlyph'
@@ -46,6 +47,7 @@ export interface EmptyDesignProps {
   onBuild(spec: PieceSpecInput): Promise<void>
   /** Adds an imported node; `kind` is the piece type it implies. */
   onImport(node: NodeInput, kind: Design['kind']): void
+  onDrawProfile?(): void
 }
 
 type Step = 'doors' | 'templates' | 'quick'
@@ -56,6 +58,7 @@ export function EmptyDesign({
   assistantAvailable,
   onBuild,
   onImport,
+  onDrawProfile,
 }: EmptyDesignProps) {
   const [step, setStep] = useState<Step>('doors')
   const [busy, setBusy] = useState<string | null>(null)
@@ -71,7 +74,7 @@ export function EmptyDesign({
   }
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-y-auto p-6">
+    <div className="pointer-events-none absolute inset-0 z-10 flex items-start justify-center overflow-y-auto px-4 pt-20 pb-6 sm:items-[safe_center] sm:p-6">
       <div className="pointer-events-auto w-full max-w-[680px]">
         {step === 'doors' && (
           <>
@@ -82,6 +85,17 @@ export function EmptyDesign({
               </p>
             </div>
             <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              {onDrawProfile && (
+                <Door
+                  icon={PencilRuler}
+                  title="Draw a profile"
+                  description="Draw a measured outline and give it depth to make a solid."
+                >
+                  <Button size="sm" variant="primary" onClick={onDrawProfile}>
+                    Draw profile
+                  </Button>
+                </Door>
+              )}
               <Door
                 icon={LayoutTemplate}
                 title="From a template"

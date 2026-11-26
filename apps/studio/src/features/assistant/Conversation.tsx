@@ -7,7 +7,7 @@
  * word.
  */
 import { type Op, planLimitAllowanceOf, type Run, type StoredChange } from '@pave/schema'
-import { Skeleton, toast } from '@pave/ui'
+import { cn, Skeleton, toast } from '@pave/ui'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { ArrowRight } from 'lucide-react'
 import { Fragment, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
@@ -89,6 +89,7 @@ export function usePublishActivity(
 
 interface InlineConversation {
   after?: ReactNode
+  transcriptClassName?: string
   pending: boolean
   send: (text: string, tier?: import('@pave/schema').AssistantTier) => void
   rephrase: (text: string) => void
@@ -347,7 +348,7 @@ export function Conversation({
         }}
         className={
           inline
-            ? 'min-h-0 flex-1 overflow-y-auto py-4'
+            ? cn('min-h-0 flex-1 overflow-y-auto py-4', inline.transcriptClassName)
             : 'min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4'
         }
       >

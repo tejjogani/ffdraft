@@ -6,7 +6,7 @@
  * A raised border turns the face into a polished rim around a recessed field; the field is
  * published as `data.paveField` so a pavé node on this body ices the field and leaves the rim.
  */
-import type { NodeOf } from '@pave/schema'
+import type { NodeOf, ProfilePlane } from '@pave/schema'
 import type { CrossSection, Manifold } from 'manifold-3d'
 import { type BuildContext, defineFeature, metalOf, runtime, solidFromManifold } from '../core'
 import { OutlineDistance } from '../mesh/outline/distance'
@@ -72,7 +72,7 @@ type Letter = { char: string; min: [number, number]; max: [number, number] }
  * each letter lies, so a loose piece can be named by its letter.
  */
 async function sourceSection(
-  source: VectorBodyNode['source'],
+  source: Exclude<VectorBodyNode['source'], { type: 'profile' }>,
   height: number,
   ctx: BuildContext,
 ): Promise<{ section: CrossSection; letters: Letter[] }> {
@@ -219,8 +219,21 @@ function innerReach(outline: CrossSection, distance: OutlineDistance): number {
   return best
 }
 
+const PROFILE_ROTATION: Record<ProfilePlane, [number, number, number]> = {
+  front: [90, 0, 0],
+  top: [0, 0, 0],
+  right: [90, 0, 90],
+}
+
 export const vectorBody = defineFeature('vectorBody', async (node, ctx) => {
   const own = <T extends CrossSection | Manifold>(x: T): T => ctx.track(x)
+  if (node.source.type === 'profile') {
+    const { manifold: mf } = runtime()
+    const outline = own(new mf.CrossSection([node.source.points], 'NonZero'))
+    const slab = own(outline.extrude(node.thickness))
+    const body = slab.rotate(PROFILE_ROTATION[node.source.plane])
+    return { bodies: [{ solid: solidFromManifold(body), ...metalOf(node) }] }
+  }
   const source = await sourceSection(node.source, node.height, ctx)
   let outline = own(source.section)
   if (outline.isEmpty()) throw new Error('The outline encloses no area')

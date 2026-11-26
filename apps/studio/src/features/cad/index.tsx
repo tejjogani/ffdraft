@@ -10,6 +10,7 @@ import type { Vec3 } from '@pave/render'
 import {
   applyOps,
   type Design,
+  type DrawnProfile,
   isBodyKind,
   labelForOps,
   type NodeInput,
@@ -71,11 +72,13 @@ import { toIssues } from './hud/issues'
 import { useProductionCheck } from './hud/useProductionCheck'
 import { useNodeEdit } from './inspector/edit'
 import { Inspector } from './inspector/Inspector'
-import { addNode, addPrepared, dependentsOf, remove } from './ops'
+import { addNode, addPrepared, dependentsOf, remove, setField } from './ops'
 import { AddMenu } from './outliner/AddMenu'
 import { Outliner } from './outliner/Outliner'
 import { type NextStep, nextSteps } from './outliner/suggestions'
 import { PiecePanel } from './PiecePanel'
+import { ProfileEditor } from './profiles/ProfileEditor'
+import { isProfileNode, type ProfileNode, profileNode } from './profiles/profile'
 import { useQuickIntentCommands } from './quick-commands'
 import { useWorkspace } from './state/workspace'
 import { Dimensions } from './viewport/Dimensions'
@@ -241,6 +244,7 @@ function Workspace({ piece }: { piece: Piece }) {
   const menu = useRef<ContextMenuHandle>(null)
   const [menuSubject, setMenuSubject] = useState<Subject>({ type: 'piece', pieceId })
   const [addOpen, setAddOpen] = useState(false)
+  const [profile, setProfile] = useState<{ original?: ProfileNode } | null>(null)
   const [confirm, setConfirm] = useState<{ ids: string[]; dependents: string[] } | null>(null)
   const root = useRef<HTMLDivElement>(null)
   const width = useWidth(root)
@@ -340,6 +344,36 @@ function Workspace({ piece }: { piece: Piece }) {
     ws().select([node.id])
   }
 
+  const drawProfile = () => setProfile({})
+  const saveProfile = (source: DrawnProfile, thickness: number) => {
+    if (!session || readOnly) throw new Error('This design is read-only.')
+    const original = profile?.original
+    if (!original) {
+      const node = profileNode(source, thickness)
+      session.commit(addPrepared(view, node), { label: 'Extruded a drawn profile' })
+      ws().select([node.id])
+      return
+    }
+    const current = session.get().view.nodes[original.id]
+    if (
+      !isProfileNode(current) ||
+      current.thickness !== original.thickness ||
+      JSON.stringify(current.source) !== JSON.stringify(original.source)
+    )
+      throw new Error(
+        'This profile changed while it was open. Reopen it to edit the latest version.',
+      )
+    if (
+      current.thickness === thickness &&
+      JSON.stringify(current.source) === JSON.stringify(source)
+    )
+      return
+    session.commit(
+      [setField(original.id, ['source'], source), setField(original.id, ['thickness'], thickness)],
+      { label: 'Edited a drawn profile' },
+    )
+  }
+
   const buildFromSpec = async (spec: PieceSpecInput) => {
     await rpc.call('pieces.setSpec', { id: pieceId, spec })
     await rpc.call('pieces.buildFromSpec', { id: pieceId })
@@ -411,6 +445,7 @@ function Workspace({ piece }: { piece: Piece }) {
     steps,
     hasRun: !!run,
     openAddMenu: () => setAddOpen(true),
+    drawProfile,
     renderThisView: () => {
       const camera = viewer.current?.shotCamera()
       if (!camera) return
@@ -520,6 +555,7 @@ function Workspace({ piece }: { piece: Piece }) {
       prior={run?.prior ?? null}
       readOnly={readOnly}
       onDelete={requestDelete}
+      onEditProfile={(original) => setProfile({ original })}
       empty={
         <PiecePanel
           piece={piece}
@@ -609,7 +645,12 @@ function Workspace({ piece }: { piece: Piece }) {
                   className="glass size-9 shrink-0 rounded-lg shadow-sm"
                 />
               )}
-              <ViewToolbar canUndo={undoable} canRedo={redoable} compact={compact} />
+              <ViewToolbar
+                canUndo={undoable}
+                canRedo={redoable}
+                compact={compact}
+                {...(!empty && !readOnly ? { onDrawProfile: drawProfile } : {})}
+              />
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-2">
               <FileToolbar
@@ -670,6 +711,7 @@ function Workspace({ piece }: { piece: Piece }) {
               assistantAvailable={auth.capabilities.assistant}
               onBuild={buildFromSpec}
               onImport={importNode}
+              {...(!readOnly ? { onDrawProfile: drawProfile } : {})}
             />
           ) : (
             <StageStatus
@@ -750,6 +792,18 @@ function Workspace({ piece }: { piece: Piece }) {
             {inspector}
           </div>
         </Sheet>
+      )}
+      {profile && !readOnly && (
+        <ProfileEditor
+          {...(profile.original
+            ? {
+                original: profile.original.source,
+                initialDepth: profile.original.thickness,
+              }
+            : {})}
+          onClose={() => setProfile(null)}
+          onSave={saveProfile}
+        />
       )}
       <Dialog
         open={!!confirm}
