@@ -75,6 +75,11 @@ export const StoneSourcing = z.object({
       depth: z.number().min(0.1).max(40),
     })
     .optional(),
+  listedCarat: z.number().positive().optional().meta({
+    title: 'Supplier-listed weight',
+    unit: 'ct',
+    description: 'Weight reported by the supplier for this fitted stone.',
+  }),
   certificate: z.string().optional(),
 })
 export type StoneSourcing = z.infer<typeof StoneSourcing>

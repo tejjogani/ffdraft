@@ -29,6 +29,7 @@ describe('stone size in carats', () => {
     }
     expect(caratOf({ ...round, sourcing }, 6.49).toFixed(2)).toBe('1.04')
     expect(caratOf(round, 6.49).toFixed(2)).toBe('1.03')
+    expect(caratOf({ ...round, sourcing: { ...sourcing, listedCarat: 1.08 } }, 6.49)).toBe(1.08)
   })
 
   it('gives the width back for the carat a width implies', () => {
