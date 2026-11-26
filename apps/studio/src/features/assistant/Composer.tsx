@@ -5,7 +5,7 @@
  * Chinese input can confirm a word with Enter).
  */
 import { Button, cn, IconButton, Spinner, Textarea, toast } from '@pave/ui'
-import { ArrowUp, CircleStop, ImagePlus, X } from 'lucide-react'
+import { ArrowUp, CircleStop, FileBox, ImagePlus, X } from 'lucide-react'
 import {
   type ClipboardEvent,
   type DragEvent,
@@ -43,6 +43,8 @@ export interface ComposerProps {
   variant?: 'dock' | 'home'
   label?: string
   submitLabel?: string
+  files?: { accept: string; model: (name: string) => boolean }
+  allowAttachmentOnly?: boolean
 }
 
 export function Composer({
@@ -63,6 +65,8 @@ export function Composer({
   variant = 'dock',
   label = 'Message the assistant',
   submitLabel = 'Send',
+  files,
+  allowAttachmentOnly = false,
 }: ComposerProps) {
   const input = useRef<HTMLTextAreaElement>(null)
   const file = useRef<HTMLInputElement>(null)
@@ -73,15 +77,26 @@ export function Composer({
     if (focusNonce) input.current?.focus()
   }, [focusNonce])
 
-  const attach = async (files: File[]) => {
-    const images = files.filter((f) => f.type.startsWith('image/'))
-    if (!images.length) return
+  const attach = async (incoming: File[]) => {
+    const supported = incoming.filter((f) => f.type.startsWith('image/') || files?.model(f.name))
+    if (!supported.length) return
     const room = MAX_PHOTOS - attachments.length
     if (room <= 0) return toast.error('Up to 8 photos per message')
     setUploading((n) => n + 1)
     try {
-      const uploaded = await Promise.all(images.slice(0, room).map(uploadAsset))
-      onAttach(uploaded.map((u) => ({ id: u.id, name: u.name })))
+      const uploaded = await Promise.allSettled(supported.slice(0, room).map(uploadAsset))
+      onAttach(
+        uploaded.flatMap((r) =>
+          r.status === 'fulfilled' ? [{ id: r.value.id, name: r.value.name }] : [],
+        ),
+      )
+      const refused = uploaded.filter((r) => r.status === 'rejected').length
+      if (refused)
+        toast.error(
+          refused === 1
+            ? 'One attachment could not be uploaded'
+            : `${refused} attachments could not be uploaded`,
+        )
     } catch (e) {
       toast.error('Couldn’t attach that photo', e instanceof Error ? e.message : undefined)
     } finally {
@@ -89,7 +104,11 @@ export function Composer({
     }
   }
 
-  const canSend = !!value.trim() && !disabled && !sending && uploading === 0
+  const canSend =
+    (!!value.trim() || (allowAttachmentOnly && attachments.length > 0)) &&
+    !disabled &&
+    !sending &&
+    uploading === 0
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (!isSendKey({ ...e, isComposing: e.nativeEvent.isComposing })) return
     e.preventDefault()
@@ -153,11 +172,22 @@ export function Composer({
           <ul aria-label="Attached photos" className="flex flex-wrap gap-1.5 px-3 pt-1 pb-1">
             {attachments.map((a) => (
               <li key={a.id} className="group relative">
-                <img
-                  src={assetUrl(a.id, 160)}
-                  alt={a.name}
-                  className="size-12 rounded-md object-cover shadow-[0_0_0_1px_var(--line)]"
-                />
+                {files?.model(a.name) ? (
+                  <span
+                    className="flex size-12 items-center justify-center rounded-md bg-bg-muted"
+                    role="img"
+                    aria-label={a.name}
+                    title={a.name}
+                  >
+                    <FileBox className="size-5" aria-hidden />
+                  </span>
+                ) : (
+                  <img
+                    src={assetUrl(a.id, 160)}
+                    alt={a.name}
+                    className="size-12 rounded-md object-cover shadow-[0_0_0_1px_var(--line)]"
+                  />
+                )}
                 <button
                   type="button"
                   aria-label={`Remove ${a.name}`}
@@ -179,7 +209,7 @@ export function Composer({
           <input
             ref={file}
             type="file"
-            accept="image/*"
+            accept={files?.accept ?? 'image/*'}
             multiple
             hidden
             onChange={(e) => {
@@ -195,7 +225,7 @@ export function Composer({
               disabled={disabled || attachments.length >= MAX_PHOTOS}
               onClick={() => file.current?.click()}
             >
-              Add photo
+              {files ? 'Attach file' : 'Add photo'}
             </Button>
           ) : (
             <IconButton

@@ -24,6 +24,7 @@ import * as t from '../db/schema'
 import { commitChange, refreshFacts, replaceDesignOps } from '../design'
 import { chooseDirection, proposeDirections, removeDirection, toDirection } from '../directions'
 import { AppError, badRequest, conflict, forbidden } from '../errors'
+import { addIntakeAssets, startIntake } from '../home-intake'
 import { estimateSpec, openAsCad, takeToCad } from '../ideas'
 import { createId } from '../ids'
 import { ensure, ensureAll, getCollection, getPiece } from '../lookups'
@@ -243,6 +244,10 @@ export const pieces: HandlerGroup<'pieces'> = {
       origin: input.origin ? await toOrigin(ctx, input.origin, null) : null,
     })
   },
+
+  'pieces.startIntake': startIntake,
+
+  'pieces.addIntakeAssets': addIntakeAssets,
 
   'pieces.update': async (ctx, { id, origin, ...patch }) => {
     const current = await getPiece(ctx, id)

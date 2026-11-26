@@ -1,23 +1,20 @@
-/**
- * The home page's composer: the dock's own composer, large. Sending starts a conversation and
- * opens the dock on it. Without a Claude API key it still makes a piece: the words become the
- * piece's brief (templates are below).
- */
+/** Home saves the project and all attached files before starting a conversation. */
 import type { AssistantTier } from '@pave/schema'
 import { toast } from '@pave/ui'
 import { useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
-import { useSend } from '../../features/assistant/actions'
+import { useRef, useState } from 'react'
 import { Composer as SharedComposer } from '../../features/assistant/Composer'
 import { TierPicker } from '../../features/assistant/TierPicker'
+import { invalidateFor, queryClient } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { useSession } from '../../lib/session'
 import { useCurrentView } from '../../lib/use-current-view'
-import { type Attachment, useAssistant } from '../../stores/assistant'
+import type { Attachment } from '../../stores/assistant'
+import { firstMessageId, intakeFiles, sendIntake } from './intake'
 
 const SUGGESTIONS = [
   '1.5 ct oval, hidden halo, 18k yellow',
-  'Turn a logo into an iced pendant',
+  'Turn my logo into an iced pendant with a Cuban chain',
   'Men’s signet with family crest',
 ]
 
@@ -29,37 +26,49 @@ export function Composer() {
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [tier, setTier] = useState<AssistantTier | null>(null)
   const [busy, setBusy] = useState(false)
-  const { send } = useSend({})
+  const retry = useRef<{ key: string; requestId: string } | null>(null)
 
   const submit = async (text: string) => {
-    if (!text.trim()) return
+    if (busy) return
+    const models = attachments.filter((a) => intakeFiles.model(a.name))
+    const brief = text.trim() || (models.length ? `Open ${models[0]!.name} as CAD` : '')
+    if (!brief) return
+    const assetIds = attachments.map((a) => a.id)
+    const key = JSON.stringify([brief, assetIds])
+    if (retry.current?.key !== key) retry.current = { key, requestId: crypto.randomUUID() }
     setBusy(true)
     try {
-      if (capabilities.assistant) {
-        // The dock's state carries the photos and tier of a new conversation.
-        useAssistant.setState({
-          attachments,
-          draftTier: tier,
-          selection: null,
-          dropPageContext: true,
-        })
-        const out = await send(text.trim(), { threadId: null })
-        if (!isCurrent()) return
-        useAssistant.setState({
-          follow: { threadId: out.thread.id, path: window.location.pathname },
-        })
-        useAssistant.getState().open()
-      } else {
-        const piece = await rpc.call('pieces.create', {
-          title: text.trim().slice(0, 80),
-          brief: text.trim(),
-        })
-        if (isCurrent()) await navigate({ to: '/pieces/$id', params: { id: piece.id } })
+      const project = await rpc.call('pieces.startIntake', {
+        requestId: retry.current.requestId,
+        brief,
+        assetIds,
+      })
+      invalidateFor(queryClient, 'pieces')
+      invalidateFor(queryClient, 'boards')
+      let thread: string | undefined
+      if (capabilities.assistant && !models.length && isCurrent()) {
+        try {
+          const out = await sendIntake({
+            ...project,
+            text: brief,
+            attachments: assetIds,
+            tier,
+            messageId: firstMessageId(project.pieceId),
+          })
+          thread = out.thread.id
+        } catch (e) {
+          toast.error(
+            'Project saved. The assistant could not reply.',
+            e instanceof Error ? e.message : undefined,
+          )
+        }
       }
       setPrompt('')
       setAttachments([])
+      retry.current = null
+      if (isCurrent()) await navigate({ to: '/', search: { intake: project.pieceId, thread } })
     } catch (e) {
-      toast.error('Couldn’t send that', e instanceof Error ? e.message : undefined)
+      toast.error('Couldn’t save the project', e instanceof Error ? e.message : undefined)
     } finally {
       setBusy(false)
     }
@@ -76,11 +85,12 @@ export function Composer() {
         onRemoveAttachment={(id) => setAttachments((list) => list.filter((x) => x.id !== id))}
         onSubmit={() => void submit(prompt)}
         sending={busy}
-        placeholder="What are we making? Describe it, or drop a photo of a piece."
+        disabled={busy}
+        files={intakeFiles}
+        allowAttachmentOnly={attachments.some((a) => intakeFiles.model(a.name))}
+        placeholder="Describe a piece, attach a reference, or bring finished CAD."
         label="Describe a piece for the assistant"
-        submitLabel={
-          capabilities.assistant ? 'Send to assistant' : 'Create a piece from this brief'
-        }
+        submitLabel="Start design intake"
         tools={capabilities.assistant ? <TierPicker value={tier} onChange={setTier} /> : undefined}
       />
       <div className="mt-3 flex flex-wrap gap-1.5">
@@ -89,8 +99,8 @@ export function Composer() {
             key={s}
             type="button"
             disabled={busy}
-            onClick={() => void submit(s)}
-            className="h-7 rounded-sm px-2.5 text-xs text-fg-muted shadow-[inset_0_0_0_1px_var(--line)] transition-colors duration-120 hover:bg-bg-hover hover:text-fg"
+            onClick={() => setPrompt(s)}
+            className="min-h-7 rounded-sm px-2.5 text-xs text-fg-muted shadow-[inset_0_0_0_1px_var(--line)] transition-colors duration-120 hover:bg-bg-hover hover:text-fg"
           >
             {s}
           </button>
@@ -98,8 +108,7 @@ export function Composer() {
       </div>
       {!capabilities.assistant && (
         <p className="mt-3 text-xs text-fg-subtle">
-          The assistant is off until a Claude API key is added in Settings, AI; meanwhile this makes
-          a piece with your words as its brief.
+          Manual intake is available. Add a Claude API key in Settings → AI for a conversation.
         </p>
       )}
     </div>

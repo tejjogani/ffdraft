@@ -1,21 +1,40 @@
 import { buildDesign, TEMPLATES, type Template } from '@pave/schema'
-import { buttonClass, InlineError } from '@pave/ui'
-import { Link } from '@tanstack/react-router'
+import { Button, buttonClass, InlineError } from '@pave/ui'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowRight } from 'lucide-react'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { KindGlyph } from '../../components/KindGlyph'
 import { Column, PageHeader, SectionTitle } from '../../components/Page'
 import { PieceCard, PieceCardSkeleton } from '../../components/PieceCard'
 import { useCreatePiece } from '../../lib/pieces'
 import { useRpc } from '../../lib/query'
 import { useSession } from '../../lib/session'
+import { useAssistant } from '../../stores/assistant'
+import { BrainstormPage } from './BrainstormPage'
 import { Composer } from './Composer'
+import { IntakePage } from './IntakePage'
+import type { IntakeSearch } from './intake'
 
 const greeting = (h: number) =>
   h < 5 ? 'Working late' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
 
-export function HomePage() {
+export function HomePage({ search }: { search: IntakeSearch }) {
+  const drafting = !!(search.intake || search.brainstorm)
+  useEffect(() => {
+    if (drafting) useAssistant.getState().close()
+  }, [drafting])
+  if (search.intake)
+    return <IntakePage key={search.intake} search={search} pieceId={search.intake} />
+  if (search.brainstorm)
+    return (
+      <BrainstormPage key={search.brainstorm} id={search.brainstorm} threadId={search.thread} />
+    )
+  return <HomeDashboard />
+}
+
+function HomeDashboard() {
   const session = useSession()
+  const navigate = useNavigate()
   const firstName = session.user.name.split(' ')[0]
   const now = new Date()
   return (
@@ -35,6 +54,15 @@ export function HomePage() {
             )}
           </h1>
           <Composer />
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="mt-4"
+            onClick={() => void navigate({ to: '/', search: { brainstorm: crypto.randomUUID() } })}
+          >
+            Brainstorm <ArrowRight aria-hidden />
+          </Button>
         </section>
         <RecentPieces />
         <Templates />
