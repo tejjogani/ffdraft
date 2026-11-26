@@ -3,9 +3,10 @@ import { Swatch } from '@pave/ui'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { KindGlyph } from '../../components/KindGlyph'
 import { StageChip } from '../../components/StageChip'
-import { hasFacts, KIND_LABEL, metalLabel, metalSwatch } from '../../lib/domain'
 import { usd } from '../../features/projects/cost'
+import { projectFolder } from '../../features/projects/folder'
 import { StageProgress } from '../../features/projects/ProjectSections'
+import { hasFacts, KIND_LABEL, metalLabel, metalSwatch } from '../../lib/domain'
 import { carats, grams, relativeTime } from '../../lib/format'
 
 const th = 'h-8 px-3 text-left text-xs font-normal text-fg-subtle whitespace-nowrap'
@@ -18,18 +19,18 @@ export function PieceTable({
   costs,
 }: {
   pieces: PieceSummary[]
-  collections: Collection[]
+  collections: Collection[] | undefined
   /** Each project's costs, by piece id (projects.summary). */
   costs?: ReadonlyMap<string, ProjectCost>
 }) {
   const navigate = useNavigate()
-  const collectionName = (id: string | null) => collections.find((c) => c.id === id)?.name
   return (
     <div className="-mx-3 overflow-x-auto">
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b border-line">
             <th className={th}>Title</th>
+            <th className={th}>Folder</th>
             <th className={th}>Stage</th>
             <th className={th}>Progress</th>
             <th className={`${th} text-right`}>Cost</th>
@@ -37,7 +38,6 @@ export function PieceTable({
             <th className={th}>Metal</th>
             <th className={`${th} text-right`}>Weight</th>
             <th className={`${th} text-right`}>Carat</th>
-            <th className={th}>Folder</th>
             <th className={`${th} text-right`}>Edited</th>
           </tr>
         </thead>
@@ -60,6 +60,9 @@ export function PieceTable({
                   </span>
                   <span className="truncate">{p.title || 'Untitled'}</span>
                 </Link>
+              </td>
+              <td className={`${td} text-fg-muted`}>
+                {projectFolder(p.collectionId, collections)}
               </td>
               <td className={td}>
                 <StageChip stage={p.stage} />
@@ -90,9 +93,6 @@ export function PieceTable({
               </td>
               <td className={`${td} text-right font-mono text-xs text-fg-muted tabular`}>
                 {p.facts?.caratTotal ? carats(p.facts.caratTotal) : '—'}
-              </td>
-              <td className={`${td} text-fg-muted`}>
-                {collectionName(p.collectionId) ?? <span className="text-fg-faint">—</span>}
               </td>
               <td className={`${td} text-right text-xs text-fg-subtle`}>
                 {relativeTime(p.updatedAt)}

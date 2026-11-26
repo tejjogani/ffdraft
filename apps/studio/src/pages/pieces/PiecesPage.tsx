@@ -19,6 +19,7 @@ import { PieceCard, PieceCardSkeleton } from '../../components/PieceCard'
 import { StageIcon } from '../../components/StageChip'
 import { useOpenPaveFile } from '../../features/pavefile'
 import { usd } from '../../features/projects/cost'
+import { projectFolder } from '../../features/projects/folder'
 import { StageProgress } from '../../features/projects/ProjectSections'
 import { KIND_LABEL, STAGE_LABEL } from '../../lib/domain'
 import { plural } from '../../lib/format'
@@ -285,12 +286,20 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
                       <PieceCard
                         key={p.id}
                         piece={p}
-                        meta={<ProjectMeta piece={p} cost={costs.get(p.id)} />}
+                        meta={
+                          <>
+                            <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium">
+                              <Folder className="size-3.5 shrink-0" aria-hidden />
+                              {projectFolder(p.collectionId, collections.data)}
+                            </span>
+                            <ProjectMeta piece={p} cost={costs.get(p.id)} />
+                          </>
+                        }
                       />
                     ))}
                   </Grid>
                 ) : (
-                  <PieceTable pieces={list} collections={collections.data ?? []} costs={costs} />
+                  <PieceTable pieces={list} collections={collections.data} costs={costs} />
                 )}
               </section>
             ))}

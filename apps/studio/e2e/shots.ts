@@ -105,7 +105,7 @@ const shots = (piece: string, collection: { id: string; name: string }): Shot[] 
     `/pieces/${piece}`,
     async (p) => {
       await p.getByRole('button', { name: 'Piece options' }).click()
-      await p.getByRole('menuitem', { name: 'Move to collection' }).hover()
+      await p.getByRole('menuitem', { name: 'Move to folder' }).hover()
     },
   ],
   [

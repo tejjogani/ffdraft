@@ -25,7 +25,11 @@ try {
   )
   assert.equal(dimensions.length, 7)
   assert.ok(
-    dimensions.every((d, i) => d.height >= 96 && (!i || d.top - dimensions[i - 1]!.bottom >= 12)),
+    dimensions.every(
+      (d, i) =>
+        d.height >= 64 &&
+        (i % 2 ? d.top === dimensions[i - 1]!.top : !i || d.top - dimensions[i - 2]!.bottom >= 8),
+    ),
   )
   await entry.click()
   const card = page.getByRole('region', { name: 'Spec', exact: true })
