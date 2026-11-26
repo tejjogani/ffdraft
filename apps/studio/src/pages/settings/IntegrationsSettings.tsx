@@ -1,15 +1,6 @@
 import type { Capabilities } from '@pave/schema'
 import { Chip, InlineError } from '@pave/ui'
-import {
-  Blend,
-  Box,
-  Gem,
-  ImagePlus,
-  Landmark,
-  type LucideIcon,
-  Search,
-  Sparkles,
-} from 'lucide-react'
+import { Blend, Box, Gem, ImagePlus, type LucideIcon, Search, Sparkles } from 'lucide-react'
 import { useSession } from '../../lib/session'
 import { SettingsTitle } from './SettingsLayout'
 
@@ -26,13 +17,6 @@ const INTEGRATIONS: Integration[] = [
     title: 'Assistant',
     description: 'Plans pieces, edits CAD and runs tools on your behalf.',
     icon: Sparkles,
-  },
-  {
-    key: 'imageSearch',
-    title: 'Museum collections',
-    description:
-      'Reference search in the open collections of The Met, the Art Institute of Chicago and the Cleveland Museum of Art. No key needed.',
-    icon: Landmark,
   },
   {
     key: 'imageGeneration',
@@ -117,30 +101,19 @@ export function IntegrationsSettings() {
   )
 }
 
-/**
- * General web image search needs a paid search API key (for example Brave Search's image
- * endpoint). It is not part of this build: the slot says so instead of pretending.
- */
 function WebSearchSlot() {
   return (
-    <article
-      aria-disabled
-      aria-label="Web image search (not available)"
-      className="flex flex-col rounded-lg p-4 opacity-70 shadow-[0_0_0_1px_var(--line)]"
-    >
+    <article className="flex flex-col rounded-lg p-4 shadow-[0_0_0_1px_var(--line)]">
       <div className="flex items-center gap-2.5">
         <span className="flex size-7 items-center justify-center rounded-md bg-bg-muted">
           <Search className="size-4 text-fg-muted" aria-hidden />
         </span>
         <h3 className="flex-1 text-sm font-medium">Web image search</h3>
-        <Chip outline>Not available</Chip>
       </div>
-      <p className="mt-2.5 flex-1 text-xs leading-5 text-fg-muted">
-        Searching the whole web for pictures needs a search API key from a provider that licenses
-        image results (for example Brave Search). It is not part of this build. Until then, search
-        the museums, or paste a link into the reference panel: it is kept as a view-only link.
+      <p className="mt-2.5 text-xs leading-5 text-fg-muted">
+        Google Images and Pinterest open in a new tab from the design board and reference panel.
+        Save a link you choose as a view-only reference.
       </p>
-      <div className="mt-3 text-xs text-fg-subtle">No key field yet.</div>
     </article>
   )
 }

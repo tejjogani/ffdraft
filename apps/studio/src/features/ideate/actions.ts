@@ -3,7 +3,7 @@
  * what the person brings (files, links, notes, sketches), taking a picture to CAD and opening a
  * 3D model as CAD. Each is one command or a short, ordered chain of them.
  */
-import type { Board, Reference } from '@pave/schema'
+import type { Board, CommandInput, Reference } from '@pave/schema'
 import { toast } from '@pave/ui'
 import { useNavigate } from '@tanstack/react-router'
 import { uploadAsset } from '../../lib/assets'
@@ -21,8 +21,23 @@ const refresh = () => {
   invalidateFor(queryClient, 'references')
 }
 
+export type BoardTarget = { boardId: string } | { pieceId: string }
+
+async function saveReferences(
+  target: BoardTarget,
+  items: CommandInput<'references.save'>['items'],
+) {
+  if (!items.length) return []
+  const saved =
+    'boardId' in target
+      ? await rpc.call('references.save', { ...target, items })
+      : await rpc.call('references.saveForPiece', { ...target, items })
+  refresh()
+  return saved
+}
+
 /** Files dropped, pasted or picked: pictures and sketch sheets, and 3D models. */
-export async function addFiles(boardId: string, files: readonly File[]): Promise<Reference[]> {
+export async function addFiles(target: BoardTarget, files: readonly File[]): Promise<Reference[]> {
   const items: { assetId: string; title: string }[] = []
   for (const file of files) {
     const kind = classifyBoardFile(file.name || (file.type.startsWith('image/') ? 'paste.png' : ''))
@@ -42,21 +57,17 @@ export async function addFiles(boardId: string, files: readonly File[]): Promise
     const asset = await uploadAsset(named)
     items.push({ assetId: asset.id, title: named.name.replace(/\.[^.]+$/, '') })
   }
-  if (!items.length) return []
-  const out = await rpc.call('references.save', { boardId, items })
-  refresh()
-  return out
+  return saveReferences(target, items)
 }
 
 /** Pasted or dropped web addresses: kept as view-only links (a Pinterest pin, a Google result). */
-export async function addLinks(boardId: string, urls: readonly string[]): Promise<Reference[]> {
+export async function addLinks(target: BoardTarget, urls: readonly string[]): Promise<Reference[]> {
   if (!urls.length) return []
-  const out = await rpc.call('references.save', {
-    boardId,
-    // Named after the site until someone renames it ("pinterest.com").
-    items: urls.map((url) => ({ url, title: siteOf(url) })),
-  })
-  refresh()
+  // Named after the site until someone renames it ("pinterest.com").
+  const out = await saveReferences(
+    target,
+    urls.map((url) => ({ url, title: siteOf(url) })),
+  )
   toast({
     title: urls.length === 1 ? 'Link added' : `${urls.length} links added`,
     description: 'Kept as view-only inspiration. Capture its image to show it on the board.',
@@ -72,18 +83,15 @@ const siteOf = (url: string) => {
   }
 }
 
-export async function addNote(boardId: string, note: string): Promise<void> {
-  await rpc.call('references.save', { boardId, items: [{ note }] })
-  refresh()
+export async function addNote(target: BoardTarget, note: string): Promise<void> {
+  await saveReferences(target, [{ note }])
 }
 
-export async function addSketch(boardId: string, file: File, title: string): Promise<void> {
+export async function addSketch(target: BoardTarget, file: File, title: string): Promise<void> {
   const asset = await uploadAsset(file)
-  await rpc.call('references.save', {
-    boardId,
-    items: [{ assetId: asset.id, title, rights: 'own', note: 'Sketched in Pavé' }],
-  })
-  refresh()
+  await saveReferences(target, [
+    { assetId: asset.id, title, rights: 'own', note: 'Sketched in Pavé' },
+  ])
 }
 
 export async function captureLink(ref: Reference): Promise<void> {

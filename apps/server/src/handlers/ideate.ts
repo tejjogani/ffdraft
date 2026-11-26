@@ -104,10 +104,10 @@ async function toBoards(ctx: Ctx, rows: BoardRow[]): Promise<Board[]> {
 const toBoard = async (ctx: Ctx, row: BoardRow) => (await toBoards(ctx, [row]))[0]!
 
 /** Marks boards as changed: bumps `updatedAt` and tells open clients. */
-async function touchBoards(ctx: Ctx, boardIds: Iterable<string>) {
+async function touchBoards(ctx: Ctx, boardIds: Iterable<string>, notify = true) {
   for (const boardId of new Set(boardIds)) {
     await ctx.repo.boards.update(eq(t.board.id, boardId), { updatedAt: new Date() })
-    publish(ctx, { type: 'board.updated', boardId })
+    if (notify) publish(ctx, { type: 'board.updated', boardId })
   }
 }
 
@@ -124,12 +124,13 @@ export async function insertReferences(
   ctx: Ctx,
   boardId: string,
   items: NewReference[],
+  notify = true,
 ): Promise<Reference[]> {
   const start = await nextPosition(ctx, boardId)
   const rows = await ctx.repo.references.insertMany(
     items.map((item, i) => ({ ...item, id: createId('ref'), boardId, position: start + i })),
   )
-  await touchBoards(ctx, [boardId])
+  await touchBoards(ctx, [boardId], notify)
   return rows.map(toReference)
 }
 
@@ -420,6 +421,20 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
     await getBoard(ctx, input.boardId)
     const items = await Promise.all(input.items.map((item) => referenceFromItem(ctx, item)))
     return insertReferences(ctx, input.boardId, items)
+  },
+
+  'references.saveForPiece': async (ctx, input) => {
+    await getPiece(ctx, input.pieceId)
+    const items = await Promise.all(input.items.map((item) => referenceFromItem(ctx, item)))
+    const saved = await ctx.repo.transaction(async (repo) => {
+      // First saves must agree even if a previously unlinked board holds the default board id.
+      await repo.pieces.select({ id: t.piece.id }, eq(t.piece.id, input.pieceId)).for('update')
+      const tx = { ...ctx, repo }
+      const board = await designBoardFor(tx, input.pieceId, false)
+      return insertReferences(tx, board.id, items, false)
+    })
+    publish(ctx, { type: 'board.updated', boardId: saved[0]!.boardId })
+    return saved
   },
 
   'references.pins': async (ctx, { pieceId }) => {

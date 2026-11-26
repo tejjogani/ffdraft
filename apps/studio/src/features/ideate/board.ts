@@ -23,6 +23,7 @@ export function classifyBoardFile(name: string): BoardFile {
   return null
 }
 
+export const BOARD_IMAGE_ACCEPT = [...IMAGE].map((e) => `.${e}`).join(',')
 export const BOARD_ACCEPT = [...IMAGE, ...MODEL, 'step', 'stp'].map((e) => `.${e}`).join(',')
 
 /** Web addresses in pasted or dropped text (a Pinterest pin, a Google result, a shop page). */

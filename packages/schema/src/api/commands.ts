@@ -323,6 +323,36 @@ export const SPEC_QUESTION_IDS: readonly string[] = [
   'budget',
 ]
 
+const referenceSaveItems = z
+  .array(
+    z
+      .object({
+        result: SearchResultSchema.optional(),
+        url: z.string().url().optional(),
+        assetId: id.optional(),
+        swatch: z.object({ hex: z.string().regex(/^#[0-9a-fA-F]{6}$/) }).optional(),
+        pieceId: id.optional(),
+        note: z.string().max(4000).optional(),
+        title: z.string().max(200).optional(),
+        /** For uploads and notes; a search result or URL can only be lowered to `viewOnly`. */
+        rights: z.enum(RIGHTS).optional(),
+      })
+      .refine(
+        (item) => {
+          const sources = [item.result, item.url, item.assetId, item.swatch].filter(
+            (x) => x !== undefined,
+          ).length
+          return sources === 1 || (sources === 0 && item.note !== undefined)
+        },
+        {
+          message:
+            'Give exactly one of result, url, assetId or swatch (a note may go with it), or a note alone',
+        },
+      ),
+  )
+  .min(1)
+  .max(50)
+
 export const commands = {
   // ── Session & organisation ────────────────────────────────────────────────────────────────
   'session.get': def({
@@ -833,36 +863,15 @@ export const commands = {
     tool: true,
     input: z.object({
       boardId: id,
-      items: z
-        .array(
-          z
-            .object({
-              result: SearchResultSchema.optional(),
-              url: z.string().url().optional(),
-              assetId: id.optional(),
-              swatch: z.object({ hex: z.string().regex(/^#[0-9a-fA-F]{6}$/) }).optional(),
-              pieceId: id.optional(),
-              note: z.string().max(4000).optional(),
-              title: z.string().max(200).optional(),
-              /** For uploads and notes; a search result or URL can only be lowered to `viewOnly`. */
-              rights: z.enum(RIGHTS).optional(),
-            })
-            .refine(
-              (item) => {
-                const sources = [item.result, item.url, item.assetId, item.swatch].filter(
-                  (x) => x !== undefined,
-                ).length
-                return sources === 1 || (sources === 0 && item.note !== undefined)
-              },
-              {
-                message:
-                  'Give exactly one of result, url, assetId or swatch (a note may go with it), or a note alone',
-              },
-            ),
-        )
-        .min(1)
-        .max(50),
+      items: referenceSaveItems,
     }),
+    output: z.array(ReferenceSchema),
+  }),
+  'references.saveForPiece': def({
+    description:
+      'Save references to the piece’s design board, creating the board with its first items.',
+    kind: 'mutation',
+    input: z.object({ pieceId: id, items: referenceSaveItems }),
     output: z.array(ReferenceSchema),
   }),
   'references.pins': def({

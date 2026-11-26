@@ -46,25 +46,18 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
     stage: 'design',
     label: 'Design',
     button: 'Gather ideas with AI',
-    goal: 'Read the brief and the design board, ask what the brief leaves open, find references that answer it and pin the best to the board, and sharpen the brief, so I can pick a picture to take to CAD.',
+    goal: 'Read the brief and the design board, ask what the brief leaves open, draw on the references I’ve saved, and sharpen the brief so I can choose a picture to take to CAD.',
     steps: [
       {
         id: 'brief',
         label: 'Read the brief and the design board; ask what the brief leaves open',
-        tools: [
-          'pieces.get',
-          'boards.forPiece',
-          'boards.get',
-          'boards.list',
-          'references.pins',
-          'chat.ask',
-        ],
+        tools: ['pieces.get', 'boards.get', 'boards.list', 'references.pins', 'chat.ask'],
       },
       {
         id: 'gather',
-        label: 'Find references, pin the best to the board, sharpen the brief',
+        label: 'Review saved references and sharpen the brief',
         tools: [
-          'references.search',
+          'boards.forPiece',
           'references.save',
           'references.similar',
           'references.lineage',

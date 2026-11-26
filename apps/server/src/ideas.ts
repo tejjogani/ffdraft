@@ -36,10 +36,10 @@ const extensionOf = (name: string) => name.toLowerCase().split('.').pop() ?? ''
 
 /**
  * The piece's design board: the oldest board linked to it, else a new one. The new board's id is
- * derived from the piece, so two windows opening the Design tab at once insert one board (the
+ * derived from the piece, so two windows saving to Design at once insert one board (the
  * primary key decides); if that id is taken by a board someone unlinked, a fresh one is made.
  */
-export async function designBoardFor(ctx: Ctx, pieceId: string): Promise<BoardRow> {
+export async function designBoardFor(ctx: Ctx, pieceId: string, notify = true): Promise<BoardRow> {
   const piece = await getPiece(ctx, pieceId)
   const linked = () =>
     ctx.repo.boards.first(
@@ -58,7 +58,7 @@ export async function designBoardFor(ctx: Ctx, pieceId: string): Promise<BoardRo
     inserted ??
     (await linked()) ??
     (await ctx.repo.boards.insert({ id: createId('brd'), ...values }))
-  publish(ctx, { type: 'board.updated', boardId: board.id })
+  if (notify) publish(ctx, { type: 'board.updated', boardId: board.id })
   return board
 }
 

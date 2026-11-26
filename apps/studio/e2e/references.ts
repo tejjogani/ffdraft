@@ -1,11 +1,10 @@
 // @ts-nocheck — a driver script, run with tsx; not part of the app's type graph.
 /**
- * The reference panel beside CAD, end to end against the real server and kernel, with the museum
- * answers played from a recording (the museums cannot be reached here; their picture addresses
- * are served from the fixture's files to the browser too): search the three collections, read a
- * result's provenance, pin results, a link and a dropped picture, reorder, then drag the picture
- * onto the front view, scale it by two clicks and a typed distance, fade, lock, move, undo and
- * redo, take it out and undo that, and see the panel beside the Render tab and on a phone.
+ * The reference panel beside CAD against the real server and kernel. Search on the web and pin
+ * a chosen link, check the provenance of an existing museum pin, then bring in a picture.
+ * Reorder and drag the picture onto the front view, scale by two clicks and a typed distance,
+ * fade, lock, move, undo and redo, take it out and undo that, and see the panel beside Render
+ * and on a phone.
  *
  *   pnpm --filter @pave/studio build
  *   tsx apps/studio/e2e/references-fixture.ts <fixtureDir>
@@ -13,6 +12,7 @@
  *     tsx apps/server/src/main.ts
  *   tsx apps/studio/e2e/references.ts http://127.0.0.1:8799 <outDir> <fixtureDir> light 1440
  */
+import assert from 'node:assert/strict'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
@@ -104,19 +104,37 @@ try {
   await panel().waitFor()
   await shot('01-panel-empty')
 
-  // ── 2. Search the museums ────────────────────────────────────────────────────────────────
-  await panel().getByRole('button', { name: 'Search', exact: true }).first().click()
-  await panel().getByRole('textbox', { name: 'Search museum collections' }).fill('ring')
-  await panel().getByRole('textbox', { name: 'Search museum collections' }).press('Enter')
-  await until(
-    'three providers',
-    async () => (await panel().locator('section[aria-label] article').count()) >= 8,
+  // ── 2. Search the web and pin a chosen link ────────────────────────────────────────────
+  await ctx.route('https://www.google.com/search?*', (route) =>
+    route.fulfill({ body: 'Provider navigation', contentType: 'text/plain' }),
   )
-  await page.waitForTimeout(1200)
+  await panel().getByRole('button', { name: 'Search', exact: true }).click()
+  await panel().getByRole('textbox', { name: 'Search terms' }).fill('oval bezel & gold')
+  const opened = page.waitForEvent('popup')
+  await panel().getByRole('link', { name: 'Google Images' }).click()
+  const searchTab = await opened
+  await searchTab.waitForLoadState()
+  assert.equal(searchTab.url(), 'https://www.google.com/search?tbm=isch&q=oval+bezel+%26+gold')
+  await searchTab.close()
   await shot('02-search')
+  const link = 'https://www.pinterest.com/pin/1234567890/'
+  await panel().getByRole('textbox', { name: 'Reference link' }).fill(link)
+  await panel().getByRole('button', { name: 'Pin link' }).click()
+  await panel().locator('article[aria-label^="Pinned: pinterest.com"]').waitFor()
+  const [web] = await pinsOf(piece.id)
+  assert.equal(web.source.url, link)
+  assert.equal(web.rights, 'viewOnly')
 
-  // ── 3. Provenance of a view-only result ──────────────────────────────────────────────────
-  const modern = panel().locator('article[aria-label="Modern ring"]')
+  // ── 3. Provenance of already-saved museum references ───────────────────────────────────
+  const { results } = await rpc('references.search', { query: 'ring' })
+  for (const title of ['Posy ring', 'Modern ring', 'Ring with a cushion-cut sapphire']) {
+    const result = results.find((item) => item.title === title)
+    assert.ok(result, title)
+    await rpc('references.pin', { pieceId: piece.id, items: [{ result }] })
+  }
+  await page.reload()
+  await panel().waitFor()
+  const modern = panel().locator('article[aria-label="Pinned: Modern ring"]')
   await modern.scrollIntoViewIfNeeded()
   await modern.getByRole('button', { name: /comes from/ }).click()
   const pop = page.getByRole('dialog', { name: /Where “Modern ring” comes from/ })
@@ -125,21 +143,7 @@ try {
   await shot('03-provenance')
   await page.keyboard.press('Escape')
 
-  // ── 4. Pin results, a link and a dropped picture ─────────────────────────────────────────
-  for (const title of ['Posy ring', 'Modern ring', 'Ring with a cushion-cut sapphire']) {
-    const tile = panel().locator(`article[aria-label="${title}"]`)
-    await tile.scrollIntoViewIfNeeded()
-    await tile.getByRole('button', { name: 'Pin' }).click()
-    await tile.getByRole('button', { name: 'Pinned' }).waitFor()
-  }
-  await panel()
-    .getByRole('button', { name: /^Pinned \d/ })
-    .click()
-  await panel()
-    .getByLabel('Paste a link or a picture')
-    .fill('https://www.pinterest.com/pin/1234567890/')
-  await panel().getByLabel('Paste a link or a picture').press('Enter')
-  await until('link pinned', async () => (await pinsOf(piece.id)).length === 4)
+  // ── 4. Add a picture ───────────────────────────────────────────────────────────────────
   await panel().locator('input[type="file"]').setInputFiles(join(FIXTURE, 'ring-front.png'))
   await until('picture pinned', async () => (await pinsOf(piece.id)).length === 5)
   // Bring the drawing to the top of the list.

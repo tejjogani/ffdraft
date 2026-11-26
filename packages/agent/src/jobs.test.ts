@@ -107,10 +107,10 @@ describe('AI job plans', () => {
     expect(states(gathered)).toEqual(['done', 'done', 'pending'])
     expect(gathered.review).toBe('pending')
 
-    // More references asked for by chat: the gather step runs again; the pick is still theirs.
+    // A revised brief runs the gather step again and leaves the choice of picture to the designer.
     let more = continueJob(gathered, 'run_2').job
     expect(states(more)).toEqual(['done', 'done', 'pending'])
-    more = advanceJob(more, 'references.search')!
+    more = advanceJob(more, 'pieces.update')!
     expect(states(more)).toEqual(['done', 'running', 'pending'])
     expect(states(endJob(more, 'done'))).toEqual(['done', 'done', 'pending'])
     // No tool takes the pick: Take to CAD is a person's action on the board.

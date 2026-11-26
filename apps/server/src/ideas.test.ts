@@ -10,9 +10,10 @@
  *   message came from), image generations, Blender renders and Rhino/STEP exports; folders add
  *   up their own projects and their sub-folders'.
  */
-import type { Ctx } from './context'
+
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import type { Ctx } from './context'
 import { claim, settle } from './plans'
 import { BOOT_TIMEOUT, type Client, client, type TestServer, testServer } from './test/harness'
 import { recordUsage } from './usage'
@@ -71,6 +72,32 @@ describe('the design board', () => {
     const fresh = await api.call('boards.forPiece', { pieceId: piece.id })
     expect(fresh.id).not.toBe(a.id)
     expect((await api.call('boards.get', { id: a.id })).board.pieceId).toBeNull()
+  })
+
+  it('keeps the design board absent when the first reference cannot be saved', async () => {
+    const piece = await api.call('pieces.create', { title: 'Rejected reference' })
+    const failed = await api.fail('references.saveForPiece', {
+      pieceId: piece.id,
+      items: [{ note: 'First idea' }, { assetId: 'not-an-asset' }],
+    })
+    expect(failed.status).toBe(404)
+    expect(await api.call('boards.list', { pieceId: piece.id })).toEqual([])
+  })
+
+  it('shares a replacement board between two first saves after unlinking', async () => {
+    const piece = await api.call('pieces.create', { title: 'Fresh start' })
+    const old = await api.call('boards.forPiece', { pieceId: piece.id })
+    await api.call('boards.update', { id: old.id, pieceId: null })
+    const [first, second] = await Promise.all(
+      ['Low bezel', 'Gold band'].map((note) =>
+        api.call('references.saveForPiece', { pieceId: piece.id, items: [{ note }] }),
+      ),
+    )
+    expect(first?.[0]?.boardId).toBe(second?.[0]?.boardId)
+    const boards = await api.call('boards.list', { pieceId: piece.id })
+    expect(boards).toHaveLength(1)
+    expect(boards[0]!.referenceCount).toBe(2)
+    expect((await api.call('boards.get', { id: old.id })).references).toEqual([])
   })
 
   it('takes every source: an upload, a sketch, a scanned sheet, a link, a note and a 3D model', async () => {
