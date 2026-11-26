@@ -311,27 +311,11 @@ cost, and the changes it made.
 
 ## A first tour by hand
 
-1. On **Home**, pick a piece under *Jump back in*, or a template under *Start from a template*.
-2. Open the **CAD** tab. The first time takes a few seconds while the geometry engine loads.
-3. Click a part of the model, or a row in the feature list on the left. Its settings appear on
-   the right. Change one — the ring size, the stone size, the number of prongs — and the model,
-   the weight and the carat total follow.
-4. The bar under the model shows metal weight, carats and stone count, and *things to check*:
-   walls that are too thin, stones too close to an edge, and so on. Some come with a one-click
-   fix.
-5. **Export** (top right of the model) saves the piece as STL or 3MF for printing and casting,
-   STEP for Rhino and MatrixGold, 3DM, OBJ or GLB. **Pavé file** saves everything about the
-   piece (design, history, references, shots) as one `.pave` file, always free; open it with
-   **Open Pavé file** on the Pieces page, or drop it on the window.
-6. **+** above the feature list adds a stone, a setting, a halo, a row of stones, pavé, a bail,
-   a chain, text, an imported mesh and more.
-7. The **Design** tab holds the design board, the brief and the spec. In CAD, **Try variants**
-   shows built alternatives of the CAD: **Add from a template** adds one by hand; choosing one
-   replaces the design as one change you can undo.
-8. The **Render** tab draws the selected shot live. Pick a look (Studio white, Black acrylic,
-   Soft gradient…), an angle and a size, then **Render** (or **Render all** for the whole set).
+Open **Projects**, choose a piece, then open **CAD builder**. Select **CAD guide** for the first-time walkthrough. **Next** and **Back** move through the steps. The [first-time CAD guide](docs/first-time-cad.md) supplies the text both here and in Studio.
 
-Undo and redo work for every change, and the **History** tab lists them.
+The walkthrough covers selecting a part, changing metal and finish, editing stones, fitting a measured diamond and drawing a first solid. **Export** in CAD saves a manufacturing or exchange file. **Save as Pavé file** in the project menu saves a native file you can reopen with **Open Pavé file** in Projects. **Design board & spec** holds references and measurements. **Render studio** holds the project’s shots.
+
+For current freeform modeling capabilities and the order of upcoming Rhino-style tools, see the [CAD roadmap](docs/plans/freeform-cad.md).
 
 ## Plans: Free and Pro
 

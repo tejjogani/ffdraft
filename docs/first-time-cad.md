@@ -1,0 +1,33 @@
+# First-time CAD guide
+
+Open a project, choose CAD builder, then choose CAD guide to follow these steps in the editor. You can close the guide at any time and reopen it while you work. Manual editing works without Claude.
+
+## Select the part you want to change
+
+Click a part in the 3D view or choose its name in Features. On a solitaire, Band is the ring and Head is the metal setting around the centre stone. The Inspector shows controls for the selected part.
+
+On a smaller screen, use the Features and Inspector buttons above the model to open those panels. If your project is empty, start with a template to try the material and stone controls.
+
+## Choose the metal and finish
+
+Select Band, then choose Metal in the Material section of the Inspector. Try 18k Rose Gold for a warmer color. Under Finish, try High polish, Satin, Brushed, Matte / sandblast or Hammered. Use the Rendered view to see the material.
+
+The band and head can use different metals. To change the whole piece at once, right-click empty space in the 3D view and choose Change metal everywhere. To coat a part, open Fine-tune and choose Plating. These controls use material presets. Uploading an arbitrary texture map onto a part is a planned feature.
+
+## Change the centre stone
+
+Select Centre stone in Features. In the Inspector, use Stone to choose the gem material and color, such as ruby or blue sapphire. Use Cut to change its shape. For an unsourced centre stone, enter Width in millimetres or its weight in carats.
+
+To swap the stone and adjust its mount together, right-click the stone in the 3D view and choose Replace stone. Review the replacement before applying it.
+
+## Fit a diamond from inventory
+
+Open Stone sourcing for the same project. Find the centre stone, choose Find diamonds (Change diamond for a fitted stone), select a candidate and preview the change. Fit this stone applies the supplier’s measured dimensions to the CAD setting.
+
+A fitted diamond uses the listing’s measurements. To try a different size, compare another listing. Inventory results depend on your Diaex connection.
+
+## Draw and check your work
+
+Draw profile lets you draw a closed outline or rectangle and extrude it into a solid. Draw curve creates an open or closed construction polyline. Choose Front, Top or Right and click points or enter coordinates in millimetres. The curve can snap to an endpoint or midpoint.
+
+Select the result and use Edit profile or Edit points to revise it. Undo reverses an edit. Open Project history to review changes, or return to the project and open Render studio to set up a shot.
