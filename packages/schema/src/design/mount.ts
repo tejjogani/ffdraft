@@ -104,6 +104,20 @@ export function prongCountFor(cut: GemCutId, dims: GemDims): number {
 export const prongSpinFor = (count: number): number =>
   count === 4 ? 45 : count % 2 === 1 ? round(90 / count, 0.01) : 0
 
+/** The effective numbering layout, before applying any per-prong changes. */
+export function prongLayout(head: Setting, gem: Node | undefined) {
+  if ((head.style !== 'prong' && head.style !== 'basket') || gem?.kind !== 'gem') return null
+  const dims = stoneDims(gem)
+  const count = head.prongCount ?? prongCountFor(gem.cut, dims)
+  return {
+    gem: gem.id,
+    cut: gem.cut,
+    ratio: dims.length / dims.width,
+    count,
+    spin: head.prongSpin ?? prongSpinFor(count),
+  }
+}
+
 /**
  * Claw wire for a stone (canon `ring.head.prongWire`, before the alloy allowance): 0.1·W +
  * 0.35 mm (0.85 on 5 mm, 1.0 on 6.5, 1.15 on 8), × 0.88 when six or more claws share the load,

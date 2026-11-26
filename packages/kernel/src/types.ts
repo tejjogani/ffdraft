@@ -15,6 +15,7 @@ import type {
   MetalId,
   Op,
   PlatingId,
+  ProngNumber,
 } from '@pave/schema'
 
 /** Indexed triangle mesh in mm, Z up. Normals are per-vertex; hard edges split vertices. */
@@ -143,12 +144,19 @@ export interface EvaluatedCurve {
   closed: boolean
 }
 
+export interface EvaluatedProngTip {
+  nodeId: string
+  number: ProngNumber
+  at: [number, number, number]
+}
+
 export interface Evaluation {
   detail: Detail
   parts: Part[]
   stones: StoneInstance[]
   gemMeshes: Record<string, MeshData>
   curves?: EvaluatedCurve[]
+  prongTips?: EvaluatedProngTip[]
   report: Report
   diagnostics: Diagnostic[]
   /** Wall-clock milliseconds, total and per node, for the performance HUD and traces. */

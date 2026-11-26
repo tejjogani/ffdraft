@@ -611,6 +611,10 @@ function Workspace({ piece }: { piece: Piece }) {
       readOnly={readOnly}
       onDelete={requestDelete}
       onEditProfile={(original) => setProfile({ original })}
+      onLocateProng={(at) => {
+        setSheet(null)
+        setMarker({ at, level: 'info', key: Date.now() })
+      }}
       onEditCurve={(original) => {
         if (!curve && !profile) {
           setSheet(null)
