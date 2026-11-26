@@ -10,6 +10,7 @@ export type ErrorCode =
   | 'budget_exceeded'
   | 'plan_limit'
   | 'not_configured'
+  | 'provider_unavailable'
   | 'internal'
 
 const STATUS = {
@@ -25,6 +26,7 @@ const STATUS = {
   payload_too_large: 413,
   internal: 500,
   not_configured: 501,
+  provider_unavailable: 503,
 } as const satisfies Record<ErrorCode, number>
 
 export type ErrorStatus = (typeof STATUS)[ErrorCode]

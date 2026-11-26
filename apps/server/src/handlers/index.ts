@@ -14,6 +14,7 @@ import { production } from './production'
 import { projects } from './projects'
 import { render } from './render'
 import { session } from './session'
+import { sourcing } from './sourcing'
 import type { Handlers } from './types'
 import { usage } from './usage'
 
@@ -23,6 +24,7 @@ export const handlers: Handlers = {
   ...collections,
   ...pieces,
   ...design,
+  ...sourcing,
   ...ideate,
   ...images,
   ...freeform,

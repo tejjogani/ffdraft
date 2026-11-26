@@ -35,6 +35,8 @@ export interface Config {
    * the plan belongs to the organisation, and when unset or not a plan's name.
    */
   plan: PlanName | null
+  /** Signed-out Diaex Partner API base. Unset disables requests to Diaex. */
+  diaexPartnerApiUrl: string | null
 }
 
 const flag = z
@@ -58,6 +60,13 @@ const EnvSchema = z.object({
   NODE_ENV: z.string().optional(),
   // Checked below rather than here: a mistyped plan is ignored with a warning, not a crash.
   PAVE_PLAN: z.string().optional(),
+  PAVE_DIAEX_PARTNER_API_URL: z
+    .url({ protocol: /^https?$/ })
+    .refine((value) => {
+      const url = URL.parse(value)
+      return url !== null && !url.username && !url.password && !url.search && !url.hash
+    })
+    .optional(),
 })
 
 /** Reads configuration from the environment. Every variable is documented in `.env.example`. */
@@ -92,6 +101,7 @@ export function configFromEnv(env: NodeJS.ProcessEnv = process.env): Config {
     validateOutputs: !production,
     logRequests: !production && e.NODE_ENV !== 'test',
     plan: auth === 'local' ? planFrom(e.PAVE_PLAN) : null,
+    diaexPartnerApiUrl: e.PAVE_DIAEX_PARTNER_API_URL ?? null,
   }
 }
 

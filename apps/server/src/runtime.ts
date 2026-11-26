@@ -164,6 +164,7 @@ export class Runtime {
       blobs: this.blobs,
       events: this.events,
       authMode: this.config.auth,
+      diaexPartnerApiUrl: this.config.diaexPartnerApiUrl,
       orgFingerprint: createHmac('sha256', this.#fingerprintKey())
         .update(membership.org.id)
         .digest('hex')

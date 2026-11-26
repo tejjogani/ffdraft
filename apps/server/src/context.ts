@@ -40,6 +40,7 @@ export interface Ctx {
   readonly events: EventBus
   /** `local` (single-user desktop/self-host, no sign-in) or `accounts`. */
   readonly authMode: AuthMode
+  readonly diaexPartnerApiUrl: string | null
   /**
    * This organisation on this install, as a fingerprint (an HMAC of its id under a key derived
    * from the auth secret): a .pave file says where it was saved without carrying the org's id.

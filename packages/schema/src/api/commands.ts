@@ -12,6 +12,7 @@ import { z } from 'zod'
 import { ChangeSchema, DesignSchema, OpSchema, PIECE_KINDS } from '../design/design'
 import { DirectionSchema, MIX_PARTS } from '../design/directions'
 import { StoneChangeSchema, StoneTargetSchema } from '../design/intents'
+import { StoneSourcing } from '../design/nodes'
 import { PhotoReadSchema } from '../design/photo-read'
 import { PieceSpecSchema } from '../design/spec'
 import {
@@ -114,6 +115,25 @@ const ok = z.object({ ok: z.literal(true) })
 const none = z.object({})
 /** A JSON merge patch (RFC 7396): objects merge, arrays and scalars replace, null deletes. */
 const mergePatch = z.record(z.string(), z.unknown())
+
+/** Diaex's exact public stone ID, kept opaque. */
+export const DiaexStoneId = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[^\s\p{Cc}]+$/u)
+
+export const SourcedDiamondSchema = StoneSourcing.pick({ certificate: true }).extend({
+  sku: DiaexStoneId,
+  url: z.url({ protocol: /^https$/ }),
+  measured: StoneSourcing.shape.measured.unwrap(),
+  color: z.string().nullable(),
+  fancyHue: z.string().optional(),
+  clarity: z.string().nullable(),
+  origin: z.enum(['natural', 'lab', 'any']),
+  carat: z.number().positive(),
+})
+export type SourcedDiamond = z.infer<typeof SourcedDiamondSchema>
 
 /** Which model each assistant tier runs on; null = the tier's default. */
 const tierModels = z.object({
@@ -706,6 +726,30 @@ export const commands = {
       claimId: id.optional(),
     }),
     output: z.object({ asset: AssetSchema, notes: z.array(z.string()) }),
+  }),
+
+  // ── Sourcing ──────────────────────────────────────────────────────────────────────────────
+  'sourcing.search': def({
+    description:
+      'Find available Diaex diamonds near a single stone’s size, or look up its exact public ID.',
+    kind: 'query',
+    input: z.object({
+      pieceId: id,
+      nodeId: id,
+      color: z.string().trim().min(1).max(32).optional(),
+      sku: DiaexStoneId.optional(),
+    }),
+    output: z.object({
+      candidates: z.array(SourcedDiamondSchema),
+      searchUrl: z.url({ protocol: /^https$/ }),
+    }),
+  }),
+  'sourcing.stone': def({
+    description:
+      'Recheck an exact Diaex diamond against the piece’s current stone before applying its measurements.',
+    kind: 'query',
+    input: z.object({ pieceId: id, nodeId: id, sku: DiaexStoneId }),
+    output: SourcedDiamondSchema,
   }),
 
   // ── Ideate ────────────────────────────────────────────────────────────────────────────────
