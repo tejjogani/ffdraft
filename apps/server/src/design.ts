@@ -54,6 +54,7 @@ export interface CommitInput {
 export type CommitPlan = (
   tx: Ctx['repo'],
   design: Design,
+  version: number,
 ) => Promise<Pick<CommitInput, 'ops' | 'label' | 'reverts'>>
 
 /**
@@ -113,7 +114,9 @@ async function commitOnce(ctx: Ctx, tx: Ctx['repo'], planned: CommitInput | Plan
       currentVersion: piece.version,
     })
   const input: CommitInput =
-    'plan' in planned ? { ...planned, ...(await planned.plan(tx, piece.design)) } : planned
+    'plan' in planned
+      ? { ...planned, ...(await planned.plan(tx, piece.design, piece.version)) }
+      : planned
 
   let applied: { design: Design; inverse: Op[] }
   try {

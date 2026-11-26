@@ -20,14 +20,15 @@ import {
 import { Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { Copy, FileDown, Folder, FolderInput, Images, MoreHorizontal, Trash2 } from 'lucide-react'
 import { type ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { KindGlyph } from '../../components/KindGlyph'
 import { Column, PageHeader } from '../../components/Page'
+import { PieceCover } from '../../components/PieceCover'
 import { StagePicker } from '../../components/StageChip'
 import { JobPanel } from '../../features/assistant/jobs/JobPanel'
 import { StartJob } from '../../features/assistant/jobs/StartJob'
 import { TryVariants } from '../../features/directions/TryVariants'
 import { savePaveFile } from '../../features/pavefile'
 import { PROJECT_AREAS, PROJECT_MENU, type ProjectArea } from '../../features/projects/areas'
+import { projectFolder } from '../../features/projects/folder'
 import { ProjectSwitcher } from '../../features/projects/ProjectSwitcher'
 import { DOCK_PANEL_PX, ReferenceDock } from '../../features/references/ReferencePanel'
 import { useReferencePanel } from '../../features/references/store'
@@ -246,7 +247,7 @@ function PieceHeader({
                 size="sm"
                 onClick={() => assistant.open({ context: { pieceId: piece.id } })}
               >
-                <AiChip>Ask</AiChip>
+                <AiChip>Project AI</AiChip>
               </Button>
               <Menu
                 trigger={<IconButton icon={MoreHorizontal} label="Piece options" />}
@@ -262,7 +263,7 @@ function PieceHeader({
                 >
                   Save as Pavé file
                 </MenuItem>
-                <MenuSub label="Move to collection" icon={FolderInput}>
+                <MenuSub label="Move to folder" icon={FolderInput}>
                   <CollectionChoices piece={piece} />
                 </MenuSub>
                 <MenuSeparator />
@@ -308,27 +309,27 @@ function PieceHero({ piece }: { piece: Piece }) {
   }
 
   return (
-    <div className="pt-12 pb-5">
-      <div className="stage mb-5 flex h-[70px] w-14 items-center justify-center overflow-hidden rounded-md shadow-[0_0_0_1px_var(--line)]">
-        <KindGlyph kind={piece.kind} className="w-16 shrink-0 text-fg-muted" />
+    <div className="pt-7 pb-4">
+      <div className="flex items-center gap-4">
+        <PieceCover piece={piece} className="w-16 shrink-0 rounded-lg border border-line" />
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur()
+            if (e.key === 'Escape') {
+              setTitle(piece.title)
+              requestAnimationFrame(() => e.currentTarget?.blur())
+            }
+          }}
+          placeholder="Untitled"
+          aria-label="Piece title"
+          maxLength={120}
+          className="min-w-0 flex-1 bg-transparent font-serif text-title text-fg placeholder:text-fg-faint outline-none focus-visible:outline-none sm:text-display"
+        />
       </div>
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        onBlur={commitTitle}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur()
-          if (e.key === 'Escape') {
-            setTitle(piece.title)
-            requestAnimationFrame(() => e.currentTarget?.blur())
-          }
-        }}
-        placeholder="Untitled"
-        aria-label="Piece title"
-        maxLength={120}
-        className="w-full bg-transparent font-serif text-title text-fg placeholder:text-fg-faint outline-none focus-visible:outline-none sm:text-display"
-      />
-      <div className="mt-4 -ml-1.5 flex flex-wrap items-center gap-x-1 gap-y-1 text-sm">
+      <div className="mt-3 -ml-1.5 flex flex-wrap items-center gap-x-1 gap-y-1 text-sm">
         <PieceStage piece={piece} />
         <Property>{KIND_LABEL[piece.kind]}</Property>
         {metal && (
@@ -344,7 +345,7 @@ function PieceHero({ piece }: { piece: Piece }) {
               className={cn(buttonClass({ variant: 'ghost', size: 'sm' }), 'px-1.5 font-normal')}
             >
               <Folder aria-hidden />
-              {collections.data?.find((c) => c.id === piece.collectionId)?.name ?? 'No collection'}
+              {projectFolder(piece.collectionId, collections.data)}
             </button>
           }
         >
@@ -373,10 +374,12 @@ function CollectionChoices({ piece }: { piece: Piece }) {
       value={piece.collectionId ?? 'none'}
       onChange={(v) => update.mutate({ id: piece.id, collectionId: v === 'none' ? null : v })}
     >
-      <MenuRadioItem value="none">No collection</MenuRadioItem>
+      <MenuRadioItem closeOnClick value="none">
+        Default folder
+      </MenuRadioItem>
       {collections.data?.map((c) => (
-        <MenuRadioItem key={c.id} value={c.id}>
-          {c.name}
+        <MenuRadioItem closeOnClick key={c.id} value={c.id}>
+          {projectFolder(c.id, collections.data)}
         </MenuRadioItem>
       ))}
     </MenuRadioGroup>

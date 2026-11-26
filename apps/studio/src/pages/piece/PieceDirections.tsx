@@ -52,6 +52,7 @@ export function PieceDirections({ pieceId }: { pieceId: string }) {
   const board = boards.find((b) => b.id === pick) ?? boards[0] ?? null
   return (
     <div className="flex flex-col gap-10">
+      <SpecCard piece={p} />
       <section aria-label="Design">
         <SectionTitle actions={<StageActions piece={p} board={board} />}>Design board</SectionTitle>
         {boards.length > 1 && (
@@ -79,10 +80,6 @@ export function PieceDirections({ pieceId }: { pieceId: string }) {
       <section>
         <SectionTitle>Brief</SectionTitle>
         <Brief piece={p} />
-      </section>
-      <section>
-        <SectionTitle>Spec</SectionTitle>
-        <SpecCard piece={p} />
       </section>
     </div>
   )
