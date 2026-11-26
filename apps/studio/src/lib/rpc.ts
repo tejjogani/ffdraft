@@ -113,6 +113,7 @@ export const QUERY_NAMES = [
   'chat.ask',
   'scenes.history',
   'renders.engine',
+  'renders.installStatus',
   'models.estimatePortraits',
   'shots.get',
   'shots.estimate',

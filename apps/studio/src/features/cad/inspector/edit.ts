@@ -9,6 +9,7 @@ import {
   labelForOps,
   type Node,
   type NodeKind,
+  type ProngNumber,
 } from '@pave/schema'
 import { createContext, use, useMemo } from 'react'
 import type { DesignSession } from '../../../lib/design-session/store'
@@ -36,6 +37,8 @@ export interface FieldEdit {
   switchVariant(path: readonly string[], next: string): string | null
   /** Whether the assistant's latest run changed this exact field, and how. */
   prior(path: readonly string[]): PriorValue
+  /** Points out a numbered tip on the evaluated setting. */
+  locateProng?(number: ProngNumber): void
   /** Viewers (and a window without a session) see the controls but every write is a no-op. */
   readOnly: boolean
 }

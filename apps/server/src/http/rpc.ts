@@ -1,24 +1,53 @@
 import { COMMAND_NAMES, type CommandName } from '@pave/schema'
 import { bodyLimit } from 'hono/body-limit'
-import { AppError, badRequest, notFound } from '../errors'
+import { AppError, badRequest, forbidden, notFound } from '../errors'
 import type { Runtime } from '../runtime'
-import type { App } from './types'
+import type { App, HttpContext } from './types'
 
 const isCommand = (name: string): name is CommandName => (COMMAND_NAMES as string[]).includes(name)
 
-async function readJson(c: {
-  req: { text(): Promise<string>; header(name: string): string | undefined }
-}) {
+async function readJson(c: HttpContext, requireObject = false) {
   const text = await c.req.text()
-  if (text.trim() === '') return {}
+  if (!requireObject && text.trim() === '') return {}
   // Requiring a JSON content type means a cross-site form post can never reach a command.
-  if (!c.req.header('content-type')?.toLowerCase().startsWith('application/json'))
-    throw badRequest('Send the command input as application/json')
+  const contentType = c.req.header('content-type')?.toLowerCase()
+  const json = requireObject
+    ? contentType?.split(';')[0]?.trim() === 'application/json'
+    : contentType?.startsWith('application/json')
+  if (!json) throw badRequest('Send the command input as application/json')
+  let input: unknown
   try {
-    return JSON.parse(text) as unknown
+    input = JSON.parse(text) as unknown
   } catch {
     throw badRequest('The request body is not valid JSON')
   }
+  if (requireObject && input === null) throw badRequest('Send an empty JSON object')
+  return input
+}
+
+const renderInstall = (name: CommandName) =>
+  name === 'renders.installStatus' ||
+  name === 'renders.installEngine' ||
+  name === 'renders.cancelInstall'
+
+/** An installation changes this computer. The generic local guard also permits LAN and dev
+ * origins, so require a loopback bind and the browser's exact loopback request origin here. */
+function localInstallRequest(c: HttpContext, runtime: Runtime): boolean {
+  const { auth, host } = runtime.config
+  if (auth !== 'local' || !['localhost', '127.0.0.1', '::1'].includes(host.toLowerCase()))
+    return false
+
+  const url = new URL(c.req.url)
+  const hostHeader = c.req.header('host')
+  const fetchSite = c.req.header('sec-fetch-site')
+  if (
+    !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) ||
+    (hostHeader !== undefined && hostHeader.toLowerCase() !== url.host) ||
+    c.req.header('origin') !== url.origin ||
+    (fetchSite !== undefined && fetchSite !== 'same-origin')
+  )
+    throw forbidden('Open Pavé on this computer to manage the Blender installation.')
+  return true
 }
 
 /**
@@ -44,7 +73,11 @@ export function mountRpc(app: App, runtime: Runtime) {
     async (c) => {
       const name = c.req.param('name')
       if (!isCommand(name)) throw notFound('Command', name)
-      const output = await runtime.execute(name, await readJson(c), c.var.ctx)
+      const install = renderInstall(name)
+      const ctx = install
+        ? { ...c.var.ctx, localRenderInstall: localInstallRequest(c, runtime) }
+        : c.var.ctx
+      const output = await runtime.execute(name, await readJson(c, install), ctx)
       return c.json(output as object)
     },
   )

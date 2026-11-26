@@ -11,6 +11,8 @@ import {
 } from '@pave/schema'
 import { type AnyFeature, type NodeResult, QUALITY, type Scene } from '../core'
 import { CHECK_NAMES, runCheck, withoutCascades } from '../dfm/index'
+import type { HeadData } from '../features/setting'
+import { transformPoint } from '../geometry/vec'
 import { discardRuntime, isRuntimeFault, runtimeGeneration } from '../runtime/index'
 import type { Detail, Diagnostic, EvaluateOptions, Evaluation } from '../types'
 import {
@@ -298,12 +300,28 @@ export class Evaluator {
           ]
         : [],
     )
+    const prongTips = active.flatMap(({ id, node, data, matrix }) =>
+      node.kind === 'setting'
+        ? (data as HeadData).claws.flatMap(({ number, tip }) =>
+            tip
+              ? [
+                  {
+                    nodeId: id,
+                    number,
+                    at: [...transformPoint(matrix, tip)] as [number, number, number],
+                  },
+                ]
+              : [],
+          )
+        : [],
+    )
     const evaluation: Evaluation = {
       detail,
       parts: parts.map((p) => p.part),
       stones: stones.map((s) => s.instance),
       gemMeshes,
       ...(curves.length ? { curves } : {}),
+      ...(prongTips.length ? { prongTips } : {}),
       report: buildReport(
         design,
         parts,

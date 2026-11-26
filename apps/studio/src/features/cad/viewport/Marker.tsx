@@ -48,18 +48,21 @@ export function Marker({
     }
   }, [viewer, at])
 
+  const border =
+    spot.level === 'error'
+      ? 'border-danger'
+      : spot.level === 'info'
+        ? 'border-select'
+        : 'border-warn'
   return (
     <div ref={el} aria-hidden className="pointer-events-none absolute top-0 left-0 z-10">
       <span
-        className={cn(
-          'absolute -top-[5px] -left-[5px] size-2.5 rounded-full border-2',
-          spot.level === 'error' ? 'border-danger' : 'border-warn',
-        )}
+        className={cn('absolute -top-[5px] -left-[5px] size-2.5 rounded-full border-2', border)}
       />
       <span
         className={cn(
           'absolute -top-[5px] -left-[5px] size-2.5 animate-ping rounded-full border-2 motion-reduce:hidden',
-          spot.level === 'error' ? 'border-danger' : 'border-warn',
+          border,
         )}
       />
     </div>

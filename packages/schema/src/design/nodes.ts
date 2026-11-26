@@ -208,6 +208,32 @@ export const Gem = z
   })
   .meta({ title: 'Stone', description: 'A single gemstone.' })
 
+export const PRONG_NUMBERS = ['1', '2', '3', '4', '5', '6', '7', '8'] as const
+export type ProngNumber = (typeof PRONG_NUMBERS)[number]
+export const PRONG_TIP_OFFSET_MAX_MM = 0.5
+const prongTipOffset = (number: ProngNumber) =>
+  mm(`Prong ${number} tip offset`, -PRONG_TIP_OFFSET_MAX_MM, PRONG_TIP_OFFSET_MAX_MM, 0)
+    .unwrap()
+    .optional()
+    .meta({ title: `Prong ${number} tip offset`, unit: 'mm', step: 0.05 })
+
+const ProngTipOffsets = z
+  .strictObject(
+    Object.fromEntries(PRONG_NUMBERS.map((number) => [number, prongTipOffset(number)])) as Record<
+      ProngNumber,
+      ReturnType<typeof prongTipOffset>
+    >,
+  )
+  .optional()
+  .meta({
+    title: 'Individual prong tips',
+    group: 'Prongs',
+    when: { style: ['prong', 'basket'] },
+    widget: 'prongTips',
+    description:
+      'Sparse 1-based prong numbers in the current layout, counterclockwise from the stone’s +X axis as seen from the table. Double tips share a number. Offset is in mm (−0.5 to +0.5), positive outward and negative inward. To move one tip, update with {"prongTipOffsetsMm":{"1":0.25}}. Use null for a key to reset it. Changing the claw layout clears old offsets.',
+  })
+
 export const Setting = z
   .object({
     ...base,
@@ -239,6 +265,7 @@ export const Setting = z
       group: 'Prongs',
       when: { style: ['prong', 'basket'] },
     }),
+    prongTipOffsetsMm: ProngTipOffsets,
     prongSpin: follows(
       deg('Prong rotation', -90, 90, 45, {
         group: 'Prongs',

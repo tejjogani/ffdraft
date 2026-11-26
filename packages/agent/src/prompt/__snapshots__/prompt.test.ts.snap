@@ -6,9 +6,9 @@ exports[`the frozen system prompt > has a stable hash (snapshot) that covers the
     7082,
     41253,
     10638,
-    14609,
+    15238,
   ],
-  "hash": "prompt-0963ef261ddab6",
+  "hash": "prompt-0ddc1ea532043a",
 }
 `;
 
@@ -85,6 +85,15 @@ Shared value lists:
 - prongCount: integer 3–8. only when style is prong or basket. Auto: the usual count for the stone’s shape and size.
 - prongDiameter: number 0.5–2.5 mm. only when style is prong or basket. Auto: sized to the stone.
 - prongTip: round | claw | tab | double = "round". only when style is prong or basket
+- prongTipOffsetsMm: object. only when style is prong or basket. Sparse 1-based prong numbers in the current layout, counterclockwise from the stone’s +X axis as seen from the table. Double tips share a number. Offset is in mm (−0.5 to +0.5), positive outward and negative inward. To move one tip, update with {"prongTipOffsetsMm":{"1":0.25}}. Use null for a key to reset it. Changing the claw layout clears old offsets.
+  - 1: number -0.5–0.5 mm
+  - 2: number -0.5–0.5 mm
+  - 3: number -0.5–0.5 mm
+  - 4: number -0.5–0.5 mm
+  - 5: number -0.5–0.5 mm
+  - 6: number -0.5–0.5 mm
+  - 7: number -0.5–0.5 mm
+  - 8: number -0.5–0.5 mm
 - prongSpin: number -90–90°. only when style is prong or basket. 0 = a claw along the band. Auto: symmetric about the band for the claw count (four at 45, six at 0, three at 30). Shapes with points or corners put claws on them instead.
 - taper: number 0–0.8 = 0.35. only when style is prong or basket. How strongly the head narrows toward its base.
 - rails: integer 0–2 = 1. only when style is basket

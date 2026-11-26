@@ -217,7 +217,10 @@ export interface BlenderCapability {
 }
 
 /** Whether renders can run here; the server reports this as a capability. */
-export async function detectBlender(options: RuntimeOptions = {}): Promise<BlenderCapability> {
+export async function detectBlender(
+  options: RuntimeOptions = {},
+  opts: { signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<BlenderCapability> {
   const runtime = resolveRuntime(options)
   const base = { runtime: runtime.kind, command: runtime.command }
   if (
@@ -240,7 +243,10 @@ export async function detectBlender(options: RuntimeOptions = {}): Promise<Blend
           'import bpy; print("PAVE_BLENDER_VERSION", bpy.app.version_string)',
         ]
   try {
-    const { code, stdout, stderr } = await run(runtime.command, args, { timeoutMs: 120_000 })
+    const { code, stdout, stderr } = await run(runtime.command, args, {
+      signal: opts.signal,
+      timeoutMs: opts.timeoutMs ?? 120_000,
+    })
     const version = /PAVE_BLENDER_VERSION (\S+)/.exec(stdout)?.[1]
     if (code === 0 && version) return { ...base, available: true, version }
     return {

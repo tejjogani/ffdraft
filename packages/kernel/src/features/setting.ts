@@ -9,6 +9,8 @@
 import {
   GEM_CUTS,
   type NodeOf,
+  PRONG_NUMBERS,
+  type ProngNumber,
   prongCountFor,
   prongDiameterFor,
   prongHeavyFor,
@@ -291,7 +293,7 @@ function prongStyle(node: SettingNode, d: number, onPoint: boolean): ProngStyle 
 }
 
 /** One claw: up the leg, past the girdle, then leaning in over the crown. */
-function prong(head: Head, phi: number, style: ProngStyle, sideways: number): Solid {
+function prong(head: Head, phi: number, style: ProngStyle, sideways: number, tipOffset: number) {
   const { shape } = head
   const n = shape.normal(phi)
   const tangent: Vec2 = [-n[1], n[0]]
@@ -323,10 +325,20 @@ function prong(head: Head, phi: number, style: ProngStyle, sideways: number): So
   const points = world(shape, axis)
   const outward = sub(shape.toWorld([n[0], n[1], 0]), shape.toWorld([0, 0, 0]))
   const frames = pathFrames(points, { closed: false, side: outward })
+  // Translate the crown sections along the girdle normal, preserving their profiles and the
+  // girdle and root sections. The terminal section gets the full measured displacement.
+  const firstCrown = frames.length - style.crown.length
+  const endFraction = style.end === 'point' ? 0.95 : style.crown.at(-1)![0]
+  if (tipOffset)
+    for (const [i, [fraction]] of style.crown.entries()) {
+      const frame = frames[firstCrown + i]!
+      frame.origin = addScaled(frame.origin, outward, tipOffset * (fraction / endFraction))
+    }
   const sections = frames.map((frame, i) => placeLoop(frame, scaleLoop(style.loop, sizes[i]!)))
 
   const last = frames[frames.length - 1]!
   const lastSize = sizes[sizes.length - 1]!
+  let tip = last.origin
   if (style.end === 'dome') {
     // A hemisphere: rings shrinking along a quarter circle, closed by a pole.
     for (const a of [30, 60]) {
@@ -335,16 +347,16 @@ function prong(head: Head, phi: number, style: ProngStyle, sideways: number): So
         placeLoop({ ...last, origin }, scaleLoop(style.loop, lastSize * Math.cos(a * DEG))),
       )
     }
-    sections.push(
-      poleSection(addScaled(last.origin, last.z, style.radius * lastSize), style.loop.length),
-    )
+    tip = addScaled(last.origin, last.z, style.radius * lastSize)
+    sections.push(poleSection(tip, style.loop.length))
   } else if (style.end === 'point') {
     // The tip comes to rest on the crown, just short of the table.
-    const z = shape.girdleTop + 0.95 * crownHeight
+    const z = shape.girdleTop + endFraction * crownHeight
     const s = shape.silhouette(phi, z)
-    sections.push(poleSection(shape.toWorld(shift([s[0], s[1], z + 0.02])), style.loop.length))
+    tip = addScaled(shape.toWorld(shift([s[0], s[1], z + 0.02])), outward, tipOffset)
+    sections.push(poleSection(tip, style.loop.length))
   }
-  return sweepSolid({ closed: false, sections })
+  return { solid: sweepSolid({ closed: false, sections }), tip }
 }
 
 /** Half the width of a claw along the girdle, by tip: what a halo must leave room for. */
@@ -357,6 +369,7 @@ function clawHalfWidth(node: SettingNode, d: number, onPoint: boolean): number {
 
 /** One claw as placed: its direction in the stone's frame and how much room it takes. */
 export interface ClawPlace {
+  number: ProngNumber
   phi: number
   point: boolean
   /** Half its width along the girdle, mm. */
@@ -377,12 +390,25 @@ export interface ClawPlace {
    * girdle.
    */
   surface?: Float32Array
+  /** Tip centre before the setting's own transform, available once the claw is built. */
+  tip?: Vec3
 }
 
 function clawPlaces(node: SettingNode, shape: StoneShape, claws: Claws): ClawPlace[] {
-  return prongDirections(shape, claws.count, claws.spin * DEG).map(({ phi, point }) => {
+  const directions = prongDirections(shape, claws.count, claws.spin * DEG)
+  const tau = 2 * Math.PI
+  const fromX = (phi: number) => {
+    const angle = ((phi % tau) + tau) % tau
+    return angle > tau - 1e-9 ? 0 : angle
+  }
+  // Number counterclockwise from +X as seen from the table. Keep the original build order
+  // used by the mesh and halo, including the cut's corners and any intermediate claws.
+  const numbered = directions.toSorted((a, b) => fromX(a.phi) - fromX(b.phi))
+  return directions.map((direction) => {
+    const { phi, point } = direction
     const style = prongStyle(node, claws.diameter, point)
     return {
+      number: PRONG_NUMBERS[numbered.indexOf(direction)]!,
       phi,
       point,
       halfWidth: clawHalfWidth(node, claws.diameter, point),
@@ -398,11 +424,30 @@ function prongs(
   head: Head,
   claws: Claws,
   places: readonly ClawPlace[],
-): Solid[][] {
-  return places.map(({ phi, point }) => {
+  ctx: BuildContext,
+) {
+  return places.map(({ phi, point, number }) => {
     const style = prongStyle(node, claws.diameter, point)
     const pair = !point && node.prongTip === 'double'
-    return (pair ? [-0.4, 0.4] : [0]).map((k) => prong(head, phi, style, k * claws.diameter))
+    const offset = node.prongTipOffsetsMm?.[number] ?? 0
+    const built = (pair ? [-0.4, 0.4] : [0]).map((k) =>
+      prong(head, phi, style, k * claws.diameter, offset),
+    )
+    const tip = pair ? lerp3(built[0]!.tip, built[1]!.tip, 0.5) : built[0]!.tip
+    if (offset > style.overlap + 1e-6)
+      ctx.report({
+        level: 'warning',
+        code: 'prong.tipContact',
+        message: `Prong ${number} moves ${offset.toFixed(2)} mm outward, beyond its ${style.overlap.toFixed(2)} mm planned bite. Check that its tip still grips the stone.`,
+        value: offset,
+        limit: style.overlap,
+        at: [...tip],
+        fix: {
+          label: `Reset prong ${number} tip offset`,
+          ops: [{ t: 'update', id: node.id, patch: { prongTipOffsetsMm: { [number]: null } } }],
+        },
+      })
+    return { solids: built.map(({ solid }) => solid), tip }
   })
 }
 
@@ -732,9 +777,13 @@ export const setting = defineFeature('setting', (node, ctx) => {
     const standoff = claws.diameter / 2 - RULES.prongOverlap(claws.diameter)
     const wire = clamp(claws.diameter * 0.8, 0.5, 1.2)
     head.railDepth = railDepthOf(head, standoff, wire)
-    const clawSolids = prongs(node, head, claws, places)
-    places = places.map((place, i) => ({ ...place, surface: inStoneFrame(stone, clawSolids[i]!) }))
-    solids.push(...clawSolids.flat())
+    const built = prongs(node, head, claws, places, ctx)
+    places = places.map((place, i) => ({
+      ...place,
+      tip: built[i]!.tip,
+      surface: inStoneFrame(stone, built[i]!.solids),
+    }))
+    solids.push(...built.flatMap(({ solids }) => solids))
     const bottom = baseDepth(head, standoff)
     const girdle = -shape.girdleBottom
     if (node.style === 'basket')

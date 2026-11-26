@@ -17,6 +17,7 @@ export const FIELD_WIDGETS = [
   'asset',
   'ringSize',
   'stoneSize',
+  'prongTips',
   'metal',
   'finish',
   'plating',

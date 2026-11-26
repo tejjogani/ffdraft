@@ -9,6 +9,7 @@ import { and, asc, desc, eq, gt, inArray, isNull, lt, max, type SQL } from 'driz
 import { captureShots, suggestShots } from '../cinema'
 import { type Ctx, publish } from '../context'
 import * as t from '../db/schema'
+import { BLENDER_INSTALL_UNAVAILABLE } from '../engines/render/blender'
 import { badRequest, conflict, forbidden } from '../errors'
 import { createId } from '../ids'
 import { renderHandle, stopJob, submitJob, updateRender } from '../jobs'
@@ -19,6 +20,16 @@ import { changeScene, patchScene, revertScene, sceneHistory } from '../scenes'
 import { isTerminal, publishJob, serviceContext } from '../service-context'
 import { toPiece } from './pieces'
 import type { HandlerGroup } from './types'
+
+function installer(ctx: Ctx, requireLocal: boolean) {
+  if (
+    ctx.actor.type !== 'user' ||
+    ctx.localRenderInstall === undefined ||
+    (requireLocal && (!ctx.localRenderInstall || ctx.authMode !== 'local'))
+  )
+    throw forbidden('Blender setup is only available to the owner in a local Pavé window.')
+  return ctx.localRenderInstall ? ctx.services.optional('renderEngine') : null
+}
 
 type RenderRow = typeof t.renderJob.$inferSelect
 type SceneRow = typeof t.renderScene.$inferSelect
@@ -463,4 +474,11 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
       throw forbidden('The render engine can only be configured on a local install')
     return ctx.services.require('renderEngine').configure(blenderPath, serviceContext(ctx))
   },
+
+  'renders.installStatus': async (ctx) =>
+    installer(ctx, false)?.installStatus?.() ?? BLENDER_INSTALL_UNAVAILABLE,
+  'renders.installEngine': async (ctx) =>
+    installer(ctx, true)?.install?.() ?? BLENDER_INSTALL_UNAVAILABLE,
+  'renders.cancelInstall': async (ctx) =>
+    (await installer(ctx, true)?.cancelInstall?.()) ?? BLENDER_INSTALL_UNAVAILABLE,
 }
