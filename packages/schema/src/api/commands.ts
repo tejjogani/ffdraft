@@ -69,6 +69,7 @@ import {
   ReferenceSchema,
   RenderEngineStatusSchema,
   RenderEstimateSchema,
+  RenderInstallStatusSchema,
   RenderJobSchema,
   RenderSceneSchema,
   RIGHTS,
@@ -1561,6 +1562,28 @@ export const commands = {
     role: 'owner',
     input: z.object({ blenderPath: z.string().min(1).max(1024).nullable() }),
     output: RenderEngineStatusSchema,
+  }),
+
+  'renders.installStatus': def({
+    description: 'Check availability and progress of the built-in local Blender installer.',
+    kind: 'query',
+    role: 'owner',
+    input: z.strictObject({}),
+    output: RenderInstallStatusSchema,
+  }),
+  'renders.installEngine': def({
+    description: 'Install the pinned Blender release on this computer in the background.',
+    kind: 'mutation',
+    role: 'owner',
+    input: z.strictObject({}),
+    output: RenderInstallStatusSchema,
+  }),
+  'renders.cancelInstall': def({
+    description: 'Cancel a running Blender installation on this computer.',
+    kind: 'mutation',
+    role: 'owner',
+    input: z.strictObject({}),
+    output: RenderInstallStatusSchema,
   }),
 
   // ── Brand models ──────────────────────────────────────────────────────────────────────────

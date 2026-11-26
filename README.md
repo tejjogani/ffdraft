@@ -57,7 +57,7 @@ You need:
 | --- | --- | --- |
 | [Node.js](https://nodejs.org) | 22 or newer | The LTS installer is fine |
 | [Git](https://git-scm.com) | any | To download the code |
-| Disk space | about 1.5 GB | Another 1 GB if you add the Blender renderer |
+| Disk space | about 1.5 GB | Allow additional disk space if you add the Blender renderer |
 | A browser | Chrome, Edge, Firefox or Safari, current | The 3D view needs WebGL 2 |
 
 Everything else is installed for you. Works on macOS, Windows and Linux.
@@ -97,7 +97,7 @@ The installer takes a few minutes the first time. It:
 4. builds the application;
 5. creates `apps/server/.env`, a settings file where every line is optional;
 6. says whether the assistant has a Claude API key (never the key itself);
-7. says whether the optional Blender renderer is installed (and installs it with `--render`);
+7. checks the optional command-line Blender worker (and installs it with `--render`);
 8. starts Pavé once on a spare port with a throwaway data folder, checks that it answers, and
    stops it.
 
@@ -350,15 +350,22 @@ In accounts mode the plan belongs to each organisation instead, and `PAVE_PLAN` 
 Pavé's own 3D view and the Render tab's browser previews need nothing extra. Photoreal takes use
 Blender's Cycles renderer, which is a separate, optional install.
 
-```bash
-node scripts/install.mjs --render
-```
+On a supported local installation, choose **Set up Blender** when you open Pavé, or open the
+engine status in a project's **Render** tab. If Pavé finds a compatible Blender 5.3 installation,
+it uses that automatically. Otherwise, **Install render engine** confirms the download shown
+in the dialog. Pavé verifies Blender and stores it in its own data folder. You can close the
+dialog and keep working, or reopen it to see progress or cancel. Photoreal rendering turns on
+as soon as Blender has passed its startup check.
 
-(`./install.sh --render` or `.\install.ps1 --render` do the same.) This needs **Python 3.13** on
-your computer (Blender 5.3's Python module supports only that version) and downloads about 1 GB.
-If you already have Blender 5.3 installed, skip this and set `PAVE_BLENDER` in
-`apps/server/.env` to the Blender program instead; the Render tab's engine dialog can also point
-Pavé at it. Restart Pavé after installing.
+The built-in installer is available on Apple silicon Macs, Linux x64, and Windows x64 and Arm64
+when Pavé is running locally and listening only on loopback. On other setups, you can install
+Blender 5.3 yourself and set `PAVE_BLENDER` in `apps/server/.env` to the Blender executable. On a
+local installation, **Use an existing Blender installation** in the engine dialog can also
+check a path you provide.
+
+The command-line option `node scripts/install.mjs --render` remains available for installing
+Blender's Python module with **Python 3.13**. Restart Pavé after using the command-line installer
+or changing the environment file.
 
 Renders run on your processor unless Blender finds a supported graphics card; on a Mac it uses
 the Apple graphics chip (Metal). On a shared
@@ -482,7 +489,7 @@ turn it on, then restart Pavé. A value set in your terminal wins over the file.
 | `PAVE_MAX_UPLOAD_MB` | `200` | Largest file that can be uploaded |
 | `PAVE_KERNEL_WORKERS` | from the computer: 2 on 8 GB, 3 on 16 GB, at most 4, and one processor left free | How many geometry jobs run at once |
 | `PAVE_KERNEL_MEMORY_MB` | `1024` on 8 GB or less, else `1536` | Memory a geometry worker may hold before it is restarted |
-| `PAVE_PYTHON`, `PAVE_BLENDER` | — | Where Blender is, if not installed by `--render` |
+| `PAVE_PYTHON`, `PAVE_BLENDER` | — | Optional paths to your own Blender-enabled Python or Blender executable |
 | `ANTHROPIC_API_KEY` | — | Your Claude API key for the assistant. Wins over a key saved in Settings, AI |
 | `PAVE_ASSISTANT_TIER` | `standard` | The tier new conversations start on: `power`, `standard` or `light` |
 | `PAVE_ASSISTANT_MODEL_POWER`, `…_STANDARD`, `…_LIGHT` | Claude Fable 5.2, Claude Opus 5.5, Claude Sonnet 5.5 | The model of each tier: `claude-fable-5-2`, `claude-opus-5-5`, `claude-sonnet-5-5` or `claude-haiku-5-5`. Wins over Settings, AI |
@@ -593,7 +600,7 @@ Back the folder up first if the work in it matters.
 | `--render` fails with "CPython 3.13 not found" | Install Python 3.13, or install Blender 5.3 and set `PAVE_BLENDER` |
 | PowerShell: "running scripts is disabled on this system" | `powershell -ExecutionPolicy Bypass -File .\install.ps1` |
 | The assistant answers with an error | See [When something goes wrong](#when-something-goes-wrong) |
-| The Render tab says Blender was not found | Install it with `node scripts/install.mjs --render`, or point the engine dialog (or `PAVE_BLENDER`) at Blender 5.3, then restart. Without it, takes are browser previews |
+| The Render tab says Blender was not found | Open the engine status and choose **Install render engine** if offered, or point Pavé at an existing Blender 5.3 executable. Browser previews still work while you set up Blender |
 | Something is wrong and you want a clean start | Stop Pavé, rename `.data`, start again. Your old work stays in the renamed folder |
 
 `pnpm check:install` checks the installation without changing anything.

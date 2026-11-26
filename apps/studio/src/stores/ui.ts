@@ -6,6 +6,10 @@ interface UIState {
   sidebarCollapsed: boolean
   /** Phone-narrow windows: the sidebar is a drawer over the page, closed by default. */
   mobileNavOpen: boolean
+  engineSetupOpen: boolean
+  setEngineSetupOpen: (open: boolean) => void
+  dismissedEngineVersion: string | null
+  dismissEngineVersion: (version: string) => void
   paletteOpen: boolean
   /** Collections expanded in the sidebar. */
   expandedCollections: string[]
@@ -22,6 +26,10 @@ export const useUI = create<UIState>()(
     (set) => ({
       sidebarCollapsed: false,
       mobileNavOpen: false,
+      engineSetupOpen: false,
+      setEngineSetupOpen: (engineSetupOpen) => set({ engineSetupOpen }),
+      dismissedEngineVersion: null,
+      dismissEngineVersion: (dismissedEngineVersion) => set({ dismissedEngineVersion }),
       paletteOpen: false,
       expandedCollections: [],
       toggleSidebar: () =>
@@ -43,6 +51,7 @@ export const useUI = create<UIState>()(
       name: 'pave:ui',
       partialize: (s) => ({
         sidebarCollapsed: s.sidebarCollapsed,
+        dismissedEngineVersion: s.dismissedEngineVersion,
         expandedCollections: s.expandedCollections,
       }),
     },

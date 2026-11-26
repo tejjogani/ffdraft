@@ -40,6 +40,8 @@ export interface Ctx {
   readonly events: EventBus
   /** `local` (single-user desktop/self-host, no sign-in) or `accounts`. */
   readonly authMode: AuthMode
+  /** Set only by the validated browser RPC request for the local Blender installer. */
+  readonly localRenderInstall?: boolean
   readonly diaexPartnerApiUrl: string | null
   /**
    * This organisation on this install, as a fingerprint (an HMAC of its id under a key derived

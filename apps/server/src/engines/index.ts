@@ -71,6 +71,7 @@ export function createEngines(
   const workRoot = config.renderWorkRoot ?? (dataDir && join(dataDir, 'render-work'))
   const blender = new BlenderSetup({
     file: config.engineFile,
+    dataDir: runtime.config.auth === 'local' ? dataDir : null,
     ...(config.blenderEnv ? { env: config.blenderEnv } : {}),
   })
   const renderEngine: RenderEngineService = {
@@ -79,6 +80,10 @@ export function createEngines(
       return blender.status()
     },
     configure: (blenderPath) => blender.configure(blenderPath),
+    installStatus: () => blender.installStatus(),
+    install: () => blender.install(),
+    cancelInstall: () => blender.cancelInstall(),
+    dispose: () => blender.dispose(),
   }
   return {
     geometry: createGeometry(pool),

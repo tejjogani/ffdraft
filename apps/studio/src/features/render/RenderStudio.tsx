@@ -30,9 +30,10 @@ import { type Command, useRegisterCommands } from '../../lib/commands'
 import { usePieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
 import { useRpc } from '../../lib/query'
 import { assistant, openAssistant } from '../../stores/assistant'
+import { useUI } from '../../stores/ui'
 import { jobState } from '../assistant/jobs/status'
 import { useStageJob } from '../assistant/jobs/useJob'
-import { EngineDialog, engineLabel } from './EngineDialog'
+import { engineLabel } from './EngineDialog'
 import { ShotInspector } from './ShotInspector'
 import { addShot, saveHouseShot, takeShotIntent } from './shot-actions'
 import { isLive, pickOf, type Shot, takeLabel, takeMedia, takesOf } from './shots'
@@ -55,7 +56,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
   const houses = useRpc('scenes.list', { pieceId: null })
   const [viewing, setViewing] = useState<string | null>(null)
   const [comparing, setComparing] = useState<[string, string] | null>(null)
-  const [engineOpen, setEngineOpen] = useState(false)
+  const setEngineOpen = useUI((s) => s.setEngineSetupOpen)
 
   const shot = s.shots.find((x) => x.key === selectedKey) ?? s.shots[0] ?? null
   // A default shot becomes a saved one on the first edit: follow it by position.
@@ -466,7 +467,6 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
             />
           )}
         </aside>
-        <EngineDialog open={engineOpen} onOpenChange={setEngineOpen} />
       </div>
     </div>
   )
