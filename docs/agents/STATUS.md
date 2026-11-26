@@ -1,6 +1,6 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 09:36 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 10:36 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## Studio experience: focused editor, project card menu, minimal assistant with a character (lane A, A11)
 
@@ -26,7 +26,8 @@ _Generated 26 Nov 2026 09:36 UTC by `docs/agents/sync_status.py` from the workfl
 | review:critic | done | 2 blocker, 5 major, 5 minor. FAIL. None of the six looks would pass on a fine-jewelry product page yet. Black acrylic fails outright on a piece the builder did not tune on. I rendered from… |
 | write:skill | running or interrupted |  |
 | fix:1 | done | Ten of the twelve findings are fixed or improved, each checked on a before-and-after render that I looked at whole and cropped on the stone and the ground. Two are not fixed: F8 (red pavé seats inside the rose-gold shan… |
-| verify:1 | running or interrupted |  |
+| verify:1 | done | 1 blocker, 4 major, 2 minor. FAIL. I re-rendered at HEAD f8569f6 under verify-1/, with the fixer's harness, 768 px, preview tier, 2 threads: studs in six looks, the three-stone in six, the… |
+| fix:2 | running or interrupted |  |
 
 ## CAD viewport: speed, full rotation, Rhino navigation (lane A, A13)
 
@@ -55,13 +56,14 @@ _Generated 26 Nov 2026 09:36 UTC by `docs/agents/sync_status.py` from the workfl
 | build:engine | done | commit ddec501 (on top of merge b1985b8; earlier step-A commits 29f4004 and 857c738 kept). Step A is finished on spec/truth and committed, not pushed. I merged claude/busy-bardeen-o482lo into spec/truth (merge commit b1985b8). Two files conflicted. In apps/server/src/handlers/pieces.ts I kept both import bloc… |
 | review:cheat | done | 5 blocker, 1 major, 1 minor. FAIL. I ran scripted wrong-model turns through the strict fake Claude API on the real server and kernel. The gate does refuse the obvious attempts: a wrong met… |
 | review:gems | done | 6 major, 4 minor. FAIL on the gem and jewellery lens. The gem tables are right. The check holds every template to its own build, at both draft and production detail. But I repro… |
-| review:founder | running or interrupted |  |
+| review:founder | done | 1 blocker, 5 major, 7 minor. FAIL. I walked the founder's path in a browser on spec/truth at ba743cc, with a fresh studio build in my scratchpad, the real server and kernel, and the script… |
 | build:agent | done | commit 849d56d. I finished step B (the assistant side of the spec work) on spec/truth and committed it as 849d56d. Nothing was pushed. The founder's journey now runs end to end on the fake API, with scripted models standing in for Clau… |
 | build:studio | done | commit ba743cc. Step C (the studio) is done and committed on spec/truth as ba743cc. Nothing was pushed. Before building, I merged ui/focus (commit b7d5489) and then claude/busy-bardeen-o482lo (commit 1645a3b). Three files conflicted in… |
+| fix:1 | running or interrupted |  |
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: e63a63f Status: studio and render in their fix rounds; spec studio step under way
+Branch `claude/busy-bardeen-o482lo`, head: 35b3366 Status: studio updating its browser scripts; render verifying fixes; spec in review
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -92,7 +94,7 @@ Branch `claude/busy-bardeen-o482lo`, head: e63a63f Status: studio and render in 
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: e63a63f Status: studio and render in their fix rounds; spec studio step under way
+Branch `claude/busy-bardeen-o482lo`, head: 35b3366 Status: studio updating its browser scripts; render verifying fixes; spec in review
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -134,7 +136,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: e63a63f Status: studio and render in their fix rounds; spec studio step under way
+Branch `claude/busy-bardeen-o482lo`, head: 35b3366 Status: studio updating its browser scripts; render verifying fixes; spec in review
 
 | Agent | State | Outcome |
 |---|---|---|
