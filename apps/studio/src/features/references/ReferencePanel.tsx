@@ -1,6 +1,6 @@
 /**
  * The reference window beside CAD and the Render tab. Its References tab finds references (the
- * keyless museum collections, the piece's own photos and moodboards, the organisation's boards,
+ * Google Images and Pinterest, the piece's own photos and moodboards, the organisation's boards,
  * a pasted link, a dropped or pasted picture), pins them to the piece, orders them, and drags a
  * pinned picture onto the CAD view as an image plane; every result and pin says where it comes
  * from and what its rights allow. Its Sketch tab is a sketch pad whose sketch becomes a pinned
@@ -9,10 +9,9 @@
  * Docked as a flat column beside the work, or pulled out as a floating glass window the person
  * can move, resize, close and dock again (remembered per browser); a sheet on narrow screens.
  */
-import type { ImagePlaneView, Piece, Reference, SearchResult } from '@pave/schema'
+import type { ImagePlaneView, Piece, Reference } from '@pave/schema'
 import {
   Button,
-  Checkbox,
   cn,
   EmptyState,
   IconButton,
@@ -44,12 +43,10 @@ import {
   PictureInPicture2,
   Pin,
   PinOff,
-  RotateCw,
-  Search,
   Sparkles,
   X,
 } from 'lucide-react'
-import { type DragEvent, type ReactNode, useMemo, useRef, useState } from 'react'
+import { type DragEvent, type ReactNode, useRef, useState } from 'react'
 import { FloatingWindow } from '../../components/FloatingWindow'
 import { assetUrl, uploadAsset } from '../../lib/assets'
 import { defaultRect } from '../../lib/float-window'
@@ -64,8 +61,8 @@ import { GeneratedTab } from './GeneratedTab'
 import { ProvenanceButton, type ProvenanceFacts, providerLabel, RightsChip } from './Provenance'
 import { SketchPad } from './SketchPad'
 import { type PanelSource, PIN_DRAG_TYPE, type ReferenceTab, useReferencePanel } from './store'
+import { WebReferenceSearch } from './WebReferenceSearch'
 
-const MUSEUMS = ['met', 'aic', 'cleveland'] as const
 const VIEWS: ImagePlaneView[] = ['front', 'top', 'right']
 
 /** Docked beside the work from this container width; a sheet below it. */
@@ -110,16 +107,6 @@ function useReferenceJob(piece: Piece) {
 
 export const UPDATE_GOAL =
   'Update the design to the attached reference picture: read it, compare it with the design as it is, change only what differs (one undoable edit per change), keep my own edits, fit and compare, and say what changed and what still differs.'
-
-const resultFacts = (r: SearchResult): ProvenanceFacts => ({
-  title: r.title,
-  provider: r.provider,
-  url: r.pageUrl ?? r.imageUrl,
-  credit: r.credit,
-  license: r.license,
-  licenseUrl: r.licenseUrl ?? null,
-  rights: r.rights,
-})
 
 const refFacts = (r: Reference): ProvenanceFacts => ({
   title: r.title,
@@ -233,7 +220,7 @@ function ReferencesTab({ piece }: { piece: Piece }) {
         {source === 'pinned' && (
           <PinnedList piece={piece} pins={pins.data?.references ?? null} readOnly={readOnly} />
         )}
-        {source === 'search' && <SearchSource piece={piece} readOnly={readOnly} />}
+        {source === 'search' && <SearchSource key={piece.id} piece={piece} readOnly={readOnly} />}
         {source === 'piece' && <PieceSource piece={piece} readOnly={readOnly} />}
         {source === 'boards' && <BoardsSource piece={piece} readOnly={readOnly} />}
       </div>
@@ -260,7 +247,7 @@ function PinnedList({
       {pins.length === 0 ? (
         <EmptyState
           title="Nothing pinned yet"
-          description="Search the museums, pick from this piece or your boards, or paste a link or a picture. Pinned pictures can be laid in the front, top or right view to model over."
+          description="Search Google Images or Pinterest, pick from your boards, or add a link or picture. Pinned pictures can be laid in the front, top or right view to model over."
         />
       ) : (
         <ul aria-label="Pinned references" className="flex flex-col gap-2">
@@ -583,163 +570,13 @@ function AddBar({ piece }: { piece: Piece }) {
 // ── Search ────────────────────────────────────────────────────────────────────────────────────
 
 function SearchSource({ piece, readOnly }: { piece: Piece; readOnly: boolean }) {
-  const query = useReferencePanel((s) => s.query)
-  const setQuery = useReferencePanel((s) => s.setQuery)
-  const openOnly = useReferencePanel((s) => s.openOnly)
-  const setOpenOnly = useReferencePanel((s) => s.setOpenOnly)
-  const [draft, setDraft] = useState(query)
-  const pins = useRpc('references.pins', { pieceId: piece.id })
-  const pinnedUrls = useMemo(
-    () => new Set((pins.data?.references ?? []).map((r) => r.source?.url).filter(Boolean)),
-    [pins.data],
-  )
-  return (
-    <div className="flex flex-col gap-3">
-      <form
-        aria-label="Museum search"
-        className="flex flex-col gap-2"
-        onSubmit={(e) => {
-          e.preventDefault()
-          setQuery(draft.trim())
-        }}
-      >
-        <div className="flex gap-1.5">
-          <Input
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Art deco ring, mourning ring, cameo…"
-            aria-label="Search museum collections"
-            className="h-8 min-w-0 flex-1 text-sm"
-          />
-          <IconButton icon={Search} label="Search" type="submit" />
-        </div>
-        {/* biome-ignore lint/a11y/noLabelWithoutControl: the checkbox inside is the control */}
-        <label className="flex items-center gap-2 text-xs text-fg-muted">
-          <Checkbox checked={openOnly} onChange={setOpenOnly} />
-          Open access only (can be kept and sent to AI)
-        </label>
-      </form>
-      {!query ? (
-        <p className="text-xs leading-5 text-fg-subtle">
-          Searches the open collections of The Met, the Art Institute of Chicago and the Cleveland
-          Museum of Art. No key needed. General web image search needs a search API key (Settings,
-          Integrations).
-        </p>
-      ) : (
-        MUSEUMS.map((p) => (
-          <ProviderResults
-            key={`${p}:${query}:${openOnly}`}
-            provider={p}
-            query={query}
-            openOnly={openOnly}
-            piece={piece}
-            readOnly={readOnly}
-            pinnedUrls={pinnedUrls}
-          />
-        ))
-      )}
-    </div>
-  )
-}
-
-function ProviderResults({
-  provider,
-  query,
-  openOnly,
-  piece,
-  readOnly,
-  pinnedUrls,
-}: {
-  provider: string
-  query: string
-  openOnly: boolean
-  piece: Piece
-  readOnly: boolean
-  pinnedUrls: Set<string | null | undefined>
-}) {
-  const search = useRpc(
-    'references.search',
-    { query, providers: [provider], openOnly, page: 1 },
-    { staleTime: 5 * 60_000, retry: false },
-  )
-  const unavailable = search.data?.unavailable[0]
-  return (
-    <section aria-label={providerLabel(provider)} className="flex flex-col gap-1.5">
-      <h3 className="text-xs font-medium text-fg-muted">{providerLabel(provider)}</h3>
-      {search.isPending ? (
-        <div className="grid grid-cols-2 gap-2">
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="aspect-square" />
-          ))}
-        </div>
-      ) : search.isError || unavailable ? (
-        <p className="flex items-center gap-2 text-xs text-fg-subtle">
-          <span className="min-w-0 flex-1">
-            {unavailable?.reason ?? search.error?.message ?? 'Could not search'}
-          </span>
-          <Button size="sm" variant="ghost" icon={RotateCw} onClick={() => void search.refetch()}>
-            Retry
-          </Button>
-        </p>
-      ) : !search.data?.results.length ? (
-        <p className="text-xs text-fg-subtle">Nothing found.</p>
-      ) : (
-        <ul className="grid grid-cols-2 gap-2">
-          {search.data.results.map((r) => (
-            <li key={r.key}>
-              <ResultTile
-                result={r}
-                piece={piece}
-                readOnly={readOnly}
-                pinned={pinnedUrls.has(r.pageUrl ?? r.imageUrl)}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  )
-}
-
-function ResultTile({
-  result: r,
-  piece,
-  readOnly,
-  pinned,
-}: {
-  result: SearchResult
-  piece: Piece
-  readOnly: boolean
-  pinned: boolean
-}) {
-  const [busy, setBusy] = useState(false)
-  return (
-    <Tile
-      label={r.title}
-      picture={r.thumbUrl}
-      sub={r.credit ?? providerLabel(r.provider)}
-      chips={<RightsChip rights={r.rights} />}
-      facts={resultFacts(r)}
-      action={
-        readOnly ? null : (
-          <Button
-            size="sm"
-            variant={pinned ? 'ghost' : 'secondary'}
-            disabled={pinned || busy}
-            className="h-6 px-2 text-xs"
-            onClick={async () => {
-              setBusy(true)
-              await pin(piece.id, [{ result: r }])
-              setBusy(false)
-            }}
-          >
-            {busy ? <Spinner className="size-3" /> : <Pin className="size-3" />}
-            {pinned ? 'Pinned' : 'Pin'}
-          </Button>
-        )
-      }
-    />
-  )
+  const setSource = useReferencePanel((s) => s.setSource)
+  const saveLink = async (url: string) => {
+    const saved = await pin(piece.id, [{ url, title: linkName(url) }])
+    if (!saved?.length) throw new Error('Couldn’t pin that link. Try again.')
+    setSource('pinned')
+  }
+  return <WebReferenceSearch saveLabel="Pin link" {...(!readOnly && { onSave: saveLink })} />
 }
 
 /** A picture with its title, credit, rights and one action, for results and board items. */

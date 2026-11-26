@@ -44,7 +44,7 @@ function starters(
   if (stage === 'design')
     return [
       { label: 'Gather ideas with AI', job: 'design' },
-      { label: 'Find museum references for this brief' },
+      { label: 'Suggest search terms for this brief' },
       { label: 'What does the brief leave open?' },
     ] satisfies Starter[]
   if (stage === 'render' && piece.hasDesign)

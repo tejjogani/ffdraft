@@ -4,9 +4,9 @@
  * against the real server and kernel with the scripted assistant (fixture `ideas`) standing in
  * for Claude.
  *
- * A project in a sub-folder: its design board started, then filled from every source (an upload
+ * A project in a sub-folder: its design board filled from every source (an upload
  * of a photo, a scanned sketch sheet and a 3D model, a pasted Pinterest link, a note, a sketch
- * drawn in the app), in Masonry and in Canvas. The photo goes to CAD: the CAD job asks the five
+ * drawn in the app), in Grid and Arrange by hand. The photo goes to CAD: the CAD job asks the five
  * specs with the picture's defaults, Go answers, the spec card shows the estimate, Build it builds,
  * and the picture lies in the front view as an image plane. The CAD reference window shows the
  * linked board; Try variants adds a variant in CAD; the model opens as CAD. Then the project page
@@ -133,17 +133,20 @@ try {
   const sheet = await page.locator('#c').evaluate((el) => el.toDataURL('image/png'))
   writeFileSync(join(FILES, 'sketch-sheet.png'), Buffer.from(sheet.split(',')[1], 'base64'))
 
-  // The Design stage: no board until the person starts one (opening the tab writes nothing).
+  // The first photo opens the native file picker and creates the board when it is saved.
   await page.goto(`${BASE}/pieces/${piece.id}/directions`)
-  await page.getByRole('button', { name: 'Start the design board' }).waitFor({ timeout: 60_000 })
+  const upload = page.getByRole('button', { name: 'Add reference photo' })
+  await upload.waitFor({ timeout: 60_000 })
   await shot('01-design-empty')
-  await page.getByRole('button', { name: 'Start the design board' }).click()
-  await board().waitFor()
+  const chosen = page.waitForEvent('filechooser')
+  await upload.click()
+  await (await chosen).setFiles(PHOTO)
+  await until('first photo on the board', async () => (await items().count()) === 1)
 
-  // Uploads: a photo, a sketch sheet and a 3D model, through the board's own file picker.
+  // Bring in a scanned sketch sheet and a 3D model.
   await board()
     .locator('input[aria-label="Pictures or 3D models to add"]')
-    .setInputFiles([PHOTO, join(FILES, 'sketch-sheet.png'), join(FILES, 'halo-ring.stl')])
+    .setInputFiles([join(FILES, 'sketch-sheet.png'), join(FILES, 'halo-ring.stl')])
   await until('three uploads on the board', async () => (await items().count()) >= 3)
   // A pasted Pinterest link (view-only), a note, and a sketch drawn in the app.
   const addMenu = async (name: string) => {
@@ -200,10 +203,10 @@ try {
     report.modelViewer = 'not ready'
   })
   await shot('02-design-board')
-  await board().getByRole('button', { name: 'Canvas', exact: true }).click()
+  await board().getByRole('button', { name: 'Arrange by hand', exact: true }).click()
   await page.waitForTimeout(1200)
   await shot('03-design-board-canvas')
-  await board().getByRole('button', { name: 'Masonry', exact: true }).click()
+  await board().getByRole('button', { name: 'Grid', exact: true }).click()
 
   // Take the photo to CAD: the CAD job asks the five specs first.
   const photoName = PHOTO.split('/')

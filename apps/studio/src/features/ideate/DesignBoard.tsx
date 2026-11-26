@@ -2,7 +2,7 @@
  * A design board: the image-based space to design, think and collect ideas before CAD. A calm
  * pin board of pictures, sketches, scanned sketch sheets, notes, links (Pinterest, Google, a
  * shop: kept view-only, their image captured only when someone asks) and 3D models kept as
- * inspiration, in two views of the same items: Masonry and Canvas.
+ * inspiration, in two views of the same items: Grid and Arrange by hand.
  *
  * Everything here is a registered command on the server; the board keeps only its view and the
  * selected tile. From a picture or sketch, "Take to CAD" starts the CAD job from it; a 3D model
@@ -26,7 +26,6 @@ import {
   Box,
   Camera,
   FileImage,
-  Grid2x2,
   Hammer,
   Link2,
   MoreHorizontal,
@@ -36,6 +35,7 @@ import {
   Search,
   Sparkles,
   Trash2,
+  X,
 } from 'lucide-react'
 import {
   type DragEvent,
@@ -48,20 +48,28 @@ import { assetUrl } from '../../lib/assets'
 import { useRpcMutation } from '../../lib/query'
 import { ProvenanceButton, providerLabel, RightsChip } from '../references/Provenance'
 import { SketchPad } from '../references/SketchPad'
+import { WebReferenceSearch } from '../references/WebReferenceSearch'
 import {
   addFiles,
   addLinks,
   addNote,
   addSketch,
+  type BoardTarget,
   captureLink,
   removeReference,
   useOpenAsCad,
   useTakeToCad,
 } from './actions'
-import { BOARD_ACCEPT, canvasLayout, movedTo, takeToCadRefusal, urlsIn } from './board'
+import {
+  BOARD_ACCEPT,
+  BOARD_IMAGE_ACCEPT,
+  canvasLayout,
+  movedTo,
+  takeToCadRefusal,
+  urlsIn,
+} from './board'
 import { GeneratePanel } from './GeneratePanel'
 import { ModelViewer } from './ModelViewer'
-import { SearchSheet } from './SearchSheet'
 
 type View = 'masonry' | 'canvas'
 
@@ -76,13 +84,16 @@ const readView = (): View => {
 
 export function DesignBoard({
   board,
-  references,
+  pieceId,
+  references = [],
   readOnly = false,
-}: {
-  board: Board
-  references: Reference[]
+}: ({ board: Board; pieceId?: never } | { board?: never; pieceId: string }) & {
+  references?: Reference[]
   readOnly?: boolean
 }) {
+  const boardId = board?.id
+  const target: BoardTarget = boardId ? { boardId } : { pieceId: pieceId! }
+  const empty = references.length === 0
   const [view, setView] = useState<View>(readView)
   const [selected, setSelected] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
@@ -92,6 +103,7 @@ export function DesignBoard({
   const [generating, setGenerating] = useState(false)
   const [busy, setBusy] = useState(false)
   const [over, setOver] = useState(false)
+  const photos = useRef<HTMLInputElement>(null)
   const files = useRef<HTMLInputElement>(null)
   const takeToCad = useTakeToCad()
   const openAsCad = useOpenAsCad()
@@ -107,11 +119,17 @@ export function DesignBoard({
   }
 
   const run = async (what: string, fn: () => Promise<unknown>) => {
+    try {
+      await save(fn)
+    } catch (e) {
+      toast.error(`Couldn’t ${what}`, e instanceof Error ? e.message : undefined)
+    }
+  }
+
+  const save = async (fn: () => Promise<unknown>) => {
     setBusy(true)
     try {
       await fn()
-    } catch (e) {
-      toast.error(`Couldn’t ${what}`, e instanceof Error ? e.message : undefined)
     } finally {
       setBusy(false)
     }
@@ -121,7 +139,7 @@ export function DesignBoard({
   // `run` only sets this component's busy flag; the listener is renewed when the board changes.
   // biome-ignore lint/correctness/useExhaustiveDependencies: see above
   useEffect(() => {
-    if (readOnly) return
+    if (readOnly || busy) return
     const onPaste = (e: ClipboardEvent) => {
       const t = e.target as HTMLElement | null
       if (t?.closest('input, textarea, [contenteditable="true"]')) return
@@ -130,30 +148,51 @@ export function DesignBoard({
       if (!pasted.length && !urls.length) return
       e.preventDefault()
       void run('add that', async () => {
-        if (pasted.length) await addFiles(board.id, pasted)
-        else await addLinks(board.id, urls)
+        if (pasted.length) await addFiles(target, pasted)
+        else await addLinks(target, urls)
       })
     }
     document.addEventListener('paste', onPaste)
     return () => document.removeEventListener('paste', onPaste)
-  }, [board.id, readOnly])
+  }, [boardId, pieceId, readOnly, busy])
 
   const onDrop = (e: DragEvent) => {
     if (readOnly) return
     e.preventDefault()
     setOver(false)
+    if (busy) return
     const dropped = [...e.dataTransfer.files]
     const urls = urlsIn(e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text'))
+    if (!dropped.length && !urls.length) return
     void run('add that', async () => {
-      if (dropped.length) await addFiles(board.id, dropped)
-      else if (urls.length) await addLinks(board.id, urls)
+      if (dropped.length) await addFiles(target, dropped)
+      else if (urls.length) await addLinks(target, urls)
     })
   }
+
+  const referenceSearch = searching && !readOnly && (
+    <section
+      aria-label="Search for references"
+      className="rounded-lg border border-line bg-bg px-4 py-4 sm:px-5"
+    >
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">Search for references</h3>
+        <IconButton icon={X} label="Close reference search" onClick={() => setSearching(false)} />
+      </div>
+      <WebReferenceSearch
+        busy={busy}
+        onSave={async (url) => {
+          await save(() => addLinks(target, [url]))
+          setSearching(false)
+        }}
+      />
+    </section>
+  )
 
   return (
     <section
       aria-label="Design board"
-      data-design-board={board.id}
+      data-design-board={boardId ?? ''}
       className={cn(
         'relative flex flex-col gap-4',
         over && 'rounded-lg ring-2 ring-select ring-offset-4 ring-offset-bg',
@@ -168,100 +207,165 @@ export function DesignBoard({
       }}
       onDrop={onDrop}
     >
-      <div role="toolbar" aria-label="Board tools" className="flex flex-wrap items-center gap-1.5">
-        {!readOnly && (
-          <>
-            <Button size="sm" variant="secondary" icon={Search} onClick={() => setSearching(true)}>
-              Search references
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              icon={Sparkles}
-              aria-pressed={generating}
-              onClick={() => setGenerating((g) => !g)}
-            >
-              Generate concepts
-            </Button>
-            <Menu
-              trigger={
-                <Button size="sm" variant="ghost" icon={Plus} disabled={busy}>
-                  {busy ? 'Adding…' : 'Add'}
+      {empty && (
+        <div className="rounded-lg border border-line bg-bg-subtle px-5 py-10 sm:px-9 sm:py-14">
+          <h3 className="font-serif text-title text-fg">
+            {readOnly ? 'No references yet' : 'Collect references for your design'}
+          </h3>
+          {!readOnly && (
+            <>
+              <p className="mt-2 max-w-md text-sm text-fg-muted">
+                Bring in a photo of a piece you like, save a link, or get an idea down as a sketch
+                or note.
+              </p>
+              <div className="mt-6 flex flex-wrap gap-2">
+                <Button
+                  variant="primary"
+                  icon={FileImage}
+                  disabled={busy}
+                  onClick={() => photos.current?.click()}
+                >
+                  Add reference photo
                 </Button>
-              }
-            >
-              <MenuItem
-                icon={FileImage}
-                description="Photos, screenshots, scanned sketch sheets"
-                onClick={() => files.current?.click()}
-              >
-                Upload pictures
-              </MenuItem>
-              <MenuItem
-                icon={Box}
-                description="STL, OBJ, GLB, 3MF or PLY"
-                onClick={() => files.current?.click()}
-              >
-                Add a 3D model
-              </MenuItem>
-              <MenuItem icon={PenLine} onClick={() => setSketching(true)}>
-                Sketch
-              </MenuItem>
-              <MenuItem
-                icon={Link2}
-                description="Pinterest, Google, a shop: kept view-only"
-                onClick={() => setLinking(true)}
-              >
-                Paste a link
-              </MenuItem>
-              <MenuItem icon={NotebookPen} onClick={() => setNoting(true)}>
-                Write a note
-              </MenuItem>
-              <MenuSeparator />
-              <MenuItem
-                icon={Search}
-                disabled
-                description="Needs a search API key and the provider’s terms; paste links meanwhile"
-              >
-                Google and Pinterest search
-              </MenuItem>
-              <MenuItem
+                <Button
+                  variant="secondary"
+                  icon={Search}
+                  aria-expanded={searching}
+                  onClick={() => setSearching((open) => !open)}
+                >
+                  Search for references
+                </Button>
+                <Button
+                  variant="ghost"
+                  icon={PenLine}
+                  disabled={busy}
+                  onClick={() => setSketching(true)}
+                >
+                  Sketch
+                </Button>
+                <Button
+                  variant="ghost"
+                  icon={NotebookPen}
+                  disabled={busy}
+                  onClick={() => setNoting(true)}
+                >
+                  Write a note
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {empty && referenceSearch}
+
+      {(!empty || (board && !readOnly)) && (
+        <div
+          role="toolbar"
+          aria-label="Board tools"
+          className="flex flex-wrap items-center gap-1.5"
+        >
+          {!readOnly && (
+            <>
+              {!empty && (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={Search}
+                  aria-expanded={searching}
+                  onClick={() => setSearching((open) => !open)}
+                >
+                  Search for references
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="secondary"
                 icon={Sparkles}
-                description="Four concepts from your words and references"
-                onClick={() => setGenerating(true)}
+                aria-pressed={generating}
+                onClick={() => setGenerating((open) => !open)}
               >
                 Generate concepts
-              </MenuItem>
-            </Menu>
-          </>
-        )}
-        <Segmented<View>
-          size="sm"
-          aria-label="Board view"
-          className="ml-auto"
-          value={view}
-          onChange={changeView}
-          options={[
-            { value: 'masonry', label: 'Masonry' },
-            { value: 'canvas', label: 'Canvas' },
-          ]}
-        />
-        <input
-          ref={files}
-          type="file"
-          multiple
-          accept={BOARD_ACCEPT}
-          className="hidden"
-          aria-label="Pictures or 3D models to add"
-          onChange={(e) => {
-            const picked = [...(e.target.files ?? [])]
-            e.target.value = ''
-            void run('add those files', () => addFiles(board.id, picked))
-          }}
-        />
-      </div>
+              </Button>
+              <Menu
+                trigger={
+                  <Button size="sm" variant="ghost" icon={Plus} disabled={busy}>
+                    {busy ? 'Adding…' : 'Add'}
+                  </Button>
+                }
+              >
+                <MenuItem icon={FileImage} onClick={() => photos.current?.click()}>
+                  Add reference photo
+                </MenuItem>
+                <MenuItem
+                  icon={Box}
+                  description="STL, OBJ, GLB, 3MF or PLY"
+                  onClick={() => files.current?.click()}
+                >
+                  Add a 3D model
+                </MenuItem>
+                <MenuItem icon={PenLine} onClick={() => setSketching(true)}>
+                  Sketch
+                </MenuItem>
+                <MenuItem icon={Link2} onClick={() => setLinking(true)}>
+                  Paste a link
+                </MenuItem>
+                <MenuItem icon={NotebookPen} onClick={() => setNoting(true)}>
+                  Write a note
+                </MenuItem>
+              </Menu>
+            </>
+          )}
+          {!empty && (
+            <Segmented<View>
+              size="sm"
+              aria-label="Board view"
+              className="ml-auto"
+              value={view}
+              onChange={changeView}
+              options={[
+                { value: 'masonry', label: 'Grid' },
+                { value: 'canvas', label: 'Arrange by hand' },
+              ]}
+            />
+          )}
+        </div>
+      )}
 
-      {generating && !readOnly && (
+      {!readOnly && (
+        <>
+          <input
+            ref={photos}
+            type="file"
+            multiple
+            accept={BOARD_IMAGE_ACCEPT}
+            className="hidden"
+            aria-label="Reference photos to add"
+            onChange={(e) => {
+              const picked = [...(e.target.files ?? [])]
+              e.target.value = ''
+              if (picked.length) void run('add those photos', () => addFiles(target, picked))
+            }}
+          />
+          <input
+            ref={files}
+            type="file"
+            multiple
+            accept={BOARD_ACCEPT}
+            className="hidden"
+            aria-label="Pictures or 3D models to add"
+            onChange={(e) => {
+              const picked = [...(e.target.files ?? [])]
+              e.target.value = ''
+              if (picked.length) void run('add those files', () => addFiles(target, picked))
+            }}
+          />
+        </>
+      )}
+
+      {!empty && referenceSearch}
+
+      {generating && board && !readOnly && (
         <GeneratePanel
           board={board}
           references={references}
@@ -270,14 +374,7 @@ export function DesignBoard({
         />
       )}
 
-      {references.length === 0 ? (
-        <EmptyBoard
-          onUpload={() => files.current?.click()}
-          onSearch={() => setSearching(true)}
-          onSketch={() => setSketching(true)}
-          readOnly={readOnly}
-        />
-      ) : view === 'masonry' ? (
+      {empty || !board ? null : view === 'masonry' ? (
         <ul aria-label="Board items" className="columns-2 gap-3 sm:columns-3 xl:columns-4">
           {references.map((r) => (
             <li key={r.id} className="mb-3 break-inside-avoid">
@@ -304,7 +401,7 @@ export function DesignBoard({
         />
       )}
 
-      {chosen && !readOnly && (
+      {chosen && board && !readOnly && (
         <SelectionBar
           reference={chosen}
           onTakeToCad={() => void takeToCad(board, chosen)}
@@ -313,15 +410,14 @@ export function DesignBoard({
         />
       )}
 
-      <SearchSheet open={searching} onOpenChange={setSearching} boardId={board.id} />
       <Sheet open={sketching} onOpenChange={setSketching} title="Sketch an idea">
         <SketchPad
-          piece={{ id: board.pieceId ?? board.id }}
+          piece={{ id: board?.pieceId ?? boardId ?? pieceId! }}
           board={{
-            key: `board:${board.id}`,
+            key: boardId ? `board:${boardId}` : `design:${pieceId}`,
             titles: references.map((r) => r.title),
             save: async (file, title) => {
-              await addSketch(board.id, file, title)
+              await addSketch(target, file, title)
               setSketching(false)
             },
           }}
@@ -333,7 +429,7 @@ export function DesignBoard({
         title="Write a note"
         placeholder="Trophy on a pendant, about 25 mm tall, an iced base…"
         submit="Add the note"
-        onSubmit={(text) => run('add the note', () => addNote(board.id, text))}
+        onSubmit={(text) => save(() => addNote(target, text))}
       />
       <TextDialog
         open={linking}
@@ -345,49 +441,12 @@ export function DesignBoard({
         onSubmit={(text) => {
           const urls = urlsIn(text)
           if (!urls.length) {
-            toast.error('That is not a web address', 'Paste a link that starts with https://')
-            return
+            throw new Error('Paste a web address that starts with https:// or http://.')
           }
-          return run('add the link', () => addLinks(board.id, urls))
+          return save(() => addLinks(target, urls))
         }}
       />
     </section>
-  )
-}
-
-function EmptyBoard({
-  onUpload,
-  onSearch,
-  onSketch,
-  readOnly,
-}: {
-  onUpload: () => void
-  onSearch: () => void
-  onSketch: () => void
-  readOnly: boolean
-}) {
-  return (
-    <div className="flex flex-col items-center gap-3 rounded-lg px-6 py-14 text-center shadow-[inset_0_0_0_1px_var(--line)]">
-      <Grid2x2 className="size-6 text-fg-faint" aria-hidden />
-      <p className="font-serif text-heading">Start the board</p>
-      <p className="max-w-md text-sm text-fg-subtle">
-        Drop or paste pictures (a trophy you want on a pendant, a pendant you like, a sketch sheet),
-        links from Pinterest or Google, or a 3D model. Then pick one and take it to CAD.
-      </p>
-      {!readOnly && (
-        <div className="flex flex-wrap justify-center gap-2">
-          <Button size="sm" variant="primary" icon={FileImage} onClick={onUpload}>
-            Upload pictures
-          </Button>
-          <Button size="sm" variant="secondary" icon={Search} onClick={onSearch}>
-            Search museums
-          </Button>
-          <Button size="sm" variant="ghost" icon={PenLine} onClick={onSketch}>
-            Sketch
-          </Button>
-        </div>
-      )}
-    </div>
   )
 }
 
@@ -725,21 +784,30 @@ function TextDialog({
   placeholder: string
   submit: string
   hint?: string
-  onSubmit: (text: string) => Promise<unknown> | undefined
+  onSubmit: (text: string) => Promise<unknown>
 }) {
   const [text, setText] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title={title}>
       <form
         className="flex flex-col gap-3 px-4 pb-4"
-        onSubmit={(e) => {
+        onSubmit={async (e) => {
           e.preventDefault()
           const value = text.trim()
-          if (!value) return
-          void Promise.resolve(onSubmit(value)).then(() => {
+          if (!value || saving) return
+          setSaving(true)
+          setError('')
+          try {
+            await onSubmit(value)
             setText('')
             onOpenChange(false)
-          })
+          } catch (e) {
+            setError(e instanceof Error ? e.message : 'Couldn’t save this reference.')
+          } finally {
+            setSaving(false)
+          }
         }}
       >
         <Textarea
@@ -751,8 +819,13 @@ function TextDialog({
           autoFocus
         />
         {hint && <p className="text-xs text-fg-subtle">{hint}</p>}
-        <Button type="submit" variant="primary" disabled={!text.trim()}>
-          {submit}
+        {error && (
+          <p role="alert" className="text-xs text-danger">
+            {error}
+          </p>
+        )}
+        <Button type="submit" variant="primary" disabled={!text.trim() || saving}>
+          {saving ? 'Saving…' : submit}
         </Button>
       </form>
     </Sheet>

@@ -22,11 +22,11 @@ import {
   toast,
 } from '@pave/ui'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { Grid2x2, Hammer, LayoutTemplate, Link2, Unlink } from 'lucide-react'
+import { Hammer, LayoutTemplate, Link2, Unlink } from 'lucide-react'
 import { SectionTitle } from '../../components/Page'
 import { SpecCard } from '../../components/SpecCard'
 import { DesignBoard } from '../../features/ideate'
-import { invalidateFor, queryClient, useRpc, useRpcMutation } from '../../lib/query'
+import { invalidateFor, queryClient, useRpc } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { useCurrentView } from '../../lib/use-current-view'
 import { Brief } from './PieceOverview'
@@ -70,7 +70,11 @@ export function PieceDirections({ pieceId }: { pieceId: string }) {
             options={boards.map((b) => ({ value: b.id, label: b.title }))}
           />
         )}
-        {board ? <LinkedBoard key={board.id} board={board} /> : <NoBoard piece={p} />}
+        {board ? (
+          <LinkedBoard key={board.id} board={board} />
+        ) : (
+          <DesignBoard key={p.id} pieceId={p.id} />
+        )}
       </section>
       <section>
         <SectionTitle>Brief</SectionTitle>
@@ -88,31 +92,6 @@ function LinkedBoard({ board }: { board: Board }) {
   const data = useRpc('boards.get', { id: board.id })
   if (!data.data) return <Skeleton className="h-80 rounded-lg" />
   return <DesignBoard board={data.data.board} references={data.data.references} />
-}
-
-/** No board yet: starting one is the person's choice (opening the tab writes nothing). */
-function NoBoard({ piece }: { piece: Piece }) {
-  const start = useRpcMutation('boards.forPiece')
-  return (
-    <div className="flex flex-col items-center gap-3 rounded-lg px-6 py-14 text-center shadow-[inset_0_0_0_1px_var(--line)]">
-      <Grid2x2 className="size-6 text-fg-faint" aria-hidden />
-      <p className="font-serif text-heading">The design board</p>
-      <p className="max-w-md text-sm text-fg-subtle">
-        Collect what the piece should be: a picture of the thing to put on it, pieces you like, a
-        sketch sheet, a 3D model. Then take one to CAD. Or go straight to CAD, blank or from a
-        template.
-      </p>
-      <Button
-        size="sm"
-        variant="primary"
-        icon={Grid2x2}
-        disabled={start.isPending}
-        onClick={() => start.mutate({ pieceId: piece.id })}
-      >
-        Start the design board
-      </Button>
-    </div>
-  )
 }
 
 /** Start CAD (blank or from a template) and the board's link to this project. */

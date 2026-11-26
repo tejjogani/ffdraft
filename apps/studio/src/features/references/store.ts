@@ -1,6 +1,6 @@
 /**
  * The reference panel's UI state: whether it is open (remembered per browser), which source it
- * shows, the search words, and the image plane being worked on with its undo history per piece.
+ * shows and the image plane being worked on with its undo history per piece.
  * Pins and planes themselves are server data in TanStack Query; nothing here is a copy of them.
  */
 import type { ImagePlane, ImagePlaneView } from '@pave/schema'
@@ -29,8 +29,6 @@ interface ReferencePanelState {
   rect: Rect | null
   tab: ReferenceTab
   source: PanelSource
-  query: string
-  openOnly: boolean
   /** The pinned reference being dragged toward the viewport (shows the view drop zones). */
   dragging: string | null
   /** The image plane being worked on in the CAD view. */
@@ -55,8 +53,6 @@ interface ReferencePanelState {
   setRect: (rect: Rect) => void
   setTab: (tab: ReferenceTab) => void
   setSource: (source: PanelSource) => void
-  setQuery: (query: string) => void
-  setOpenOnly: (openOnly: boolean) => void
   setDragging: (refId: string | null) => void
   select: (selected: { pieceId: string; refId: string } | null) => void
   setScaling: (scaling: boolean) => void
@@ -74,8 +70,6 @@ export const useReferencePanel = create<ReferencePanelState>()(
       rect: null,
       tab: 'references',
       source: 'pinned',
-      query: '',
-      openOnly: false,
       dragging: null,
       selected: null,
       scaling: false,
@@ -94,8 +88,6 @@ export const useReferencePanel = create<ReferencePanelState>()(
       setRect: (rect) => set({ rect }),
       setTab: (tab) => set({ tab }),
       setSource: (source) => set({ source }),
-      setQuery: (query) => set({ query }),
-      setOpenOnly: (openOnly) => set({ openOnly }),
       setDragging: (dragging) => set({ dragging }),
       select: (selected) => set({ selected, scaling: false, preview: null }),
       setScaling: (scaling) => set({ scaling }),
@@ -136,7 +128,6 @@ export function persistedReferences(s: ReferencePanelState) {
     rect: s.rect,
     tab: s.tab,
     source: s.source,
-    openOnly: s.openOnly,
   }
 }
 
