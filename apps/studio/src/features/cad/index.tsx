@@ -27,7 +27,6 @@ import {
   Button,
   type ContextMenuHandle,
   Dialog,
-  IconButton,
   Sheet,
   Skeleton,
   Spinner,
@@ -727,12 +726,15 @@ function Workspace({ piece }: { piece: Piece }) {
             <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex flex-wrap items-start justify-between gap-2 [&>*]:pointer-events-auto">
               <div className="flex min-w-0 items-center gap-2">
                 {!dockOutliner && (
-                  <IconButton
+                  <Button
                     icon={PanelLeft}
-                    label="Features"
+                    aria-label="Features"
+                    title="Features"
                     onClick={() => setSheet('outliner')}
-                    className="glass size-9 shrink-0 rounded-lg shadow-sm"
-                  />
+                    className="glass h-9 shrink-0 rounded-lg px-2.5 shadow-sm"
+                  >
+                    <span className="hidden sm:inline">Features</span>
+                  </Button>
                 )}
                 <ViewToolbar
                   canUndo={undoable}
@@ -752,12 +754,15 @@ function Workspace({ piece }: { piece: Piece }) {
                   compact={compact}
                 />
                 {!dockInspector && (
-                  <IconButton
+                  <Button
                     icon={PanelRight}
-                    label="Inspector"
+                    aria-label="Inspector"
+                    title="Inspector"
                     onClick={() => setSheet('inspector')}
-                    className="glass size-9 shrink-0 rounded-lg shadow-sm"
-                  />
+                    className="glass h-9 shrink-0 rounded-lg px-2.5 shadow-sm"
+                  >
+                    <span className="hidden sm:inline">Inspector</span>
+                  </Button>
                 )}
               </div>
             </div>
