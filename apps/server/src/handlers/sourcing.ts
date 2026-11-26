@@ -10,6 +10,7 @@ const DIAEX_BROWSE = 'https://console.thediaex.com/browse'
 const SIZE_WINDOW_MM = 0.3
 const LIMIT = 24
 const STOCKED_DIAMONDS = ['diamond', 'diamond-lab', 'diamond-yellow', 'diamond-pink']
+const CERTIFYING_LABS = ['GIA', 'IGI', 'GCAL', 'HRD', 'SGL']
 const HUES = [
   'Yellow',
   'Pink',
@@ -24,15 +25,30 @@ const HUES = [
 ]
 const roundMm = (n: number) => Math.round(n * 100) / 100
 
-type ColorFilter = { colors?: [string]; fancy_hues?: [string] }
+const whiteGrade = /^[D-Z]$/
+const names = (values: string[] | undefined) => [
+  ...new Set(values?.map((v) => v.trim().toUpperCase()).filter(Boolean)),
+]
+const diaexHue = (v: string) => HUES.find((h) => h.toUpperCase() === v.replace(/^GREY$/, 'GRAY'))
 
-function colorFilter(input?: string): ColorFilter {
-  if (!input) return {}
-  const normalized = input.toUpperCase()
-  if (/^[D-Z]$/.test(normalized)) return { colors: [normalized] }
-  const hue = HUES.find((h) => h.toUpperCase() === normalized.replace(/^GREY$/, 'GRAY'))
-  if (hue) return { fancy_hues: [hue] }
-  throw badRequest('Enter a diamond colour grade from D to Z or a fancy hue such as Yellow.')
+function colorFilters(
+  input: string | undefined,
+  saved: string[] | undefined,
+  defaultHue: string | undefined,
+) {
+  const values = names(input ? [input] : saved)
+  const colors = values.filter((v) => whiteGrade.test(v))
+  const fancyHues = values.flatMap((v) => {
+    const hue = diaexHue(v)
+    return hue ? [hue] : []
+  })
+  if (input && !colors.length && !fancyHues.length)
+    throw badRequest('Enter a diamond colour grade from D to Z or a fancy hue such as Yellow.')
+  if (!input && !colors.length && !fancyHues.length && defaultHue) fancyHues.push(defaultHue)
+  return {
+    ...(colors.length ? { colors } : {}),
+    ...(fancyHues.length ? { fancy_hues: fancyHues } : {}),
+  }
 }
 
 async function targetStone(ctx: Ctx, pieceId: string, nodeId: string, color?: string) {
@@ -46,6 +62,7 @@ async function targetStone(ctx: Ctx, pieceId: string, nodeId: string, color?: st
     node.stone === 'diamond-yellow' ? 'Yellow' : node.stone === 'diamond-pink' ? 'Pink' : undefined
   const origin = node.stone === 'diamond-lab' ? 'lab' : (node.quality?.origin ?? 'any')
   const { length, width } = stoneDims(node)
+  const clarities = names(node.quality?.clarities)
   return {
     shape: node.cut,
     origin,
@@ -55,7 +72,9 @@ async function targetStone(ctx: Ctx, pieceId: string, nodeId: string, color?: st
       tol_minus_mm: SIZE_WINDOW_MM,
       tol_plus_mm: SIZE_WINDOW_MM,
     },
-    ...colorFilter(color ?? defaultHue),
+    ...colorFilters(color, node.quality?.colors, defaultHue),
+    ...(clarities.length ? { clarities } : {}),
+    ...(node.quality?.certified ? { certificate: { required: true } } : {}),
   }
 }
 
@@ -69,6 +88,9 @@ function searchLink(target: Target, browse = DIAEX_BROWSE): string {
     stone_types: stoneTypes[target.origin],
     colors: target.colors,
     fancy_hues: target.fancy_hues,
+    clarities: target.clarities,
+    // Browse exposes labs. These are the current Diaex grades that issue certificates.
+    labs: target.certificate ? CERTIFYING_LABS : undefined,
     min_length_mm: roundMm(length_mm - tol_minus_mm),
     max_length_mm: roundMm(length_mm + tol_plus_mm),
     min_width_mm: roundMm(width_mm - tol_minus_mm),
@@ -163,11 +185,16 @@ function matchesSearch(stone: SourcedDiamond, target: Target): boolean {
   const { length_mm, width_mm, tol_minus_mm, tol_plus_mm } = target.seat
   const within = (v: number, size: number) =>
     v >= roundMm(size - tol_minus_mm) && v <= roundMm(size + tol_plus_mm)
+  const matchesColor =
+    (!target.colors && !target.fancy_hues) ||
+    (stone.color !== null && target.colors?.includes(stone.color)) ||
+    (stone.fancyHue !== undefined && target.fancy_hues?.includes(stone.fancyHue))
   return (
     within(stone.measured.length, length_mm) &&
     within(stone.measured.width, width_mm) &&
-    (!target.colors || target.colors[0] === stone.color) &&
-    (!target.fancy_hues || target.fancy_hues[0] === stone.fancyHue)
+    Boolean(matchesColor) &&
+    (!target.clarities || (stone.clarity !== null && target.clarities.includes(stone.clarity))) &&
+    (!target.certificate || stone.certificate !== undefined)
   )
 }
 
