@@ -1,5 +1,9 @@
 [
   {
+    "name": "Render: settle the release state (better earlier stones, each later change kept only if a blind side-by-side says so)",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_6593ec00-6a0/journal.jsonl"
+  },
+  {
     "name": "Plan: own CAD as a start, CAD on Home, the AI choosing the route, photoreal images only, the spec kept current (read-only)",
     "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_d4762e9b-b9c/journal.jsonl"
   },

@@ -1,6 +1,12 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 18:36 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 18:45 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+
+## Render: settle the release state (better earlier stones, each later change kept only if a blind side-by-side says so)
+
+| Agent | State | Outcome |
+|---|---|---|
+| settle | running or interrupted |  |
 
 ## Plan: own CAD as a start, CAD on Home, the AI choosing the route, photoreal images only, the spec kept current (read-only)
 
@@ -10,7 +16,8 @@ _Generated 26 Nov 2026 18:36 UTC by `docs/agents/sync_status.py` from the workfl
 | survey:research | done | I wrote /tmp/claude-0/-home-user/24192795-28e0-5484-b947-9462017ba677/scratchpad/plan-own-cad/research.md (about 300 lines). Every claim carries a tag: O = page opened, L = checked in a local file, R = the project's own… |
 | draft:harness | done | I wrote the harness-first build plan to /tmp/claude-0/-home-user/24192795-28e0-5484-b947-9462017ba677/scratchpad/plan-own-cad/draft-harness.md. It is about 330 lines in the style of spec-truth.md: what exists today, Exp… |
 | draft:engine | done | The plan is written: 508 lines in the spec-truth.md style. Its target path is docs/plans/own-cad-and-routing.md, the name BOARD row A15 uses. I read survey-code.md and research.md in full. I also checked the code the pl… |
-| draft:experience | running or interrupted |  |
+| draft:experience | done | I wrote the experience-angle build plan to draft-experience.md (about 460 lines). It follows spec-truth.md's plan style: what exists today; experience (the four journeys screen by screen); structure; contracts; prompt; … |
+| synthesise | running or interrupted |  |
 
 ## Polish: spec (two amendments in one turn, whole message on the card) then Diaex (expiry during an outage, per-user check limit)
 
@@ -52,7 +59,7 @@ _Generated 26 Nov 2026 18:36 UTC by `docs/agents/sync_status.py` from the workfl
 | fix:1 | done | FIX-3-1 REPORT, render/realism worktree /home/user/ffdraft-render Two local commits on render/realism, not pushed: - 1b8bcea: code and tests - 14c12ed: skill, research note and sheets Every number below comes from a bef… |
 | verify:1 | done | 5 major, 6 minor. FAIL. I re-rendered everything at render/realism HEAD 14c12ed (worktree clean) through the product's own chain. That was 15 previews at 768 px and 64 samples: … |
 | fix:2 | done | I fixed the five majors on render/realism, plus four of the six minors (R7, R8, R9, R11). R6 is only partly fixed and R10 is not fixed. Everything is committed in /home/user/ffdraft-render (not pushed): c49aaf9 (code an… |
-| verify:2 | running or interrupted |  |
+| verify:2 | done | 3 major, 6 minor. Not done. 3 of the 5 majors are fixed: R3 (seat holes), R5 (Editorial stones) and R7 for the studs. R1 and R2 pass their numbers but not the eye. The R2 fix al… |
 
 ## Studio experience: third fix round (lane A, A11)
 
@@ -137,7 +144,7 @@ _Generated 26 Nov 2026 18:36 UTC by `docs/agents/sync_status.py` from the workfl
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: cecbcbb Board: plan for starting from the founder's own CAD and the AI choosing the route
+Branch `claude/busy-bardeen-o482lo`, head: 5b5f8af Status: CAD view checking its second pass; render verifying; spec polish checked, Diaex polish; plan drafting
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -168,7 +175,7 @@ Branch `claude/busy-bardeen-o482lo`, head: cecbcbb Board: plan for starting from
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: cecbcbb Board: plan for starting from the founder's own CAD and the AI choosing the route
+Branch `claude/busy-bardeen-o482lo`, head: 5b5f8af Status: CAD view checking its second pass; render verifying; spec polish checked, Diaex polish; plan drafting
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -210,7 +217,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: cecbcbb Board: plan for starting from the founder's own CAD and the AI choosing the route
+Branch `claude/busy-bardeen-o482lo`, head: 5b5f8af Status: CAD view checking its second pass; render verifying; spec polish checked, Diaex polish; plan drafting
 
 | Agent | State | Outcome |
 |---|---|---|
