@@ -8,6 +8,12 @@ Click a part in the 3D view or choose its name in Features. On a solitaire, Band
 
 On a smaller screen, use the Features and Inspector buttons above the model to open those panels. If your project is empty, start with a template to try the material and stone controls.
 
+## Make a ring band thicker or thinner
+
+Select Band. In the Band section of the Inspector, Thickness at top changes the wall near the setting. Thickness at base changes the wall on the palm side. Click a value, type the new measurement in millimetres and press Enter. For example, changing a 1.5 mm base to 1.8 mm adds 0.3 mm there.
+
+Width at top and Width at base control how wide the band looks across your finger. Ring size controls the opening. Use Undo to compare the edit with the original.
+
 ## Choose the metal and finish
 
 Select Band, then choose Metal in the Material section of the Inspector. Try 18k Rose Gold for a warmer color. Under Finish, try High polish, Satin, Brushed, Matte / sandblast or Hammered. Use the Rendered view to see the material.
