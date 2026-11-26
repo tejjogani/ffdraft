@@ -1,6 +1,12 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 13:35 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 13:50 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+
+## Spec: the card is the gate, word reading only adds notes (lane A, A7)
+
+| Agent | State | Outcome |
+|---|---|---|
+| fix:1 | running or interrupted |  |
 
 ## Render realism: third fix round, stone contrast and fire (lane A, A12)
 
@@ -21,7 +27,7 @@ _Generated 26 Nov 2026 13:35 UTC by `docs/agents/sync_status.py` from the workfl
 | fix:1 | done | The server suite is still running; I'll be notified when it exits. |
 | verify:1 | done | 9 major, 5 minor. FAIL. All six findings from the last round are fixed, but this round's reading of the designer's words now wrongly refuses many honest requests. These are firm… |
 | fix:2 | done | All 14 findings are fixed and committed on spec/truth as **f0e4ae4** in /home/user/ffdraft-spec (not pushed). The typecheck and the schema, canon, agent, server and studio suites are all green. The worktree already held… |
-| verify:2 | running or interrupted |  |
+| verify:2 | done | 6 major, 3 minor. FAIL. I verified f0e4ae4 on spec/truth in /home/user/ffdraft-spec. I edited no code and the worktree is clean, so there was nothing to commit. I did not push. … |
 
 ## Studio experience: focused editor, project card menu, minimal assistant with a character (lane A, A11)
 
@@ -88,7 +94,7 @@ _Generated 26 Nov 2026 13:35 UTC by `docs/agents/sync_status.py` from the workfl
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: da99a73 Board: render in its third fix round; skill copied to the main branch
+Branch `claude/busy-bardeen-o482lo`, head: 517e990 Status: spec verifying its last fix round; studio and render fixing
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -119,7 +125,7 @@ Branch `claude/busy-bardeen-o482lo`, head: da99a73 Board: render in its third fi
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: da99a73 Board: render in its third fix round; skill copied to the main branch
+Branch `claude/busy-bardeen-o482lo`, head: 517e990 Status: spec verifying its last fix round; studio and render fixing
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -161,7 +167,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: da99a73 Board: render in its third fix round; skill copied to the main branch
+Branch `claude/busy-bardeen-o482lo`, head: 517e990 Status: spec verifying its last fix round; studio and render fixing
 
 | Agent | State | Outcome |
 |---|---|---|
