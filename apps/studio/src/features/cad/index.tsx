@@ -51,6 +51,7 @@ import { usePieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { activeOrg, useSession } from '../../lib/session'
+import { useCurrentView } from '../../lib/use-current-view'
 import { useAssistant } from '../../stores/assistant'
 import { planProgress } from '../assistant/jobs/status'
 import { useLiveRun } from '../assistant/jobs/useJob'
@@ -203,6 +204,7 @@ function Workspace({ piece }: { piece: Piece }) {
   const role = activeOrg(auth)?.role ?? 'viewer'
   const readOnly = role === 'viewer' || role === 'guest'
   const navigate = useNavigate()
+  const isCurrent = useCurrentView()
   const kernel = useKernelInfo()
   const selection = useWorkspace((s) => s.selection)
   const stone = useWorkspace((s) => s.stone)
@@ -413,7 +415,9 @@ function Workspace({ piece }: { piece: Piece }) {
       const camera = viewer.current?.shotCamera()
       if (!camera) return
       void renderThisView(piece.id, view.kind, camera)
-        .then(() => navigate({ to: '/pieces/$id/render', params: { id: piece.id } }))
+        .then(() => {
+          if (isCurrent()) void navigate({ to: '/pieces/$id/render', params: { id: piece.id } })
+        })
         .catch((e: Error) => toast.error('Couldn’t copy the view to a shot', e.message))
     },
     requestDelete,

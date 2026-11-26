@@ -3,6 +3,7 @@ import type { CommandInput, Piece, PieceSummary } from '@pave/schema'
 import { toast } from '@pave/ui'
 import { useNavigate } from '@tanstack/react-router'
 import { queryClient, rpcKey, useRpcMutation } from './query'
+import { useCurrentView } from './use-current-view'
 
 type Update = CommandInput<'pieces.update'>
 type Snapshot = Array<[readonly unknown[], unknown]>
@@ -43,17 +44,22 @@ export function useUpdatePiece() {
 /** Create a piece and open it. */
 export function useCreatePiece() {
   const navigate = useNavigate()
+  const isCurrent = useCurrentView()
   return useRpcMutation('pieces.create', {
-    onSuccess: (piece) => void navigate({ to: '/pieces/$id', params: { id: piece.id } }),
+    onMutate: () => isCurrent,
+    onSuccess: (piece, _input, stillHere) =>
+      stillHere?.() && void navigate({ to: '/pieces/$id', params: { id: piece.id } }),
   })
 }
 
 export function useDeletePiece() {
   const navigate = useNavigate()
+  const isCurrent = useCurrentView()
   return useRpcMutation('pieces.delete', {
-    onSuccess: () => {
+    onMutate: () => isCurrent,
+    onSuccess: (_out, _input, stillHere) => {
       toast({ title: 'Piece deleted' })
-      void navigate({ to: '/pieces' })
+      if (stillHere?.()) void navigate({ to: '/pieces' })
     },
   })
 }

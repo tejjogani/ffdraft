@@ -85,8 +85,11 @@ const collectionRoute = createRoute({
 const pieceRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/pieces/$id',
+  validateSearch: (s: Record<string, unknown>): { board?: string } =>
+    typeof s.board === 'string' ? { board: s.board } : {},
   component: function Piece() {
-    return <PiecePage id={pieceRoute.useParams().id} />
+    const { id } = pieceRoute.useParams()
+    return <PiecePage key={id} id={id} />
   },
 })
 

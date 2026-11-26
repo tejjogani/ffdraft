@@ -13,7 +13,7 @@ import { AiMark, cn, IconButton } from '@pave/ui'
 import { useMatch, useRouterState } from '@tanstack/react-router'
 import { History, Minus, PanelRight, PictureInPicture2, SquarePen, X } from 'lucide-react'
 import { motion } from 'motion/react'
-import { type KeyboardEvent, type PointerEvent, useEffect, useRef } from 'react'
+import { type KeyboardEvent, type PointerEvent, useEffect, useLayoutEffect, useRef } from 'react'
 import { FloatingWindow } from '../components/FloatingWindow'
 import { AssistantPanel } from '../features/assistant'
 import { followTarget } from '../features/assistant/follow'
@@ -22,7 +22,13 @@ import { useLiveRun } from '../features/assistant/jobs/useJob'
 import { defaultRect } from '../lib/float-window'
 import { useRpc } from '../lib/query'
 import { useSession } from '../lib/session'
-import { type AssistantContext, DOCK_MAX, DOCK_MIN, useAssistant } from '../stores/assistant'
+import {
+  type AssistantContext,
+  type Attachment,
+  DOCK_MAX,
+  DOCK_MIN,
+  useAssistant,
+} from '../stores/assistant'
 
 /** The floating window's first size and its smallest. */
 const FLOAT_SIZE = { w: 400, h: 620 }
@@ -45,10 +51,40 @@ function useFollowPiece(pieceId: string | null | undefined) {
     { pieceId: pieceId ?? '', limit: 1 },
     { enabled: !!pieceId },
   )
+  const previous = useRef<string | null | undefined>(undefined)
+  const drafts = useRef(new Map<string | null, { draft: string; attachments: Attachment[] }>())
+  useLayoutEffect(() => {
+    const destination = pieceId ?? null
+    const prior = previous.current
+    if (prior === destination) return
+    previous.current = destination
+    if (prior === undefined && !destination) return
+    const s = useAssistant.getState()
+    if (prior !== undefined)
+      drafts.current.set(prior, { draft: s.draft, attachments: s.attachments })
+    const saved = drafts.current.get(destination)
+    useAssistant.setState({
+      draft: saved?.draft ?? '',
+      attachments: saved?.attachments ?? [],
+      activeThreadId: destination && s.threadPieceId === destination ? s.activeThreadId : null,
+      threadPieceId: destination,
+      activity: null,
+      selection: null,
+      liveSelection: null,
+      follow: null,
+      dropPageContext: false,
+      showThreads: false,
+      draftTier: null,
+    })
+  }, [pieceId])
   // Starts empty, so the first load of a piece is followed too, not only a change of piece.
   const last = useRef<string | null>(null)
   useEffect(() => {
-    if (!pieceId || last.current === pieceId || !threads.data) return
+    if (!pieceId) {
+      last.current = null
+      return
+    }
+    if (last.current === pieceId || !threads.data) return
     last.current = pieceId
     const s = useAssistant.getState()
     const target = followTarget({
@@ -150,7 +186,11 @@ function AssistantFloating({ context }: { context: AssistantContext }) {
       }
       actions={<WindowActions docked={false} />}
     >
-      <AssistantPanel context={context} stage={stage} />
+      <AssistantPanel
+        key={context.pieceId ?? context.boardId ?? 'workspace'}
+        context={context}
+        stage={stage}
+      />
     </FloatingWindow>
   )
 }
@@ -261,7 +301,11 @@ export function AssistantDock() {
         </span>
       </header>
       <div className="min-h-0 flex-1">
-        <AssistantPanel context={context} stage={stage} />
+        <AssistantPanel
+          key={context.pieceId ?? context.boardId ?? 'workspace'}
+          context={context}
+          stage={stage}
+        />
       </div>
     </motion.aside>
   )

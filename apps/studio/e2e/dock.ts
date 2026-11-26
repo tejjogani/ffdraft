@@ -70,7 +70,7 @@ const openDock = async () => {
   // The shortcut listener mounts with the shell; press once it is there, and again if missed.
   await page.locator('#main').waitFor()
   for (let i = 0; i < 3 && !(await dock().isVisible()); i++) {
-    await page.keyboard.press('Control+j')
+    await page.keyboard.press('ControlOrMeta+j')
     await dock()
       .waitFor({ timeout: 3000 })
       .catch(() => {})
@@ -139,8 +139,11 @@ try {
     // The three stages, then a CAD job: planned, running, paused by an edit, ready for review.
     if (!mobile) await closeDock()
     await page.goto(`${BASE}/pieces/${pieceId}`)
-    await page.getByRole('link', { name: /^2\. CAD/ }).waitFor()
-    await shot('09-stage-stepper')
+    await page
+      .getByRole('navigation', { name: 'Project tools' })
+      .getByRole('link', { name: 'CAD', exact: true })
+      .waitFor()
+    await shot('09-project-tools')
     await page.goto(`${BASE}/pieces/${pieceId}/design`)
     await page.locator('[data-region="viewport"] canvas').first().waitFor({ timeout: 60_000 })
     await page.waitForTimeout(3000)
@@ -150,7 +153,7 @@ try {
     await shot('10-job-planned')
     await page.getByRole('button', { name: 'Start job' }).click()
     await page
-      .getByRole('listitem', { name: /Build the CAD, under way/ })
+      .getByRole('listitem', { name: /Build the CAD.*under way/ })
       .waitFor({ timeout: 30_000 })
     await page.waitForTimeout(1500)
     await shot('11-job-running')

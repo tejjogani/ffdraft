@@ -96,7 +96,9 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
   const view = useRunStream(latest?.id ?? null, latest?.status === 'running')
   const run = newerRun(latest, view?.run ?? null)
   const pieceId = stored?.thread.context.pieceId ?? run?.pieceId ?? null
-  useEffect(() => setThreadPieceId(pieceId), [pieceId, setThreadPieceId])
+  useEffect(() => {
+    if (stored && useAssistant.getState().activeThreadId === threadId) setThreadPieceId(pieceId)
+  }, [pieceId, stored, threadId, setThreadPieceId])
   // Started from Home: go to the piece the run made, unless the person has moved on since.
   const navigate = useNavigate()
   const path = useRouterState({ select: (r) => r.location.pathname })
@@ -106,7 +108,7 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
     useAssistant.setState({ follow: null })
     if (path === follow.path) void navigate({ to: '/pieces/$id', params: { id: pieceId } })
   }, [pieceId, threadId, path, navigate])
-  const onPiece = path.startsWith(`/pieces/${pieceId}`)
+  const onPiece = path === `/pieces/${pieceId}` || path.startsWith(`/pieces/${pieceId}/`)
 
   // After a reload, which calls wait (for a person, or for their take) is in the run's steps.
   const waiting = run?.status === 'awaiting-approval' || run?.status === 'waiting' ? run.id : null

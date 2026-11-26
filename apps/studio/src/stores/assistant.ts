@@ -254,6 +254,7 @@ export function openAssistant(input: {
     collapsed: false,
     showThreads: false,
     dropPageContext: false,
+    threadPieceId: input.pieceId,
     activeThreadId: input.threadId ?? (s.threadPieceId === input.pieceId ? s.activeThreadId : null),
     selection: input.selection?.length
       ? { pieceId: input.pieceId, nodeIds: input.selection }

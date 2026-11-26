@@ -10,6 +10,7 @@ import { uploadAsset } from '../../lib/assets'
 import { invalidateFor, queryClient } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { useSession } from '../../lib/session'
+import { useCurrentView } from '../../lib/use-current-view'
 import { openAssistant } from '../../stores/assistant'
 import { useSend } from '../assistant/actions'
 import { useReferencePanel } from '../references/store'
@@ -115,6 +116,7 @@ async function projectFor(board: Board): Promise<string> {
  */
 export function useTakeToCad() {
   const navigate = useNavigate()
+  const isCurrent = useCurrentView()
   const { capabilities } = useSession()
   const { send } = useSend({ stage: 'design' })
   return async (board: Board, ref: Reference) => {
@@ -122,6 +124,7 @@ export function useTakeToCad() {
       const pieceId = await projectFor(board)
       const { pin, assetId } = await rpc.call('pieces.takeToCad', { pieceId, referenceId: ref.id })
       invalidateFor(queryClient, 'references')
+      if (!isCurrent()) return
       if (capabilities.assistant) {
         const out = await send(TAKE_TO_CAD_GOAL, {
           job: { stage: 'cad', goal: TAKE_TO_CAD_GOAL },
@@ -130,6 +133,7 @@ export function useTakeToCad() {
           bare: true,
           attachments: [assetId],
         })
+        if (!isCurrent()) return
         openAssistant({ pieceId, threadId: out.thread.id })
       } else {
         useReferencePanel.getState().setPlaceRequest({ pieceId, refId: pin.id, view: 'front' })
@@ -149,6 +153,7 @@ export function useTakeToCad() {
 /** Open as CAD: the model becomes a sculpted body in the project's CAD (a new project when the board has none). */
 export function useOpenAsCad() {
   const navigate = useNavigate()
+  const isCurrent = useCurrentView()
   return async (board: Board, ref: Reference) => {
     if (!ref.assetId) return
     try {
@@ -160,7 +165,7 @@ export function useOpenAsCad() {
       invalidateFor(queryClient, 'pieces')
       invalidateFor(queryClient, 'design')
       refresh()
-      await navigate({ to: '/pieces/$id/design', params: { id: piece.id } })
+      if (isCurrent()) await navigate({ to: '/pieces/$id/design', params: { id: piece.id } })
     } catch (e) {
       toast.error('Couldn’t open it as CAD', e instanceof Error ? e.message : undefined)
     }
