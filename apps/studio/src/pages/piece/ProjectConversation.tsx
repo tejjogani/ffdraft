@@ -99,12 +99,13 @@ function DesignConversation({
       </h2>
       {checking && <Skeleton className="my-3 h-16 w-full" />}
       {activeThread && (
-        <div className="my-3 h-[min(48vh,26rem)] min-h-40 rounded-lg border border-line bg-bg-subtle">
+        <div className="my-3 rounded-lg border border-line bg-bg-subtle">
           <Conversation
             key={activeThread}
             threadId={activeThread}
             page={page}
             inline={{
+              transcriptClassName: 'max-h-[min(44vh,24rem)] px-4',
               pending,
               send: (text, tier) => void send(text, tier),
               rephrase: (text) => {
