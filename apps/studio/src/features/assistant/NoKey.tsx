@@ -16,7 +16,7 @@ export function NoKey() {
     <div className="flex h-full flex-col justify-center gap-5 overflow-y-auto px-6 py-8">
       <div className="flex flex-col items-center gap-2 text-center">
         <AiMark className="size-5" />
-        <p className="font-serif text-heading">Connect Claude</p>
+        <p className="studio-heading">Connect Claude</p>
         <p className="text-sm text-fg-muted">
           The assistant runs on Claude with your organisation’s API key. It is kept on this server,
           never shown again, and never sent to the browser.

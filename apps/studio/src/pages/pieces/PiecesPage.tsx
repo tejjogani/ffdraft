@@ -12,7 +12,8 @@ import {
 import { Badge, Button, EmptyState, InlineError, Segmented, Select, Skeleton } from '@pave/ui'
 import { Link, useNavigate, useSearch } from '@tanstack/react-router'
 import { FileUp, Folder, FolderPlus, LayoutGrid, Plus, Rows3 } from 'lucide-react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import { DeleteProjectButton, DeleteProjectDialog } from '../../components/DeleteProject'
 import { KindGlyph } from '../../components/KindGlyph'
 import { Column, PageHeader, PageTitle } from '../../components/Page'
 import { PieceCard, PieceCardSkeleton } from '../../components/PieceCard'
@@ -50,6 +51,7 @@ const SORTS: Record<
  * their totals and its own total (sub-folders included).
  */
 export function PiecesPage({ collectionId }: { collectionId?: string }) {
+  const [deleting, setDeleting] = useState<PieceSummary | null>(null)
   const search = useSearch({ strict: false }) as PiecesSearch
   const navigate = useNavigate()
   const setSearch = (patch: Partial<PiecesSearch>) =>
@@ -283,29 +285,39 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
                 {view === 'gallery' ? (
                   <Grid>
                     {list.map((p) => (
-                      <PieceCard
-                        key={p.id}
-                        piece={p}
-                        meta={
-                          <>
-                            <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium">
-                              <Folder className="size-3.5 shrink-0" aria-hidden />
-                              {projectFolder(p.collectionId, collections.data)}
-                            </span>
-                            <ProjectMeta piece={p} cost={costs.get(p.id)} />
-                          </>
-                        }
-                      />
+                      <div key={p.id} className="relative">
+                        <div className="absolute right-2 top-2 z-1">
+                          <DeleteProjectButton project={p} onSelect={() => setDeleting(p)} />
+                        </div>
+                        <PieceCard
+                          piece={p}
+                          meta={
+                            <>
+                              <span className="mb-1.5 flex items-center gap-1.5 text-sm font-medium">
+                                <Folder className="size-3.5 shrink-0" aria-hidden />
+                                {projectFolder(p.collectionId, collections.data)}
+                              </span>
+                              <ProjectMeta piece={p} cost={costs.get(p.id)} />
+                            </>
+                          }
+                        />
+                      </div>
                     ))}
                   </Grid>
                 ) : (
-                  <PieceTable pieces={list} collections={collections.data} costs={costs} />
+                  <PieceTable
+                    onDelete={setDeleting}
+                    pieces={list}
+                    collections={collections.data}
+                    costs={costs}
+                  />
                 )}
               </section>
             ))}
           </div>
         )}
       </Column>
+      {deleting && <DeleteProjectDialog project={deleting} onClose={() => setDeleting(null)} />}
     </>
   )
 }

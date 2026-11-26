@@ -135,7 +135,7 @@ export function PageTitle({
   return (
     <div className="flex items-end justify-between gap-6 pt-10 pb-6">
       <div className="min-w-0">
-        <h1 className="font-serif text-title text-fg">{title}</h1>
+        <h1 className="studio-title text-fg">{title}</h1>
         {description && <p className="mt-1 text-sm text-fg-muted">{description}</p>}
       </div>
       {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}

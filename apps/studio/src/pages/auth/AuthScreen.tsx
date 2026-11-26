@@ -39,7 +39,7 @@ export function AuthScreen() {
     <div className="app-drag flex min-h-dvh flex-col items-center justify-center bg-bg-subtle px-4">
       <div className="app-no-drag w-full max-w-[360px]">
         <PaveMark className="mb-8 size-8 text-fg" />
-        <h1 className="font-serif text-title text-fg">
+        <h1 className="studio-title text-fg">
           {invitation
             ? 'You’re invited'
             : mode === 'sign-in'

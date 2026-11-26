@@ -43,7 +43,7 @@ export function PlanSettings() {
           <section className="mb-10 flex flex-col gap-4 rounded-md p-4 shadow-[inset_0_0_0_1px_var(--line)] sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <span className="font-serif text-title leading-none">{plan.data.label}</span>
+                <span className="studio-title leading-none">{plan.data.label}</span>
                 {plan.data.source === 'env' && <Chip tone="warn">Set in .env</Chip>}
               </div>
               <p className="mt-1.5 text-sm text-fg-muted">{PLANS[plan.data.plan].blurb}</p>

@@ -79,7 +79,7 @@ export function EmptyDesign({
         {step === 'doors' && (
           <>
             <div className="mb-6 text-center">
-              <h2 className="font-serif text-title text-fg">Start this piece</h2>
+              <h2 className="studio-title text-fg">Start this piece</h2>
               <p className="mt-1 text-sm text-fg-muted">
                 Pick a way in. Everything stays editable afterwards.
               </p>

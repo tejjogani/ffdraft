@@ -1,6 +1,4 @@
 import '@fontsource-variable/inter'
-import '@fontsource/instrument-serif'
-import '@fontsource/instrument-serif/400-italic.css'
 import '@fontsource-variable/geist-mono'
 import './styles.css'
 import { PaveUIProvider } from '@pave/ui'

@@ -26,7 +26,7 @@ export function StageStatus({
   if (status === 'unavailable')
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-8 text-center">
-        <p className="font-serif text-[24px] leading-8 text-fg">The 3D view isn’t available here</p>
+        <p className="studio-heading text-fg">The 3D view isn’t available here</p>
         <p className="max-w-sm text-sm text-fg-muted">
           You can keep editing by numbers in the list and the inspector; every change is saved.
           {error ? ` (${error})` : ''}
@@ -39,7 +39,7 @@ export function StageStatus({
   if (status === 'error')
     return (
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 p-8 text-center">
-        <p className="font-serif text-[24px] leading-8 text-fg">The piece couldn’t be drawn</p>
+        <p className="studio-heading text-fg">The piece couldn’t be drawn</p>
         <p className="max-w-sm text-sm text-fg-muted">
           You can keep editing by numbers in the list and the inspector; every change is saved.
         </p>

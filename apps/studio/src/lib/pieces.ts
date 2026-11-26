@@ -52,14 +52,14 @@ export function useCreatePiece() {
   })
 }
 
-export function useDeletePiece() {
+export function useDeletePiece(leaveProject: boolean) {
   const navigate = useNavigate()
   const isCurrent = useCurrentView()
   return useRpcMutation('pieces.delete', {
     onMutate: () => isCurrent,
     onSuccess: (_out, _input, stillHere) => {
-      toast({ title: 'Piece deleted' })
-      if (stillHere?.()) void navigate({ to: '/pieces' })
+      toast({ title: 'Project deleted' })
+      if (leaveProject && stillHere?.()) void navigate({ to: '/pieces' })
     },
   })
 }

@@ -45,7 +45,7 @@ function HomeDashboard() {
           <p className="mb-1 text-sm text-fg-subtle">
             {now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}
           </p>
-          <h1 className="mb-7 font-serif text-display text-fg">
+          <h1 className="mb-7 studio-title text-fg">
             {greeting(now.getHours())}
             {firstName && (
               <>

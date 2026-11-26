@@ -132,13 +132,13 @@ function Shoot({ piece }: { piece: Piece }) {
   return (
     <div className="grid gap-6">
       <div>
-        <h1 className="text-[28px] font-bold">On-model studio</h1>
+        <h1 className="studio-title">On-model studio</h1>
         <p className="mt-1 text-base text-fg-muted">
           Choose who wears {piece.title || 'this piece'} and describe the photograph.
         </p>
       </div>
       <section className="grid gap-4 rounded-xl border border-line-strong p-5">
-        <h2 className="text-xl font-bold">Shot setup</h2>
+        <h2 className="studio-heading">Shot setup</h2>
         <label className="grid gap-1 text-base font-semibold">
           Brand model
           <select
@@ -242,7 +242,7 @@ function Shoot({ piece }: { piece: Piece }) {
         )}
       </section>
       <section>
-        <h2 className="mb-3 text-xl font-bold">Project photographs</h2>
+        <h2 className="mb-3 studio-heading">Project photographs</h2>
         {shots.isError ? (
           <InlineError message={shots.error.message} onRetry={() => void shots.refetch()} />
         ) : shots.isPending ? (

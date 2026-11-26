@@ -39,7 +39,7 @@ export function UpgradePage() {
     <>
       <PageHeader crumbs={[{ label: 'Plans' }]} />
       <Column className="pt-10">
-        <h1 className="font-serif text-title">Plans</h1>
+        <h1 className="studio-title">Plans</h1>
         <p className="mt-1 max-w-[60ch] text-sm text-fg-muted">
           The whole CAD studio is free, with AI jobs on your own Claude key. Pro adds unlimited
           Blender renders and Rhino and STEP exports.
@@ -67,7 +67,7 @@ export function UpgradePage() {
               )}
             >
               <div className="flex items-center gap-2">
-                <h2 className="font-serif text-xl">{PLANS[p].label}</h2>
+                <h2 className="studio-heading">{PLANS[p].label}</h2>
                 {current === p && <Chip>Your plan</Chip>}
                 {p === 'pro' && (
                   <span className="ml-auto text-2xs text-fg-subtle">Everything in Free, plus</span>
