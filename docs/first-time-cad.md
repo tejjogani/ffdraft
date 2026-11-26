@@ -43,3 +43,5 @@ A fitted diamond uses the listing’s measurements and carat weight. For an olde
 Draw profile lets you draw a closed outline or rectangle and extrude it into a solid. Draw curve creates an open or closed construction polyline. Choose Front, Top or Right and click points or enter coordinates in millimetres. The curve can snap to an endpoint or midpoint.
 
 Select the result and use Edit profile or Edit points to revise it. Undo reverses an edit. Open Project history to review changes, or return to the project and open Render studio to set up a shot.
+
+To make a metal wire, draw a construction curve, select it and choose Make wire. Set Wire width and Wire thickness in the inspector. Edit points on the original curve to reshape the wire.
