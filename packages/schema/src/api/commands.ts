@@ -1158,6 +1158,20 @@ export const commands = {
       model: z.string(),
     }),
   }),
+  'match.traceOutline': def({
+    description:
+      'Trace the silhouette and holes of a selected project logo or flat artwork on a plain background. The returned SVG path can supply the source of an editable vectorBody. Use the agreed height, thickness and metal from the project spec. Preview only.',
+    kind: 'query',
+    tool: true,
+    input: z.object({ pieceId: id, referenceId: id }),
+    output: z.object({
+      path: z.string(),
+      width: z.number(),
+      height: z.number(),
+      version: z.number().int(),
+      islands: z.number().int(),
+    }),
+  }),
   'match.fit': def({
     description:
       'Fit a built piece to a photo by its outline: Pavé renders the design from the photo’s angle and adjusts a handful of sizes (the centre stone, the band’s width and thickness, claw thickness, halo stones, the bail) until the outlines agree. Use after building from a references.read whose `cutout.ok` is true. Takes up to `seconds`; returns the ops to apply with design.apply (it never changes the piece itself), the overlap reached, and which numbers the photo could not constrain. `quality: poor` means the recipe does not explain the photo: do not apply, compare by eye instead.',
