@@ -1,20 +1,24 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 18:09 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 18:36 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## Plan: own CAD as a start, CAD on Home, the AI choosing the route, photoreal images only, the spec kept current (read-only)
 
 | Agent | State | Outcome |
 |---|---|---|
-| survey:code | running or interrupted |  |
-| survey:research | running or interrupted |  |
+| survey:code | done | I mapped each part of the founder's loop to the code and wrote it up in survey-code.md. This was read-only: I ran no builds, tests or web searches. **Branches.** spec/truth (/home/user/ffdraft-spec) and ui/focus (/home/… |
+| survey:research | done | I wrote /tmp/claude-0/-home-user/24192795-28e0-5484-b947-9462017ba677/scratchpad/plan-own-cad/research.md (about 300 lines). Every claim carries a tag: O = page opened, L = checked in a local file, R = the project's own… |
+| draft:harness | done | I wrote the harness-first build plan to /tmp/claude-0/-home-user/24192795-28e0-5484-b947-9462017ba677/scratchpad/plan-own-cad/draft-harness.md. It is about 330 lines in the style of spec-truth.md: what exists today, Exp… |
+| draft:engine | done | The plan is written: 508 lines in the spec-truth.md style. Its target path is docs/plans/own-cad-and-routing.md, the name BOARD row A15 uses. I read survey-code.md and research.md in full. I also checked the code the pl… |
+| draft:experience | running or interrupted |  |
 
 ## Polish: spec (two amendments in one turn, whole message on the card) then Diaex (expiry during an outage, per-user check limit)
 
 | Agent | State | Outcome |
 |---|---|---|
 | spec:fix | done | I fixed all eleven findings (M1, m1–m10) in /home/user/ffdraft-spec on branch spec/truth and committed them as db80257 (not pushed). Every check passes: typecheck, schema, canon, agent, the full server suite twice, stud… |
-| spec:verify | running or interrupted |  |
+| spec:verify | done | 1 blocker, 4 minor. FAIL: one blocker remains. On spec/truth at db80257, M1 is only partly fixed. When an amendment changes a whole group line ('ring', 'body' or 'chain'), its car… |
+| diaex:fix | running or interrupted |  |
 
 ## Diaex sign-in and access gate: review fixes (lane A, A8b)
 
@@ -47,7 +51,8 @@ _Generated 26 Nov 2026 18:09 UTC by `docs/agents/sync_status.py` from the workfl
 |---|---|---|
 | fix:1 | done | FIX-3-1 REPORT, render/realism worktree /home/user/ffdraft-render Two local commits on render/realism, not pushed: - 1b8bcea: code and tests - 14c12ed: skill, research note and sheets Every number below comes from a bef… |
 | verify:1 | done | 5 major, 6 minor. FAIL. I re-rendered everything at render/realism HEAD 14c12ed (worktree clean) through the product's own chain. That was 15 previews at 768 px and 64 samples: … |
-| fix:2 | running or interrupted |  |
+| fix:2 | done | I fixed the five majors on render/realism, plus four of the six minors (R7, R8, R9, R11). R6 is only partly fixed and R10 is not fixed. Everything is committed in /home/user/ffdraft-render (not pushed): c49aaf9 (code an… |
+| verify:2 | running or interrupted |  |
 
 ## Studio experience: third fix round (lane A, A11)
 
@@ -132,7 +137,7 @@ _Generated 26 Nov 2026 18:09 UTC by `docs/agents/sync_status.py` from the workfl
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 4b581af Board: no partner-API switch-off case; Diaex and Pavé are one company
+Branch `claude/busy-bardeen-o482lo`, head: cecbcbb Board: plan for starting from the founder's own CAD and the AI choosing the route
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -163,7 +168,7 @@ Branch `claude/busy-bardeen-o482lo`, head: 4b581af Board: no partner-API switch-
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 4b581af Board: no partner-API switch-off case; Diaex and Pavé are one company
+Branch `claude/busy-bardeen-o482lo`, head: cecbcbb Board: plan for starting from the founder's own CAD and the AI choosing the route
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -205,7 +210,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 4b581af Board: no partner-API switch-off case; Diaex and Pavé are one company
+Branch `claude/busy-bardeen-o482lo`, head: cecbcbb Board: plan for starting from the founder's own CAD and the AI choosing the route
 
 | Agent | State | Outcome |
 |---|---|---|
