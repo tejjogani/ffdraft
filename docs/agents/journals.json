@@ -1,5 +1,9 @@
 [
   {
+    "name": "Polish: spec (two amendments in one turn, whole message on the card) then Diaex (expiry during an outage, per-user check limit)",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_fae83638-003/journal.jsonl"
+  },
+  {
     "name": "Diaex sign-in and access gate: review fixes (lane A, A8b)",
     "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_d22e6f28-5bf/journal.jsonl"
   },

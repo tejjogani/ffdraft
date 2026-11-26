@@ -1,12 +1,19 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 16:36 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 17:09 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+
+## Polish: spec (two amendments in one turn, whole message on the card) then Diaex (expiry during an outage, per-user check limit)
+
+| Agent | State | Outcome |
+|---|---|---|
+| spec:fix | running or interrupted |  |
 
 ## Diaex sign-in and access gate: review fixes (lane A, A8b)
 
 | Agent | State | Outcome |
 |---|---|---|
-| fix:1 | running or interrupted |  |
+| fix:1 | done | All 12 findings are fixed and committed on diaex/connect in /home/user/ffdraft-ai (not pushed), and every check passed. One test, the photo replay, failed once on the first full server run because the machine was busy. … |
+| verify:1 | done | 6 minor. No way past the gate found on diaex/connect (2c6820d). All 12 findings are fixed, and I checked each one in the code, in the tests and against a live server wi… |
 
 ## CAD view fix round, then merging the studio and the CAD view into one branch (lane A, A13b + integration)
 
@@ -115,7 +122,7 @@ _Generated 26 Nov 2026 16:36 UTC by `docs/agents/sync_status.py` from the workfl
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 5c52c04 Board: spec passed its check; Diaex gate fixes under way
+Branch `claude/busy-bardeen-o482lo`, head: 9ff5a15 Status: CAD view checking its fixes; render second pass; Diaex fixing
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -146,7 +153,7 @@ Branch `claude/busy-bardeen-o482lo`, head: 5c52c04 Board: spec passed its check;
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 5c52c04 Board: spec passed its check; Diaex gate fixes under way
+Branch `claude/busy-bardeen-o482lo`, head: 9ff5a15 Status: CAD view checking its fixes; render second pass; Diaex fixing
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -188,7 +195,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 5c52c04 Board: spec passed its check; Diaex gate fixes under way
+Branch `claude/busy-bardeen-o482lo`, head: 9ff5a15 Status: CAD view checking its fixes; render second pass; Diaex fixing
 
 | Agent | State | Outcome |
 |---|---|---|
