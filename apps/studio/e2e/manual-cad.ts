@@ -1,16 +1,17 @@
 // Run against a disposable local server: pnpm exec tsx apps/studio/e2e/manual-cad.ts <base>
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import type { chromium as chromiumType, Locator } from 'playwright'
+import type { Locator } from 'playwright'
 
-const { chromium } = createRequire(import.meta.url)('playwright') as {
-  chromium: typeof chromiumType
-}
+const { chromium, webkit } = createRequire(import.meta.url)(
+  'playwright',
+) as typeof import('playwright')
 const base = process.argv[2]
 if (!base) throw new Error('Pass the URL of a disposable local server.')
-const browser = await chromium.launch({
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
-})
+const browser =
+  process.env.PAVE_TEST_BROWSER === 'webkit'
+    ? await webkit.launch()
+    : await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
   const page = await context.newPage()
@@ -98,6 +99,14 @@ try {
   )
 
   await select(/^Head/)
+  await inspector.getByLabel('Prong number', { exact: true }).click()
+  await page.getByRole('option', { name: 'Prong 2', exact: true }).click()
+  await setNumber(inspector.getByLabel('Prong 2 tip offset', { exact: true }), '0.25')
+  await until(async () => (await design()).nodes.head.prongTipOffsetsMm?.['2'] === 0.25)
+  assert.deepEqual((await design()).nodes.head.prongTipOffsetsMm, { '2': 0.25 })
+  await undo.click()
+  await until(async () => (await design()).nodes.head.prongTipOffsetsMm === undefined)
+
   await inspector.getByRole('combobox', { name: 'Style', exact: true }).click()
   await page.getByRole('option', { name: 'Basket', exact: true }).click()
   await until(async () => (await design()).nodes.head.style === 'basket')
@@ -132,7 +141,7 @@ try {
   assert.equal(await carat.count(), 0)
   assert.ok(await inspector.getByRole('textbox', { name: 'Stone size in millimetres' }).isEnabled())
   console.log(
-    `Manual CAD passed: 1.25 ct persisted and undone; base thickness added ${(postBand.metalMassG - preBand.metalMassG).toFixed(3)}g; basket rails and fitted/melee controls verified.`,
+    `Manual CAD passed: 1.25 ct and one prong offset persisted and were undone; base thickness added ${(postBand.metalMassG - preBand.metalMassG).toFixed(3)}g; basket rails and fitted/melee controls verified.`,
   )
 } finally {
   await browser.close()

@@ -33,6 +33,8 @@ while ((take.status === 'queued' || take.status === 'running') && Date.now() < d
 }
 assert.equal(take.status, 'done', `Blender take ${take.status}: ${take.error ?? ''}`)
 assert.equal(take.engine, 'blender')
+if (process.env.PAVE_CYCLES_DEVICE)
+  assert.equal(take.device, process.env.PAVE_CYCLES_DEVICE.toUpperCase())
 assert.equal(take.assetIds.length, 1)
 const response = await fetch(`${base}/api/assets/${take.assetIds[0]}`, {
   signal: AbortSignal.timeout(30_000),

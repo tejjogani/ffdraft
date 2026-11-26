@@ -11,6 +11,7 @@ describe('the environment a Blender process gets', () => {
       LC_ALL: 'C.UTF-8',
       BLENDER_USER_SCRIPTS: '/x',
       CUDA_VISIBLE_DEVICES: '0',
+      PAVE_CYCLES_DEVICE: 'CPU',
       PAVE_RENDER_STDIN_WATCH: '1',
       ANTHROPIC_API_KEY: 'sk-ant-api03-FROM-DOTENV',
       OPENAI_API_KEY: 'sk-x',
@@ -26,11 +27,13 @@ describe('the environment a Blender process gets', () => {
         'HOME',
         'LC_ALL',
         'PATH',
+        'PAVE_CYCLES_DEVICE',
         'PAVE_RENDER_STDIN_WATCH',
         'Path',
         'SystemRoot',
       ].sort(),
     )
+    expect(env.PAVE_CYCLES_DEVICE).toBe('CPU')
     expect(JSON.stringify(env)).not.toContain('sk-ant')
   })
 })

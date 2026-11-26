@@ -12,14 +12,19 @@ import { mkdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 
-const { chromium } = createRequire(import.meta.url)('playwright') as typeof import('playwright')
+const { chromium, webkit } = createRequire(import.meta.url)(
+  'playwright',
+) as typeof import('playwright')
 const [base, screenshots] = process.argv.slice(2)
 if (!base) throw new Error('Pass the URL of a fresh, loopback-only Pavé server.')
 if (screenshots) await mkdir(screenshots, { recursive: true })
 
-const browser = await chromium.launch({
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
-})
+const browser =
+  process.env.PAVE_TEST_BROWSER === 'webkit'
+    ? await webkit.launch()
+    : await chromium.launch({
+        args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
+      })
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
   const offer = page.getByRole('complementary', { name: 'Render engine setup' })
