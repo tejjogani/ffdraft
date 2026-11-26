@@ -6,7 +6,7 @@ import type { Evaluation } from '@pave/kernel'
 import { type Design, type NodeOf, nodeTitle } from '@pave/schema'
 import { Button, Chip, cn, ScrollArea, Switch } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
-import { ArrowUpRight, PencilRuler, Scale, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { ArrowUpRight, Cable, PencilRuler, Scale, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useEffect, useMemo } from 'react'
 import { runCommand } from '../../../lib/commands'
 import type { DesignSession } from '../../../lib/design-session/store'
@@ -29,6 +29,7 @@ export interface InspectorProps {
   onDelete(ids: string[]): void
   onEditProfile(node: ProfileNode): void
   onEditCurve(node: NodeOf<'curve'>): void
+  onMakeWire(curve: string): void
   onLocateProng(at: [number, number, number]): void
   empty: React.ReactNode
 }
@@ -43,6 +44,7 @@ export function Inspector({
   onDelete,
   onEditProfile,
   onEditCurve,
+  onMakeWire,
   onLocateProng,
   empty,
 }: InspectorProps) {
@@ -143,9 +145,14 @@ export function Inspector({
                   {node.points.length} points on the {node.plane} plane
                 </p>
                 {!readOnly && selection.length === 1 && (
-                  <Button size="sm" icon={PencilRuler} onClick={() => onEditCurve(node)}>
-                    Edit points
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" icon={PencilRuler} onClick={() => onEditCurve(node)}>
+                      Edit points
+                    </Button>
+                    <Button size="sm" icon={Cable} onClick={() => onMakeWire(node.id)}>
+                      Make wire
+                    </Button>
+                  </div>
                 )}
               </section>
             )}

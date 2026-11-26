@@ -389,6 +389,7 @@ export function defaultNode(
   const missing: MissingField[] = []
   for (const f of describeNode(kind).fields) {
     if (f.key in node) continue
+    if (kind === 'pipe' && f.key === 'curve' && 'points' in node) continue
     const value = fill(f, p, node, true)
     if (value !== undefined) node[f.key] = value
     else if (f.required && f.default === undefined)
@@ -398,6 +399,8 @@ export function defaultNode(
         ...(f.meta.refKinds ? { refKinds: f.meta.refKinds } : {}),
       })
   }
+  if (kind === 'pipe' && !('curve' in node) && !('points' in node))
+    missing.push({ key: 'points', title: 'A construction curve or path points' })
   return missing.length ? { node: null, missing } : { node: node as NodeInput, missing }
 }
 

@@ -406,6 +406,12 @@ export function validateDesign(design: Design): DesignIssue[] {
           nodeId: id,
           message: `"${id}" needs a solid body but "${r}" is a ${target.kind}`,
         })
+      else if (n.kind === 'pipe' && target.kind !== 'curve')
+        issues.push({
+          level: 'error',
+          nodeId: id,
+          message: `"${id}" needs a construction curve but "${r}" is a ${target.kind}.`,
+        })
     }
     if (n.kind === 'setting' && n.prongTipOffsetsMm && Object.keys(n.prongTipOffsetsMm).length) {
       const layout = prongLayout(n, nodeOf(n.gem))
