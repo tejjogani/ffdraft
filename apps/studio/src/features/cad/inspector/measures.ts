@@ -7,19 +7,21 @@ import {
   type GemCutId,
   type GemMaterialId,
   gemCarat,
-  gemDims,
   gemDimsFromCarat,
   type RingSize,
   type RingSizeSystem,
   ringInnerDiameter,
   ringSizeFromDiameter,
+  type StoneSourcing,
   snapToMelee,
+  stoneDims,
 } from '@pave/schema'
 
 export interface StoneSpec {
   cut: GemCutId
   stone: GemMaterialId
   lw?: number
+  sourcing?: StoneSourcing
 }
 
 /** The nearest multiple of `step`, as the decimal it reads as (3.26, not 3.2600000000000002). */
@@ -27,7 +29,7 @@ const round = (v: number, step: number) => Number((Math.round(v / step) * step).
 
 /** Estimated carat of one stone of girdle width `width`. */
 export const caratOf = (s: StoneSpec, width: number): number =>
-  gemCarat(s.cut, gemDims(s.cut, width, s.lw), s.stone)
+  gemCarat(s.cut, stoneDims({ ...s, width }), s.stone)
 
 /** The girdle width (mm, to 0.01) of a stone of `carat`, clamped to [min, max]. */
 export function widthForCarat(s: StoneSpec, carat: number, min: number, max: number): number {

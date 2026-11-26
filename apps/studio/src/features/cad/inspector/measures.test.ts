@@ -21,6 +21,16 @@ describe('stone size in carats', () => {
     expect(widthForCarat(round, 1, 0.5, 40)).toBeLessThan(6.6)
   })
 
+  it('uses all three measured dimensions of a fitted single stone', () => {
+    const sourcing = {
+      provider: 'diaex',
+      sku: 'DEMO-RD-2',
+      measured: { length: 6.51, width: 6.49, depth: 4.02 },
+    }
+    expect(caratOf({ ...round, sourcing }, 6.49).toFixed(2)).toBe('1.04')
+    expect(caratOf(round, 6.49).toFixed(2)).toBe('1.03')
+  })
+
   it('gives the width back for the carat a width implies', () => {
     for (const w of [1.3, 3, 5.2, 6.5, 9.35])
       expect(widthForCarat(round, caratOf(round, w), 0.5, 40)).toBeCloseTo(w, 2)
