@@ -38,7 +38,18 @@ jobs:
         with:
           python-version: 3.13.2
           architecture: x64
-      - name: Install and start Pavé from PowerShell
+      - name: Install the Python client and pinned Chromium browser
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          python -m pip install -e ./packages/pave-python
+          $playwright = Join-Path $env:RUNNER_TEMP 'pave-playwright'
+          npm install --prefix $playwright --no-save playwright@1.63.0
+          $modulePath = Join-Path $playwright 'node_modules'
+          node (Join-Path $modulePath 'playwright/cli.js') install chromium
+          "NODE_PATH=$modulePath" >> $env:GITHUB_ENV
+      # Keep the launcher and its clients in one step. The Windows runner ends the launcher
+      # process when the step that created it exits.
+      - name: Verify Windows installation, CAD, Python and Blender
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           node -e 'if (process.platform !== "win32" || process.arch !== "x64") process.exit(1); console.log(process.platform, process.arch, process.version)'
@@ -47,20 +58,19 @@ jobs:
           $env:PAVE_AUTH = 'local'
           $env:PAVE_SEED = 'false'
           $env:PAVE_DATA_DIR = Join-Path $env:RUNNER_TEMP 'Pave Windows data'
-          $base = "http://127.0.0.1:$env:PORT"
+          $env:PAVE_TEST_URL = "http://127.0.0.1:$env:PORT"
           $logs = Join-Path $env:RUNNER_TEMP 'pave-windows-logs'
           New-Item -ItemType Directory -Path $logs | Out-Null
           $stdout = Join-Path $logs 'install.stdout.log'
           $stderr = Join-Path $logs 'install.stderr.log'
+          Write-Host '::group::Install and start Pavé from PowerShell'
           $launcher = Start-Process -FilePath pwsh -ArgumentList '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', './install.ps1', '--start' -WorkingDirectory $PWD -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
-          "PAVE_WINDOWS_PID=$($launcher.Id)" >> $env:GITHUB_ENV
-          "PAVE_TEST_URL=$base" >> $env:GITHUB_ENV
           $deadline = (Get-Date).AddMinutes(4)
           $ready = $false
           try {
             while ((Get-Date) -lt $deadline -and -not $launcher.HasExited) {
               try {
-                if ((Invoke-WebRequest "$base/health" -TimeoutSec 3).StatusCode -eq 200) {
+                if ((Invoke-WebRequest "$env:PAVE_TEST_URL/health" -TimeoutSec 3).StatusCode -eq 200) {
                   $ready = $true
                   break
                 }
@@ -69,51 +79,41 @@ jobs:
               }
               Start-Sleep -Seconds 1
             }
-          } finally {
             Get-Content $stdout
             Get-Content $stderr
-          }
-          if (-not $ready -or -not (Select-String -Path $stdout -SimpleMatch 'Pavé is ready.')) {
-            throw 'The Windows installer did not complete and serve Pavé with --start.'
-          }
-          $studio = Invoke-WebRequest $base
-          if ($studio.Content -notmatch '<div id="root"') { throw 'The Windows server did not serve Studio.' }
-      - name: Verify Python CAD against the running Windows server
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          python -m pip install -e ./packages/pave-python
-          python -m unittest discover -s packages/pave-python/tests -v
-      - name: Install a pinned Playwright browser
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          $playwright = Join-Path $env:RUNNER_TEMP 'pave-playwright'
-          npm install --prefix $playwright --no-save playwright@1.63.0
-          $modulePath = Join-Path $playwright 'node_modules'
-          node (Join-Path $modulePath 'playwright/cli.js') install chromium
-          "NODE_PATH=$modulePath" >> $env:GITHUB_ENV
-      - name: Verify the CAD guide and manual editing in Chromium
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          pnpm exec tsx apps/studio/e2e/cad-guide.ts $env:PAVE_TEST_URL
-          pnpm exec tsx apps/studio/e2e/manual-cad.ts $env:PAVE_TEST_URL
-      - name: Install managed Blender through Studio
-        run: pnpm exec tsx apps/studio/e2e/render-engine-setup.ts $env:PAVE_TEST_URL "$env:RUNNER_TEMP/pave-windows-logs"
-      - name: Run the installed Blender executable
-        run: |
-          $engine = Invoke-RestMethod -Method Post -Uri "$env:PAVE_TEST_URL/api/rpc/renders.engine" -ContentType 'application/json' -Body '{}'
-          if (-not $engine.available -or (Split-Path -Leaf $engine.path) -ne 'blender.exe') {
-            throw 'Pavé did not select the managed Windows Blender executable.'
-          }
-          $version = & $engine.path --version
-          $version | Select-Object -First 1 | Write-Output
-          if ($LASTEXITCODE -ne 0 -or $version[0] -notmatch '^Blender 5\.3\.') {
-            throw 'The managed Blender executable failed its version check.'
-          }
-      - name: Stop the disposable Pavé instance
-        if: always()
-        run: |
-          if ($env:PAVE_WINDOWS_PID -and (Get-Process -Id $env:PAVE_WINDOWS_PID -ErrorAction SilentlyContinue)) {
-            taskkill.exe /pid $env:PAVE_WINDOWS_PID /t /f
+            if (-not $ready -or -not (Select-String -Path $stdout -SimpleMatch 'Pavé is ready.')) {
+              throw 'The Windows installer did not complete and serve Pavé with --start.'
+            }
+            $studio = Invoke-WebRequest $env:PAVE_TEST_URL
+            if ($studio.Content -notmatch '<div id="root"') { throw 'The Windows server did not serve Studio.' }
+            Write-Host '::endgroup::'
+
+            Write-Host '::group::Verify Python CAD against the running Windows server'
+            python -m unittest discover -s packages/pave-python/tests -v
+            Write-Host '::endgroup::'
+
+            Write-Host '::group::Verify the CAD guide and manual editing in Chromium'
+            pnpm exec tsx apps/studio/e2e/cad-guide.ts $env:PAVE_TEST_URL
+            pnpm exec tsx apps/studio/e2e/manual-cad.ts $env:PAVE_TEST_URL
+            Write-Host '::endgroup::'
+
+            Write-Host '::group::Install and verify managed Blender through Studio'
+            pnpm exec tsx apps/studio/e2e/render-engine-setup.ts $env:PAVE_TEST_URL $logs
+            $engine = Invoke-RestMethod -Method Post -Uri "$env:PAVE_TEST_URL/api/rpc/renders.engine" -ContentType 'application/json' -Body '{}'
+            if (-not $engine.available -or (Split-Path -Leaf $engine.path) -ne 'blender.exe') {
+              throw 'Pavé did not select the managed Windows Blender executable.'
+            }
+            $version = @(& $engine.path --version)
+            $version | Select-Object -First 1 | Write-Output
+            if ($version[0] -notmatch '^Blender 5\.3\.') {
+              throw 'The managed Blender executable failed its version check.'
+            }
+            Write-Host '::endgroup::'
+          } finally {
+            if (-not $launcher.HasExited) {
+              $PSNativeCommandUseErrorActionPreference = $false
+              taskkill.exe /pid $launcher.Id /t /f
+            }
           }
       - uses: actions/upload-artifact@v4
         if: always()
