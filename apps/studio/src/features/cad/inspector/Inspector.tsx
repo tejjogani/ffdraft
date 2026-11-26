@@ -5,11 +5,12 @@
 import type { Evaluation } from '@pave/kernel'
 import { type Design, nodeTitle } from '@pave/schema'
 import { Button, Chip, cn, ScrollArea, Switch } from '@pave/ui'
-import { Scale, SlidersHorizontal, Trash2 } from 'lucide-react'
+import { ArrowUpRight, Scale, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useEffect, useMemo } from 'react'
 import { runCommand } from '../../../lib/commands'
 import type { DesignSession } from '../../../lib/design-session/store'
 import { carats, mm } from '../../../lib/format'
+import { diaexBrowseLink } from '../../sourcing/links'
 import { useWorkspace } from '../state/workspace'
 import { FieldEditContext, useNodeEdit } from './edit'
 import { FieldControl } from './FieldControl'
@@ -54,6 +55,8 @@ export function Inspector({
 
   if (!node || !model || !edit) return <>{empty}</>
 
+  const listed = node.kind === 'gem' && node.sourcing?.provider === 'diaex' ? node.sourcing : null
+  const listing = diaexBrowseLink(listed?.url)
   const included = node.visible !== false
   const picked = stone ? evaluation?.stones.find((s) => s.id === stone) : undefined
   return (
@@ -76,6 +79,24 @@ export function Inspector({
               {picked.dims.length !== picked.dims.width && ` × ${mm(picked.dims.length)}`} ·{' '}
               {carats(picked.carat)}
             </span>
+          </div>
+        )}
+        {listed && (
+          <div className="border-b border-line px-4 py-2 text-xs">
+            <p className="text-fg-muted">Fitted diamond</p>
+            {listing ? (
+              <a
+                href={listing.href}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 inline-flex items-center gap-1 break-all text-fg underline decoration-line-strong underline-offset-2"
+              >
+                {listed.sku}
+                <ArrowUpRight className="size-3 shrink-0" aria-hidden />
+              </a>
+            ) : (
+              <p className="mt-1 break-all text-fg">{listed.sku}</p>
+            )}
           </div>
         )}
         {/* Keyed by feature: another feature's form opens at its top, not where this one was scrolled. */}
