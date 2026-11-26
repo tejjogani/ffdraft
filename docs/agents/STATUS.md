@@ -1,12 +1,20 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 17:36 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 18:09 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+
+## Plan: own CAD as a start, CAD on Home, the AI choosing the route, photoreal images only, the spec kept current (read-only)
+
+| Agent | State | Outcome |
+|---|---|---|
+| survey:code | running or interrupted |  |
+| survey:research | running or interrupted |  |
 
 ## Polish: spec (two amendments in one turn, whole message on the card) then Diaex (expiry during an outage, per-user check limit)
 
 | Agent | State | Outcome |
 |---|---|---|
-| spec:fix | running or interrupted |  |
+| spec:fix | done | I fixed all eleven findings (M1, m1–m10) in /home/user/ffdraft-spec on branch spec/truth and committed them as db80257 (not pushed). Every check passes: typecheck, schema, canon, agent, the full server suite twice, stud… |
+| spec:verify | running or interrupted |  |
 
 ## Diaex sign-in and access gate: review fixes (lane A, A8b)
 
@@ -21,7 +29,8 @@ _Generated 26 Nov 2026 17:36 UTC by `docs/agents/sync_status.py` from the workfl
 |---|---|---|
 | view:fix:1 | done | All seven findings are dealt with, and the fixes are committed as **b466c27** on cad/viewport in /home/user/ffdraft-view (not pushed). Two of them are only partly fixed: the trace from the founder's Mac is what tunes mo… |
 | view:verify:1 | done | 2 major, 5 minor. Not ready. Two major findings are still open, and both are cases where the hand freezes. 1. **Spin, catch and fine-adjust still freezes in one case.** If the f… |
-| view:fix:2 | running or interrupted |  |
+| view:fix:2 | done | I committed **30c9cc0** on cad/viewport in /home/user/ffdraft-view, on top of b466c27; nothing was pushed. Before it, HEAD was b466c27 (the reviewed build), not the 81e3d4b the task named. The hand now gets the view bac… |
+| view:verify:2 | running or interrupted |  |
 
 ## Spec: the card is the gate, word reading only adds notes (lane A, A7)
 
@@ -123,7 +132,7 @@ _Generated 26 Nov 2026 17:36 UTC by `docs/agents/sync_status.py` from the workfl
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 961e4f3 Board: Diaex passed its security check; spec and Diaex polish under way
+Branch `claude/busy-bardeen-o482lo`, head: 4b581af Board: no partner-API switch-off case; Diaex and Pavé are one company
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -154,7 +163,7 @@ Branch `claude/busy-bardeen-o482lo`, head: 961e4f3 Board: Diaex passed its secur
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 961e4f3 Board: Diaex passed its security check; spec and Diaex polish under way
+Branch `claude/busy-bardeen-o482lo`, head: 4b581af Board: no partner-API switch-off case; Diaex and Pavé are one company
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -196,7 +205,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 961e4f3 Board: Diaex passed its security check; spec and Diaex polish under way
+Branch `claude/busy-bardeen-o482lo`, head: 4b581af Board: no partner-API switch-off case; Diaex and Pavé are one company
 
 | Agent | State | Outcome |
 |---|---|---|

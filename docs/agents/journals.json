@@ -1,5 +1,9 @@
 [
   {
+    "name": "Plan: own CAD as a start, CAD on Home, the AI choosing the route, photoreal images only, the spec kept current (read-only)",
+    "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_d4762e9b-b9c/journal.jsonl"
+  },
+  {
     "name": "Polish: spec (two amendments in one turn, whole message on the card) then Diaex (expiry during an outage, per-user check limit)",
     "journal": "/root/.claude/projects/-home-user/24192795-28e0-5484-b947-9462017ba677/subagents/workflows/wf_fae83638-003/journal.jsonl"
   },
