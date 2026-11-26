@@ -114,6 +114,7 @@ try {
   await page.evaluate(() => localStorage.removeItem('pave:selected-design'))
   await page.reload()
   await selection.getByText('Aster shape study', { exact: true }).waitFor()
+  if (process.argv[3] === 'overview') await page.goto(base + '/pieces/' + pieceId)
   await page.getByRole('button', { name: 'Build CAD with Claude', exact: true }).click()
   await page.waitForURL(`**/pieces/${pieceId}/design`)
   const cad = sent.find((send) => send.job?.stage === 'cad')
