@@ -24,8 +24,15 @@ export function PieceOverview({ pieceId }: { pieceId: string }) {
   return (
     <div className="flex flex-col gap-10">
       <ProjectSections piece={piece.data} />
-      <Brief piece={piece.data} />
-      <SpecCard piece={piece.data} />
+      <details className="rounded-lg border border-line px-5 py-4">
+        <summary className="cursor-pointer text-lg font-semibold">
+          Project brief and specification
+        </summary>
+        <div className="mt-4 space-y-4">
+          <Brief piece={piece.data} />
+          <SpecCard piece={piece.data} />
+        </div>
+      </details>
       <Moodboards pieceId={pieceId} />
       <LatestRenders pieceId={pieceId} />
       {piece.data.provenance && <FileProvenance provenance={piece.data.provenance} />}

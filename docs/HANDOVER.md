@@ -1,5 +1,7 @@
 # Handover: where Pavé stands and how to pick it up
 
+**November 26 recovery.** The [Codex workflows and worklog](agents/RESUME-WORKFLOWS.md) reconstruct the three interrupted jobs, record which changes reached GitHub, and link the next build steps.
+
 _Written 24 November 2026. Read this first in any new session, then the files it points to. Keep it current: whoever finishes a piece of work updates the "State" and "In flight" sections in the same commit._
 
 ## 1. What Pavé is, in the founder's words

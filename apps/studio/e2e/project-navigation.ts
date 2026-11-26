@@ -22,7 +22,7 @@ try {
   const stamp = Date.now()
   const a = await rpc('pieces.create', { title: 'Solitaire ' + stamp })
   const b = await rpc('pieces.create', { title: 'Studs ' + stamp })
-  const areas = ['directions', 'design', 'render', 'on-model', 'sourcing', 'production', 'history']
+  const areas = ['directions', 'design', 'render', 'sourcing', 'history', 'on-model', 'production']
   await page.goto(base + '/pieces/' + a.id)
   const menu = page.getByRole('navigation', { name: 'Project tools' })
   await menu.waitFor()
@@ -81,7 +81,7 @@ try {
       .click()
     await menu.waitFor()
   }
-  await menu.getByRole('link', { name: 'CAD', exact: true }).click()
+  await menu.getByRole('link', { name: 'CAD builder', exact: true }).click()
   const projectTools = page.getByRole('navigation', { name: 'Tools in this project' })
   await projectTools.getByRole('link', { name: 'History' }).click()
   await page.waitForURL('**/pieces/' + a.id + '/history')
