@@ -120,6 +120,7 @@ jobs:
               if ($version[0] -notmatch '^Blender 5\.3\.') {
                 throw 'The managed Blender executable failed its version check.'
               }
+              pnpm exec tsx apps/studio/e2e/managed-blender-render.ts $env:PAVE_TEST_URL (Join-Path $logs '04-blender-take.png')
             }
             if ($failures.Count) { throw "Failed Windows checks: $($failures -join ', ')" }
           } finally {

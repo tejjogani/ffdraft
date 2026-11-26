@@ -122,7 +122,7 @@ try {
   assert.ok(await carat.isDisabled())
   assert.ok(await width.isDisabled())
   assert.equal(Number(await width.inputValue()), fit.measured.width)
-  await inspector.getByText(/width and carat weight are fixed/i).waitFor()
+  await inspector.getByText(/carat weight is estimated/i).waitFor()
   await inspector.getByRole('link', { name: 'Change fitted diamond' }).waitFor()
 
   const halo = await rpc('pieces.create', { title: 'Melee CAD proof', templateId: 'halo' })
