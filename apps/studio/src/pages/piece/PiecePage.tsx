@@ -25,6 +25,7 @@ import { PieceCover } from '../../components/PieceCover'
 import { StagePicker } from '../../components/StageChip'
 import { JobPanel } from '../../features/assistant/jobs/JobPanel'
 import { StartJob } from '../../features/assistant/jobs/StartJob'
+import { CadGuide } from '../../features/cad/CadGuide'
 import { TryVariants } from '../../features/directions/TryVariants'
 import { savePaveFile } from '../../features/pavefile'
 import { PROJECT_AREAS, PROJECT_MENU, type ProjectArea } from '../../features/projects/areas'
@@ -78,9 +79,10 @@ export function PiecePage({ id }: { id: string }) {
       {p && stage && (
         <div className="sticky top-11 z-10 bg-bg">
           {bleed && (
-            <div className="flex items-center justify-end gap-1 px-3 py-1">
+            <div className="flex flex-wrap items-center justify-end gap-1 px-3 py-1">
               {stage === 'cad' && (
                 <>
+                  <CadGuide />
                   <TraceSelectedDesign piece={p} />
                   <TryVariants piece={p} />
                 </>
