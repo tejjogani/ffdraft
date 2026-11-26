@@ -21,6 +21,7 @@ import {
   Vec3Widget,
 } from './widgets/basic'
 import { RingSizeWidget, StoneSizeWidget } from './widgets/measures'
+import { ProngTipsWidget } from './widgets/prongs'
 
 function control(widget: Widget, row: InspectorRow, label: ReactNode): ReactNode {
   switch (widget) {
@@ -48,6 +49,8 @@ function control(widget: Widget, row: InspectorRow, label: ReactNode): ReactNode
       return <RingSizeWidget row={row} />
     case 'stoneSize':
       return <StoneSizeWidget row={row} label={label} />
+    case 'prongTips':
+      return <ProngTipsWidget key={row.path.join('.')} row={row} />
     case 'refs':
       return <RefsWidget row={row} />
     case 'asset':
@@ -63,7 +66,7 @@ function control(widget: Widget, row: InspectorRow, label: ReactNode): ReactNode
 }
 
 /** Fields whose control needs the whole row width (it carries two inputs, a hint or a list). */
-const WIDE: ReadonlySet<Widget> = new Set(['ringSize', 'vec3', 'refs'])
+const WIDE: ReadonlySet<Widget> = new Set(['ringSize', 'vec3', 'refs', 'prongTips'])
 /** Widgets that render the row's label themselves (as their scrub handle). */
 const OWNS_LABEL: ReadonlySet<Widget> = new Set(['number', 'slider', 'stoneSize'])
 
@@ -89,7 +92,7 @@ export function FieldControl({ row }: { row: InspectorRow }) {
       )}
     </span>
   )
-  const nested = row.children.length > 0 && (
+  const nested = field.widget !== 'prongTips' && row.children.length > 0 && (
     <div
       className={cn(
         'flex flex-col gap-1',

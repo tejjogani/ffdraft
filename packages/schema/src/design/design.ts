@@ -6,7 +6,7 @@
  * undo/redo, a replayable history and a per-edit trace of who (person or agent run) did what.
  */
 import { z } from 'zod'
-import { DESIGN_VERSION, migrateDesign } from './mount'
+import { DESIGN_VERSION, migrateDesign, prongLayout } from './mount'
 import { isBodyKind, type Node, type NodeInput, NodeSchema, nodeRefs } from './nodes'
 
 export const PIECE_KINDS = [
@@ -184,6 +184,8 @@ export function applyOps(input: Design, ops: readonly Op[]): { design: Design; i
   let order = [...design.order]
   let kind = design.kind
   const inverse: Op[] = []
+  const newNodes = new Set<string>()
+  const prongsSet = new Map<string, Set<string>>()
 
   const removeOne = (id: string) => {
     const node = nodes[id]!
@@ -203,6 +205,7 @@ export function applyOps(input: Design, ops: readonly Op[]): { design: Design; i
         if (node.id === '__proto__') throw new OpError('"__proto__" cannot be a node id', op)
         if (has(node.id)) throw new OpError(`Node "${node.id}" already exists`, op)
         nodes[node.id] = node
+        newNodes.add(node.id)
         order.splice(Math.min(op.index ?? order.length, order.length), 0, node.id)
         inverse.unshift({ t: 'remove', id: node.id })
         break
@@ -213,6 +216,11 @@ export function applyOps(input: Design, ops: readonly Op[]): { design: Design; i
         if ('id' in op.patch || 'kind' in op.patch)
           throw new OpError('id and kind cannot be changed; add a new node instead', op)
         const updated = parseNode(mergePatch(prev, op.patch), op)
+        if (updated.kind === 'setting' && isObject(op.patch.prongTipOffsetsMm)) {
+          const set = prongsSet.get(op.id) ?? new Set()
+          for (const number of Object.keys(op.patch.prongTipOffsetsMm)) set.add(number)
+          prongsSet.set(op.id, set)
+        }
         nodes[op.id] = updated
         inverse.unshift({ t: 'update', id: op.id, patch: diffPatch(updated, prev) })
         break
@@ -246,6 +254,36 @@ export function applyOps(input: Design, ops: readonly Op[]): { design: Design; i
         break
       }
     }
+  }
+
+  // Prong numbers identify positions in one layout. A change that also specifies new offsets
+  // applies those numbers to its final layout. Undo restores the fields from the old layout.
+  for (const id of order) {
+    const old = design.nodes[id]
+    const head = nodes[id]
+    if (
+      newNodes.has(id) ||
+      old?.kind !== 'setting' ||
+      !old.prongTipOffsetsMm ||
+      head?.kind !== 'setting' ||
+      !head.prongTipOffsetsMm ||
+      sameJson(prongLayout(old, design.nodes[old.gem]), prongLayout(head, nodes[head.gem]))
+    )
+      continue
+    const kept = Object.entries(head.prongTipOffsetsMm).filter(([n]) => prongsSet.get(id)?.has(n))
+    if (kept.length === Object.keys(head.prongTipOffsetsMm).length) continue
+    const { prongTipOffsetsMm: _removed, ...rest } = head
+    nodes[id] = kept.length ? { ...rest, prongTipOffsetsMm: Object.fromEntries(kept) } : rest
+    const update = inverse.findLast(
+      (op): op is Extract<Op, { t: 'update' }> => op.t === 'update' && op.id === id,
+    )
+    if (update) {
+      const patch = update.patch.prongTipOffsetsMm
+      update.patch.prongTipOffsetsMm = {
+        ...(isObject(patch) ? patch : {}),
+        ...old.prongTipOffsetsMm,
+      }
+    } else inverse.push({ t: 'update', id, patch: { prongTipOffsetsMm: old.prongTipOffsetsMm } })
   }
 
   // Nodes are kept in outliner order, so undoing a remove gives back the same document, key
@@ -367,6 +405,20 @@ export function validateDesign(design: Design): DesignIssue[] {
           level: 'error',
           nodeId: id,
           message: `"${id}" needs a solid body but "${r}" is a ${target.kind}`,
+        })
+    }
+    if (n.kind === 'setting' && n.prongTipOffsetsMm && Object.keys(n.prongTipOffsetsMm).length) {
+      const layout = prongLayout(n, nodeOf(n.gem))
+      const invalid = Object.keys(n.prongTipOffsetsMm).find(
+        (key) => Number(key) > (layout?.count ?? 0),
+      )
+      if (invalid)
+        issues.push({
+          level: 'error',
+          nodeId: id,
+          message: layout
+            ? `Prong ${invalid} does not exist on "${id}" (this head has ${layout.count} prongs).`
+            : `"${id}" needs a prong or basket setting and a held stone to use individual prong offsets.`,
         })
     }
   }

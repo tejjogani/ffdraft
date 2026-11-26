@@ -29,6 +29,7 @@ export interface InspectorProps {
   onDelete(ids: string[]): void
   onEditProfile(node: ProfileNode): void
   onEditCurve(node: NodeOf<'curve'>): void
+  onLocateProng(at: [number, number, number]): void
   empty: React.ReactNode
 }
 
@@ -42,6 +43,7 @@ export function Inspector({
   onDelete,
   onEditProfile,
   onEditCurve,
+  onLocateProng,
   empty,
 }: InspectorProps) {
   const selection = useWorkspace((s) => s.selection)
@@ -68,8 +70,21 @@ export function Inspector({
   const drawn = isProfileNode(node) ? node : null
   const included = node.visible !== false
   const picked = stone ? evaluation?.stones.find((s) => s.id === stone) : undefined
+  const prongTips = evaluation?.prongTips?.filter((tip) => tip.nodeId === node.id)
   return (
-    <FieldEditContext value={edit}>
+    <FieldEditContext
+      value={
+        prongTips?.length
+          ? {
+              ...edit,
+              locateProng: (number) => {
+                const tip = prongTips.find((tip) => tip.number === number)
+                if (tip) onLocateProng(tip.at)
+              },
+            }
+          : edit
+      }
+    >
       <div className="flex h-full flex-col">
         <header className="flex items-start gap-2 border-b border-line px-4 pt-3.5 pb-3">
           <div className="min-w-0 flex-1">
