@@ -7,8 +7,9 @@
  * the thread list, or the empty state's starters) above the one composer.
  */
 import type { JobStage } from '@pave/schema'
-import { AiMark } from '@pave/ui'
-import { useEffect } from 'react'
+import { AiMark, buttonClass } from '@pave/ui'
+import { Link } from '@tanstack/react-router'
+import { useEffect, useState } from 'react'
 import { useRegisterCommands } from '../../lib/commands'
 import { useRpc } from '../../lib/query'
 import { useSession } from '../../lib/session'
@@ -79,13 +80,52 @@ export function AssistantPanel({
   stage?: JobStage | null
 }) {
   const { capabilities } = useSession()
-  if (!capabilities.assistant) return <NoKey />
-  return <Panel context={context} stage={stage} />
+  if (!capabilities.assistant) return <OfflineProjectPanel context={context} />
+  return (
+    <Panel key={context.pieceId ?? context.boardId ?? 'studio'} context={context} stage={stage} />
+  )
 }
 
-function Panel({ context, stage }: { context: AssistantContext; stage: JobStage | null }) {
+function OfflineProjectPanel({ context }: { context: AssistantContext }) {
+  const active = useAssistant((state) =>
+    context.pieceId && state.threadPieceId === context.pieceId ? state.activeThreadId : null,
+  )
+  const thread = useRpc('threads.get', { id: active ?? '' }, { enabled: Boolean(active) })
+  if (!active || thread.data?.thread.context.pieceId !== context.pieceId) return <NoKey />
+  return (
+    <div className="flex h-full flex-col">
+      <div className="min-h-0 flex-1">
+        <Conversation
+          threadId={active}
+          page={context}
+          inline={{
+            transcriptClassName: 'px-4',
+            pending: true,
+            send: () => {},
+            rephrase: () => {},
+          }}
+        />
+      </div>
+      <div className="border-t border-line p-3">
+        <Link to="/settings/ai" className={buttonClass({ size: 'sm' })}>
+          Connect Claude to continue
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+function Panel({
+  context,
+  stage: pageStage,
+}: {
+  context: AssistantContext
+  stage: JobStage | null
+}) {
+  const [focus, setFocus] = useState<'auto' | 'project' | JobStage>('auto')
+  const stage = focus === 'auto' ? pageStage : focus === 'project' ? null : focus
   const isCurrent = useCurrentView()
-  const threadId = useAssistant((s) => s.activeThreadId)
+  const selectedThread = useAssistant((s) => s.activeThreadId)
   const showThreads = useAssistant((s) => s.showThreads)
   const draft = useAssistant((s) => s.draft)
   const attachments = useAssistant((s) => s.attachments)
@@ -96,8 +136,13 @@ function Panel({ context, stage }: { context: AssistantContext; stage: JobStage 
   const { send, pending, error, clearError } = useSend({ ...context, stage })
   const actions = useRunActions()
 
-  const thread = useRpc('threads.get', { id: threadId ?? '' }, { enabled: !!threadId })
-  const run = thread.data?.run ?? null
+  const thread = useRpc('threads.get', { id: selectedThread ?? '' }, { enabled: !!selectedThread })
+  const threadId =
+    !context.pieceId || thread.data?.thread.context.pieceId === context.pieceId
+      ? selectedThread
+      : null
+  const checkingThread = Boolean(context.pieceId && selectedThread && thread.isPending)
+  const run = threadId ? (thread.data?.run ?? null) : null
   const running = run?.status === 'running'
   // A conversation that no longer exists (deleted elsewhere) gives way to a new one.
   useEffect(() => {
@@ -134,7 +179,7 @@ function Panel({ context, stage }: { context: AssistantContext; stage: JobStage 
         {showThreads ? (
           <ThreadList pieceId={context.pieceId} />
         ) : threadId ? (
-          <Conversation threadId={threadId} page={context} />
+          <Conversation threadId={threadId} page={{ ...context, stage }} />
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
             <AiMark className="size-5" />
@@ -177,6 +222,22 @@ function Panel({ context, stage }: { context: AssistantContext; stage: JobStage 
             {error.message}
           </p>
         )}
+        {context.pieceId && (
+          <label className="mb-2 flex items-center gap-2 text-xs font-medium">
+            AI focus
+            <select
+              className="rounded-md border border-line bg-bg-subtle px-2 py-1 text-fg"
+              value={focus}
+              onChange={(e) => setFocus(e.target.value as typeof focus)}
+            >
+              <option value="auto">Follow this tool</option>
+              <option value="project">Whole project</option>
+              <option value="design">Design board &amp; spec</option>
+              <option value="cad">CAD builder</option>
+              <option value="render">Render studio</option>
+            </select>
+          </label>
+        )}
         <Composer
           value={draft}
           onChange={(v) => st().setDraft(v)}
@@ -187,6 +248,7 @@ function Panel({ context, stage }: { context: AssistantContext; stage: JobStage 
           onRemoveAttachment={(id) => st().removeAttachment(id)}
           onSubmit={submit}
           sending={pending}
+          disabled={checkingThread}
           focusNonce={focusNonce}
           placeholder={threadId ? 'Reply…' : 'Ask anything, or drop a photo…'}
           chips={<ContextChips page={context} />}

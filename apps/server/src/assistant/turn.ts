@@ -5,7 +5,7 @@
  */
 import { type ContextPin, canonText, pinLabel, renderContext, type TurnContext } from '@pave/agent'
 import { allowanceLine, type CommandParsedInput } from '@pave/schema'
-import { and, asc, desc, eq, gt, inArray, isNull, max, ne } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, isNull, max, ne, or } from 'drizzle-orm'
 import { readAsset } from '../assets/assets'
 import type { Ctx } from '../context'
 import * as t from '../db/schema'
@@ -284,6 +284,29 @@ async function designerEdits(
   }))
 }
 
+async function selectedReferences(ctx: Ctx, input: Send, pieceId: string | null) {
+  if (!input.referenceIds.length) return []
+  const selected = inArray(t.reference.id, input.referenceIds)
+  let where = selected
+  if (pieceId) {
+    const boards = await ctx.repo.boards.many({
+      where: or(eq(t.board.pieceId, pieceId), eq(t.board.pinsFor, pieceId)),
+    })
+    if (!boards.length) return []
+    where = and(
+      selected,
+      inArray(
+        t.reference.boardId,
+        boards.map((b) => b.id),
+      ),
+    )!
+  } else if (input.context.boardId) {
+    where = and(selected, eq(t.reference.boardId, input.context.boardId))!
+  }
+  const rows = await ctx.repo.references.many({ where })
+  return input.referenceIds.flatMap((id) => rows.filter((r) => r.id === id))
+}
+
 export async function contextText(
   ctx: Ctx,
   input: Send,
@@ -308,9 +331,7 @@ export async function contextText(
     input.attachments.length
       ? ctx.repo.assets.many({ where: inArray(t.asset.id, input.attachments) })
       : [],
-    input.referenceIds.length
-      ? ctx.repo.references.many({ where: inArray(t.reference.id, input.referenceIds) })
-      : [],
+    selectedReferences(ctx, input, run.pieceId),
   ])
   const text = renderContext({
     date: new Date().toISOString().slice(0, 10),
@@ -356,6 +377,8 @@ export async function contextText(
     ...(media.moodboard ? { moodboard: media.moodboard } : {}),
   })
   const notes = [
+    piece?.brief && `Saved project brief: ${JSON.stringify(piece.brief.slice(0, 5000))}`,
+    piece?.spec && `Saved design specification: ${JSON.stringify(piece.spec)}`,
     piece?.intake &&
       Object.keys(piece.intake.details).length &&
       `Confirmed intake decisions: ${JSON.stringify(piece.intake.details)}`,

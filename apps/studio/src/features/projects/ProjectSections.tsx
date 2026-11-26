@@ -10,6 +10,7 @@ import { useRpc } from '../../lib/query'
 import { useSession } from '../../lib/session'
 import { openAssistant } from '../../stores/assistant'
 import { StartJob } from '../assistant/jobs/StartJob'
+import { BuildCadWithClaude } from '../ideate/BuildCadWithClaude'
 import { takeMedia } from '../render/shots'
 import { PROJECT_AREAS, type ProjectArea } from './areas'
 import { costLines, STAGE_TITLE, stageStates, stageUsd, usd } from './cost'
@@ -123,9 +124,12 @@ function ProjectAssistant({ piece }: { piece: Piece }) {
               : 'Connect Claude to discuss this design or plan a CAD edit.'}
           </p>
         </div>
-        <Button variant="primary" onClick={() => openAssistant({ pieceId: piece.id })}>
-          {enabled ? 'Ask about this project' : 'Connect project AI'}
-        </Button>
+        <div className="flex min-w-0 flex-wrap items-start gap-2">
+          <BuildCadWithClaude key={piece.id} pieceId={piece.id} />
+          <Button variant="secondary" onClick={() => openAssistant({ pieceId: piece.id })}>
+            {enabled ? 'Ask about this project' : 'Project chat'}
+          </Button>
+        </div>
       </div>
       {enabled && (
         <details className="mt-4 border-t border-line pt-3">

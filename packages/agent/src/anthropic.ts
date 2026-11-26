@@ -4,11 +4,8 @@
  * subpath): the API key is passed in by the caller, used only to construct the client, and never
  * logged, stored in a trace or returned.
  *
- * The request is the same shape for every turn of every run on a given model:
- *   tools (sorted, frozen) → system (frozen; breakpoint on its last block) → messages (append-only:
- *   user turns, the context message after each, assistant turns with their thinking passed back
- *   unchanged, tool results). Volatile context never enters `system`, so the prefix is identical
- *   from turn to turn and the API's check on replayed thinking passes.
+ * Project data lives in the append-only messages. The chosen focus selects instructions for
+ * the turn, with a cache breakpoint on the final system block. Discovery has its own tool set.
  */
 import Anthropic, {
   APIConnectionError,
@@ -43,8 +40,9 @@ import {
 } from '@pave/schema'
 import type { ModelClient, ModelStream } from './model'
 import { type Effort, MODELS, type ResponseUsage, usageCost } from './pricing'
+import type { PromptGuide } from './prompt/routing'
 import { SYSTEM_BLOCKS } from './prompt/index'
-import { toolDefs } from './tools'
+import { fromApiName, toolDefs } from './tools'
 
 /** Room for adaptive thinking plus a long answer; streaming keeps it clear of HTTP timeouts. */
 export const MAX_TOKENS = 64_000
@@ -91,9 +89,9 @@ export function apiTools(): BetaTool[] {
 }
 
 /** The system prompt blocks, the last one carrying the cache breakpoint for tools + system. */
-export function systemBlocks(): BetaTextBlockParam[] {
-  return SYSTEM_BLOCKS.map((text, i) =>
-    i === SYSTEM_BLOCKS.length - 1
+export function systemBlocks(blocks: readonly string[] = SYSTEM_BLOCKS): BetaTextBlockParam[] {
+  return blocks.map((text, i) =>
+    i === blocks.length - 1
       ? { type: 'text', text, cache_control: { type: 'ephemeral' } }
       : { type: 'text', text },
   )
@@ -123,6 +121,8 @@ export const contextMessage = (text: string): Pick<Message, 'role' | 'content'> 
 })
 
 export interface BuildRequest {
+  allowedTools?: ReadonlySet<string>
+  guide?: PromptGuide
   model: AssistantModelId
   messages: BetaMessageParam[]
   features?: Partial<RequestFeatures>
@@ -140,7 +140,13 @@ export const turnFallbacks = (model: AssistantModelId): boolean => {
 }
 
 /** One turn's request. Everything but `model` and `messages` is fixed for the model. */
-export function buildRequest({ model, messages, features }: BuildRequest): BetaMessageStreamParams {
+export function buildRequest({
+  model,
+  messages,
+  features,
+  guide,
+  allowedTools,
+}: BuildRequest): BetaMessageStreamParams {
   const f = { ...DEFAULT_FEATURES, ...features }
   const fallbacks = turnFallbacks(model)
   const betas = [
@@ -151,8 +157,10 @@ export function buildRequest({ model, messages, features }: BuildRequest): BetaM
   return {
     model,
     max_tokens: MAX_TOKENS,
-    system: systemBlocks(),
-    tools: apiTools(),
+    system: systemBlocks(guide?.blocks),
+    tools: allowedTools
+      ? apiTools().filter((t) => allowedTools.has(fromApiName(t.name) ?? ''))
+      : apiTools(),
     // Forced tool choice is a 400 on these models; the prompt says when to use which tool.
     tool_choice: { type: 'auto' },
     messages,

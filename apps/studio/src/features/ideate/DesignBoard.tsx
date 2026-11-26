@@ -71,6 +71,7 @@ import {
 } from './board'
 import { GeneratePanel } from './GeneratePanel'
 import { ModelViewer } from './ModelViewer'
+import { useSelectedDesign } from './selected-design'
 
 type View = 'masonry' | 'canvas'
 
@@ -89,16 +90,36 @@ export function DesignBoard({
   references = [],
   readOnly = false,
   projectWorkspace = false,
+  onDiscussReference,
+  initialSelectedReferenceId,
 }: ({ board: Board; pieceId?: never } | { board?: never; pieceId: string }) & {
   references?: Reference[]
   readOnly?: boolean
   projectWorkspace?: boolean
+  onDiscussReference?: (reference: Reference) => void
+  initialSelectedReferenceId?: string
 }) {
   const boardId = board?.id
   const target: BoardTarget = boardId ? { boardId } : { pieceId: pieceId! }
   const empty = references.length === 0
   const [view, setView] = useState<View>(readView)
-  const [selected, setSelected] = useState<string | null>(null)
+  const [localSelection, setLocalSelection] = useState<string | null>(null)
+  const owningPiece = projectWorkspace ? board?.pieceId : null
+  const choice = useSelectedDesign((state) => (owningPiece ? state.projects[owningPiece] : null))
+  const selected = owningPiece
+    ? choice === undefined
+      ? (initialSelectedReferenceId ?? null)
+      : choice?.boardId === boardId
+        ? (choice?.referenceId ?? null)
+        : null
+    : localSelection
+  const setSelected = (referenceId: string | null) => {
+    if (owningPiece && boardId)
+      useSelectedDesign
+        .getState()
+        .choose(owningPiece, referenceId ? { boardId, referenceId } : null)
+    else setLocalSelection(referenceId)
+  }
   const [searching, setSearching] = useState(false)
   const [sketching, setSketching] = useState(false)
   const [noting, setNoting] = useState(false)
@@ -116,6 +137,7 @@ export function DesignBoard({
       key={chosen.id}
       reference={chosen}
       projectWorkspace={projectWorkspace}
+      onDiscussReference={onDiscussReference ? () => onDiscussReference(chosen) : undefined}
       onTakeToCad={() => takeToCad(board, chosen)}
       onOpenAsCad={() => openAsCad(board, chosen)}
       onClose={() => setSelected(null)}
@@ -309,7 +331,7 @@ export function DesignBoard({
                 aria-pressed={generating}
                 onClick={() => setGenerating((open) => !open)}
               >
-                Generate concepts
+                {projectWorkspace ? 'Generate images' : 'Generate concepts'}
               </Button>
               <Menu
                 trigger={
@@ -732,6 +754,7 @@ function SelectionBar({
   onTakeToCad,
   onOpenAsCad,
   onClose,
+  onDiscussReference,
   projectWorkspace,
 }: {
   reference: Reference
@@ -739,6 +762,7 @@ function SelectionBar({
   onOpenAsCad: () => Promise<void>
   onClose: () => void
   projectWorkspace: boolean
+  onDiscussReference?: () => void
 }) {
   const refusal = takeToCadRefusal(r)
   const { assistant } = useSession().capabilities
@@ -790,6 +814,12 @@ function SelectionBar({
             </span>
           </Tooltip>
         )
+      ) : projectWorkspace && assistant ? (
+        onDiscussReference && (
+          <Button size="sm" onClick={onDiscussReference}>
+            Discuss this reference
+          </Button>
+        )
       ) : (
         <Button
           size="sm"
@@ -798,13 +828,7 @@ function SelectionBar({
           disabled={going}
           onClick={() => go(onTakeToCad)}
         >
-          {going
-            ? 'Starting…'
-            : projectWorkspace
-              ? assistant
-                ? 'Build CAD from this image'
-                : 'Open image in CAD'
-              : 'Take to CAD'}
+          {going ? 'Starting…' : projectWorkspace ? 'Open image in CAD' : 'Take to CAD'}
         </Button>
       )}
       <Button size="sm" variant="ghost" onClick={onClose}>

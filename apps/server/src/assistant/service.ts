@@ -7,7 +7,8 @@ import {
   jobMessage,
   modelForRun,
   newJob,
-  PROMPT_HASH,
+  focusFor,
+  guideFor,
   resolveTiers,
 } from '@pave/agent'
 import type { AiJob, CommandOutput, CommandParsedInput, Run, Thread } from '@pave/schema'
@@ -140,7 +141,19 @@ export class Assistant implements AssistantService {
           pieceId: input.context.pieceId ?? null,
           boardId: input.context.boardId ?? null,
           sceneId: input.context.sceneId ?? null,
-          promptHash: PROMPT_HASH,
+          promptHash: guideFor(
+            focusFor({
+              piece: !!input.context.pieceId,
+              stage: input.context.stage,
+              job: job?.stage,
+              mode: input.context.intake
+                ? 'intake'
+                : input.context.brainstorm
+                  ? 'brainstorm'
+                  : null,
+            }),
+            input.context.brainstorm,
+          ).hash,
         })
     await this.#settleThread(ctx, thread.id)
 
