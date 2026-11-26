@@ -2,9 +2,8 @@
  * The Design stage: the piece's design board, an image-based space of pictures, sketches,
  * notes and models (no 3D). The person, or the Design job, collects ideas here; then a picture
  * goes to CAD ("Take to CAD": the CAD job asks the specs, estimates and builds from it), or CAD
- * starts blank or from a template. The board is the moodboard linked to the piece: it can be
- * unlinked (it lives on in Ideas) or another board linked at any time. The brief and spec the
- * CAD stage reads are below.
+ * starts blank or from a template. The project owns its design references and can copy items
+ * from reusable studio moodboards.
  *
  * (The file keeps its name and route, /directions, so links from earlier builds still work.
  * Built parametric variants moved to the CAD stage as "Try variants".)
@@ -22,10 +21,11 @@ import {
   toast,
 } from '@pave/ui'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { Hammer, LayoutTemplate, Link2, Unlink } from 'lucide-react'
+import { Hammer, LayoutTemplate } from 'lucide-react'
 import { SectionTitle } from '../../components/Page'
 import { SpecCard } from '../../components/SpecCard'
 import { DesignBoard } from '../../features/ideate'
+import { ImportMoodboard } from '../../features/ideate/ImportMoodboard'
 import { invalidateFor, queryClient, useRpc } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { useCurrentView } from '../../lib/use-current-view'
@@ -94,17 +94,11 @@ function LinkedBoard({ board }: { board: Board }) {
   return <DesignBoard board={data.data.board} references={data.data.references} />
 }
 
-/** Start CAD (blank or from a template) and the board's link to this project. */
+/** Import studio references or start CAD. */
 function StageActions({ piece, board }: { piece: Piece; board: Board | null }) {
   const navigate = useNavigate()
   const isCurrent = useCurrentView()
-  const others = useRpc('boards.list', {})
-  const unlinked = (others.data ?? []).filter((b) => !b.pieceId)
   const toCad = () => void navigate({ to: '/pieces/$id/design', params: { id: piece.id } })
-  const link = async (boardId: string, pieceId: string | null) => {
-    await rpc.call('boards.update', { id: boardId, pieceId })
-    invalidateFor(queryClient, 'boards')
-  }
   const fromTemplate = async (templateId: string) => {
     const t = TEMPLATES.find((x) => x.id === templateId)!
     try {
@@ -119,27 +113,7 @@ function StageActions({ piece, board }: { piece: Piece; board: Board | null }) {
   const hasCad = piece.design.order.length > 0
   return (
     <div className="flex flex-wrap items-center gap-1">
-      {board && (
-        <Button size="sm" variant="ghost" icon={Unlink} onClick={() => void link(board.id, null)}>
-          Unlink board
-        </Button>
-      )}
-      {unlinked.length > 0 && (
-        <Menu
-          align="end"
-          trigger={
-            <Button size="sm" variant="ghost" icon={Link2}>
-              Link a board
-            </Button>
-          }
-        >
-          {unlinked.slice(0, 20).map((b) => (
-            <MenuItem key={b.id} onClick={() => void link(b.id, piece.id)}>
-              {b.title}
-            </MenuItem>
-          ))}
-        </Menu>
-      )}
+      <ImportMoodboard pieceId={piece.id} {...(board ? { boardId: board.id } : {})} />
       <Menu
         align="end"
         trigger={

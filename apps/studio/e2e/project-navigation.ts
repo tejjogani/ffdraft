@@ -71,7 +71,7 @@ try {
       await page.getByRole('button', { name: 'Write a note', exact: true }).click()
       await page.getByRole('textbox', { name: 'Write a note' }).fill('A note for this project')
       await page.getByRole('button', { name: 'Add the note' }).click()
-      await page.getByRole('button', { name: 'Unlink board' }).waitFor()
+      await page.getByText('A note for this project').waitFor()
       assert.equal((await rpc('boards.list', { pieceId: a.id })).length, 0)
       assert.equal((await rpc('boards.list', { pieceId: b.id })).length, 1)
     }
@@ -93,11 +93,7 @@ try {
   await palette.getByRole('option', { name: 'Sourcing', exact: true }).click()
   await page.waitForURL('**/pieces/' + a.id + '/sourcing')
   const boardB = (await rpc('boards.list', { pieceId: b.id }))[0]
-  await page.goto(base + '/ideas')
-  await page
-    .getByRole('list', { name: 'Boards' })
-    .locator('a[href*="' + boardB.id + '"]')
-    .click()
+  await page.goto(base + '/ideas/' + boardB.id)
   await page.waitForURL('**/pieces/' + b.id + '/directions?board=' + boardB.id)
   await page.goto(base + '/pieces/' + a.id + '/directions?board=' + boardB.id)
   await page.getByRole('button', { name: 'Add reference photo' }).waitFor()

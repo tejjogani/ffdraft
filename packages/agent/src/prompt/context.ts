@@ -66,6 +66,16 @@ export interface TurnContext {
   images?: string | null
   /** The open piece's pinned references, in the designer's order. */
   pins?: ContextPin[]
+  /** Text and allowed image context from copied references on the active project board. */
+  moodboard?: {
+    count: number
+    references: (ContextPin & {
+      note: string
+      url: string | null
+      sourceBoardId: string
+      sourceReferenceId: string
+    })[]
+  }
 }
 
 const PIN_PICTURE: Record<ContextPin['picture'], (assetId: string | null) => string> = {
@@ -168,6 +178,19 @@ export function renderContext(c: TurnContext): string {
     out.push(
       'Pinned references (the designer’s reference panel beside CAD, in their order):',
       ...c.pins.map((p, i) => pinLine(p, i + 1)),
+    )
+  if (c.moodboard?.references.length)
+    out.push(
+      `Imported moodboard references on this design board (${c.moodboard.references.length} of ${c.moodboard.count}):`,
+      ...c.moodboard.references.map((r, i) => {
+        const credit = r.credit ? `; credit ${q(r.credit, 160)}` : ''
+        const license = r.license ? `; license ${q(r.license, 100)}` : ''
+        const where = `source board ${r.sourceBoardId}, reference ${r.sourceReferenceId}`
+        const picture = r.picture === 'none' ? '' : `; ${PIN_PICTURE[r.picture](r.assetId)}`
+        const note = r.note ? `; note ${q(r.note, 1000)}` : ''
+        const link = r.url ? `; link ${q(r.url, 400)}` : ''
+        return `${i + 1}. ${q(r.title || 'Untitled')} (id ${r.id}; ${where}${credit}${license}${picture}${link}${note})`
+      }),
     )
   if (c.designerEdits.length)
     out.push(

@@ -154,6 +154,34 @@ describe('tenancy isolation', () => {
     expect(adaOrg).not.toBe(benOrg)
     expect(seen).toEqual([])
   })
+  it('refuses to import a moodboard across organisations', async () => {
+    const source = await ada.call('boards.create', { title: 'Ada private moodboard' })
+    const own = await ben.call('pieces.create', { title: 'Ben project' })
+    const theirPiece = await ada.call('pieces.create', { title: 'Ada project' })
+    expect(
+      (await ben.fail('boards.importMoodboard', { pieceId: own.id, sourceBoardId: source.id }))
+        .status,
+    ).toBe(404)
+    expect(
+      (await ada.fail('boards.importMoodboard', { pieceId: own.id, sourceBoardId: source.id }))
+        .status,
+    ).toBe(404)
+    const ownSource = await ben.call('boards.create', { title: 'Ben moodboard' })
+    const destination = await ada.call('boards.forPiece', { pieceId: theirPiece.id })
+    expect(
+      (
+        await ben.fail('boards.importMoodboard', {
+          pieceId: own.id,
+          sourceBoardId: ownSource.id,
+          targetBoardId: destination.id,
+        })
+      ).status,
+    ).toBe(404)
+    expect(await ben.call('boards.list', { pieceId: own.id })).toEqual([])
+    expect((await ben.call('boards.list', { scope: 'library' })).map((r) => r.id)).not.toContain(
+      source.id,
+    )
+  })
 })
 
 describe('roles', () => {

@@ -743,7 +743,7 @@ export const commands = {
     description: 'List moodboards.',
     kind: 'query',
     tool: true,
-    input: z.object({ pieceId: id.optional() }),
+    input: z.object({ pieceId: id.optional(), scope: z.literal('library').optional() }),
     output: z.array(BoardSchema),
   }),
   'boards.get': def({
@@ -785,6 +785,12 @@ export const commands = {
       imageProvider: z.enum(IMAGE_PROVIDERS).nullable().optional(),
     }),
     output: BoardSchema,
+  }),
+  'boards.importMoodboard': def({
+    description: 'Copy references from a studio moodboard into an owned project board.',
+    kind: 'mutation',
+    input: z.object({ sourceBoardId: id, pieceId: id, targetBoardId: id.optional() }),
+    output: z.object({ board: BoardSchema, added: z.number().int().nonnegative() }),
   }),
   'boards.delete': def({
     description: 'Delete a moodboard and its references.',

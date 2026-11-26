@@ -1,5 +1,5 @@
 /**
- * The design board's actions, shared by the piece's Design tab and the boards in Ideas: adding
+ * The design board's actions, shared by the piece's Design tab and the studio moodboards: adding
  * what the person brings (files, links, notes, sketches), taking a picture to CAD and opening a
  * 3D model as CAD. Each is one command or a short, ordered chain of them.
  */
@@ -106,12 +106,12 @@ export async function removeReference(ref: Reference): Promise<void> {
 
 /**
  * The project a board's picture goes to: the board's linked piece, else a new one linked to
- * the board (a board in Ideas becomes that project's design board).
+ * a copy from the studio moodboard.
  */
 async function projectFor(board: Board): Promise<string> {
   if (board.pieceId) return board.pieceId
   const piece = await rpc.call('pieces.create', { title: board.title.replace(/ · Design$/, '') })
-  await rpc.call('boards.update', { id: board.id, pieceId: piece.id })
+  await rpc.call('boards.importMoodboard', { sourceBoardId: board.id, pieceId: piece.id })
   invalidateFor(queryClient, 'pieces')
   refresh()
   return piece.id
@@ -169,7 +169,8 @@ export function useOpenAsCad() {
         assetId: ref.assetId,
         ...(board.pieceId ? { pieceId: board.pieceId } : { title: ref.title || undefined }),
       })
-      if (!board.pieceId) await rpc.call('boards.update', { id: board.id, pieceId: piece.id })
+      if (!board.pieceId)
+        await rpc.call('boards.importMoodboard', { sourceBoardId: board.id, pieceId: piece.id })
       invalidateFor(queryClient, 'pieces')
       invalidateFor(queryClient, 'design')
       refresh()

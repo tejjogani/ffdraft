@@ -112,12 +112,26 @@ const pieceTab = (
     },
   })
 
-const ideasRoute = route('/ideas', () => <BoardsPage />)
+const moodboardsRoute = route('/moodboards', () => <BoardsPage />)
 const boardRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/ideas/$boardId',
+  path: '/moodboards/$boardId',
   component: function Board() {
     return <BoardPage boardId={boardRoute.useParams().boardId} />
+  },
+})
+const legacyIdeas = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ideas',
+  beforeLoad: () => {
+    throw redirect({ to: '/moodboards', replace: true })
+  },
+})
+const legacyIdea = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ideas/$boardId',
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: '/moodboards/$boardId', params, replace: true })
   },
 })
 const modelRoute = createRoute({
@@ -172,7 +186,9 @@ const routeTree = rootRoute.addChildren([
     pieceTab('production', PieceProduction),
     pieceTab('history', PieceHistory),
   ]),
-  ideasRoute,
+  moodboardsRoute,
+  legacyIdeas,
+  legacyIdea,
   boardRoute,
   route('/renders', () => <RendersPage />),
   route('/models', () => <ModelsPage />),

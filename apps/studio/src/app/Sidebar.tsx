@@ -149,8 +149,8 @@ export function Sidebar({ drawer = false }: { drawer?: boolean }) {
         </NavLink>
         {!pieceId && (
           <>
-            <NavLink to="/ideas" icon={Lightbulb}>
-              Ideas
+            <NavLink to="/moodboards" icon={Lightbulb}>
+              Moodboards
             </NavLink>
             <NavLink to="/renders" icon={Image}>
               Renders
