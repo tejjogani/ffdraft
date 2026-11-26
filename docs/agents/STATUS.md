@@ -1,6 +1,12 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 12:35 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 12:40 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+
+## Render realism: third fix round, stone contrast and fire (lane A, A12)
+
+| Agent | State | Outcome |
+|---|---|---|
+| fix:1 | running or interrupted |  |
 
 ## Studio experience: third fix round (lane A, A11)
 
@@ -37,7 +43,7 @@ _Generated 26 Nov 2026 12:35 UTC by `docs/agents/sync_status.py` from the workfl
 | fix:release | done | commit 1807a9e. Both release-check majors are fixed and verified in the real thing, and every suite asked for is green; two trial follow-ups the checkpoint's title names (photo-built export, picture sent twice) were never in its diff a… |
 | build:realism | done | commit 387c43e. I picked up the realism step from the checkpoint (fd7f6a3) and judged its renders by looking at them again, whole and cropped. Black acrylic and Studio contrast still showed the gold as olive-brown brass over most of th… |
 | review:critic | done | 2 blocker, 5 major, 5 minor. FAIL. None of the six looks would pass on a fine-jewelry product page yet. Black acrylic fails outright on a piece the builder did not tune on. I rendered from… |
-| write:skill | running or interrupted |  |
+| write:skill | done | commit 059dddf. Step 4 is done and committed as 059dddf on render/realism (not pushed). It records what the realism work learned in three places. 1. **The render skill** (/home/user/ffdraft-render/.claude/skills/jewelry-render/SKILL.md… |
 | fix:1 | done | Ten of the twelve findings are fixed or improved, each checked on a before-and-after render that I looked at whole and cropped on the stone and the ground. Two are not fixed: F8 (red pavé seats inside the rose-gold shan… |
 | verify:1 | done | 1 blocker, 4 major, 2 minor. FAIL. I re-rendered at HEAD f8569f6 under verify-1/, with the fixer's harness, 768 px, preview tier, 2 threads: studs in six looks, the three-stone in six, the… |
 | fix:2 | done | I fixed the findings on branch render/realism in /home/user/ffdraft-render and committed once as 810d46e (not pushed). Every change was judged on a before-and-after pair that I opened whole and cropped on the stone, ban… |
@@ -80,7 +86,7 @@ _Generated 26 Nov 2026 12:35 UTC by `docs/agents/sync_status.py` from the workfl
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: e39d707 Board: studio in its third fix round
+Branch `claude/busy-bardeen-o482lo`, head: 370129c Status: render writing up its measured findings; spec and studio in their third fix rounds
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -111,7 +117,7 @@ Branch `claude/busy-bardeen-o482lo`, head: e39d707 Board: studio in its third fi
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: e39d707 Board: studio in its third fix round
+Branch `claude/busy-bardeen-o482lo`, head: 370129c Status: render writing up its measured findings; spec and studio in their third fix rounds
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -153,7 +159,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: e39d707 Board: studio in its third fix round
+Branch `claude/busy-bardeen-o482lo`, head: 370129c Status: render writing up its measured findings; spec and studio in their third fix rounds
 
 | Agent | State | Outcome |
 |---|---|---|
