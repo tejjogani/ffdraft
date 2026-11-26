@@ -7,6 +7,7 @@ import { BOARD_SKILL } from './skills/board'
 import { CINEMA_SKILL } from './skills/cinema'
 import { DIRECTIONS_SKILL } from './skills/directions'
 import { EDITING_SKILL } from './skills/editing'
+import { INTAKE_SKILL } from './skills/intake'
 import { PHOTO_SKILL } from './skills/photo'
 import { PRODUCTION_SKILL } from './skills/production'
 import { RENDER_SKILL } from './skills/render'
@@ -21,11 +22,12 @@ export function focusFor(input: {
   mode?: 'intake' | 'brainstorm' | null
 }): AssistantFocus {
   if (input.mode === 'intake') return 'commission'
-  if (input.mode === 'brainstorm') return 'brainstorm'
+  if (input.mode === 'brainstorm') return input.piece && input.stage ? input.stage : 'brainstorm'
   return input.job ?? input.stage ?? (input.piece ? 'project' : 'studio')
 }
 
 const skills = {
+  intake: INTAKE_SKILL,
   questions: ASK_SKILL,
   references: BOARD_SKILL,
   specification: SPEC_SKILL,
@@ -49,7 +51,7 @@ const focusSkills = {
     'rendering',
   ],
   brainstorm: ['questions'],
-  commission: ['questions', 'references', 'specification'],
+  commission: ['intake', 'questions', 'references', 'specification'],
   design: ['questions', 'references', 'directions', 'specification', 'photo'],
   cad: ['questions', 'specification', 'photo', 'editing', 'stones', 'workshop'],
   render: ['questions', 'rendering', 'cinema'],
@@ -69,7 +71,7 @@ const directions: Record<AssistantFocus, string> = {
   render:
     'Work with the current CAD, selected shot references and saved scenes. Keep the product geometry and agreed materials intact unless the designer asks for a CAD edit.',
 }
-export function guideFor(focus: AssistantFocus) {
+export function guideFor(focus: AssistantFocus, readOnly = false) {
   const names = focusSkills[focus]
   const blocks = [
     CORE_PROMPT,
@@ -78,6 +80,11 @@ export function guideFor(focus: AssistantFocus) {
     DESIGN_KNOWLEDGE,
   ]
   if (focus === 'cad' || focus === 'project' || focus === 'studio') blocks.push(NODE_REFERENCE)
+  if (readOnly)
+    blocks.push(
+      directions.brainstorm +
+        ' Only the scoped read and question tools listed for this turn are available.',
+    )
   return { focus, skills: names, blocks, hash: hash(JSON.stringify(blocks)) }
 }
 export type PromptGuide = ReturnType<typeof guideFor>

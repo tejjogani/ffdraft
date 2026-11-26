@@ -22,7 +22,8 @@ describe('one assistant with a focus for each turn', () => {
   })
   it('uses a deliberate job over the current page and keeps discovery in its own mode', () => {
     expect(focusFor({ mode: 'intake', piece: true, stage: 'design' })).toBe('commission')
-    expect(focusFor({ mode: 'brainstorm', piece: true, stage: 'cad' })).toBe('brainstorm')
+    expect(focusFor({ mode: 'brainstorm', piece: true, stage: 'design' })).toBe('design')
+    expect(focusFor({ mode: 'brainstorm', piece: false })).toBe('brainstorm')
     expect(focusFor({ piece: true, stage: 'design', job: 'cad' })).toBe('cad')
     expect(focusFor({ piece: true })).toBe('project')
     expect(focusFor({ piece: false })).toBe('studio')

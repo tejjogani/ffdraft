@@ -50,7 +50,9 @@ export function useSend(page: AssistantContext) {
       attachments: photos,
       context: {
         ...(pieceId ? { pieceId } : {}),
-        ...(usePage && page.boardId && (!opts.pieceId || opts.pieceId === pagePiece) ? { boardId: page.boardId } : {}),
+        ...(usePage && page.boardId && (!opts.pieceId || opts.pieceId === pagePiece)
+          ? { boardId: page.boardId }
+          : {}),
         selection:
           !opts.bare && s.selection && s.selection.pieceId === pieceId ? s.selection.nodeIds : [],
         ...(pieceId && page.stage ? { stage: page.stage } : {}),

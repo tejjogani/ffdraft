@@ -1130,7 +1130,7 @@ export const commands = {
   }),
   'references.read': def({
     description:
-      'Read one to four photos of one piece (uploaded image assets): its kind, the camera angle, the archetype, each group of stones (cut, arrangement, setting, claws), the band profile and proportions as ratios, the metal, and what the photos hide, each part marked visible, partly or not. Call it first when the designer wants a design from a photo or a picture from the design board; ask its `questions` with chat.ask, then build from `specDraft` (changed by the answers) through pieces.setSpec. It is a separate Claude call on the conversation’s tier and costs a little.',
+      'Read one to four photos of one piece (uploaded image assets): its kind, the camera angle, the archetype, each group of stones (cut, arrangement, setting, claws), the band profile and proportions as ratios, the metal, and what the photos hide, each part marked visible, partly or not. Call it first when the designer wants a design from a photo or a picture from the design board; use the saved specification and ask only unresolved questions with chat.ask. For new designs, confirm the specDraft before saving it with pieces.setSpec. It is a separate Claude call on the conversation’s tier and costs a little.',
     kind: 'mutation',
     tool: true,
     input: z.object({
@@ -1785,7 +1785,7 @@ export const commands = {
   }),
   'chat.ask': def({
     description:
-      'Ask the designer one to three short questions as quick replies, and wait for their answer: each with two to six options and the good default already picked (`defaults`), so one press of Go answers with no typing. Ask only what changes the work and cannot be read from the piece or the brief (for directions: the budget, the metal, who wears it; for CAD: the ring size, the centre stone, the setting the spec leaves open; for renders: what the images are for, aspect ratios, which animations); never more than three, except before building from a picture, when you pass the five spec questions references.read returns, as they are. Write `intro` as one plain sentence saying what you saw and what you are about to do. The result is what they picked; if they type a message instead, that message is the answer.',
+      'Ask the designer one to three short questions as quick replies, and wait for their answer: each with two to six options and the good default already picked (`defaults`), so one press of Go answers with no typing. Ask only what changes the work and cannot be read from the piece or the brief (for directions: the budget, the metal, who wears it; for CAD: the ring size, the centre stone, the setting the spec leaves open; for renders: what the images are for, aspect ratios, which animations); never more than three, except on a new photo-only brief, when up to five unresolved spec questions from references.read are allowed. Keep saved project decisions. Write `intro` as one plain sentence saying what you saw and what you are about to do. The result is what they picked; if they type a message instead, that message is the answer.',
     kind: 'query',
     tool: { confirm: true },
     input: z.object({

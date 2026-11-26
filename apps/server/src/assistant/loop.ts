@@ -100,7 +100,7 @@ import { cameraNote } from './camera-note'
 import { captureOnServer } from './capture'
 import type { RunHost } from './host'
 import { modelImage } from './images'
-import { designModeForRun, intakeRefusal } from './intake'
+import { designModeForRun, intakeRefusal, designToolsFor } from './intake'
 import { readPhotos } from './read'
 import { lastReadOf, placeTakePlane } from './take-plane'
 import { expireBrowserTake, takeResult, waitFor } from './takes'
@@ -426,10 +426,28 @@ async function callModel(host: RunHost, messages: MessageRow[], run: Run): Promi
   }
 
   const idx = await nextIndex(ctx, runId)
-  const guide = guideFor(focusFor({ piece: !!run.pieceId, stage: run.stage, job: run.job?.stage }))
-  const prompt = {focus: guide.focus, skills: guide.skills, hash: guide.hash}
+  const mode = await designModeForRun(ctx, runId)
+  const guide = guideFor(
+    // The project version at send time stays fixed if this run creates a new piece midway.
+    focusFor({
+      piece: run.baseSeq !== null,
+      stage: run.stage,
+      job: run.job?.stage,
+      mode: mode?.kind,
+    }),
+    mode?.kind === 'brainstorm',
+  )
+  const allowedTools = mode && designToolsFor(mode.kind, !!run.pieceId)
+  const prompt = {
+    focus: guide.focus,
+    mode: mode?.kind ?? (run.job ? 'job' : 'chat'),
+    skills: guide.skills,
+    hash: guide.hash,
+    ...(allowedTools && { tools: [...allowedTools] }),
+  }
   const params = buildRequest({
     guide,
+    ...(allowedTools && { allowedTools }),
     model: host.model as AssistantModelId,
     messages: toApiMessages(messages),
     features: host.features,
@@ -861,6 +879,18 @@ async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepO
         await refuse(errorResult(call.id, reason), parsed.command)
         continue
       }
+    }
+    const input = parsed.input as { pieceId?: string; id?: string }
+    const target = input.pieceId ?? (parsed.command.startsWith('pieces.') ? input.id : undefined)
+    if (host.pieceId && target && target !== host.pieceId) {
+      await refuse(
+        errorResult(
+          call.id,
+          'This conversation belongs to a different project. Switch projects before using that piece.',
+        ),
+        parsed.command,
+      )
+      continue
     }
     let admission = admit(parsed.def, ctx.role)
     if (admission.kind === 'refuse') {

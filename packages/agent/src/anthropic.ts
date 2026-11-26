@@ -4,11 +4,8 @@
  * subpath): the API key is passed in by the caller, used only to construct the client, and never
  * logged, stored in a trace or returned.
  *
- * The request is the same shape for every turn of every run on a given model:
- *   tools (sorted, frozen) → system (frozen; breakpoint on its last block) → messages (append-only:
- *   user turns, the context message after each, assistant turns with their thinking passed back
- *   unchanged, tool results). Volatile context never enters `system`, so the prefix is identical
- *   from turn to turn and the API's check on replayed thinking passes.
+ * Project data lives in the append-only messages. The chosen focus selects instructions for
+ * the turn, with a cache breakpoint on the final system block. Discovery has its own tool set.
  */
 import Anthropic, {
   APIConnectionError,
@@ -45,7 +42,7 @@ import type { ModelClient, ModelStream } from './model'
 import { type Effort, MODELS, type ResponseUsage, usageCost } from './pricing'
 import type { PromptGuide } from './prompt/routing'
 import { SYSTEM_BLOCKS } from './prompt/index'
-import { toolDefs } from './tools'
+import { fromApiName, toolDefs } from './tools'
 
 /** Room for adaptive thinking plus a long answer; streaming keeps it clear of HTTP timeouts. */
 export const MAX_TOKENS = 64_000
@@ -124,6 +121,7 @@ export const contextMessage = (text: string): Pick<Message, 'role' | 'content'> 
 })
 
 export interface BuildRequest {
+  allowedTools?: ReadonlySet<string>
   guide?: PromptGuide
   model: AssistantModelId
   messages: BetaMessageParam[]
@@ -142,7 +140,13 @@ export const turnFallbacks = (model: AssistantModelId): boolean => {
 }
 
 /** One turn's request. Everything but `model` and `messages` is fixed for the model. */
-export function buildRequest({ model, messages, features, guide }: BuildRequest): BetaMessageStreamParams {
+export function buildRequest({
+  model,
+  messages,
+  features,
+  guide,
+  allowedTools,
+}: BuildRequest): BetaMessageStreamParams {
   const f = { ...DEFAULT_FEATURES, ...features }
   const fallbacks = turnFallbacks(model)
   const betas = [
@@ -154,7 +158,9 @@ export function buildRequest({ model, messages, features, guide }: BuildRequest)
     model,
     max_tokens: MAX_TOKENS,
     system: systemBlocks(guide?.blocks),
-    tools: apiTools(),
+    tools: allowedTools
+      ? apiTools().filter((t) => allowedTools.has(fromApiName(t.name) ?? ''))
+      : apiTools(),
     // Forced tool choice is a 400 on these models; the prompt says when to use which tool.
     tool_choice: { type: 'auto' },
     messages,

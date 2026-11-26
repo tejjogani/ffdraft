@@ -9,7 +9,11 @@ const start = (requestId: string, assetIds: string[] = []) =>
   api.call('pieces.startIntake', { requestId, brief, assetIds })
 
 beforeAll(async () => {
-  server = await assistantServer({ env: { ANTHROPIC_API_KEY: 'sk-ant-test-home-intake' } })
+  // Inject disallowed tool calls to verify the execution guard even if a model ignores its tool list.
+  server = await assistantServer({
+    transport: 'direct',
+    env: { ANTHROPIC_API_KEY: 'sk-ant-test-home-intake' },
+  })
   api = client(server.server)
 }, BOOT_TIMEOUT)
 afterAll(async () => server.server.dispose())
