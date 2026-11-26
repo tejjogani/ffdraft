@@ -1,148 +1,245 @@
-/**
- * Whether Blender is set up, and how to set it up. Photoreal takes need Blender 5.3 on this
- * computer; without it, takes are drawn in the browser and labelled "Preview quality". The
- * owner of a local install can point Pavé at a Blender by path, or search again.
- */
-import type { RenderEngineStatus } from '@pave/schema'
-import { Button, Dialog, Input, Spinner, toast } from '@pave/ui'
-import { CircleCheck, CircleDashed } from 'lucide-react'
-import { useState } from 'react'
-import { useRpc, useRpcMutation } from '../../lib/query'
-import { useSession } from '../../lib/session'
+import type { CommandOutput, RenderEngineStatus } from '@pave/schema'
+import { Button, Dialog, InlineError, Input, Spinner, toast } from '@pave/ui'
+import { CheckCircle2, Download } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { queryClient, rpcKey, useRpc, useRpcMutation } from '../../lib/query'
+import { activeOrg, useSession } from '../../lib/session'
+import { useUI } from '../../stores/ui'
 
-export const INSTALL_COMMAND = 'node scripts/install.mjs --render'
+type InstallStatus = CommandOutput<'renders.installStatus'>
+type Phase = InstallStatus['phase']
 
-export function engineLabel(e: RenderEngineStatus | undefined): string {
-  if (!e) return 'Checking Blender…'
-  if (!e.available) return 'Preview quality · set up Blender'
-  return `Blender ${e.version ?? ''}${e.device ? ` · ${e.device}` : ''}`.trim()
+const progressLabels: Partial<Record<Phase, string>> = {
+  downloading: 'Downloading Blender',
+  verifying: 'Verifying the download',
+  extracting: 'Installing the render engine',
+  checkingEngine: 'Checking Blender',
 }
 
-export function EngineDialog({
-  open,
-  onOpenChange,
-}: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}) {
-  const engine = useRpc('renders.engine', {}, { enabled: open })
+export function engineLabel(engine: RenderEngineStatus | undefined) {
+  if (!engine) return 'Checking Blender…'
+  if (!engine.available) return 'Preview quality · set up Blender'
+  return `Blender ${engine.version ?? ''}${engine.device ? ` · ${engine.device}` : ''}`.trim()
+}
+
+function refreshEngine() {
+  for (const name of ['renders.engine', 'session.get'] as const)
+    void queryClient.invalidateQueries({ queryKey: rpcKey(name) })
+}
+
+const megabytes = (bytes: number) => Math.round(bytes / 1_000_000)
+
+/** One installer shared by startup and Render studio. Closing the panel keeps the job running. */
+export function RenderEngineSetup() {
   const session = useSession()
-  const owner = session.orgs.find((o) => o.id === session.activeOrgId)?.role === 'owner'
+  const owner = activeOrg(session)?.role === 'owner'
+  const localOwner = owner && ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
+  const open = useUI((s) => s.engineSetupOpen)
+  const setOpen = useUI((s) => s.setEngineSetupOpen)
+  const dismissed = useUI((s) => s.dismissedEngineVersion)
+  const dismiss = useUI((s) => s.dismissEngineVersion)
+  const status = useRpc(
+    'renders.installStatus',
+    {},
+    {
+      enabled: localOwner,
+      refetchOnWindowFocus: true,
+      refetchInterval: (q) => {
+        const phase = q.state.data?.phase
+        return phase && (phase === 'checking' || progressLabels[phase]) ? 750 : false
+      },
+    },
+  )
+  const engine = useRpc('renders.engine', {}, { enabled: open })
+  const state = localOwner ? status.data : undefined
+  const phase = state?.phase
+  const ready = phase === 'ready' || Boolean(engine.data?.available || session.capabilities.blender)
+  const progress = phase && progressLabels[phase]
+  const refreshInstallStatus = status.refetch
+  useEffect(() => {
+    if (open && localOwner) void refreshInstallStatus()
+  }, [open, localOwner, refreshInstallStatus])
+  const readyFromSetup = phase === 'ready'
+  useEffect(() => {
+    if (readyFromSetup) refreshEngine()
+  }, [readyFromSetup])
+  const update = (next: InstallStatus) =>
+    queryClient.setQueryData(rpcKey('renders.installStatus', {}), next)
+  const start = useRpcMutation('renders.installEngine', {
+    onSuccess: update,
+    meta: { silent: true },
+  })
+  const cancel = useRpcMutation('renders.cancelInstall', {
+    onSuccess: update,
+    meta: { silent: true },
+  })
   const [path, setPath] = useState('')
   const configure = useRpcMutation('renders.configureEngine', {
     meta: { silent: true },
-    onSuccess: (status) =>
-      status.available
-        ? toast.success(`Blender ${status.version ?? ''} found`)
-        : toast.error('That did not work', status.reason ?? undefined),
-    onError: (e) => toast.error('Couldn’t check Blender', e.message),
+    onSuccess: (next) => {
+      if (next.available) {
+        queryClient.setQueryData(rpcKey('renders.engine', {}), next)
+        refreshEngine()
+        void status.refetch()
+      } else toast.error('Blender could not be used', next.reason ?? undefined)
+    },
+    onError: (err) => toast.error('Couldn’t check Blender', err.message),
   })
-  const e = configure.data ?? engine.data
+  const showOffer =
+    state?.supported && !ready && phase !== 'checking' && (progress || dismissed !== state.version)
+  const actionError = start.error ?? cancel.error
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Render engine"
-      description="Photoreal takes are rendered by Blender on this computer. Without it, takes are drawn in the browser and labelled Preview quality."
-      className="max-w-lg"
-    >
-      <div className="flex flex-col gap-4">
-        <div className="flex items-start gap-2.5 rounded-lg bg-bg-muted p-3">
-          {!e ? (
-            <Spinner className="mt-0.5 size-4" />
-          ) : e.available ? (
-            <CircleCheck className="mt-0.5 size-4 shrink-0 text-ok" aria-hidden />
-          ) : (
-            <CircleDashed className="mt-0.5 size-4 shrink-0 text-fg-subtle" aria-hidden />
+    <>
+      {showOffer && !open && (
+        <aside
+          aria-label="Render engine setup"
+          className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-bg-subtle px-4 py-2"
+        >
+          <Download className="size-4 shrink-0 text-fg-muted" aria-hidden />
+          <span className="mr-auto text-sm font-medium">
+            {progress ?? 'Enable photoreal rendering'}
+          </span>
+          <Button size="sm" onClick={() => setOpen(true)}>
+            {progress ? 'View progress' : 'Set up Blender'}
+          </Button>
+          {!progress && (
+            <Button size="sm" variant="ghost" onClick={() => dismiss(state.version)}>
+              Later
+            </Button>
           )}
-          <div className="min-w-0 text-sm">
-            <p className="font-medium">
-              {!e
-                ? 'Looking for Blender…'
-                : e.available
-                  ? 'Blender is ready'
-                  : 'Blender is not set up'}
-            </p>
-            {e?.available && (
-              <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs text-fg-muted">
-                <dt>Version</dt>
-                <dd className="font-mono">{e.version}</dd>
-                <dt>Device</dt>
-                <dd>{e.device ?? 'Found on the first take'}</dd>
-                <dt>Path</dt>
-                <dd className="truncate font-mono" title={e.path ?? ''}>
-                  {e.path}
-                </dd>
-              </dl>
-            )}
-            {e && !e.available && e.reason && (
-              <p className="mt-1 text-xs text-fg-muted">{e.reason}</p>
-            )}
-          </div>
-        </div>
-
-        {e && !e.available && (
-          <div className="flex flex-col gap-1.5 text-sm">
-            <p className="font-medium">Set it up</p>
-            <p className="text-fg-muted">
-              In a terminal, in the folder you installed Pavé in, run this. It needs Python 3.13 and
-              downloads Blender’s renderer (about 1 GB) into Pavé’s own folder; nothing else on the
-              computer changes.
-            </p>
-            <code className="rounded-md bg-bg-muted px-2.5 py-1.5 font-mono text-xs select-all">
-              {INSTALL_COMMAND}
-            </code>
-            <p className="text-xs text-fg-subtle">
-              Then restart Pavé, or press Search again. A Blender 5.3 you installed yourself works
-              too: give its path below.
-            </p>
-          </div>
-        )}
-
-        {owner ? (
-          <form
-            className="flex flex-col gap-1.5"
-            onSubmit={(ev) => {
-              ev.preventDefault()
-              if (path.trim()) configure.mutate({ blenderPath: path.trim() })
-            }}
-          >
-            <label htmlFor="blender-path" className="text-xs font-medium text-fg-subtle">
-              Blender executable
-            </label>
-            <div className="flex gap-1.5">
-              <Input
-                id="blender-path"
-                value={path}
-                onChange={(ev) => setPath(ev.target.value)}
-                placeholder="/Applications/Blender.app/Contents/MacOS/Blender"
-                className="font-mono text-xs"
-              />
-              <Button type="submit" disabled={!path.trim() || configure.isPending}>
-                Use this
-              </Button>
-            </div>
-            <div>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={configure.isPending}
-                onClick={() => configure.mutate({ blenderPath: null })}
+        </aside>
+      )}
+      {open && (
+        <Dialog
+          open
+          onOpenChange={setOpen}
+          title="Render engine"
+          className="max-w-lg"
+          description="Blender renders photoreal shots on this computer. You can keep working in Studio during setup."
+        >
+          <div className="space-y-4">
+            {ready ? (
+              <div
+                className="flex items-start gap-2 rounded-lg border border-line bg-bg-subtle p-3"
+                role="status"
               >
-                {configure.isPending ? (
-                  <Spinner className="size-3.5" label="Searching" />
-                ) : (
-                  'Search again'
+                <CheckCircle2 className="mt-0.5 size-4 text-ok" aria-hidden />
+                <div>
+                  <p className="text-sm font-semibold">Blender is ready</p>
+                  {engine.data?.version && (
+                    <p className="mt-1 text-xs text-fg-muted">
+                      Version {engine.data.version}
+                      {engine.data.device ? ` · ${engine.data.device}` : ''}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : progress && state ? (
+              <section
+                className="space-y-2 rounded-lg border border-line bg-bg-subtle p-3"
+                aria-label="Installation progress"
+              >
+                <p className="flex items-center gap-2 text-sm font-semibold" role="status">
+                  <Spinner className="size-4" />
+                  {progress}
+                </p>
+                {phase === 'downloading' && state.totalBytes > 0 && (
+                  <>
+                    <progress
+                      aria-label="Blender download"
+                      max={state.totalBytes}
+                      value={state.downloadedBytes}
+                      className="h-2 w-full accent-current"
+                    />
+                    <p className="text-xs text-fg-muted">
+                      {megabytes(state.downloadedBytes)} of {megabytes(state.totalBytes)} MB
+                    </p>
+                  </>
                 )}
-              </Button>
-            </div>
-          </form>
-        ) : (
-          <p className="text-xs text-fg-subtle">
-            Only the owner of this Pavé can change the render engine.
-          </p>
-        )}
-      </div>
-    </Dialog>
+                <Button size="sm" disabled={cancel.isPending} onClick={() => cancel.mutate({})}>
+                  Cancel installation
+                </Button>
+              </section>
+            ) : localOwner && (status.isPending || phase === 'checking') ? (
+              <p className="flex items-center gap-2 text-sm" role="status">
+                <Spinner className="size-4" />
+                Checking for Blender…
+              </p>
+            ) : state?.supported ? (
+              <section className="space-y-3 rounded-lg border border-line bg-bg-subtle p-4">
+                <h3 className="text-base font-semibold">Install Blender {state.version}</h3>
+                <p className="text-sm text-fg-muted">
+                  Allow Pavé to download {megabytes(state.totalBytes)} MB and install Blender in its
+                  own data folder on this computer.
+                </p>
+                {phase === 'failed' && (
+                  <InlineError message={state.reason || 'Installation failed. Try again.'} />
+                )}
+                {phase === 'cancelled' && (
+                  <p className="text-sm text-fg-muted">Installation cancelled.</p>
+                )}
+                <Button
+                  variant="primary"
+                  icon={Download}
+                  disabled={start.isPending}
+                  onClick={() => {
+                    cancel.reset()
+                    start.mutate({})
+                  }}
+                >
+                  {phase === 'failed' || phase === 'cancelled'
+                    ? 'Retry installation'
+                    : 'Install render engine'}
+                </Button>
+              </section>
+            ) : status.isError && localOwner ? (
+              <InlineError message={status.error.message} onRetry={() => void status.refetch()} />
+            ) : (
+              <p className="text-sm text-fg-muted">
+                {state?.reason ||
+                  'The owner can set up Blender on the computer running Pavé. Browser previews are available here.'}
+              </p>
+            )}
+            {actionError && <InlineError message={actionError.message} />}
+            {localOwner && !progress && (
+              <details className="text-sm">
+                <summary className="cursor-pointer font-medium">
+                  Use an existing Blender installation
+                </summary>
+                <form
+                  className="mt-3 space-y-2"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    if (path.trim()) configure.mutate({ blenderPath: path.trim() })
+                  }}
+                >
+                  <label htmlFor="blender-path">Blender executable</label>
+                  <Input
+                    id="blender-path"
+                    value={path}
+                    onChange={(event) => setPath(event.target.value)}
+                    placeholder="Path to Blender"
+                  />
+                  <div className="flex gap-2">
+                    <Button type="submit" disabled={!path.trim() || configure.isPending}>
+                      Use this
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      disabled={configure.isPending}
+                      onClick={() => configure.mutate({ blenderPath: null })}
+                    >
+                      Search again
+                    </Button>
+                  </div>
+                </form>
+              </details>
+            )}
+            <Button onClick={() => setOpen(false)}>{ready ? 'Done' : 'Close'}</Button>
+          </div>
+        </Dialog>
+      )}
+    </>
   )
 }

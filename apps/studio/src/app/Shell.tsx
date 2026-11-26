@@ -7,6 +7,7 @@ import { useUiTools } from '../features/assistant/ui-tools'
 import { usePaveFileDrop } from '../features/pavefile'
 import { PlanLimitCard } from '../features/plans/PlanLimitCard'
 import { useBrowserTakes } from '../features/render/browser-takes'
+import { RenderEngineSetup } from '../features/render/EngineDialog'
 import { useClientToolRelay } from '../lib/client-tools'
 import { useShortcutListener } from '../lib/commands'
 import { useServerEvents } from '../lib/events'
@@ -89,6 +90,7 @@ function Shell() {
         )}
       </AnimatePresence>
       <main id="main" className="relative flex min-w-0 flex-1 flex-col overflow-y-auto bg-bg">
+        <RenderEngineSetup />
         <Suspense fallback={null}>
           <Outlet />
         </Suspense>
