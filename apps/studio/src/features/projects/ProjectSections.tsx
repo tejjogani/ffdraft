@@ -35,8 +35,8 @@ export function ProjectSections({ piece }: { piece: Piece }) {
   return (
     <section aria-label="Project">
       <ProjectAssistant piece={piece} />
-      <h2 className="text-[28px] font-bold leading-tight tracking-tight">Project tools</h2>
-      <nav aria-label="Project tools" className="mt-4 grid grid-cols-2 gap-2.5 sm:gap-3">
+      <h2 className="font-sans text-[18px] font-semibold leading-6 tracking-[-0.025em]">Project tools</h2>
+      <nav aria-label="Project tools" className="mt-3 grid grid-cols-2 gap-2 sm:gap-2.5">
         {PROJECT_AREAS.map((area) => {
           const [name, description] = toolCopy[area.title]
 
@@ -48,7 +48,7 @@ export function ProjectSections({ piece }: { piece: Piece }) {
               aria-label={name}
               data-tool={area.title}
               data-stage-section={'stage' in area ? area.stage : undefined}
-              className="project-tool-card group relative flex min-w-0 flex-col items-start gap-2 rounded-lg border p-3.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-select sm:min-h-[80px] sm:flex-row sm:items-center sm:gap-3.5 sm:px-4"
+              className="project-tool-card group relative flex min-w-0 flex-col items-start gap-2 rounded-lg border p-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-select sm:min-h-[66px] sm:flex-row sm:items-center sm:gap-3 sm:px-3.5"
             >
               <ToolPreview
                 area={area}
@@ -58,10 +58,10 @@ export function ProjectSections({ piece }: { piece: Piece }) {
                 }
               />
               <span className="min-w-0 flex-1">
-                <span className="block text-[17px] font-bold leading-5 tracking-tight sm:text-[18px]">
+                <span className="block font-sans text-[14px] font-semibold leading-[19px] tracking-[-0.015em]">
                   {name}
                 </span>
-                <span className="mt-1 block text-[14px] leading-[1.35] text-[color-mix(in_srgb,var(--fg)_76%,var(--bg))]">
+                <span className="mt-0.5 block text-[13px] leading-[18px] text-[color-mix(in_srgb,var(--fg)_76%,var(--bg))]">
                   {description}
                 </span>
               </span>
@@ -109,15 +109,15 @@ function ProjectAssistant({ piece }: { piece: Piece }) {
   return (
     <section
       aria-label="Project assistant"
-      className="mb-7 rounded-xl border border-line-strong bg-bg-muted p-4 sm:p-5"
+      className="mb-6 rounded-xl border border-line-strong bg-bg-muted p-4 sm:p-5"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="flex items-center gap-2 text-[21px] font-bold">
+          <h2 className="flex items-center gap-2 text-[17px] font-semibold tracking-tight">
             <AiMark className="size-5" />
             Project assistant
           </h2>
-          <p className="mt-1 text-[15px] text-fg-muted">
+          <p className="mt-1 text-[13px] text-fg-muted">
             {enabled
               ? 'Ask about this design, change a setting, or plan a render.'
               : 'Connect Claude to discuss this design or plan a CAD edit.'}
@@ -165,7 +165,7 @@ function ToolPreview({
     <span
       aria-hidden
       className={cn(
-        'relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md ring-1 ring-black/10 sm:size-10',
+        'relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md ring-1 ring-black/10 sm:size-9',
         tones[area.title],
       )}
     >
