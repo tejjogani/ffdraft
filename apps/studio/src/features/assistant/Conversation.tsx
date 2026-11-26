@@ -10,7 +10,7 @@ import { type Op, planLimitAllowanceOf, type Run, type StoredChange } from '@pav
 import { Skeleton, toast } from '@pave/ui'
 import { Link, useNavigate, useRouterState } from '@tanstack/react-router'
 import { ArrowRight } from 'lucide-react'
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { Fragment, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { type AssistantContext, useAssistant } from '../../stores/assistant'
 import { DirectionCards } from '../directions/DirectionCards'
@@ -87,7 +87,22 @@ export function usePublishActivity(
   }, [run?.id, live, pieceId, key, setActivity])
 }
 
-export function Conversation({ threadId, page }: { threadId: string; page: AssistantContext }) {
+interface InlineConversation {
+  after?: ReactNode
+  pending: boolean
+  send: (text: string, tier?: import('@pave/schema').AssistantTier) => void
+  rephrase: (text: string) => void
+}
+
+export function Conversation({
+  threadId,
+  page,
+  inline,
+}: {
+  threadId: string
+  page: AssistantContext
+  inline?: InlineConversation
+}) {
   const q = useRpc('threads.get', { id: threadId })
   const setThreadPieceId = useAssistant((s) => s.setThreadPieceId)
   const sentPhotos = useAssistant((s) => s.sentPhotos)
@@ -104,10 +119,10 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
   const path = useRouterState({ select: (r) => r.location.pathname })
   useEffect(() => {
     const follow = useAssistant.getState().follow
-    if (!pieceId || follow?.threadId !== threadId) return
+    if (inline || !pieceId || follow?.threadId !== threadId) return
     useAssistant.setState({ follow: null })
     if (path === follow.path) void navigate({ to: '/pieces/$id', params: { id: pieceId } })
-  }, [pieceId, threadId, path, navigate])
+  }, [pieceId, threadId, path, navigate, inline])
   const onPiece = path === `/pieces/${pieceId}` || path.startsWith(`/pieces/${pieceId}/`)
 
   // After a reload, which calls wait (for a person, or for their take) is in the run's steps.
@@ -144,7 +159,10 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
   usePublishActivity(run, items, pieceId)
 
   const actions = useRunActions()
-  const { send, pending } = useSend(page)
+  const dock = useSend(page)
+  const pending = inline?.pending ?? dock.pending
+  const resend = (text: string, tier?: import('@pave/schema').AssistantTier) =>
+    inline ? inline.send(text, tier) : void dock.send(text, { bare: true, tier })
   const revert = useRpcMutation('design.revert', { meta: { silent: true } })
   const undo = (change: StoredChange) =>
     revert.mutate(
@@ -327,10 +345,14 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
           const el = e.currentTarget
           stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
         }}
-        className="min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4"
+        className={
+          inline
+            ? 'min-h-0 flex-1 overflow-y-auto py-4'
+            : 'min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4'
+        }
       >
         <div ref={content}>
-          {pieceId && !onPiece && piece.data && (
+          {!inline && pieceId && !onPiece && piece.data && (
             <Link
               to="/pieces/$id"
               params={{ id: pieceId }}
@@ -356,16 +378,17 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
           {run && (
             <div className="mt-3.5 flex flex-col gap-2">
               {run.status === 'failed' && run.errorCode === 'run_cap' && (
-                <CapPill busy={pending} onContinue={() => void send('Continue', { bare: true })} />
+                <CapPill busy={pending} onContinue={() => resend('Continue')} />
               )}
               {run.status === 'failed' && run.errorCode !== 'run_cap' && (
                 <RunError
                   run={run}
                   actions={{
                     busy: pending,
-                    retry: () => void send(lastUserText || 'Try again', { bare: true }),
-                    retryOn: (tier) => void send(lastUserText || 'Try again', { bare: true, tier }),
+                    retry: () => resend(lastUserText || 'Try again'),
+                    retryOn: (tier) => resend(lastUserText || 'Try again', tier),
                     rephrase: () => {
+                      if (inline) return inline.rephrase(lastUserText)
                       useAssistant.getState().setDraft(lastUserText)
                       useAssistant.getState().focusComposer()
                     },
@@ -388,6 +411,7 @@ export function Conversation({ threadId, page }: { threadId: string; page: Assis
               )}
             </div>
           )}
+          {inline?.after}
         </div>
       </div>
       {run && (run.job || run.status === 'running' || run.status === 'waiting') && (

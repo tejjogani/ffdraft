@@ -11,6 +11,7 @@ import { BOARD_SKILL } from './skills/board'
 import { CINEMA_SKILL } from './skills/cinema'
 import { DIRECTIONS_SKILL } from './skills/directions'
 import { EDITING_SKILL } from './skills/editing'
+import { INTAKE_SKILL } from './skills/intake'
 import { PHOTO_SKILL } from './skills/photo'
 import { PRODUCTION_SKILL } from './skills/production'
 import { RENDER_SKILL } from './skills/render'
@@ -21,6 +22,7 @@ export const SKILLS = [
   '# Skills',
   SPEC_SKILL,
   BOARD_SKILL,
+  INTAKE_SKILL,
   DIRECTIONS_SKILL,
   EDITING_SKILL,
   STONE_SKILL,

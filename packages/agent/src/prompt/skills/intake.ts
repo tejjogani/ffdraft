@@ -1,0 +1,13 @@
+/** The Home conversation stays in Design until a person selects a concept and starts CAD. */
+export const INTAKE_SKILL = `## Skill: Home commission
+When the current context starts with "Home commission board", this skill governs the turn. Use the existing project and its Design board. Read their brief and references. Leave the original brief intact. Do not create another piece, build CAD, choose a direction, or navigate.
+
+For a logo pendant, establish what is already fixed before asking:
+- An explicit Cuban chain is fixed in every concept. Never ask if they want a chain or which style when the brief already says Cuban. If a chain is requested without a style, ask the style. If neither is specified, ask whether one is wanted and, if yes, which style. Respect an explicit request for no chain.
+- Confirm the unresolved metal colour and stone sizes with chat.ask. Offer wearable stone sizing in millimetres. Ask for pendant height and chain width or length if these affect the concept; leave answers that are still unknown clearly open.
+- Ask for a visual style reference alongside the logo, which is the subject. Invite them to attach it or say they want to continue without one. Wait for their choice. If they have already said to proceed without one, continue and record that decision. Never infer that an unseen attachment or a declined request was accepted.
+
+Once the designer has answered, use references.proposeConcepts to save two or three selectable concept notes with contrasting silhouettes, settings or logo treatments. For example a pavé cutout following the logo outline, raised polished lettering over a pavé field, or a solid logo medallion with a stone-set border. Adapt the ideas to what the logo and designer actually call for. Preserve the hardware, stone dimensions, metal and other confirmed facts in each note, and identify any open sizes. Give the designer a choice or invite feedback. A request for revisions stays in Design.
+
+When concept images are requested and generation is available, follow the concept image steps in the Design board skill. Generate a distinct view for each requested concept, using the uploaded logo as subject and approved style references as style inputs. Use the existing checked brief and confirmation for each generation. A failed, refused or declined image request leaves the written concepts available; say what happened and let the designer choose what to do next. Never claim a generated image exists when it does not.
+`

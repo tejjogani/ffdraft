@@ -100,6 +100,7 @@ import { cameraNote } from './camera-note'
 import { captureOnServer } from './capture'
 import type { RunHost } from './host'
 import { modelImage } from './images'
+import { designModeForRun, intakeRefusal } from './intake'
 import { readPhotos } from './read'
 import { lastReadOf, placeTakePlane } from './take-plane'
 import { expireBrowserTake, takeResult, waitFor } from './takes'
@@ -811,6 +812,7 @@ async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepO
   let preapproved = jobTakes.length
   let machineSpent: number | null = null
   const allowances = lastFreeTracker(ctx)
+  const designMode = await designModeForRun(ctx, runId)
 
   for (const call of calls) {
     const existing = byCall.get(call.id)
@@ -852,6 +854,13 @@ async function runTools(host: RunHost, calls: BetaToolUseBlock[]): Promise<StepO
         parsed.command ?? call.name,
       )
       continue
+    }
+    if (designMode) {
+      const reason = await intakeRefusal(host, designMode, parsed.command, parsed.input)
+      if (reason) {
+        await refuse(errorResult(call.id, reason), parsed.command)
+        continue
+      }
     }
     let admission = admit(parsed.def, ctx.role)
     if (admission.kind === 'refuse') {

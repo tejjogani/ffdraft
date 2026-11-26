@@ -119,7 +119,7 @@ export class Assistant implements AssistantService {
               : {}),
           }
         : null)
-    if (!job && input.threadId) {
+    if (!job && input.threadId && !input.context.brainstorm && !input.context.intake) {
       const last = await ctx.repo.runs.first(
         eq(t.agentRun.threadId, input.threadId),
         desc(t.agentRun.startedAt),

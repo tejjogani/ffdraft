@@ -10,6 +10,7 @@ import { lazy } from 'react'
 import { Root } from './app/Shell'
 import { AcceptInvitePage } from './pages/auth/AcceptInvitePage'
 import { HomePage } from './pages/home/HomePage'
+import { intakeSearch } from './pages/home/intake'
 import { LIBRARY_TABS, LibraryPage, type LibraryTab } from './pages/library/LibraryPage'
 import { NotFound, RouteError } from './pages/NotFound'
 import { PieceDirections } from './pages/piece/PieceDirections'
@@ -64,7 +65,14 @@ const rootRoute = createRootRoute({ component: Root, notFoundComponent: NotFound
 const route = <P extends string>(path: P, component: () => React.ReactNode) =>
   createRoute({ getParentRoute: () => rootRoute, path, component })
 
-const homeRoute = route('/', HomePage)
+const homeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/',
+  validateSearch: intakeSearch,
+  component: function Home() {
+    return <HomePage search={homeRoute.useSearch()} />
+  },
+})
 
 const piecesRoute = createRoute({
   getParentRoute: () => rootRoute,
