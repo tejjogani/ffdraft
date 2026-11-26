@@ -141,7 +141,7 @@ try {
     await page.goto(`${BASE}/pieces/${pieceId}`)
     await page
       .getByRole('navigation', { name: 'Project tools' })
-      .getByRole('link', { name: 'CAD', exact: true })
+      .getByRole('link', { name: 'CAD builder', exact: true })
       .waitFor()
     await shot('09-project-tools')
     await page.goto(`${BASE}/pieces/${pieceId}/design`)

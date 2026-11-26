@@ -20,8 +20,8 @@ import {
 import { Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { Copy, FileDown, Folder, FolderInput, Images, MoreHorizontal, Trash2 } from 'lucide-react'
 import { type ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { KindGlyph } from '../../components/KindGlyph'
 import { Column, PageHeader } from '../../components/Page'
+import { PieceCover } from '../../components/PieceCover'
 import { StagePicker } from '../../components/StageChip'
 import { JobPanel } from '../../features/assistant/jobs/JobPanel'
 import { StartJob } from '../../features/assistant/jobs/StartJob'
@@ -308,27 +308,27 @@ function PieceHero({ piece }: { piece: Piece }) {
   }
 
   return (
-    <div className="pt-12 pb-5">
-      <div className="stage mb-5 flex h-[70px] w-14 items-center justify-center overflow-hidden rounded-md shadow-[0_0_0_1px_var(--line)]">
-        <KindGlyph kind={piece.kind} className="w-16 shrink-0 text-fg-muted" />
+    <div className="pt-7 pb-4">
+      <div className="flex items-center gap-4">
+        <PieceCover piece={piece} className="w-16 shrink-0 rounded-lg border border-line" />
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur()
+            if (e.key === 'Escape') {
+              setTitle(piece.title)
+              requestAnimationFrame(() => e.currentTarget?.blur())
+            }
+          }}
+          placeholder="Untitled"
+          aria-label="Piece title"
+          maxLength={120}
+          className="min-w-0 flex-1 bg-transparent font-serif text-title text-fg placeholder:text-fg-faint outline-none focus-visible:outline-none sm:text-display"
+        />
       </div>
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        onBlur={commitTitle}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur()
-          if (e.key === 'Escape') {
-            setTitle(piece.title)
-            requestAnimationFrame(() => e.currentTarget?.blur())
-          }
-        }}
-        placeholder="Untitled"
-        aria-label="Piece title"
-        maxLength={120}
-        className="w-full bg-transparent font-serif text-title text-fg placeholder:text-fg-faint outline-none focus-visible:outline-none sm:text-display"
-      />
-      <div className="mt-4 -ml-1.5 flex flex-wrap items-center gap-x-1 gap-y-1 text-sm">
+      <div className="mt-3 -ml-1.5 flex flex-wrap items-center gap-x-1 gap-y-1 text-sm">
         <PieceStage piece={piece} />
         <Property>{KIND_LABEL[piece.kind]}</Property>
         {metal && (
