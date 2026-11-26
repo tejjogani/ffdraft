@@ -28,7 +28,9 @@ try {
   const openPalette = async (on = page) => {
     const mod = await on.evaluate(() => (/Mac/.test(navigator.platform) ? 'Meta' : 'Control'))
     await on.keyboard.press(`${mod}+k`)
-    await on.getByRole('combobox').filter({ visible: true }).fill('Delete project')
+    const input = on.getByRole('combobox').filter({ visible: true })
+    await input.fill('Delete project')
+    return input
   }
   const hasFocus = (selector: string) =>
     page.waitForFunction((s) => document.activeElement?.matches(s), selector)
@@ -60,10 +62,19 @@ try {
         await assertTouchTarget(menuItem)
         await menuItem.press('Enter')
       } else {
-        await openPalette()
+        const input = await openPalette()
         const command = page.getByRole('option', { name: 'Delete project', exact: true })
         await assertTouchTarget(command)
-        await command.press('Enter')
+        const count = await page.getByRole('option').count()
+        for (
+          let i = 0;
+          i < count && (await command.getAttribute('aria-selected')) !== 'true';
+          i++
+        ) {
+          await input.press('ArrowDown')
+        }
+        assert.equal(await command.getAttribute('aria-selected'), 'true')
+        await input.press('Enter')
       }
       await hasFocus('[role="dialog"] button')
       assert.equal(await cancel.evaluate((el) => el === document.activeElement), true)
