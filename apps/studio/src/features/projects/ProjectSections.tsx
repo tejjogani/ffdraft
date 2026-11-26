@@ -19,7 +19,7 @@ const toolCopy = {
   CAD: ['CAD builder', 'Open the 3D model to shape the piece and adjust its settings.'],
   Renders: ['Render studio', 'Frame the piece, set the lighting and make a product image.'],
   Sourcing: ['Stone sourcing', 'Find diamonds for a setting and compare their measurements.'],
-  'On model': ['On model', 'On-model imagery is planned.'],
+  'On model': ['On model', 'Prepare a photograph of the piece being worn.'],
   Production: ['Production', 'Production packages are planned.'],
   History: ['Project history', 'Review design changes and undo an edit.'],
 } satisfies Record<ProjectArea['title'], [string, string]>
