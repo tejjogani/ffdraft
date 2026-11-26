@@ -104,6 +104,32 @@ beforeAll(async () => {
 afterAll(() => s.server.dispose())
 
 describe('prompt enhancement, references and four results', () => {
+  it('adds imported notes and link details to the active board’s image brief', async () => {
+    const piece = await api.call('pieces.create', { title: 'Ring from studio' })
+    const source = await api.call('boards.create', { title: 'Ring moodboard' })
+    await api.call('references.save', {
+      boardId: source.id,
+      items: [
+        { note: 'Keep a low profile for gloves.' },
+        { title: 'Oval reference', url: 'https://www.pinterest.com/pin/789/' },
+      ],
+    })
+    const { board } = await api.call('boards.importMoodboard', {
+      pieceId: piece.id,
+      sourceBoardId: source.id,
+    })
+    let request: BetaMessageStreamParams | null = null
+    s.model.push(({ params }) => {
+      request = params
+      return { content: [text(briefJson())] }
+    })
+    await api.call('references.brief', { boardId: board.id, request: 'A clean oval ring' })
+    const content = JSON.stringify(request!.messages)
+    expect(content).toContain('Keep a low profile for gloves.')
+    expect(content).toContain('https://www.pinterest.com/pin/789/')
+    expect(imagesIn(request!)).toEqual([])
+  })
+
   it('briefs the request with its references, then generates four checked images with lineage and metering', async () => {
     const { piece, board, trophy, pendant } = await boardWithPictures()
     let briefReq: BetaMessageStreamParams | null = null

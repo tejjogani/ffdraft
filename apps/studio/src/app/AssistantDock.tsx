@@ -37,8 +37,11 @@ const FLOAT_LIMITS = { minW: 320, minH: 360 }
 /** The page the user is on, as assistant context. */
 function useRouteContext(): AssistantContext {
   const piece = useMatch({ from: '/pieces/$id', shouldThrow: false })
-  const board = useMatch({ from: '/ideas/$boardId', shouldThrow: false })
-  return { pieceId: piece?.params.id ?? null, boardId: board?.params.boardId ?? null }
+  const board = useMatch({ from: '/moodboards/$boardId', shouldThrow: false })
+  return {
+    pieceId: piece?.params.id ?? null,
+    boardId: board?.params.boardId ?? piece?.search.board ?? null,
+  }
 }
 
 /**

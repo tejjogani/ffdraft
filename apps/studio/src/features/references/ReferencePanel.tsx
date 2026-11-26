@@ -680,14 +680,14 @@ function PieceSource({ piece, readOnly }: { piece: Piece; readOnly: boolean }) {
           />
         ))
       ) : (
-        <p className="text-xs text-fg-subtle">No moodboards linked to this piece.</p>
+        <p className="text-xs text-fg-subtle">No design references on this piece yet.</p>
       )}
     </div>
   )
 }
 
 function BoardsSource({ piece, readOnly }: { piece: Piece; readOnly: boolean }) {
-  const boards = useRpc('boards.list', {})
+  const boards = useRpc('boards.list', { scope: 'library' })
   const [open, setOpen] = useState<string | null>(null)
   if (boards.isPending) return <Skeleton className="h-20" />
   if (!boards.data?.length)
