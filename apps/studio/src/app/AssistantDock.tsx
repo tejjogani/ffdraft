@@ -19,6 +19,7 @@ import { AssistantPanel } from '../features/assistant'
 import { followTarget } from '../features/assistant/follow'
 import { pillSummary, stageOfPath } from '../features/assistant/jobs/status'
 import { useLiveRun } from '../features/assistant/jobs/useJob'
+import { latestProjectThread } from '../features/assistant/project-thread'
 import { defaultRect } from '../lib/float-window'
 import { useRpc } from '../lib/query'
 import { useSession } from '../lib/session'
@@ -37,9 +38,10 @@ const FLOAT_LIMITS = { minW: 320, minH: 360 }
 /** The page the user is on, as assistant context. */
 function useRouteContext(): AssistantContext {
   const piece = useMatch({ from: '/pieces/$id', shouldThrow: false })
+  const home = useMatch({ from: '/', shouldThrow: false })
   const board = useMatch({ from: '/moodboards/$boardId', shouldThrow: false })
   return {
-    pieceId: piece?.params.id ?? null,
+    pieceId: piece?.params.id ?? home?.search.intake ?? null,
     boardId: board?.params.boardId ?? piece?.search.board ?? null,
   }
 }
@@ -49,11 +51,7 @@ function useRouteContext(): AssistantContext {
  * `followTarget` decides.
  */
 function useFollowPiece(pieceId: string | null | undefined) {
-  const threads = useRpc(
-    'threads.list',
-    { pieceId: pieceId ?? '', limit: 1 },
-    { enabled: !!pieceId },
-  )
+  const threads = useRpc('threads.list', latestProjectThread(pieceId ?? ''), { enabled: !!pieceId })
   const previous = useRef<string | null | undefined>(undefined)
   const drafts = useRef(new Map<string | null, { draft: string; attachments: Attachment[] }>())
   useLayoutEffect(() => {
@@ -114,7 +112,7 @@ export function AssistantWindow() {
 }
 
 /** Title-bar buttons shared by the docked and floating forms. */
-function WindowActions({ docked }: { docked: boolean }) {
+function WindowActions({ docked, project }: { docked: boolean; project: boolean }) {
   const showThreads = useAssistant((s) => s.showThreads)
   const setShowThreads = useAssistant((s) => s.setShowThreads)
   const openThread = useAssistant((s) => s.openThread)
@@ -132,7 +130,13 @@ function WindowActions({ docked }: { docked: boolean }) {
             aria-pressed={showThreads}
             onClick={() => setShowThreads(!showThreads)}
           />
-          <IconButton icon={SquarePen} label="New conversation" onClick={() => openThread(null)} />
+          {!project && (
+            <IconButton
+              icon={SquarePen}
+              label="New conversation"
+              onClick={() => openThread(null)}
+            />
+          )}
         </>
       )}
       {docked ? (
@@ -187,7 +191,7 @@ function AssistantFloating({ context }: { context: AssistantContext }) {
           <span className="truncate text-sm font-medium">Assistant</span>
         </>
       }
-      actions={<WindowActions docked={false} />}
+      actions={<WindowActions docked={false} project={Boolean(context.pieceId)} />}
     >
       <AssistantPanel
         key={context.pieceId ?? context.boardId ?? 'workspace'}
@@ -300,7 +304,7 @@ export function AssistantDock() {
         <AiMark className="size-3.5" />
         <span className="text-sm font-medium">Assistant</span>
         <span className="app-no-drag ml-auto flex items-center">
-          <WindowActions docked />
+          <WindowActions docked project={Boolean(context.pieceId)} />
         </span>
       </header>
       <div className="min-h-0 flex-1">

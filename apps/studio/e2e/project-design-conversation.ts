@@ -58,6 +58,10 @@ try {
   const conversation = page.getByRole('region', { name: 'Design conversation' })
   await conversation.waitFor({ timeout: 8000 })
   await conversation.getByRole('link', { name: 'Connect Claude' }).waitFor()
+  await conversation.getByText('Connect Claude to chat about this design.').waitFor()
+  assert.equal(await conversation.getByLabel('Design note').isVisible(), false)
+  await conversation.getByText('Write a board note', { exact: true }).click()
+  await conversation.getByText('This note is saved to the design board.').waitFor()
   await conversation
     .getByLabel('Design note')
     .fill('Leave room for a low gallery on the Aster ring.')
@@ -78,6 +82,10 @@ try {
   await page.reload()
   await page.getByRole('button', { name: 'Select Gallery shape study', exact: true }).click()
   const selected = page.getByRole('region', { name: 'Selected item', exact: true })
+  await selected.getByText('Gallery shape study', { exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Build CAD with Claude', exact: true }).click()
+  await page.getByRole('link', { name: 'Open manual CAD', exact: true }).waitFor()
+  assert.equal(await page.getByRole('link', { name: 'Connect Claude', exact: true }).count(), 2)
   await selected.getByText('Gallery shape study', { exact: true }).waitFor()
   const captures = process.env.PAVE_E2E_SCREENSHOTS
   if (captures) {
@@ -170,13 +178,7 @@ try {
     const referenceAssetId = await addImage(assistantBase, a.id)
     await page.reload()
     await page.getByRole('button', { name: 'Select Gallery shape study', exact: true }).click()
-    await page
-      .getByRole('region', { name: 'Selected item', exact: true })
-      .getByRole('button', {
-        name: 'Build CAD from this image',
-        exact: true,
-      })
-      .click()
+    await page.getByRole('button', { name: 'Build CAD with Claude', exact: true }).click()
     await page.waitForURL(`**/pieces/${a.id}/design`)
     const handoff = messages.find((request) => request.job?.stage === 'cad')
     assert.ok(handoff)

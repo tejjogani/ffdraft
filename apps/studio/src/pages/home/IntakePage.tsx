@@ -2,11 +2,12 @@ import { type AssistantTier, METALS, type Piece, type Reference } from '@pave/sc
 import { Button, buttonClass, cn, InlineError, Markdown, Skeleton } from '@pave/ui'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ArrowRight, Check, FileBox } from 'lucide-react'
-import { useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { PageHeader } from '../../components/Page'
 import { newMessageId } from '../../features/assistant/actions'
 import { Composer } from '../../features/assistant/Composer'
 import { Conversation } from '../../features/assistant/Conversation'
+import { selectProjectThread } from '../../features/assistant/project-thread'
 import { TierPicker } from '../../features/assistant/TierPicker'
 import { takeToCadRefusal } from '../../features/ideate/board'
 import { useReferencePanel } from '../../features/references/store'
@@ -34,6 +35,9 @@ export function IntakePage({ pieceId, search }: { pieceId: string; search: Intak
   const thread = useRpc('threads.get', { id: search.thread ?? '' }, { enabled: !!search.thread })
   const threadId =
     thread.data?.thread.context.pieceId === pieceId ? thread.data.thread.id : undefined
+  useLayoutEffect(() => {
+    if (threadId) selectProjectThread(pieceId, threadId)
+  }, [pieceId, threadId])
   const initialTitle = piece.data?.title || 'Design intake'
   const fault = piece.error ?? boards.error ?? board.error ?? thread.error
   return (
