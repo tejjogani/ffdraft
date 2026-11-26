@@ -16,19 +16,19 @@ import {
   MenuSub,
   Skeleton,
   Swatch,
-  tabClass,
 } from '@pave/ui'
-import { Link, Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
+import { Outlet, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import { Copy, FileDown, Folder, FolderInput, Images, MoreHorizontal, Trash2 } from 'lucide-react'
 import { type ReactNode, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { KindGlyph } from '../../components/KindGlyph'
 import { Column, PageHeader } from '../../components/Page'
 import { StagePicker } from '../../components/StageChip'
 import { JobPanel } from '../../features/assistant/jobs/JobPanel'
-import { StageStepper } from '../../features/assistant/jobs/StageStepper'
 import { StartJob } from '../../features/assistant/jobs/StartJob'
 import { TryVariants } from '../../features/directions/TryVariants'
 import { savePaveFile } from '../../features/pavefile'
+import { PROJECT_AREAS, PROJECT_MENU, type ProjectArea } from '../../features/projects/areas'
+import { ProjectSwitcher } from '../../features/projects/ProjectSwitcher'
 import { DOCK_PANEL_PX, ReferenceDock } from '../../features/references/ReferencePanel'
 import { useReferencePanel } from '../../features/references/store'
 import { type Command, useRegisterCommands } from '../../lib/commands'
@@ -36,32 +36,14 @@ import { hasFacts, KIND_LABEL, metalLabel, metalSwatch } from '../../lib/domain'
 import { carats, grams } from '../../lib/format'
 import { useDeletePiece, useUpdatePiece } from '../../lib/pieces'
 import { useRpc, useRpcMutation } from '../../lib/query'
+import { useCurrentView } from '../../lib/use-current-view'
 import { assistant } from '../../stores/assistant'
 
-/** The tabs after the stage stepper (Design → CAD → Render). */
-const TABS = [
-  { to: '/pieces/$id/on-model', label: 'On model' },
-  { to: '/pieces/$id/sourcing', label: 'Sourcing' },
-  { to: '/pieces/$id/production', label: 'Production' },
-  { to: '/pieces/$id/history', label: 'History' },
-] as const
-
-/**
- * The piece page: a Notion-like header (icon, title, properties) above its tabs. The middle
- * tabs are the piece's three stages in order, Design, CAD and Render, each done by hand or by
- * an AI job; a stage's job shows in a bar under the tabs while it wants attention.
- */
 export function PiecePage({ id }: { id: string }) {
   const piece = useRpc('pieces.get', { id })
   const matchRoute = useMatchRoute()
-  const stage: JobStage | null = matchRoute({ to: '/pieces/$id/directions', params: { id } })
-    ? 'design'
-    : matchRoute({ to: '/pieces/$id/design', params: { id } })
-      ? 'cad'
-      : matchRoute({ to: '/pieces/$id/render', params: { id } })
-        ? 'render'
-        : null
-  // CAD and Render are workspaces: the title block folds into the header to give them room.
+  const area = PROJECT_AREAS.find((item) => matchRoute({ to: item.to, params: { id } }))
+  const stage = area && 'stage' in area ? area.stage : null
   const bleed = stage === 'cad' || stage === 'render'
 
   if (piece.isError)
@@ -89,60 +71,19 @@ export function PiecePage({ id }: { id: string }) {
   const p = piece.data
   return (
     <div className="flex min-h-full flex-col">
-      <PieceHeader piece={p} stage={stage} />
-      {!bleed && (
-        <Column className="pb-0!">{p ? <PieceHero piece={p} /> : <HeroSkeleton />}</Column>
-      )}
-      <div className="sticky top-11 z-10 bg-bg">
-        <div className={bleed ? '' : 'mx-auto w-full max-w-[880px] px-6 sm:px-12'}>
-          {/* On a phone the row scrolls sideways inside itself, never the page. */}
-          <nav
-            aria-label="Piece sections"
-            className={cn(
-              // The hairline is drawn inside the row (not a border) so a scrolling row keeps
-              // the active tab's underline on top of it.
-              'scroll-fade-x relative flex items-center gap-4 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_var(--line)]',
-              bleed && 'px-4',
-            )}
-          >
-            <Link
-              to="/pieces/$id"
-              params={{ id }}
-              activeOptions={{ exact: true }}
-              activeProps={{ 'aria-current': 'page' }}
-              className={cn(
-                tabClass,
-                'aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-0 aria-[current=page]:after:bottom-0 aria-[current=page]:after:h-px aria-[current=page]:after:bg-fg',
-              )}
-            >
-              Overview
-            </Link>
-            {p && <StageStepper piece={p} className="mx-1" />}
-            {TABS.map((t) => (
-              <Link
-                key={t.to}
-                to={t.to}
-                params={{ id }}
-                activeProps={{ 'aria-current': 'page' }}
-                className={cn(
-                  tabClass,
-                  'aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-0 aria-[current=page]:after:bottom-0 aria-[current=page]:after:h-px aria-[current=page]:after:bg-fg',
-                )}
-              >
-                {t.label}
-              </Link>
-            ))}
-            {bleed && p && (
-              <div className="ml-auto flex items-center gap-1 pl-3">
-                {stage === 'cad' && <TryVariants piece={p} />}
-                <ReferencesToggle />
-                <PieceStage piece={p} labelled />
-              </div>
-            )}
-          </nav>
+      <PieceHeader piece={p} stage={stage} area={area} />
+      {!area && <Column className="pb-0!">{p ? <PieceHero piece={p} /> : <HeroSkeleton />}</Column>}
+      {p && stage && (
+        <div className="sticky top-11 z-10 bg-bg">
+          {bleed && (
+            <div className="flex items-center justify-end gap-1 px-3 py-1">
+              {stage === 'cad' && <TryVariants piece={p} />}
+              <ReferencesToggle />
+            </div>
+          )}
+          <JobPanel pieceId={p.id} stage={stage} />
         </div>
-        {p && stage && <JobPanel pieceId={p.id} stage={stage} />}
-      </div>
+      )}
       <Outlet />
     </div>
   )
@@ -212,14 +153,25 @@ function PieceStage({ piece, labelled }: { piece: Piece; labelled?: boolean }) {
   )
 }
 
-function PieceHeader({ piece, stage }: { piece: Piece | undefined; stage: JobStage | null }) {
+function PieceHeader({
+  piece,
+  stage,
+  area,
+}: {
+  piece: Piece | undefined
+  stage: JobStage | null
+  area?: ProjectArea
+}) {
   const collections = useRpc('collections.list', {})
   const collection = collections.data?.find((c) => c.id === piece?.collectionId)
   const navigate = useNavigate()
+  const isCurrent = useCurrentView()
   const remove = useDeletePiece()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const duplicate = useRpcMutation('pieces.duplicate', {
-    onSuccess: (copy) => void navigate({ to: '/pieces/$id', params: { id: copy.id } }),
+    onMutate: () => isCurrent,
+    onSuccess: (copy, _input, stillHere) =>
+      stillHere?.() && void navigate({ to: '/pieces/$id', params: { id: copy.id } }),
   })
 
   const commands: Command[] = piece
@@ -266,13 +218,29 @@ function PieceHeader({ piece, stage }: { piece: Piece | undefined; stage: JobSta
                 link: { to: '/collections/$id', params: { id: collection.id } },
               }
             : { label: 'Pieces', link: { to: '/pieces' } },
-          { label: piece ? piece.title || 'Untitled' : '…' },
+          {
+            label: piece ? piece.title || 'Untitled' : '…',
+            link: piece && area ? { to: PROJECT_MENU, params: { id: piece.id } } : undefined,
+          },
+          ...(area
+            ? [
+                {
+                  label: (
+                    <>
+                      <span className="md:hidden">{piece?.title || 'Untitled'} · </span>
+                      {area.title}
+                    </>
+                  ),
+                },
+              ]
+            : []),
         ]}
         actions={
           piece && (
             <>
+              <ProjectSwitcher pieceId={piece.id} area={area} />
               {/* The stage's AI job: the plan shows before anything starts. */}
-              {stage && <StartJob pieceId={piece.id} stage={stage} />}
+              {stage && <StartJob key={stage} pieceId={piece.id} stage={stage} />}
               <Button
                 variant="ghost"
                 size="sm"

@@ -12,6 +12,7 @@ import { useEffect } from 'react'
 import { useRegisterCommands } from '../../lib/commands'
 import { useRpc } from '../../lib/query'
 import { useSession } from '../../lib/session'
+import { useCurrentView } from '../../lib/use-current-view'
 import { type AssistantContext, useAssistant } from '../../stores/assistant'
 import { useRunActions, useSend } from './actions'
 import { Composer } from './Composer'
@@ -83,6 +84,7 @@ export function AssistantPanel({
 }
 
 function Panel({ context, stage }: { context: AssistantContext; stage: JobStage | null }) {
+  const isCurrent = useCurrentView()
   const threadId = useAssistant((s) => s.activeThreadId)
   const showThreads = useAssistant((s) => s.showThreads)
   const draft = useAssistant((s) => s.draft)
@@ -130,7 +132,7 @@ function Panel({ context, stage }: { context: AssistantContext; stage: JobStage 
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1">
         {showThreads ? (
-          <ThreadList />
+          <ThreadList pieceId={context.pieceId} />
         ) : threadId ? (
           <Conversation threadId={threadId} page={context} />
         ) : (
@@ -179,7 +181,9 @@ function Panel({ context, stage }: { context: AssistantContext; stage: JobStage 
           value={draft}
           onChange={(v) => st().setDraft(v)}
           attachments={attachments}
-          onAttach={(a) => st().addAttachments(a)}
+          onAttach={(a) => {
+            if (isCurrent()) st().addAttachments(a)
+          }}
           onRemoveAttachment={(id) => st().removeAttachment(id)}
           onSubmit={submit}
           sending={pending}

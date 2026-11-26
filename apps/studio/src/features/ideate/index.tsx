@@ -23,6 +23,7 @@ import { Column, PageHeader, PageTitle } from '../../components/Page'
 import { assetUrl } from '../../lib/assets'
 import { invalidateFor, queryClient, useRpc, useRpcMutation } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
+import { useCurrentView } from '../../lib/use-current-view'
 import { DesignBoard } from './DesignBoard'
 
 export { DesignBoard } from './DesignBoard'
@@ -30,8 +31,11 @@ export { DesignBoard } from './DesignBoard'
 export function BoardsPage() {
   const boards = useRpc('boards.list', {})
   const navigate = useNavigate()
+  const isCurrent = useCurrentView()
   const create = useRpcMutation('boards.create', {
-    onSuccess: (b) => void navigate({ to: '/ideas/$boardId', params: { boardId: b.id } }),
+    onMutate: () => isCurrent,
+    onSuccess: (b, _input, stillHere) =>
+      stillHere?.() && void navigate({ to: '/ideas/$boardId', params: { boardId: b.id } }),
   })
   return (
     <>
@@ -83,8 +87,13 @@ export function BoardsPage() {
 function BoardCard({ board }: { board: Board }) {
   return (
     <Link
-      to="/ideas/$boardId"
-      params={{ boardId: board.id }}
+      {...(board.pieceId
+        ? ({
+            to: '/pieces/$id/directions',
+            params: { id: board.pieceId },
+            search: { board: board.id },
+          } as const)
+        : ({ to: '/ideas/$boardId', params: { boardId: board.id } } as const))}
       className="block overflow-hidden rounded-lg bg-bg shadow-[0_0_0_1px_var(--line)] hover:shadow-[0_0_0_1px_var(--line-strong)]"
     >
       <div className="grid aspect-[4/3] grid-cols-2 grid-rows-2 gap-px bg-line">
@@ -155,6 +164,7 @@ export function BoardPage({ boardId }: { boardId: string }) {
  */
 export function BoardLink({ board }: { board: Board }) {
   const navigate = useNavigate()
+  const isCurrent = useCurrentView()
   const pieces = useRpc('pieces.list', { limit: 50 })
   const linked = pieces.data?.find((p) => p.id === board.pieceId)
   const link = async (pieceId: string | null) => {
@@ -168,7 +178,7 @@ export function BoardLink({ board }: { board: Board }) {
     })
     if (opts.linkBoard) await link(piece.id)
     invalidateFor(queryClient, 'pieces')
-    await navigate({ to: '/pieces/$id/design', params: { id: piece.id } })
+    if (isCurrent()) await navigate({ to: '/pieces/$id/design', params: { id: piece.id } })
   }
   if (board.pieceId)
     return (

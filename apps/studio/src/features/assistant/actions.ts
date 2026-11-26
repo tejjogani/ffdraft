@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { clientId } from '../../lib/events'
 import { invalidateFor, queryClient, useRpcMutation } from '../../lib/query'
 import { type RpcError, rpc } from '../../lib/rpc'
+import { useCurrentView } from '../../lib/use-current-view'
 import { type AssistantContext, useAssistant } from '../../stores/assistant'
 
 /** A fresh id for a message, so a retried send stores it once. */
@@ -31,6 +32,7 @@ export interface SendOptions {
 
 /** Sends from the dock's state: its conversation, chips, photos and tier. */
 export function useSend(page: AssistantContext) {
+  const isCurrent = useCurrentView()
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<RpcError | null>(null)
   const send = async (text: string, opts: SendOptions = {}) => {
@@ -49,7 +51,8 @@ export function useSend(page: AssistantContext) {
       context: {
         ...(pieceId ? { pieceId } : {}),
         ...(usePage && page.boardId ? { boardId: page.boardId } : {}),
-        selection: opts.bare ? [] : (s.selection?.nodeIds ?? []),
+        selection:
+          !opts.bare && s.selection && s.selection.pieceId === pieceId ? s.selection.nodeIds : [],
         ...(pieceId && page.stage ? { stage: page.stage } : {}),
       },
       ...(tier ? { tier } : {}),
@@ -61,6 +64,9 @@ export function useSend(page: AssistantContext) {
     setError(null)
     try {
       const out = await rpc.call('threads.send', input)
+      invalidateFor(queryClient, 'runs')
+      if (!isCurrent()) return out
+      useAssistant.getState().setThreadPieceId(out.thread.context.pieceId ?? pieceId ?? null)
       if (opts.bare)
         // A starter, Retry or a stage's job: the person's draft in the composer stays.
         useAssistant.setState((st) => ({
@@ -69,7 +75,6 @@ export function useSend(page: AssistantContext) {
           tierByThread: tier ? { ...st.tierByThread, [out.thread.id]: tier } : st.tierByThread,
         }))
       else useAssistant.getState().sent(out.thread.id, out.run.id, photos, tier ?? null)
-      invalidateFor(queryClient, 'runs')
       return out
     } catch (e) {
       setError(e as RpcError)
@@ -83,6 +88,7 @@ export function useSend(page: AssistantContext) {
 
 /** Approve or decline what a run waits on; stop it; pause, resume or accept an AI job. */
 export function useRunActions() {
+  const isCurrent = useCurrentView()
   const silent = { meta: { silent: true } } as const
   const decide = useRpcMutation('runs.decide', silent)
   const cancel = useRpcMutation('runs.cancel', silent)
@@ -90,7 +96,10 @@ export function useRunActions() {
   const accept = useRpcMutation('runs.accept', silent)
   const resume = useRpcMutation('runs.resume', {
     ...silent,
-    onSuccess: (out) => useAssistant.getState().openThread(out.thread.id),
+    onMutate: () => isCurrent,
+    onSuccess: (out, _input, stillHere) => {
+      if (stillHere?.()) useAssistant.getState().openThread(out.thread.id)
+    },
   })
   return {
     decide,
