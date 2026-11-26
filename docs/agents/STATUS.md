@@ -1,6 +1,6 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 02:35 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 05:54 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## Studio experience: focused editor, project card menu, minimal assistant with a character (lane A, A11)
 
@@ -8,7 +8,9 @@ _Generated 26 Nov 2026 02:35 UTC by `docs/agents/sync_status.py` from the workfl
 |---|---|---|
 | build:editor | done | commit 75b34cb. Step 1 (points A to D) is finished on `ui/focus` in /home/user/ffdraft-ui; nothing is pushed. The studio typecheck, the 344 studio unit tests, the production build and the Playwright walkthrough (1440x900 and 390x844, l… |
 | build:menu | done | commit 2ad4d35. Step 2 (point I) is finished on `ui/focus` in /home/user/ffdraft-ui; nothing is pushed. A project is now a card menu of its areas instead of a tab row with a numbered Design → CAD → Render stepper. Typecheck, 545 tests,… |
-| build:assistant | running or interrupted |  |
+| build:assistant | done | commit 1ea6388. Step 3 (points E, F, G, H) is finished on `ui/focus` in /home/user/ffdraft-ui; nothing is pushed. The assistant is now one calm character with a minimal conversation. The four touched packages typecheck, 654 tests pass,… |
+| review:taste | running or interrupted |  |
+| review:walk | running or interrupted |  |
 
 ## Render realism: every look tested in Blender, black acrylic, the render skill (lane A, A12)
 
@@ -16,6 +18,8 @@ _Generated 26 Nov 2026 02:35 UTC by `docs/agents/sync_status.py` from the workfl
 |---|---|---|
 | fix:release | done | commit 1807a9e. Both release-check majors are fixed and verified in the real thing, and every suite asked for is green; two trial follow-ups the checkpoint's title names (photo-built export, picture sent twice) were never in its diff a… |
 | build:realism | running or interrupted |  |
+| review:critic | running or interrupted |  |
+| write:skill | running or interrupted |  |
 
 ## CAD viewport: speed, full rotation, Rhino navigation (lane A, A13)
 
@@ -24,7 +28,9 @@ _Generated 26 Nov 2026 02:35 UTC by `docs/agents/sync_status.py` from the workfl
 | build:viewport | done | commit 6138cb9 on local branch cad/viewport in /home/user/ffdraft-view (three commits on top of afe5e03: a86d2be, d972286, 6138cb9). Not pushed. Worktree clean.. The CAD view now follows the hand with no damping, turns all the way over the top and under the piece, uses Rhino's mapping by default, and reopens a piece with its model on screen before the geometry engine is ready. A… |
 | review:viewport | done | 4 major, 3 minor. Not ready for the founder yet: the builder's numbers hold, but four reproduced defects sit in the new default mapping, each on a path he will hit (pendants, a … |
 | fix:1 | done | All seven findings are fixed on `cad/viewport` in `/home/user/ffdraft-view`, in five commits (not pushed), with one residual on trackpad momentum that only the founder's Mac can settle. Studio tests (392 in 52 files), t… |
-| verify:1 | running or interrupted |  |
+| verify:1 | done | 1 major, 3 minor. Three of the four findings are fixed and confirmed; the fourth (trackpad momentum) is fixed for the hand but the filter now stops almost none of the momentum. … |
+| fix:2 | running or interrupted |  |
+| verify:2 | running or interrupted |  |
 
 ## Studio focus: settings readability, CAD editor, delete (lane A, A8)
 
@@ -46,7 +52,7 @@ _Generated 26 Nov 2026 02:35 UTC by `docs/agents/sync_status.py` from the workfl
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: a2dfd79 Status: editor and release fixes done; card menu, render realism and viewport fixes under way
+Branch `claude/busy-bardeen-o482lo`, head: ca549c3 Status: the assistant's character and minimal chat are built; viewport fixes being verified; render realism under way
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -77,7 +83,7 @@ Branch `claude/busy-bardeen-o482lo`, head: a2dfd79 Status: editor and release fi
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: a2dfd79 Status: editor and release fixes done; card menu, render realism and viewport fixes under way
+Branch `claude/busy-bardeen-o482lo`, head: ca549c3 Status: the assistant's character and minimal chat are built; viewport fixes being verified; render realism under way
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -119,7 +125,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: a2dfd79 Status: editor and release fixes done; card menu, render realism and viewport fixes under way
+Branch `claude/busy-bardeen-o482lo`, head: ca549c3 Status: the assistant's character and minimal chat are built; viewport fixes being verified; render realism under way
 
 | Agent | State | Outcome |
 |---|---|---|
