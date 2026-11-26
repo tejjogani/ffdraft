@@ -1,6 +1,18 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 19:03 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 19:06 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+
+## Polish 2: spec (a card applies only the change it showed) then Diaex (sign-in never starved, honest grace dates)
+
+| Agent | State | Outcome |
+|---|---|---|
+| spec:fix | running or interrupted |  |
+
+## Render judged against real photographs of stones and jewelry (lane A, A12)
+
+| Agent | State | Outcome |
+|---|---|---|
+| real-references | running or interrupted |  |
 
 ## Render: settle the release state (better earlier stones, each later change kept only if a blind side-by-side says so)
 
@@ -28,7 +40,7 @@ _Generated 26 Nov 2026 19:03 UTC by `docs/agents/sync_status.py` from the workfl
 | spec:fix | done | I fixed all eleven findings (M1, m1–m10) in /home/user/ffdraft-spec on branch spec/truth and committed them as db80257 (not pushed). Every check passes: typecheck, schema, canon, agent, the full server suite twice, stud… |
 | spec:verify | done | 1 blocker, 4 minor. FAIL: one blocker remains. On spec/truth at db80257, M1 is only partly fixed. When an amendment changes a whole group line ('ring', 'body' or 'chain'), its car… |
 | diaex:fix | done | All six findings are dealt with and committed as 5492aac on diaex/connect in /home/user/ffdraft-ai (not pushed). The typecheck, all four suites and the access e2e at both sizes pass. Sign in with Diaex and the gate work… |
-| diaex:verify | running or interrupted |  |
+| diaex:verify | done | 1 major, 4 minor. No way past the gate at 5492aac on diaex/connect. All six findings are dealt with, and I found no blocker. Tests, by hand where needed, of every listed way pas… |
 
 ## Diaex sign-in and access gate: review fixes (lane A, A8b)
 
@@ -147,7 +159,7 @@ _Generated 26 Nov 2026 19:03 UTC by `docs/agents/sync_status.py` from the workfl
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: e27281d Board: render settles its release state by blind side-by-side
+Branch `claude/busy-bardeen-o482lo`, head: a62ab2f Board: own-CAD plan written; render judged against real photographs
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -178,7 +190,7 @@ Branch `claude/busy-bardeen-o482lo`, head: e27281d Board: render settles its rel
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: e27281d Board: render settles its release state by blind side-by-side
+Branch `claude/busy-bardeen-o482lo`, head: a62ab2f Board: own-CAD plan written; render judged against real photographs
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -220,7 +232,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: e27281d Board: render settles its release state by blind side-by-side
+Branch `claude/busy-bardeen-o482lo`, head: a62ab2f Board: own-CAD plan written; render judged against real photographs
 
 | Agent | State | Outcome |
 |---|---|---|
