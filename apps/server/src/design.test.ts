@@ -25,6 +25,25 @@ const gem = (id: string, x: number) => ({
 })
 
 describe('design document', () => {
+  it('describes the selected project feature with the field names and units used to edit it', async () => {
+    const piece = await api.call('pieces.create', { templateId: 'wedding-band' })
+    const input = { pieceId: piece.id, nodeId: 'band' }
+    const result = await api.call('design.describe', input)
+    expect(result).toMatchObject({
+      pieceId: piece.id,
+      nodeId: 'band',
+      version: piece.version,
+      kind: 'ringShank',
+      schema: {
+        properties: {
+          thicknessBottom: { title: 'Thickness at base', unit: 'mm', minimum: 0.9, maximum: 5 },
+        },
+      },
+    })
+    expect((await api.fail('design.describe', { ...input, nodeId: 'head' })).status).toBe(404)
+    expect((await api.fail('design.describe', { ...input, pieceId: 'absent' })).status).toBe(404)
+  })
+
   it('applies, lists history, and reverts', async () => {
     const piece = await api.call('pieces.create', { templateId: 'wedding-band' })
     const events: ServerEvent[] = []

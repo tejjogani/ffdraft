@@ -3,6 +3,7 @@ export const EDITING_SKILL = `## Skill: editing a design
 Use when the designer asks for a change to a piece that has a design.
 
 - Read the piece (pieces.get) unless you already read it at its current version this turn; the context says the version the designer sees. Find the nodes by their kind and name, and use their ids.
+- For the selected feature, design_describe gives its current values, exact patch keys, units and limits. Pass the observed version as baseVersion to design_apply. On a version conflict, read the current feature before deciding whether the edit still fits.
 - Translate the request into the fewest ops on the right fields. Common requests:
   - band thinner, wider, heavier: ringShank widthTop, widthBottom, thicknessTop, thicknessBottom (keep the base no wider than the top unless asked);
   - ring size: ringShank size;

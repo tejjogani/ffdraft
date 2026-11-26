@@ -2,7 +2,7 @@
 
 exports[`tool schemas > is sorted and stable (snapshot) 1`] = `
 {
-  "hash": "0d9af68c5bf31d",
+  "hash": "03b4ca1b444195",
   "tools": [
     "boards_create mutation",
     "boards_delete mutation confirm strict",
@@ -13,6 +13,7 @@ exports[`tool schemas > is sorted and stable (snapshot) 1`] = `
     "collections_create mutation",
     "collections_list query",
     "design_apply mutation",
+    "design_describe query strict",
     "design_evaluate query",
     "design_export mutation",
     "design_history query",

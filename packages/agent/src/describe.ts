@@ -75,6 +75,11 @@ export const TOOL_CHIPS = {
   },
   'pieces.delete': { running: 'Deleting the piece', done: 'Deleted the piece' },
   'design.apply': { running: 'Editing the design', done: (i) => i.label },
+  'design.describe': {
+    quiet: true,
+    running: 'Inspecting the CAD feature',
+    done: 'Inspected the CAD feature',
+  },
   'design.history': { quiet: true, running: 'Reading the history', done: 'Read the history' },
   'design.revert': {
     running: 'Undoing',
@@ -162,7 +167,10 @@ export const TOOL_CHIPS = {
     running: 'Reading the photo',
     done: (i) => (i.assetIds.length > 1 ? `Read ${i.assetIds.length} photos` : 'Read the photo'),
   },
-  'match.traceOutline': { running: 'Tracing the selected outline', done: 'Traced the selected outline' },
+  'match.traceOutline': {
+    running: 'Tracing the selected outline',
+    done: 'Traced the selected outline',
+  },
   'match.fit': {
     running: 'Fitting the design to the photo',
     done: 'Fitted the design to the photo',

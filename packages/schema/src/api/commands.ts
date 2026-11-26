@@ -18,7 +18,7 @@ import {
   PieceIntakeSchema,
 } from '../design/intake'
 import { StoneChangeSchema, StoneTargetSchema } from '../design/intents'
-import { StoneSourcing } from '../design/nodes'
+import { NODE_KINDS, StoneSourcing } from '../design/nodes'
 import { PhotoReadSchema } from '../design/photo-read'
 import { PieceSpecSchema } from '../design/spec'
 import {
@@ -693,6 +693,21 @@ export const commands = {
   }),
 
   // ── Design document ───────────────────────────────────────────────────────────────────────
+  'design.describe': def({
+    description:
+      'Inspect one feature by its id in this project. Returns the current values and input JSON Schema used by the CAD editor, including field descriptions, conditions, units, ranges and defaults. Use its version as baseVersion for a subsequent design.apply.',
+    kind: 'query',
+    tool: true,
+    input: z.object({ pieceId: id, nodeId: id }),
+    output: z.object({
+      pieceId: id,
+      nodeId: id,
+      version: z.number().int(),
+      kind: z.enum(NODE_KINDS),
+      values: z.record(z.string(), z.unknown()),
+      schema: z.record(z.string(), z.unknown()),
+    }),
+  }),
   'design.apply': def({
     description:
       'Edit a piece’s CAD by applying ops to its feature tree: add / update / remove / move nodes. Updates are JSON merge patches. All ops in one call form a single undoable change; give it a short human label. Fails atomically with a precise message if an op is invalid.',
