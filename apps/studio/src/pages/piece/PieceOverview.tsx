@@ -1,16 +1,16 @@
 import type { Piece } from '@pave/schema'
-import { Button, Skeleton, Textarea } from '@pave/ui'
+import { Skeleton, Textarea } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
-import { ImageIcon, Lightbulb, Plus } from 'lucide-react'
+import { ImageIcon } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { SectionTitle } from '../../components/Page'
 import { SpecCard } from '../../components/SpecCard'
 import { ProjectSections } from '../../features/projects/ProjectSections'
 import { takeMedia } from '../../features/render/shots'
 import { assetUrl } from '../../lib/assets'
-import { dateTime, plural, relativeTime } from '../../lib/format'
+import { dateTime, relativeTime } from '../../lib/format'
 import { useUpdatePiece } from '../../lib/pieces'
-import { useRpc, useRpcMutation } from '../../lib/query'
+import { useRpc } from '../../lib/query'
 
 export function PieceOverview({ pieceId }: { pieceId: string }) {
   const piece = useRpc('pieces.get', { id: pieceId })
@@ -33,7 +33,6 @@ export function PieceOverview({ pieceId }: { pieceId: string }) {
           <SpecCard piece={piece.data} />
         </div>
       </details>
-      <Moodboards pieceId={pieceId} />
       <LatestRenders pieceId={pieceId} />
       {piece.data.provenance && <FileProvenance provenance={piece.data.provenance} />}
     </div>
@@ -74,64 +73,6 @@ export function Brief({ piece }: { piece: Piece }) {
         aria-label="Brief"
         className="text-lg leading-7 placeholder:text-fg-faint"
       />
-    </section>
-  )
-}
-
-export function Moodboards({ pieceId }: { pieceId: string }) {
-  const boards = useRpc('boards.list', { pieceId })
-  const create = useRpcMutation('boards.create')
-  return (
-    <section>
-      <SectionTitle
-        actions={
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={Plus}
-            onClick={() => create.mutate({ title: 'Untitled board', pieceId })}
-          >
-            New board
-          </Button>
-        }
-      >
-        Moodboards
-      </SectionTitle>
-      {boards.isPending ? (
-        <Skeleton className="h-14" />
-      ) : !boards.data?.length ? (
-        <p className="text-sm text-fg-subtle">No moodboards linked to this piece.</p>
-      ) : (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {boards.data.map((b) => (
-            <Link
-              key={b.id}
-              to="/pieces/$id/directions"
-              params={{ id: pieceId }}
-              search={{ board: b.id }}
-              className="flex items-center gap-3 rounded-lg p-2 shadow-[0_0_0_1px_var(--line)] transition-shadow hover:shadow-[0_0_0_1px_var(--line-strong)]"
-            >
-              <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-bg-muted">
-                {b.coverAssetIds[0] ? (
-                  <img
-                    src={assetUrl(b.coverAssetIds[0], 120)}
-                    alt=""
-                    className="size-full object-cover"
-                  />
-                ) : (
-                  <Lightbulb className="size-4 text-fg-subtle" aria-hidden />
-                )}
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium">{b.title}</span>
-                <span className="block text-xs text-fg-subtle">
-                  {plural(b.referenceCount, 'reference')} · {relativeTime(b.updatedAt)}
-                </span>
-              </span>
-            </Link>
-          ))}
-        </div>
-      )}
     </section>
   )
 }
