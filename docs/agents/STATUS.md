@@ -1,6 +1,6 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 06:36 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 06:58 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
 
 ## Studio experience: focused editor, project card menu, minimal assistant with a character (lane A, A11)
 
@@ -31,7 +31,7 @@ _Generated 26 Nov 2026 06:36 UTC by `docs/agents/sync_status.py` from the workfl
 | fix:1 | done | All seven findings are fixed on `cad/viewport` in `/home/user/ffdraft-view`, in five commits (not pushed), with one residual on trackpad momentum that only the founder's Mac can settle. Studio tests (392 in 52 files), t… |
 | verify:1 | done | 1 major, 3 minor. Three of the four findings are fixed and confirmed; the fourth (trackpad momentum) is fixed for the hand but the filter now stops almost none of the momentum. … |
 | fix:2 | done | I fixed the major momentum finding and the shader-recompile minor. Each edit now compiles no metal or gem shader programs; before it compiled two. The other two minors are only partly done. Everything is committed on ca… |
-| verify:2 | running or interrupted |  |
+| verify:2 | done | 3 major, 4 minor. The momentum fix is only partly done. On the page I tested at 16 ms, the momentum stopped after a flick is now 23 to 39 % (it was 0 to 8 %). It holds up when C… |
 
 ## Studio focus: settings readability, CAD editor, delete (lane A, A8)
 
@@ -53,7 +53,7 @@ _Generated 26 Nov 2026 06:36 UTC by `docs/agents/sync_status.py` from the workfl
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 9a2a194 Board and status: jobs resumed on the next model after the weekly limit
+Branch `claude/busy-bardeen-o482lo`, head: 4c01312 Status: studio reviews in, fixes under way; viewport second round being verified; looks being tuned
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -84,7 +84,7 @@ Branch `claude/busy-bardeen-o482lo`, head: 9a2a194 Board and status: jobs resume
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: 9a2a194 Board and status: jobs resumed on the next model after the weekly limit
+Branch `claude/busy-bardeen-o482lo`, head: 4c01312 Status: studio reviews in, fixes under way; viewport second round being verified; looks being tuned
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -126,7 +126,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: 9a2a194 Board and status: jobs resumed on the next model after the weekly limit
+Branch `claude/busy-bardeen-o482lo`, head: 4c01312 Status: studio reviews in, fixes under way; viewport second round being verified; looks being tuned
 
 | Agent | State | Outcome |
 |---|---|---|
