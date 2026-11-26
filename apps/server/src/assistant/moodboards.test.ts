@@ -21,7 +21,8 @@ async function picture(name: string, background: string) {
   form.set('file', new File([bytes], name, { type: 'image/png' }))
   const response = await api.request('/api/assets', { method: 'POST', body: form })
   expect(response.status).toBe(201)
-  return (await response.json()).id as string
+  const asset = (await response.json()) as { id: string }
+  return asset.id
 }
 
 it('gives a project turn the chosen moodboard notes and permitted images', async () => {

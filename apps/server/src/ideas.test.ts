@@ -113,11 +113,11 @@ describe('the design board', () => {
         { url: 'https://www.pinterest.com/pin/123/', title: 'Engraving' },
       ],
     })
-    const [first, retry] = await Promise.all(
-      [a, a].map(({ id }) =>
-        api.call('boards.importMoodboard', { pieceId: id, sourceBoardId: source.id }),
-      ),
-    )
+    const input = { pieceId: a.id, sourceBoardId: source.id }
+    const [first, retry] = await Promise.all([
+      api.call('boards.importMoodboard', input),
+      api.call('boards.importMoodboard', input),
+    ])
     const other = await api.call('boards.importMoodboard', {
       pieceId: b.id,
       sourceBoardId: source.id,
