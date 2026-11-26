@@ -115,36 +115,6 @@ const none = z.object({})
 /** A JSON merge patch (RFC 7396): objects merge, arrays and scalars replace, null deletes. */
 const mergePatch = z.record(z.string(), z.unknown())
 
-const referenceSaveItems = z
-  .array(
-    z
-      .object({
-        result: SearchResultSchema.optional(),
-        url: z.string().url().optional(),
-        assetId: id.optional(),
-        swatch: z.object({ hex: z.string().regex(/^#[0-9a-fA-F]{6}$/) }).optional(),
-        pieceId: id.optional(),
-        note: z.string().max(4000).optional(),
-        title: z.string().max(200).optional(),
-        /** For uploads and notes; a search result or URL can only be lowered to `viewOnly`. */
-        rights: z.enum(RIGHTS).optional(),
-      })
-      .refine(
-        (item) => {
-          const sources = [item.result, item.url, item.assetId, item.swatch].filter(
-            (x) => x !== undefined,
-          ).length
-          return sources === 1 || (sources === 0 && item.note !== undefined)
-        },
-        {
-          message:
-            'Give exactly one of result, url, assetId or swatch (a note may go with it), or a note alone',
-        },
-      ),
-  )
-  .min(1)
-  .max(50)
-
 /** Which model each assistant tier runs on; null = the tier's default. */
 const tierModels = z.object({
   power: z.enum(ASSISTANT_MODELS).nullable(),
@@ -332,6 +302,36 @@ export const SPEC_QUESTION_IDS: readonly string[] = [
   'metal',
   'budget',
 ]
+
+const referenceSaveItems = z
+  .array(
+    z
+      .object({
+        result: SearchResultSchema.optional(),
+        url: z.string().url().optional(),
+        assetId: id.optional(),
+        swatch: z.object({ hex: z.string().regex(/^#[0-9a-fA-F]{6}$/) }).optional(),
+        pieceId: id.optional(),
+        note: z.string().max(4000).optional(),
+        title: z.string().max(200).optional(),
+        /** For uploads and notes; a search result or URL can only be lowered to `viewOnly`. */
+        rights: z.enum(RIGHTS).optional(),
+      })
+      .refine(
+        (item) => {
+          const sources = [item.result, item.url, item.assetId, item.swatch].filter(
+            (x) => x !== undefined,
+          ).length
+          return sources === 1 || (sources === 0 && item.note !== undefined)
+        },
+        {
+          message:
+            'Give exactly one of result, url, assetId or swatch (a note may go with it), or a note alone',
+        },
+      ),
+  )
+  .min(1)
+  .max(50)
 
 export const commands = {
   // ── Session & organisation ────────────────────────────────────────────────────────────────
