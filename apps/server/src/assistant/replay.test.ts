@@ -269,7 +269,12 @@ const volatile = (t: string) =>
  * piece; a piece made through the API alone has none yet.
  */
 const UNBUILT_FACTS = 'metal caratTotal 0 metalMassG 0 stoneCount 0'
+const UTC_DATE = /^\d{4}-\d{2}-\d{2}$/
 const explained = (d: { recorded: string; live: string; after: string }) =>
+  // Only the Date field immediately after the studio context header uses the replay day.
+  (d.after === 'designer sent the message above nDate' &&
+    UTC_DATE.test(d.recorded) &&
+    UTC_DATE.test(d.live)) ||
   (volatile(d.recorded) && volatile(d.live)) ||
   (d.recorded === UNBUILT_FACTS && d.live === 'null') ||
   // The context names the person's own edits "by the designer" (it said "you", which, addressed
