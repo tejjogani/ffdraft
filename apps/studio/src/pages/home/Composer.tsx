@@ -12,6 +12,7 @@ import { Composer as SharedComposer } from '../../features/assistant/Composer'
 import { TierPicker } from '../../features/assistant/TierPicker'
 import { rpc } from '../../lib/rpc'
 import { useSession } from '../../lib/session'
+import { useCurrentView } from '../../lib/use-current-view'
 import { type Attachment, useAssistant } from '../../stores/assistant'
 
 const SUGGESTIONS = [
@@ -23,6 +24,7 @@ const SUGGESTIONS = [
 export function Composer() {
   const { capabilities } = useSession()
   const navigate = useNavigate()
+  const isCurrent = useCurrentView()
   const [prompt, setPrompt] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [tier, setTier] = useState<AssistantTier | null>(null)
@@ -42,6 +44,7 @@ export function Composer() {
           dropPageContext: true,
         })
         const out = await send(text.trim(), { threadId: null })
+        if (!isCurrent()) return
         useAssistant.setState({
           follow: { threadId: out.thread.id, path: window.location.pathname },
         })
@@ -51,7 +54,7 @@ export function Composer() {
           title: text.trim().slice(0, 80),
           brief: text.trim(),
         })
-        await navigate({ to: '/pieces/$id', params: { id: piece.id } })
+        if (isCurrent()) await navigate({ to: '/pieces/$id', params: { id: piece.id } })
       }
       setPrompt('')
       setAttachments([])

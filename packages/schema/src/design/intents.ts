@@ -25,7 +25,7 @@ import {
   snapToMelee,
 } from '../domain/gems'
 import { nodeTitle } from './describe'
-import type { Design, Op } from './design'
+import { type Design, diffPatch, evaluationOrder, mergePatch, type Op } from './design'
 import {
   clawReach,
   MOUNT,
@@ -222,6 +222,33 @@ interface Patched {
   patch: Record<string, unknown>
 }
 
+/** Why this design node cannot hold one actual sourced stone, if any. */
+export function stoneFitTargetError(design: Design, nodeId: string): string | undefined {
+  const gem = design.nodes[nodeId]
+  if (gem?.kind !== 'gem') return 'Select a single gemstone to fit a sourced stone.'
+  const order = evaluationOrder(design)
+  if (!order) return 'Fix the circular references in the design before fitting a sourced stone.'
+
+  // A group carries its children's geometry, so patterning or scaling that group affects the gem.
+  const carriers = new Set([nodeId])
+  const grouped = new Set<string>()
+  for (const id of order) {
+    const node = design.nodes[id]!
+    if (node.kind === 'pattern' && node.sources.some((source) => carriers.has(source)))
+      return `“${nodeTitle(gem)}” is repeated by a pattern. Give each stone its own gemstone node to fit separately.`
+    if (node.kind === 'group') {
+      for (const child of node.children) {
+        if (!carriers.has(child)) continue
+        if (grouped.has(child)) return `“${nodeTitle(gem)}” is repeated in multiple group entries.`
+        grouped.add(child)
+        carriers.add(id)
+      }
+    }
+    if (carriers.has(id) && node.transform && node.transform.scale !== 1)
+      return `Set the scale of “${nodeTitle(node)}” to 1 before fitting the measured stone.`
+  }
+}
+
 /**
  * Replace or resize a stone (or every stone of a row, halo or pavé field) and let the mount
  * follow. Returns ordinary ops, a history label, notes for the designer, and warnings (each
@@ -255,6 +282,11 @@ function plan(
   if (!first) throw new IntentError(`No node "${target.nodeId}"`)
   if (!isStoneNode(first))
     throw new IntentError(`“${nodeTitle(first)}” (${first.kind}) carries no stones to replace`)
+  const fit = change.fit
+  if (fit) {
+    const error = stoneFitTargetError(design, first.id)
+    if (error) throw new IntentError(error)
+  }
 
   const warnings: IntentWarning[] = []
   const notes: string[] = []
@@ -287,6 +319,23 @@ function plan(
           .map((id) => design.nodes[id]!)
           .filter((n): n is StoneNode => isStoneNode(n) && alike(n))
       : [first]
+  if (fit) {
+    if (target.instance !== undefined && target.instance !== 0)
+      throw new IntentError(`“${nodeTitle(first)}” has no stone at index ${target.instance}`)
+    if (targets.length !== 1)
+      throw new IntentError('Select one gemstone to fit an individually sourced stone')
+    const assigned = Object.values(design.nodes).find(
+      (n) =>
+        n.kind === 'gem' &&
+        n.id !== first.id &&
+        n.sourcing?.provider === fit.provider &&
+        n.sourcing.sku === fit.sku,
+    )
+    if (assigned)
+      throw new IntentError(
+        `${fit.provider} ${fit.sku} is already fitted to “${nodeTitle(assigned)}”`,
+      )
+  }
   if (target.scope === 'alike' && targets.length > 1)
     notes.push(
       `Changed ${targets.length} alike: ${targets.map((n) => `“${nodeTitle(n)}”`).join(', ')}`,
@@ -419,12 +468,12 @@ function plan(
         alike(n),
     )
     if (partner) {
-      const twin = plan(design, { nodeId: partner.id }, changeInput, false)
+      const twin = change.fit ? undefined : plan(design, { nodeId: partner.id }, changeInput, false)
       warnings.push({
         code: 'side.pair',
         nodeId: first.id,
         message: `Only “${nodeTitle(first)}” changes; its partner “${nodeTitle(partner)}” keeps the old stone, so the two sides no longer match.`,
-        ...(twin.ops.length
+        ...(twin?.ops.length
           ? {
               suggestion: {
                 label: `Make the same change to “${nodeTitle(partner)}”`,
@@ -560,19 +609,7 @@ function applyPatches(design: Design, ops: readonly Op[]): Design {
   const nodes = { ...design.nodes }
   for (const op of ops) {
     if (op.t !== 'update') continue
-    const n = { ...(nodes[op.id] as Record<string, unknown>) }
-    for (const [k, v] of Object.entries(op.patch)) {
-      if (v === null) delete n[k]
-      else if (v && typeof v === 'object' && !Array.isArray(v)) {
-        const inner = { ...(n[k] as Record<string, unknown>) }
-        for (const [ik, iv] of Object.entries(v)) {
-          if (iv === null) delete inner[ik]
-          else inner[ik] = iv
-        }
-        n[k] = inner
-      } else n[k] = v
-    }
-    nodes[op.id] = n as unknown as Node
+    nodes[op.id] = mergePatch(nodes[op.id], op.patch) as Node
   }
   return { ...design, nodes }
 }
@@ -614,15 +651,17 @@ function gemPatch(
   const cutRange = GEM_CUTS[cut].lw
 
   if (change.fit?.measured) {
-    // Fit the mount to a real stone: the link with its measured size, and nominal fields that
-    // agree with it, so the inspector, the stone list and a later unlink all say the same.
+    // Fit with the exact measurements. Keep the nominal fallback inside the gem field ranges.
     const m = change.fit.measured
     const width = Math.min(m.length, m.width)
     const ratio = Math.max(m.length, m.width) / width
-    patch.sourcing = change.fit
+    // An incoming source is a full record. Encode omitted fields as deletes in the merge patch.
+    const source = Object.fromEntries(Object.entries(change.fit).filter(([, v]) => v !== undefined))
+    const sourcing = diffPatch(node.sourcing ?? {}, source)
+    if (Object.keys(sourcing).length) patch.sourcing = sourcing
     patch.cut = cut
-    patch.width = mm2(width)
-    patch.lw = cut === 'round' ? null : Number(ratio.toFixed(3))
+    patch.width = Math.max(0.6, mm2(width))
+    patch.lw = cut === 'round' ? null : Math.min(5, Number(ratio.toFixed(3)))
     if (ratio < cutRange.min - 0.005 || ratio > cutRange.max + 0.005)
       warnings.push({
         code: 'stone.ratio',
@@ -703,12 +742,6 @@ function fieldPatch(
   if (change.stone && change.stone !== node.stone) patch.stone = change.stone
   const grade = qualityPatch(node.quality, change.quality)
   if (grade) patch.quality = grade
-  if (change.fit)
-    warnings.push({
-      code: 'fit.field',
-      nodeId: node.id,
-      message: `“${nodeTitle(node)}” holds many stones bought as a parcel: fit one real stone with a single stone, not a field.`,
-    })
   const size = fieldSize(node)
   const cut = change.cut ?? node.cut
   const stone = change.stone ?? node.stone

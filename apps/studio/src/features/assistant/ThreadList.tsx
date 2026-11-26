@@ -5,8 +5,8 @@ import { relativeTime } from '../../lib/format'
 import { useRpc } from '../../lib/query'
 import { useAssistant } from '../../stores/assistant'
 
-export function ThreadList() {
-  const threads = useRpc('threads.list', { limit: 50 })
+export function ThreadList({ pieceId }: { pieceId?: string | null }) {
+  const threads = useRpc('threads.list', { ...(pieceId ? { pieceId } : {}), limit: 50 })
   const active = useAssistant((s) => s.activeThreadId)
   const openThread = useAssistant((s) => s.openThread)
   if (threads.isPending)

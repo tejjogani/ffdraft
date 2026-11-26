@@ -21,14 +21,14 @@ import {
   Skeleton,
   toast,
 } from '@pave/ui'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { Grid2x2, Hammer, LayoutTemplate, Link2, Unlink } from 'lucide-react'
-import { useState } from 'react'
 import { SectionTitle } from '../../components/Page'
 import { SpecCard } from '../../components/SpecCard'
 import { DesignBoard } from '../../features/ideate'
 import { invalidateFor, queryClient, useRpc, useRpcMutation } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
+import { useCurrentView } from '../../lib/use-current-view'
 import { Brief } from './PieceOverview'
 
 /** The piece's boards, the design board first (the oldest linked, as the server picks it). */
@@ -38,7 +38,8 @@ const ordered = (boards: Board[]) =>
 export function PieceDirections({ pieceId }: { pieceId: string }) {
   const piece = useRpc('pieces.get', { id: pieceId })
   const linked = useRpc('boards.list', { pieceId })
-  const [pick, setPick] = useState<string | null>(null)
+  const { board: pick } = useSearch({ from: '/pieces/$id' })
+  const navigate = useNavigate()
   if (!piece.data || !linked.data)
     return (
       <div className="flex flex-col gap-4">
@@ -59,11 +60,17 @@ export function PieceDirections({ pieceId }: { pieceId: string }) {
             aria-label="Linked boards"
             className="mb-3"
             value={board!.id}
-            onChange={setPick}
+            onChange={(board) =>
+              void navigate({
+                to: '/pieces/$id/directions',
+                params: { id: pieceId },
+                search: { board },
+              })
+            }
             options={boards.map((b) => ({ value: b.id, label: b.title }))}
           />
         )}
-        {board ? <LinkedBoard board={board} /> : <NoBoard piece={p} />}
+        {board ? <LinkedBoard key={board.id} board={board} /> : <NoBoard piece={p} />}
       </section>
       <section>
         <SectionTitle>Brief</SectionTitle>
@@ -111,6 +118,7 @@ function NoBoard({ piece }: { piece: Piece }) {
 /** Start CAD (blank or from a template) and the board's link to this project. */
 function StageActions({ piece, board }: { piece: Piece; board: Board | null }) {
   const navigate = useNavigate()
+  const isCurrent = useCurrentView()
   const others = useRpc('boards.list', {})
   const unlinked = (others.data ?? []).filter((b) => !b.pieceId)
   const toCad = () => void navigate({ to: '/pieces/$id/design', params: { id: piece.id } })
@@ -124,7 +132,7 @@ function StageActions({ piece, board }: { piece: Piece; board: Board | null }) {
       await rpc.call('pieces.setSpec', { id: piece.id, spec: t.spec })
       await rpc.call('pieces.buildFromSpec', { id: piece.id })
       invalidateFor(queryClient, 'design')
-      toCad()
+      if (isCurrent()) toCad()
     } catch (e) {
       toast.error('Couldn’t start from that template', e instanceof Error ? e.message : undefined)
     }

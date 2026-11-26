@@ -1,50 +1,33 @@
-/**
- * A project's three stages as sections, each with what it holds and what it has cost: the
- * design board (Claude and image generations), the CAD (Claude, and Rhino/STEP exports counted
- * against the plan) and the renders (Claude, and Blender renders counted against the plan), and
- * the project's total. Also the small stage-progress marks and cost cell the lists use.
- */
-import {
-  JOB_STAGES,
-  type JobStage,
-  type Piece,
-  type PieceSummary,
-  type ProjectCost,
-} from '@pave/schema'
-import { cn, Skeleton } from '@pave/ui'
+/** Project tools and the cost and contents of this piece. */
+import { JOB_STAGES, type Piece, type PieceSummary, type ProjectCost } from '@pave/schema'
+import { cn } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
-import { Box, Grid2x2, ImageIcon } from 'lucide-react'
-import { STAGE_PATH } from '../assistant/jobs/status'
 import { useRpc } from '../../lib/query'
+import { PROJECT_AREAS, type ProjectArea } from './areas'
 import { costLines, holds, STAGE_TITLE, stageStates, stageUsd, usd } from './cost'
-
-const ICON = { design: Grid2x2, cad: Box, render: ImageIcon } as const
 
 export function ProjectSections({ piece }: { piece: Piece }) {
   const summary = useRpc('projects.summary', { pieceIds: [piece.id] })
-  const cost = summary.data?.projects[0]
+  const cost = summary.data?.projects.find((p) => p.pieceId === piece.id)
   return (
     <section aria-label="Project" className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-sm font-medium">Project</h2>
+        <h2 className="text-sm font-medium">Project tools</h2>
         <p className="text-sm text-fg-muted">
           Total spent{' '}
           <span className="font-mono text-fg tabular" data-project-total>
-            {cost ? usd(cost.totalUsd) : '…'}
+            {cost ? usd(cost.totalUsd) : summary.isError ? 'Unavailable' : '…'}
           </span>
         </p>
       </div>
-      <ul className="grid gap-3 sm:grid-cols-3">
-        {JOB_STAGES.map((stage) => (
-          <li key={stage}>
-            {cost ? (
-              <StageSection piece={piece} stage={stage} cost={cost} />
-            ) : (
-              <Skeleton className="h-36 rounded-lg" />
-            )}
-          </li>
+      <nav
+        aria-label="Project tools"
+        className="flex flex-col divide-y divide-line rounded-lg border border-line"
+      >
+        {PROJECT_AREAS.map((area) => (
+          <AreaCard key={area.to} piece={piece} area={area} cost={cost} />
         ))}
-      </ul>
+      </nav>
       {cost && cost.otherUsd > 0 && (
         <p className="text-xs text-fg-subtle">
           Plus {usd(cost.otherUsd)} of Claude asked about this project from outside its stages
@@ -55,39 +38,33 @@ export function ProjectSections({ piece }: { piece: Piece }) {
   )
 }
 
-function StageSection({
-  piece,
-  stage,
-  cost,
-}: {
-  piece: Piece
-  stage: JobStage
-  cost: ProjectCost
-}) {
-  const c = cost[stage]
-  const Icon = ICON[stage]
+function AreaCard({ piece, area, cost }: { piece: Piece; area: ProjectArea; cost?: ProjectCost }) {
+  const stage = 'stage' in area ? area.stage : null
+  const c = stage && cost ? cost[stage] : null
+  const Icon = area.icon
   return (
     <Link
-      to={STAGE_PATH[stage]}
+      to={area.to}
       params={{ id: piece.id }}
-      aria-label={`${STAGE_TITLE[stage]}: ${holds(stage, c)}, ${usd(stageUsd(c))} spent`}
-      data-stage-section={stage}
-      className="flex h-full flex-col gap-3 rounded-lg bg-bg p-4 shadow-[0_0_0_1px_var(--line)] hover:shadow-[0_0_0_1px_var(--line-strong)]"
+      aria-label={area.title}
+      data-stage-section={stage ?? undefined}
+      className="flex min-h-12 items-center gap-3 px-4 py-2.5 first:rounded-t-lg last:rounded-b-lg hover:bg-bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2"
     >
-      <div className="flex items-center gap-2">
-        <Icon className="size-4 text-fg-muted" aria-hidden />
-        <span className="text-sm font-medium">{STAGE_TITLE[stage]}</span>
-        <span className="ml-auto font-mono text-sm tabular">{usd(stageUsd(c))}</span>
-      </div>
-      <p className="text-sm text-fg-muted">{holds(stage, c)}</p>
-      <dl className="mt-auto grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-xs">
-        {costLines(stage, c).map((l) => (
-          <div key={l.label} className="contents">
-            <dt className="text-fg-subtle">{l.label}</dt>
-            <dd className="font-mono tabular">{l.value}</dd>
-          </div>
-        ))}
-      </dl>
+      <Icon className="size-4 shrink-0 text-fg-muted" aria-hidden />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-medium">{area.title}</span>
+        {stage && c && <span className="block text-xs text-fg-subtle">{holds(stage, c)}</span>}
+      </span>
+      {stage && c && (
+        <span className="text-right">
+          <span className="font-mono text-xs tabular">{usd(stageUsd(c))}</span>
+          <span className="hidden text-xs text-fg-subtle sm:block">
+            {costLines(stage, c)
+              .map((line) => line.label + ' ' + line.value)
+              .join(' · ')}
+          </span>
+        </span>
+      )}
     </Link>
   )
 }

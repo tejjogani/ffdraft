@@ -23,8 +23,8 @@ export function PieceOverview({ pieceId }: { pieceId: string }) {
     )
   return (
     <div className="flex flex-col gap-10">
-      <Brief piece={piece.data} />
       <ProjectSections piece={piece.data} />
+      <Brief piece={piece.data} />
       <SpecCard piece={piece.data} />
       <Moodboards pieceId={pieceId} />
       <LatestRenders pieceId={pieceId} />
@@ -99,8 +99,9 @@ export function Moodboards({ pieceId }: { pieceId: string }) {
           {boards.data.map((b) => (
             <Link
               key={b.id}
-              to="/ideas/$boardId"
-              params={{ boardId: b.id }}
+              to="/pieces/$id/directions"
+              params={{ id: pieceId }}
+              search={{ board: b.id }}
               className="flex items-center gap-3 rounded-lg p-2 shadow-[0_0_0_1px_var(--line)] transition-shadow hover:shadow-[0_0_0_1px_var(--line-strong)]"
             >
               <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-bg-muted">

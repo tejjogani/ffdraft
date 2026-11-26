@@ -14,7 +14,7 @@ import {
   MenuSub,
   useTheme,
 } from '@pave/ui'
-import { Link, type LinkProps, useNavigate } from '@tanstack/react-router'
+import { Link, type LinkProps, useMatch, useMatchRoute, useNavigate } from '@tanstack/react-router'
 import {
   ArrowUpRight,
   BookOpen,
@@ -46,6 +46,7 @@ import {
 } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
 import { AskAiSection } from '../features/assistant/AskAiSection'
+import { PROJECT_AREAS, PROJECT_MENU } from '../features/projects/areas'
 import { runCommand } from '../lib/commands'
 import { usd } from '../lib/format'
 import { useRpc, useRpcMutation } from '../lib/query'
@@ -98,6 +99,12 @@ function ActionRow({
 
 /** The frosted sidebar: workspace, quick actions, navigation, collections, library & settings. */
 export function Sidebar({ drawer = false }: { drawer?: boolean }) {
+  const project = useMatch({ from: '/pieces/$id', shouldThrow: false })
+  const pieceId = project?.params.id
+  const matchRoute = useMatchRoute()
+  const inTool =
+    pieceId && PROJECT_AREAS.some((area) => matchRoute({ to: area.to, params: { id: pieceId } }))
+  const piece = useRpc('pieces.get', { id: pieceId ?? '' }, { enabled: !!pieceId })
   const toggle = useUI((s) => s.toggleSidebar)
   return (
     <aside
@@ -137,22 +144,46 @@ export function Sidebar({ drawer = false }: { drawer?: boolean }) {
         <NavLink to="/" icon={Home} exact>
           Home
         </NavLink>
-        <NavLink to="/ideas" icon={Lightbulb}>
-          Ideas
-        </NavLink>
         <NavLink to="/pieces" icon={Gem}>
           Projects
         </NavLink>
-        <NavLink to="/renders" icon={Image}>
-          Renders
-        </NavLink>
-        <NavLink to="/models" icon={User}>
-          Models
-        </NavLink>
-        <NavLink to="/sourcing" icon={Truck}>
-          Sourcing
-        </NavLink>
+        {!pieceId && (
+          <>
+            <NavLink to="/ideas" icon={Lightbulb}>
+              Ideas
+            </NavLink>
+            <NavLink to="/renders" icon={Image}>
+              Renders
+            </NavLink>
+            <NavLink to="/models" icon={User}>
+              Models
+            </NavLink>
+            <NavLink to="/sourcing" icon={Truck}>
+              Sourcing
+            </NavLink>
+          </>
+        )}
       </nav>
+      {inTool && pieceId && piece.data && (
+        <nav
+          aria-label="Tools in this project"
+          className="mt-4 flex min-h-0 shrink-0 flex-col gap-px px-2"
+        >
+          <Link
+            to={PROJECT_MENU}
+            params={{ id: pieceId }}
+            className="mb-1 truncate px-2 py-1 text-xs font-medium text-fg-muted hover:text-fg"
+          >
+            {piece.data.title || 'Untitled'}
+          </Link>
+          {PROJECT_AREAS.map(({ to, icon: Icon, title }) => (
+            <Link key={to} to={to} params={{ id: pieceId }} search={{}} className={row}>
+              <Icon aria-hidden className="size-4 text-fg-subtle" />
+              <span className="truncate">{title}</span>
+            </Link>
+          ))}
+        </nav>
+      )}
 
       <Collections />
 

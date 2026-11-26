@@ -154,12 +154,23 @@ function replayed(change: StoredChange) {
 }
 
 /** The stone intent on a design, with its errors as a bad request. */
-function planStone(design: Design, input: Parameters<typeof replaceStone>): IntentResult {
+function planStone(...args: Parameters<typeof replaceStone>): IntentResult {
   try {
-    return replaceStone(design, input[1], input[2])
+    return replaceStone(...args)
   } catch (err) {
     if (err instanceof IntentError) throw badRequest(err.message)
     throw err
+  }
+}
+
+/** A concurrent fit made the transaction's replanned edit unnecessary. */
+class UnchangedStone extends Error {
+  constructor(
+    readonly intent: IntentResult,
+    readonly design: Design,
+    readonly version: number,
+  ) {
+    super('The stone already matches the requested change')
   }
 }
 
@@ -247,7 +258,6 @@ export const design: HandlerGroup<'design'> = {
   // replay) and commits it as one attributed change.
   'design.replaceStone': async (ctx, input) => {
     const piece = await getPiece(ctx, input.pieceId)
-    const args: Parameters<typeof replaceStone> = [piece.design, input.target, input.change]
     const geometry = ctx.services.isConfigured('geometry') ? ctx.services.get('geometry') : null
     const evaluate = (design: Design) =>
       geometry
@@ -262,49 +272,66 @@ export const design: HandlerGroup<'design'> = {
     // answer "not applied", so look the change up first.
     if (!input.dryRun && changeId) {
       const existing = await ctx.repo.changes.first(eq(t.designChange.id, changeId))
-      if (existing && existing.pieceId === piece.id) return replayed(toStoredChange(existing))
+      if (existing) {
+        if (existing.pieceId !== piece.id) throw conflict(`Change id "${changeId}" is already used`)
+        return replayed(toStoredChange(existing))
+      }
     }
-    const preview = planStone(piece.design, args)
+    // A no-op can bypass the transaction, so check its base version here too.
+    if (!input.dryRun && input.baseVersion !== undefined && input.baseVersion !== piece.version)
+      throw conflict(`The piece is at version ${piece.version}, not ${input.baseVersion}`, {
+        currentVersion: piece.version,
+      })
+    const preview = planStone(piece.design, input.target, input.change)
     const outcome = (intent: IntentResult) => ({
       ops: intent.ops,
       label: intent.label,
       notes: intent.notes,
       warnings: intent.warnings,
     })
-    if (input.dryRun || preview.ops.length === 0) {
+    const inspect = async (intent: IntentResult, design: Design, version: number) => {
       let next: Design
       try {
-        next = applyOps(piece.design, preview.ops).design
+        next = applyOps(design, intent.ops).design
       } catch (err) {
         if (!(err instanceof OpError)) throw err
         throw new AppError('bad_request', err.message, { op: err.op })
       }
-      const before = await evaluate(piece.design)
-      const after = preview.ops.length ? await evaluate(next) : before
+      const before = await evaluate(design)
+      const after = intent.ops.length ? await evaluate(next) : before
       return {
         applied: false,
-        version: piece.version,
-        ...outcome(preview),
+        version,
+        ...outcome(intent),
         ...compareFacts(before, after),
       }
     }
+    if (input.dryRun || preview.ops.length === 0)
+      return inspect(preview, piece.design, piece.version)
     // Set by the plan inside the commit (a holder object, as TypeScript does not follow
     // assignments made in a callback).
     const planned: { intent: IntentResult | null; base: Design } = {
       intent: null,
       base: piece.design,
     }
-    const { version, change } = await commitChange(ctx, {
+    const result = await commitChange(ctx, {
       pieceId: input.pieceId,
       baseVersion: input.baseVersion,
       changeId,
-      plan: async (_tx, current) => {
-        const intent = planStone(current, [current, input.target, input.change])
+      plan: async (_tx, current, version) => {
+        const intent = planStone(current, input.target, input.change)
+        if (!intent.ops.length) throw new UnchangedStone(intent, current, version)
         planned.intent = intent
         planned.base = current
         return { ops: intent.ops, label: intent.label }
       },
+    }).catch((err: unknown) => {
+      if (err instanceof UnchangedStone) return err
+      throw err
     })
+    if (result instanceof UnchangedStone)
+      return inspect(result.intent, result.design, result.version)
+    const { version, change } = result
     const committed = planned.intent
     const base = planned.base
     // The same change id was committed between the lookup above and this commit (two retries
