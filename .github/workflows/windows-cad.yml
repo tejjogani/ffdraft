@@ -1,0 +1,123 @@
+name: Windows CAD smoke
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/windows-cad.yml
+      - install.ps1
+      - scripts/install.mjs
+      - apps/server/src/engines/**
+      - apps/studio/e2e/**
+      - apps/studio/src/features/cad/**
+      - apps/studio/src/features/render/**
+      - packages/kernel/**
+      - packages/pave-python/**
+      - packages/schema/**
+      - pnpm-lock.yaml
+
+permissions:
+  contents: read
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22.23.1
+          architecture: x64
+          cache: pnpm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: 3.13.2
+          architecture: x64
+      - name: Install and start Pavé from PowerShell
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          node -e 'if (process.platform !== "win32" || process.arch !== "x64") process.exit(1); console.log(process.platform, process.arch, process.version)'
+          $env:HOST = '127.0.0.1'
+          $env:PORT = '18976'
+          $env:PAVE_AUTH = 'local'
+          $env:PAVE_SEED = 'false'
+          $env:PAVE_DATA_DIR = Join-Path $env:RUNNER_TEMP 'Pave Windows data'
+          $base = "http://127.0.0.1:$env:PORT"
+          $logs = Join-Path $env:RUNNER_TEMP 'pave-windows-logs'
+          New-Item -ItemType Directory -Path $logs | Out-Null
+          $stdout = Join-Path $logs 'install.stdout.log'
+          $stderr = Join-Path $logs 'install.stderr.log'
+          $launcher = Start-Process -FilePath pwsh -ArgumentList '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', './install.ps1', '--start' -WorkingDirectory $PWD -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+          "PAVE_WINDOWS_PID=$($launcher.Id)" >> $env:GITHUB_ENV
+          "PAVE_TEST_URL=$base" >> $env:GITHUB_ENV
+          $deadline = (Get-Date).AddMinutes(4)
+          $ready = $false
+          try {
+            while ((Get-Date) -lt $deadline -and -not $launcher.HasExited) {
+              try {
+                if ((Invoke-WebRequest "$base/health" -TimeoutSec 3).StatusCode -eq 200) {
+                  $ready = $true
+                  break
+                }
+              } catch {
+                # The installer is still running, so the application may not be listening yet.
+              }
+              Start-Sleep -Seconds 1
+            }
+          } finally {
+            Get-Content $stdout
+            Get-Content $stderr
+          }
+          if (-not $ready -or -not (Select-String -Path $stdout -SimpleMatch 'Pavé is ready.')) {
+            throw 'The Windows installer did not complete and serve Pavé with --start.'
+          }
+          $studio = Invoke-WebRequest $base
+          if ($studio.Content -notmatch '<div id="root"') { throw 'The Windows server did not serve Studio.' }
+      - name: Verify Python CAD against the running Windows server
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          python -m pip install -e ./packages/pave-python
+          python -m unittest discover -s packages/pave-python/tests -v
+      - name: Install a pinned Playwright browser
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $playwright = Join-Path $env:RUNNER_TEMP 'pave-playwright'
+          npm install --prefix $playwright --no-save playwright@1.63.0
+          $modulePath = Join-Path $playwright 'node_modules'
+          node (Join-Path $modulePath 'playwright/cli.js') install chromium
+          "NODE_PATH=$modulePath" >> $env:GITHUB_ENV
+      - name: Verify the CAD guide and manual editing in Chromium
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          pnpm exec tsx apps/studio/e2e/cad-guide.ts $env:PAVE_TEST_URL
+          pnpm exec tsx apps/studio/e2e/manual-cad.ts $env:PAVE_TEST_URL
+      - name: Install managed Blender through Studio
+        run: pnpm exec tsx apps/studio/e2e/render-engine-setup.ts $env:PAVE_TEST_URL "$env:RUNNER_TEMP/pave-windows-logs"
+      - name: Run the installed Blender executable
+        run: |
+          $engine = Invoke-RestMethod -Method Post -Uri "$env:PAVE_TEST_URL/api/rpc/renders.engine" -ContentType 'application/json' -Body '{}'
+          if (-not $engine.available -or (Split-Path -Leaf $engine.path) -ne 'blender.exe') {
+            throw 'Pavé did not select the managed Windows Blender executable.'
+          }
+          $version = & $engine.path --version
+          $version | Select-Object -First 1 | Write-Output
+          if ($LASTEXITCODE -ne 0 -or $version[0] -notmatch '^Blender 5\.3\.') {
+            throw 'The managed Blender executable failed its version check.'
+          }
+      - name: Stop the disposable Pavé instance
+        if: always()
+        run: |
+          if ($env:PAVE_WINDOWS_PID -and (Get-Process -Id $env:PAVE_WINDOWS_PID -ErrorAction SilentlyContinue)) {
+            taskkill.exe /pid $env:PAVE_WINDOWS_PID /t /f
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-cad-smoke-logs
+          path: ${{ runner.temp }}/pave-windows-logs
+          if-no-files-found: ignore
