@@ -47,6 +47,8 @@ export interface SweepSpec {
   closed: boolean
   /** Section indices where the surface is creased across the sweep (corners of an outline). */
   kinks?: readonly number[]
+  /** Optional cubic Bézier handles, one pair per two-section run between kinks. */
+  bezierHandles?: readonly (readonly [Float64Array, Float64Array])[]
 }
 
 /** Places a 2D profile loop on a frame's xy-plane; x and y of the loop follow the frame's axes. */
@@ -87,6 +89,7 @@ interface Piece {
 
 interface Net {
   sections: readonly Float64Array[]
+  profileRows: readonly Float64Array[]
   closed: boolean
   segments: number
   /** Numbers per section: 9 × segments. */
@@ -126,17 +129,33 @@ function buildNet(spec: SweepSpec): Net {
       runs.push(Array.from({ length: breaks[i + 1]! - breaks[i]! + 1 }, (_, k) => breaks[i]! + k))
   }
 
-  const pieces = runs.map((stations): Piece => {
+  const handles = spec.bezierHandles
+  if (handles && (handles.length !== runs.length || runs.some((run) => run.length !== 2)))
+    throw new Error('Bézier handles need one pair for each two-section sweep run')
+  const pieces = runs.map((stations, i): Piece => {
     const periodic = closed && kinks.length === 0
     const points = new Float64Array(stations.length * dim)
     stations.forEach((index, row) => {
       points.set(sections[index]!, row * dim)
     })
     const spline = cubicSpline(chordParameters(points, dim, periodic), periodic)
+    const pair = handles?.[i]
+    if (pair) {
+      const [a, b] = pair
+      if (a.length !== dim || b.length !== dim)
+        throw new Error('Bézier handles differ in segment count')
+      const poles = new Float64Array(4 * dim)
+      poles.set(sections[stations[0]!]!, 0)
+      poles.set(a, dim)
+      poles.set(b, 2 * dim)
+      poles.set(sections[stations[1]!]!, 3 * dim)
+      return { stations, spline, poles }
+    }
     return { stations, spline, poles: spline.solve(points, dim) }
   })
   return {
     sections,
+    profileRows: handles ? [...sections, ...handles.flat()] : sections,
     closed,
     segments: dim / 9,
     dim,
@@ -214,7 +233,7 @@ function rowDeviation(
 /** How many samples each profile segment needs, from the flatness of its control polygon. */
 function segmentCounts(net: Net, quality: Quality, refine: number): number[] {
   const counts = new Array<number>(net.segments).fill(refine)
-  for (const section of net.sections)
+  for (const section of net.profileRows)
     for (let s = 0; s < net.segments; s++) {
       const p = (k: number, c: number) => section[((s * 3 + k) % (net.segments * 3)) * 3 + c]!
       let sag = 0
