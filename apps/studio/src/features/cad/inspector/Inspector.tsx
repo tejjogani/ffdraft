@@ -5,6 +5,7 @@
 import type { Evaluation } from '@pave/kernel'
 import { type Design, nodeTitle } from '@pave/schema'
 import { Button, Chip, cn, ScrollArea, Switch } from '@pave/ui'
+import { Link } from '@tanstack/react-router'
 import { ArrowUpRight, PencilRuler, Scale, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { useEffect, useMemo } from 'react'
 import { runCommand } from '../../../lib/commands'
@@ -18,6 +19,7 @@ import { FieldControl } from './FieldControl'
 import { inspectorModel } from './model'
 
 export interface InspectorProps {
+  pieceId: string
   design: Design
   session: DesignSession | null
   evaluation: Evaluation | null
@@ -30,6 +32,7 @@ export interface InspectorProps {
 }
 
 export function Inspector({
+  pieceId,
   design,
   session,
   evaluation,
@@ -101,6 +104,14 @@ export function Inspector({
             ) : (
               <p className="mt-1 break-all text-fg">{listed.sku}</p>
             )}
+            <Link
+              to="/pieces/$id/sourcing"
+              params={{ id: pieceId }}
+              hash={`stone-${node.id}`}
+              className="mt-2 block font-medium underline underline-offset-2"
+            >
+              Change fitted diamond
+            </Link>
           </div>
         )}
         {/* Keyed by feature: another feature's form opens at its top, not where this one was scrolled. */}

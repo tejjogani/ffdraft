@@ -11,10 +11,12 @@ import type { Ctx } from '../context'
 import * as t from '../db/schema'
 import { getBoard, getPiece } from '../lookups'
 import { planStatus } from '../plans'
+import { importedReferences } from '../references/moodboards'
 import { pinnedRows } from '../references/pins'
 import { viewOnlyAssets } from '../references/rights'
 import { serviceContext } from '../service-context'
 import { modelImage } from './images'
+import { intakeContext } from './intake'
 
 type Send = CommandParsedInput<'threads.send'>
 type Piece = Awaited<ReturnType<typeof getPiece>>
@@ -36,6 +38,7 @@ export interface TurnMedia {
   withheld: string[]
   /** The open piece's pins, and what the model can see of each. */
   pins: ContextPin[]
+  moodboard?: NonNullable<TurnContext['moodboard']> & { board: NonNullable<TurnContext['board']> }
 }
 
 /**
@@ -75,6 +78,73 @@ async function pinsForTurn(
   }
 }
 
+/** Resolve an explicit board only within this project. A stale selection falls back to its design board. */
+async function activeDesignBoard(ctx: Ctx, pieceId: string, boardId: string | undefined) {
+  const owned = and(eq(t.board.pieceId, pieceId), isNull(t.board.pinsFor))!
+  const selected = boardId
+    ? await ctx.repo.boards.first(and(owned, eq(t.board.id, boardId))!)
+    : null
+  return selected ?? (await ctx.repo.boards.first(owned, asc(t.board.createdAt)))
+}
+
+async function addMoodboardContext(
+  ctx: Ctx,
+  input: Send,
+  run: RunRef,
+  content: Record<string, unknown>[],
+  imagesLeft: number,
+): Promise<TurnMedia['moodboard']> {
+  if (!run.pieceId) return
+  const board = await activeDesignBoard(ctx, run.pieceId, input.context.boardId)
+  if (!board) return
+  const { rows, count } = await importedReferences(ctx, board.id, input.referenceIds)
+  if (!count) return
+  const assets = rows.flatMap((r) => (r.assetId ? [r.assetId] : []))
+  const blocked = await viewOnlyAssets(ctx, assets)
+  const attached = new Set(input.attachments)
+  const references: NonNullable<TurnContext['moodboard']>['references'] = []
+  for (const [i, r] of rows.entries()) {
+    const imageAsset = r.type === 'image' || r.type === 'generated' ? r.assetId : null
+    const privateImage = r.rights === 'viewOnly' || (imageAsset && blocked.has(imageAsset))
+    let picture: ContextPin['picture'] = privateImage
+      ? 'viewOnly'
+      : imageAsset
+        ? 'available'
+        : 'none'
+    if (imageAsset && !privateImage && !attached.has(imageAsset) && imagesLeft > 0) {
+      const { asset, bytes } = await readAsset(ctx, imageAsset)
+      const image = await modelImage(bytes, asset.mime)
+      if (image) {
+        content.push(
+          { type: 'text', text: pinLabel(i + 1, r.title, r.id, true) },
+          {
+            type: 'image',
+            source: { type: 'base64', media_type: image.mediaType, data: image.data },
+          },
+        )
+        attached.add(imageAsset)
+        imagesLeft--
+        picture = 'above'
+      }
+    }
+    references.push({
+      id: r.id,
+      title: r.title,
+      note: r.note,
+      url: r.source?.url ?? null,
+      provider: r.source?.provider ?? null,
+      credit: r.source?.credit ?? null,
+      license: r.source?.license ?? null,
+      sourceBoardId: r.importedFrom!.sourceBoardId,
+      sourceReferenceId: r.importedFrom!.sourceReferenceId,
+      assetId: privateImage ? null : imageAsset,
+      plane: null,
+      picture,
+    })
+  }
+  return { board: { id: board.id, title: board.title }, references, count }
+}
+
 /**
  * The user message: pinned pictures first, each after its label, then the designer's photos
  * (as Claude reads best), then the text. View-only pictures are never among them.
@@ -88,7 +158,10 @@ export async function userContent(
   const media: TurnMedia = { skipped: [], withheld: [], pins: [] }
   const pins = await pinsForTurn(ctx, run)
   const shown = new Set<string>()
+  const attached = new Set(input.attachments)
   for (const r of pins.send) {
+    // A selected design can also be pinned for the CAD job. Send the attachment once.
+    if (attached.has(r.assetId!)) continue
     const { asset, bytes } = await readAsset(ctx, r.assetId!)
     const image = await modelImage(bytes, asset.mime)
     if (!image) continue
@@ -117,6 +190,14 @@ export async function userContent(
             : 'available',
   }))
 
+  const moodboard = await addMoodboardContext(
+    ctx,
+    input,
+    run,
+    content,
+    MAX_PIN_PICTURES - shown.size,
+  )
+  if (moodboard) media.moodboard = moodboard
   const blocked = await viewOnlyAssets(ctx, input.attachments)
   for (const id of input.attachments) {
     const { asset, bytes } = await readAsset(ctx, id)
@@ -210,7 +291,19 @@ export async function contextText(
   media: TurnMedia,
 ): Promise<string> {
   const piece = run.pieceId ? await getPiece(ctx, run.pieceId) : null
-  const board = input.context.boardId ? await getBoard(ctx, input.context.boardId) : null
+  const board =
+    media.moodboard?.board ??
+    (input.context.boardId
+      ? piece
+        ? await ctx.repo.boards.first(
+            and(
+              eq(t.board.id, input.context.boardId),
+              eq(t.board.pieceId, piece.id),
+              isNull(t.board.pinsFor),
+            )!,
+          )
+        : await getBoard(ctx, input.context.boardId)
+      : null)
   const [assets, refs] = await Promise.all([
     input.attachments.length
       ? ctx.repo.assets.many({ where: inArray(t.asset.id, input.attachments) })
@@ -260,6 +353,7 @@ export async function contextText(
     plan: allowanceLine(await planStatus(ctx)),
     images: await imagesLine(ctx),
     pins: media.pins,
+    ...(media.moodboard ? { moodboard: media.moodboard } : {}),
   })
   const notes = [
     media.skipped.length &&
@@ -267,7 +361,7 @@ export async function contextText(
     media.withheld.length &&
       `Not shown to you (view-only references; their pictures never are): ${media.withheld.join(', ')}.`,
   ].filter(Boolean)
-  return notes.length ? `${text}\n${notes.join('\n')}` : text
+  return [`${intakeContext(input)}${text}`, ...notes].join('\n')
 }
 
 /** One line on whether concept images can be generated here, so a job never promises them. */

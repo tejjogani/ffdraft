@@ -1,24 +1,21 @@
-/**
- * Ideas: design boards on their own (`/ideas`, `/ideas/:boardId`). A board may be linked to a
- * project, where it is that project's Design stage; it can be linked, unlinked and started as
- * CAD at any time. Contract:
- *  - `BoardsPage`: /ideas, including its own <PageHeader/>.
- *  - `BoardPage`: /ideas/:boardId.
- */
+/** Studio moodboards are reusable boards without a project. */
 import type { Board } from '@pave/schema'
 import { TEMPLATES } from '@pave/schema'
 import {
   Button,
+  Dialog,
   EmptyState,
   InlineError,
+  Input,
   Menu,
   MenuItem,
-  MenuSeparator,
   MenuSub,
   Skeleton,
+  toast,
 } from '@pave/ui'
-import { Link, useNavigate } from '@tanstack/react-router'
-import { Hammer, LayoutTemplate, Link2, Plus, Unlink } from 'lucide-react'
+import { Link, Navigate, useNavigate } from '@tanstack/react-router'
+import { Hammer, LayoutTemplate, Plus } from 'lucide-react'
+import { useState } from 'react'
 import { Column, PageHeader, PageTitle } from '../../components/Page'
 import { assetUrl } from '../../lib/assets'
 import { invalidateFor, queryClient, useRpc, useRpcMutation } from '../../lib/query'
@@ -29,33 +26,74 @@ import { DesignBoard } from './DesignBoard'
 export { DesignBoard } from './DesignBoard'
 
 export function BoardsPage() {
-  const boards = useRpc('boards.list', {})
+  const boards = useRpc('boards.list', { scope: 'library' })
+  const [creating, setCreating] = useState(false)
+  const [name, setName] = useState('')
   const navigate = useNavigate()
   const isCurrent = useCurrentView()
   const create = useRpcMutation('boards.create', {
     onMutate: () => isCurrent,
-    onSuccess: (b, _input, stillHere) =>
-      stillHere?.() && void navigate({ to: '/ideas/$boardId', params: { boardId: b.id } }),
+    meta: { silent: true },
+    onSuccess: (b, _input, stillHere) => {
+      if (stillHere?.()) void navigate({ to: '/moodboards/$boardId', params: { boardId: b.id } })
+    },
   })
   return (
     <>
       <PageHeader
-        crumbs={[{ label: 'Ideas' }]}
+        crumbs={[{ label: 'Moodboards' }]}
         actions={
-          <Button
-            size="sm"
-            variant="secondary"
-            icon={Plus}
-            onClick={() => create.mutate({ title: 'New board' })}
+          <Dialog
+            open={creating}
+            onOpenChange={(open) => {
+              setCreating(open)
+              if (open) {
+                setName('')
+                create.reset()
+              }
+            }}
+            trigger={
+              <Button size="sm" variant="secondary" icon={Plus}>
+                New moodboard
+              </Button>
+            }
+            title="New moodboard"
           >
-            New board
-          </Button>
+            <form
+              className="flex flex-col gap-3"
+              onSubmit={(e) => {
+                e.preventDefault()
+                if (name.trim() && !create.isPending) create.mutate({ title: name.trim() })
+              }}
+            >
+              <Input
+                aria-label="Moodboard name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={120}
+                placeholder="Art Deco"
+              />
+              {create.error && (
+                <p role="alert" className="text-sm text-danger">
+                  {create.error.message}
+                </p>
+              )}
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => setCreating(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" disabled={!name.trim() || create.isPending}>
+                  {create.isPending ? 'Creating…' : 'Create moodboard'}
+                </Button>
+              </div>
+            </form>
+          </Dialog>
         }
       />
       <Column wide>
         <PageTitle
-          title="Ideas"
-          description="Design boards: pictures, sketches, notes and models to think with. Link one to a project, or take a picture from it to CAD."
+          title="Moodboards"
+          description="Build a studio library of references you can reuse across projects."
         />
         {boards.isError ? (
           <InlineError message={boards.error.message} onRetry={() => void boards.refetch()} />
@@ -67,11 +105,11 @@ export function BoardsPage() {
           </div>
         ) : boards.data.length === 0 ? (
           <EmptyState
-            title="No boards yet"
-            description="Start one here, or open a project’s Design stage: its board is made with it."
+            title="No moodboards yet"
+            description="Create a moodboard for photos, sketches and ideas you want to use again."
           />
         ) : (
-          <ul aria-label="Boards" className="grid grid-cols-2 gap-3 md:grid-cols-3">
+          <ul aria-label="Moodboards" className="grid grid-cols-2 gap-3 md:grid-cols-3">
             {boards.data.map((b) => (
               <li key={b.id}>
                 <BoardCard board={b} />
@@ -87,13 +125,8 @@ export function BoardsPage() {
 function BoardCard({ board }: { board: Board }) {
   return (
     <Link
-      {...(board.pieceId
-        ? ({
-            to: '/pieces/$id/directions',
-            params: { id: board.pieceId },
-            search: { board: board.id },
-          } as const)
-        : ({ to: '/ideas/$boardId', params: { boardId: board.id } } as const))}
+      to="/moodboards/$boardId"
+      params={{ boardId: board.id }}
       className="block overflow-hidden rounded-lg bg-bg shadow-[0_0_0_1px_var(--line)] hover:shadow-[0_0_0_1px_var(--line-strong)]"
     >
       <div className="grid aspect-[4/3] grid-cols-2 grid-rows-2 gap-px bg-line">
@@ -115,7 +148,6 @@ function BoardCard({ board }: { board: Board }) {
         <p className="truncate text-sm font-medium">{board.title}</p>
         <p className="text-xs text-fg-subtle">
           {board.referenceCount} {board.referenceCount === 1 ? 'item' : 'items'}
-          {board.pieceId ? ' · linked to a project' : ''}
         </p>
       </div>
     </Link>
@@ -127,7 +159,9 @@ export function BoardPage({ boardId }: { boardId: string }) {
   if (data.isError)
     return (
       <>
-        <PageHeader crumbs={[{ label: 'Ideas', link: { to: '/ideas' } }, { label: 'Board' }]} />
+        <PageHeader
+          crumbs={[{ label: 'Moodboards', link: { to: '/moodboards' } }, { label: 'Board' }]}
+        />
         <Column>
           {data.error.status === 404 ? (
             <EmptyState title="Board not found" description="It may have been deleted." />
@@ -138,11 +172,25 @@ export function BoardPage({ boardId }: { boardId: string }) {
       </>
     )
   const board = data.data?.board
+  if (board?.pinsFor)
+    return <Navigate to="/pieces/$id/design" params={{ id: board.pinsFor }} replace />
+  if (board?.pieceId)
+    return (
+      <Navigate
+        to="/pieces/$id/directions"
+        params={{ id: board.pieceId }}
+        search={{ board: board.id }}
+        replace
+      />
+    )
   return (
     <>
       <PageHeader
-        crumbs={[{ label: 'Ideas', link: { to: '/ideas' } }, { label: board?.title ?? '…' }]}
-        actions={board && <BoardLink board={board} />}
+        crumbs={[
+          { label: 'Moodboards', link: { to: '/moodboards' } },
+          { label: board?.title ?? '…' },
+        ]}
+        actions={board && <StartBoardCad board={board} />}
       />
       <Column wide>
         {board ? (
@@ -158,79 +206,49 @@ export function BoardPage({ boardId }: { boardId: string }) {
   )
 }
 
-/**
- * Where a board in Ideas leads: the project it is linked to (with Unlink), or Start CAD: a new
- * project, blank or from a template, with this board linked or not, or a link to an existing one.
- */
-export function BoardLink({ board }: { board: Board }) {
+function StartBoardCad({ board }: { board: Board }) {
   const navigate = useNavigate()
   const isCurrent = useCurrentView()
-  const pieces = useRpc('pieces.list', { limit: 50 })
-  const linked = pieces.data?.find((p) => p.id === board.pieceId)
-  const link = async (pieceId: string | null) => {
-    await rpc.call('boards.update', { id: board.id, pieceId })
-    invalidateFor(queryClient, 'boards')
+  const [pending, setPending] = useState(false)
+  const start = async (templateId?: string) => {
+    setPending(true)
+    try {
+      const piece = await rpc.call('pieces.create', {
+        title: board.title,
+        ...(templateId ? { templateId } : {}),
+      })
+      if (board.referenceCount)
+        await rpc.call('boards.importMoodboard', { sourceBoardId: board.id, pieceId: piece.id })
+      invalidateFor(queryClient, 'pieces')
+      invalidateFor(queryClient, 'boards')
+      if (isCurrent()) await navigate({ to: '/pieces/$id/design', params: { id: piece.id } })
+    } catch (e) {
+      toast.error('Couldn’t start CAD', e instanceof Error ? e.message : undefined)
+    } finally {
+      setPending(false)
+    }
   }
-  const start = async (opts: { templateId?: string; linkBoard: boolean }) => {
-    const piece = await rpc.call('pieces.create', {
-      title: board.title.replace(/ · Design$/, ''),
-      ...(opts.templateId ? { templateId: opts.templateId } : {}),
-    })
-    if (opts.linkBoard) await link(piece.id)
-    invalidateFor(queryClient, 'pieces')
-    if (isCurrent()) await navigate({ to: '/pieces/$id/design', params: { id: piece.id } })
-  }
-  if (board.pieceId)
-    return (
-      <div className="flex items-center gap-1">
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={Link2}
-          onClick={() => void navigate({ to: '/pieces/$id', params: { id: board.pieceId! } })}
-        >
-          {linked ? `Linked to ${linked.title || 'Untitled'}` : 'Linked to a project'}
-        </Button>
-        <Button size="sm" variant="ghost" icon={Unlink} onClick={() => void link(null)}>
-          Unlink
-        </Button>
-      </div>
-    )
+
   return (
     <Menu
       align="end"
       trigger={
-        <Button size="sm" variant="secondary" icon={Hammer}>
+        <Button size="sm" variant="secondary" icon={Hammer} disabled={pending}>
           Start CAD
         </Button>
       }
     >
       <MenuItem
         icon={Hammer}
-        description="A new project with this board as its design"
-        onClick={() => void start({ linkBoard: true })}
+        description="A new project with a copy of these references"
+        onClick={() => void start()}
       >
-        Blank CAD, board linked
+        Blank CAD
       </MenuItem>
-      <MenuItem
-        icon={Hammer}
-        description="The board stays on its own in Ideas"
-        onClick={() => void start({ linkBoard: false })}
-      >
-        Blank CAD, not linked
-      </MenuItem>
-      <MenuSub label="From a template, board linked" icon={LayoutTemplate}>
+      <MenuSub label="From a template" icon={LayoutTemplate}>
         {TEMPLATES.map((t) => (
-          <MenuItem key={t.id} onClick={() => void start({ templateId: t.id, linkBoard: true })}>
+          <MenuItem key={t.id} onClick={() => void start(t.id)}>
             {t.spec.title}
-          </MenuItem>
-        ))}
-      </MenuSub>
-      <MenuSeparator />
-      <MenuSub label="Link to a project" icon={Link2}>
-        {(pieces.data ?? []).slice(0, 20).map((p) => (
-          <MenuItem key={p.id} onClick={() => void link(p.id)}>
-            {p.title || 'Untitled'}
           </MenuItem>
         ))}
       </MenuSub>

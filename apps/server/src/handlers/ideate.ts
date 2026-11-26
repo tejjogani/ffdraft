@@ -51,6 +51,7 @@ export const toReference = (r: ReferenceRow): Reference => ({
         capturedAt: r.source.capturedAt ?? null,
       }
     : null,
+  ...(r.importedFrom ? { importedFrom: r.importedFrom } : {}),
   rights: r.rights,
   tags: r.tags,
   palette: r.palette,
@@ -207,7 +208,7 @@ async function capturedAsset(
   }
 }
 
-async function referenceFromItem(ctx: Ctx, item: SaveItem): Promise<NewReference> {
+export async function referenceFromItem(ctx: Ctx, item: SaveItem): Promise<NewReference> {
   await ensure(getPiece, ctx, item.pieceId)
   const text = { title: item.title ?? '', note: item.note ?? '', pieceId: item.pieceId ?? null }
   if (item.result) {
@@ -366,6 +367,7 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
     const rows = await ctx.repo.boards.many({
       where: and(
         isNull(t.board.pinsFor),
+        input.scope === 'library' ? isNull(t.board.pieceId) : undefined,
         input.pieceId ? eq(t.board.pieceId, input.pieceId) : undefined,
       ),
       orderBy: desc(t.board.updatedAt),
@@ -407,6 +409,70 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
     return toBoard(ctx, row!)
   },
 
+  'boards.importMoodboard': async (ctx, { sourceBoardId, pieceId, targetBoardId }) => {
+    const { board, added } = await ctx.repo.transaction(async (repo) => {
+      const tx = { ...ctx, repo }
+      // Serialize imports and first saves for this project, even when it has no board yet.
+      const [piece] = await repo.pieces
+        .select({ id: t.piece.id }, eq(t.piece.id, pieceId))
+        .for('update')
+      if (!piece) throw notFound('Project', pieceId)
+      const [source] = await repo.boards
+        .select(
+          { id: t.board.id },
+          and(eq(t.board.id, sourceBoardId), isNull(t.board.pieceId), isNull(t.board.pinsFor)),
+        )
+        .for('share')
+      if (!source) throw notFound('Moodboard', sourceBoardId)
+      const selected = targetBoardId ? await getBoard(tx, targetBoardId) : null
+      if (selected && (selected.pieceId !== pieceId || selected.pinsFor))
+        throw notFound('Project design board', selected.id)
+      const items = await repo.references.many({
+        where: eq(t.reference.boardId, source.id),
+        orderBy: [asc(t.reference.position), asc(t.reference.id)],
+      })
+      if (!items.length) throw badRequest('This moodboard has no references to import.')
+
+      const target = selected ?? (await designBoardFor(tx, pieceId, false))
+      const existing = await repo.references.select(
+        { importedFrom: t.reference.importedFrom },
+        eq(t.reference.boardId, target.id),
+      )
+      const copied = new Set(
+        existing
+          .filter((r) => r.importedFrom?.sourceBoardId === source.id)
+          .map((r) => r.importedFrom!.sourceReferenceId),
+      )
+      const remaining = items.filter((r) => !copied.has(r.id))
+      if (remaining.length) {
+        await insertReferences(
+          tx,
+          target.id,
+          remaining.map((r) => ({
+            type: r.type,
+            assetId: r.assetId,
+            thumbUrl: r.thumbUrl,
+            title: r.title,
+            note: r.note,
+            source: r.source,
+            importedFrom: { sourceBoardId: source.id, sourceReferenceId: r.id },
+            rights: r.rights,
+            tags: r.tags,
+            palette: r.palette,
+            generation: r.generation,
+            pieceId: r.pieceId,
+            width: r.width,
+            height: r.height,
+          })),
+          false,
+        )
+      }
+      return { board: await toBoard(tx, await getBoard(tx, target.id)), added: remaining.length }
+    })
+    if (added) publish(ctx, { type: 'board.updated', boardId: board.id })
+    return { board, added }
+  },
+
   'boards.delete': async (ctx, { id }) => {
     await getBoard(ctx, id)
     await ctx.repo.boards.delete(eq(t.board.id, id))
@@ -435,6 +501,21 @@ export const ideate: HandlerGroup<'boards' | 'references'> = {
     })
     publish(ctx, { type: 'board.updated', boardId: saved[0]!.boardId })
     return saved
+  },
+
+  'references.proposeConcepts': async (ctx, { boardId, concepts }) => {
+    const board = await getBoard(ctx, boardId)
+    if (!board.pieceId || board.pinsFor) throw badRequest('Choose a project Design board')
+    return insertReferences(
+      ctx,
+      board.id,
+      concepts.map((concept) => ({
+        ...concept,
+        type: 'note',
+        rights: 'own',
+        tags: ['Design concept'],
+      })),
+    )
   },
 
   'references.pins': async (ctx, { pieceId }) => {

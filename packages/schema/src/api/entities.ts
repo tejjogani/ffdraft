@@ -323,6 +323,8 @@ export const ReferenceSchema = z.object({
       capturedAt: iso.nullable(),
     })
     .nullable(),
+  /** The source of an independent copy made by a project moodboard import. */
+  importedFrom: z.object({ sourceBoardId: id, sourceReferenceId: id }).optional(),
   rights: z.enum(RIGHTS),
   tags: z.array(z.string()),
   palette: z.array(z.string()),

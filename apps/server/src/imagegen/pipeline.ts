@@ -51,6 +51,7 @@ import { AppError, badRequest, conflict, forbidden, NotConfiguredError, notFound
 import { insertReferences, type NewReference, toReference } from '../handlers/ideate'
 import { createId } from '../ids'
 import { getBoard } from '../lookups'
+import { importedReferences } from '../references/moodboards'
 import { assertSendable } from '../references/rights'
 import { serviceContext } from '../service-context'
 import { assertBudget, fromMicros, recordUsage, toMicros } from '../usage'
@@ -266,7 +267,21 @@ export async function writeBrief(
   const parent = inputs.parent ? await picture(ctx, inputs.parent, 'Parent image') : null
   const takesRefs =
     resolved.provider.models.find((m) => m.id === resolved.model)?.takesReferences ?? false
-  const request = [input.request, ...inputs.notes.map((n) => `Note on the board: ${n}`)].join('\n')
+  const imported = board.pieceId
+    ? await importedReferences(ctx, board.id, input.referenceIds)
+    : null
+  const details = imported?.rows.map((r) => ({
+    title: r.title.slice(0, 200),
+    note: r.note.slice(0, 1000),
+    source: r.source?.url?.slice(0, 400) ?? null,
+    credit: r.source?.credit?.slice(0, 160) ?? null,
+    rights: r.rights,
+  }))
+  const request = [
+    input.request,
+    ...inputs.notes.map((n) => `Note on the board: ${n}`),
+    ...(details?.length ? [`Imported moodboard context: ${JSON.stringify(details)}`] : []),
+  ].join('\n')
   const id = createId('brf')
   const { message, costUsd } = await ask(
     ctx,

@@ -10,6 +10,7 @@ import { lazy } from 'react'
 import { Root } from './app/Shell'
 import { AcceptInvitePage } from './pages/auth/AcceptInvitePage'
 import { HomePage } from './pages/home/HomePage'
+import { intakeSearch } from './pages/home/intake'
 import { LIBRARY_TABS, LibraryPage, type LibraryTab } from './pages/library/LibraryPage'
 import { NotFound, RouteError } from './pages/NotFound'
 import { PieceDirections } from './pages/piece/PieceDirections'
@@ -64,7 +65,14 @@ const rootRoute = createRootRoute({ component: Root, notFoundComponent: NotFound
 const route = <P extends string>(path: P, component: () => React.ReactNode) =>
   createRoute({ getParentRoute: () => rootRoute, path, component })
 
-const homeRoute = route('/', HomePage)
+const homeRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/',
+  validateSearch: intakeSearch,
+  component: function Home() {
+    return <HomePage search={homeRoute.useSearch()} />
+  },
+})
 
 const piecesRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -112,12 +120,26 @@ const pieceTab = (
     },
   })
 
-const ideasRoute = route('/ideas', () => <BoardsPage />)
+const moodboardsRoute = route('/moodboards', () => <BoardsPage />)
 const boardRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: '/ideas/$boardId',
+  path: '/moodboards/$boardId',
   component: function Board() {
     return <BoardPage boardId={boardRoute.useParams().boardId} />
+  },
+})
+const legacyIdeas = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ideas',
+  beforeLoad: () => {
+    throw redirect({ to: '/moodboards', replace: true })
+  },
+})
+const legacyIdea = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/ideas/$boardId',
+  beforeLoad: ({ params }) => {
+    throw redirect({ to: '/moodboards/$boardId', params, replace: true })
   },
 })
 const modelRoute = createRoute({
@@ -172,7 +194,9 @@ const routeTree = rootRoute.addChildren([
     pieceTab('production', PieceProduction),
     pieceTab('history', PieceHistory),
   ]),
-  ideasRoute,
+  moodboardsRoute,
+  legacyIdeas,
+  legacyIdea,
   boardRoute,
   route('/renders', () => <RendersPage />),
   route('/models', () => <ModelsPage />),

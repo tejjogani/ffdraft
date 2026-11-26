@@ -15,7 +15,7 @@ import {
   RenderSceneSchema,
 } from '@pave/schema'
 import { AiMark, Button, cn, Popover, Segmented, Spinner, Textarea, toast } from '@pave/ui'
-import { Link } from '@tanstack/react-router'
+import { Link, useMatch } from '@tanstack/react-router'
 import { Circle, ImagePlus, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { assetUrl, uploadAsset } from '../../../lib/assets'
@@ -61,7 +61,11 @@ export function StartJob({
   /** Pinned pictures the Render job copies as shot references (asset ids). */
   const [shotRefs, setShotRefs] = useState<string[]>([])
   const file = useRef<HTMLInputElement>(null)
-  const { send, pending } = useSend({ pieceId })
+  const selectedBoard = useMatch({ from: '/pieces/$id', shouldThrow: false })?.search.board
+  const { send, pending } = useSend({
+    pieceId,
+    boardId: stage === 'design' ? (selectedBoard ?? null) : null,
+  })
 
   const addPhoto = async (f: File | undefined) => {
     if (!f) return

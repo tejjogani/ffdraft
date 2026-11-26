@@ -100,6 +100,70 @@ describe('the design board', () => {
     expect((await api.call('boards.get', { id: old.id })).references).toEqual([])
   })
 
+  it('copies a reusable moodboard in order, independently and without duplicates', async () => {
+    const source = await api.call('boards.create', { title: 'Art Deco' })
+    const a = await api.call('pieces.create', { title: 'A' })
+    const b = await api.call('pieces.create', { title: 'B' })
+    const photo = await upload('moodboard.png', await png('#c9a13b'), 'image/png')
+    const originals = await api.call('references.save', {
+      boardId: source.id,
+      items: [
+        { assetId: photo.id, title: 'Owned sketch', note: 'Use a stepped shoulder' },
+        { note: 'Keep a thin band' },
+        { url: 'https://www.pinterest.com/pin/123/', title: 'Engraving' },
+      ],
+    })
+    const input = { pieceId: a.id, sourceBoardId: source.id }
+    const [first, retry] = await Promise.all([
+      api.call('boards.importMoodboard', input),
+      api.call('boards.importMoodboard', input),
+    ])
+    const other = await api.call('boards.importMoodboard', {
+      pieceId: b.id,
+      sourceBoardId: source.id,
+    })
+    expect(first.board.id).toBe(retry.board.id)
+    expect(first.added + retry.added).toBe(3)
+    const copied = (await api.call('boards.get', { id: first.board.id })).references
+    const otherCopies = (await api.call('boards.get', { id: other.board.id })).references
+    expect(copied.map((r) => r.importedFrom?.sourceReferenceId)).toEqual(originals.map((r) => r.id))
+    expect(copied[0]).toMatchObject({
+      assetId: photo.id,
+      note: 'Use a stepped shoulder',
+      rights: 'own',
+    })
+    expect(copied[1]).toMatchObject({ note: 'Keep a thin band', type: 'note' })
+    expect(copied[2]).toMatchObject({ source: originals[2]!.source, rights: 'viewOnly' })
+    expect(otherCopies[0]!.id).not.toBe(copied[0]!.id)
+    await api.call('references.update', { id: copied[1]!.id, note: 'Only in A' })
+    expect((await api.call('boards.get', { id: other.board.id })).references[1]!.note).toBe(
+      'Keep a thin band',
+    )
+    expect((await api.call('boards.get', { id: source.id })).references).toEqual(originals)
+    expect((await api.call('boards.list', { scope: 'library' })).map((r) => r.id)).not.toContain(
+      first.board.id,
+    )
+
+    const invalid = await api.fail('boards.importMoodboard', {
+      sourceBoardId: source.id,
+      pieceId: b.id,
+      targetBoardId: first.board.id,
+    })
+    expect(invalid.status).toBe(404)
+    expect(
+      (await api.fail('boards.importMoodboard', { sourceBoardId: first.board.id, pieceId: b.id }))
+        .status,
+    ).toBe(404)
+    const pins = await api.call('references.pin', {
+      pieceId: a.id,
+      items: [{ url: 'https://example.com/project-private' }],
+    })
+    expect(
+      (await api.fail('boards.importMoodboard', { sourceBoardId: pins[0]!.boardId, pieceId: b.id }))
+        .status,
+    ).toBe(404)
+  })
+
   it('takes every source: an upload, a sketch, a scanned sheet, a link, a note and a 3D model', async () => {
     const piece = await api.call('pieces.create', { title: 'Sources', kind: 'pendant' })
     const board = await api.call('boards.forPiece', { pieceId: piece.id })

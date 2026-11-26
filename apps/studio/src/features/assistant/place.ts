@@ -18,6 +18,6 @@ export function placeOf(pathname: string): {
     const tab = (PIECE_TABS as readonly string[]).includes(segment) ? (segment as PieceTab) : null
     return { pieceId: decodeURIComponent(piece[1]!), tab, boardId: null }
   }
-  const board = /^\/ideas\/([^/]+)\/?$/.exec(pathname)
+  const board = /^\/moodboards\/([^/]+)\/?$/.exec(pathname)
   return { pieceId: null, tab: null, boardId: board ? decodeURIComponent(board[1]!) : null }
 }

@@ -134,7 +134,7 @@ export function PieceSourcing({ pieceId }: { pieceId: string }) {
           const listing =
             node.sourcing?.provider === 'diaex' ? diaexBrowseLink(node.sourcing.url) : undefined
           return (
-            <li key={node.id} className="py-4">
+            <li key={node.id} id={`stone-${node.id}`} className="scroll-mt-4 py-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
                   <h3 className="text-sm font-medium text-fg">{nodeTitle(node)}</h3>

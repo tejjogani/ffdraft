@@ -9,7 +9,7 @@ import sharp from 'sharp'
 /** The long edge Claude's vision works at without resizing. */
 export const MODEL_LONG_EDGE = 1568
 
-const SUPPORTED = new Set(['image/jpeg', 'image/png', 'image/webp'])
+const SUPPORTED = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/svg+xml'])
 
 export const isModelImage = (mime: string) => SUPPORTED.has(mime)
 
@@ -19,10 +19,11 @@ export interface ModelImage {
   data: string
 }
 
-/** The image resized for the model, or null for a format it cannot read (HEIC, SVG, …). */
+/** The image resized for the model. SVG artwork is rasterized to PNG for vision. */
 export async function modelImage(bytes: Uint8Array, mime: string): Promise<ModelImage | null> {
   if (!isModelImage(mime)) return null
-  const format = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpeg'
+  const mediaType = mime === 'image/svg+xml' ? 'image/png' : (mime as ModelImage['mediaType'])
+  const format = mediaType === 'image/png' ? 'png' : mediaType === 'image/webp' ? 'webp' : 'jpeg'
   // `rotate()` applies the EXIF orientation, so a phone photo is seen the right way up.
   const out = await sharp(bytes)
     .rotate()
@@ -34,5 +35,5 @@ export async function modelImage(bytes: Uint8Array, mime: string): Promise<Model
     })
     .toFormat(format)
     .toBuffer()
-  return { mediaType: mime as ModelImage['mediaType'], data: out.toString('base64') }
+  return { mediaType, data: out.toString('base64') }
 }

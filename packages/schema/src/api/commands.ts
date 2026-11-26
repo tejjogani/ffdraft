@@ -491,6 +491,24 @@ export const commands = {
     }),
     output: PieceSchema,
   }),
+  'pieces.startIntake': def({
+    description:
+      'Save a Home commission, its Design board, and all attached assets as one project. Repeat with the same requestId to return the same project.',
+    kind: 'mutation',
+    input: z.object({
+      requestId: z.string().min(8).max(64),
+      brief: z.string().trim().min(1).max(20_000),
+      assetIds: z.array(id).max(8).default([]),
+    }),
+    output: z.object({ pieceId: id, boardId: id }),
+  }),
+  'pieces.addIntakeAssets': def({
+    description:
+      'Keep uploaded assets on this project’s Design board, skipping assets already there.',
+    kind: 'mutation',
+    input: z.object({ pieceId: id, boardId: id, assetIds: z.array(id).min(1).max(8) }),
+    output: z.array(ReferenceSchema),
+  }),
   'pieces.update': def({
     description:
       'Update a piece’s title, stage, brief, collection, cover or origin. Setting `coverAssetId` stops automatic cover capture unless `coverAuto: true` is sent with it. Changing the origin’s sources clears its attestation. The assistant may only add sources and flags to an origin; only a person can remove them, clear the origin or attest (403 otherwise).',
@@ -787,7 +805,7 @@ export const commands = {
     description: 'List moodboards.',
     kind: 'query',
     tool: true,
-    input: z.object({ pieceId: id.optional() }),
+    input: z.object({ pieceId: id.optional(), scope: z.literal('library').optional() }),
     output: z.array(BoardSchema),
   }),
   'boards.get': def({
@@ -829,6 +847,12 @@ export const commands = {
       imageProvider: z.enum(IMAGE_PROVIDERS).nullable().optional(),
     }),
     output: BoardSchema,
+  }),
+  'boards.importMoodboard': def({
+    description: 'Copy references from a studio moodboard into an owned project board.',
+    kind: 'mutation',
+    input: z.object({ sourceBoardId: id, pieceId: id, targetBoardId: id.optional() }),
+    output: z.object({ board: BoardSchema, added: z.number().int().nonnegative() }),
   }),
   'boards.delete': def({
     description: 'Delete a moodboard and its references.',
@@ -872,6 +896,25 @@ export const commands = {
       'Save references to the piece’s design board, creating the board with its first items.',
     kind: 'mutation',
     input: z.object({ pieceId: id, items: referenceSaveItems }),
+    output: z.array(ReferenceSchema),
+  }),
+  'references.proposeConcepts': def({
+    description:
+      'Save up to four distinct pre-CAD concepts as selectable notes on the project’s Design board. Each note describes what changes visually and preserves the confirmed measurements and materials. Generated images already on the board can be chosen directly.',
+    kind: 'mutation',
+    tool: true,
+    input: z.object({
+      boardId: id,
+      concepts: z
+        .array(
+          z.object({
+            title: z.string().trim().min(1).max(100),
+            note: z.string().trim().min(1).max(2000),
+          }),
+        )
+        .min(1)
+        .max(4),
+    }),
     output: z.array(ReferenceSchema),
   }),
   'references.pins': def({
@@ -1653,6 +1696,10 @@ export const commands = {
           pieceId: id.optional(),
           boardId: id.optional(),
           sceneId: id.optional(),
+          /** Home stays in Design until the designer explicitly hands the concept to CAD. */
+          intake: z.literal(true).optional(),
+          /** Talk through ideas without changing the studio or continuing an AI job. */
+          brainstorm: z.literal(true).optional(),
           selection: z.array(id).max(200).default([]),
           /** The stage tab the message was sent from: the run's spend counts against it. */
           stage: z.enum(JOB_STAGES).optional(),
