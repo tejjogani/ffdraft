@@ -13,6 +13,7 @@ import { z } from 'zod'
 import { GEM_CUT_IDS, GEM_MATERIAL_IDS } from '../domain/gems'
 import { FINISH_IDS, METAL_IDS, PLATING_IDS } from '../domain/metals'
 import { RING_SIZE_SYSTEMS } from '../domain/sizes'
+import { CurveDefinition } from './curve'
 import { choice, deg, follows, int, mm, ratio, ref, text, toggle, vec3 } from './fields'
 import { DrawnProfile } from './profile'
 
@@ -661,6 +662,12 @@ export const Group = z
   })
   .meta({ title: 'Group' })
 
+export const ConstructionCurve = CurveDefinition.safeExtend({
+  ...base,
+  kind: z.literal('curve'),
+  transform: z.never().optional(),
+}).meta({ title: 'Construction curve', description: 'An editable planar polyline in millimetres.' })
+
 export const NODE_SCHEMAS = {
   ringShank: RingShank,
   gem: Gem,
@@ -681,6 +688,7 @@ export const NODE_SCHEMAS = {
   engraving: Engraving,
   pattern: Pattern,
   group: Group,
+  curve: ConstructionCurve,
 } as const
 
 export type NodeKind = keyof typeof NODE_SCHEMAS
@@ -706,6 +714,7 @@ export const NodeSchema = z.discriminatedUnion('kind', [
   Engraving,
   Pattern,
   Group,
+  ConstructionCurve,
 ])
 
 export type Node = z.infer<typeof NodeSchema>

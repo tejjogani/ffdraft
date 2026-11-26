@@ -48,6 +48,7 @@ export interface EmptyDesignProps {
   /** Adds an imported node; `kind` is the piece type it implies. */
   onImport(node: NodeInput, kind: Design['kind']): void
   onDrawProfile?(): void
+  onDrawCurve?(): void
 }
 
 type Step = 'doors' | 'templates' | 'quick'
@@ -59,6 +60,7 @@ export function EmptyDesign({
   onBuild,
   onImport,
   onDrawProfile,
+  onDrawCurve,
 }: EmptyDesignProps) {
   const [step, setStep] = useState<Step>('doors')
   const [busy, setBusy] = useState<string | null>(null)
@@ -88,10 +90,15 @@ export function EmptyDesign({
               {onDrawProfile && (
                 <Door
                   icon={PencilRuler}
-                  title="Draw a profile"
-                  description="Draw a measured outline and give it depth to make a solid."
+                  title="Draw in CAD"
+                  description="Draw a construction curve or extrude a measured outline into a solid."
                 >
-                  <Button size="sm" variant="primary" onClick={onDrawProfile}>
+                  {onDrawCurve && (
+                    <Button size="sm" variant="primary" onClick={onDrawCurve}>
+                      Draw curve
+                    </Button>
+                  )}
+                  <Button size="sm" onClick={onDrawProfile}>
                     Draw profile
                   </Button>
                 </Door>

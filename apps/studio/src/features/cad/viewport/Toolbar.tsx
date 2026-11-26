@@ -22,6 +22,7 @@ import {
   PencilRuler,
   Redo2,
   ScanEye,
+  Spline,
   Undo2,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -49,16 +50,26 @@ export function ViewToolbar({
   canRedo,
   compact = false,
   onDrawProfile,
+  onDrawCurve,
 }: {
   canUndo: boolean
   canRedo: boolean
   compact?: boolean
   onDrawProfile?(): void
+  onDrawCurve?(): void
 }) {
   const display = useWorkspace((s) => s.display)
   const xray = useWorkspace((s) => s.xray)
   return (
     <Cluster>
+      {onDrawCurve &&
+        (compact ? (
+          <IconButton icon={Spline} label="Draw curve" onClick={onDrawCurve} />
+        ) : (
+          <Button variant="ghost" size="sm" icon={Spline} onClick={onDrawCurve}>
+            Draw curve
+          </Button>
+        ))}
       {onDrawProfile && (
         <>
           {compact ? (
@@ -140,11 +151,13 @@ export function ViewToolbar({
 export function FileToolbar({
   save,
   formats,
+  canSaveFile,
   simplified,
   compact,
 }: {
   save: SaveState | null
   formats: readonly ExportFormat[]
+  canSaveFile: boolean
   simplified: boolean
   compact: boolean
 }) {
@@ -168,7 +181,7 @@ export function FileToolbar({
       )}
       <Cluster className="pr-1 pl-0.5">
         {save && <SavePill save={save} compact={compact} />}
-        {formats.length > 0 && (
+        {canSaveFile && (
           <Menu
             align="end"
             className="w-72"
@@ -195,25 +208,27 @@ export function FileToolbar({
                 Pavé file
               </MenuItem>
             </MenuGroup>
-            <MenuSeparator />
-            <MenuGroup label="Download">
-              {formats.map((f) => (
-                <MenuItem
-                  key={f}
-                  description={`${EXPORT_PURPOSE[f].hint} · ${
-                    !exportCounts(f)
-                      ? 'Free'
-                      : cadLeft !== null
-                        ? `${cadLeft} of ${cadLimit} free left this month`
-                        : 'Counted on your plan'
-                  }`}
-                  tag={f.toUpperCase()}
-                  onClick={() => runCommand(`design.export.${f}`)}
-                >
-                  {EXPORT_PURPOSE[f].label}
-                </MenuItem>
-              ))}
-            </MenuGroup>
+            {formats.length > 0 && <MenuSeparator />}
+            {formats.length > 0 && (
+              <MenuGroup label="Download">
+                {formats.map((f) => (
+                  <MenuItem
+                    key={f}
+                    description={`${EXPORT_PURPOSE[f].hint} · ${
+                      !exportCounts(f)
+                        ? 'Free'
+                        : cadLeft !== null
+                          ? `${cadLeft} of ${cadLimit} free left this month`
+                          : 'Counted on your plan'
+                    }`}
+                    tag={f.toUpperCase()}
+                    onClick={() => runCommand(`design.export.${f}`)}
+                  >
+                    {EXPORT_PURPOSE[f].label}
+                  </MenuItem>
+                ))}
+              </MenuGroup>
+            )}
           </Menu>
         )}
       </Cluster>

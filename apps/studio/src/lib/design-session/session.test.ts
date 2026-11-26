@@ -236,6 +236,38 @@ describe('design session core', () => {
     expect(core.canRedo(s)).toBe(false)
   })
 
+  it('restores a point edit after stored JSON reorders the point keys', () => {
+    const id = 'curve_history'
+    const original = [
+      { id: 'a', u: 0, v: 0 },
+      { id: 'b', u: 8, v: 0 },
+    ]
+    const design = applyOps(solitaire(), [
+      { t: 'add', node: { id, kind: 'curve', plane: 'front', points: original } },
+    ]).design
+    const restored: Op = {
+      t: 'update',
+      id,
+      patch: {
+        points: [
+          { u: 0, v: 0, id: 'a' },
+          { u: 8, v: 0, id: 'b' },
+        ],
+      },
+    }
+    const edit: Op = {
+      t: 'update',
+      id,
+      patch: {
+        points: [
+          { u: 0, v: 0, id: 'a' },
+          { u: 8, v: 4, id: 'b' },
+        ],
+      },
+    }
+    expect(core.guardedInverse({ ops: [restored], inverse: [edit] }, design)).toEqual([edit])
+  })
+
   it('names undo and redo after the original edit however often they flip', () => {
     const d = solitaire()
     let s = core.commit(core.createSession('p1', d, 0), setWidth(d, 3))

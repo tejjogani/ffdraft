@@ -6,6 +6,7 @@
  * compiler, drawings, the BOM, sourcing — depend on this file only, never on kernel internals.
  */
 import type {
+  CurvePlane,
   Design,
   FinishId,
   GemCutId,
@@ -135,11 +136,19 @@ export interface Report {
 
 export type Detail = 'draft' | 'production'
 
+export interface EvaluatedCurve {
+  nodeId: string
+  plane: CurvePlane
+  points: [number, number, number][]
+  closed: boolean
+}
+
 export interface Evaluation {
   detail: Detail
   parts: Part[]
   stones: StoneInstance[]
   gemMeshes: Record<string, MeshData>
+  curves?: EvaluatedCurve[]
   report: Report
   diagnostics: Diagnostic[]
   /** Wall-clock milliseconds, total and per node, for the performance HUD and traces. */

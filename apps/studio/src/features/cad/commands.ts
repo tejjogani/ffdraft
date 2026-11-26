@@ -26,6 +26,7 @@ import {
   Scale,
   ScanEye,
   SlidersHorizontal,
+  Spline,
   Trash2,
   Undo2,
   Wrench,
@@ -63,6 +64,7 @@ export interface CadCommandContext {
   hasRun: boolean
   openAddMenu(): void
   drawProfile(): void
+  drawCurve(): void
   requestDelete(ids: string[]): void
   exportAs(format: ExportFormat): void
   show(d: Diagnostic): void
@@ -140,6 +142,15 @@ export function useCadCommands(c: CadCommandContext): void {
   const allExcluded = () => selected().every((id) => c.design.nodes[id]!.visible === false)
   const firstFix = () => c.issues.find((i) => i.d.fix)?.d
   const commands: Command[] = [
+    {
+      id: 'design.drawCurve',
+      title: 'Draw curve',
+      group: 'Design',
+      keywords: ['construction', 'polyline', 'point'],
+      icon: Spline,
+      when: editable,
+      run: c.drawCurve,
+    },
     {
       id: 'design.drawProfile',
       title: 'Draw profile',

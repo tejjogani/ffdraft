@@ -2,7 +2,13 @@
  * The evaluator: walks a design in dependency order, memoises every node on a content hash,
  * and assembles the cached results into a {@link Scene} (and from it the public Evaluation).
  */
-import { type Design, evaluationOrder, type Node, nodeRefs } from '@pave/schema'
+import {
+  type Design,
+  evaluationOrder,
+  type Node,
+  nodeRefs,
+  pointFromCurvePlane,
+} from '@pave/schema'
 import { type AnyFeature, type NodeResult, QUALITY, type Scene } from '../core'
 import { CHECK_NAMES, runCheck, withoutCascades } from '../dfm/index'
 import { discardRuntime, isRuntimeFault, runtimeGeneration } from '../runtime/index'
@@ -280,11 +286,24 @@ export class Evaluator {
       ...stoneDiagnostics(stones),
     ]
 
+    const curves = active.flatMap(({ id, node }) =>
+      node.kind === 'curve'
+        ? [
+            {
+              nodeId: id,
+              plane: node.plane,
+              closed: node.closed,
+              points: node.points.map(({ u, v }) => pointFromCurvePlane(node.plane, [u, v])),
+            },
+          ]
+        : [],
+    )
     const evaluation: Evaluation = {
       detail,
       parts: parts.map((p) => p.part),
       stones: stones.map((s) => s.instance),
       gemMeshes,
+      ...(curves.length ? { curves } : {}),
       report: buildReport(
         design,
         parts,

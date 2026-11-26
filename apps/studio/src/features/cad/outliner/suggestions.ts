@@ -58,7 +58,7 @@ function option(design: Design, kind: NodeKind, target?: string): AddOption {
 }
 
 export function addMenu(design: Design, kinds: readonly string[], target?: string): AddGroup[] {
-  const supported = NODE_KINDS.filter((k) => kinds.includes(k))
+  const supported = NODE_KINDS.filter((k) => k !== 'curve' && kinds.includes(k))
   const listed = new Set(GROUPS.flatMap((g) => g.kinds))
   const groups = [...GROUPS, { label: 'More', kinds: supported.filter((k) => !listed.has(k)) }]
   return groups

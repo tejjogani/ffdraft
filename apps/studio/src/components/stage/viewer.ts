@@ -8,7 +8,7 @@
  * Kept outside React so capture, picking and the render loop act on the renderer directly; the
  * <Stage/> component only mounts it and forwards state.
  */
-import type { Bounds, Evaluation, Part } from '@pave/kernel'
+import type { Bounds, EvaluatedCurve, Evaluation, Part } from '@pave/kernel'
 import {
   boundsCenter,
   boundsRadius,
@@ -30,7 +30,12 @@ import {
   toThreePoint,
   zUpGroup,
 } from '@pave/render/three'
-import { type ImagePlaneView, RenderSceneSchema } from '@pave/schema'
+import {
+  type CurvePlane,
+  type ImagePlaneView,
+  pointOnCurvePlane,
+  RenderSceneSchema,
+} from '@pave/schema'
 import CameraControls from 'camera-controls'
 import {
   Box3,
@@ -46,6 +51,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   PerspectiveCamera,
+  Plane,
   PlaneGeometry,
   Quaternion,
   Raycaster,
@@ -212,6 +218,7 @@ export class Viewer {
   private readonly renderListeners = new Set<() => void>()
   /** Nodes the default framing is about (e.g. a pendant without its chain); empty = everything. */
   private frameFocus: readonly string[] = []
+  private constructionFrame: readonly EvaluatedCurve[] = []
   private shadowAllowed = false
   /** Reference pictures to model over; drawn before the piece and never captured. */
   private readonly planes: ImagePlaneLayer
@@ -330,20 +337,65 @@ export class Viewer {
   }
 
   /** Where a model point (Z-up mm) appears, in CSS pixels from the canvas's top-left. */
-  project(point: Vec3): { x: number; y: number; visible: boolean } {
+  project(point: Vec3): { x: number; y: number; visible: boolean; inFront: boolean } {
     const p = toThreePoint(point).project(this.camera)
+    const inFront = p.z > -1 && p.z < 1
     return {
       x: ((p.x + 1) / 2) * this.width,
       y: ((1 - p.y) / 2) * this.height,
-      visible: p.z > -1 && p.z < 1 && Math.abs(p.x) <= 1.05 && Math.abs(p.y) <= 1.05,
+      visible: inFront && Math.abs(p.x) <= 1.05 && Math.abs(p.y) <= 1.05,
+      inFront,
     }
+  }
+
+  /** Only the CAD viewport gives the camera construction curves to frame. */
+  setConstructionFrame(curves: readonly EvaluatedCurve[]): void {
+    const first = curves[0]
+    const wasEmpty = this.constructionFrame.length === 0
+    this.constructionFrame = curves
+    if (first && wasEmpty && !this.evaluation?.parts.length && !this.evaluation?.stones.length)
+      this.viewConstructionPlane(
+        first.plane,
+        curves.flatMap((c) => c.points),
+      )
+  }
+
+  /** Looks squarely onto the named plane through the model origin. */
+  viewConstructionPlane(plane: CurvePlane, points: Vec3[] = []): void {
+    const azimuth = plane === 'right' ? 90 : 0
+    const elevation = plane === 'top' ? 90 : 0
+    const scene = points.length ? points : this.pointsFor()
+    this.look(
+      azimuth,
+      elevation,
+      scene.length
+        ? scene
+        : [
+            [-12, -12, -12],
+            [12, 12, 12],
+          ],
+      0.64,
+      false,
+    )
+  }
+
+  /** Converts canvas pixels into millimetres on a construction plane through the origin. */
+  pointOnConstructionPlane(plane: CurvePlane, x: number, y: number): [number, number] | null {
+    const normal =
+      plane === 'front'
+        ? new Vector3(0, 0, 1)
+        : plane === 'right'
+          ? new Vector3(1, 0, 0)
+          : new Vector3(0, 1, 0)
+    this.raycaster.setFromCamera(this.ndc(x, y), this.camera)
+    const hit = this.raycaster.ray.intersectPlane(new Plane(normal, 0), new Vector3())
+    return hit ? pointOnCurvePlane(plane, [hit.x, -hit.z, hit.y]) : null
   }
 
   /** The screen rectangle (CSS pixels) the nodes' bounds cover, or null when none is in front. */
   screenBounds(
     nodeIds: readonly string[],
   ): { x0: number; y0: number; x1: number; y1: number } | null {
-    if (!this.evaluation) return null
     const pts = this.nodePoints(nodeIds)
       .map((p) => this.project(p))
       .filter((p) => p.visible)
@@ -824,25 +876,29 @@ export class Viewer {
 
   private pointsFor(nodeIds?: readonly string[]): Vec3[] {
     const e = this.evaluation
-    if (!e) return []
     if (!nodeIds?.length && this.frameFocus.length) {
       const focused = this.nodePoints(this.frameFocus)
       if (focused.length) return focused
     }
     if (!nodeIds?.length) {
+      const construction = this.constructionFrame.flatMap((c) => c.points)
+      if (!e) return construction
+      if (construction.length && !e.parts.length && !e.stones.length) return construction
       const subject = subjectOf(e)
-      return subject.silhouette ?? corners(e.report.bounds)
+      return [...(subject.silhouette ?? corners(e.report.bounds)), ...construction]
     }
     const pts = this.nodePoints(nodeIds)
     return pts.length ? pts : this.pointsFor()
   }
 
   private nodePoints(nodeIds: readonly string[]): Vec3[] {
-    const e = this.evaluation!
+    const e = this.evaluation
     const ids = new Set(nodeIds)
-    const pts: Vec3[] = []
-    for (const p of e.parts) if (ids.has(p.nodeId)) pts.push(...corners(p.bounds))
-    for (const s of e.stones)
+    const pts: Vec3[] = this.constructionFrame
+      .filter((curve) => ids.has(curve.nodeId))
+      .flatMap((curve) => curve.points)
+    for (const p of e?.parts ?? []) if (ids.has(p.nodeId)) pts.push(...corners(p.bounds))
+    for (const s of e?.stones ?? [])
       if (ids.has(s.nodeId)) {
         const r = s.dims.width * 0.6
         const c: Vec3 = [s.matrix[12]!, s.matrix[13]!, s.matrix[14]!]
