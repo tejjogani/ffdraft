@@ -1,6 +1,12 @@
 # Live status of agents and tasks
 
-_Generated 26 Nov 2026 11:35 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+_Generated 26 Nov 2026 11:50 UTC by `docs/agents/sync_status.py` from the workflow journals; pushed automatically. Who owns what: `docs/agents/BOARD.md`. The plan: `docs/PLAN.md`._
+
+## Spec as the source of truth: third fix round (lane A, A7)
+
+| Agent | State | Outcome |
+|---|---|---|
+| fix:1 | running or interrupted |  |
 
 ## Studio experience: focused editor, project card menu, minimal assistant with a character (lane A, A11)
 
@@ -27,7 +33,8 @@ _Generated 26 Nov 2026 11:35 UTC by `docs/agents/sync_status.py` from the workfl
 | write:skill | running or interrupted |  |
 | fix:1 | done | Ten of the twelve findings are fixed or improved, each checked on a before-and-after render that I looked at whole and cropped on the stone and the ground. Two are not fixed: F8 (red pavé seats inside the rose-gold shan… |
 | verify:1 | done | 1 blocker, 4 major, 2 minor. FAIL. I re-rendered at HEAD f8569f6 under verify-1/, with the fixer's harness, 768 px, preview tier, 2 threads: studs in six looks, the three-stone in six, the… |
-| fix:2 | running or interrupted |  |
+| fix:2 | done | I fixed the findings on branch render/realism in /home/user/ffdraft-render and committed once as 810d46e (not pushed). Every change was judged on a before-and-after pair that I opened whole and cropped on the stone, ban… |
+| verify:2 | running or interrupted |  |
 
 ## CAD viewport: speed, full rotation, Rhino navigation (lane A, A13)
 
@@ -62,11 +69,11 @@ _Generated 26 Nov 2026 11:35 UTC by `docs/agents/sync_status.py` from the workfl
 | fix:1 | done | I fixed all 5 blockers, every major except G10, and most of the minors on `spec/truth` in /home/user/ffdraft-spec. Two commits, not pushed: `31543ae` (gem facts and the gate) and `330700e` (spec authority, server, promp… |
 | verify:1 | done | 1 blocker, 4 major, 3 minor. FAIL. Most of the reviewed findings are fixed and reproduce as fixed: B1, B3, B4, the gate (M1), G1 to G6, M2, the exact negated message, and the 4.01 to 4.05 … |
 | fix:2 | done | Waiting for results. |
-| verify:2 | running or interrupted |  |
+| verify:2 | done | 4 major, 2 minor. FAIL. All five findings are fixed for the exact cases reported, but the fix breaks 5 server replay tests, adds a new false refusal, and leaves two gaps open. I… |
 
 ## Release verification (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: e0c8cce Status: studio on browser scripts; render second fix round; spec first fix round
+Branch `claude/busy-bardeen-o482lo`, head: 1de0fec Status: spec verifying its second fix round; studio and render still working
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -97,7 +104,7 @@ Branch `claude/busy-bardeen-o482lo`, head: e0c8cce Status: studio on browser scr
 
 ## Integration and release (lane A, A3)
 
-Branch `claude/busy-bardeen-o482lo`, head: e0c8cce Status: studio on browser scripts; render second fix round; spec first fix round
+Branch `claude/busy-bardeen-o482lo`, head: 1de0fec Status: spec verifying its second fix round; studio and render still working
 
 | Agent | State | Outcome |
 |---|---|---|
@@ -139,7 +146,7 @@ Branch `claude/assistant-build`, head: 645a050 Record the temporary review-fix c
 
 ## Engine follow-up (lane A, A2)
 
-Branch `claude/busy-bardeen-o482lo`, head: e0c8cce Status: studio on browser scripts; render second fix round; spec first fix round
+Branch `claude/busy-bardeen-o482lo`, head: 1de0fec Status: spec verifying its second fix round; studio and render still working
 
 | Agent | State | Outcome |
 |---|---|---|
