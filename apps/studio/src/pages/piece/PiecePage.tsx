@@ -28,6 +28,7 @@ import { StartJob } from '../../features/assistant/jobs/StartJob'
 import { TryVariants } from '../../features/directions/TryVariants'
 import { savePaveFile } from '../../features/pavefile'
 import { PROJECT_AREAS, PROJECT_MENU, type ProjectArea } from '../../features/projects/areas'
+import { projectFolder } from '../../features/projects/folder'
 import { ProjectSwitcher } from '../../features/projects/ProjectSwitcher'
 import { DOCK_PANEL_PX, ReferenceDock } from '../../features/references/ReferencePanel'
 import { useReferencePanel } from '../../features/references/store'
@@ -246,7 +247,7 @@ function PieceHeader({
                 size="sm"
                 onClick={() => assistant.open({ context: { pieceId: piece.id } })}
               >
-                <AiChip>Ask</AiChip>
+                <AiChip>Project AI</AiChip>
               </Button>
               <Menu
                 trigger={<IconButton icon={MoreHorizontal} label="Piece options" />}
@@ -262,7 +263,7 @@ function PieceHeader({
                 >
                   Save as Pavé file
                 </MenuItem>
-                <MenuSub label="Move to collection" icon={FolderInput}>
+                <MenuSub label="Move to folder" icon={FolderInput}>
                   <CollectionChoices piece={piece} />
                 </MenuSub>
                 <MenuSeparator />
@@ -344,7 +345,7 @@ function PieceHero({ piece }: { piece: Piece }) {
               className={cn(buttonClass({ variant: 'ghost', size: 'sm' }), 'px-1.5 font-normal')}
             >
               <Folder aria-hidden />
-              {collections.data?.find((c) => c.id === piece.collectionId)?.name ?? 'No collection'}
+              {projectFolder(piece.collectionId, collections.data)}
             </button>
           }
         >
@@ -373,10 +374,12 @@ function CollectionChoices({ piece }: { piece: Piece }) {
       value={piece.collectionId ?? 'none'}
       onChange={(v) => update.mutate({ id: piece.id, collectionId: v === 'none' ? null : v })}
     >
-      <MenuRadioItem value="none">No collection</MenuRadioItem>
+      <MenuRadioItem closeOnClick value="none">
+        Default folder
+      </MenuRadioItem>
       {collections.data?.map((c) => (
-        <MenuRadioItem key={c.id} value={c.id}>
-          {c.name}
+        <MenuRadioItem closeOnClick key={c.id} value={c.id}>
+          {projectFolder(c.id, collections.data)}
         </MenuRadioItem>
       ))}
     </MenuRadioGroup>

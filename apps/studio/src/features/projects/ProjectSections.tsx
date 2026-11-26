@@ -1,27 +1,27 @@
 /** Project tools and the cost and contents of this piece. */
 import { JOB_STAGES, type Piece, type PieceSummary, type ProjectCost } from '@pave/schema'
-import { cn } from '@pave/ui'
+import { AiMark, Button, cn } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
 import { ArrowUpRight } from 'lucide-react'
 import { CutIcon } from '../../components/CutIcon'
 import { KindGlyph } from '../../components/KindGlyph'
 import { assetUrl } from '../../lib/assets'
 import { useRpc } from '../../lib/query'
+import { useSession } from '../../lib/session'
+import { openAssistant } from '../../stores/assistant'
+import { StartJob } from '../assistant/jobs/StartJob'
 import { takeMedia } from '../render/shots'
 import { PROJECT_AREAS, type ProjectArea } from './areas'
 import { costLines, STAGE_TITLE, stageStates, stageUsd, usd } from './cost'
 
 const toolCopy = {
-  Designs: [
-    'Design board & spec',
-    'Collect reference images and edit the materials, stones and sizes.',
-  ],
-  CAD: ['CAD builder', 'Open the 3D model to shape the piece and adjust its settings.'],
-  Renders: ['Render studio', 'Frame the piece, set the lighting and make a product image.'],
-  Sourcing: ['Stone sourcing', 'Find diamonds for a setting and compare their measurements.'],
-  'On model': ['On model', 'Prepare a photograph of the piece being worn.'],
+  Designs: ['Design board & spec', 'Gather references and edit the spec.'],
+  CAD: ['CAD builder', 'Shape the piece and adjust its settings.'],
+  Renders: ['Render studio', 'Set the camera, lighting and backdrop.'],
+  Sourcing: ['Stone sourcing', 'Compare diamonds and refit a setting.'],
+  'On model': ['On model', 'Choose a model and prepare a shoot.'],
   Production: ['Production', 'Production packages are planned.'],
-  History: ['Project history', 'Review design changes and undo an edit.'],
+  History: ['Project history', 'Review or undo a design change.'],
 } satisfies Record<ProjectArea['title'], [string, string]>
 
 export function ProjectSections({ piece }: { piece: Piece }) {
@@ -34,11 +34,10 @@ export function ProjectSections({ piece }: { piece: Piece }) {
   const cost = summary.data?.projects.find((p) => p.pieceId === piece.id)
   return (
     <section aria-label="Project">
+      <ProjectAssistant piece={piece} />
       <h2 className="text-[28px] font-bold leading-tight tracking-tight">Project tools</h2>
-      <p className="mt-1.5 mb-5 text-[15px] text-fg-muted">
-        Choose what you’d like to work on. Each tool opens in this project.
-      </p>
-      <nav aria-label="Project tools" className="flex flex-col gap-4">
+      <p className="mt-1.5 mb-5 text-[15px] text-fg-muted">Choose a tool for this piece.</p>
+      <nav aria-label="Project tools" className="grid grid-cols-2 gap-3">
         {PROJECT_AREAS.map((area) => {
           const [name, description] = toolCopy[area.title]
 
@@ -49,7 +48,7 @@ export function ProjectSections({ piece }: { piece: Piece }) {
               params={{ id: piece.id }}
               aria-label={name}
               data-stage-section={'stage' in area ? area.stage : undefined}
-              className="group flex min-h-[104px] items-center gap-4 rounded-xl border border-line-strong bg-bg p-4 shadow-sm hover:border-fg-muted hover:bg-bg-subtle focus-visible:outline-2 sm:min-h-[115px] sm:gap-6 sm:p-5"
+              className="group flex min-w-0 flex-col items-start gap-2 rounded-lg border border-line-strong bg-bg p-3 hover:border-fg-muted hover:bg-bg-subtle focus-visible:outline-2 sm:min-h-[84px] sm:flex-row sm:items-center sm:gap-3 sm:px-4"
             >
               <ToolPreview
                 area={area}
@@ -59,14 +58,14 @@ export function ProjectSections({ piece }: { piece: Piece }) {
                 }
               />
               <span className="min-w-0 flex-1">
-                <span className="block text-[21px] font-semibold leading-7 tracking-tight sm:text-[24px]">
+                <span className="block text-[17px] font-semibold leading-5 tracking-tight sm:text-[18px]">
                   {name}
                 </span>
-                <span className="mt-1 block text-[15px] leading-5 text-fg-muted">
+                <span className="mt-1 block text-[14px] leading-5 text-fg-muted">
                   {description}
                 </span>
               </span>
-              <ArrowUpRight className="size-5 shrink-0 text-fg-muted" aria-hidden />
+              <ArrowUpRight className="hidden size-4 shrink-0 text-fg-muted lg:block" aria-hidden />
             </Link>
           )
         })}
@@ -102,6 +101,43 @@ export function ProjectSections({ piece }: { piece: Piece }) {
   )
 }
 
+function ProjectAssistant({ piece }: { piece: Piece }) {
+  const enabled = useSession().capabilities.assistant
+  return (
+    <section
+      aria-label="Project assistant"
+      className="mb-8 rounded-xl border border-line-strong bg-bg-subtle p-5 sm:p-6"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="flex items-center gap-2 text-[21px] font-bold">
+            <AiMark className="size-5" />
+            Project assistant
+          </h2>
+          <p className="mt-1 text-[15px] text-fg-muted">
+            {enabled
+              ? 'Ask about this design, change a setting, or plan a render.'
+              : 'Connect Claude to discuss this design or plan a CAD edit.'}
+          </p>
+        </div>
+        <Button variant="primary" onClick={() => openAssistant({ pieceId: piece.id })}>
+          {enabled ? 'Ask about this project' : 'Connect project AI'}
+        </Button>
+      </div>
+      {enabled && (
+        <details className="mt-4 border-t border-line pt-3">
+          <summary className="cursor-pointer text-base font-semibold">Plan an AI job</summary>
+          <div className="mt-3 flex flex-col items-start gap-2">
+            {JOB_STAGES.map((stage) => (
+              <StartJob key={stage} pieceId={piece.id} stage={stage} />
+            ))}
+          </div>
+        </details>
+      )}
+    </section>
+  )
+}
+
 function ToolPreview({
   area,
   piece,
@@ -126,7 +162,7 @@ function ToolPreview({
     <span
       aria-hidden
       className={cn(
-        'relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-md sm:h-[76px] sm:w-24',
+        'relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-md sm:size-12',
         tones[area.title],
       )}
     >
@@ -134,19 +170,19 @@ function ToolPreview({
         <img className="size-full object-cover" src={assetUrl(image, 160)} alt="" />
       ) : area.title === 'CAD' ? (
         <span className="flex size-full items-center justify-center bg-[linear-gradient(to_right,#22504f12_1px,transparent_1px),linear-gradient(to_bottom,#22504f12_1px,transparent_1px)] bg-[size:9px_9px]">
-          <KindGlyph kind={piece.kind} className="w-16" />
+          <KindGlyph kind={piece.kind} className="w-12" />
         </span>
       ) : area.title === 'Designs' ? (
         <>
-          <span className="absolute h-10 w-8 -translate-x-2 rotate-[-13deg] border border-[#bfaa8c] bg-[#fbf6ea]" />
+          <span className="absolute h-7 w-6 -translate-x-2 rotate-[-13deg] border border-[#bfaa8c] bg-[#fbf6ea]" />
           <span className="relative translate-x-1 rotate-[7deg] border border-[#c8b699] bg-[#fffaf0] shadow-sm">
-            <KindGlyph kind={piece.kind} className="w-10" />
+            <KindGlyph kind={piece.kind} className="w-7" />
           </span>
         </>
       ) : area.title === 'Sourcing' && gem ? (
-        <CutIcon cut={gem.cut} className="size-10" />
+        <CutIcon cut={gem.cut} className="size-7" />
       ) : (
-        <Icon className="size-8" strokeWidth={1.5} />
+        <Icon className="size-6" strokeWidth={1.5} />
       )}
     </span>
   )
