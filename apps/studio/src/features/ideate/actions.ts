@@ -11,10 +11,11 @@ import { invalidateFor, queryClient } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { useSession } from '../../lib/session'
 import { useCurrentView } from '../../lib/use-current-view'
-import { openAssistant } from '../../stores/assistant'
+import { openAssistant, useAssistant } from '../../stores/assistant'
 import { useSend } from '../assistant/actions'
+import { resolveProjectThread } from '../assistant/project-thread'
 import { useReferencePanel } from '../references/store'
-import { classifyBoardFile, TAKE_TO_CAD_GOAL } from './board'
+import { classifyBoardFile, TAKE_TO_CAD_GOAL, takeToCadRefusal } from './board'
 
 const refresh = () => {
   invalidateFor(queryClient, 'boards')
@@ -127,22 +128,44 @@ export function useTakeToCad() {
   const isCurrent = useCurrentView()
   const { capabilities } = useSession()
   const { send } = useSend({ stage: 'design' })
-  return async (board: Board, ref: Reference) => {
+  return async (
+    board: Board,
+    ref: Reference,
+    options?: {
+      prompt: string
+      originalAssets?: string[]
+      requireClaude: boolean
+      clientMessageId?: string
+    },
+  ) => {
     try {
+      const refusal = takeToCadRefusal(ref)
+      if (refusal) throw new Error(refusal)
+      if (options?.requireClaude && !capabilities.assistant)
+        throw new Error('Connect Claude to build this design.')
       const pieceId = await projectFor(board)
+      const prompt = options?.prompt ?? TAKE_TO_CAD_GOAL
+      if (!isCurrent()) return
+      if (capabilities.assistant) openAssistant({ pieceId, draft: prompt })
       const { pin, assetId } = await rpc.call('pieces.takeToCad', { pieceId, referenceId: ref.id })
       invalidateFor(queryClient, 'references')
       if (!isCurrent()) return
       if (capabilities.assistant) {
-        const out = await send(TAKE_TO_CAD_GOAL, {
+        const threadId = await resolveProjectThread(pieceId)
+        if (!isCurrent()) return
+        const out = await send(prompt, {
           job: { stage: 'cad', goal: TAKE_TO_CAD_GOAL },
-          threadId: null,
+          threadId,
           pieceId,
+          boardId: board.pieceId === pieceId ? board.id : undefined,
           bare: true,
-          attachments: [assetId],
+          referenceIds: [ref.id],
+          clientMessageId: options?.clientMessageId,
+          attachments: [...new Set([assetId, ...(options?.originalAssets ?? [])])].slice(0, 8),
         })
         if (!isCurrent()) return
-        openAssistant({ pieceId, threadId: out.thread.id })
+        const { draft } = useAssistant.getState()
+        openAssistant({ pieceId, threadId: out.thread.id, draft: draft === prompt ? '' : draft })
       } else {
         useReferencePanel.getState().setPlaceRequest({ pieceId, refId: pin.id, view: 'front' })
         toast({
@@ -153,6 +176,7 @@ export function useTakeToCad() {
       }
       await navigate({ to: '/pieces/$id/design', params: { id: pieceId } })
     } catch (e) {
+      if (options?.requireClaude) throw e
       toast.error('Couldn’t take it to CAD', e instanceof Error ? e.message : undefined)
     }
   }

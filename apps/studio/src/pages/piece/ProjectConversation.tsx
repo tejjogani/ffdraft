@@ -1,51 +1,66 @@
-import type { AssistantTier, Piece } from '@pave/schema'
+import type { AssistantTier, Piece, Reference } from '@pave/schema'
 import {
   Button,
   buttonClass,
+  Chip,
   Field,
+  IconButton,
   InlineError,
-  readStored,
   Skeleton,
   Textarea,
   toast,
-  writeStored,
 } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
+import { X } from 'lucide-react'
 import { useState } from 'react'
 import { newMessageId } from '../../features/assistant/actions'
 import { Composer } from '../../features/assistant/Composer'
 import { Conversation } from '../../features/assistant/Conversation'
+import {
+  latestProjectThread,
+  resolveProjectThread,
+  selectProjectThread,
+} from '../../features/assistant/project-thread'
 import { addNote, type BoardTarget } from '../../features/ideate/actions'
 import { clientId } from '../../lib/events'
 import { invalidateFor, queryClient, useRpc } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { activeOrg, useSession } from '../../lib/session'
-import type { Attachment } from '../../stores/assistant'
+import { useCurrentView } from '../../lib/use-current-view'
+import { type Attachment, useAssistant } from '../../stores/assistant'
 
 const errorMessage = (error: unknown) =>
   error instanceof Error ? error.message : 'Try again in a moment.'
 
-/** A project thread is independent of the floating assistant, its draft and its CAD selection. */
-export function ProjectConversation({ piece, boardId }: { piece: Piece; boardId?: string }) {
+type ProjectConversationProps = {
+  piece: Piece
+  boardId?: string
+  reference?: Reference
+  onClearReference?: () => void
+}
+
+export function ProjectConversation({ piece, ...props }: ProjectConversationProps) {
   const session = useSession()
-  const scope = `pave:design-conversation:${session.activeOrgId}:${session.user.id}:${piece.id}`
-  return <DesignConversation key={scope} scope={scope} pieceId={piece.id} boardId={boardId} />
+  const scope = `${session.activeOrgId}:${session.user.id}:${piece.id}`
+  return <DesignConversation key={scope} pieceId={piece.id} {...props} />
 }
 
 function DesignConversation({
-  scope,
   pieceId,
   boardId,
-}: {
-  scope: string
-  pieceId: string
-  boardId?: string
-}) {
+  reference,
+  onClearReference,
+}: Omit<ProjectConversationProps, 'piece'> & { pieceId: string }) {
   const session = useSession()
   const role = activeOrg(session)?.role
   const canWrite = role !== undefined && role !== 'viewer' && role !== 'guest'
   const canChat = canWrite && session.capabilities.assistant
-  const [threadId, setThreadId] = useState(() => readStored<string | null>(scope, null))
+  const isCurrent = useCurrentView()
+  const selected = useAssistant((state) =>
+    state.threadPieceId === pieceId ? state.activeThreadId : null,
+  )
+  const recent = useRpc('threads.list', latestProjectThread(pieceId))
+  const threadId = selected ?? recent.data?.[0]?.id ?? null
   const [draft, setDraft] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [focus, setFocus] = useState(0)
@@ -58,7 +73,7 @@ function DesignConversation({
   )
   const activeThread =
     thread.data?.thread.context.pieceId === pieceId ? thread.data.thread.id : null
-  const checking = Boolean(threadId && thread.isPending)
+  const checking = Boolean(threadId ? thread.isPending : recent.isPending)
   const page = { pieceId, boardId, stage: 'design' as const }
 
   async function send(text: string, tier?: AssistantTier) {
@@ -67,17 +82,22 @@ function DesignConversation({
     setPending(true)
     setError('')
     try {
+      const verified = await resolveProjectThread(pieceId)
+      const photos = [
+        ...(reference?.assetId ? [reference.assetId] : []),
+        ...(tier ? [] : attachments.map(({ id }) => id)),
+      ]
       const out = await rpc.call('threads.send', {
-        ...(activeThread ? { threadId: activeThread } : {}),
+        ...(verified ? { threadId: verified } : {}),
         text: message,
-        attachments: tier ? [] : attachments.map(({ id }) => id),
+        attachments: [...new Set(photos)].slice(0, 8),
+        ...(reference ? { referenceIds: [reference.id] } : {}),
         context: { ...page, selection: [], brainstorm: true },
         ...(tier ? { tier } : {}),
         clientId,
         clientMessageId: newMessageId(),
       })
-      writeStored(scope, out.thread.id)
-      setThreadId(out.thread.id)
+      if (isCurrent()) selectProjectThread(pieceId, out.thread.id)
       setDraft('')
       setAttachments([])
       invalidateFor(queryClient, 'threads')
@@ -106,7 +126,7 @@ function DesignConversation({
             page={page}
             inline={{
               transcriptClassName: 'max-h-[min(44vh,24rem)] px-4',
-              pending,
+              pending: pending || !canChat,
               send: (text, tier) => void send(text, tier),
               rephrase: (text) => {
                 setDraft(text)
@@ -115,6 +135,9 @@ function DesignConversation({
             }}
           />
         </div>
+      )}
+      {!threadId && recent.isError && (
+        <InlineError message={recent.error.message} onRetry={() => void recent.refetch()} />
       )}
       {thread.isError && thread.error.status !== 404 && (
         <InlineError message={thread.error.message} onRetry={() => void thread.refetch()} />
@@ -140,6 +163,19 @@ function DesignConversation({
                 ? 'Continue the design conversation…'
                 : 'Explore a shape, setting, or finish…'
             }
+            chips={
+              reference && (
+                <Chip outline className="max-w-full gap-2">
+                  <span className="truncate">{reference.title}</span>
+                  <IconButton
+                    icon={X}
+                    size="sm"
+                    label="Remove reference from message"
+                    onClick={onClearReference}
+                  />
+                </Chip>
+              )
+            }
             sending={pending}
             disabled={checking || thread.data?.run?.status === 'running'}
             focusNonce={focus}
@@ -147,7 +183,20 @@ function DesignConversation({
           {error && <InlineError message={error} />}
         </div>
       ) : canWrite ? (
-        <DesignNote key={boardId ?? pieceId} target={boardId ? { boardId } : { pieceId }} />
+        <div className="mt-3 space-y-4">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <p className="text-sm text-fg-muted">Connect Claude to chat about this design.</p>
+            <Link to="/settings/ai" className={buttonClass({ size: 'sm', variant: 'primary' })}>
+              Connect Claude
+            </Link>
+          </div>
+          <details className="border-t border-line pt-3">
+            <summary className="w-fit cursor-pointer text-sm font-medium hover:text-fg-muted">
+              Write a board note
+            </summary>
+            <DesignNote key={boardId ?? pieceId} target={boardId ? { boardId } : { pieceId }} />
+          </details>
+        </div>
       ) : (
         <p className="mt-2 text-sm text-fg-muted">Designers can add to this conversation.</p>
       )}
@@ -176,6 +225,7 @@ function DesignNote({ target }: { target: BoardTarget }) {
           .finally(() => setPending(false))
       }}
     >
+      <p className="text-xs text-fg-muted">This note is saved to the design board.</p>
       <Field label="Design note">
         {(id) => (
           <Textarea
@@ -188,14 +238,9 @@ function DesignNote({ target }: { target: BoardTarget }) {
           />
         )}
       </Field>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" variant="primary" disabled={!note.trim() || pending}>
-          {pending ? 'Saving…' : 'Save to design board'}
-        </Button>
-        <Link to="/settings/ai" className={buttonClass({ variant: 'ghost' })}>
-          Connect Claude
-        </Link>
-      </div>
+      <Button type="submit" variant="secondary" disabled={!note.trim() || pending}>
+        {pending ? 'Saving…' : 'Save to design board'}
+      </Button>
       {error && <InlineError message={error} />}
     </form>
   )
