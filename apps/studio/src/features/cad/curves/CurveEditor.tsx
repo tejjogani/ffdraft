@@ -215,9 +215,8 @@ export function CurveEditor({
           />
         </div>
         <p className="text-xs text-fg-muted">
-          {selected
-            ? 'Click a new position or type coordinates to move the point.'
-            : 'Click the viewport or type coordinates to add a point.'}
+          {viewer && 'Click the viewport or '}
+          {viewer ? 'type' : 'Type'} coordinates to {selected ? 'move the point.' : 'add a point.'}
         </p>
         <form
           className="flex flex-wrap items-end gap-2"
@@ -275,17 +274,19 @@ export function CurveEditor({
           </p>
         )}
         <div className="flex flex-wrap items-center gap-1.5">
-          <Button
-            size="sm"
-            variant={snapEnabled ? 'secondary' : 'ghost'}
-            aria-pressed={snapEnabled}
-            onClick={() => {
-              setSnapEnabled(!snapEnabled)
-              setSnap(null)
-            }}
-          >
-            Snap points
-          </Button>
+          {viewer && (
+            <Button
+              size="sm"
+              variant={snapEnabled ? 'secondary' : 'ghost'}
+              aria-pressed={snapEnabled}
+              onClick={() => {
+                setSnapEnabled(!snapEnabled)
+                setSnap(null)
+              }}
+            >
+              Snap points
+            </Button>
+          )}
           <Button
             size="sm"
             variant={closed ? 'secondary' : 'ghost'}

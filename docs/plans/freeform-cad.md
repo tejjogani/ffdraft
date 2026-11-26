@@ -49,8 +49,8 @@ history, survives Pavé file save and reopen, and exports to free STL at the dra
 **Available next slice.** **Draw curve** creates an independent open or closed polyline in the
 CAD viewport. Click the Front, Top, or Right plane or type millimetre coordinates. Endpoint and
 midpoint snaps use other curves on that plane. **Edit points** reopens the curve, and its point IDs
-remain stable across edits, Undo/Redo, and Pavé file reopen. Construction curves contribute no
-metal to manufacturing exports.
+remain stable across edits, Undo/Redo, and Pavé file reopen. Scripts can create and edit the same
+curves through `design.apply`. Construction curves contribute no metal to manufacturing exports.
 
 The remaining milestones below cover smooth curves, additional curve tools, attached
 construction planes, and operations that use curves to make solids.
