@@ -1687,8 +1687,8 @@ export const commands = {
           id,
           title: z.string(),
           assetId: id.nullable(),
-          /** What must be in the frame: the whole piece, or the centre stone for a macro. */
-          subject: z.enum(['piece', 'centre stone']),
+          /** What must be in the frame: the whole piece, centre stone or a group of settings. */
+          subject: z.enum(['piece', 'centre stone', 'setting detail']),
           framing: z.string(),
           ok: z.boolean(),
           /** What is wrong and how to fix it, in plain words; null when the framing is good. */

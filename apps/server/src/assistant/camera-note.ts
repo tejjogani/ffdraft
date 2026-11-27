@@ -4,7 +4,7 @@
  * frame the piece fills. With these numbers "move the camera a bit lower" is one scenes.update
  * with a new position, rather than guesswork about where a preset puts the camera.
  */
-import { describePose, predictFraming, resolveScene } from '@pave/render'
+import { describePose, resolveScene, shotFraming } from '@pave/render'
 import type { SavedScene } from '@pave/schema'
 import { subjectsOf } from '../cinema'
 import type { Ctx } from '../context'
@@ -39,15 +39,11 @@ export async function cameraNote(
     if (!subject) return []
     const resolved = resolveScene(shot.scene, subject)
     const c = resolved.camera
-    const framing = predictFraming(
-      c,
-      resolved.output.width / resolved.output.height,
-      subject.silhouette ?? [],
-    )
+    const check = shotFraming(shot.scene, subject)
     const kind =
       shot.scene.camera.preset === 'custom' ? 'custom camera' : `${shot.scene.camera.preset} preset`
     const lock = shot.scene.camera.locked ? ', locked' : ''
-    return `- "${shot.title}" (${shot.id}, ${kind}${lock}): ${describePose(c)}; framing ${framing.label}.`
+    return `- "${shot.title}" (${shot.id}, ${kind}${lock}): ${describePose(c)}; ${check.subject} framing ${check.framing.label}.`
   })
   return lines.length ? ['Shot cameras (mm, Z up, front faces −Y):', ...lines].join('\n') : null
 }

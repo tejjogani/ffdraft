@@ -13,10 +13,12 @@ import type { Evaluation } from '@pave/kernel'
 import {
   customCameraPatch,
   type Framing,
+  importedStationDetail,
   poseOf,
   type ResolvedCamera,
   type ResolvedScene,
   sceneHash,
+  subjectOf,
   type ViewPose,
 } from '@pave/render'
 import type { RenderScene } from '@pave/schema'
@@ -98,7 +100,7 @@ export function Viewfinder({
   className?: string
   /** A finished gesture, as a scene patch. */
   onCommit: (patch: Record<string, unknown>) => void
-  onLock: (locked: boolean) => void
+  onLock: (locked: boolean, camera?: Record<string, unknown>) => void
   onReset: () => void
   /** The fingerprint of the scene now drawn (what a take of this view renders). */
   onHash?: (hash: string | null) => void
@@ -179,7 +181,20 @@ export function Viewfinder({
     // A new still quality (the setting changed, or the machine proved slow) draws again.
   }, [evaluation, scene, fit.width, fit.height, quality?.stillDpr, quality?.stillEffects])
 
-  const points = useMemo(() => (evaluation ? framingPoints(evaluation) : []), [evaluation])
+  const detail = useMemo(
+    () =>
+      evaluation &&
+      scene.includeUnassignedRhino &&
+      !scene.camera.locked &&
+      (scene.camera.preset === 'hero' || scene.camera.preset === 'macro')
+        ? importedStationDetail(scene.camera, subjectOf(evaluation))
+        : null,
+    [evaluation, scene.camera, scene.includeUnassignedRhino],
+  )
+  const points = useMemo(
+    () => detail?.points ?? (evaluation ? framingPoints(evaluation) : []),
+    [detail, evaluation],
+  )
   const radius = resolved?.subject.radius ?? 10
   const current = pose ?? (resolved ? poseOf(resolved.camera, radius) : null)
   const framing: Framing | null = current ? framingOf(current, aspect, points) : null
@@ -449,6 +464,19 @@ export function Viewfinder({
                   label={locked ? 'Unlock camera' : 'Lock camera'}
                   active={locked}
                   onClick={() => {
+                    if (!locked && detail && resolved && current) {
+                      takePending()
+                      const { preset, basePreset } = scene.camera
+                      onLock(
+                        true,
+                        customCameraPatch(
+                          current,
+                          resolved.subject,
+                          preset === 'custom' ? basePreset : preset,
+                        ).camera,
+                      )
+                      return
+                    }
                     commitPending()
                     onLock(!locked)
                   }}

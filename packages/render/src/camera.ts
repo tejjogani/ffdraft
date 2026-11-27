@@ -196,6 +196,91 @@ function boundsOf(pts: readonly Vec3[]): Bounds {
   return { min, max }
 }
 
+/**
+ * Locate the middle settings of a long, narrow Rhino import. Work in the row's own XY axes
+ * so world orientation does not decide whether a bracelet or straightened necklace qualifies.
+ */
+export function importedStationDetail(
+  camera: RenderScene['camera'],
+  subject: SceneSubject,
+): { points: Vec3[]; azimuth: number; elevation: number; focus: Vec3 } | null {
+  const { preset } = camera
+  if (
+    (preset !== 'hero' && preset !== 'macro') ||
+    camera.locked ||
+    camera.position ||
+    camera.target
+  )
+    return null
+
+  const gems = subject.parts.filter(
+    (part) => part.importRole === 'unassigned' && part.sourceAppearance?.kind === 'gem',
+  )
+  if (gems.length < 2) return null
+
+  const center = boundsCenter(subject.bounds)
+  const centers = gems.map(({ bounds }) => boundsCenter(bounds))
+  const mean = scale(centers.reduce(add, [0, 0, 0]), 1 / centers.length)
+  let xx = 0
+  let xy = 0
+  let yy = 0
+  for (const point of centers) {
+    const [x, y] = sub(point, mean)
+    xx += x * x
+    xy += x * y
+    yy += y * y
+  }
+  const direction = Math.atan2(2 * xy, xx - yy) / 2
+  const along: Vec3 = [Math.cos(direction), Math.sin(direction), 0]
+  const across: Vec3 = [-along[1], along[0], 0]
+  const local = (p: Vec3): Vec3 => {
+    const offset = sub(p, center)
+    return [dot(offset, along), dot(offset, across), offset[2]]
+  }
+  const world = (p: Vec3): Vec3 =>
+    add(center, add(scale(along, p[0]), add(scale(across, p[1]), [0, 0, p[2]])))
+  const fullPoints = subject.silhouette?.length
+    ? subject.silhouette
+    : subject.parts.flatMap(({ bounds }) => corners(bounds))
+  const extent = boundsOf(fullPoints.map(local))
+  const [span, width, height] = sub(extent.max, extent.min)
+  if (span < 4 * Math.max(width, height) || span <= 0) return null
+
+  const midpoint = boundsCenter(extent)[0]
+  const row = gems.map((part, index) => {
+    const center = centers[index]!
+    return { part, center, offset: local(center)[0] }
+  })
+  row.sort(
+    (a, b) => Math.abs(a.offset - midpoint) - Math.abs(b.offset - midpoint) || a.offset - b.offset,
+  )
+  const selected = row.slice(0, preset === 'macro' ? 2 : 3)
+  const focus = selected[0]!
+  const detail = boundsOf(selected.flatMap(({ part }) => corners(part.bounds).map(local)))
+  const size = Math.max(...sub(focus.part.bounds.max, focus.part.bounds.min))
+  if (detail.max[0] - detail.min[0] > 0.55 * span || size <= 0) return null
+
+  // Keep the nearby prongs and gallery. A long shared rail contributes only its extent at these
+  // settings, so it never forces the camera back out to the bracelet's full length.
+  const margin: Vec3 = [size * 0.12, size * 0.5, size * 0.65]
+  const lo = sub(detail.min, margin)
+  const hi = add(detail.max, margin)
+  const points = corners(detail)
+  for (const part of subject.parts) {
+    if (part.sourceAppearance?.kind === 'gem') continue
+    const b = boundsOf(corners(part.bounds).map(local))
+    const min = lo.map((n, i) => Math.max(n, b.min[i]!)) as Vec3
+    const max = hi.map((n, i) => Math.min(n, b.max[i]!)) as Vec3
+    if (min.every((n, i) => n <= max[i]!)) points.push(...corners({ min, max }))
+  }
+  return {
+    points: points.map(world),
+    azimuth: (direction * 180) / Math.PI + 15,
+    elevation: preset === 'macro' ? 64 : 56,
+    focus: focus.center,
+  }
+}
+
 function stoneBounds(subject: SceneSubject): Bounds | null {
   const centre = subject.stones.filter((s) => s.role === 'center')
   const stones = centre.length ? centre : subject.stones
@@ -241,6 +326,7 @@ export function resolveCamera(
   frameReflection = false,
 ): ResolvedCamera {
   const radius = boundsRadius(subject.bounds)
+  const detail = importedStationDetail(camera, subject)
   let target: Vec3
   let azimuth: number
   let elevation: number
@@ -254,8 +340,9 @@ export function resolveCamera(
   } else {
     const spec = CAMERA_PRESETS[camera.preset]
     const stones = spec.frame === 'stones' ? stoneBounds(subject) : null
-    const pts = stones ? corners(stones) : (subject.silhouette ?? corners(subject.bounds))
-    ;({ azimuth, elevation } = spec)
+    const pts =
+      detail?.points ?? (stones ? corners(stones) : (subject.silhouette ?? corners(subject.bounds)))
+    ;({ azimuth, elevation } = detail ?? spec)
     if (frameReflection && !camera.target && !stones && elevation < 16) {
       elevation = 16
       if (Math.abs(azimuth) < 15) azimuth = 15
@@ -263,7 +350,7 @@ export function resolveCamera(
     const framed = framePoints(pts, azimuth, elevation, camera.focalLength, aspect, spec.fill)
     target = camera.target ?? framed.target
     distance = framed.distance
-    if (frameReflection && !camera.target && !stones) {
+    if (frameReflection && !camera.target && !stones && !detail) {
       // A standing piece's reflection needs more space below the contact point.
       const { up } = cameraBasis(azimuth, elevation)
       target = add(
@@ -275,7 +362,7 @@ export function resolveCamera(
 
   const { position } = cameraPose({ target, azimuth, elevation, distance })
   const forward = orbitDirection(azimuth, elevation)
-  const focus = focusPoint(subject, camera.focusNodeId, target)
+  const focus = focusPoint(subject, camera.focusNodeId, detail?.focus ?? target)
   return {
     target,
     azimuth,
