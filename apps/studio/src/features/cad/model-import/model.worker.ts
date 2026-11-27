@@ -17,7 +17,7 @@ const MAX_STL_FILE_BYTES = 200 * 1024 * 1024
 const canFormSolid = (bounds: Bounds, triangles: number) =>
   triangles >= 4 && bounds.max.every((max, axis) => max > bounds.min[axis]!)
 
-async function previewModel({ file, stlUnit }: ModelRequest): Promise<ModelPreview> {
+async function previewModel({ file, stlUnit, includeCurves }: ModelRequest): Promise<ModelPreview> {
   if (!isModelFile(file.name)) throw new Error('Choose a Rhino .3dm file or an STL mesh.')
   const stl = isStlFile(file.name)
   const limit = stl ? MAX_STL_FILE_BYTES : MAX_RHINO_FILE_BYTES
@@ -38,11 +38,12 @@ async function previewModel({ file, stlUnit }: ModelRequest): Promise<ModelPrevi
           layer: null,
         },
       ],
+      curves: [],
       skipped: [],
     }
   }
 
-  const rhino = await readRhino3dm(bytes)
+  const rhino = await readRhino3dm(bytes, { includeCurves })
   const parts: ModelPart[] = []
   const skipped = [...rhino.skipped]
   for (const part of rhino.objects) {
@@ -58,6 +59,7 @@ async function previewModel({ file, stlUnit }: ModelRequest): Promise<ModelPrevi
   return {
     units: rhino.units,
     parts,
+    curves: rhino.curves,
     skipped,
   }
 }

@@ -15,6 +15,12 @@ import { writeStl } from '../mesh/stl'
 import { freeRhino, loadRhino3dm } from '../runtime/rhino'
 import type { IndexedTriangles } from '../solid/meshing'
 import type { Bounds } from '../types'
+import {
+  CURVE_SOURCE_ID_KEY,
+  type PlacedRhinoCurve,
+  RhinoCurveReadError,
+  readPlacedCurve,
+} from './rhino-curve'
 
 const MAX_FILE_MIB = 64
 export const MAX_RHINO_FILE_BYTES = MAX_FILE_MIB * 1024 * 1024
@@ -52,6 +58,10 @@ export interface RhinoNativePart {
   transform?: Mat4
 }
 
+export interface RhinoCurveObject extends RhinoObjectLabel, PlacedRhinoCurve {
+  sourceObjectId?: string
+}
+
 export interface RhinoSkippedObject extends RhinoObjectLabel {
   reason: string
 }
@@ -59,6 +69,7 @@ export interface RhinoSkippedObject extends RhinoObjectLabel {
 export interface RhinoImport {
   units: string
   objects: readonly RhinoMeshObject[]
+  curves: readonly RhinoCurveObject[]
   skipped: readonly RhinoSkippedObject[]
 }
 
@@ -398,7 +409,10 @@ function writeNativePart(
 }
 
 /** Reads native Rhino meshes and complete render caches without changing their placement. */
-export async function readRhino3dm(bytes: Uint8Array): Promise<RhinoImport> {
+export async function readRhino3dm(
+  bytes: Uint8Array,
+  { includeCurves = false }: { includeCurves?: boolean } = {},
+): Promise<RhinoImport> {
   validateArchive(bytes)
   const rhino = await loadRhino3dm()
   return withHandles((hold) => {
@@ -417,6 +431,7 @@ export async function readRhino3dm(bytes: Uint8Array): Promise<RhinoImport> {
     const settings = hold(doc.settings())
     const units = fileUnits(rhino, settings.modelUnitSystem)
     const result: RhinoMeshObject[] = []
+    const curves: RhinoCurveObject[] = []
     const skipped: RhinoSkippedObject[] = []
     const layerInfo = new Map<number, ReturnType<typeof readLayer>>()
     const visibleById = new Map<string, boolean>()
@@ -510,12 +525,25 @@ export async function readRhino3dm(bytes: Uint8Array): Promise<RhinoImport> {
             }
             return
           }
-          const meshes = objectMeshes(
-            rhino,
-            geometry,
-            parent?.meshPlacement ?? filePlacement,
-            budget,
-          )
+          const placement = parent?.meshPlacement ?? filePlacement
+          if (includeCurves && geometry instanceof rhino.Curve) {
+            const curve = readPlacedCurve(rhino, geometry, placement.pointInMillimetres)
+            if (curve.controlPoints.length > budget.vertices) throw new Error(TOO_COMPLEX)
+            budget.vertices -= curve.controlPoints.length
+            const savedId = attrs?.getUserString(CURVE_SOURCE_ID_KEY)
+            const sourceObjectId =
+              savedId && /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(savedId)
+                ? savedId
+                : attrs?.id
+            curves.push({
+              ...curve,
+              name: objectName || inContext(`Curve ${ordinal}`),
+              layer,
+              ...(sourceObjectId && { sourceObjectId }),
+            })
+            return
+          }
+          const meshes = objectMeshes(rhino, geometry, placement, budget)
           const objectId = attrs?.id
           let native: RhinoNativePart | undefined
           if (objectId) {
@@ -550,13 +578,14 @@ export async function readRhino3dm(bytes: Uint8Array): Promise<RhinoImport> {
             ...(native && { native }),
           })
         } catch (error) {
-          if (!(error instanceof SkippedGeometry)) throw error
+          if (!(error instanceof SkippedGeometry || error instanceof RhinoCurveReadError))
+            throw error
           skipped.push({ name, layer, reason: error.message })
         }
       })
     }
 
     for (let i = 0; i < count; i++) readObject(() => objects.get(i), i + 1)
-    return { units: units.name, objects: result, skipped }
+    return { units: units.name, objects: result, curves, skipped }
   })
 }

@@ -3,13 +3,15 @@
  * asked for. Unchanged Rhino solids keep their imported BReps. The remaining bodies are
  * written as meshes, with a layer per alloy and one for stones, in millimetres.
  */
-import { METALS } from '@pave/schema'
+import { METALS, type NodeOf } from '@pave/schema'
 import { defineExporter, type Scene } from '../core'
 import type { ChainData } from '../features/chain'
 import { fromFrame } from '../geometry/vec'
+import { CURVE_SOURCE_ID_KEY } from '../import/rhino-curve'
 import { freeRhino as free, loadRhino3dm } from '../runtime/rhino'
 import type { ExportOptions } from '../types'
 import { type MeshObject, metalNotes, objectColor, sceneObjects } from './meshes'
+import { writeRhinoNurbsCurve } from './rhino-curve'
 import { nativeSolidWriter } from './rhino-native'
 
 const rgba = (hex: string) => ({
@@ -66,7 +68,12 @@ function girdle(stone: MeshObject & { kind: 'stone' }): number[][] {
   })
 }
 
-async function write3dm(scene: Scene, objects: readonly MeshObject[], options: ExportOptions) {
+async function write3dm(
+  scene: Scene,
+  objects: readonly MeshObject[],
+  curves: readonly NodeOf<'nurbsCurve'>[],
+  options: ExportOptions,
+) {
   const rhino = await loadRhino3dm()
   const doc = new rhino.File3dm()
   // The document's tables, fetched once and freed with it. Each call to `doc.objects()` (or
@@ -147,8 +154,31 @@ async function write3dm(scene: Scene, objects: readonly MeshObject[], options: E
         free(curve)
       }
     }
+    for (const curve of curves) {
+      options.signal?.throwIfAborted()
+      const path = curve.rhinoLayer?.split('::').filter(Boolean)
+      const attrs = attributes(
+        curve.name || curve.id,
+        layerFor(path?.length ? path : ['Curves'], '#5a8fb8'),
+        {
+          nodeId: curve.id,
+          ...(curve.sourceObjectId && { [CURVE_SOURCE_ID_KEY]: curve.sourceObjectId }),
+        },
+      )
+      try {
+        writeRhinoNurbsCurve(rhino, objectTable, curve, attrs)
+      } finally {
+        free(attrs)
+      }
+    }
+    const only = options.only && new Set(options.only)
     for (const result of scene.nodes.values())
-      if (result.status === 'ok' && result.node.kind === 'chain') {
+      if (
+        result.status === 'ok' &&
+        result.node.visible &&
+        result.node.kind === 'chain' &&
+        (!only || only.has(result.id))
+      ) {
         const data = result.data as ChainData
         const points = data.path.map((p) => [...p])
         if (data.closed) points.push(points[0]!)
@@ -177,18 +207,35 @@ export const rhino3dm = defineExporter({
   format: '3dm',
   detail: 'production',
   async run(scene, options) {
+    const only = options.only && new Set(options.only)
+    const curves: NodeOf<'nurbsCurve'>[] = []
+    for (const { node, status } of scene.nodes.values()) {
+      if (
+        status === 'ok' &&
+        node.visible &&
+        node.kind === 'nurbsCurve' &&
+        (!only || only.has(node.id))
+      )
+        curves.push(node)
+    }
     const objects = sceneObjects(scene, {
       stones: options.stones ?? true,
       ...(options.only && { only: options.only }),
+      allowEmpty: curves.length > 0,
     })
-    const { bytes, nativeNotes } = await write3dm(scene, objects, options)
+    const { bytes, nativeNotes } = await write3dm(scene, objects, curves, options)
     return {
       bytes,
       mime: 'application/x-3dm',
       extension: '3dm',
       notes: [
+        ...(curves.length
+          ? [
+              `${curves.length} editable NURBS curve${curves.length === 1 ? '' : 's'} in millimetres.`,
+            ]
+          : []),
         ...nativeNotes,
-        'Millimetres. Layers: one per alloy under Metal, Stones, and Curves (chain centre lines, stone girdles).',
+        'Curve layers keep their Rhino paths. New curves, chain centre lines and stone girdles appear under Curves.',
         'Each object carries user strings: node ids, alloy, finish and plating for metal; stone, cut, carat and size for stones.',
         ...metalNotes(scene, objects),
       ],
