@@ -37,7 +37,10 @@ function check(...files: string[]) {
   }
 }
 
-async function writeModel(name: string, contents: 'mixed' | 'point' | 'curve' | 'mesh') {
+async function writeModel(
+  name: string,
+  contents: 'mixed' | 'overlap' | 'point' | 'curve' | 'mesh' | 'repair',
+) {
   const rhino = await loadRhino3dm()
   const doc = new rhino.File3dm()
   const settings = doc.settings()
@@ -67,8 +70,27 @@ async function writeModel(name: string, contents: 'mixed' | 'point' | 'curve' | 
       faces.addTriFace(1, 2, 3)
       faces.addTriFace(2, 0, 3)
       objects.addMesh(mesh, attributes)
+      const overlapping = hold(mesh.duplicate() as Mesh)
+      expect(overlapping.translate([0.25, 0, 0])).toBe(true)
+      objects.addMesh(overlapping, attributes)
+
+      // The reader accepts this display, but Studio cannot build a solid from the flat mesh.
+      const flat = hold(new rhino.Mesh())
+      const flatVertices = hold(flat.vertices())
+      for (const [x, y] of [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+      ] as const)
+        flatVertices.add(x, y, 0)
+      hold(flat.faces()).addQuadFace(0, 1, 2, 3)
+      objects.addMesh(flat, attributes)
+
+      const sphere = hold(new rhino.Sphere([0, 0, 0], 1))
+      objects.addBrep(hold(rhino.Brep.createFromSphere(sphere)), attributes)
     }
-    if (contents === 'mixed') {
+    if (contents === 'mixed' || contents === 'overlap' || contents === 'repair') {
       const layers = hold(doc.layers())
       const layer = hold(new rhino.Layer())
       layer.name = 'Test profiles'
@@ -99,7 +121,7 @@ async function writeModel(name: string, contents: 'mixed' | 'point' | 'curve' | 
         vertices.add(x, y, z)
       const faces = hold(mesh.faces())
       for (let i = 0; i < 4; i++) {
-        faces.addTriFace(i, (i + 1) % 4, 4)
+        if (contents !== 'repair' || i !== 0) faces.addTriFace(i, (i + 1) % 4, 4)
         faces.addTriFace((i + 1) % 4, i, 5)
       }
       const shell = hold(solid.faces())
@@ -122,7 +144,8 @@ async function writeModel(name: string, contents: 'mixed' | 'point' | 'curve' | 
         id: string,
         transform: Transform,
       ) => InstanceReference
-      for (const x of [5, 10]) {
+      const placements = contents === 'overlap' ? [5, 6] : contents === 'repair' ? [5] : [5, 10]
+      for (const x of placements) {
         const transform = hold(rhino.Transform.translationXYZ(x, 0, 0))
         objects.addInstanceObject(hold(new Reference(definition.id, transform)), attributes)
       }
@@ -136,6 +159,31 @@ async function writeModel(name: string, contents: 'mixed' | 'point' | 'curve' | 
 }
 
 describe('local Rhino model check', () => {
+  it('preserves both overlapping same-alloy native parts and a weighted curve in one full export', async () => {
+    const file = await writeModel('overlapping synthetic assembly.3dm', 'overlap')
+    const digest = sha256(await readFile(file))
+    const { status, reports } = check('--full-export', file)
+    expect(reports[0].failure).toBeUndefined()
+    expect(reports).toMatchObject([
+      {
+        result: 'passed',
+        sha256: { before: digest, after: digest },
+        fullExport: {
+          supportedBodies: 2,
+          supportedCurves: 1,
+          expectedNativeBodies: 2,
+          nativeBReps: 2,
+          nativeInstances: 0,
+          placedNativeBodies: 2,
+          meshBodies: 0,
+          curves: 1,
+          sourceParity: true,
+        },
+      },
+    ])
+    expect(status).toBe(0)
+  })
+
   it('checks archived edges and trimmed cap motion on a placed sleeve in centimetres', async () => {
     const rhino = await loadRhino3dm()
     const fixture = await makeCappedPrismFixture()
@@ -224,6 +272,7 @@ describe('local Rhino model check', () => {
         nativeCaps: { status: 'not run: no eligible end caps', candidatesChecked: 1 },
       },
     ])
+    expect(reports[0]).not.toHaveProperty('fullExport')
     expect(status).toBe(0)
     expect(sha256(await readFile(file))).toBe(digest)
   })
@@ -244,16 +293,60 @@ describe('local Rhino model check', () => {
   it('reports absent native tools while accepting mesh-only and curve-only geometry', async () => {
     const mesh = await writeModel('mesh.3dm', 'mesh')
     const curve = await writeModel('curve.3dm', 'curve')
-    const { status, reports } = check(mesh, curve)
+    const { status, reports } = check('--full-export', mesh, curve)
     expect(status).toBe(0)
     expect(reports).toMatchObject([
-      { result: 'passed', bodies: { baseline: 'mesh', edited: 'mesh', undone: 'mesh' } },
-      { result: 'passed', curves: { roundTripped: 1, editedAndUndone: true } },
+      {
+        result: 'passed',
+        bodies: { baseline: 'mesh', edited: 'mesh', undone: 'mesh' },
+        fullExport: {
+          supportedBodies: 2,
+          expectedNativeBodies: 0,
+          meshOnlyInputs: 2,
+          meshBodies: 2,
+          curves: 0,
+          previewExcluded: 1,
+          readerSkipped: 2,
+          sourceParity: true,
+        },
+      },
+      {
+        result: 'passed',
+        curves: { roundTripped: 1, editedAndUndone: true },
+        fullExport: {
+          supportedBodies: 0,
+          expectedNativeBodies: 0,
+          meshBodies: 0,
+          curves: 1,
+          sourceParity: true,
+        },
+      },
     ])
     for (const report of reports) {
       expect(report.nativeEdges.status).toBe('not run: no retained native solid')
       expect(report.nativeCaps.status).toBe('not run: no retained native solid')
       expect(report.sha256.before).toBe(report.sha256.after)
     }
+  })
+
+  it('records a retained source with a repaired display as a mesh fallback', async () => {
+    const file = await writeModel('repaired display.3dm', 'repair')
+    const { status, reports } = check('--full-export', file)
+    expect(reports[0].failure).toBeUndefined()
+    expect(status).toBe(0)
+    expect(reports[0]).toMatchObject({
+      result: 'passed',
+      imported: { nativeParts: 1 },
+      fullExport: {
+        supportedBodies: 1,
+        expectedNativeBodies: 0,
+        repairedNativeInputs: 1,
+        meshOnlyInputs: 0,
+        meshBodies: 1,
+        placedNativeBodies: 0,
+        curves: 1,
+        sourceParity: true,
+      },
+    })
   })
 })

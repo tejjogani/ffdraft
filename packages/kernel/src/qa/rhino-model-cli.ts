@@ -7,10 +7,11 @@ import { MAX_RHINO_FILE_BYTES, readRhino3dm } from '../import/rhino'
 import { createKernel } from '../kernel'
 import { loadRhino3dm } from '../runtime/rhino'
 import { archive, counts, sourceArchive } from './rhino-archive'
+import { probeFullExport } from './rhino-full-export'
 import { hasSolidPreview, probeBodies, probeCurves } from './rhino-model-probes'
 import { probeNativeCaps, probeNativeEdges, retainedParts } from './rhino-native-probes'
 
-const usage = 'Usage: pnpm cad:check-rhino <file.3dm> [more.3dm ...]'
+const usage = 'Usage: pnpm cad:check-rhino [--full-export] <file.3dm> [more.3dm ...]'
 
 async function sha256(file: string) {
   const hash = createHash('sha256')
@@ -18,7 +19,7 @@ async function sha256(file: string) {
   return hash.digest('hex')
 }
 
-async function check(file: string, index: number) {
+async function check(file: string, index: number, fullExport: boolean) {
   const report = {
     fileNumber: index + 1,
     result: 'failed' as 'passed' | 'failed',
@@ -29,6 +30,12 @@ async function check(file: string, index: number) {
     bodies: undefined as Awaited<ReturnType<typeof probeBodies>> | undefined,
     nativeEdges: undefined as Awaited<ReturnType<typeof probeNativeEdges>> | undefined,
     nativeCaps: undefined as Awaited<ReturnType<typeof probeNativeCaps>> | undefined,
+    fullExport: undefined as
+      | (Awaited<ReturnType<typeof probeFullExport>> & {
+          readerSkipped: number
+          previewExcluded: number
+        })
+      | undefined,
     failure: undefined as { stage: string; detail: string } | undefined,
   }
   const kernel = createKernel()
@@ -96,6 +103,14 @@ async function check(file: string, index: number) {
     report.nativeEdges = await probeNativeEdges(rhino, bytes, native, sourceData.unit[0])
     stage = 'native end-cap readback'
     report.nativeCaps = await probeNativeCaps(rhino, bytes, native, sourceData.unit[0])
+    if (fullExport) {
+      stage = 'full 3DM export readback'
+      report.fullExport = {
+        ...(await probeFullExport(rhino, kernel, parts, imported.curves)),
+        readerSkipped: imported.skipped.length,
+        previewExcluded: previewSkipped,
+      }
+    }
     report.result = 'passed'
   } catch (error) {
     report.failure = {
@@ -122,7 +137,10 @@ async function check(file: string, index: number) {
 
 try {
   const { values, positionals } = parseArgs({
-    options: { help: { type: 'boolean', short: 'h' } },
+    options: {
+      help: { type: 'boolean', short: 'h' },
+      'full-export': { type: 'boolean', default: false },
+    },
     allowPositionals: true,
   })
   if (values.help) {
@@ -130,7 +148,7 @@ try {
   } else {
     if (!positionals.length) throw new Error(usage)
     for (const [index, file] of positionals.entries()) {
-      const report = await check(file, index)
+      const report = await check(file, index, values['full-export'])
       console.log(JSON.stringify(report))
       if (report.result === 'failed') process.exitCode = 1
     }

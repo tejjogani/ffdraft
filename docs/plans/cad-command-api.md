@@ -75,6 +75,14 @@ The offline edge and end-cap corpus probes have synthetic regression cases for a
 
 The probes use controlled selections and write exports in memory. The [Studio import checks](../../apps/studio/e2e/model-import.ts) and [server archive tests](../../apps/server/src/pavefile/pavefile-engines.test.ts) exercise the browser workflow and persisted `.pave` exchange.
 
+Add `--full-export` to check the complete imported assembly in one production `.3dm` export.
+
+```bash
+pnpm --silent cad:check-rhino --full-export "path/to/model.3dm"
+```
+
+The check reopens the export in memory and verifies one object per supported node. It checks closed native BReps and their block placement and provenance, editable NURBS definitions, and closed meshes where native retention is ineligible. The report counts skipped source entries, excluded previews, and retained sources that require mesh repair. The full assembly check takes additional time and memory for display evaluation, export, and readback. The command leaves the source file unchanged and writes no export file.
+
 ## Trace quality
 
 Project history answers what changed, who changed it, and how to reverse it. An assistant run also has ordered tool inputs, results, errors, and a link to the resulting changes. A useful regression replays a request on a disposable project and verifies the observed shape, bounds, mass or other task-specific result. A tool returning success alone is insufficient. The project-scoping regression includes a refused cross-project read and ensures that the other project keeps its original version.

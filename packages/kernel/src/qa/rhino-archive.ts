@@ -191,7 +191,12 @@ export function sourceCurve(rhino: RhinoModule, doc: File3dm, id: string, scale:
   })
 }
 
-export function nativeShape(rhino: RhinoModule, doc: File3dm, geometry: GeometryBase) {
+export function nativeShape(
+  rhino: RhinoModule,
+  doc: File3dm,
+  geometry: GeometryBase,
+  includeEncoding = true,
+) {
   return handles((hold) => {
     const instance = geometry instanceof rhino.InstanceReference ? geometry : null
     let shape = geometry
@@ -200,6 +205,10 @@ export function nativeShape(rhino: RhinoModule, doc: File3dm, geometry: Geometry
       const ids = def?.getObjectIds() as string[] | undefined
       ok(ids?.length === 1, 'Native export instance must contain one solid.')
       const object = hold(hold(doc.objects()).findId(ids[0]!))
+      ok(
+        hold(object.attributes()).isInstanceDefinitionObject,
+        'Native block member is not embedded.',
+      )
       shape = hold(object.geometry())
     }
     ok(
@@ -228,7 +237,7 @@ export function nativeShape(rhino: RhinoModule, doc: File3dm, geometry: Geometry
     return {
       type: instance ? ('instance' as const) : ('BRep' as const),
       topology: { edges: edgeList.count, trims },
-      shape: JSON.stringify(shape.encode()),
+      shape: includeEncoding ? JSON.stringify(shape.encode()) : undefined,
       samples,
       placement:
         xform &&
