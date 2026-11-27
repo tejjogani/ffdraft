@@ -12,6 +12,7 @@
     "./mesh-stl": "./src/mesh/stl.ts",
     "./rhino-cap": "./src/import/rhino-cap.ts",
     "./rhino-edges": "./src/import/rhino-edges.ts",
+    "./rhino-face-borders": "./src/import/rhino-face-borders.ts",
     "./rhino-import": "./src/import/rhino.ts",
     "./walls": "./src/dfm/wallProbe.ts"
   },

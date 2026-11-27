@@ -27,6 +27,8 @@ For a measured mesh, use `design.meshComponents` to read source-mesh vertices an
 
 For a retained Rhino solid, `design.rhinoCapFaces` lists qualifying end faces. Pass the selected face index, returned native asset ID, project version and signed offset in millimetres to `design.offsetRhinoCap`. For an edge, page through `design.rhinoEdges`, request the exact curve for the chosen edge index, and add it with `design.apply` at the version inspected. The Python helpers expose both workflows. Re-read a selection after another edit changes its source or project version. [Face command](../../apps/server/src/handlers/rhino-caps.ts) · [Edge query](../../apps/server/src/handlers/rhino-edges.ts) · [Python examples](../../packages/pave-python/README.md)
 
+Use `design.rhinoFaceBorders` to inspect a retained Rhino solid's complete face borders in project millimetres. `faceCount` counts all source face indices, including faces omitted from a page. An exact `faceIndex` request returns one closed NURBS curve per qualified outer or inner trim loop, in outer-first order. The loop directions follow the placed face orientation. Use the returned project version in one `design.apply` to add independent `nurbsCurve` nodes with fresh IDs for all the loops. A face that contains a seam, repeated edge, edgeless trim or discontinuity is ineligible.
+
 The [Python package](../../packages/pave-python/README.md) contains callable examples. A script uses the permissions of its local session. Local scripts produce user edits. For an assistant tool call the server records the run ID and tool-call ID on the change.
 
 ## Implementation order
