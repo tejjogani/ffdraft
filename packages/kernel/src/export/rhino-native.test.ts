@@ -1,9 +1,11 @@
 import { applyOps, designFrom, type NodeInput, replaceStone } from '@pave/schema'
 import { importSTEP, measureVolume, type Shape3D } from 'replicad'
-import type { InstanceReference, Mesh, MeshType, RhinoModule, Transform } from 'rhino3dm'
+import type { Brep, InstanceReference, Mesh, MeshType, RhinoModule, Transform } from 'rhino3dm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { makeCappedPrismFixture } from '../../test-fixtures/capped-prism'
 import { type RhinoMeshObject, readRhino3dm } from '../import/rhino'
 import { createKernel } from '../kernel'
+import { archive } from '../qa/rhino-archive'
 import { freeRhino, loadRhino3dm } from '../runtime/rhino'
 
 let rhino: RhinoModule
@@ -617,6 +619,100 @@ describe('Rhino import roles', () => {
       },
     ])
     expect(output.notes[0]).toMatch(/2 native Rhino solids retained, 0 evaluated mesh bodies/)
+  })
+
+  it('keeps pierced by-part cage members native near a setting of another alloy', async () => {
+    const bytes = archive(rhino, await makeCappedPrismFixture(), (doc, hold) => {
+      const objects = hold(doc.objects())
+      const sleeve = hold(hold(objects.get(0)).geometry())
+      expect(sleeve).toBeInstanceOf(rhino.Brep)
+      const upper = hold(sleeve.duplicate())
+      expect(upper).toBeInstanceOf(rhino.Brep)
+      const pose = hold(
+        Object.assign(rhino.Transform.identity(), {
+          m00: 1.25,
+          m11: 1.25,
+          m22: 1.25,
+          m03: 9,
+          m13: 0.75,
+          m23: 0.5,
+        }),
+      )
+      expect(upper.transform(pose)).toBe(true)
+      const attrs = hold(new rhino.ObjectAttributes())
+      attrs.name = 'Upper sleeve'
+      objects.addBrep(upper as Brep, attrs)
+      return doc.toByteArray().slice()
+    })
+    const { design, assets } = fixture((await readRhino3dm(bytes)).objects)
+    const base = applyOps(design, [
+      {
+        t: 'add',
+        node: { id: 'gem', kind: 'gem', width: 2.8, transform: { position: [15, 0, 3.3] } },
+      },
+      {
+        t: 'add',
+        node: {
+          id: 'setting',
+          kind: 'setting',
+          gem: 'gem',
+          material: 'au18k-rose',
+          style: 'bezel',
+        },
+      },
+    ]).design
+    const changed = applyOps(base, [
+      ...['part-0', 'part-1'].map((id) => ({
+        t: 'update' as const,
+        id,
+        patch: {
+          material: 'pt950',
+          mountCage: {
+            mode: 'byPart',
+            min: [-3, -3, 0],
+            max: [12.75, 4.5, 3],
+            offsets: Array.from({ length: 8 }, (_, i) => [
+              (i & 3) === 3 ? 1.5 : 0,
+              0,
+              (i & 6) === 6 ? 0.6 : 0,
+            ]),
+          },
+        },
+      })),
+    ]).design
+    const baselineCast = await kernel.scene(base, { assets, detail: 'production' })
+    const originalCastBezel = baselineCast.parts.find((p) => p.part.nodeId === 'setting')!.part
+      .volumeMm3
+    const scene = await kernel.scene(changed, { assets, detail: 'production' })
+    const upper = scene.nodes.get('part-1')!.bodies[0]!
+    const bezel = scene.nodes.get('setting')!.bodies[0]!
+    const overlap = upper.solid
+      .manifold(scene.quality)
+      .intersect(bezel.solid.manifold(scene.quality))
+    expect(overlap.volume()).toBeGreaterThan(0.2)
+    overlap.delete()
+    const castUpper = scene.parts.find((p) => p.sources.some((s) => s.nodeId === 'part-1'))
+    expect(castUpper?.part.volumeMm3).toBeLessThan(upper.solid.volume() - 0.2)
+    expect(scene.parts.find((p) => p.part.nodeId === 'setting')?.part.volumeMm3).toBeCloseTo(
+      originalCastBezel,
+      6,
+    )
+    const exported = await kernel.export(changed, '3dm', { assets, stones: false })
+    const parts = readRhinoExport(exported.bytes)
+    for (const id of ['part-0', 'part-1']) {
+      const part = parts.find((p) => p.nodeIds === id)
+      expect(part?.native || part?.affineInstance).toBe(true)
+    }
+    const baseline = await kernel.export(base, '3dm', { assets, stones: false })
+    const originalBezel = readRhinoExport(baseline.bytes).find((p) => p.nodeIds === 'setting')!
+    expect(parts.find((p) => p.nodeIds === 'setting')).toMatchObject({
+      min: originalBezel.min,
+      max: originalBezel.max,
+      volume: originalBezel.volume,
+    })
+    expect(exported.notes).toContain(
+      'Handmade mount metal is exchanged as independent design parts. Production outputs seat overlapping alloys.',
+    )
   })
 
   it('exports a nonlinear cage as a connected mesh and restores the immutable BRep on undo', async () => {

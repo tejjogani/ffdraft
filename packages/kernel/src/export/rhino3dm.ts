@@ -313,6 +313,9 @@ export const rhino3dm = defineExporter({
       curves,
       options,
     )
+    const independentMount = objects.some(
+      (o) => o.kind === 'metal' && o.part.fused === null && o.part.sources[0]?.body.customMount,
+    )
     return {
       bytes,
       mime: 'application/x-3dm',
@@ -320,6 +323,11 @@ export const rhino3dm = defineExporter({
       notes: [
         `${retained} native Rhino solid${retained === 1 ? '' : 's'} retained, ${meshBodies} evaluated mesh ${meshBodies === 1 ? 'body' : 'bodies'}, ${curves.length} editable NURBS curve${curves.length === 1 ? '' : 's'}.`,
         ...nativeNotes,
+        ...(independentMount
+          ? [
+              'Handmade mount metal is exchanged as independent design parts. Production outputs seat overlapping alloys.',
+            ]
+          : []),
         'Evaluated bodies export as meshes. STEP carries exact Pavé geometry where available.',
         'Curve layers keep their Rhino paths. New curves, chain centre lines and stone girdles appear under Curves.',
         'Each object carries user strings: node ids, alloy, finish and plating for metal; stone, cut, carat and size for stones.',

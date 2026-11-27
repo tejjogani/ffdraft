@@ -509,9 +509,10 @@ interface HostedAddition {
 }
 
 /**
- * A modeling archive keeps independently imported bodies in the outliner. Keep possible
- * production mutations in the usual assembly so an original cannot replace a seated, engraved,
- * two-tone or augmented casting. Source bodies arrive here after visibility and consumption.
+ * A modeling archive keeps independently imported bodies in the outliner. Explicit cuts and
+ * additions still assemble. Custom mount edits exchange the individual design parts, leaving
+ * incidental cross-alloy seating to production formats. Source bodies arrive here after
+ * visibility and consumption.
  */
 function independentImports(
   active: readonly NodeResult[],
@@ -523,15 +524,8 @@ function independentImports(
 ): Set<string> {
   const hosts = new Set(additions.map(({ host }) => host.id))
   const cutters = everywhere.map((solid) => solid.bounds())
-  const byMaterial = new Map<MetalId, Bounds[]>()
-  const include = (material: MetalId, solid: Solid) => {
-    const boxes = byMaterial.get(material) ?? []
-    boxes.push(solid.bounds())
-    byMaterial.set(material, boxes)
-  }
-  for (const result of active) for (const body of result.bodies) include(body.material, body.solid)
-  for (const { host, addition } of additions) include(host.bodies[0]!.material, addition.solid)
   const independent = new Set<string>()
+  const ordinary: { id: string; body: Body }[] = []
   for (const { id, node, bodies } of active) {
     if (
       bodies.length !== 1 ||
@@ -542,11 +536,31 @@ function independentImports(
       hosts.has(id)
     )
       continue
-    const { material, solid, customMount } = bodies[0]!
-    const box = solid.bounds()
+    const body = bodies[0]!
+    const box = body.solid.bounds()
     // Account for the submicron translation of production seats below.
     const near = (cut: Bounds) => boundsOverlap(cut, box, Math.max(...GENERAL_POSITION))
-    if (cutters.some(near) || (!customMount && gemBoxes.some(near))) continue
+    if (cutters.some(near) || (!body.customMount && gemBoxes.some(near))) continue
+    if (body.customMount) independent.add(id)
+    else ordinary.push({ id, body })
+  }
+  if (ordinary.length === 0) return independent
+
+  const byMaterial = new Map<MetalId, Bounds[]>()
+  const include = (material: MetalId, solid: Solid) => {
+    const boxes = byMaterial.get(material) ?? []
+    boxes.push(solid.bounds())
+    byMaterial.set(material, boxes)
+  }
+  for (const result of active)
+    if (!independent.has(result.id))
+      for (const body of result.bodies) include(body.material, body.solid)
+  for (const { host, addition } of additions) include(host.bodies[0]!.material, addition.solid)
+  for (const {
+    id,
+    body: { material, solid },
+  } of ordinary) {
+    const box = solid.bounds()
     if (
       [...byMaterial].some(
         ([alloy, boxes]) => alloy !== material && boxes.some((other) => boundsOverlap(other, box)),
