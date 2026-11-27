@@ -85,6 +85,26 @@ export const BASES: Record<string, NodeInput[]> = {
 
 /** The base design of a kind with a patch merged into the node under test. */
 export function variant(kind: string, patch: Record<string, unknown>): Design {
+  // In-plane axis controls belong to the linked profile variant. Keep the section clear
+  // of the chosen axis at both parameter extremes so the generated test input is valid.
+  if (kind === 'revolve' && ('axis' in patch || 'axisOffset' in patch)) {
+    const side = Number(patch.axisOffset ?? 0) <= 0 ? 1 : -1
+    return designFrom('ring', [
+      {
+        id: 'profile',
+        kind: 'curve',
+        closed: true,
+        plane: 'front',
+        points: [
+          [2, 2],
+          [5, 2],
+          [5, 4],
+          [2, 4],
+        ].map(([u, v], i) => ({ id: String(i), u: side * u!, v: side * v! })),
+      },
+      { id: 'node', kind: 'revolve', curve: 'profile', ...patch },
+    ])
+  }
   const nodes = BASES[kind]!
   const last = nodes[nodes.length - 1]!
   return designFrom('ring', [...nodes.slice(0, -1), { ...last, ...patch } as NodeInput])

@@ -24,6 +24,7 @@ import {
   Plus,
   Redo2,
   RefreshCw,
+  RotateCw,
   Scale,
   ScanEye,
   SlidersHorizontal,
@@ -66,6 +67,7 @@ export interface CadCommandContext {
   openAddMenu(): void
   drawProfile(): void
   drawCurve(): void
+  revolveCurve(curve: string): void
   makeWire(curve: string): void
   requestDelete(ids: string[]): void
   exportAs(format: ExportFormat): void
@@ -156,6 +158,21 @@ export function useCadCommands(c: CadCommandContext): void {
       icon: Spline,
       when: editable,
       run: c.drawCurve,
+    },
+    {
+      id: 'design.revolveCurve',
+      title: 'Revolve selected profile',
+      group: 'Design',
+      icon: RotateCw,
+      keywords: ['lathe', 'spin', 'axis'],
+      when: () => {
+        const n = c.design.nodes[selectedCurve() ?? '']
+        return editable() && n?.kind === 'curve' && n.closed
+      },
+      run: () => {
+        const id = selectedCurve()
+        if (id) c.revolveCurve(id)
+      },
     },
     {
       id: 'design.makeWire',

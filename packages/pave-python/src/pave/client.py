@@ -130,6 +130,29 @@ class Project:
         self._record_write(result)
         return result
 
+    def revolve_curve(
+        self,
+        curve_id: str,
+        *,
+        solid_id: str,
+        axis: Literal["vertical", "horizontal"] = "vertical",
+        axis_offset_mm: float = 0.0,
+        angle_degrees: float = 360.0,
+        base_version: int | None = None,
+        change_id: str | None = None,
+    ) -> JsonObject:
+        """Revolve a closed project curve around an axis in its drawing plane."""
+        node = {
+            "id": solid_id, "kind": "revolve", "curve": curve_id, "axis": axis,
+            "axisOffset": axis_offset_mm, "angle": angle_degrees,
+        }
+        return self.apply(
+            [{"t": "add", "node": node}],
+            "Revolve profile",
+            base_version=base_version,
+            change_id=change_id,
+        )
+
     def make_wire(
         self,
         curve_id: str,

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { Node, NodeOf } from './nodes'
-import { PROFILE_PLANES, type ProfilePlane } from './profile'
+import { DrawnProfile, PROFILE_PLANES, type ProfilePlane } from './profile'
 
 export const CURVE_POINT_LIMIT = 128
 export type CurvePlane = ProfilePlane
@@ -72,4 +72,29 @@ export function pipePath(
     closed: source.closed,
     plane: source.plane,
   }
+}
+
+/** A profile must bound one face entirely on one side of the in-plane rotation axis. */
+export function revolveProfileError(
+  curve: NodeOf<'curve'>,
+  axis: 'vertical' | 'horizontal' = 'vertical',
+  offset = 0,
+): string | undefined {
+  if (!curve.closed) return 'Revolve needs a closed construction curve.'
+  const points = DrawnProfile.shape.points.safeParse(curve.points.map(({ u, v }) => [u, v]))
+  if (!points.success) return points.error.issues[0]?.message ?? 'Invalid profile.'
+  const coordinates = curve.points.map((p) => (axis === 'vertical' ? p.u : p.v))
+  if (Math.min(...coordinates) < offset && Math.max(...coordinates) > offset)
+    return 'The rotation axis crosses the profile. Move the axis to an edge or outside the outline.'
+}
+
+/** Start on the origin unless that would cut through the outline. */
+export function defaultRevolveOffset(
+  curve: NodeOf<'curve'>,
+  axis: 'vertical' | 'horizontal',
+): number {
+  const coords = curve.points.map(({ u, v }) => (axis === 'vertical' ? u : v))
+  const low = Math.min(...coords)
+  const high = Math.max(...coords)
+  return low < 0 && high > 0 ? (Math.abs(low) <= high ? low : high) : 0
 }

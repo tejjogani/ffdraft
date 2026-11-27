@@ -158,6 +158,65 @@ function shellCount({ positions, indices }: Triangles): number {
 const exportOf = (design: Design, format: ExportFormat, stones?: boolean): Promise<ExportResult> =>
   kernel.export(design, format, stones === undefined ? {} : { stones })
 
+describe('revolve from a construction curve', () => {
+  const outline = (outer: number) =>
+    [
+      [3, 2],
+      [outer, 2],
+      [outer, 6],
+      [3, 6],
+    ].map(([u, v], i) => ({ id: String(i), u: u!, v: v! }))
+  const profile = (plane: 'front' | 'top' | 'right' = 'front') =>
+    designFrom('other', [{ id: 'outline', kind: 'curve', plane, closed: true, points: outline(5) }])
+  const spin = (patch: Record<string, unknown> = {}): Op => ({
+    t: 'add',
+    node: { id: 'lathe', kind: 'revolve', curve: 'outline', ...patch },
+  })
+
+  it('exports the measured annulus and rebuilds it after editing and reopening the profile', async () => {
+    const first = applyOps(profile(), [spin()]).design
+    const edit = applyOps(first, [{ t: 'update', id: 'outline', patch: { points: outline(7) } }])
+    for (const [design, r] of [
+      [first, 5],
+      [edit.design, 7],
+      [applyOps(edit.design, edit.inverse).design, 5],
+    ] as const) {
+      const reopened = parseDesignDocument(JSON.parse(JSON.stringify(design)))
+      const { triangles } = parseStl((await exportOf(reopened, 'stl')).bytes)
+      expect(isClosedManifold(triangles)).toBe(true)
+      expectBounds(boundsOf(triangles.positions), { min: [-r, -r, 2], max: [r, r, 6] })
+      const built = await kernel.evaluate(reopened)
+      expect(built.parts[0]!.volumeMm3 / (Math.PI * (r ** 2 - 9) * 4)).toBeCloseTo(1, 2)
+    }
+  })
+
+  it('resolves a horizontal offset axis in the drawing plane, including the negative side and partial angles', async () => {
+    const design = applyOps(profile('right'), [
+      spin({ axis: 'horizontal', axisOffset: 7, angle: 180 }),
+    ]).design
+    const built = await kernel.evaluate(design)
+    expect(built.parts[0]!.volumeMm3 / (Math.PI * (25 - 1))).toBeCloseTo(1, 2)
+    const { triangles } = parseStl((await exportOf(design, 'stl')).bytes)
+    expect(isClosedManifold(triangles)).toBe(true)
+    expectBounds(boundsOf(triangles.positions), { min: [-5, 3, 2], max: [0, 5, 12] })
+  })
+
+  it('rejects axis crossings, open outlines, intersecting outlines and ambiguous input before saving', () => {
+    expect(() => applyOps(profile(), [spin({ axisOffset: 4 })])).toThrow(/axis/i)
+    expect(() => applyOps(profile(), [spin({ profile: 'M0 0h1v1z' })])).toThrow(/either|one/i)
+    const d = applyOps(profile(), [spin()]).design
+    expect(() => applyOps(d, [{ t: 'update', id: 'outline', patch: { closed: false } }])).toThrow(
+      /closed/i,
+    )
+    const pts = outline(5)
+    expect(() =>
+      applyOps(d, [
+        { t: 'update', id: 'outline', patch: { points: [pts[0], pts[2], pts[1], pts[3]] } },
+      ]),
+    ).toThrow(/cross/i)
+  })
+})
+
 describe('wire from a construction curve', () => {
   const source = designFrom('other', [
     {

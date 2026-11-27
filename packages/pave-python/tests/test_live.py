@@ -116,3 +116,19 @@ class LiveCadTest(unittest.TestCase):
         reopened.undo(wire["change"]["seq"])
         self.assertNotIn("custom-wire", reopened.features)
         self.assertIn("rail", reopened.features)
+
+
+        # The Python tool makes the same linked solid as the editor.
+        profile = {
+            "id": "bezel-section", "kind": "curve", "plane": "front", "closed": True,
+            "points": [{"id": str(i), "u": u, "v": v}
+                       for i, (u, v) in enumerate([(3, 0), (5, 0), (5, 4), (3, 4)])],
+        }
+        reopened.apply([{"t": "add", "node": profile}], "Draw a bezel section")
+        before = reopened.evaluate()["metalMassG"]
+        result = reopened.revolve_curve("bezel-section", solid_id="bezel")
+        self.assertGreater(reopened.evaluate()["metalMassG"], before)
+        current = studio.project(piece_id)
+        self.assertEqual(current.features["bezel"]["curve"], "bezel-section")
+        current.undo(result["change"]["seq"])
+        self.assertAlmostEqual(current.evaluate()["metalMassG"], before, places=4)

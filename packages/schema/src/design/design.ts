@@ -6,6 +6,7 @@
  * undo/redo, a replayable history and a per-edit trace of who (person or agent run) did what.
  */
 import { z } from 'zod'
+import { revolveProfileError } from './curve'
 import { DESIGN_VERSION, migrateDesign, prongLayout } from './mount'
 import { isBodyKind, type Node, type NodeInput, NodeSchema, nodeRefs } from './nodes'
 
@@ -406,12 +407,16 @@ export function validateDesign(design: Design): DesignIssue[] {
           nodeId: id,
           message: `"${id}" needs a solid body but "${r}" is a ${target.kind}`,
         })
-      else if (n.kind === 'pipe' && target.kind !== 'curve')
+      else if ((n.kind === 'pipe' || n.kind === 'revolve') && target.kind !== 'curve')
         issues.push({
           level: 'error',
           nodeId: id,
           message: `"${id}" needs a construction curve but "${r}" is a ${target.kind}.`,
         })
+      else if (n.kind === 'revolve' && target.kind === 'curve') {
+        const message = revolveProfileError(target, n.axis, n.axisOffset)
+        if (message) issues.push({ level: 'error', nodeId: id, message })
+      }
     }
     if (n.kind === 'setting' && n.prongTipOffsetsMm && Object.keys(n.prongTipOffsetsMm).length) {
       const layout = prongLayout(n, nodeOf(n.gem))

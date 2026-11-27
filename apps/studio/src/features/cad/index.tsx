@@ -67,6 +67,7 @@ import { useCadCommands } from './commands'
 import { captureCover } from './cover'
 import { CurveEditor } from './curves/CurveEditor'
 import { CurveOverlay } from './curves/CurveOverlay'
+import { RevolveDialog } from './curves/RevolveDialog'
 import { EmptyDesign } from './empty/EmptyDesign'
 import { exportFormats, runExport } from './export'
 import { ChangeChip } from './hud/ChangeChip'
@@ -249,6 +250,7 @@ function Workspace({ piece }: { piece: Piece }) {
   const [menuSubject, setMenuSubject] = useState<Subject>({ type: 'piece', pieceId })
   const [addOpen, setAddOpen] = useState(false)
   const [profile, setProfile] = useState<{ original?: ProfileNode } | null>(null)
+  const [revolveSource, setRevolveSource] = useState<{ pieceId: string; id: string } | null>(null)
   const [curve, setCurve] = useState<{ original?: NodeOf<'curve'> } | null>(null)
   const [confirm, setConfirm] = useState<{ ids: string[]; dependents: string[] } | null>(null)
   const root = useRef<HTMLDivElement>(null)
@@ -352,6 +354,14 @@ function Workspace({ piece }: { piece: Piece }) {
   const add = (kind: NodeKind, target = defaultTarget()) => {
     const { ops, id } = addNode(view, kind, { target })
     if (!ops.length || !session) return
+    if (
+      ops[0]?.t === 'add' &&
+      ops[0].node.kind === 'revolve' &&
+      typeof ops[0].node.curve === 'string'
+    ) {
+      setRevolveSource({ pieceId, id: ops[0].node.curve })
+      return
+    }
     session.commit(ops)
     if (id) ws().select([id])
   }
@@ -367,6 +377,12 @@ function Workspace({ piece }: { piece: Piece }) {
   const drawCurve = () => {
     if (!profile && !curve) setCurve({})
   }
+  const revolveCurve = (id: string) => {
+    if (!readOnly && !curve && !profile) setRevolveSource({ pieceId, id })
+  }
+  const selectedProfile =
+    revolveSource?.pieceId === pieceId ? view.nodes[revolveSource.id] : undefined
+
   const makeWire = (id: string) => {
     if (!session || readOnly || profile || curve || session.get().view.nodes[id]?.kind !== 'curve')
       return
@@ -507,6 +523,7 @@ function Workspace({ piece }: { piece: Piece }) {
     drawProfile,
     drawCurve,
     makeWire,
+    revolveCurve,
     renderThisView: () => {
       const camera = viewer.current?.shotCamera()
       if (!camera) return
@@ -627,6 +644,7 @@ function Workspace({ piece }: { piece: Piece }) {
           setCurve({ original })
         }
       }}
+      onRevolve={revolveCurve}
       onMakeWire={makeWire}
       empty={
         <PiecePanel
@@ -901,6 +919,29 @@ function Workspace({ piece }: { piece: Piece }) {
             : {})}
           onClose={() => setProfile(null)}
           onSave={saveProfile}
+        />
+      )}
+      {selectedProfile?.kind === 'curve' && !readOnly && (
+        <RevolveDialog
+          key={pieceId + '/' + selectedProfile.id}
+          source={selectedProfile}
+          onClose={() => setRevolveSource(null)}
+          onSave={(settings) => {
+            if (!session || session.get().view.nodes[selectedProfile.id]?.kind !== 'curve') return
+            const id = newId('revolve')
+            session.commit(
+              addPrepared(session.get().view, {
+                kind: 'revolve',
+                id,
+                curve: selectedProfile.id,
+                ...settings,
+              }),
+              { label: 'Revolved a construction curve' },
+            )
+            ws().select([id])
+            setRevolveSource(null)
+            if (!dockInspector) setSheet('inspector')
+          }}
         />
       )}
       <Dialog
