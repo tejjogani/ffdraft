@@ -69,8 +69,10 @@ import { planProgress } from '../assistant/jobs/status'
 import { useLiveRun } from '../assistant/jobs/useJob'
 import { useQuickIntent } from '../assistant/quick-intent-store'
 import { type Subject, subjectFor } from '../assistant/quick-intents'
+import { reportPlanLimit } from '../plans/plan-limit'
 import { ImagePlanes } from '../references/ImagePlanes'
-import { renderThisView } from '../render/shot-actions'
+import { renderAvailability } from '../render/availability'
+import { queueCadRender, renderThisView, selectShotNext } from '../render/shot-actions'
 import { useViewportTools } from './capture-tool'
 import { useCadCommands } from './commands'
 import { captureCover } from './cover'
@@ -305,6 +307,22 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
   // selected: commands and the inspector would otherwise act on something that is not there.
   useEffect(() => ws().retain((id) => Object.hasOwn(view.nodes, id)), [view])
   const { evaluation, status, stale, error: failure, retry } = usePieceEvaluation(pieceId)
+  const [queuingRender, setQueuingRender] = useState(false)
+  const availability = renderAvailability({ design: view, evaluation, status, stale })
+  const renderBlocked = queuingRender
+    ? 'Queueing render…'
+    : save?.status === 'offline'
+      ? 'Reconnect to save the design before rendering.'
+      : !session || save?.status !== 'saved' || syncing
+        ? 'Wait for the design to save before rendering.'
+        : {
+            ready: null,
+            pending: 'Wait for the geometry to finish updating.',
+            failed: 'Retry the geometry engine before rendering.',
+            'review-roles': 'Assign metal or stone roles to the imported geometry.',
+            references: 'Add a solid body or stone to render.',
+            empty: 'Add a solid body or stone to render.',
+          }[availability]
   const partRevisions = useRef(new Map<string, string>())
   useEffect(() => {
     if (!evaluation || stale) return
@@ -803,6 +821,33 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
     [view, kernel.kinds, readOnly],
   )
 
+  const renderSavedDesign = async () => {
+    if (!session || readOnly || renderBlocked || !isCurrent()) return
+    const sourceVersion = version
+    setQueuingRender(true)
+    try {
+      const shot = await queueCadRender(pieceId, view.kind, () => {
+        if (!isCurrent()) return false
+        const current = session.get()
+        if (current.version !== sourceVersion || current.save.status !== 'saved' || hasGap(current))
+          throw new Error('The design changed. Wait for it to save, then click Render again.')
+        return true
+      })
+      if (shot && isCurrent()) {
+        selectShotNext(pieceId, shot.id)
+        await navigate({ to: '/pieces/$id/render', params: { id: pieceId } })
+      }
+    } catch (err) {
+      if (isCurrent() && !reportPlanLimit(err))
+        toast.error(
+          'Couldn’t start the render',
+          err instanceof Error ? err.message : 'Try Render again.',
+        )
+    } finally {
+      if (isCurrent()) setQueuingRender(false)
+    }
+  }
+
   useCadCommands({
     session,
     viewer,
@@ -822,6 +867,8 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
     makeWire,
     revolveCurve,
     openSectionTool,
+    canRenderSavedDesign: !readOnly && renderBlocked === null,
+    renderSavedDesign: () => void renderSavedDesign(),
     renderThisView: () => {
       const camera = viewer.current?.shotCamera()
       if (!camera) return
@@ -1132,6 +1179,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
                   canSaveFile={!empty}
                   simplified={simplified}
                   compact={compact}
+                  render={readOnly ? undefined : { blocked: renderBlocked, pending: queuingRender }}
                   onImportModel={readOnly ? undefined : () => openModelImport()}
                   onReviewRhinoRoles={
                     !readOnly && session && hasRhinoBodies ? () => openRhinoRoleReview() : undefined

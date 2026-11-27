@@ -10,6 +10,7 @@ import {
   MenuItem,
   MenuSeparator,
   Segmented,
+  Spinner,
   Tooltip,
 } from '@pave/ui'
 import {
@@ -165,6 +166,7 @@ export function FileToolbar({
   canSaveFile,
   simplified,
   compact,
+  render,
   onImportModel,
   onReviewRhinoRoles,
 }: {
@@ -173,6 +175,7 @@ export function FileToolbar({
   canSaveFile: boolean
   simplified: boolean
   compact: boolean
+  render?: { blocked: string | null; pending: boolean }
   onImportModel?: (() => void) | undefined
   onReviewRhinoRoles?: (() => void) | undefined
 }) {
@@ -261,6 +264,27 @@ export function FileToolbar({
               </MenuGroup>
             )}
           </Menu>
+        )}
+        {render && (
+          <span
+            className="inline-flex"
+            title={render.blocked ?? 'Render the saved design in Blender'}
+          >
+            <Button
+              size="sm"
+              variant="primary"
+              icon={render.pending ? undefined : Camera}
+              aria-label="Render"
+              aria-busy={render.pending}
+              aria-description={render.blocked ?? undefined}
+              disabled={!!render.blocked}
+              className="ml-0.5"
+              onClick={() => runCommand('design.renderSaved')}
+            >
+              {render.pending && <Spinner className="size-4" />}
+              <span className="hidden min-[390px]:inline">Render</span>
+            </Button>
+          </span>
         )}
       </Cluster>
     </div>

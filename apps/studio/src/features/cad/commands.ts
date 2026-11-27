@@ -79,6 +79,8 @@ export interface CadCommandContext {
   fix(d: Diagnostic): void
   addStep(step: NextStep): void
   undoRun(): void
+  canRenderSavedDesign: boolean
+  renderSavedDesign(): void
   /** Copies this view's camera into a new shot and opens it in the Render tab. */
   renderThisView(): void
 }
@@ -405,6 +407,15 @@ export function useCadCommands(c: CadCommandContext): void {
       icon: Focus,
       shortcut: 'f',
       run: () => c.viewer.current?.frameAll(true, ws().selection),
+    },
+    {
+      id: 'design.renderSaved',
+      title: 'Render saved design',
+      group: 'Design',
+      icon: Camera,
+      keywords: ['blender', 'hero', 'photoreal'],
+      when: () => c.canRenderSavedDesign,
+      run: c.renderSavedDesign,
     },
     {
       id: 'view.renderThis',

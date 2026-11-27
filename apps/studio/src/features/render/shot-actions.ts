@@ -169,3 +169,32 @@ export function queueShotAction<T>(
   actionQueues.set(pieceId, queue)
   return result
 }
+
+const cadRenders = new Map<string, Promise<SavedScene | null>>()
+
+/** Queues the saved Hero shot, or the first saved shot if this set has no Hero. */
+export function queueCadRender(
+  pieceId: string,
+  kind: PieceKind,
+  canProceed: () => boolean,
+): Promise<SavedScene | null> {
+  const pending = cadRenders.get(pieceId)
+  if (pending) return pending
+  const work = queueShotAction(pieceId, 'render', async () => {
+    if (!canProceed()) return null
+    const shots = await ensureShotsSaved(pieceId, kind)
+    if (!canProceed()) return null
+    const shot = shots.find((s) => s.title.toLowerCase() === 'hero') ?? shots[0]
+    if (!shot) throw new Error('Add a shot in Render Studio, then try again.')
+    await rpc.call('renders.create', {
+      pieceId,
+      sceneId: shot.id,
+      title: shot.title,
+      engine: 'blender',
+    })
+    void queryClient.invalidateQueries({ queryKey: rpcKey('renders.list') })
+    return shot
+  }).finally(() => cadRenders.delete(pieceId))
+  cadRenders.set(pieceId, work)
+  return work
+}
