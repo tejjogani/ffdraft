@@ -32,13 +32,30 @@ export async function subjectOf(
   ctx: Ctx,
   piece: Pick<Piece, 'id' | 'design'>,
   signal?: AbortSignal,
+  includeUnassignedRhino?: boolean,
 ): Promise<SceneSubject | null> {
   const geometry = ctx.services.optional('geometry')
   if (!geometry?.subject) return null
   return (await geometry.subject(piece.design, serviceContext(ctx), {
     pieceId: piece.id,
     ...(signal ? { signal } : {}),
+    ...(includeUnassignedRhino && { includeUnassignedRhino }),
   })) as SceneSubject
+}
+
+/** A set can contain shots with and without imported previews. Evaluate each setting once. */
+export async function subjectsOf(
+  ctx: Ctx,
+  piece: Pick<Piece, 'id' | 'design'>,
+  scenes: readonly RenderScene[],
+  signal?: AbortSignal,
+) {
+  const modes = new Set(scenes.map((scene) => scene.includeUnassignedRhino === true))
+  const entries = await Promise.all(
+    [...modes].map(async (mode) => [mode, await subjectOf(ctx, piece, signal, mode)] as const),
+  )
+  const subjects = new Map(entries)
+  return (scene: RenderScene) => subjects.get(scene.includeUnassignedRhino === true) ?? null
 }
 
 export async function suggestShots(
@@ -47,7 +64,9 @@ export async function suggestShots(
   signal?: AbortSignal,
 ): Promise<CommandOutput<'scenes.suggest'>> {
   const piece = await getPiece(ctx, input.pieceId)
-  const subject = await subjectOf(ctx, piece, signal).catch(() => null)
+  const subject = await subjectOf(ctx, piece, signal, input.includeUnassignedRhino).catch(
+    () => null,
+  )
   const features = pieceFeatures(piece.design, subject ?? undefined)
   const ratio = ASPECTS[input.aspect as AspectKey].ratio
   const hasStone = features.centreStoneNodeId !== null || (subject?.stones.length ?? 0) > 0
@@ -124,8 +143,14 @@ export async function captureShots(
     )
   const piece = await getPiece(ctx, pieceId)
   const geometry = ctx.services.get('geometry')
-  const subject = await subjectOf(ctx, piece, signal)
+  const subjectFor = await subjectsOf(
+    ctx,
+    piece,
+    saved.map(({ scene }) => scene),
+    signal,
+  )
   const shots = saved.map((s) => {
+    const subject = subjectFor(s.scene)
     const resolved = subject ? resolveScene(s.scene, subject) : null
     const { width, height } = s.scene.output
     const k = input.size / Math.max(width, height)
@@ -147,7 +172,11 @@ export async function captureShots(
         views: [],
         size: input.size,
         focus: [],
-        shots: shots.map((s) => ({ camera: rasterCamera(s.resolved!.camera), ...s.size })),
+        shots: shots.map((s) => ({
+          camera: rasterCamera(s.resolved!.camera),
+          ...s.size,
+          includeUnassignedRhino: s.saved.scene.includeUnassignedRhino,
+        })),
         pieceId: piece.id,
         ...(signal ? { signal } : {}),
       },
@@ -219,7 +248,9 @@ export async function framingRefusal(
   const scene = input.scene ?? saved?.scene
   if (!scene) return null
   const piece = await getPiece(ctx, input.pieceId)
-  const subject = await subjectOf(ctx, piece, signal).catch(() => null)
+  const subject = await subjectOf(ctx, piece, signal, scene.includeUnassignedRhino).catch(
+    () => null,
+  )
   if (!subject) return null
   const check = shotFraming(scene, subject)
   if (check.ok) return null

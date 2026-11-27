@@ -209,6 +209,30 @@ try {
   await page.goto(`${base}/pieces/${pieceId}/render`)
   await page.getByText('Source labels by body count', { exact: true }).waitFor()
   await page.getByText('White Gold (2)', { exact: true }).waitFor()
+  const preview = page.getByRole('button', { name: 'Preview imported CAD', exact: true })
+  const include = page.getByRole('switch', { name: 'Show unassigned bodies in clay' })
+  const previewCount = page.getByText('2 unassigned bodies appear in neutral clay.', {
+    exact: true,
+  })
+  await preview.click()
+  await previewCount.waitFor()
+  await until(async () =>
+    (await rpc('scenes.list', { pieceId })).some(
+      (shot: CommandOutput<'scenes.list'>[number]) =>
+        shot.scene.look === 'catalog-white' && shot.scene.includeUnassignedRhino === true,
+    ),
+  )
+  await page.reload()
+  await previewCount.waitFor()
+  assert.equal(await include.getAttribute('aria-checked'), 'true')
+  await include.click()
+  await preview.waitFor()
+  await until(async () =>
+    (await rpc('scenes.list', { pieceId })).every(
+      (shot: CommandOutput<'scenes.list'>[number]) => shot.scene.includeUnassignedRhino !== true,
+    ),
+  )
+  assert.equal((await readReopened()).version, reopened.piece.version)
   await page.getByRole('link', { name: 'Review materials' }).click()
   const review = page.getByRole('dialog', { name: 'Review materials' })
   await review.getByRole('searchbox', { name: 'Filter Rhino bodies' }).fill('White Gold')

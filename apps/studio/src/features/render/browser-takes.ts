@@ -7,7 +7,7 @@
  * context per take. A take nobody draws within ten minutes is failed by the server (a run
  * waiting on it would otherwise wait for ever).
  */
-import { BROWSER_TAKE_SECONDS } from '@pave/render'
+import { BROWSER_TAKE_SECONDS, renderEvaluation } from '@pave/render'
 import type { RenderJob } from '@pave/schema'
 import { useEffect } from 'react'
 import { uploadAsset } from '../../lib/assets'
@@ -39,7 +39,12 @@ async function drawTake(job: RenderJob): Promise<void> {
   }
   // three.js loads only when a take is drawn, so the shell stays light.
   const { renderStill } = await import('./shot-renderer')
-  const { blob, sceneHash } = await renderStill(evaluation, job.scene, {
+  const render = renderEvaluation(evaluation, piece.design, job.scene.includeUnassignedRhino)
+  if (!render.parts.length && !render.stones.length) {
+    await fail('Nothing to render. Review the design or preview its unassigned Rhino bodies.')
+    return
+  }
+  const { blob, sceneHash } = await renderStill(render, job.scene, {
     pieceId: job.pieceId,
     version: job.sourceVersion,
   })

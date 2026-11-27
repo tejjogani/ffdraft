@@ -75,9 +75,8 @@ export class PaveModel {
       let material = materials.get(key)
       if (!material) {
         const m = resolve(key, () => metalMaterial(part.material, part.finish, part.plating))
-        if (m.kind !== 'metal')
-          throw new Error(`Part ${part.id} is assigned non-metal material ${key}`)
-        material = createMetalMaterialFrom(m)
+        if (m.kind === 'gem') throw new Error(`Part ${part.id} is assigned gem material ${key}`)
+        material = m.kind === 'surface' ? createSurfaceGemMaterial(m) : createMetalMaterialFrom(m)
         materials.set(key, material)
         this.disposables.push(material)
       }

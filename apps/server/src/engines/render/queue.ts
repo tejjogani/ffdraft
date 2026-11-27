@@ -70,10 +70,11 @@ interface Entry {
 
 /** Same piece version, request, engine and runner → the same pixels. */
 export function cacheKeyOf(job: RenderJob, blenderVersion: string | null): string {
+  const { includeUnassignedRhino, ...ordinary } = job.requestedScene
   const key = canonicalJson([
     job.pieceId,
     job.sourceVersion,
-    job.requestedScene,
+    includeUnassignedRhino ? job.requestedScene : ordinary,
     'blender',
     job.autoTune,
     RESOLVED_SCENE_VERSION,
@@ -223,9 +224,11 @@ export function createRenderQueue(o: RenderQueueOptions) {
       await rm(workDir, { recursive: true, force: true })
       await mkdir(workDir, { recursive: true })
       entry.workDir = workDir
-      const { glb, subject } = await o
-        .geometry()
-        .renderInput(piece.design, sctx, { pieceId: piece.id, signal })
+      const { glb, subject } = await o.geometry().renderInput(piece.design, sctx, {
+        pieceId: piece.id,
+        signal,
+        includeUnassignedRhino: job.requestedScene.includeUnassignedRhino,
+      })
       if (subject.parts.length === 0 && subject.stones.length === 0)
         throw new AppError('conflict', 'Nothing to render: the piece has no metal or stones.')
       let reported = 0

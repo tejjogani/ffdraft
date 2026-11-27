@@ -4,7 +4,13 @@
  * first edit, adjust a shot, render one or all, cancel, star, swap a take into the set, set the
  * cover. Every write goes through the same commands the assistant uses.
  */
-import { mergePatch, type RenderJob, RenderSceneSchema, type SavedScene } from '@pave/schema'
+import {
+  mergePatch,
+  type RenderJob,
+  type RenderScene,
+  RenderSceneSchema,
+  type SavedScene,
+} from '@pave/schema'
 import { toast } from '@pave/ui'
 import { useRef } from 'react'
 import { queryClient, rpcKey, useRpc } from '../../lib/query'
@@ -13,12 +19,12 @@ import { reportPlanLimit } from '../plans/plan-limit'
 import { ensureShotsSaved, queueShotAction } from './shot-actions'
 import { type Shot, shotForTake, shotList, takeMedia } from './shots'
 
-export function useShots(pieceId: string, canRender: boolean) {
+export function useShots(pieceId: string, canRender: (scene: RenderScene) => boolean) {
   // A plan-limit toast can keep a preview action after the design changes.
   const renderAllowed = useRef({ pieceId, canRender })
   renderAllowed.current = { pieceId, canRender }
-  const canStartRender = () =>
-    renderAllowed.current.pieceId === pieceId && renderAllowed.current.canRender
+  const canStartRender = (scene: RenderScene) =>
+    renderAllowed.current.pieceId === pieceId && renderAllowed.current.canRender(scene)
   const piece = useRpc('pieces.get', { id: pieceId })
   const saved = useRpc('scenes.list', { pieceId })
   const takes = useRpc('renders.list', { pieceId, limit: 200 })
@@ -92,14 +98,14 @@ export function useShots(pieceId: string, canRender: boolean) {
     list: Shot[],
     extra: { retryOf?: string; note?: string; engine?: 'browser' } = {},
   ): Promise<void> => {
-    if (!canStartRender()) return
+    if (!list.length) return
     let done = 0
     try {
       await queueShotAction(pieceId, 'render', async () => {
         for (const shot of list) {
-          if (!canStartRender()) return
+          if (!canStartRender(shot.scene)) return
           const row = await savedFor(shot)
-          if (!canStartRender()) return
+          if (!canStartRender(row.scene)) return
           await rpc.call('renders.create', {
             pieceId,
             sceneId: row.id,
@@ -125,10 +131,13 @@ export function useShots(pieceId: string, canRender: boolean) {
 
   /** Renders a take again with what it was asked for: its shot as it is now, else its own scene. */
   const rerender = async (take: RenderJob) => {
-    if (!canStartRender() || take.pieceId !== pieceId) return
+    if (take.pieceId !== pieceId) return
     try {
       await queueShotAction(pieceId, 'render', async () => {
-        if (!canStartRender()) return
+        const saved = queryClient
+          .getQueryData<SavedScene[]>(sceneListKey)
+          ?.find(({ id }) => id === take.sceneId)
+        if (!canStartRender(saved?.scene ?? take.requestedScene)) return
         await rpc.call('renders.create', {
           pieceId,
           title: take.title,
