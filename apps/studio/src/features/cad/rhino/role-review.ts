@@ -20,7 +20,10 @@ export const STONE_FIELD_KEYS = [
 export type RhinoStoneField = (typeof STONE_FIELD_KEYS)[number]
 export type RhinoStoneFields = Record<RhinoStoneField, string>
 
-export function rhinoStoneFields(measurements?: RhinoStoneMeasurements): RhinoStoneFields {
+export function rhinoStoneFields(
+  measurements?: RhinoStoneMeasurements,
+  digits?: number,
+): RhinoStoneFields {
   const values = measurements && [
     measurements.width,
     measurements.length,
@@ -29,7 +32,15 @@ export function rhinoStoneFields(measurements?: RhinoStoneMeasurements): RhinoSt
     ...measurements.rotation,
   ]
   return Object.fromEntries(
-    STONE_FIELD_KEYS.map((key, index) => [key, values ? String(values[index]) : '']),
+    STONE_FIELD_KEYS.map((key, index) => {
+      const value = values?.[index]
+      return [
+        key,
+        value === undefined
+          ? ''
+          : String(digits === undefined ? value : Number(value.toFixed(digits))),
+      ]
+    }),
   ) as RhinoStoneFields
 }
 
@@ -59,25 +70,30 @@ interface PlacedBody {
   placement: readonly string[]
 }
 
-/** A group can span multiple occurrences. Pair only within the same occurrence, in both directions. */
+/** A group can span occurrences. Match at the same placement or across a containing placement. */
 export function uniqueRhinoHeadPairs(stones: readonly PlacedBody[], heads: readonly PlacedBody[]) {
-  const groupKey = (body: PlacedBody, group: string) => JSON.stringify([group, ...body.placement])
-  const headsByGroup = new Map<string, string[]>()
+  const headsByGroup = new Map<string, PlacedBody[]>()
   for (const head of heads) {
     for (const group of head.groups) {
-      const key = groupKey(head, group)
-      const members = headsByGroup.get(key) ?? []
-      members.push(head.id)
-      headsByGroup.set(key, members)
+      const members = headsByGroup.get(group) ?? []
+      members.push(head)
+      headsByGroup.set(group, members)
     }
   }
   const candidates = new Map<string, Set<string>>()
   const headUse = new Map<string, number>()
   for (const stone of stones) {
-    const matches = new Set(
-      stone.groups.flatMap((group) => headsByGroup.get(groupKey(stone, group)) ?? []),
-    )
-    matches.delete(stone.id)
+    const matches = new Set<string>()
+    for (const group of stone.groups) {
+      for (const head of headsByGroup.get(group) ?? []) {
+        if (head.id === stone.id) continue
+        const [shorter, longer] =
+          stone.placement.length <= head.placement.length
+            ? [stone.placement, head.placement]
+            : [head.placement, stone.placement]
+        if (shorter.every((id, index) => id === longer[index])) matches.add(head.id)
+      }
+    }
     candidates.set(stone.id, matches)
     for (const head of matches) headUse.set(head, (headUse.get(head) ?? 0) + 1)
   }

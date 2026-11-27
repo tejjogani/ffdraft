@@ -29,6 +29,18 @@ describe('bulk Rhino settings', () => {
     expect(uniqueRhinoHeadPairs([first, second], [shared])).toEqual(new Map())
   })
 
+  test('pairs a top-level head with a nested stone when the common group is unique', () => {
+    const stone = body('stone', ['outer', 'inner'])
+    const head = body('head', [])
+    expect(uniqueRhinoHeadPairs([stone], [head])).toEqual(new Map([['stone', 'head']]))
+  })
+
+  test('leaves a shared top-level head unpaired across distinguishable placements', () => {
+    const stoneA = body('stone-a', ['part-a'])
+    const stoneB = body('stone-b', ['part-b'])
+    expect(uniqueRhinoHeadPairs([stoneA, stoneB], [body('head', [])])).toEqual(new Map())
+  })
+
   test('leaves a stone unpaired if two heads match its group and placement', () => {
     const stone = body('stone', [])
     expect(uniqueRhinoHeadPairs([stone], [body('head-a', []), body('head-b', [])])).toEqual(

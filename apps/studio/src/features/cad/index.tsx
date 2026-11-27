@@ -21,6 +21,7 @@ import {
   type NodeOf,
   newId,
   nodeTitle,
+  type Op,
   type Piece,
   type PieceSpecInput,
   reviewRhinoRoles,
@@ -448,7 +449,7 @@ function Workspace({ piece }: { piece: Piece }) {
     ws().select([linked?.id ?? id])
   }
 
-  const confirmRhinoRoles = (choices: ImportedRoleChoice[]) => {
+  const currentRhinoReview = () => {
     if (
       !session ||
       readOnly ||
@@ -462,11 +463,23 @@ function Workspace({ piece }: { piece: Piece }) {
       throw new Error(
         'The design changed during review. Reopen the review to see the current bodies.',
       )
+    if (latest.pending.length || latest.gesture)
+      throw new Error('Wait for the design to finish saving before you apply the review.')
+    return { session, latest }
+  }
+
+  const confirmRhinoRoles = (choices: ImportedRoleChoice[]) => {
+    const { session, latest } = currentRhinoReview()
     const ops = reviewRhinoRoles(latest.view, choices)
-    session.commit(ops, { label: 'Confirmed Rhino roles' })
+    session.commit(ops, { label: 'Confirmed Rhino roles', baseVersion: latest.version })
     if (choices[0]) selectRhinoRoleBody(choices[0].sourceId, session.get().view)
     setRhinoReview(null)
-    if (ops.length) toast({ title: 'Rhino roles confirmed' })
+  }
+
+  const recoverRhinoLabels = (ops: Op[]) => {
+    const { session, latest } = currentRhinoReview()
+    session.commit(ops, { label: 'Recovered Rhino source labels', baseVersion: latest.version })
+    setRhinoReview(null)
   }
 
   const editMesh = (node: ImportedMesh) => {
@@ -1122,6 +1135,7 @@ function Workspace({ piece }: { piece: Piece }) {
             onClose={() => setRhinoReview(null)}
             onSelect={(body) => selectRhinoRoleBody(body.id, session.get().view)}
             onSave={confirmRhinoRoles}
+            onRecover={recoverRhinoLabels}
           />
         )}
       {!readOnly && session && modelImport?.pieceId === pieceId && (

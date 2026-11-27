@@ -13,6 +13,7 @@ import {
   METALS,
   type MetalId,
   nodeTitle,
+  type Op,
   rhinoRoleCandidates,
   rhinoRoleFrameIssue,
   rhinoRoleLinks,
@@ -23,6 +24,7 @@ import { createPortal } from 'react-dom'
 import { assetUrl } from '../../../lib/assets'
 import { plural } from '../../../lib/format'
 import type { ImportedMesh } from '../mesh-edit/model'
+import { RecoverRhinoLabels } from '../model-import/RecoverRhinoLabels'
 import { isolatedStoneIds, measureRhinoRoleBody } from '../model-import/role-measurements'
 import {
   parseRhinoStoneFields,
@@ -176,6 +178,7 @@ interface PeerMeasurement {
 
 async function measureMatches(
   bodies: ImportedMesh[],
+  design: Design,
   cut: GemCutId,
   signal: AbortSignal,
 ): Promise<PeerMeasurement[]> {
@@ -185,7 +188,7 @@ async function measureMatches(
     const batch = await Promise.all(
       bodies.slice(i, i + 4).map(async (body): Promise<PeerMeasurement> => {
         try {
-          if (rhinoRoleFrameIssue(body)) return { id: body.id }
+          if (rhinoRoleFrameIssue(body, design)) return { id: body.id }
           const bytes = await readMesh(body, signal)
           return { id: body.id, measurement: measureRhinoRoleBody(bytes, cut) }
         } catch {
@@ -207,12 +210,14 @@ export function RhinoRoleReview({
   onSelect,
   onClose,
   onSave,
+  onRecover,
 }: {
   design: Design
   initialId?: string
   onSelect: (body: ImportedMesh) => void
   onClose: () => void
   onSave: (choices: ImportedRoleChoice[]) => void
+  onRecover: (ops: Op[]) => void
 }) {
   const [selectedId, setSelectedId] = useState(initialId)
   const [bodyFilter, setBodyFilter] = useState('')
@@ -254,7 +259,7 @@ export function RhinoRoleReview({
       initialFocus={filterRef}
       title="Review Rhino roles"
       description="Classify imported bodies for editing, rendering, and production."
-      className="top-[8dvh] max-h-[calc(92dvh-1rem)] w-[min(800px,calc(100vw-24px))]"
+      className="top-[8dvh]! max-h-[calc(92dvh-1rem)]! w-[min(800px,calc(100vw-24px))]"
       footer={<div ref={setFooter} className="flex gap-2" />}
     >
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.8fr)]">
@@ -309,6 +314,9 @@ export function RhinoRoleReview({
               )}
             </ul>
           </fieldset>
+          <div className="mt-2">
+            <RecoverRhinoLabels design={design} onRecover={onRecover} />
+          </div>
         </aside>
         <ReviewBody
           key={selected.id}
@@ -369,14 +377,16 @@ function ReviewBody({
   const [bulk, setBulk] = useState(false)
   const [pair, setPair] = useState(false)
   const [peerOverrides, setPeerOverrides] = useState<ReadonlyMap<string, boolean>>(new Map())
-  const [customFields, setCustomFields] = useState<RhinoStoneFields | null>(null)
+  const [seedOverride, setSeedOverride] = useState<boolean>()
+  const [customFields, setCustomFields] = useState<Partial<RhinoStoneFields>>({})
+  const [remeasured, setRemeasured] = useState<RhinoStoneMeasurements>()
   const [originalMesh, setOriginalMesh] = useState<ArrayBuffer | null | undefined>(undefined)
   const [batch, setBatch] = useState<{ cut: GemCutId; readings: PeerMeasurement[] } | null>(null)
   const [error, setError] = useState('')
-  const frameIssue = rhinoRoleFrameIssue(body)
+  const frameIssue = rhinoRoleFrameIssue(body, design)
   const sourceFit = currentGem?.importSourceFit
   const lockGem = !!currentGem?.sourcing
-  const needsMesh = role === 'stone' && !!cut && !sourceFit && !frameIssue
+  const needsMesh = role === 'stone' && !!cut && !frameIssue
 
   useEffect(() => {
     if (!needsMesh) return
@@ -410,7 +420,7 @@ function ReviewBody({
   useEffect(() => {
     if (!measurePeers || !cut) return
     const controller = new AbortController()
-    void measureMatches(peers, cut, controller.signal)
+    void measureMatches(peers, design, cut, controller.signal)
       .then((readings) => {
         if (!controller.signal.aborted) setBatch({ cut, readings })
       })
@@ -418,10 +428,11 @@ function ReviewBody({
         if (!controller.signal.aborted) setBatch(null)
       })
     return () => controller.abort()
-  }, [cut, measurePeers, peers])
+  }, [cut, design, measurePeers, peers])
   const readings = batch?.cut === cut ? batch?.readings : undefined
 
   const suggestion = useMemo(() => {
+    if (remeasured) return remeasured
     if (sourceFit)
       return {
         width: sourceFit.width,
@@ -430,10 +441,37 @@ function ReviewBody({
         girdle: sourceFit.transform?.position ?? ([0, 0, 0] as [number, number, number]),
         rotation: sourceFit.transform?.rotation ?? ([0, 0, 0] as [number, number, number]),
       }
-    return cut && originalMesh ? measureRhinoRoleBody(originalMesh, cut) : undefined
-  }, [cut, originalMesh, sourceFit])
-  const fields = customFields ?? rhinoStoneFields(suggestion)
-  const measurement = parseRhinoStoneFields(fields)
+    if (!cut || !originalMesh) return undefined
+    try {
+      return measureRhinoRoleBody(originalMesh, cut)
+    } catch {
+      return undefined
+    }
+  }, [cut, originalMesh, remeasured, sourceFit])
+  const fields = { ...rhinoStoneFields(suggestion, 6), ...customFields }
+  const measurement = parseRhinoStoneFields({ ...rhinoStoneFields(suggestion), ...customFields })
+  const enteredRotation = (['rx', 'ry', 'rz'] as const).map((field) =>
+    fields[field].trim() ? Number(fields[field]) : NaN,
+  ) as [number, number, number]
+  const recalculateFit = () => {
+    if (!cut || !originalMesh || !enteredRotation.every(Number.isFinite)) return
+    let fit: RhinoStoneMeasurements | undefined
+    try {
+      fit = measureRhinoRoleBody(originalMesh, cut, enteredRotation)
+    } catch {
+      // An unavailable mesh leaves the form editable.
+    }
+    if (!fit) {
+      setError(
+        'These angles could not be used to measure the retained mesh. Enter the fit manually.',
+      )
+      return
+    }
+    setRemeasured(fit)
+    setCustomFields({})
+    setError('')
+  }
+
   const peerMeasurements = new Map(readings?.map(({ id, measurement }) => [id, measurement]))
   const measuredPoints = (readings ?? []).flatMap(({ id, measurement }) =>
     measurement ? [{ id, girdle: measurement.girdle }] : [],
@@ -450,17 +488,20 @@ function ReviewBody({
       peerOverrides,
     ),
   )
+  const seedIsIsolated = includesPeers && isolated.has(body.id)
+  const includeSeed = !seedIsIsolated || (seedOverride ?? false)
+  const appliedCount = chosenPeers.size + Number(includeSeed)
   const availableHeads = useMemo(
     () =>
       bodies.filter((item) => {
-        if (item.id === body.id || rhinoRoleFrameIssue(item)) return false
+        if (item.id === body.id || rhinoRoleFrameIssue(item, design)) return false
         const role = importRoleOf(item)
         return (
           (item.id === initialHead && currentRole === 'stone') ||
           (role !== 'stone' && role !== 'setting')
         )
       }),
-    [bodies, body.id, currentRole, initialHead],
+    [bodies, body.id, currentRole, design, initialHead],
   )
   const headOptions = [
     { value: '', label: 'No setting body' },
@@ -469,7 +510,7 @@ function ReviewBody({
   const editHead =
     headId !== initialHead || headMaterial !== initialHeadMaterial || style !== initialStyle
   const pairEnabled = role === 'stone' && includesPeers && !!headId
-  const headRequired = !!headId && (editHead || (pairEnabled && pair))
+  const headRequired = !!headId && ((includeSeed && editHead) || (pairEnabled && pair))
   const paired = useMemo(() => {
     if (!pairEnabled || !pair) return new Map<string, string>()
     const headMatches = new Set(rhinoRoleCandidates(design, headId))
@@ -497,6 +538,7 @@ function ReviewBody({
       ? !!material
       : role === 'stone'
         ? !!(
+            appliedCount &&
             cut &&
             species &&
             measurement &&
@@ -514,14 +556,14 @@ function ReviewBody({
         const makeHead = (id: string) =>
           headMaterial && style ? { sourceId: id, material: headMaterial, style } : undefined
         const selectedHead = editHead ? (headId ? makeHead(headId) : null) : undefined
-        const choices: ImportedRoleChoice[] = [
-          {
+        const choices: ImportedRoleChoice[] = []
+        if (includeSeed)
+          choices.push({
             sourceId: body.id,
             role,
             stone: { ...measurement, cut, species },
             ...(selectedHead !== undefined && { head: selectedHead }),
-          },
-        ]
+          })
         if (includesPeers && readings) {
           for (const reading of readings) {
             if (!chosenPeers.has(reading.id)) continue
@@ -562,9 +604,7 @@ function ReviewBody({
           <>
             <Button onClick={onClose}>Cancel</Button>
             <Button variant="primary" disabled={!canSave} onClick={save}>
-              {includesPeers
-                ? `Confirm ${plural(peers.length + 1, 'body', 'bodies')}`
-                : 'Confirm role'}
+              {includesPeers ? `Confirm ${plural(appliedCount, 'body', 'bodies')}` : 'Confirm role'}
             </Button>
           </>,
           footer,
@@ -576,8 +616,16 @@ function ReviewBody({
         <div className="grid gap-1">
           <h3 className="break-words text-sm font-medium">{nodeTitle(body)}</h3>
           {source && <p className="break-words text-xs text-fg-muted">{source}</p>}
-          {includesPeers && isolated.has(body.id) && (
-            <p className="text-xs text-fg-muted">Away from the other stones</p>
+          {seedIsIsolated && (
+            <label className="flex items-start gap-2 text-xs text-fg-muted">
+              <input
+                type="checkbox"
+                className="mt-px size-4 shrink-0 accent-current"
+                checked={includeSeed}
+                onChange={(event) => setSeedOverride(event.currentTarget.checked)}
+              />
+              Include {nodeTitle(body)} (away from the other stones)
+            </label>
           )}
         </div>
         <Label label="Role">
@@ -631,6 +679,7 @@ function ReviewBody({
                   value={cut}
                   onChange={(value) => {
                     setCut(value)
+                    setRemeasured(undefined)
                     setBatch(null)
                   }}
                   options={cutOptions}
@@ -647,8 +696,19 @@ function ReviewBody({
                 )}
                 <StoneFields
                   fields={fields}
-                  onChange={(field, value) => setCustomFields({ ...fields, [field]: value })}
+                  onChange={(field, value) =>
+                    setCustomFields((previous) => ({ ...previous, [field]: value }))
+                  }
                 />
+                <div>
+                  <Button
+                    size="sm"
+                    disabled={!cut || !originalMesh || !enteredRotation.every(Number.isFinite)}
+                    onClick={recalculateFit}
+                  >
+                    Recalculate fit at these angles
+                  </Button>
+                </div>
                 <Label label="Setting body">
                   <Select
                     aria-label="Setting body"
@@ -701,6 +761,7 @@ function ReviewBody({
                 checked={bulk}
                 onChange={(event) => {
                   setBulk(event.currentTarget.checked)
+                  setSeedOverride(undefined)
                   setPair(false)
                   setBatch(null)
                 }}
@@ -715,13 +776,14 @@ function ReviewBody({
                   checked={pair}
                   onChange={(event) => setPair(event.currentTarget.checked)}
                 />
-                Also link matching setting bodies in the same Rhino group and placement
+                Also link unique matching settings in the same Rhino group and compatible placement
               </label>
             )}
             {pairEnabled && pair && (
               <p className="text-xs text-fg-muted">
-                {plural(pairedCount, 'match', 'matches')} with a unique setting. The remaining
-                stones will be confirmed without a setting.
+                {plural(pairedCount, 'match', 'matches')} with a unique setting.
+                {pairedCount < chosenPeers.size &&
+                  ' The other selected stones will be confirmed without a setting.'}
               </p>
             )}
             {includesPeers && (
@@ -735,7 +797,7 @@ function ReviewBody({
                 <ul className="mt-1.5 grid max-h-52 gap-2 overflow-y-auto rounded-md border border-line p-2">
                   {peers.map((peer) => {
                     const reading = peerMeasurements.get(peer.id)
-                    const peerHead = paired.get(peer.id)
+                    const peerHead = chosenPeers.has(peer.id) ? paired.get(peer.id) : undefined
                     return (
                       <li key={peer.id} className="grid gap-0.5">
                         <label className="flex items-start gap-2 text-fg">

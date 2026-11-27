@@ -5,7 +5,14 @@
  * of its own here or in the components that render this model.
  */
 
-import { describeNode, type FieldInfo, type Node, type NodeKind, visibleFields } from '@pave/schema'
+import {
+  describeNode,
+  type FieldInfo,
+  isImportReference,
+  type Node,
+  type NodeKind,
+  visibleFields,
+} from '@pave/schema'
 import { isProfileNode } from '../profiles/profile'
 
 export interface InspectorRow {
@@ -80,7 +87,9 @@ export function inspectorModel(node: Node, opts: { advanced?: boolean } = {}): I
                 ? !['curve', 'axis', 'axisOffset'].includes(f.key)
                 : f.key !== 'profile',
             )
-          : d.fields
+          : isImportReference(node)
+            ? d.fields.filter((f) => f.meta.group !== 'Material')
+            : d.fields
   const shown =
     node.kind === 'nurbsCurve'
       ? fields.filter(

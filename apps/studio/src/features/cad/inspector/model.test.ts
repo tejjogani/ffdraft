@@ -38,6 +38,21 @@ describe('inspector model', () => {
     }
   })
 
+  it('shows alloy controls only after a raw Rhino body is confirmed as metal', () => {
+    const raw = {
+      kind: 'meshBody',
+      id: 'rhino-body',
+      keepSourcePlacement: true,
+      source: { type: 'asset', assetId: 'mesh', rhinoLayer: 'Parts' },
+    }
+    for (const importRole of [undefined, 'unassigned', 'reference', 'stone', 'setting']) {
+      const node = NodeSchema.parse({ ...raw, importRole })
+      expect(rowsOf(node).map((row) => row.field.key)).not.toContain('material')
+    }
+    const metal = NodeSchema.parse({ ...raw, importRole: 'metal' })
+    expect(rowsOf(metal).map((row) => row.field.key)).toContain('material')
+  })
+
   it('names every `when` key after a sibling field', () => {
     for (const kind of NODE_KINDS) {
       const fields = describeNode(kind).fields

@@ -3,7 +3,13 @@
  * "Fine-tune" reveals the `advanced` fields. With nothing selected it shows the piece itself.
  */
 import type { Evaluation } from '@pave/kernel'
-import { type Design, isRhinoRoleBody, type NodeOf, nodeTitle } from '@pave/schema'
+import {
+  type Design,
+  isImportReference,
+  isRhinoRoleBody,
+  type NodeOf,
+  nodeTitle,
+} from '@pave/schema'
 import { Button, Chip, cn, ScrollArea, Switch } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
 import {
@@ -102,6 +108,9 @@ export function Inspector({
   const roleSource =
     node.kind === 'gem' || node.kind === 'setting' ? design.nodes[node.importSourceId ?? ''] : node
   const included = node.visible !== false
+  const includeLabel = isImportReference(node)
+    ? 'Include source in Rhino export'
+    : 'Count in weight and export'
   const picked = stone ? evaluation?.stones.find((s) => s.id === stone) : undefined
   const prongTips = evaluation?.prongTips?.filter((tip) => tip.nodeId === node.id)
   return (
@@ -311,19 +320,21 @@ export function Inspector({
               <div className="flex items-center justify-between gap-3 py-1 text-sm text-fg-muted">
                 <span className="flex items-center gap-2">
                   <Scale className="size-4 text-fg-subtle" aria-hidden />
-                  Count in weight and export
+                  {includeLabel}
                 </span>
                 <Switch
                   checked={included}
                   disabled={edit.readOnly}
-                  aria-label="Count in weight and export"
+                  aria-label={includeLabel}
                   onChange={() => runCommand('design.excludeSelected')}
                 />
               </div>
               {!included && (
                 <p className="-mt-1 text-xs text-fg-subtle">
-                  Left out: not weighed, not exported. The eye in the list only hides a feature from
-                  view.
+                  {isImportReference(node)
+                    ? 'Source left out of Rhino export.'
+                    : 'Left out of weight totals and export.'}{' '}
+                  The eye in the list only hides a feature from view.
                 </p>
               )}
               {!edit.readOnly && (
