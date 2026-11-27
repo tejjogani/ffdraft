@@ -276,11 +276,9 @@ export function applyResolvedScene(
     dispose: () => {
       stage.removeFromParent()
       stage.traverse((o) => {
-        if (o instanceof Mesh) {
-          o.geometry.dispose()
-          ;(o.material as { dispose(): void }).dispose()
-        }
-        if (o instanceof Reflector) o.dispose()
+        if (o instanceof Mesh) o.geometry.dispose()
+        if (o instanceof Reflector || o instanceof DirectionalLight) o.dispose()
+        else if (o instanceof Mesh) (o.material as { dispose(): void }).dispose()
       })
       if (bg instanceof DataTexture) bg.dispose()
     },
