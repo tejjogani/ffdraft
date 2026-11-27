@@ -20,8 +20,9 @@ import type {
 /** A part as posted: `mesh` and `edges` are omitted when the receiver already holds this rev. */
 export type WirePart = Omit<Part, 'mesh' | 'edges'> & { mesh?: MeshData; edges?: Float32Array }
 
-export type WireEvaluation = Omit<Evaluation, 'parts' | 'gemMeshes'> & {
+export type WireEvaluation = Omit<Evaluation, 'parts' | 'referenceParts' | 'gemMeshes'> & {
   parts: WirePart[]
+  referenceParts?: WirePart[]
   /** Only the gem meshes not sent before. */
   gemMeshes: Record<string, MeshData>
 }
@@ -95,39 +96,43 @@ export class PartLedger {
       indices: copy(m.indices),
     })
     const held = this.parts[evaluation.detail]
-    const parts = evaluation.parts.map((part): WirePart => {
+    const encodePart = (part: Part): WirePart => {
       const { mesh, edges, ...facts } = part
       return held.get(part.id)?.rev === part.rev
         ? facts
         : { ...facts, mesh: copyMesh(mesh), edges: copy(edges) }
-    })
+    }
+    const parts = evaluation.parts.map(encodePart)
+    const referenceParts = evaluation.referenceParts?.map(encodePart)
     const gemMeshes: Record<string, MeshData> = {}
     for (const [key, mesh] of Object.entries(evaluation.gemMeshes))
       if (!this.gems.has(key)) {
         this.gems.set(key, mesh)
         gemMeshes[key] = copyMesh(mesh)
       }
-    this.remember(evaluation.detail, evaluation.parts)
-    return { wire: { ...evaluation, parts, gemMeshes }, transfer }
+    this.remember(evaluation.detail, [...evaluation.parts, ...(evaluation.referenceParts ?? [])])
+    return { wire: { ...evaluation, parts, referenceParts, gemMeshes }, transfer }
   }
 
   /** Receiver: restores the buffers that were left out. */
   decode(wire: WireEvaluation): Evaluation {
     const held = this.parts[wire.detail]
-    const parts = wire.parts.map((part): Part => {
+    const decodePart = (part: WirePart): Part => {
       if (part.mesh && part.edges) return part as Part
       const known = held.get(part.id)
       if (!known || known.rev !== part.rev)
         throw new Error(`Kernel worker referred to unknown geometry (${part.id})`)
       return { ...part, mesh: known.mesh, edges: known.edges }
-    })
+    }
+    const parts = wire.parts.map(decodePart)
+    const referenceParts = wire.referenceParts?.map(decodePart)
     for (const [key, mesh] of Object.entries(wire.gemMeshes)) this.gems.set(key, mesh)
     const used = new Set(wire.stones.map((s) => s.meshKey))
     const gemMeshes = Object.fromEntries(
       [...used].map((key) => [key, this.gems.get(key) as MeshData]),
     )
-    this.remember(wire.detail, parts)
-    return { ...wire, parts, gemMeshes }
+    this.remember(wire.detail, [...parts, ...(referenceParts ?? [])])
+    return { ...wire, parts, referenceParts, gemMeshes }
   }
 
   private remember(detail: Detail, parts: readonly Part[]): void {

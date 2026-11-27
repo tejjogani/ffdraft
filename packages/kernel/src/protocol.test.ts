@@ -1,8 +1,8 @@
-import { applyOps, buildDesign, TEMPLATES } from '@pave/schema'
+import { applyOps, buildDesign, designFrom, TEMPLATES } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
 import { createKernelClient } from './client'
 import { Evaluator } from './evaluate/evaluate'
-import type { LocalKernel } from './kernel'
+import { createKernel, type LocalKernel } from './kernel'
 import type { Locks, Port, Request, Response } from './protocol'
 import { loadRuntime } from './runtime/index'
 import { CORE_FEATURES } from './testing/core'
@@ -50,6 +50,33 @@ function coreKernel(): LocalKernel {
 const solitaire = buildDesign(TEMPLATES[0]!.spec)
 
 describe('worker protocol', () => {
+  it('sends a display reference once and keeps it separate from metal', async () => {
+    const { client: port, worker, sent } = channel()
+    const local = createKernel()
+    serveKernel(local, worker)
+    const client = createKernelClient({ port })
+    const design = designFrom('other', [
+      {
+        id: 'reference',
+        kind: 'meshBody',
+        source: { type: 'builtin', name: 'dice' },
+        importRole: 'reference',
+      },
+    ])
+    try {
+      const first = await client.evaluate(design)
+      expect(first.parts).toEqual([])
+      expect(first.referenceParts?.[0]?.mesh.positions.length).toBeGreaterThan(0)
+      const second = await client.evaluate(design)
+      const last = sent.at(-1) as Extract<Response, { type: 'evaluated' }>
+      expect(last.evaluation.referenceParts?.[0]?.mesh).toBeUndefined()
+      expect(second.referenceParts?.[0]?.mesh).toBe(first.referenceParts?.[0]?.mesh)
+    } finally {
+      client.terminate()
+      local.dispose()
+    }
+  })
+
   it('round-trips an evaluation and sends only what changed', async () => {
     const { client: port, worker, sent } = channel()
     const local = coreKernel()

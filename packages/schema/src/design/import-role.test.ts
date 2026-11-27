@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { applyOps, designFrom, evaluationOrder, parseDesignDocument } from './design'
+import { importRoleOf, type NodeOf, NodeSchema } from './nodes'
 
 const source = {
   id: 'original',
@@ -19,6 +20,16 @@ const gem = {
 } as const
 
 describe('confirmed Rhino imports', () => {
+  it('keeps an alloy chosen before import roles were available', () => {
+    const legacy = NodeSchema.parse({
+      ...source,
+      importRole: undefined,
+      material: 'au18k-white',
+    }) as NodeOf<'meshBody'>
+    expect(importRoleOf(legacy)).toBe('metal')
+    expect(importRoleOf({ ...legacy, importRole: 'reference' })).toBe('reference')
+  })
+
   it('round-trips the source role and fit, and builds the source before its gem', () => {
     const design = designFrom('other', [gem, source])
     const read = parseDesignDocument(JSON.parse(JSON.stringify(design)))

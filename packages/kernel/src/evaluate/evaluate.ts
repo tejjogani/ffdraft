@@ -5,6 +5,7 @@
 import {
   type Design,
   evaluationOrder,
+  isImportReference,
   type Node,
   nodeRefs,
   pointFromCurvePlane,
@@ -20,6 +21,7 @@ import {
   activeResults,
   assembleDraft,
   assembleProduction,
+  assembleReferences,
   type DraftCache,
   draftVolumes,
   withCurrentNames,
@@ -279,16 +281,31 @@ export class Evaluator {
     await breathe()
     const assembleStarted = performance.now()
     const assembly = this.assembleOrDrop(design, results, detail, cache, separateImportedBodies)
-    const parts = withCurrentNames(assembly.parts, results)
+    const assembled = withCurrentNames(assembly.parts, results)
+    const parts = assembled.filter(({ part }) => {
+      const node = results.get(part.nodeId)?.node
+      return !node || !isImportReference(node)
+    })
     timings['@assemble'] = performance.now() - assembleStarted
 
     // Assembly can take seconds at production; an abort that arrived meanwhile stops here.
     await breathe()
     const active = activeResults(design, results)
+    const referenceParts =
+      detail === 'draft'
+        ? assembled.filter(({ part }) => {
+            const role = part.importRole
+            return role !== undefined && role !== 'metal'
+          })
+        : assembleReferences(active, quality)
     const { stones, gemMeshes } = instanceStones(design, active)
     const diagnostics: Diagnostic[] = [
       ...documentIssues,
-      ...[...results.values()].flatMap((r) => r.diagnostics),
+      ...[...results.values()].flatMap((r) =>
+        isImportReference(r.node)
+          ? r.diagnostics.filter((d) => d.code.startsWith('feature.'))
+          : r.diagnostics,
+      ),
       ...stoneDiagnostics(stones),
     ]
 
@@ -324,6 +341,7 @@ export class Evaluator {
     const evaluation: Evaluation = {
       detail,
       parts: parts.map((p) => p.part),
+      ...(referenceParts.length && { referenceParts: referenceParts.map((p) => p.part) }),
       stones: stones.map((s) => s.instance),
       gemMeshes,
       ...(curves.length ? { curves } : {}),
@@ -344,6 +362,7 @@ export class Evaluator {
       quality,
       nodes: results,
       parts,
+      ...(referenceParts.length && { referenceParts }),
       stones,
       evaluation,
     }

@@ -50,8 +50,10 @@ const base = {
   transform: Transform.optional(),
 }
 
+const DEFAULT_METAL = 'au18k-yellow'
+
 const metal = {
-  material: choice('Metal', METAL_IDS, 'au18k-yellow', { group: 'Material', widget: 'metal' }),
+  material: choice('Metal', METAL_IDS, DEFAULT_METAL, { group: 'Material', widget: 'metal' }),
   finish: choice('Finish', FINISH_IDS, 'polished', { group: 'Material', widget: 'finish' }),
   plating: choice('Plating', PLATING_IDS, 'none', {
     group: 'Material',
@@ -199,7 +201,7 @@ export const Gem = z
     ...base,
     kind: z.literal('gem'),
     ...stone,
-    importSourceId: z.string().min(1).optional(),
+    importSourceId: z.string().min(1).optional().meta({ internal: true }),
     importSourceFit: z
       .object({
         cut: z.enum(GEM_CUT_IDS),
@@ -209,7 +211,8 @@ export const Gem = z
         /** The source's original girdle frame, in world millimetres. */
         transform: Transform.optional(),
       })
-      .optional(),
+      .optional()
+      .meta({ internal: true }),
     width: mm('Width', 0.6, 40, 6.5, {
       group: 'Stone',
       widget: 'stoneSize',
@@ -258,9 +261,9 @@ export const Setting = z
     ...base,
     kind: z.literal('setting'),
     ...metal,
-    importSourceId: z.string().min(1).optional(),
+    importSourceId: z.string().min(1).optional().meta({ internal: true }),
     /** Set on the first edit to a confirmed head's geometry; undo restores the original shape. */
-    importSourceRegenerated: z.literal(true).optional(),
+    importSourceRegenerated: z.literal(true).optional().meta({ internal: true }),
     gem: ref('Holds', ['gem']),
     style: choice('Style', ['prong', 'basket', 'bezel', 'halfBezel', 'flush'], 'prong', {
       labels: { halfBezel: 'Half bezel' },
@@ -478,7 +481,7 @@ export const MeshBody = z
     ...base,
     kind: z.literal('meshBody'),
     ...metal,
-    importRole: ImportRoleSchema.optional(),
+    importRole: ImportRoleSchema.optional().meta({ internal: true }),
     source: z
       .discriminatedUnion('type', [
         z.object({
@@ -879,7 +882,7 @@ export function importRoleOf(node: NodeOf<'meshBody'>): ImportRole | undefined {
       source.rhinoInstancePath !== undefined ||
       source.nativeAssetId !== undefined)
   )
-    return 'unassigned'
+    return node.material === DEFAULT_METAL ? 'unassigned' : 'metal'
 }
 
 /** Whether a source is geometry for modeling or exchange until it is assigned to production. */

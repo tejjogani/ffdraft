@@ -24,7 +24,9 @@ export function instanceStones(
     const node = design.nodes[result.id]
     result.stones.forEach((stone, index) => {
       const unit = gemUnit(stone.cut, stone.dims.length / stone.dims.width)
-      gemMeshes[unit.key] ??= unit.mesh
+      const imported = stone.imported
+      const meshKey = imported?.key ?? unit.key
+      gemMeshes[meshKey] ??= imported?.mesh ?? unit.mesh
       stones.push({
         stone,
         instance: {
@@ -39,13 +41,18 @@ export function instanceStones(
             stone.stone,
             node?.kind === 'gem' ? node.sourcing : undefined,
           ),
-          meshKey: unit.key,
+          meshKey,
           matrix: [
-            ...frameMatrix(stone.frame, [
-              stone.dims.width,
-              stone.dims.length / unit.length,
-              stone.dims.depth / unit.depth,
-            ]),
+            ...frameMatrix(
+              stone.frame,
+              imported
+                ? [stone.dims.width, stone.dims.width, stone.dims.width]
+                : [
+                    stone.dims.width,
+                    stone.dims.length / unit.length,
+                    stone.dims.depth / unit.depth,
+                  ],
+            ),
           ],
           role: stone.role,
           setting: held.get(result.id) ?? stone.setting,

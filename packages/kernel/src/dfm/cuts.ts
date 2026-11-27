@@ -3,8 +3,11 @@
  * or splits metal off, and seats sunk so close to an edge that the wall beside the stone is
  * thinner than a setter needs.
  */
+import { isImportReference } from '@pave/schema'
 import type { Manifold } from 'manifold-3d'
 import type { Scene, SceneStone } from '../core'
+import { activeResults } from '../evaluate/assemble'
+import { cutTargets, importSeatMatches, settingsByGem } from '../evaluate/import-seats'
 import { fromFrame } from '../geometry/vec'
 import { runtime } from '../runtime/index'
 import { boundsOfPositions, boundsOverlap } from '../solid/meshing'
@@ -44,17 +47,29 @@ function shellCount(m: Manifold): number {
 function breakthroughs(scene: Scene): Diagnostic[] {
   const { manifold: mf } = runtime()
   const out: Diagnostic[] = []
-  const results = [...scene.nodes.values()].filter((r) => r.status === 'ok' && r.node.visible)
+  const results = [...scene.nodes.values()].filter(
+    (r) => r.status === 'ok' && r.node.visible && !isImportReference(r.node),
+  )
+  const active = new Set(activeResults(scene.design, scene.nodes))
+  const settings = settingsByGem(results)
   const cutters = results.flatMap((r) =>
-    r.cuts.map((cut) => ({ owner: r, cut, box: cut.solid.bounds() })),
+    r.cuts
+      .filter((cut) => !cut.importSeatGem || active.has(r))
+      .map((cut) => ({
+        owner: r,
+        cut,
+        targets: cutTargets(cut, scene.design, settings),
+        box: cut.solid.bounds(),
+      })),
   )
   for (const host of results)
     for (const body of host.bodies) {
       const box = body.solid.bounds()
       const aimed = cutters.filter(
         (c) =>
-          c.owner.id !== host.id &&
-          (c.cut.targets === 'all' || c.cut.targets.includes(host.id)) &&
+          (c.cut.importSeatGem
+            ? c.targets !== 'all' && importSeatMatches(c.owner, host.id, body, c.targets)
+            : c.owner.id !== host.id && (c.targets === 'all' || c.targets.includes(host.id))) &&
           boundsOverlap(c.box, box),
       )
       for (const engraving of [true, false]) {

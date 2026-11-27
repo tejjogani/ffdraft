@@ -48,13 +48,16 @@ describe('the frozen system prompt', () => {
 })
 
 describe('the node reference', () => {
-  it('lists every node kind and every field', () => {
+  it('lists every node kind and every public field', () => {
     for (const kind of NODE_KINDS) {
       expect(NODE_REFERENCE, kind).toContain(`## ${kind}:`)
       const section = NODE_REFERENCE.split(`## ${kind}:`)[1]!.split('\n## ')[0]!
-      for (const key of Object.keys(NODE_SCHEMAS[kind].shape))
-        if (!['id', 'kind', 'name', 'visible', 'transform'].includes(key))
-          expect(section, `${kind}.${key}`).toMatch(new RegExp(`^\\s*- ${key}\\b`, 'm'))
+      for (const [key, field] of Object.entries(NODE_SCHEMAS[kind].shape))
+        if (!['id', 'kind', 'name', 'visible', 'transform'].includes(key)) {
+          const line = new RegExp(`^\\s*- ${key}\\b`, 'm')
+          if (field.meta()?.internal) expect(section, `${kind}.${key}`).not.toMatch(line)
+          else expect(section, `${kind}.${key}`).toMatch(line)
+        }
     }
   })
 

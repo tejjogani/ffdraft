@@ -25,6 +25,8 @@ import {
   type Scene,
   type Solid,
 } from '../core'
+import { activeResults } from '../evaluate/assemble'
+import { cutTargets, importSeatMatches, settingsByGem } from '../evaluate/import-seats'
 import { createBreather } from '../evaluate/yield'
 import { gemUnit } from '../gems/index'
 import { isRuntimeFault, runtimeGeneration } from '../runtime/index'
@@ -46,18 +48,33 @@ const labelOf = (result: NodeResult | undefined, fallback: string) =>
  * Cutters aimed at a node (or at whatever they touch) that overlap its body. Metal added after
  * the cuts (beads, claw tips: `afterCuts`) is not cut, exactly as in the cast part.
  */
-function cuttersFor(scene: Scene, nodeId: string, body: Body): Solid[] {
-  const late = scene.nodes.get(nodeId)?.additions.some((a) => a.afterCuts && a.solid === body.solid)
-  if (late) return []
-  const box = body.solid.bounds()
-  return [...scene.nodes.values()]
-    .filter((r) => r.status === 'ok' && r.node.visible)
-    .flatMap((r) => r.cuts)
-    .filter(
-      (c) =>
-        (c.targets === 'all' || c.targets.includes(nodeId)) && boundsOverlap(c.solid.bounds(), box),
-    )
-    .map((c) => c.solid)
+function cutterSelection(scene: Scene) {
+  const active = new Set(activeResults(scene.design, scene.nodes))
+  const settings = settingsByGem(scene.nodes.values())
+  const cutters = [...scene.nodes.values()].flatMap((owner) =>
+    owner.status === 'ok' && owner.node.visible
+      ? owner.cuts
+          .filter((cut) => !cut.importSeatGem || active.has(owner))
+          .map((cut) => ({ owner, cut, targets: cutTargets(cut, scene.design, settings) }))
+      : [],
+  )
+  return (nodeId: string, body: Body): Solid[] => {
+    const late = scene.nodes
+      .get(nodeId)
+      ?.additions.some((a) => a.afterCuts && a.solid === body.solid)
+    if (late) return []
+    const box = body.solid.bounds()
+    return cutters
+      .filter(
+        ({ cut, owner, targets }) =>
+          (targets === 'all' ||
+            (cut.importSeatGem
+              ? importSeatMatches(owner, nodeId, body, targets)
+              : targets.includes(nodeId))) &&
+          boundsOverlap(cut.solid.bounds(), box),
+      )
+      .map(({ cut }) => cut.solid)
+  }
 }
 
 /** Most cutters in one exact pass; beyond this OpenCascade's compound cut slows sharply. */
@@ -341,6 +358,7 @@ export const step = defineExporter({
     let uncut = 0
     const uncutNodes = new Set<string>()
     const budget = { cutters: MAX_EXACT_CUTTERS }
+    const cuttersFor = cutterSelection(scene)
     const exact: { nodeId: string; body: Body }[] = []
     for (const part of scene.parts)
       for (const { nodeId, body } of part.sources) {
@@ -362,7 +380,7 @@ export const step = defineExporter({
         (a, b) => b.body.solid.volume() - a.body.solid.volume(),
       )) {
         await breathe()
-        const tools = cuttersFor(scene, nodeId, body)
+        const tools = cuttersFor(nodeId, body)
         const known = previous.get(body.solid)
         if (
           known &&

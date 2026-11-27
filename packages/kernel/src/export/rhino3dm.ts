@@ -3,10 +3,10 @@
  * asked for. Unchanged Rhino solids keep their imported BReps. The remaining bodies are
  * written as meshes, with a layer per alloy and one for stones, in millimetres.
  */
-import { METALS, type NodeOf } from '@pave/schema'
+import { importRoleOf, METALS, type NodeOf } from '@pave/schema'
 import { defineExporter, type Scene } from '../core'
 import type { ChainData } from '../features/chain'
-import { fromFrame } from '../geometry/vec'
+import { fromFrame, multiply } from '../geometry/vec'
 import { inheritedMaterial } from '../import/rhino-context'
 import { CURVE_SOURCE_ID_KEY } from '../import/rhino-curve'
 import { freeRhino as free, loadRhino3dm } from '../runtime/rhino'
@@ -25,7 +25,9 @@ const rgba = (hex: string) => ({
 
 /** User strings a Rhino user (or a script) reads off an object. */
 function userStrings(o: MeshObject): Record<string, string> {
-  if (o.kind === 'metal')
+  if (o.kind === 'metal') {
+    const role = o.part.part.importRole
+    if (role && role !== 'metal') return { nodeIds: o.nodeIds.join(','), importRole: role }
     return {
       nodeIds: o.nodeIds.join(','),
       alloy: o.material,
@@ -34,6 +36,7 @@ function userStrings(o: MeshObject): Record<string, string> {
       plating: o.plating,
       volumeMm3: o.volumeMm3.toFixed(2),
     }
+  }
   const s = o.stone
   return {
     nodeId: s.nodeId,
@@ -51,17 +54,22 @@ function userStrings(o: MeshObject): Record<string, string> {
 
 /** A singleton imported source carries its own modeling identity even if geometry uses a mesh. */
 function importedObject(scene: Scene, o: MeshObject) {
-  if (o.kind !== 'metal' || o.part.sources.length !== 1) return null
-  const node = scene.nodes.get(o.part.sources[0]!.nodeId)?.node
+  if (o.kind === 'metal' && o.part.sources.length !== 1) return null
+  const source = o.kind === 'metal' ? o.part.sources[0] : undefined
+  const nodeId =
+    o.kind === 'stone' ? o.native?.nodeId : (source?.body.nativeImport?.nodeId ?? source?.nodeId)
+  const node = nodeId === undefined ? undefined : scene.nodes.get(nodeId)?.node
   if (node?.kind !== 'meshBody' || node.source.type !== 'asset' || !node.keepSourcePlacement)
     return null
   const { rhinoLayer, rhinoObjectId, rhinoInstancePath, rhinoContext } = node.source
+  const role = importRoleOf(node)
   return {
     name: node.name?.trim() || o.name,
     path: rhinoLayer?.split('::').filter(Boolean),
     context: rhinoContext,
     hasNativeSource: Boolean(node.source.nativeAssetId),
     strings: {
+      ...(role && { importRole: role }),
       ...(rhinoObjectId && { rhinoObjectId }),
       ...(rhinoInstancePath?.length && { rhinoInstancePath: JSON.stringify(rhinoInstancePath) }),
     },
@@ -144,13 +152,14 @@ async function write3dm(
     for (const o of objects) {
       options.signal?.throwIfAborted()
       const imported = importedObject(scene, o)
-      const layer =
-        o.kind === 'metal'
-          ? layerFor(
-              imported?.path?.length ? imported.path : ['Metal', METALS[o.material].label],
-              objectColor(o),
-            )
-          : layerFor(['Stones'], '#9fd3ff')
+      const role = o.kind === 'metal' ? o.part.part.importRole : undefined
+      const defaultPath =
+        o.kind === 'stone'
+          ? ['Stones']
+          : role && role !== 'metal'
+            ? ['References']
+            : ['Metal', METALS[o.material].label]
+      const layer = layerFor(imported?.path?.length ? imported.path : defaultPath, objectColor(o))
       const attrs = attributes(imported?.name ?? o.name, layer, {
         ...userStrings(o),
         ...imported?.strings,
@@ -168,37 +177,44 @@ async function write3dm(
             memberMaterialFromParent: source.materialFromParent,
           }
         })
-      if (o.kind === 'metal' && (await native.write(o.part, attrs, affineContext))) {
-        free(attrs)
-        continue
+      const preserved =
+        o.kind === 'metal'
+          ? await native.write(o.part, attrs, affineContext)
+          : o.native &&
+            (await native.writeSource(
+              o.native.nodeId,
+              multiply(o.stone.matrix, o.native.matrix),
+              attrs, affineContext,
+            ))
+      if (!preserved) {
+        const mesh = new rhino.Mesh()
+        const p = o.positions
+        // One list object for the whole loop, freed after it: `mesh.vertices()` hands out a new
+        // WASM-side object on every call, and one per vertex and per face was never freed.
+        const vertices = mesh.vertices()
+        for (let i = 0; i < p.length; i += 3) vertices.add(p[i]!, p[i + 1]!, p[i + 2]!)
+        free(vertices)
+        const faces = mesh.faces()
+        for (let t = 0; t < o.indices.length; t += 3)
+          faces.addTriFace(o.indices[t]!, o.indices[t + 1]!, o.indices[t + 2]!)
+        free(faces)
+        const normals = mesh.normals()
+        normals.computeNormals()
+        free(normals)
+        mesh.compact()
+        const meshId = objectTable.addMesh(mesh, attrs)
+        free(mesh)
+        if (meshId === '00000000-0000-0000-0000-000000000000')
+          throw new Error(`Rhino could not write mesh “${imported?.name ?? o.name}”.`)
+        if (o.kind === 'metal') {
+          meshBodies++
+          if (imported?.hasNativeSource && !o.part.preservesNativeSurface)
+            evaluatedImports.push(
+              `“${imported.name}” uses the evaluated mesh because the current body could not retain its original native surface.`,
+            )
+        }
       }
-      const mesh = new rhino.Mesh()
-      const p = o.positions
-      // One list object for the whole loop, freed after it: `mesh.vertices()` hands out a new
-      // WASM-side object on every call, and one per vertex and per face was never freed.
-      const vertices = mesh.vertices()
-      for (let i = 0; i < p.length; i += 3) vertices.add(p[i]!, p[i + 1]!, p[i + 2]!)
-      free(vertices)
-      const faces = mesh.faces()
-      for (let t = 0; t < o.indices.length; t += 3)
-        faces.addTriFace(o.indices[t]!, o.indices[t + 1]!, o.indices[t + 2]!)
-      free(faces)
-      const normals = mesh.normals()
-      normals.computeNormals()
-      free(normals)
-      mesh.compact()
-      const meshId = objectTable.addMesh(mesh, attrs)
       free(attrs)
-      free(mesh)
-      if (meshId === '00000000-0000-0000-0000-000000000000')
-        throw new Error(`Rhino could not write mesh “${imported?.name ?? o.name}”.`)
-      if (o.kind === 'metal') {
-        meshBodies++
-        if (imported?.hasNativeSource && !o.part.preservesNativeSurface)
-          evaluatedImports.push(
-            `“${imported.name}” uses the evaluated mesh because the current body could not retain its original native surface.`,
-          )
-      }
       if (o.kind === 'stone') {
         const curve = attributes(`${o.name} girdle`, layerFor(['Curves', 'Girdles'], '#5a8fb8'), {
           stoneId: o.stone.id,
@@ -281,6 +297,7 @@ export const rhino3dm = defineExporter({
     }
     const objects = sceneObjects(scene, {
       stones: options.stones ?? true,
+      referenceBodies: true,
       ...(options.only && { only: options.only }),
       allowEmpty: curves.length > 0,
     })
