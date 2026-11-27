@@ -4,11 +4,11 @@ exports[`the frozen system prompt > has a stable hash (snapshot) that covers the
 {
   "chars": [
     7082,
-    43422,
+    43718,
     10638,
-    18723,
+    19163,
   ],
-  "hash": "prompt-11de3d330eb0ed",
+  "hash": "prompt-09bdd88287f7fd",
 }
 `;
 
@@ -23,7 +23,7 @@ Shared value lists:
 - <cut>: round, oval, princess, emerald, asscher, cushion, radiant, marquise, pear, heart, baguette, trillion, cabochon
 - <stone>: diamond, diamond-lab, diamond-yellow, diamond-pink, diamond-black, moissanite, cz, sapphire-blue, sapphire-pink, sapphire-yellow, sapphire-white, ruby, emerald, aquamarine, morganite, amethyst, citrine, topaz, tourmaline, garnet, peridot, tanzanite, spinel, alexandrite, opal, pearl, onyx, turquoise
 - ring size systems: us, uk, eu, jp, mm
-- body nodes (solids that host stones, bails, findings, engravings and booleans): ringShank, setting, halo, vectorBody, meshBody, relief, revolve, loft, railSweep, pipe, primitive, boolean, bail
+- body nodes (solids that host stones, bails, findings, engravings and booleans): ringShank, setting, halo, vectorBody, meshBody, relief, revolve, loft, railSweep, thickenSurface, pipe, primitive, boolean, bail
 - <quality> (what to buy; the stone list and sourcing read it):
   - origin: natural | lab | any = "any"
   - colors: list of string (0–12 items)
@@ -227,6 +227,13 @@ Shared value lists:
 - rails (required): list of string (1–2 items). One or two distinct guiding curve IDs.
 - sections (required): list of string (1–32 items). Ordered cross-section curve IDs placed along the rails.
 - capped: boolean = true. Create a casting solid from closed sections. Turn off to model a sheet.
+## thickenSurface: Thicken surface. Give an uncapped loft or rail sweep a measured thickness to form a solid.
+- material: <metal> = "au18k-yellow"
+- finish: <finish> = "polished"
+- plating: <plating> = "none"
+- surface (required): id of a loft / railSweep node. The ID of an uncapped loft or rail sweep.
+- thickness: number 0.05–20 mm = 1
+- reverse: boolean = false. Build the solid on the other side of the source surface.
 ## revolve: Revolve. Turn a closed curve around an axis to make a solid, or supply an SVG radius-height profile about Z.
 - material: <metal> = "au18k-yellow"
 - finish: <finish> = "polished"

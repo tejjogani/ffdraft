@@ -1,6 +1,7 @@
 import { applyOps, designFrom, type NodeInput } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
-import { saveSectionFeature } from '../ops'
+import { inspectorModel } from '../inspector/model'
+import { addNode, saveSectionFeature } from '../ops'
 import { addMenu } from '../outliner/suggestions'
 import {
   initialSectionDraft,
@@ -139,5 +140,34 @@ describe('linked section features', () => {
       capped: false,
       ruled: true,
     })
+  })
+})
+
+describe('thicken surface tools', () => {
+  it('offers the tool only with an eligible sheet', () => {
+    expect(addMenu(drawing, ['thickenSurface'])[0]?.options[0]).toMatchObject({
+      title: 'Thicken surface',
+      disabled: expect.stringMatching(/uncapped loft or rail sweep/i),
+    })
+    const model = applyOps(drawing, [
+      { t: 'add', node: { id: 'sheet', kind: 'loft', sections: ['bottom', 'top'], capped: false } },
+    ]).design
+    expect(addMenu(model, ['thickenSurface'], 'ball')[0]).toMatchObject({
+      label: 'Bodies',
+      options: [{ disabled: null }],
+    })
+    const thickened = addNode(model, 'thickenSurface', { target: 'ball' })
+    const node = applyOps(model, thickened.ops).design.nodes[thickened.id!]!
+    expect(node).toMatchObject({
+      kind: 'thickenSurface',
+      surface: 'sheet',
+      thickness: 1,
+      reverse: false,
+    })
+    expect(
+      inspectorModel(node, { advanced: false }).sections.flatMap((group) =>
+        group.rows.map((row) => row.field.title),
+      ),
+    ).toEqual(expect.arrayContaining(['Source surface', 'Thickness', 'Reverse direction']))
   })
 })

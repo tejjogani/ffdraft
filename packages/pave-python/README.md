@@ -68,6 +68,14 @@ project.make_wire(
 )
 ```
 
+## Thicken a modeling surface
+
+Use an uncapped loft or rail sweep as the source. The resulting solid updates when its source curves change. A negative thickness builds on the opposite side.
+
+```python
+project.thicken_surface("shoulder", feature_id="shoulder-metal", thickness_mm=0.8)
+```
+
 ## Review an imported part’s role
 
 Use the source feature ID from the open project. The role plan previews the same choices as the Studio review dialog. Apply it at the returned version to record one undoable edit.

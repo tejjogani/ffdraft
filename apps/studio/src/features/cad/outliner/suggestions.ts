@@ -40,6 +40,7 @@ const GROUPS: { label: string; kinds: NodeKind[] }[] = [
       'revolve',
       'loft',
       'railSweep',
+      'thickenSurface',
       'pipe',
       'primitive',
     ],

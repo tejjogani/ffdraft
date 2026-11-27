@@ -32,6 +32,7 @@ export const BODY_KINDS = [
   'revolve',
   'loft',
   'railSweep',
+  'thickenSurface',
   'pipe',
   'primitive',
   'boolean',
@@ -708,6 +709,24 @@ export const RailSweep = z
     description: 'Sweep editable cross sections along one or two guide curves.',
   })
 
+export const ThickenSurface = z
+  .object({
+    ...base,
+    ...metal,
+    kind: z.literal('thickenSurface'),
+    surface: ref('Source surface', ['loft', 'railSweep'], {
+      description: 'The ID of an uncapped loft or rail sweep.',
+    }),
+    thickness: mm('Thickness', 0.05, 20, 1),
+    reverse: toggle('Reverse direction', false, {
+      description: 'Build the solid on the other side of the source surface.',
+    }),
+  })
+  .meta({
+    title: 'Thicken surface',
+    description: 'Give an uncapped loft or rail sweep a measured thickness to form a solid.',
+  })
+
 export const Pipe = z
   .object({
     ...base,
@@ -930,6 +949,7 @@ export const NODE_SCHEMAS = {
   relief: Relief,
   loft: Loft,
   railSweep: RailSweep,
+  thickenSurface: ThickenSurface,
   revolve: Revolve,
   pipe: Pipe,
   primitive: Primitive,
@@ -959,6 +979,7 @@ export const NodeSchema = z.discriminatedUnion('kind', [
   Relief,
   Loft,
   RailSweep,
+  ThickenSurface,
   Revolve,
   Pipe,
   Primitive,
@@ -978,6 +999,13 @@ export type Node = z.infer<typeof NodeSchema>
 export type NodeInput = z.input<typeof NodeSchema>
 export type NodeOf<K extends NodeKind> = Extract<Node, { kind: K }>
 export type NodeInputOf<K extends NodeKind> = Extract<NodeInput, { kind: K }>
+
+/** An editable loft or rail sweep evaluated as a surface. */
+export function isSectionSurface(
+  node: Node | undefined,
+): node is (NodeOf<'loft'> | NodeOf<'railSweep'>) & { capped: false } {
+  return (node?.kind === 'loft' || node?.kind === 'railSweep') && !node.capped
+}
 
 export const isBodyKind = (k: NodeKind): boolean => (BODY_KINDS as readonly string[]).includes(k)
 
@@ -1045,6 +1073,8 @@ export function nodeRefs(n: Node): string[] {
       return n.sections
     case 'railSweep':
       return [...n.rails, ...n.sections]
+    case 'thickenSurface':
+      return [n.surface]
     case 'revolve':
     case 'pipe':
       return n.curve === undefined ? [] : [n.curve]

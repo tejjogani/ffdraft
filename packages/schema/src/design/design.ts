@@ -13,6 +13,7 @@ import {
   importRoleOf,
   importSourceRole,
   isBodyKind,
+  isSectionSurface,
   type Node,
   type NodeInput,
   NodeSchema,
@@ -537,13 +538,18 @@ export function validateDesign(design: Design): DesignIssue[] {
         })
       else if (
         (n.kind === 'pave' || n.kind === 'engraving' || n.kind === 'boolean') &&
-        (!isBodyKind(target.kind) ||
-          ((target.kind === 'loft' || target.kind === 'railSweep') && !target.capped))
+        (!isBodyKind(target.kind) || isSectionSurface(target))
       )
         issues.push({
           level: 'error',
           nodeId: id,
           message: `"${id}" needs a solid body but "${r}" is a ${target.kind}`,
+        })
+      else if (n.kind === 'thickenSurface' && !isSectionSurface(target))
+        issues.push({
+          level: 'error',
+          nodeId: id,
+          message: `“${id}” needs an uncapped loft or rail sweep as its source surface.`,
         })
       else if (
         (n.kind === 'loft' || n.kind === 'railSweep') &&

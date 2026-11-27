@@ -7,6 +7,7 @@ import {
   type FieldInfo,
   GEM_MATERIALS,
   type GemMaterialId,
+  isSectionSurface,
   METALS,
   type MetalId,
   nodeTitle,
@@ -207,10 +208,16 @@ export function Vec3Widget({ row }: WidgetProps) {
 /** Nodes a reference field may point at: the right kinds, never itself or its dependents. */
 function candidates(row: InspectorRow, edit: ReturnType<typeof useFieldEdit>): SelectOption[] {
   const kinds = row.field.meta.refKinds
+  const sectionSurfacesOnly = edit.node.kind === 'thickenSurface' && row.field.key === 'surface'
   const exclude = new Set([edit.node.id, ...dependentsOf(edit.design, edit.node.id)])
   return edit.design.order
     .map((id) => edit.design.nodes[id]!)
-    .filter((n) => !exclude.has(n.id) && (!kinds || kinds.includes(n.kind)))
+    .filter(
+      (n) =>
+        !exclude.has(n.id) &&
+        (!kinds || kinds.includes(n.kind)) &&
+        (!sectionSurfacesOnly || isSectionSurface(n)),
+    )
     .map((n) => ({ value: n.id, label: nodeTitle(n) }))
 }
 

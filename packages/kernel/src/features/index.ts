@@ -27,6 +27,7 @@ import { relief } from './relief'
 import { revolve } from './revolve'
 import { ringShank } from './ringShank'
 import { setting } from './setting'
+import { thickenSurface } from './thickenSurface'
 import { vectorBody } from './vectorBody'
 
 export const FEATURES: readonly AnyFeature[] = [
@@ -38,6 +39,7 @@ export const FEATURES: readonly AnyFeature[] = [
   revolve,
   loft,
   railSweep,
+  thickenSurface,
   pipe,
   engraving,
   booleanFeature,

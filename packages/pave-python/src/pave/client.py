@@ -310,6 +310,16 @@ class Project:
         return self.apply([{"t": "add", "node": node}], "Sweep sections along rails",
                           base_version=base_version, change_id=change_id)
 
+    def thicken_surface(
+        self, surface_id: str, *, feature_id: str, thickness_mm: float,
+        base_version: int | None = None, change_id: str | None = None,
+    ) -> JsonObject:
+        """Thicken an uncapped loft or rail sweep. A negative thickness reverses the side."""
+        node = {"kind": "thickenSurface", "id": feature_id, "surface": surface_id,
+                "thickness": abs(thickness_mm), "reverse": thickness_mm < 0}
+        return self.apply([{"t": "add", "node": node}], "Thicken surface",
+                          base_version=base_version, change_id=change_id)
+
     def revolve_curve(
         self,
         curve_id: str,

@@ -66,3 +66,76 @@ it('builds an editable loft and a sheet through the project assistant and measur
     await s.server.dispose()
   }
 }, 90_000)
+
+it('thickens a linked project sheet through the assistant', async () => {
+  const s = await assistantServer({
+    env: { ANTHROPIC_API_KEY: 'sk-ant-test-section-modeling' },
+    engines: true,
+  })
+  try {
+    const api = client(s.server)
+    const piece = await api.call('pieces.create', { title: 'Thickened surface study' })
+    const result = await api.call('design.apply', {
+      pieceId: piece.id,
+      baseVersion: piece.version,
+      label: 'Build a sheet',
+      ops: [
+        ...[0, 10].map((z) => ({
+          t: 'add' as const,
+          node: {
+            kind: 'nurbsCurve' as const,
+            id: `profile-${z}`,
+            degree: 1,
+            knots: [0, 1],
+            controlPoints: [
+              [0, 0, z, 1],
+              [5, 0, z, 1],
+            ] as [number, number, number, number][],
+          },
+        })),
+        {
+          t: 'add',
+          node: { id: 'sheet', kind: 'loft', sections: ['profile-0', 'profile-10'], capped: false },
+        },
+      ],
+    })
+    s.model.push(
+      {
+        content: [
+          tool('design_apply', {
+            pieceId: piece.id,
+            label: 'Thicken sheet by 0.8 mm',
+            baseVersion: result.version,
+            ops: [
+              {
+                t: 'add',
+                node: { id: 'body', kind: 'thickenSurface', surface: 'sheet', thickness: 0.8 },
+              },
+            ],
+          }),
+        ],
+      },
+      { content: [tool('design_evaluate', { pieceId: piece.id, detail: 'production' })] },
+      { content: [text('The sheet is now 0.8 mm thick.')] },
+    )
+    const { run } = await api.call('threads.send', {
+      text: 'Thicken the loft surface by 0.8 mm.',
+      clientId: 'thicken-test',
+      clientMessageId: 'thicken-test-1',
+      context: { pieceId: piece.id },
+    })
+    await settled(s.parts, run.id)
+    const trace = await api.call('traces.run', { id: run.id })
+    expect(trace.run.status).toBe('done')
+    expect(
+      trace.steps
+        .filter((step) => step.name === 'design.apply' || step.name === 'design.evaluate')
+        .map((step) => step.isError),
+    ).toEqual([false, false])
+    const summary = await api.call('design.evaluate', { pieceId: piece.id, detail: 'production' })
+    expect(summary.metals[0]?.volumeMm3).toBeCloseTo(40, 3)
+    expect(summary.modelingSurfaces ?? []).toHaveLength(0)
+  } finally {
+    await s.server.dispose()
+  }
+}, 90_000)

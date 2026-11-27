@@ -344,6 +344,18 @@ class StudioTest(unittest.TestCase):
             "sections": ["top"], "capped": False,
         })
 
+    def test_thicken_surface_keeps_the_source_and_uses_signed_millimetres(self):
+        project = self.project()
+        self.reply({"version": 1, "change": {"seq": 1}})
+        project.thicken_surface("shoulder", feature_id="shoulder-metal", thickness_mm=-0.8,
+                                change_id="thicken-1")
+        body = self.request("design.apply")
+        self.assertEqual((body["baseVersion"], body["changeId"]), (0, "thicken-1"))
+        self.assertEqual(body["ops"], [{"t": "add", "node": {
+            "kind": "thickenSurface", "id": "shoulder-metal", "surface": "shoulder",
+            "thickness": 0.8, "reverse": True,
+        }}])
+
     def test_revolve_uses_the_project_edit_guard_and_measured_axis(self):
         project = self.project()
         self.reply({"version": 1, "change": {"seq": 1}})
