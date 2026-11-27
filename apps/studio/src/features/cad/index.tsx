@@ -55,6 +55,7 @@ import { QualityIndicator } from '../../components/stage/QualityIndicator'
 import { Stage } from '../../components/stage/Stage'
 import type { Viewer, ViewerState } from '../../components/stage/viewer'
 import { createViewVisibility, metalShellOf } from '../../components/stage/visibility'
+import { ZoomControl } from '../../components/stage/ZoomControl'
 import { runCommand } from '../../lib/commands'
 import { canRedo, canUndo, hasGap } from '../../lib/design-session/core'
 import { useDesignSession, useSessionState } from '../../lib/design-session/store'
@@ -1262,6 +1263,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
           ) : null}
           {!empty && !curve && (
             <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex items-end justify-between gap-3 [&>*]:pointer-events-auto">
+              {viewerHandle && <ZoomControl viewer={viewerHandle} />}
               <div className="flex min-w-0 flex-wrap items-end gap-1.5">
                 {(targets.length > 0 || isolated.length > 0 || hasHidden) && (
                   <fieldset

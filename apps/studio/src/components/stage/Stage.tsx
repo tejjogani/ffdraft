@@ -18,6 +18,7 @@ import { isClick, isSecondary, LONG_PRESS_MS, LONG_PRESS_SLOP_PX, type Point } f
 import type { GpuTier } from './quality'
 import { Viewer, type ViewerPick, type ViewerState } from './viewer'
 import { createWheelClassifier, type WheelDevice } from './wheel'
+import { pinchWheelFactor } from './zoom'
 
 export interface StageProps {
   evaluation: Evaluation | null
@@ -172,14 +173,40 @@ export function Stage({
       })
     }
     const onPointerLeave = () => callbacks.current.onHover?.(null)
+    let gestureScale: number | null = null
     const onWheel = (e: WheelEvent) => {
       if (e.target !== cv) return
+      if (e.ctrlKey) {
+        e.preventDefault()
+        e.stopPropagation()
+        if (gestureScale === null) v.zoom(pinchWheelFactor(e.deltaY), local(e))
+        return
+      }
       const intent = wheels.classify(e as WheelEvent & WheelLegacy, callbacks.current.wheel)
       if (intent.type !== 'orbit') return
       // A trackpad swipe orbits; camera-controls would otherwise read it as zoom.
       e.preventDefault()
       e.stopPropagation()
       v.orbit(-intent.dx * 0.25, -intent.dy * 0.25)
+    }
+    // Safari exposes a cumulative pinch scale in its gesture events.
+    const onGestureStart = (e: Event) => {
+      e.preventDefault()
+      gestureScale = 1
+    }
+    const onGestureChange = (e: Event) => {
+      e.preventDefault()
+      const gesture = e as MouseEvent & { scale: number }
+      const { scale } = gesture
+      if (gestureScale === null || !(scale > 0) || !Number.isFinite(scale)) return
+      const factor = (scale / gestureScale) ** 3
+      gestureScale = scale
+      const point = Number.isFinite(gesture.clientX) ? local(gesture) : undefined
+      v.zoom(Math.max(0.125, Math.min(8, factor)), point)
+    }
+    const onGestureEnd = (e: Event) => {
+      e.preventDefault()
+      gestureScale = null
     }
     // Middle-click paste on Linux would drop clipboard text into whatever has focus.
     const onAuxClick = (e: MouseEvent) => {
@@ -208,6 +235,9 @@ export function Stage({
     cv.addEventListener('pointerleave', onPointerLeave)
     // Capture on the host so this runs before camera-controls' own wheel listener on the canvas.
     el.addEventListener('wheel', onWheel, { capture: true, passive: false })
+    cv.addEventListener('gesturestart', onGestureStart, { passive: false })
+    cv.addEventListener('gesturechange', onGestureChange, { passive: false })
+    cv.addEventListener('gestureend', onGestureEnd, { passive: false })
     cv.addEventListener('auxclick', onAuxClick)
     return () => {
       cancelAnimationFrame(hoverFrame)
@@ -222,6 +252,9 @@ export function Stage({
       cv.removeEventListener('keydown', onKeyDown)
       cv.removeEventListener('pointerleave', onPointerLeave)
       el.removeEventListener('wheel', onWheel, { capture: true })
+      cv.removeEventListener('gesturestart', onGestureStart)
+      cv.removeEventListener('gesturechange', onGestureChange)
+      cv.removeEventListener('gestureend', onGestureEnd)
       cv.removeEventListener('auxclick', onAuxClick)
       callbacks.current.onBeforeDispose?.(v)
       setLiveViewer(null)
