@@ -5,10 +5,11 @@
  * before it.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const SRC = join(import.meta.dirname, '../..')
+const sourcePath = (file: string) => relative(SRC, file).split(sep).join('/')
 /** The element, not `ContextMenuHandle` in a type argument. */
 const OPEN = /<ContextMenu[\s>]/g
 const EXEMPT = /no AskAiSection: \w/
@@ -39,14 +40,14 @@ describe('context menus', () => {
   const files = sources(SRC).filter((p) => menusIn(readFileSync(p, 'utf8')).length)
 
   it('are the sidebar, the feature list and the 3D view (a new one is listed here on purpose)', () => {
-    expect(files.map((p) => p.slice(SRC.length + 1)).sort()).toEqual([
+    expect(files.map(sourcePath).sort()).toEqual([
       'app/Sidebar.tsx',
       'features/cad/outliner/Outliner.tsx',
       'features/cad/viewport/ViewportMenu.tsx',
     ])
   })
 
-  it.each(files.map((p) => [p.slice(SRC.length + 1), p]))(
+  it.each(files.map((p) => [sourcePath(p), p]))(
     'every menu in %s ends with AskAiSection, or says why not',
     (_, path) => {
       for (const menu of menusIn(readFileSync(path, 'utf8')))
@@ -61,7 +62,7 @@ describe('context menus', () => {
     const exempt = files.flatMap((p) =>
       menusIn(readFileSync(p, 'utf8'))
         .filter((m) => !m.body.includes('<AskAiSection'))
-        .map(() => p.slice(SRC.length + 1)),
+        .map(() => sourcePath(p)),
     )
     expect(exempt).toEqual(['app/Sidebar.tsx'])
   })
