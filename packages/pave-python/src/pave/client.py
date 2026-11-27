@@ -12,6 +12,13 @@ from uuid import uuid4
 JsonObject = dict[str, Any]
 
 
+class _Omitted:
+    pass
+
+
+_OMITTED = _Omitted()
+
+
 class RpcError(Exception):
     """Pavé rejected a request. Inspect status, code and details for the reason."""
 
@@ -229,6 +236,35 @@ class Project:
         """Preview confirmed Rhino part roles. Use the returned ops and version with apply."""
         return self._cad_rpc("design.planImportRoles", choices=choices)
 
+    def inspect_mount(self, node_ids: Iterable[str]) -> JsonObject:
+        """Read selected imported metal members and their cage bounds in project mm."""
+        return self._cad_rpc("design.inspectMount", nodeIds=list(node_ids))
+
+    def edit_mount(
+        self,
+        node_ids: Iterable[str],
+        *,
+        base_version: int,
+        cage: JsonObject | None | _Omitted = _OMITTED,
+        fit_gem_id: str | None | _Omitted = _OMITTED,
+        material: str | None = None,
+        change_id: str | None = None,
+    ) -> JsonObject:
+        """Commit one mount edit at the inspected version. Pass None to clear a cage or fit."""
+        changes: JsonObject = {}
+        if cage is not _OMITTED:
+            changes["cage"] = cage
+        if fit_gem_id is not _OMITTED:
+            changes["fitGemId"] = fit_gem_id
+        if material is not None:
+            changes["material"] = material
+        result = self._cad_rpc(
+            "design.editMount", nodeIds=list(node_ids), **changes,
+            **self._write_guard(base_version, change_id),
+        )
+        self._record_write(result)
+        return result
+
     def mesh_components(
         self, feature_id: str, *, offset: int = 0, limit: int = 30,
         vertex_ids: Iterable[int] | None = None, face_ids: Iterable[int] | None = None,
@@ -351,17 +387,21 @@ class Project:
         self,
         feature_id: str,
         *,
-        carat: float,
+        carat: float | None = None,
+        fit: JsonObject | None = None,
         dry_run: bool = False,
         base_version: int | None = None,
         change_id: str | None = None,
     ) -> JsonObject:
-        """Set a stone's weight in carats, letting the setting adjust with the stone."""
+        """Resize a stone by carats or fit a measured supplier stone and adjust its mount."""
+        if (carat is None) == (fit is None):
+            raise ValueError("Pass exactly one of carat or fit")
+        change = {"carat": carat} if fit is None else {"fit": fit}
         guard = {} if dry_run else self._write_guard(base_version, change_id)
         result = self._cad_rpc(
             "design.replaceStone",
             target={"nodeId": feature_id},
-            change={"carat": carat},
+            change=change,
             dryRun=dry_run,
             **guard,
         )
