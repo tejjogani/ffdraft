@@ -91,7 +91,8 @@ def configure(output: Output, color: ColorSettings, animated: bool) -> None:
     view.exposure = color["exposure"]
     view.gamma = 1.0
     image = scene.render.image_settings
-    image.media_type = "IMAGE"
+    if hasattr(image, "media_type"):
+        image.media_type = "IMAGE"
     image.file_format = "PNG"
     image.color_mode = "RGBA"
     image.color_depth = "8"
@@ -210,7 +211,8 @@ def encode_video(frames_dir: Path, count: int, fps: int, width: int, height: int
             strip.elements.append(f"frame_{f:04d}.png")
         strip.colorspace_settings.name = "sRGB"
         settings = encode.render.image_settings
-        settings.media_type = "VIDEO"
+        if hasattr(settings, "media_type"):
+            settings.media_type = "VIDEO"
         settings.file_format = "FFMPEG"
         encode.render.ffmpeg.format = container
         encode.render.ffmpeg.codec = codec
