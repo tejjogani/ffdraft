@@ -29,3 +29,8 @@ export const RhinoContext = z.object({
 
 /** Identities are shared within one import and namespaced across imports. */
 export type RhinoContext = z.infer<typeof RhinoContext>
+
+/** Inherited materials stop at the first placement with its own object or layer binding. */
+export function inheritedMaterial(placements: readonly RhinoContext['placements'][number][]) {
+  return placements.findLast((placement) => !placement.materialFromParent)?.material
+}

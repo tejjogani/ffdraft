@@ -320,7 +320,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
             ready: null,
             pending: 'Wait for the geometry to finish updating.',
             failed: 'Retry the geometry engine before rendering.',
-            'review-roles': 'Assign metal or stone roles to the imported geometry.',
+            'review-roles': 'Assign metals and gemstones to the imported bodies in Pavé.',
             references: 'Add a solid body or stone to render.',
             sheets: 'Use Thicken surface in Add feature to give the sheet a wall.',
             empty: 'Add a solid body or stone to render.',
@@ -602,7 +602,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
   const confirmRhinoRoles = (choices: ImportedRoleChoice[]) => {
     const { session, latest } = currentRhinoReview()
     const ops = reviewRhinoRoles(latest.view, choices)
-    session.commit(ops, { label: 'Confirmed Rhino roles', baseVersion: latest.version })
+    session.commit(ops, { label: 'Reviewed project materials', baseVersion: latest.version })
     if (choices[0]) selectRhinoRoleBody(choices[0].sourceId, session.get().view)
     setRhinoReview(null)
   }

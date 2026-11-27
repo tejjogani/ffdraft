@@ -214,7 +214,7 @@ export function Inspector({
             {isRhinoRoleBody(roleSource) && selection.length === 1 && (
               <section className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
                 <span className="text-xs text-fg-muted">
-                  Rhino role · {rhinoRoleLabel(roleSource)}
+                  Project role · {rhinoRoleLabel(roleSource)}
                 </span>
                 {!edit.readOnly && session && (
                   <Button
@@ -222,7 +222,7 @@ export function Inspector({
                     icon={ListChecks}
                     onClick={() => onReviewRhinoRole(roleSource.id)}
                   >
-                    Review role
+                    Review materials
                   </Button>
                 )}
               </section>
