@@ -24,6 +24,7 @@ import { diaexBrowseLink } from '../../sourcing/links'
 import { NurbsControls } from '../curves/NurbsControls'
 import { type ImportedMesh, isImportedMesh } from '../mesh-edit/model'
 import { isProfileNode, type ProfileNode, profileSize } from '../profiles/profile'
+import { RhinoEndFaceTool } from '../rhino/RhinoEndFaceTool'
 import { useWorkspace } from '../state/workspace'
 import { FieldEditContext, useNodeEdit } from './edit'
 import { FieldControl } from './FieldControl'
@@ -87,11 +88,11 @@ export function Inspector({
   const drawn = isProfileNode(node) ? node : null
   const rhinoLayer =
     node.kind === 'meshBody' && node.source.type === 'asset' ? node.source.rhinoLayer : null
-  const hasRhinoSurface =
+  const retainedRhinoAsset =
     node.kind === 'meshBody' &&
     node.source.type === 'asset' &&
-    node.source.nativeAssetId &&
-    node.source.nativeMeshAssetId === node.source.assetId
+    node.source.nativeMeshAssetId === node.source.assetId &&
+    node.source.nativeAssetId
   const included = node.visible !== false
   const picked = stone ? evaluation?.stones.find((s) => s.id === stone) : undefined
   const prongTips = evaluation?.prongTips?.filter((tip) => tip.nodeId === node.id)
@@ -121,9 +122,9 @@ export function Inspector({
                 Rhino layer · {rhinoLayer}
               </p>
             )}
-            {hasRhinoSurface && (
+            {retainedRhinoAsset && (
               <p className="mt-1 text-xs text-fg-muted">
-                Rhino surface retained. Shape edits export as a mesh.
+                Rhino surface retained. Mesh edits export as a mesh.
               </p>
             )}
           </div>
@@ -178,7 +179,16 @@ export function Inspector({
               />
             )}
             {isImportedMesh(node) && !edit.readOnly && selection.length === 1 && (
-              <section className="border-b border-line px-4 py-3">
+              <section className="flex flex-wrap gap-2 border-b border-line px-4 py-3">
+                {retainedRhinoAsset && session && (
+                  <RhinoEndFaceTool
+                    key={`${pieceId}/${node.id}`}
+                    nativeAssetId={retainedRhinoAsset}
+                    nodeId={node.id}
+                    pieceId={pieceId}
+                    session={session}
+                  />
+                )}
                 <Button size="sm" icon={BoxSelect} onClick={() => onEditMesh(node)}>
                   Edit mesh
                 </Button>

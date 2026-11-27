@@ -62,6 +62,8 @@ interface OwnChange {
   label: string
   /** What the original edit was called, for "Undo …" / "Redo …" however often it flips. */
   base: string
+  /** The sequence once confirmed, used to order a late response among this window's edits. */
+  seq?: number
 }
 
 /** An assistant run's edits as this window saw them arrive, for the change chip and spark dots. */
@@ -354,7 +356,12 @@ function revertOwn(s: SessionState, id: string, kind: 'undo' | 'redo'): SessionS
       ],
     }
   try {
-    const changesMesh = ops.some((op) => op.t === 'update' && Object.hasOwn(op.patch, 'meshEdits'))
+    const changesMesh = ops.some(
+      (op) =>
+        op.t === 'update' &&
+        (Object.hasOwn(op.patch, 'meshEdits') ||
+          (isObject(op.patch.source) && typeof op.patch.source.nativeAssetId === 'string')),
+    )
     return record(
       s,
       ops,
@@ -373,13 +380,17 @@ function revertOwn(s: SessionState, id: string, kind: 'undo' | 'redo'): SessionS
   }
 }
 
-export const canUndo = (s: SessionState): boolean => s.undo.length > 0 || s.gesture !== null
+const readyToUndo = (s: SessionState, id: string | undefined) =>
+  id !== undefined && (s.own[id]?.seq ?? s.version) <= s.version
+
+export const canUndo = (s: SessionState): boolean =>
+  s.gesture !== null || readyToUndo(s, s.undo.at(-1))
 export const canRedo = (s: SessionState): boolean => s.redo.length > 0
 
 export function undo(s: SessionState): SessionState {
   if (s.gesture) return cancelGesture(s)
   const id = s.undo.at(-1)
-  if (!id) return s
+  if (!id || !readyToUndo(s, id)) return s
   return revertOwn({ ...s, undo: s.undo.slice(0, -1) }, id, 'undo')
 }
 
@@ -449,7 +460,7 @@ export function receive(s: SessionState, change: StoredChange): SessionState {
       inbox,
       pending: next.pending.filter((p) => p.id !== c!.id),
       own: ownChange
-        ? { ...next.own, [c.id]: { ...ownChange, inverse: c.inverse as Op[] } }
+        ? { ...next.own, [c.id]: { ...ownChange, inverse: c.inverse as Op[], seq: c.seq } }
         : next.own,
       runs: trackRun(next.runs, c, before),
     }
@@ -458,13 +469,40 @@ export function receive(s: SessionState, change: StoredChange): SessionState {
   return derive(next)
 }
 
+/** Adopts a server-planned edit explicitly made by this window, even if its event arrived first. */
+export function adoptChange(s: SessionState, id: string, change: StoredChange): SessionState {
+  if (change.id !== id || change.pieceId !== s.pieceId || change.actor.type !== 'user') return s
+  const next = receive(s, change)
+  if (Object.hasOwn(next.own, id)) return next
+  const later = next.undo.findIndex((other) => (next.own[other]?.seq ?? Infinity) > change.seq)
+  const undo = next.undo.slice()
+  undo.splice(later < 0 ? undo.length : later, 0, id)
+  return {
+    ...next,
+    own: {
+      ...next.own,
+      [id]: {
+        label: change.label,
+        base: change.label,
+        ops: change.ops as Op[],
+        inverse: change.inverse as Op[],
+        seq: change.seq,
+      },
+    },
+    undo: undo.slice(-MAX_UNDO),
+    redo: [],
+  }
+}
+
 /** Settles a pending change of ours that `confirmed` already contains. */
 function ack(s: SessionState, change: StoredChange): SessionState {
   const own = s.own[change.id]
   return derive({
     ...s,
     pending: s.pending.filter((p) => p.id !== change.id),
-    own: own ? { ...s.own, [change.id]: { ...own, inverse: change.inverse as Op[] } } : s.own,
+    own: own
+      ? { ...s.own, [change.id]: { ...own, inverse: change.inverse as Op[], seq: change.seq } }
+      : s.own,
   })
 }
 

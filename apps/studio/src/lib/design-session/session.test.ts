@@ -112,6 +112,126 @@ const flush = async () => {
   for (let i = 0; i < 20; i++) await new Promise((r) => setTimeout(r, 0))
 }
 
+describe('server-created Studio changes', () => {
+  it.each(['event first', 'response first'] as const)(
+    'makes a server-created edit undoable once when the %s arrives',
+    async (order) => {
+      const server = new FakeServer(solitaire())
+      const session = sessionOn(server)
+      try {
+        const change = server.commit(setWidth(server.design, 3), {
+          id: 'chg_face',
+          actor: { type: 'user', id: 'u_me' },
+        })
+        if (order === 'event first') session.receive(change)
+        session.adoptChange('chg_face', change)
+        session.receive(change)
+        session.adoptChange('chg_face', change)
+        expect(width(session.get().view)).toBe(3)
+        session.undo()
+        await session.idle()
+        expect(width(server.design)).toBe(2.2)
+        expect(core.canUndo(session.get())).toBe(false)
+        session.adoptChange('chg_face', change)
+        expect(core.canUndo(session.get())).toBe(false)
+        session.redo()
+        await session.idle()
+        expect(width(server.design)).toBe(3)
+        expect(server.log.map((c) => c.reverts)).toEqual([
+          undefined,
+          ['chg_face'],
+          [server.log[1]!.id],
+        ])
+      } finally {
+        session.dispose()
+      }
+    },
+  )
+
+  it('does not adopt an agent change or a response for a different piece or command', () => {
+    const server = new FakeServer(solitaire())
+    const session = sessionOn(server)
+    try {
+      const change = server.commit(setWidth(server.design, 3), { id: 'chg_face' })
+      session.adoptChange('chg_other', change)
+      session.adoptChange(change.id, { ...change, pieceId: 'p2' })
+      session.adoptChange(change.id, { ...change, actor: { type: 'agent', runId: 'r1' } })
+      expect(width(session.get().view)).toBe(2.2)
+      expect(core.canUndo(session.get())).toBe(false)
+    } finally {
+      session.dispose()
+    }
+  })
+
+  it('undoes a newer local edit first when a server-created edit gets a late response', async () => {
+    const server = new FakeServer(solitaire())
+    const session = sessionOn(server)
+    try {
+      const change = server.commit(setWidth(server.design, 3), { id: 'chg_face' })
+      session.receive(change)
+      session.commit(setWidth(session.get().view, 4))
+      await session.idle()
+      session.adoptChange(change.id, change)
+      session.undo()
+      await session.idle()
+      expect(width(server.design)).toBe(3)
+      session.undo()
+      await session.idle()
+      expect(width(server.design)).toBe(2.2)
+    } finally {
+      session.dispose()
+    }
+  })
+
+  it('guards native asset Undo against a concurrent source replacement', async () => {
+    const design = applyOps(solitaire(), [
+      {
+        t: 'add',
+        node: {
+          id: 'sleeve',
+          kind: 'meshBody',
+          keepSourcePlacement: true,
+          source: {
+            type: 'asset',
+            assetId: 'a_mesh',
+            nativeMeshAssetId: 'a_mesh',
+            nativeAssetId: 'a_solid',
+          },
+        },
+      },
+    ]).design
+    const server = new FakeServer(design)
+    const session = sessionOn(server)
+    const replace = (asset: string): Op[] => [
+      {
+        t: 'update',
+        id: 'sleeve',
+        patch: {
+          source: {
+            type: 'asset',
+            assetId: `${asset}_mesh`,
+            nativeMeshAssetId: `${asset}_mesh`,
+            nativeAssetId: `${asset}_solid`,
+          },
+        },
+      },
+    ]
+    try {
+      const change = server.commit(replace('b'), { id: 'chg_face' })
+      session.adoptChange(change.id, change)
+      await session.resync()
+      // Other window commits after the snapshot used to decide what Undo may change.
+      server.commit(replace('c'))
+      session.undo()
+      await session.idle()
+      expect(server.design.nodes.sleeve).toHaveProperty('source.nativeAssetId', 'c_solid')
+      expect(server.log).toHaveLength(2)
+    } finally {
+      session.dispose()
+    }
+  })
+})
+
 function sessionOn(
   server: FakeServer,
   initial: { design: Design; version: number } = {

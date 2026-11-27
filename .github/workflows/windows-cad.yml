@@ -120,6 +120,9 @@ jobs:
             Test-PaveStage 'Verify Rhino curve import and export in Chromium' {
               pnpm exec tsx apps/studio/e2e/rhino-curve-io.ts $env:PAVE_TEST_URL
             }
+            Test-PaveStage 'Verify native Rhino end-face editing in Chromium' {
+              pnpm exec tsx apps/studio/e2e/rhino-end-face.ts $env:PAVE_TEST_URL
+            }
             Test-PaveStage 'Verify weighted NURBS point editing in Chromium' {
               pnpm exec tsx apps/studio/e2e/nurbs-controls.ts $env:PAVE_TEST_URL
             }

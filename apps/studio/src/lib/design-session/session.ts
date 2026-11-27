@@ -62,6 +62,8 @@ export interface DesignSession {
   redo(): void
   /** Ingests a server change from any source (ack, event, history). */
   receive(change: StoredChange): void
+  /** Takes the response to a server-planned edit this window submitted with this change ID. */
+  adoptChange(changeId: string, change: StoredChange): void
   /** Fetches what this window may have missed (after a reconnect, or a lasting gap). */
   resync(): Promise<void>
   /** Resolves once nothing is pending and no gesture is live. */
@@ -218,6 +220,7 @@ export function createDesignSession(
     receive: (change) => {
       if (change.pieceId === pieceId) update((s) => core.receive(s, change))
     },
+    adoptChange: (changeId, change) => update((s) => core.adoptChange(s, changeId, change)),
     resync,
     idle: () => {
       const s = store.getState()
