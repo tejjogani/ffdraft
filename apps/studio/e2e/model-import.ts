@@ -29,6 +29,9 @@ const addLayer = (name: string) => {
 const jewelry = addLayer('Jewelry')
 const lights = addLayer('Lights')
 const objects = doc.objects()
+const displayMaterial = new rhino.Material()
+displayMaterial.name = '/White Gold-b46dab22-34ed-4666-af9c-908cd8a75324'
+doc.materials().add(displayMaterial)
 const faces = [
   [0, 2, 1],
   [0, 1, 3],
@@ -49,6 +52,8 @@ for (const [name, x, size, layer] of [
   for (const face of faces) mesh.faces().addTriFace(...face)
   const attrs = new rhino.ObjectAttributes()
   attrs.name = name
+  attrs.materialSource = rhino.ObjectMaterialSource.MaterialFromObject
+  attrs.materialIndex = 0
   attrs.layerIndex = layer
   assert.ok(objects.addMesh(mesh, attrs))
 }
@@ -200,11 +205,23 @@ try {
   assert.equal(unassignedExport.status(), 409)
   assert.match(await unassignedExport.text(), /Nothing to export.*no metal/)
 
-  const review = page.getByRole('dialog', { name: 'Review Rhino roles' })
+  await page.goto(`${base}/pieces/${pieceId}/render`)
+  await page.getByText('Source labels by body count', { exact: true }).waitFor()
+  await page.getByText('White Gold (2)', { exact: true }).waitFor()
+  await page.getByRole('link', { name: 'Review materials' }).click()
+  const review = page.getByRole('dialog', { name: 'Review materials' })
+  await review.getByRole('searchbox', { name: 'Filter Rhino bodies' }).fill('White Gold')
+  assert.equal(await review.getByRole('radio').count(), 2)
+  await review.getByRole('button', { name: 'Cancel', exact: true }).click()
   for (const [index, name] of ['Mount', 'Bail'].entries()) {
     await page.getByRole('treeitem', { name: new RegExp(name) }).click()
-    await page.getByText('Rhino role · Unassigned', { exact: true }).waitFor()
-    await page.getByRole('button', { name: 'Review role', exact: true }).click()
+    await page.getByText('Project role · Unassigned', { exact: true }).waitFor()
+    await page
+      .locator('section')
+      .filter({ has: page.getByText('Project role · Unassigned', { exact: true }) })
+      .getByRole('button', { name: 'Review materials', exact: true })
+      .last()
+      .click()
     await review.getByRole('combobox', { name: 'Role', exact: true }).click()
     await page.getByRole('option', { name: 'Metal', exact: true }).click()
     const confirm = review.getByRole('button', { name: 'Confirm role', exact: true })

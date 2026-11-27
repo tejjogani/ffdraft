@@ -36,7 +36,7 @@ import { useUI } from '../../stores/ui'
 import { useReadOnly } from '../assistant/AskAiSection'
 import { jobState } from '../assistant/jobs/status'
 import { useStageJob } from '../assistant/jobs/useJob'
-import { renderAvailability } from './availability'
+import { renderAvailability, sourceMaterialSummary } from './availability'
 import { engineLabel, useRenderInstallStatus } from './EngineDialog'
 import { ShotInspector } from './ShotInspector'
 import { addShot, saveHouseShot, takeShotIntent } from './shot-actions'
@@ -51,6 +51,9 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
   const geometry = usePieceEvaluation(pieceId, 'production')
   const { evaluation } = geometry
   const availability = renderAvailability(geometry)
+  const sourceMaterials =
+    availability === 'review-roles' &&
+    sourceMaterialSummary(geometry.design, evaluation?.referenceParts)
   const canRender = availability === 'ready'
   const s = useShots(pieceId, canRender)
   const viewfinder = useRef<ViewfinderHandle>(null)
@@ -423,13 +426,23 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                       : 'No geometry to render'
                 }
                 description={
-                  availability === 'review-roles'
-                    ? 'Assign a metal or stone role to each imported body you want to render.'
-                    : availability === 'sheets'
-                      ? 'In CAD, select the sheet and choose Add feature → Thicken surface to make a renderable solid.'
-                      : availability === 'references'
-                        ? 'The imported reference bodies are available in CAD. Renders use the piece’s metal and stones.'
-                        : 'The viewfinder shows metal and stones from the design.'
+                  availability === 'review-roles' ? (
+                    <>
+                      Assign metals and gemstones to the imported bodies you want to render in Pavé.
+                      {sourceMaterials && (
+                        <span className="mt-2 block break-words">
+                          <span className="block font-medium">Source labels by body count</span>
+                          <span className="block">{sourceMaterials}</span>
+                        </span>
+                      )}
+                    </>
+                  ) : availability === 'sheets' ? (
+                    'In CAD, select the sheet and choose Add feature → Thicken surface to make a renderable solid.'
+                  ) : availability === 'references' ? (
+                    'The imported reference bodies are available in CAD. Renders use the piece’s metal and stones.'
+                  ) : (
+                    'The viewfinder shows metal and stones from the design.'
+                  )
                 }
                 action={
                   availability === 'review-roles' && !readOnly ? (
@@ -442,7 +455,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                         '[--ink:var(--cad-ink)] [--ink-fg:var(--cad-paper)]',
                       )}
                     >
-                      Review Rhino roles
+                      Review materials
                     </Link>
                   ) : availability === 'sheets' ? (
                     <Link

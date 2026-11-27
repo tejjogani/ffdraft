@@ -26,13 +26,13 @@ Click a stone on the ring, even a single diamond in a pavé row. Choose Hide sto
 
 Open Construction curves in Features to browse the guides. On an imported Rhino assembly, the eye beside the group shows or hides them together. Imported assemblies open at a three-quarter angle. Drag on the model to orbit it. Use Views to switch between the studio and dark backdrops.
 
-For a product image, open Renders and choose a shot. Under Look, choose Studio white or Soft gradient. If the CAD Inspector says Unassigned, use Review role to identify the imported metals and stones first. A view-only hide or backdrop choice in CAD belongs to that workspace.
+For a product image, open Renders and choose a shot. Under Look, choose Studio white or Soft gradient. If the CAD Inspector says Unassigned, choose Review materials to assign metals and gemstones in Pavé. A view-only hide or backdrop choice in CAD belongs to that workspace.
 
 To update the actual piece, select the part, edit its dimensions in the Inspector, or choose Edit handmade mount and Save mount edit. Undo reverses a saved design change. Export for Rhino to write a new .3dm.
 
 ## Tell Pavé which parts are metal or stones
 
-Choose Review Rhino roles in CAD. If an older import is missing labels, choose Recover Rhino source labels and select the original .3dm. Check the exact matches before applying them.
+Choose Review materials in CAD or Renders. The source material labels help identify each body. Choose its project alloy or gemstone before rendering. If an older import is missing labels, choose Recover Rhino source labels and select the original .3dm. Check the exact matches before applying them.
 
 Select a part and check its source layer, group and appearance. Choose Metal and an alloy for anything the caster should weigh. Choose Reference for a display stand, an unused copy or a guide solid. Use the eye in Features to hide a reference while working.
 
@@ -40,7 +40,7 @@ Choose Stone for a gemstone. Confirm the species, cut, width, length, depth and 
 
 ## Fit a sourced stone to an imported setting
 
-In Review Rhino roles, select the stone and choose the separate solid that forms its complete setting. Pick its alloy and a replacement style. Check each proposed pairing if you apply the choice to matching parts. For a handmade mounting built from separate claws or rails, use Edit handmade mount on the original metal parts.
+In Review materials, select the stone and choose the separate solid that forms its complete setting. Pick its alloy and a replacement style. Check each proposed pairing if you apply the choice to matching parts. For a handmade mounting built from separate claws or rails, use Edit handmade mount on the original metal parts.
 
 Open Stone sourcing in the same project. Find the confirmed stone, preview a measured alternative and choose Fit this stone. The selected stone and linked head use the new measurements. A changed fit rebuilds that head in the chosen style. Use Undo to return to the source geometry.
 
