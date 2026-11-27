@@ -9,7 +9,7 @@ import type { AnyFeature } from '../core'
 import { bail } from './bail'
 import { booleanFeature } from './boolean'
 import { chain } from './chain'
-import { curve } from './curve'
+import { curve, nurbsCurve } from './curve'
 import { engraving } from './engraving'
 import { finding } from './finding'
 import { gem } from './gem'
@@ -48,4 +48,5 @@ export const FEATURES: readonly AnyFeature[] = [
   pattern,
   group,
   curve,
+  nurbsCurve,
 ]

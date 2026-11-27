@@ -353,11 +353,11 @@ export class Viewer {
     const first = curves[0]
     const wasEmpty = this.constructionFrame.length === 0
     this.constructionFrame = curves
-    if (first && wasEmpty && !this.evaluation?.parts.length && !this.evaluation?.stones.length)
-      this.viewConstructionPlane(
-        first.plane,
-        curves.flatMap((c) => c.points),
-      )
+    if (first && wasEmpty && !this.evaluation?.parts.length && !this.evaluation?.stones.length) {
+      const points = curves.flatMap((c) => c.points)
+      if (first.plane) this.viewConstructionPlane(first.plane, points)
+      else if (points.length) this.look(40, 25, points, 0.64, false)
+    }
   }
 
   /** Looks squarely onto the named plane through the model origin. */

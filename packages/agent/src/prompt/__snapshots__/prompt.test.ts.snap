@@ -6,9 +6,9 @@ exports[`the frozen system prompt > has a stable hash (snapshot) that covers the
     7082,
     41656,
     10638,
-    16509,
+    17015,
   ],
-  "hash": "prompt-1e9f05cbbf58ae",
+  "hash": "prompt-045869be2d8143",
 }
 `;
 
@@ -286,5 +286,11 @@ Shared value lists:
 ## curve: Construction curve. An editable planar polyline in millimetres.
 - plane (required): front | top | right
 - points (required): list of object (2–128 items). Ordered vertices with stable ids and horizontal and vertical coordinates in mm.
-- closed: boolean = false"
+- closed: boolean = false
+## nurbsCurve: NURBS curve. An editable spatial curve with measured control points, rational weights and a knot vector.
+- degree (required): integer 1–15
+- knots (required): list of number (2–4110 items). Rhino knot vector, omitting the two exterior knots.
+- controlPoints (required): list of list of any (4–4 items) (2–4096 items). Ordered [x, y, z, weight]. XYZ are Euclidean world coordinates in mm. Keep positive rational weights when reshaping the curve.
+- rhinoLayer: string
+- sourceObjectId: string"
 `;

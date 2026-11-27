@@ -139,7 +139,7 @@ export type Detail = 'draft' | 'production'
 
 export interface EvaluatedCurve {
   nodeId: string
-  plane: CurvePlane
+  plane?: CurvePlane
   points: [number, number, number][]
   closed: boolean
 }
