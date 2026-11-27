@@ -309,7 +309,6 @@ export interface CaptureService extends Service {
 export type RenderJobPatch = Partial<
   Pick<
     RenderJob,
-    RenderScene,
     | 'status'
     | 'progress'
     | 'assetIds'
