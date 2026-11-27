@@ -239,7 +239,8 @@ export const pieces: HandlerGroup<'pieces'> = {
   },
 
   'pieces.create': async (ctx, input) => {
-    const id = input.requestId && requestedPieceId(ctx.orgId, ctx.user.id, input.requestId, 'create')
+    const id =
+      input.requestId && requestedPieceId(ctx.orgId, ctx.user.id, input.requestId, 'create')
     if (id) {
       const existing = await ctx.repo.pieces.first(eq(t.piece.id, id))
       if (existing) return toPiece(ctx, existing)
