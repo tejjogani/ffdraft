@@ -88,10 +88,23 @@ function validateRhinoLabelBatch(design: Design, ops: Op[], original?: ChangeRow
       const written = originalOp && readRhinoLabelUpdate(originalOp)
       if (!written || !deepEqual(op, inverse.get(op.id)))
         throw badRequest('A large undo must use the recorded Rhino label recovery.')
-      if (!deepEqual(current ?? null, written.context))
-        throw conflict('The Rhino source labels changed after this recovery.')
-    } else if (current || update.context === null) {
-      throw badRequest('A Rhino label recovery can only fill in missing source labels.')
+      const recorded = written.context
+      const stillMatches =
+        recorded && !('groups' in recorded)
+          ? deepEqual(current?.stullerMaterial ?? null, recorded.stullerMaterial)
+          : deepEqual(current ?? null, recorded)
+      if (!stillMatches) throw conflict('The Rhino source labels changed after this recovery.')
+    } else {
+      const next = update.context
+      if (!next || !('groups' in next))
+        throw badRequest('A Rhino label recovery requires the complete original source context.')
+      if (
+        current &&
+        (current.stullerMaterial ||
+          !next.stullerMaterial ||
+          !deepEqual({ ...current, stullerMaterial: next.stullerMaterial }, next))
+      )
+        throw badRequest('A Rhino label recovery can only fill in missing source labels.')
     }
   }
 }

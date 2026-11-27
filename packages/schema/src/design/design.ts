@@ -20,7 +20,7 @@ import {
   NodeSchema,
   nodeRefs,
 } from './nodes'
-import { RhinoContext } from './rhino-context'
+import { RhinoContext, RhinoStullerMaterial } from './rhino-context'
 
 export const PIECE_KINDS = [
   'ring',
@@ -95,9 +95,17 @@ export function isModelImportAdd(op: z.infer<typeof OpSchema>): boolean {
   )
 }
 
+// Undo of an additive supplier recovery records only the changed field in its merge patch.
+const recoveredContext = z
+  .union([
+    RhinoContext.strict(),
+    z.strictObject({ stullerMaterial: RhinoStullerMaterial.nullable() }),
+  ])
+  .nullable()
+
 const RhinoLabelUpdate = z.union([
-  z.strictObject({ rhinoContext: RhinoContext.strict().nullable() }),
-  z.strictObject({ source: z.strictObject({ rhinoContext: RhinoContext.strict().nullable() }) }),
+  z.strictObject({ rhinoContext: recoveredContext }),
+  z.strictObject({ source: z.strictObject({ rhinoContext: recoveredContext }) }),
 ])
 
 /** Identifies an update consisting only of a Rhino metadata field or its removal. */
