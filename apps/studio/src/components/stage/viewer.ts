@@ -218,6 +218,7 @@ export class Viewer {
     target: Vector3
     near: number
     far: number
+    fitDistance: number | null
   } | null = null
   private readonly timer = new Timer()
   private frame = 0
@@ -226,6 +227,8 @@ export class Viewer {
   private width = 1
   private height = 1
   private framedOnce = false
+  private fitDistance: number | null = null
+  private readonly zoomOrbit = new Spherical()
   private disposed = false
   /** Milliseconds the last frames took to submit (CPU side), for the performance readout. */
   readonly frameTimes: number[] = []
@@ -749,11 +752,13 @@ export class Viewer {
         target: this.controls.getTarget(new Vector3(), false),
         near: this.camera.near,
         far: this.camera.far,
+        fitDistance: this.fitDistance,
       }
       this.frameAll()
     } else if (this.beforeIsolation) {
-      const { position, target, near, far } = this.beforeIsolation
+      const { position, target, near, far, fitDistance } = this.beforeIsolation
       this.beforeIsolation = null
+      this.fitDistance = fitDistance
       this.camera.near = near
       this.camera.far = far
       this.camera.updateProjectionMatrix()
@@ -1050,6 +1055,7 @@ export class Viewer {
       target[2] + back[2] * distance,
     ])
     const t = toThreePoint(target)
+    this.fitDistance = distance
     this.camera.near = Math.max(0.05, distance * 0.02)
     this.camera.far = distance * 50
     this.camera.updateProjectionMatrix()
@@ -1195,9 +1201,36 @@ export class Viewer {
     this.invalidate()
   }
 
-  zoom(factor: number): void {
-    void this.controls.zoom(factor, !reducedMotion())
+  zoom(factor: number, at?: readonly [x: number, y: number]): void {
+    if (!(factor > 0) || !Number.isFinite(factor) || factor === 1) return
+    const from = this.controls.getSpherical(this.zoomOrbit).radius
+    const to = Math.max(
+      this.controls.minDistance,
+      Math.min(this.controls.maxDistance, from / factor),
+    )
+    if (at) {
+      // Keep the point under the pointer on the orbit plane while dollying, as with the mouse wheel.
+      const ndc = this.ndc(...at)
+      const ray = new Vector3(ndc.x, ndc.y, 0)
+        .unproject(this.camera)
+        .sub(this.camera.position)
+        .applyQuaternion(this.camera.quaternion.clone().invert())
+      const scale = (from - to) / -ray.z
+      void this.controls.truck(ray.x * scale, -ray.y * scale, !reducedMotion())
+    }
+    this.setZoomDistance(to, true)
+  }
+
+  setZoomDistance(distance: number, animate = false): void {
+    void this.controls.dollyTo(distance, animate && !reducedMotion())
     this.invalidate()
+  }
+
+  /** Camera magnification relative to the last fitted view. */
+  get zoomPercent(): number | null {
+    return this.fitDistance === null
+      ? null
+      : Math.max(1, Math.round((this.fitDistance / this.controls.distance) * 100))
   }
 
   /** Looks straight at an image plane's view (front, top or right), framing the piece. */
@@ -1278,6 +1311,7 @@ export class Viewer {
       target: this.controls.getTarget(new Vector3()),
       near: this.camera.near,
       far: this.camera.far,
+      fitDistance: this.fitDistance,
       width: this.width,
       height: this.height,
       insetRight: this.insetRight,
@@ -1335,6 +1369,7 @@ export class Viewer {
         this.setEvaluation(saved.evaluation)
       this.camera.near = saved.near
       this.camera.far = saved.far
+      this.fitDistance = saved.fitDistance
       this.insetRight = saved.insetRight
       // setSize puts back the pixel ratio the current quality asks for.
       this.setSize(saved.width, saved.height)
