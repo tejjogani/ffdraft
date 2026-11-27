@@ -122,6 +122,8 @@ const def = <I extends z.ZodType, O extends z.ZodType, const T extends ToolFlag 
 ) => d as CommandDef<I, O> & { tool: T }
 
 const id = z.string()
+const meshPoint = z.tuple([z.number(), z.number(), z.number()])
+const componentId = z.number().int().nonnegative()
 /** Every format the CAD exports to; which of them count is in plans/plans.ts. */
 export const EXPORT_FORMATS = ['stl', 'step', '3dm', 'glb', 'obj', '3mf'] as const
 const ok = z.object({ ok: z.literal(true) })
@@ -713,6 +715,32 @@ export const commands = {
       kind: z.enum(NODE_KINDS),
       values: z.record(z.string(), z.unknown()),
       schema: z.record(z.string(), z.unknown()),
+    }),
+  }),
+  'design.meshComponents': def({
+    description:
+      'Read the editable vertices and triangular faces of an imported mesh body in this project. IDs remain stable for the same source asset. Coordinates are absolute XYZ millimetres in the source frame before part transforms. Each face contains three vertex IDs. Page through both lists with offset and limit, or request specific IDs to inspect the endpoints of a face. Pass assetId and version back when writing meshEdits with design.apply.',
+    kind: 'query',
+    tool: true,
+    input: z.object({
+      pieceId: id,
+      nodeId: id,
+      offset: componentId.default(0),
+      limit: z.number().int().min(1).max(100).default(30),
+      vertexIds: z.array(componentId).max(100).optional(),
+      faceIds: z.array(componentId).max(100).optional(),
+    }),
+    output: z.object({
+      pieceId: id,
+      nodeId: id,
+      version: componentId,
+      assetId: id,
+      vertexCount: componentId,
+      faceCount: componentId,
+      vertices: z.array(z.object({ id: componentId, xyz: meshPoint })),
+      faces: z.array(
+        z.object({ id: componentId, vertexIds: z.tuple([componentId, componentId, componentId]) }),
+      ),
     }),
   }),
   'design.apply': def({

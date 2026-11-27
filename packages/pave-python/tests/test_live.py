@@ -132,3 +132,41 @@ class LiveCadTest(unittest.TestCase):
         self.assertEqual(current.features["bezel"]["curve"], "bezel-section")
         current.undo(result["change"]["seq"])
         self.assertAlmostEqual(current.evaluate()["metalMassG"], before, places=4)
+
+    def test_imported_mesh_vertex_edit_export_and_undo(self):
+        import struct
+
+        url = os.environ["PAVE_TEST_URL"].rstrip("/")
+        studio = Studio(url)
+        project_id = studio._rpc("pieces.create", {"title": "Python mesh edit test"})["id"]
+        project = studio.project(project_id)
+        # Write a closed tetrahedron so the exported top vertex gives an independent measurement.
+        mesh = b"v 0 0 0\nv 0 4 0\nv 4 0 0\nv 0 0 4\nf 1 2 3\nf 1 3 4\nf 3 2 4\nf 2 1 4\n"
+        boundary = uuid4().hex
+        prefix = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="mount.obj"'
+                  '\r\nContent-Type: model/obj\r\n\r\n').encode()
+        upload = Request(url + "/api/assets", data=prefix + mesh + f"\r\n--{boundary}--\r\n".encode(),
+                         headers={"Content-Type": "multipart/form-data; boundary=" + boundary})
+        with urlopen(upload, timeout=60) as response:
+            source = json.load(response)["id"]
+        project.apply([{"t": "add", "node": {
+            "kind": "meshBody", "id": "mount", "source": {"type": "asset", "assetId": source},
+            "keepSourcePlacement": True,
+        }}], "Import mount")
+        components = project.mesh_components("mount")
+        top = next(v["id"] for v in components["vertices"] if v["xyz"][2] == 4)
+        edit = project.set_mesh_vertices("mount", components["assetId"], {top: (0, 0, 4.25)},
+                                         base_version=components["version"])
+        reopened = studio.project(project_id)
+        self.assertEqual(reopened.mesh_components("mount", vertex_ids=[top], face_ids=[])["vertices"],
+                         [{"id": top, "xyz": [0, 0, 4.25]}])
+        file = studio._rpc("design.export", {"pieceId": project_id, "format": "stl", "stones": False})
+        with urlopen(url + file["asset"]["url"], timeout=60) as response:
+            data = response.read()
+        faces = struct.unpack_from("<I", data, 80)[0]
+        self.assertEqual(len(data), 84 + 50 * faces)
+        max_z = max(struct.unpack_from("<f", data, 84 + i * 50 + 20 + j * 12)[0]
+                    for i in range(faces) for j in range(3))
+        self.assertAlmostEqual(max_z, 4.25)
+        reopened.undo(edit["version"])
+        self.assertEqual(reopened.mesh_components("mount", vertex_ids=[top])["vertices"][0]["xyz"], [0, 0, 4])

@@ -25,6 +25,68 @@ const gem = (id: string, x: number) => ({
 })
 
 describe('design document', () => {
+  it('reads mesh components in the active piece and validates a measured vertex change before committing it', async () => {
+    const ctx = await server.runtime.context(server.runtime.local!)
+    const asset = await putAsset(ctx, {
+      name: 'test.obj',
+      mime: 'model/obj',
+      bytes: new TextEncoder().encode(
+        'v 0 0 0\nv 0 4 0\nv 4 0 0\nv 0 0 4\nf 1 2 3\nf 1 3 4\nf 3 2 4\nf 2 1 4\n',
+      ),
+    })
+    const { id: pieceId } = await api.call('pieces.create', { title: 'Imported mount' })
+    const { id: other } = await api.call('pieces.create', { title: 'Second piece' })
+    await api.call('design.apply', {
+      pieceId,
+      label: 'Import mount',
+      ops: [
+        {
+          t: 'add',
+          node: {
+            kind: 'meshBody',
+            id: 'mount',
+            source: { type: 'asset', assetId: asset.id },
+            keepSourcePlacement: true,
+          },
+        },
+      ],
+    })
+    const query = { pieceId, nodeId: 'mount' }
+    const read = await api.call('design.meshComponents', { ...query, offset: 0, limit: 1 })
+    expect(read).toMatchObject({
+      assetId: asset.id,
+      version: 1,
+      vertexCount: 4,
+      faceCount: 4,
+      vertices: [{ id: 0, xyz: [0, 0, 0] }],
+      faces: [{ id: 0, vertexIds: [0, 1, 2] }],
+    })
+    expect((await api.fail('design.meshComponents', { ...query, pieceId: other })).status).toBe(404)
+    const edit = (vertices: Record<string, number[]>) => ({
+      pieceId,
+      baseVersion: read.version,
+      label: 'Set mesh points',
+      ops: [
+        {
+          t: 'update' as const,
+          id: 'mount',
+          patch: { meshEdits: { assetId: asset.id, vertices } },
+        },
+      ],
+    })
+    expect((await api.fail('design.apply', edit({ '400': [0, 0, 8] }))).status).toBe(400)
+    expect((await api.call('pieces.get', { id: pieceId })).version).toBe(1)
+    const saved = await api.call('design.apply', edit({ '3': [0, 0, 5] }))
+    expect(saved.version).toBe(2)
+    expect(
+      (await api.call('design.meshComponents', { ...query, offset: 3, limit: 1 })).vertices,
+    ).toEqual([{ id: 3, xyz: [0, 0, 5] }])
+    await api.call('design.revert', { pieceId, seq: saved.version })
+    expect(
+      (await api.call('design.meshComponents', { ...query, offset: 3, limit: 1 })).vertices,
+    ).toEqual([{ id: 3, xyz: [0, 0, 4] }])
+  })
+
   it('describes the selected project feature with the field names and units used to edit it', async () => {
     const piece = await api.call('pieces.create', { templateId: 'wedding-band' })
     const input = { pieceId: piece.id, nodeId: 'band' }

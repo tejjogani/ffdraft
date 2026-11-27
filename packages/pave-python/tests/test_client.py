@@ -157,6 +157,16 @@ class StudioTest(unittest.TestCase):
             "axisOffset": -2, "angle": 180,
         }}])
 
+    def test_set_mesh_vertices_binds_to_the_observed_source_and_version(self):
+        project = self.project()
+        self.reply({"version": 1, "change": {"seq": 1}})
+        project.set_mesh_vertices("mount", "asset_1", {12: (2, 3, 4)}, base_version=0)
+        body = self.request("design.apply")
+        self.assertEqual(body["baseVersion"], 0)
+        self.assertEqual(body["ops"], [{"t": "update", "id": "mount", "patch": {
+            "meshEdits": {"assetId": "asset_1", "vertices": {"12": [2, 3, 4]}}
+        }}])
+
     def test_make_wire_names_its_rail_and_preserves_the_edit_guard(self):
         project = self.project()
         self.reply({"version": 1, "change": {"seq": 1}})
