@@ -10,6 +10,8 @@ def check(url: str, piece_id: str, node_id: str) -> None:
         raise ValueError("Pass the disposable loopback server used by the browser test.")
     project = Studio(url).project(piece_id)
     source = project.features[node_id]
+    assert source["importRole"] == "unassigned"
+    assert project.evaluate()["metalMassG"] == 0
     read = project.rhino_cap_faces(node_id)
     face = next(f for f in read["faces"] if f["normal"][2] > 0.99)
     assert face["innerLoops"] == 1

@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
+import type { CommandOutput, Design, Piece } from '@pave/schema'
 import { parseStl } from '../../../packages/kernel/src/mesh/parse/stl'
 import { boundsOfPositions } from '../../../packages/kernel/src/solid/meshing'
 
@@ -150,9 +151,15 @@ try {
   assert.equal(uploadAttempts, 3)
   const imported = await piece()
   assert.equal(imported.version, 1)
-  const byName = (design: typeof imported.design) =>
-    design.order.map((nodeId: string) => design.nodes[nodeId].name)
+  const byName = (design: Design) => design.order.map((nodeId) => design.nodes[nodeId]!.name)
+  const roles = (design: Design) =>
+    design.order.map((nodeId) => {
+      const node = design.nodes[nodeId]
+      assert.ok(node?.kind === 'meshBody')
+      return node.importRole
+    })
   assert.deepEqual(byName(imported.design), ['Mount', 'Bail'])
+  assert.deepEqual(roles(imported.design), ['unassigned', 'unassigned'])
   await undo()
   await until(async () => (await piece()).design.order.length === 0)
   await page.getByRole('button', { name: 'Redo', exact: true }).click()
@@ -169,18 +176,56 @@ try {
     },
   })
   assert.ok(uploaded.ok())
-  const reopened = await rpc('pieces.openFile', { assetId: (await uploaded.json()).id })
+  const reopened = (await rpc('pieces.openFile', {
+    assetId: (await uploaded.json()).id,
+  })) as CommandOutput<'pieces.openFile'>
   assert.deepEqual(byName(reopened.piece.design), ['Mount', 'Bail'])
-  for (const node of Object.values(reopened.piece.design.nodes) as {
-    source: { rhinoLayer: string }
-  }[])
+  assert.deepEqual(roles(reopened.piece.design), ['unassigned', 'unassigned'])
+  for (const node of Object.values(reopened.piece.design.nodes)) {
+    assert.ok(node.kind === 'meshBody' && node.source.type === 'asset')
     assert.equal(node.source.rhinoLayer, 'Jewelry')
+  }
   await open(reopened.piece.id)
   await page.getByText('Bail', { exact: true }).first().waitFor()
   await page.getByText('Bail', { exact: true }).first().click()
   await page.getByText('Rhino layer · Jewelry', { exact: true }).waitFor()
 
-  const cast = await rpc('design.export', { pieceId: reopened.piece.id, format: 'stl' })
+  const pieceId = reopened.piece.id
+  const readReopened = async () => (await rpc('pieces.get', { id: pieceId })) as Piece
+  const noMetal = await rpc('design.evaluate', { pieceId, detail: 'production' })
+  assert.equal(noMetal.metalMassG, 0)
+  const unassignedExport = await page.request.post(`${base}/api/rpc/design.export`, {
+    data: { pieceId, format: 'stl', stones: false },
+  })
+  assert.equal(unassignedExport.status(), 409)
+  assert.match(await unassignedExport.text(), /Nothing to export.*no metal/)
+
+  const review = page.getByRole('dialog', { name: 'Review Rhino roles' })
+  for (const [index, name] of ['Mount', 'Bail'].entries()) {
+    await page.getByRole('treeitem', { name: new RegExp(name) }).click()
+    await page.getByText('Rhino role · Unassigned', { exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Review role', exact: true }).click()
+    await review.getByRole('combobox', { name: 'Role', exact: true }).click()
+    await page.getByRole('option', { name: 'Metal', exact: true }).click()
+    const confirm = review.getByRole('button', { name: 'Confirm role', exact: true })
+    assert.ok(await confirm.isDisabled(), 'A casting alloy must be chosen explicitly.')
+    await review.getByRole('combobox', { name: 'Alloy', exact: true }).click()
+    await page.getByRole('option', { name: '18k Yellow Gold', exact: true }).click()
+    await confirm.click()
+    await review.waitFor({ state: 'hidden' })
+    await until(async () => roles((await readReopened()).design)[index] === 'metal')
+  }
+  const classified = await readReopened()
+  assert.deepEqual(roles(classified.design), ['metal', 'metal'])
+  for (const nodeId of classified.design.order) {
+    const original = reopened.piece.design.nodes[nodeId]
+    const current = classified.design.nodes[nodeId]
+    assert.ok(original?.kind === 'meshBody' && current?.kind === 'meshBody')
+    assert.deepEqual(current.source, original.source)
+  }
+  const metal = await rpc('design.evaluate', { pieceId, detail: 'production' })
+  assert.ok(metal.metalMassG > 0)
+  const cast = await rpc('design.export', { pieceId, format: 'stl', stones: false })
   const triangles = parseStl(await payload(cast.asset.url))
   assert.equal(triangles.indices.length, 24)
   const bounds = boundsOfPositions(triangles.positions)
@@ -203,6 +248,8 @@ try {
   await until(async () => (await piece()).design.order.length === 3)
   const withStl = (await piece()).design
   assert.deepEqual(byName(withStl), ['Mount', 'Bail', 'offset'])
+  assert.deepEqual(roles(withStl), ['unassigned', 'unassigned', undefined])
+  assert.ok((await rpc('design.evaluate', { pieceId: id, detail: 'production' })).metalMassG > 0)
   const importedStl = await payload(`/api/assets/${withStl.nodes[withStl.order[2]].source.assetId}`)
   const stlBounds = boundsOfPositions(parseStl(importedStl).positions)
   assert.deepEqual(rounded(stlBounds.min), [25.4, 50.8, 76.2])
@@ -211,7 +258,7 @@ try {
   await undo()
   await until(async () => (await piece()).design.order.length === 2)
   console.log(
-    'Passed Rhino and STL import preview, cancel, named assembly, reopen, STL readback and grouped undo.',
+    'Passed Rhino and STL import preview, cancel, named assembly, reopen, role confirmation, STL readback and grouped undo.',
   )
 } finally {
   await browser.close()

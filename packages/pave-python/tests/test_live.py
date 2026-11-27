@@ -153,6 +153,8 @@ class LiveCadTest(unittest.TestCase):
             "kind": "meshBody", "id": "mount", "source": {"type": "asset", "assetId": source},
             "keepSourcePlacement": True,
         }}], "Import mount")
+        self.assertNotIn("importRole", project.features["mount"])
+        self.assertGreater(project.evaluate()["metalMassG"], 0)
         components = project.mesh_components("mount")
         top = next(v["id"] for v in components["vertices"] if v["xyz"][2] == 4)
         edit = project.set_mesh_vertices("mount", components["assetId"], {top: (0, 0, 4.25)},
