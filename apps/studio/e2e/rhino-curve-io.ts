@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { readRhino3dm } from '../../../packages/kernel/src/import/rhino'
-import type { Piece } from '../../../packages/schema/src/index'
+import { MAX_MODEL_IMPORT_OPS, type Piece } from '../../../packages/schema/src/index'
 
 const require = createRequire(import.meta.url)
 const { chromium, webkit } = require('playwright') as typeof import('playwright')
@@ -153,18 +153,27 @@ try {
   assert.equal(reopened.curves.length, 1)
 
   await openEmptyProject()
-  await chooseFile(500)
-  await dialog.getByRole('heading', { name: 'Skipped 500 objects' }).waitFor()
+  await chooseFile(MAX_MODEL_IMPORT_OPS)
+  const displayedLimit = await page.evaluate(
+    (limit) => limit.toLocaleString(),
+    MAX_MODEL_IMPORT_OPS,
+  )
+  await dialog.getByRole('heading', { name: `Skipped ${displayedLimit} objects` }).waitFor()
   await includeCurves.check()
-  await dialog.getByText(/Select layers with up to 500 items/).waitFor()
+  await dialog.getByText(`Select layers with up to ${MAX_MODEL_IMPORT_OPS} items`).waitFor()
   assert.equal(
-    await dialog.getByRole('button', { name: 'Import 1 part and 500 curves' }).isDisabled(),
+    await dialog
+      .getByRole('button', { name: `Import 1 part and ${displayedLimit} curves` })
+      .isDisabled(),
     true,
   )
   await dialog.getByRole('checkbox', { name: 'Mounts' }).uncheck()
-  assert.equal(await dialog.getByRole('button', { name: 'Import 500 curves' }).isEnabled(), true)
+  assert.equal(
+    await dialog.getByRole('button', { name: `Import ${displayedLimit} curves` }).isEnabled(),
+    true,
+  )
   console.log(
-    'Verified opt-in and mixed Rhino curve import, one-edit undo, exact exports, and the 500-item limit.',
+    `Verified opt-in and mixed Rhino curve import, one-edit undo, exact exports, and the ${MAX_MODEL_IMPORT_OPS}-item limit.`,
   )
 } finally {
   await browser.close()
