@@ -36,13 +36,32 @@ export function counts<T extends string>(items: Iterable<T>) {
   return Object.fromEntries(tally)
 }
 
-const commonUnits = (rhino: RhinoModule) =>
+const modelUnits = (rhino: RhinoModule) =>
   new Map<UnitSystem, [number, string]>([
+    [rhino.UnitSystem.Angstroms, [1e-7, 'angstroms']],
+    [rhino.UnitSystem.Nanometers, [1e-6, 'nanometres']],
+    [rhino.UnitSystem.Microns, [1e-3, 'microns']],
     [rhino.UnitSystem.Millimeters, [1, 'millimetres']],
     [rhino.UnitSystem.Centimeters, [10, 'centimetres']],
+    [rhino.UnitSystem.Decimeters, [100, 'decimetres']],
     [rhino.UnitSystem.Meters, [1000, 'metres']],
+    [rhino.UnitSystem.Dekameters, [1e4, 'dekametres']],
+    [rhino.UnitSystem.Hectometers, [1e5, 'hectometres']],
+    [rhino.UnitSystem.Kilometers, [1e6, 'kilometres']],
+    [rhino.UnitSystem.Megameters, [1e9, 'megametres']],
+    [rhino.UnitSystem.Gigameters, [1e12, 'gigametres']],
+    [rhino.UnitSystem.Microinches, [25.4e-6, 'microinches']],
+    [rhino.UnitSystem.Mils, [0.0254, 'mils']],
     [rhino.UnitSystem.Inches, [25.4, 'inches']],
     [rhino.UnitSystem.Feet, [304.8, 'feet']],
+    [rhino.UnitSystem.Yards, [914.4, 'yards']],
+    [rhino.UnitSystem.Miles, [1609344, 'miles']],
+    [rhino.UnitSystem.PrinterPoints, [25.4 / 72, 'printer points']],
+    [rhino.UnitSystem.PrinterPicas, [25.4 / 6, 'printer picas']],
+    [rhino.UnitSystem.NauticalMiles, [1852e3, 'nautical miles']],
+    [rhino.UnitSystem.AstronomicalUnits, [1.4959787e14, 'astronomical units']],
+    [rhino.UnitSystem.LightYears, [9.4607304725808e18, 'light years']],
+    [rhino.UnitSystem.Parsecs, [3.08567758e19, 'parsecs']],
   ])
 
 export function readCurve(curve: NurbsCurve, scale = 1) {
@@ -70,7 +89,7 @@ export function sourceArchive(rhino: RhinoModule, doc: File3dm, hold: Hold) {
   const layers = hold(doc.layers())
   const definitions = hold(doc.instanceDefinitions())
   const units = hold(doc.settings()).modelUnitSystem
-  const unit = commonUnits(rhino).get(units)
+  const unit = modelUnits(rhino).get(units)
   const layerRows = Array.from({ length: layers.count }, (_, i) =>
     handles((take) => {
       const layer = take(layers.get(i))

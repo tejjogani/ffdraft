@@ -8,6 +8,7 @@ import { createKernel } from '../kernel'
 import { loadRhino3dm } from '../runtime/rhino'
 import { archive, counts, sourceArchive } from './rhino-archive'
 import { hasSolidPreview, probeBodies, probeCurves } from './rhino-model-probes'
+import { probeNativeCaps, probeNativeEdges, retainedParts } from './rhino-native-probes'
 
 const usage = 'Usage: pnpm cad:check-rhino <file.3dm> [more.3dm ...]'
 
@@ -26,6 +27,8 @@ async function check(file: string, index: number) {
     imported: undefined as Record<string, unknown> | undefined,
     curves: undefined as Awaited<ReturnType<typeof probeCurves>> | undefined,
     bodies: undefined as Awaited<ReturnType<typeof probeBodies>> | undefined,
+    nativeEdges: undefined as Awaited<ReturnType<typeof probeNativeEdges>> | undefined,
+    nativeCaps: undefined as Awaited<ReturnType<typeof probeNativeCaps>> | undefined,
     failure: undefined as { stage: string; detail: string } | undefined,
   }
   const kernel = createKernel()
@@ -67,10 +70,7 @@ async function check(file: string, index: number) {
       sourceData.report.visibleEntries === total,
       'Visible source entries differ from the imported and skipped totals.',
     )
-    ok(
-      !sourceData.unit || sourceData.unit[1] === imported.units,
-      'Importer reported different model units.',
-    )
+    ok(sourceData.unit?.[1] === imported.units, 'Importer reported different model units.')
 
     stage = 'usable geometry'
     ok(
@@ -90,6 +90,12 @@ async function check(file: string, index: number) {
 
     stage = 'body edit readback'
     report.bodies = await probeBodies(rhino, kernel, parts)
+
+    const native = retainedParts(parts)
+    stage = 'exact native edge readback'
+    report.nativeEdges = await probeNativeEdges(rhino, bytes, native, sourceData.unit[0])
+    stage = 'native end-cap readback'
+    report.nativeCaps = await probeNativeCaps(rhino, bytes, native, sourceData.unit[0])
     report.result = 'passed'
   } catch (error) {
     report.failure = {
