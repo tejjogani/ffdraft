@@ -144,6 +144,10 @@ const ok = z.object({ ok: z.literal(true) })
 const none = z.object({})
 /** A JSON merge patch (RFC 7396): objects merge, arrays and scalars replace, null deletes. */
 const mergePatch = z.record(z.string(), z.unknown())
+const importedSceneOptions = RenderSceneSchema.pick({
+  includeUnassignedRhino: true,
+  importedBodyLook: true,
+})
 
 /** Diaex's exact public stone ID, kept opaque. */
 export const DiaexStoneId = z
@@ -1614,7 +1618,7 @@ export const commands = {
   }),
   'scenes.update': def({
     description:
-      'Adjust a saved shot. `patch` is a JSON merge patch on its scene (e.g. {"camera":{"focalLength":105}}); the result is re-validated, and the viewfinder shows the change before any render time is spent. Set `includeUnassignedRhino: true` when the designer asks for a neutral preview of unassigned Rhino bodies on this shot. Each change can be undone (scenes.revert). To move the camera, set {"camera":{"preset":"custom","position":[x,y,z],"target":[x,y,z]}} in the piece\'s millimetres (Z up, the front faces −Y; the result names the current pose) and optionally `roll` in degrees; keep the target to orbit, move both to pan. A shot whose camera is `locked` cannot be moved until a person unlocks it.',
+      'Adjust a saved shot. `patch` is a JSON merge patch on its scene (e.g. {"camera":{"focalLength":105}}); the result is re-validated, and the viewfinder shows the change before any render time is spent. To preview unassigned Rhino bodies in this shot, set `includeUnassignedRhino: true` with `importedBodyLook: "source"` for source materials or `"clay"` for neutral clay. Each change can be undone (scenes.revert). To move the camera, set {"camera":{"preset":"custom","position":[x,y,z],"target":[x,y,z]}} in the piece\'s millimetres (Z up, the front faces −Y; the result names the current pose) and optionally `roll` in degrees; keep the target to orbit, move both to pan. A shot whose camera is `locked` cannot be moved until a person unlocks it.',
     kind: 'mutation',
     tool: true,
     input: z.object({
@@ -1629,20 +1633,20 @@ export const commands = {
   }),
   'scenes.suggest': def({
     description:
-      'Before setting up shots: what matters in this piece for photography (its kind, centre stone, halo, pavé, engraving, gallery) and the shot vocabulary for it, each with a camera already placed for the aspect ratio you give (hero three-quarter, profile, top-down, macro on the centre stone, low angle; per kind for pendants, earrings and bracelets), the framing it predicts, and default quick questions for chat.ask. Pass a camera to scenes.create as it is or adjusted; then check the framing with scenes.capture before rendering.',
+      'Before setting up shots: what matters in this piece for photography (its kind, centre stone, halo, pavé, engraving, gallery) and the shot vocabulary for it, each with a camera already placed for the aspect ratio you give (hero three-quarter, profile, top-down, macro on the centre stone, low angle; per kind for pendants, earrings and bracelets), the framing it predicts, and default quick questions for chat.ask. Pass a camera and any returned sceneOptions to scenes.create; then check the framing with scenes.capture before rendering.',
     kind: 'query',
     tool: true,
-    input: z.object({
+    input: importedSceneOptions.extend({
       pieceId: id,
       aspect: z.enum(['1:1', '4:5', '9:16', '16:9', '3:2']).default('1:1'),
-      /** Frame the same geometry as a shot opted in to a neutral imported CAD preview. */
-      includeUnassignedRhino: z.boolean().optional(),
     }),
     output: z.object({
       kind: z.enum(PIECE_KINDS),
       /** What matters about the piece in pictures, one plain line each. */
       features: z.array(z.string()),
       centreStoneNodeId: id.nullable(),
+      /** Settings to put on a shot when framing included the unassigned Rhino bodies. */
+      sceneOptions: importedSceneOptions.optional(),
       shots: z.array(
         z.object({
           key: z.string(),
