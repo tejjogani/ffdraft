@@ -235,6 +235,11 @@ try {
   assert.deepEqual((await atVersion(before.version + 3)).design, edited.design)
   await page.getByRole('button', { name: 'Undo', exact: true }).click()
   assert.deepEqual((await atVersion(before.version + 4)).design, before.design)
+  // The server can commit Undo before the CAD window receives its acknowledgment.
+  await page
+    .getByRole('status')
+    .filter({ hasText: /^Saved$/ })
+    .waitFor()
 
   await open()
   await viewport.waitFor()
