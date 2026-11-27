@@ -1,5 +1,7 @@
 # 13 — The jewelry CAD feature set: the incumbents, a capability matrix, frequency of use, and the gaps in the freeform plan
 
+> **Historical research snapshot.** For implemented behavior, tests by entry point and outstanding gaps at the audited commit, see [the current jewelry workflow evidence](cad-feature-evidence.md). “Today” and plan counts below refer to the original research date.
+
 Research date: 2026-11-25. Scope: what jewelers actually get from Rhino and from each jewelry CAD product on sale today (named tools, status, price), how often a working designer uses each job, and what is missing from [`docs/plans/freeform-cad.md`](../plans/freeform-cad.md) and from the product. Builds on [`12-rhino-parity.md`](./12-rhino-parity.md) (the Rhino tool inventory and engine facts, not repeated here; corrected in §7), [`01-cad.md`](./01-cad.md), [`06-freeform.md`](./06-freeform.md) and [`cad-workspace.md`](../plans/cad-workspace.md).
 
 **How to read the evidence.** `[V]` I opened the page this session and the claim is on it; the link is beside it. `[V repo]` I read it in this repository this session. `[S]` seen only in a search result or an earlier repo file, not opened. `[E]` my estimate or working knowledge; I say what it rests on. Several vendor pages are marketing pages: a `[V]` there means "the vendor says so", not "tested". Prices were seen on 25 November 2026. No new kernel spikes were run for this file: feasibility notes rest on the measured facts in research 12 and on reading the code.

@@ -1,26 +1,28 @@
 # 22 — Full Rhino parity: every Rhino 8 capability (and what Rhino 9 adds), checked against the plan and the product
 
+> **Historical research snapshot.** For implemented behavior, tests by entry point and outstanding gaps at the audited commit, see [the current row-by-row evidence and Rhino 9 command additions](cad-feature-evidence.md). “Today” and plan counts below refer to the original research date.
+
 Research date: 2026-11-25. Scope: the complete list of Rhino's own CAD capabilities, checked row by row against the product today, the eight-step build brief ([`docs/plans/freeform-cad.md`](../plans/freeform-cad.md)) and the product's engines. Rhino 8 is the baseline inventory; Rhino 9, the version McNeel sells today, is a separate marked group. Builds on [`12-rhino-parity.md`](./12-rhino-parity.md) (the jeweler's subset and the kernel spikes), [`06-freeform.md`](./06-freeform.md), [`01-cad.md`](./01-cad.md) and [`cad-workspace.md`](../plans/cad-workspace.md). The jewelry plug-ins are topic 13's file, not this one.
 
 **How to read the evidence.** `[V]` I opened the page this session and the claim is on it; the link is beside it. `[V d.ts]` I read the engines' shipped type files this session (replicad-opencascadejs 1.2.1 `replicad_single.d.ts`, 353 class names; rhino3dm 8.35.0 `rhino3dm.d.ts`). `[V code]` or a file path means I read that file in the repository. `[12]` was measured by research 12's spikes and not rerun here. `[S]` is a search summary only. `[E]` is my estimate; engine ratings and jeweler need are `[E]` unless marked.
 
 ## 1. The short answer
 
-- **The size of "all of Rhino".** McNeel's Rhino 8 command list holds **1,078 command names** [V]. Grouped by what they do, they are **195 capabilities** (§3), plus 40 names that are not CAD (digitiser arms, licence, help). Rhino 9 adds 14 more groups.
+- **The size of "all of Rhino".** McNeel's Rhino 8 command list holds **1,078 command entries** [V]. Grouped by what they do, they are **195 capabilities** (§3), plus 40 names that are not CAD (digitiser arms, licence, help). Rhino 9 adds 14 more groups.
 - **The count today.** Of the 195: **16 are there, 58 partly, 121 not**. The eight planned steps finish **37** more and touch **19** in part. **After step 8, 142 of 195 (73 %) are still not fully covered**: 85 the plan never mentions, 33 it cuts on purpose, 5 it defers, 19 it covers in part. By jeweler's need those 142 are 14 A, 36 B, 56 C, 36 D. The plan was scoped to the jeweler's subset and does that well; it is far from all of Rhino.
 - **Most of the gap is not an engine problem.** Of the 142: **74 are cheap** on today's engines, **55 are real work with known algorithms**, and only **13 need research or something the engines do not have** (SubD, QuadRemesh, flattening doubly curved surfaces, G2 surface blends, exact cage deformation, other kernels' file formats).
 - **Three structural causes sit under most rows.** (1) The plan's rule "bodies are closed": Rhino's surface modeling treats an open surface as an ordinary object, so about two dozen rows wait on reversing that rule [E]. (2) The shipped OpenCascade build is a 353-class subset [V d.ts]; the missing classes (non-uniform transform, Gordon and Coons fills, curve projection, NURBS conversion, IGES, face features) exist in OpenCascade and need **our own WebAssembly build**. (3) There is no SubD engine at all.
 - **Two things in the brief's "needs a new engine" list are closer than assumed.** Make2D: exact hidden-line classes are in the shipped build [V d.ts], and the production package already draws hidden-line sheets with dimensions and a title block [V code]. ShrinkWrap: the level-set re-surfacing behind it already runs inside mesh repair [V code]; it lacks a tool and controls.
 - **Recommendations for the hard seven** (§5): SubD: build (own cage node; OpenSubdiv or own evaluator; patches to NURBS). QuadRemesh: adopt QuadriFlow (MIT) as a server job, after SubD. ShrinkWrap: build on what exists. Cage deformers: do differently (exact by moving surface poles, mesh otherwise). Grasshopper: do differently (graph view and formulas first; a canvas only if the founder wants it). Make2D: build on the exact classes. Worksessions: do differently (linked reference pieces).
 - **Rhino moved.** Rhino 9 is the version on sale (US$995, seen 25 Nov 2026 [V]). It adds setback fillets, a new Patch, multi-face push/pull, patterns along curves, gem caustics, Grasshopper 2 and **RhinoAI, an assistant inside Rhino that works with Claude and other models** [V]. An AI assistant is no longer something Rhino lacks.
-- **Parity of capability, not of interface.** Every one of the 1,078 names should resolve in the slash palette: to a verb, or to a one-line answer saying how the product does it. No toolbars, no 119 separate selection commands.
+- **Parity of capability, not of interface.** Every one of the 1,078 entries should resolve in the slash palette: to a verb, or to a one-line answer saying how the product does it. No toolbars, no 119 separate selection commands.
 - **Cost.** Fifteen further steps (§8), very roughly 65 to 90 weeks of one build lane [E]; SubD is the largest single item.
 - **Proposed to leave out, for the founder to confirm** (§6): digitiser arms, marine tools and formats, sun studies, legacy render exports, architectural drafting marks, the VBScript runtime, loading Rhino's binary plug-ins, proprietary kernel formats (SAT, Parasolid).
 
 ## 2. What was counted, and how
 
-- **Source of names.** The [Rhino 8 command list](https://docs.mcneel.com/rhino/8/help/en-us/commandlist/command_list.htm) [V], read in two parts and de-duplicated: 1,078 names. Three look like page slips and are kept as printed (`ApplyCurves`, `SelPolysurface`, `Synchronize Views`). The mesh modifiers (Displacement and its siblings) and the object snaps are properties and toggles, not commands; they come from their own help pages [V].
-- **Completeness check.** A script confirmed that every one of the 1,078 names appears in §3. 119 start with `Sel`, 27 with `Extract`, 24 with `Mesh`, 18 with `SubD`.
+- **Source of names.** The [Rhino 8 command list](https://docs.mcneel.com/rhino/8/help/en-us/commandlist/command_list.htm) [V], read in two parts: 1,078 entries, including two repeated headings. Three look like page slips and are kept as printed (`ApplyCurves`, `SelPolysurface`, `Synchronize Views`). The mesh modifiers (Displacement and its siblings) and the object snaps are properties and toggles, not commands; they come from their own help pages [V].
+- **Completeness check.** A script confirmed that every one of the 1,078 entries appears in §3. 119 start with `Sel`, 27 with `Extract`, 24 with `Mesh`, 18 with `SubD`.
 - **Rows.** A row is one capability a user would name ("fillet an edge", "array along a curve"). Near-identical commands share a row and are all listed. Counts in §1 and §4 were computed from the tables by script.
 - **How this relates to research 12.** Research 12 counted 74 tools: the A and B rows of a jeweler's Rhino. This file counts everything, so its A and B rows are a superset and the C and D rows are new.
 - **Rhino 9.** McNeel's [sales page](https://www.rhino3d.com/sales/) prices only Rhino 9 and its [download page](https://www.rhino3d.com/download/) lists Rhino 8 as an archive [V]. I could not find the release date at source. The Rhino 9 help command list was not opened, so §3.19 lists Rhino 9 by feature, not by command.
@@ -377,7 +379,7 @@ Listed so that every name on McNeel's page is accounted for. None needs a geomet
 
 | | Rows | Share |
 |---|---|---|
-| Rhino 8 capabilities (from 1,078 command names) | 195 | 100 % |
+| Rhino 8 capabilities (from 1,078 command entries) | 195 | 100 % |
 | In the product today: yes | 16 | 8 % |
 | In the product today: partly | 58 | 30 % |
 | Finished by plan steps 1–8 (beyond the 16) | 37 | 19 % |
@@ -537,10 +539,10 @@ An unknown or unsupported Rhino name typed in the palette should never dead-end:
 
 ## 7. Verification: proving parity
 
-1. **The ledger.** A checked-in table of all 1,078 names (plus Rhino 9 features), each mapped to a verb, a "how it is done here" answer, or "left out, because". CI fails on an unmapped name, and on a verb whose example picks do not build through `design.run`.
+1. **The ledger.** A checked-in table of all 1,078 entries (plus Rhino 9 features), each mapped to a verb, a "how it is done here" answer, or "left out, because". CI fails on an unmapped name, and on a verb whose example picks do not build through `design.run`.
 2. **One geometry test per capability row**, with closed-form answers where they exist. Examples: sphere r 10: volume 4,188.79 mm³, area 1,256.64 mm²; torus by Pappus; box 2 × 3 × 4: centroid at the centre, moments of inertia m(b² + c²)/12 about each axis; unrolled cylinder area equals the face area; offset of a sphere by t has radius r + t; a network surface interpolates its curves within tolerance; a two-rail sweep stays within 0.01 mm of rail 2.
 3. **Mass properties three ways:** OpenCascade `GProp`, a mesh tetrahedron sum, and the closed form; exact within 1e-6 relative, mesh within 0.1 %.
-4. **.3dm round trip through rhino3dm:** write, read back, compare object counts and types, the layer tree, block definitions and instances, units, user strings, and control points and knots to 1e-9. Then the reverse on public sample .3dm files. Never the founder's father's files.
+4. **.3dm round trip through rhino3dm:** write, read back, compare object counts and types, the layer tree, block definitions and instances, units, user strings, and control points and knots to 1e-9. Then the reverse on public sample .3dm files. Use independently constructed fixtures in the repository. Keep assessments of private files local.
 5. **STEP round trip** through the build's reader: valid, same face count, volume within 1e-3.
 6. **SubD:** limit positions against OpenSubdiv's own regression shapes; deviation of our NURBS conversion from the limit surface, reported per continuity option.
 7. **Rhino as referee (optional, needs a licence):** open our .3dm and STEP in Rhino, run `Check`, `Volume`, `ShowEdges`; today a manual release gate, automatable with Compute.

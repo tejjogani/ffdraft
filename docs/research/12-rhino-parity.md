@@ -1,5 +1,7 @@
 # 12 — Rhino parity: the jewelry designer's Rhino and plug-in toolset, ranked, with feasibility
 
+> **Historical research snapshot.** For implemented behavior, tests by entry point and outstanding gaps at the audited commit, see [the jewelry workflow and Rhino feature evidence](cad-feature-evidence.md). “Today” and plan counts below refer to the original research date.
+
 Research date: 2026-11-24. Scope: every Rhino tool and jewelry plug-in capability (MatrixGold, RhinoGold / RhinoArtisan, Panther3D / CrossGems, smaller tools) a working jewelry CAD designer reaches for, how often, whether Pavé's engines can do it, what Pavé has today, and in which step of the build brief it lands. Build brief: [`docs/plans/freeform-cad.md`](../plans/freeform-cad.md). Domain model and kernel background: [`01-cad.md`](./01-cad.md); meshes, pavé and freeform on-ramps: [`06-freeform.md`](./06-freeform.md).
 
 **How to read the evidence.** `[V]` was checked this session: by a spike against the repo's own runtimes (replicad 1.2.1 with replicad-opencascadejs 1.2.1, manifold-3d 3.5.5, rhino3dm 8.35), or by reading the shipped `replicad_single.d.ts`. `[S]` is a web fact taken from search summaries, because vendor pages (gemvision.com and most others) could not be opened. `[E]` is judgement or working knowledge of Rhino and jewelry CAD. Frequencies are `[E]` throughout.
