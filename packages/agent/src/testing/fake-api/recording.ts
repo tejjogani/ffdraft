@@ -158,8 +158,27 @@ export function recordedMessages(rec: Recording): unknown[][] {
 const TOKEN = /[A-Za-z0-9_-]+/g
 /** A server- or kernel-generated id: `pc_V1StGXR8Z5jdHi6B`, `gem_k3f9x2`, `chg_run_…_toolu_…`. */
 const ID_LIKE = /^[a-z]{2,8}_[A-Za-z0-9_-]{5,}$/
+const FAKE_SIGNATURE = /^fk1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]{43}$/
 
-const tokens = (s: string) => s.match(TOKEN) ?? []
+/** Compare opaque thinking signatures byte-for-byte as a single token. Base64url MACs can
+ * accidentally resemble a generated ID and capture the tool_use ID in the very next block. */
+function messageTokens(message: unknown): string[] {
+  let comparable = message
+  if (isObj(message) && message.role === 'assistant' && Array.isArray(message.content)) {
+    comparable = {
+      ...message,
+      content: message.content.map((block: unknown) =>
+        isObj(block) &&
+        block.type === 'thinking' &&
+        typeof block.signature === 'string' &&
+        FAKE_SIGNATURE.test(block.signature)
+          ? { ...block, signature: Buffer.from(block.signature, 'utf8').toString('hex') }
+          : block,
+      ),
+    }
+  }
+  return JSON.stringify(stripImages(comparable)).match(TOKEN) ?? []
+}
 const norm = (t: string) => (ID_LIKE.test(t) ? '<id>' : t)
 
 export interface Alignment {
@@ -193,8 +212,8 @@ export function align(
     if (a[i] !== b[i]) out.structural.push(`messages.${i}: ${a[i]} recorded, ${b[i]} live`)
   const n = Math.min(recorded.length, live.length)
   for (let i = 0; i < n; i++) {
-    const ra = tokens(JSON.stringify(stripImages(recorded[i])))
-    const la = tokens(JSON.stringify(stripImages(live[i])))
+    const ra = messageTokens(recorded[i])
+    const la = messageTokens(live[i])
     let x = 0
     let y = 0
     while (x < ra.length && y < la.length) {

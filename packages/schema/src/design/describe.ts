@@ -11,7 +11,14 @@ import { formatRingSize, type RingSize } from '../domain/sizes'
 import { defaultRevolveOffset, revolveProfileError } from './curve'
 import { applyOps, type Design, newId, type Op } from './design'
 import type { FieldMeta, FieldWidget } from './fields'
-import { NODE_SCHEMAS, type Node, type NodeInput, type NodeKind, nodeRefs } from './nodes'
+import {
+  isSectionSurface,
+  NODE_SCHEMAS,
+  type Node,
+  type NodeInput,
+  type NodeKind,
+  nodeRefs,
+} from './nodes'
 
 export type FieldType =
   | 'number'
@@ -390,6 +397,22 @@ export function defaultNode(
   const missing: MissingField[] = []
   for (const f of describeNode(kind).fields) {
     if (f.key in node) continue
+    if ((kind === 'loft' || kind === 'railSweep') && (f.key === 'sections' || f.key === 'rails')) {
+      missing.push({
+        key: f.key,
+        title: f.key === 'rails' ? 'Guide curves' : 'Ordered section curves',
+        refKinds: ['curve', 'nurbsCurve'],
+      })
+      continue
+    }
+    if (kind === 'thickenSurface' && f.key === 'surface') {
+      const source = [hint.target, ...design.order.toReversed()]
+        .map((candidate) => (candidate === undefined ? undefined : design.nodes[candidate]))
+        .find((candidate) => isSectionSurface(candidate) && candidate.id !== id)
+      if (source) node.surface = source.id
+      else missing.push({ key: 'surface', title: 'Uncapped loft or rail sweep' })
+      continue
+    }
     if (kind === 'pipe' && f.key === 'curve' && 'points' in node) continue
     if (kind === 'revolve' && f.key === 'curve') {
       if ('profile' in node) continue

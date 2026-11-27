@@ -103,7 +103,7 @@ def import_piece(glb: Path, scene: Scene) -> tuple[bpy.types.Object, list[bpy.ty
 # ── Rig ──────────────────────────────────────────────────────────────────────────────────────
 
 
-def _panel(p: Panel, rig: bpy.types.Object, pivot: Vec3, material: bpy.types.Material) -> None:
+def _panel(p: Panel, rig: bpy.types.Object, pivot: Vec3, material: bpy.types.Material) -> bpy.types.Object:
     w, h = p["size"][0] * MM / 2, p["size"][1] * MM / 2
     mesh = bpy.data.meshes.new(p["id"])
     # Wound so the face normal is local −Z, the direction the panel emits.
@@ -126,6 +126,7 @@ def _panel(p: Panel, rig: bpy.types.Object, pivot: Vec3, material: bpy.types.Mat
     obj.visible_shadow = False
     if max(p["radiance"]) == 0:
         obj.visible_diffuse = False
+    return obj
 
 
 def _sparkle(i: int, s: Sparkle, rig: bpy.types.Object, pivot: Vec3, gems: bpy.types.Collection) -> None:
@@ -143,12 +144,21 @@ def _sparkle(i: int, s: Sparkle, rig: bpy.types.Object, pivot: Vec3, gems: bpy.t
     obj.light_linking.receiver_collection = gems
 
 
-def build_rig(rig: Rig, gems: list[bpy.types.Object]) -> bpy.types.Object:
+def build_rig(
+    rig: Rig, gems: list[bpy.types.Object], camera_floor: bpy.types.Object | None
+) -> bpy.types.Object:
     root = _empty("rig", _m(rig["pivot"]))
     root.rotation_euler = (0.0, 0.0, math.radians(rig["rotation"]))
     material = _emission("panel")
+    panel_receivers = None
+    if camera_floor is not None:
+        panel_receivers = bpy.data.collections.new("acrylic-flag")
+        panel_receivers.objects.link(camera_floor)
+        panel_receivers.collection_objects[0].light_linking.link_state = "EXCLUDE"
     for p in rig["panels"]:
-        _panel(p, root, rig["pivot"], material)
+        panel = _panel(p, root, rig["pivot"], material)
+        if panel_receivers is not None:
+            panel.light_linking.receiver_collection = panel_receivers
     if rig["sparkles"]:
         receivers = bpy.data.collections.new("sparkle-receivers")
         for g in gems:
@@ -224,9 +234,17 @@ def build_ground(g: Ground, center: Vec3) -> list[bpy.types.Object]:
         obj.data.materials.append(_principled("ground", (0.8, 0.8, 0.8), 1.0))
         return [obj]
     if kind == "reflective":
-        obj = _plane("ground", g["z"], g["size"], (center[0], center[1]))
-        obj.data.materials.append(_principled("ground", g["color"], g["roughness"], g["ior"]))
-        return [obj]
+        # The camera sees the reflection of the piece and room, with softboxes flagged off the
+        # acrylic. The piece still sees the same rig in the sheet as it does in the room.
+        center_xy = (center[0], center[1])
+        material = _principled("ground", g["color"], g["roughness"], g["ior"])
+        camera_floor = _plane("acrylic", g["z"], g["size"], center_xy)
+        camera_floor.visible_diffuse = camera_floor.visible_glossy = camera_floor.visible_transmission = False
+        camera_floor.data.materials.append(material)
+        reflected_floor = _plane("acrylic-bounce", g["z"] - 0.002, g["size"], center_xy)
+        reflected_floor.visible_camera = False
+        reflected_floor.data.materials.append(material)
+        return [camera_floor, reflected_floor]
     # Sweep: extrude the [depth, height] profile across its width, facing the camera.
     hw = g["width"] * MM / 2
     profile = g["profile"]
@@ -324,9 +342,9 @@ def build_scene(scene: Scene, glb: Path) -> dict[str, list[bpy.types.Object]]:
     """Builds everything; returns object groups the renderer toggles for the mask pass."""
     bpy.ops.wm.read_factory_settings(use_empty=True)
     piece, gems = import_piece(glb, scene)
-    rig = build_rig(scene["rig"], gems)
-    build_world(scene["rig"]["ambient"])
     ground = build_ground(scene["ground"], scene["camera"]["target"])
+    rig = build_rig(scene["rig"], gems, ground[0] if scene["ground"]["kind"] == "reflective" else None)
+    build_world(scene["rig"]["ambient"])
     orbit, cam = build_camera(scene["camera"])
     if scene["animation"]:
         animate(scene["animation"], piece, rig, orbit, cam)

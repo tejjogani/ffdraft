@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Cycles materials from resolved material records (research §2 "Mapping to renderers").
 
-Metals: Metallic BSDF in F82 mode. Transparent gems: Principled BSDF with native dispersion
-(Blender 5.3) and Beer–Lambert volume absorption. Opaque stones: Principled surface.
+Metals: Metallic BSDF in F82 mode. Transparent gems: Principled BSDF and Beer–Lambert
+volume absorption. Opaque stones: Principled surface.
 """
 
 from __future__ import annotations
@@ -84,8 +84,8 @@ def _gem(name: str, m: Material) -> bpy.types.Material:
     bsdf.inputs["Roughness"].default_value = 0.0
     bsdf.inputs["IOR"].default_value = m["ior"]
     bsdf.inputs["Transmission Weight"].default_value = 1.0
-    bsdf.inputs["Transmission Dispersion Scale"].default_value = 1.0
-    bsdf.inputs["Transmission Dispersion Abbe Number"].default_value = m["abbe"]
+    # Cycles 5.3 traces dispersion in RGB; even 1024-sample diamond takes retain colour mosaic.
+    bsdf.inputs["Transmission Dispersion Scale"].default_value = 0.0
     tree.links.new(bsdf.outputs[0], out.inputs["Surface"])
 
     # σ = −ln(colour) / distance per channel; density = max σ, colour = 1 − σ / density.

@@ -1,0 +1,24 @@
+{
+  "runs": [
+    [
+      {
+        "content": [
+          {
+            "type": "tool_use",
+            "name": "renders_create",
+            "input": {
+              "pieceId": "{{pieceId}}",
+              "title": "Catalog proof from current CAD",
+              "engine": "blender",
+              "scene": {
+                "look": "catalog-white",
+                "output": { "width": 640, "height": 640, "quality": "standard" }
+              }
+            }
+          }
+        ]
+      },
+      { "content": [{ "type": "text", "text": "The catalog image is ready." }] }
+    ]
+  ]
+}

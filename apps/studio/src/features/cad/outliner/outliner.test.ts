@@ -175,6 +175,15 @@ describe('add menu and next steps', () => {
     expect(options.find((o) => o.kind === 'pave')!.disabled).toMatch(/^Needs a /)
     expect(options.find((o) => o.kind === 'ringShank')!.title).toBe('Ring band')
   })
+  it('names the missing inputs for wire and thickening', () => {
+    const options = addMenu(designFrom('ring', []), ['pipe', 'thickenSurface']).flatMap(
+      (group) => group.options,
+    )
+    expect(options.map((option) => option.disabled)).toEqual([
+      'Needs an uncapped loft or rail sweep',
+      'Needs a construction curve or path points',
+    ])
+  })
   it('suggests icing a body, then a bail, then a chain', () => {
     let d = designFrom('pendant', [
       { id: 'trophy', kind: 'meshBody', source: { type: 'builtin', name: 'trophy' } },

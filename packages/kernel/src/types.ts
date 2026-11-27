@@ -37,6 +37,8 @@ export interface Bounds {
  * separate shells that touch nothing else (the links of a chain).
  */
 export interface Part {
+  /** Open CAD surface with area but no casting volume. */
+  modelingSheet?: true
   id: string
   nodeId: string
   /**
@@ -143,6 +145,7 @@ export type Detail = 'draft' | 'production'
 export interface EvaluatedCurve {
   nodeId: string
   plane?: CurvePlane
+  planeOffset?: number
   points: [number, number, number][]
   closed: boolean
 }

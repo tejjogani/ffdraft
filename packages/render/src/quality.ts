@@ -1,7 +1,7 @@
 /**
  * Cycles settings per quality tier — research §1 "Recommended Cycles settings", with the
- * "Decisions for Pavé" floor of 24 transmission and 12 glossy bounces applied to every tier
- * (brilliant cuts need long internal-reflection chains; prongs reflect prongs).
+ * "Decisions for Pavé" bounce floor, with a matching glossy budget for the long
+ * internal-reflection chains in brilliant cuts.
  */
 import type { RenderScene } from '@pave/schema'
 import type { ResolvedOutput } from './types'
@@ -13,8 +13,8 @@ interface Tier extends Omit<ResolvedOutput, 'width' | 'height' | 'seed'> {
   maxSide: number | null
 }
 
-const DEEP = { total: 32, transmission: 32, glossy: 16, diffuse: 4, transparent: 8 }
-const FLOOR = { total: 24, transmission: 24, glossy: 12, diffuse: 2, transparent: 8 }
+const DEEP = { total: 32, transmission: 32, glossy: 32, diffuse: 4, transparent: 8 }
+const FLOOR = { total: 24, transmission: 24, glossy: 24, diffuse: 2, transparent: 8 }
 
 const STILL: Record<Quality, Tier> = {
   // The critique-loop draft: 768², 64 spp (research §4). Paths inside a stone are indirect,

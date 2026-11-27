@@ -35,6 +35,8 @@ export const ServerEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('board.updated'), boardId: id }),
   /** A saved shot was created, adjusted or deleted (`pieceId` null for a house shot). */
   z.object({ type: z.literal('scene.updated'), sceneId: id, pieceId: id.nullable() }),
+  /** An owner queued a render that needs the local Blender installer. */
+  z.object({ type: z.literal('render.installRequested') }),
   /** A long-running job moved; carries enough to update a progress ring without refetching. */
   z.object({
     type: z.literal('job.updated'),

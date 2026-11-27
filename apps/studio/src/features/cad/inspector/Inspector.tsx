@@ -32,6 +32,7 @@ import { diaexBrowseLink } from '../../sourcing/links'
 import { NurbsControls } from '../curves/NurbsControls'
 import { RhinoEdgeCopy } from '../curves/RhinoEdgeCopy'
 import { RhinoFaceBorders } from '../curves/RhinoFaceBorders'
+import { isSectionFeature, type SectionFeature, sectionCurveOptions } from '../curves/section-model'
 import { type ImportedMesh, isImportedMesh } from '../mesh-edit/model'
 import { isProfileNode, type ProfileNode, profileSize } from '../profiles/profile'
 import { RhinoEndFaceTool } from '../rhino/RhinoEndFaceTool'
@@ -56,6 +57,8 @@ export interface InspectorProps {
   onReviewRhinoRole(id: string): void
   onEditCurve(node: NodeOf<'curve'>): void
   onRevolve(curve: string): void
+  onEditSectionFeature(node: SectionFeature): void
+  canEditSectionFeature(node: SectionFeature): boolean
   onMakeWire(curve: string): void
   onLocateProng(at: [number, number, number]): void
   empty: React.ReactNode
@@ -75,6 +78,8 @@ export function Inspector({
   onReviewRhinoRole,
   onEditCurve,
   onRevolve,
+  onEditSectionFeature,
+  canEditSectionFeature,
   onMakeWire,
   onLocateProng,
   empty,
@@ -298,6 +303,17 @@ export function Inspector({
                 )}
               </section>
             )}
+            {isSectionFeature(node) && (
+              <SectionInputs
+                node={node}
+                design={design}
+                onEdit={
+                  !edit.readOnly && session && canEditSectionFeature(node)
+                    ? () => onEditSectionFeature(node)
+                    : undefined
+                }
+              />
+            )}
             {drawn && (
               <section
                 aria-label="Drawn profile"
@@ -382,5 +398,52 @@ export function Inspector({
         </ScrollArea>
       </div>
     </FieldEditContext>
+  )
+}
+
+function SectionInputs({
+  node,
+  design,
+  onEdit,
+}: {
+  node: SectionFeature
+  design: Design
+  onEdit?: () => void
+}) {
+  const options = new Map(sectionCurveOptions(design).map(({ value, label }) => [value, label]))
+  const groups = [
+    ...(node.kind === 'railSweep' ? [{ label: 'Rails', ids: node.rails }] : []),
+    { label: 'Sections', ids: node.sections },
+  ]
+  return (
+    <section aria-label="Linked curves" className="space-y-2 border-b border-line px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs text-fg-muted">
+          {node.capped ? 'Capped solid' : 'Uncapped surface'}
+          {node.kind === 'loft' && (node.ruled ? ' · Ruled' : ' · Smooth')}
+        </span>
+        {onEdit && (
+          <Button size="sm" icon={PencilRuler} aria-haspopup="dialog" onClick={onEdit}>
+            Edit {node.kind === 'loft' ? 'loft' : 'sweep'}
+          </Button>
+        )}
+      </div>
+      <dl className="grid grid-cols-[4rem_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs">
+        {groups.map(({ label, ids }) => (
+          <div key={label} className="contents">
+            <dt className="text-fg-subtle">{label}</dt>
+            <dd>
+              <ol className="list-inside list-decimal">
+                {ids.map((id) => (
+                  <li key={id} className="truncate" title={options.get(id)}>
+                    {options.get(id) ?? 'Missing curve'}
+                  </li>
+                ))}
+              </ol>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   )
 }

@@ -100,10 +100,25 @@ const sceneScope = (pieceId: string | null): SQL =>
 const announceScene = (ctx: Ctx, row: SceneRow) =>
   publish(ctx, { type: 'scene.updated', sceneId: row.id, pieceId: row.pieceId })
 
-/** Which engine `auto` means here: Blender when the queue is set up and found it. */
-export function engineFor(ctx: Ctx, asked: 'auto' | 'blender' | 'browser'): 'blender' | 'browser' {
+function canSetupBlender(ctx: Ctx): boolean {
+  return (
+    ctx.localRenderInstall === true &&
+    ctx.authMode === 'local' &&
+    ctx.role === 'owner' &&
+    ctx.actor.type !== 'system' &&
+    ctx.services.optional('renderEngine')?.installStatus?.().supported === true
+  )
+}
+
+/** Auto uses Blender when available or when this local owner can install it. */
+export function engineFor(
+  ctx: Ctx,
+  asked: 'auto' | 'blender' | 'browser',
+  purpose: RenderJob['purpose'] = 'take',
+): 'blender' | 'browser' {
   if (asked !== 'auto') return asked
-  return ctx.services.isConfigured('renderQueue') && ctx.services.capabilities().blender
+  return ctx.services.isConfigured('renderQueue') &&
+    (ctx.services.capabilities().blender || (purpose === 'take' && canSetupBlender(ctx)))
     ? 'blender'
     : 'browser'
 }
@@ -321,13 +336,20 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
   // and deliver the result with renders.complete.
   'renders.create': async (ctx, input) => {
     const piece = await getPiece(ctx, input.pieceId)
+    if (input.baseVersion !== undefined && piece.version !== input.baseVersion)
+      throw conflict('The saved design changed. Review the latest version and render again.')
     const saved = input.sceneId ? await getScene(ctx, input.sceneId) : null
     if (saved && saved.pieceId !== null && saved.pieceId !== piece.id)
       throw badRequest('That shot belongs to another piece')
     await ensure(getRender, ctx, input.retryOf)
     // Asking for Blender without a render queue is refused up front (501), before any row exists.
     if (input.engine === 'blender') ctx.services.require('renderQueue')
-    const engine = engineFor(ctx, input.engine)
+    const engine = engineFor(ctx, input.engine, input.purpose)
+    const setupBlender =
+      engine === 'blender' &&
+      input.purpose === 'take' &&
+      !ctx.services.capabilities().blender &&
+      canSetupBlender(ctx)
     const scene = input.scene ?? saved!.scene
     // A locked shot is rendered as it is framed: the assistant cannot re-frame it in passing.
     if (saved && input.scene && ctx.actor.type === 'agent') {
@@ -382,8 +404,11 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
       const handle = renderHandle(ctx, job)
       const subject = await toPiece(ctx, piece)
       await submitJob(handle, () =>
-        ctx.services.get('renderQueue').submit(job, subject, handle, serviceContext(ctx)),
+        ctx.services
+          .get('renderQueue')
+          .submit(job, subject, handle, serviceContext(ctx), setupBlender),
       )
+      if (setupBlender) publish(ctx, { type: 'render.installRequested' }, { userId: ctx.user.id })
     }
     return job
   },

@@ -2,6 +2,7 @@ import type { CommandOutput, RenderEngineStatus } from '@pave/schema'
 import { Button, Dialog, InlineError, Input, Spinner, toast } from '@pave/ui'
 import { CheckCircle2, Download } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { onReconnect } from '../../lib/events'
 import { queryClient, rpcKey, useRpc, useRpcMutation } from '../../lib/query'
 import { activeOrg, useSession } from '../../lib/session'
 import { useUI } from '../../stores/ui'
@@ -16,9 +17,15 @@ const progressLabels: Partial<Record<Phase, string>> = {
   checkingEngine: 'Checking Blender',
 }
 
-export function engineLabel(engine: RenderEngineStatus | undefined) {
+export function engineLabel(
+  engine: RenderEngineStatus | undefined,
+  install: InstallStatus | undefined,
+) {
   if (!engine) return 'Checking Blender…'
-  if (!engine.available) return 'Preview quality · set up Blender'
+  if (!engine.available) {
+    if (install?.supported) return progressLabels[install.phase] ?? 'Blender · first render setup'
+    return 'Browser preview'
+  }
   return `Blender ${engine.version ?? ''}${engine.device ? ` · ${engine.device}` : ''}`.trim()
 }
 
@@ -29,15 +36,10 @@ function refreshEngine() {
 
 const megabytes = (bytes: number) => Math.round(bytes / 1_000_000)
 
-/** One installer shared by startup and Render studio. Closing the panel keeps the job running. */
-export function RenderEngineSetup() {
+export function useRenderInstallStatus() {
   const session = useSession()
   const owner = activeOrg(session)?.role === 'owner'
   const localOwner = owner && ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname)
-  const open = useUI((s) => s.engineSetupOpen)
-  const setOpen = useUI((s) => s.setEngineSetupOpen)
-  const dismissed = useUI((s) => s.dismissedEngineVersion)
-  const dismiss = useUI((s) => s.dismissEngineVersion)
   const status = useRpc(
     'renders.installStatus',
     {},
@@ -50,6 +52,17 @@ export function RenderEngineSetup() {
       },
     },
   )
+  return { localOwner, status }
+}
+
+/** One installer shared by startup and Render studio. Closing the panel keeps setup running. */
+export function RenderEngineSetup() {
+  const session = useSession()
+  const { localOwner, status } = useRenderInstallStatus()
+  const open = useUI((s) => s.engineSetupOpen)
+  const setOpen = useUI((s) => s.setEngineSetupOpen)
+  const dismissed = useUI((s) => s.dismissedEngineVersion)
+  const dismiss = useUI((s) => s.dismissEngineVersion)
   const engine = useRpc('renders.engine', {}, { enabled: open })
   const state = localOwner ? status.data : undefined
   const phase = state?.phase
@@ -59,6 +72,13 @@ export function RenderEngineSetup() {
   useEffect(() => {
     if (open && localOwner) void refreshInstallStatus()
   }, [open, localOwner, refreshInstallStatus])
+  useEffect(
+    () =>
+      onReconnect(() => {
+        if (localOwner) void refreshInstallStatus()
+      }),
+    [localOwner, refreshInstallStatus],
+  )
   const readyFromSetup = phase === 'ready'
   useEffect(() => {
     if (readyFromSetup) refreshEngine()
@@ -85,8 +105,12 @@ export function RenderEngineSetup() {
     },
     onError: (err) => toast.error('Couldn’t check Blender', err.message),
   })
+  const setupFailed = phase === 'failed' || phase === 'cancelled'
   const showOffer =
-    state?.supported && !ready && phase !== 'checking' && (progress || dismissed !== state.version)
+    state?.supported &&
+    !ready &&
+    phase !== 'checking' &&
+    (progress || setupFailed || dismissed !== state.version)
   const actionError = start.error ?? cancel.error
   return (
     <>
@@ -96,13 +120,23 @@ export function RenderEngineSetup() {
           className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line bg-bg-subtle px-4 py-2"
         >
           <Download className="size-4 shrink-0 text-fg-muted" aria-hidden />
-          <span className="mr-auto text-sm font-medium">
-            {progress ?? 'Enable photoreal rendering'}
+          <span className="mr-auto text-sm font-medium" role="status">
+            {progress ??
+              (phase === 'failed'
+                ? 'Blender setup failed'
+                : phase === 'cancelled'
+                  ? 'Blender setup canceled'
+                  : 'Blender installs with your first render')}
+            {phase === 'downloading' && state.totalBytes > 0 && (
+              <span className="ml-2 text-xs text-fg-muted">
+                {megabytes(state.downloadedBytes)} of {megabytes(state.totalBytes)} MB
+              </span>
+            )}
           </span>
           <Button size="sm" onClick={() => setOpen(true)}>
-            {progress ? 'View progress' : 'Set up Blender'}
+            {progress ? 'View progress' : 'Setup details'}
           </Button>
-          {!progress && (
+          {!progress && !setupFailed && (
             <Button size="sm" variant="ghost" onClick={() => dismiss(state.version)}>
               Later
             </Button>
@@ -143,6 +177,7 @@ export function RenderEngineSetup() {
                   <Spinner className="size-4" />
                   {progress}
                 </p>
+                <p className="text-xs text-fg-muted">Queued renders start when Blender is ready.</p>
                 {phase === 'downloading' && state.totalBytes > 0 && (
                   <>
                     <progress
@@ -169,8 +204,8 @@ export function RenderEngineSetup() {
               <section className="space-y-3 rounded-lg border border-line bg-bg-subtle p-4">
                 <h3 className="text-base font-semibold">Install Blender {state.version}</h3>
                 <p className="text-sm text-fg-muted">
-                  Allow Pavé to download {megabytes(state.totalBytes)} MB and install Blender in its
-                  own data folder on this computer.
+                  Your first render downloads {megabytes(state.totalBytes)} MB and installs Blender
+                  in Pavé’s data folder. Setup can also run by itself.
                 </p>
                 {phase === 'failed' && (
                   <InlineError message={state.reason || 'Installation failed. Try again.'} />

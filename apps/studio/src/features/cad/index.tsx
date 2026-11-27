@@ -69,14 +69,24 @@ import { planProgress } from '../assistant/jobs/status'
 import { useLiveRun } from '../assistant/jobs/useJob'
 import { useQuickIntent } from '../assistant/quick-intent-store'
 import { type Subject, subjectFor } from '../assistant/quick-intents'
+import { reportPlanLimit } from '../plans/plan-limit'
 import { ImagePlanes } from '../references/ImagePlanes'
-import { renderThisView } from '../render/shot-actions'
+import { renderAvailability } from '../render/availability'
+import { queueCadRender, renderThisView, selectShotNext } from '../render/shot-actions'
 import { useViewportTools } from './capture-tool'
 import { useCadCommands } from './commands'
 import { captureCover } from './cover'
 import { CurveEditor } from './curves/CurveEditor'
 import { CurveOverlay } from './curves/CurveOverlay'
 import { RevolveDialog } from './curves/RevolveDialog'
+import { SectionFeatureDialog } from './curves/SectionFeatureDialog'
+import {
+  initialSectionDraft,
+  type SectionDraft,
+  type SectionFeature,
+  type SectionTool,
+  sectionToolFor,
+} from './curves/section-model'
 import { EmptyDesign } from './empty/EmptyDesign'
 import { exportFormats, runExport } from './export'
 import { ChangeChip } from './hud/ChangeChip'
@@ -95,7 +105,7 @@ import {
 } from './mesh-edit/model'
 import { ModelImport } from './model-import/ModelImport'
 import { MountEditor, mountSessionBusy } from './mount-editor/MountEditor'
-import { addNode, addPrepared, dependentsOf, remove, setField } from './ops'
+import { addNode, addPrepared, dependentsOf, remove, saveSectionFeature, setField } from './ops'
 import { AddMenu } from './outliner/AddMenu'
 import { Outliner } from './outliner/Outliner'
 import { type NextStep, nextSteps } from './outliner/suggestions'
@@ -297,6 +307,23 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
   // selected: commands and the inspector would otherwise act on something that is not there.
   useEffect(() => ws().retain((id) => Object.hasOwn(view.nodes, id)), [view])
   const { evaluation, status, stale, error: failure, retry } = usePieceEvaluation(pieceId)
+  const [queuingRender, setQueuingRender] = useState(false)
+  const availability = renderAvailability({ design: view, evaluation, status, stale })
+  const renderBlocked = queuingRender
+    ? 'Queueing render…'
+    : save?.status === 'offline'
+      ? 'Reconnect to save the design before rendering.'
+      : !session || save?.status !== 'saved' || syncing
+        ? 'Wait for the design to save before rendering.'
+        : {
+            ready: null,
+            pending: 'Wait for the geometry to finish updating.',
+            failed: 'Retry the geometry engine before rendering.',
+            'review-roles': 'Assign metal or stone roles to the imported geometry.',
+            references: 'Add a solid body or stone to render.',
+            sheets: 'Use Thicken surface in Add feature to give the sheet a wall.',
+            empty: 'Add a solid body or stone to render.',
+          }[availability]
   const partRevisions = useRef(new Map<string, string>())
   useEffect(() => {
     if (!evaluation || stale) return
@@ -333,6 +360,12 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
   const [addOpen, setAddOpen] = useState(false)
   const [profile, setProfile] = useState<{ original?: ProfileNode } | null>(null)
   const [revolveSource, setRevolveSource] = useState<{ pieceId: string; id: string } | null>(null)
+  const [sectionEditor, setSectionEditor] = useState<{
+    pieceId: string
+    tool: SectionTool
+    initial: SectionDraft
+    original?: SectionFeature
+  } | null>(null)
   const [curve, setCurve] = useState<{ original?: NodeOf<'curve'> } | null>(null)
   const [confirm, setConfirm] = useState<{ ids: string[]; dependents: string[] } | null>(null)
   const root = useRef<HTMLDivElement>(null)
@@ -451,6 +484,18 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
   // Without a selection, a new feature attaches to the piece's main body (a stone to the band).
   const defaultTarget = () =>
     selection[0] ?? view.order.toReversed().find((id) => isBodyKind(view.nodes[id]!.kind))
+
+  const openSectionTool = (tool: SectionTool, original?: SectionFeature) => {
+    if (!session || readOnly || curve || profile || !kernel.kinds.includes(tool.kind)) return
+    setAddOpen(false)
+    setSheet(null)
+    setSectionEditor({
+      pieceId,
+      tool,
+      initial: initialSectionDraft(session.get().view, tool, ws().selection, original),
+      original,
+    })
+  }
 
   const add = (kind: NodeKind, target = defaultTarget()) => {
     const { ops, id } = addNode(view, kind, { target })
@@ -655,7 +700,9 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
     add('pipe', id)
     if (!dockInspector) setSheet('inspector')
   }
-  const saveCurve = (definition: Pick<NodeOf<'curve'>, 'plane' | 'points' | 'closed'>) => {
+  const saveCurve = (
+    definition: Pick<NodeOf<'curve'>, 'plane' | 'planeOffset' | 'points' | 'closed'>,
+  ) => {
     if (!session || readOnly) throw new Error('This design is read-only.')
     const original = curve?.original
     if (!original) {
@@ -669,6 +716,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
       if (
         current?.kind !== 'curve' ||
         current.plane !== original.plane ||
+        (current.planeOffset ?? 0) !== (original.planeOffset ?? 0) ||
         current.closed !== original.closed ||
         !sameJson(current.points, original.points)
       )
@@ -677,6 +725,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
         )
       if (
         current.plane !== definition.plane ||
+        (current.planeOffset ?? 0) !== (definition.planeOffset ?? 0) ||
         current.closed !== definition.closed ||
         !sameJson(current.points, definition.points)
       )
@@ -773,6 +822,33 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
     [view, kernel.kinds, readOnly],
   )
 
+  const renderSavedDesign = async () => {
+    if (!session || readOnly || renderBlocked || !isCurrent()) return
+    const sourceVersion = version
+    setQueuingRender(true)
+    try {
+      const shot = await queueCadRender(pieceId, view.kind, sourceVersion, () => {
+        if (!isCurrent()) return false
+        const current = session.get()
+        if (current.version !== sourceVersion || current.save.status !== 'saved' || hasGap(current))
+          throw new Error('The design changed. Wait for it to save, then click Render again.')
+        return true
+      })
+      if (shot && isCurrent()) {
+        selectShotNext(pieceId, shot.id)
+        await navigate({ to: '/pieces/$id/render', params: { id: pieceId } })
+      }
+    } catch (err) {
+      if (isCurrent() && !reportPlanLimit(err))
+        toast.error(
+          'Couldn’t start the render',
+          err instanceof Error ? err.message : 'Try Render again.',
+        )
+    } finally {
+      if (isCurrent()) setQueuingRender(false)
+    }
+  }
+
   useCadCommands({
     session,
     viewer,
@@ -782,6 +858,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
     canRedo: redoable,
     crashed: kernel.status === 'crashed',
     formats,
+    kinds: kernel.kinds,
     issues,
     steps,
     hasRun: !!run,
@@ -790,6 +867,9 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
     drawCurve,
     makeWire,
     revolveCurve,
+    openSectionTool,
+    canRenderSavedDesign: !readOnly && renderBlocked === null,
+    renderSavedDesign: () => void renderSavedDesign(),
     renderThisView: () => {
       const camera = viewer.current?.shotCamera()
       if (!camera) return
@@ -944,7 +1024,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
               design={view}
               kinds={kernel.kinds}
               target={defaultTarget()}
-              onAdd={(k) => add(k)}
+              onAdd={(kind, tool) => (tool ? openSectionTool(tool) : add(kind))}
               open={addOpen}
               onOpenChange={setAddOpen}
             />
@@ -977,6 +1057,8 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
         }
       }}
       onRevolve={revolveCurve}
+      onEditSectionFeature={(node) => openSectionTool(sectionToolFor(node), node)}
+      canEditSectionFeature={(node) => kernel.kinds.includes(node.kind)}
       onMakeWire={makeWire}
       empty={
         <PiecePanel
@@ -1098,6 +1180,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
                   canSaveFile={!empty}
                   simplified={simplified}
                   compact={compact}
+                  render={readOnly ? undefined : { blocked: renderBlocked, pending: queuingRender }}
                   onImportModel={readOnly ? undefined : () => openModelImport()}
                   onReviewRhinoRoles={
                     !readOnly && session && hasRhinoBodies ? () => openRhinoRoleReview() : undefined
@@ -1328,6 +1411,41 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
             )
             ws().select([id])
             setRevolveSource(null)
+            if (!dockInspector) setSheet('inspector')
+          }}
+        />
+      )}
+      {!readOnly && session && sectionEditor?.pieceId === pieceId && (
+        <SectionFeatureDialog
+          key={`${pieceId}/${sectionEditor.original?.id ?? sectionEditor.tool.id}`}
+          design={view}
+          tool={sectionEditor.tool}
+          initial={sectionEditor.initial}
+          editing={!!sectionEditor.original}
+          onClose={() => setSectionEditor(null)}
+          onSave={async (draft, signal) => {
+            const current = session.get().view
+            const { tool, original } = sectionEditor
+            const { id, ops } = saveSectionFeature(current, tool, draft, original)
+            if (ops.length) {
+              const candidate = applyOps(current, ops).design
+              const result = await evaluationScheduler('draft').request(
+                `${pieceId}:section-feature`,
+                candidate,
+              )
+              if (signal.aborted || !isCurrent()) return
+              if (!result) throw new Error('The geometry check was interrupted. Try again.')
+              const issue = result.diagnostics.find((d) => d.nodeId === id && d.level === 'error')
+              if (issue) throw new Error(issue.message)
+              const latest = session.get().view
+              if (latest !== current && !sameJson(latest, current))
+                throw new Error('The design changed during the geometry check. Try again.')
+              session.commit(ops, {
+                label: original ? `Edited ${tool.title.toLowerCase()}` : tool.title,
+              })
+            }
+            setSectionEditor(null)
+            ws().select([id])
             if (!dockInspector) setSheet('inspector')
           }}
         />

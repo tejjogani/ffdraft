@@ -13,6 +13,7 @@ import {
   type NodeKind,
   visibleFields,
 } from '@pave/schema'
+import { isSectionFeature } from '../curves/section-model'
 import { isProfileNode } from '../profiles/profile'
 
 export interface InspectorRow {
@@ -103,7 +104,9 @@ export function inspectorModel(node: Node, opts: { advanced?: boolean } = {}): I
               'transform',
             ].includes(f.key),
         )
-      : fields
+      : isSectionFeature(node)
+        ? fields.filter((f) => !['sections', 'rails', 'ruled', 'capped'].includes(f.key))
+        : fields
   const rows = rowsFor(shown, value, [], !!opts.advanced)
   const sections: InspectorSection[] = []
   const section = (group: string | undefined) => {

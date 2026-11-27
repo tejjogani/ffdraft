@@ -290,6 +290,36 @@ class Project:
             base_version=base_version, change_id=change_id,
         )
 
+    def loft(
+        self, section_ids: list[str], *, feature_id: str, ruled: bool = False,
+        capped: bool = True, base_version: int | None = None, change_id: str | None = None,
+    ) -> JsonObject:
+        """Fit a solid or sheet through ordered project curves. Editing a source rebuilds it."""
+        node = {"kind": "loft", "id": feature_id, "sections": section_ids,
+                "ruled": ruled, "capped": capped}
+        return self.apply([{"t": "add", "node": node}], "Loft sections",
+                          base_version=base_version, change_id=change_id)
+
+    def rail_sweep(
+        self, rail_ids: list[str], section_ids: list[str], *, feature_id: str,
+        capped: bool = True, base_version: int | None = None, change_id: str | None = None,
+    ) -> JsonObject:
+        """Sweep placed profiles along one or two editable project rails, in input order."""
+        node = {"kind": "railSweep", "id": feature_id, "rails": rail_ids,
+                "sections": section_ids, "capped": capped}
+        return self.apply([{"t": "add", "node": node}], "Sweep sections along rails",
+                          base_version=base_version, change_id=change_id)
+
+    def thicken_surface(
+        self, surface_id: str, *, feature_id: str, thickness_mm: float,
+        base_version: int | None = None, change_id: str | None = None,
+    ) -> JsonObject:
+        """Thicken an uncapped loft or rail sweep. A negative thickness reverses the side."""
+        node = {"kind": "thickenSurface", "id": feature_id, "surface": surface_id,
+                "thickness": abs(thickness_mm), "reverse": thickness_mm < 0}
+        return self.apply([{"t": "add", "node": node}], "Thicken surface",
+                          base_version=base_version, change_id=change_id)
+
     def revolve_curve(
         self,
         curve_id: str,

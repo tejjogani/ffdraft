@@ -16,15 +16,18 @@ import { gem } from './gem'
 import { gemRow } from './gemRow'
 import { group } from './group'
 import { halo } from './halo'
+import { loft } from './loft'
 import { meshBody } from './meshBody'
 import { pattern } from './pattern'
 import { pave } from './pave'
 import { pipe } from './pipe'
 import { primitive } from './primitive'
+import { railSweep } from './railSweep'
 import { relief } from './relief'
 import { revolve } from './revolve'
 import { ringShank } from './ringShank'
 import { setting } from './setting'
+import { thickenSurface } from './thickenSurface'
 import { vectorBody } from './vectorBody'
 
 export const FEATURES: readonly AnyFeature[] = [
@@ -34,6 +37,9 @@ export const FEATURES: readonly AnyFeature[] = [
   halo,
   gemRow,
   revolve,
+  loft,
+  railSweep,
+  thickenSurface,
   pipe,
   engraving,
   booleanFeature,

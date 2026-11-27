@@ -68,6 +68,14 @@ project.make_wire(
 )
 ```
 
+## Thicken a modeling surface
+
+Use an uncapped loft or rail sweep as the source. The resulting solid updates when its source curves change. A negative thickness builds on the opposite side.
+
+```python
+project.thicken_surface("shoulder", feature_id="shoulder-metal", thickness_mm=0.8)
+```
+
 ## Review an imported part’s role
 
 Use the source feature ID from the open project. The role plan previews the same choices as the Studio review dialog. Apply it at the returned version to record one undoable edit.
@@ -198,3 +206,12 @@ project.apply(
     base_version=rail["version"],
 )
 ```
+
+Use ordered curve IDs from the open project. Editing any input rebuilds its dependent CAD.
+
+```python
+project.loft(["base", "middle", "rim"], feature_id="head", ruled=False)
+project.rail_sweep(["inner", "outer"], ["shoulder-section"], feature_id="shoulder")
+```
+
+Set `capped=False` to work with a sheet. `project.evaluate()` reports each visible modeling surface's area and dimensions in millimetres alongside the casting metrics.

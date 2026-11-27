@@ -46,9 +46,9 @@ try {
   }
 
   await page.goto(base)
-  await offer.getByRole('button', { name: 'Set up Blender' }).click()
+  await offer.getByRole('button', { name: 'Setup details' }).click()
   await setup.getByRole('heading', { name: /^Install Blender 5\.3\./ }).waitFor()
-  await setup.getByText(/Allow Pavé to download \d+ MB/).waitFor()
+  await setup.getByText(/Your first render downloads \d+ MB/).waitFor()
   assert.equal((await rpc('renders.installStatus')).phase, 'idle')
   assert.equal((await rpc('session.get')).capabilities.blender, false)
   await shot('01-permission')

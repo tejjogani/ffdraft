@@ -11,6 +11,7 @@ export function snapCurve(
   plane: CurvePlane,
   cursor: Screen,
   project: (world: Vec3) => Screen & { visible: boolean },
+  offset = 0,
 ): CurveSnap | null {
   let best: CurveSnap | null = null
   let distance = CURVE_SNAP_PX
@@ -23,7 +24,7 @@ export function snapCurve(
     best = { point: pointOnCurvePlane(plane, world), screen, label }
   }
   for (const curve of curves) {
-    if (curve.plane !== plane) continue
+    if (curve.plane !== plane || (curve.planeOffset ?? 0) !== offset) continue
     for (const point of curve.points) consider(point, 'Endpoint')
     for (let i = 0; i < curve.points.length - (curve.closed ? 0 : 1); i++) {
       const a = curve.points[i]!

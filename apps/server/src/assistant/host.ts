@@ -86,14 +86,20 @@ export class RunHost {
 
   static async open(
     deps: AssistantDeps,
-    who: { orgId: string; userId: string; runId: string },
+    who: { orgId: string; userId: string; runId: string; localRenderInstall?: () => boolean },
     signal: AbortSignal,
   ): Promise<RunHost> {
     const base = await deps.runtime.context({ userId: who.userId, orgId: who.orgId })
     const run = await base.repo.runs.first(eq(t.agentRun.id, who.runId))
     if (!run?.threadId) throw notFound('Run', who.runId)
     const actor: Actor = { type: 'agent', runId: run.id, model: run.model }
-    const ctx: Ctx = { ...base, actor }
+    const ctx: Ctx = {
+      ...base,
+      actor,
+      get localRenderInstall() {
+        return who.localRenderInstall?.() ?? false
+      },
+    }
     const apiKey = deps.scripted ? null : await deps.keys.key(ctx)
     let host: RunHost | null = null
     const client = deps.model({

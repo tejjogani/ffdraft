@@ -190,6 +190,26 @@ describe('resolveScene', () => {
     })
   })
 
+  it('leaves room under the piece for the black acrylic reflection', () => {
+    const acrylic = resolveScene(scene({ look: 'black-acrylic' }), ring)
+    const noFloor = resolveScene(scene({ look: 'black-acrylic', ground: 'none' }), ring)
+    expect(acrylic.camera.target[2]).toBeLessThan(noFloor.camera.target[2])
+    expect(acrylic.camera.distance).toBeCloseTo(noFloor.camera.distance)
+    const front = resolveScene(scene({ look: 'black-acrylic', camera: { preset: 'front' } }), ring)
+    expect(front.camera.elevation).toBeGreaterThanOrEqual(16)
+  })
+
+  it('preserves an explicitly composed black acrylic camera', () => {
+    const camera = {
+      preset: 'custom' as const,
+      position: [0, -80, 20] as Vec3,
+      target: [0, 0, 20] as Vec3,
+    }
+    const acrylic = resolveScene(scene({ look: 'black-acrylic', camera }), ring)
+    expect(acrylic.camera.target).toEqual(camera.target)
+    expect(acrylic.camera.elevation).toBe(0)
+  })
+
   it('caps resolution and sets bounces per tier', () => {
     const preview = resolveScene(
       scene({ output: { quality: 'preview', width: 2000, height: 1000 } }),
@@ -197,13 +217,14 @@ describe('resolveScene', () => {
     ).output
     expect([preview.width, preview.height]).toEqual([768, 384])
     expect(preview.bounces.transmission).toBeGreaterThanOrEqual(24)
-    expect(preview.bounces.glossy).toBeGreaterThanOrEqual(12)
+    expect(preview.bounces.glossy).toBe(preview.bounces.transmission)
     const final = resolveScene(
       scene({ output: { quality: 'final', width: 3000, height: 3000 } }),
       ring,
     ).output
     expect(final.width).toBe(3000)
     expect(final.clampIndirect).toBe(0)
+    expect(final.bounces.glossy).toBe(final.bounces.transmission)
   })
 })
 

@@ -22,6 +22,7 @@ import {
   assembleDraft,
   assembleProduction,
   assembleReferences,
+  assembleSheets,
   type DraftCache,
   draftVolumes,
   withCurrentNames,
@@ -298,6 +299,7 @@ export class Evaluator {
             return role !== undefined && role !== 'metal'
           })
         : assembleReferences(active, quality)
+    referenceParts.push(...assembleSheets(active, quality))
     const { stones, gemMeshes } = instanceStones(design, active)
     const diagnostics: Diagnostic[] = [
       ...documentIssues,
@@ -315,8 +317,11 @@ export class Evaluator {
           {
             nodeId: id,
             plane: node.plane,
+            ...(node.planeOffset && { planeOffset: node.planeOffset }),
             closed: node.closed,
-            points: node.points.map(({ u, v }) => pointFromCurvePlane(node.plane, [u, v])),
+            points: node.points.map(({ u, v }) =>
+              pointFromCurvePlane(node.plane, [u, v], node.planeOffset),
+            ),
           },
         ]
       if (node.kind === 'nurbsCurve' && data)

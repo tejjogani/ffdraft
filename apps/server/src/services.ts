@@ -81,6 +81,7 @@ export interface ServiceContext {
   readonly orgId: string
   readonly userId: string
   readonly actor: Actor
+  readonly localRenderInstall?: boolean
   recordUsage(event: NewUsage): Promise<void>
   putAsset(file: NewAsset): Promise<Asset>
   /** Reads an asset of the caller's org; rejects with 404 for anything else. */
@@ -323,6 +324,7 @@ export interface RenderQueue extends Service {
     piece: Piece,
     handle: JobHandle<RenderJobPatch>,
     sctx: ServiceContext,
+    setupBlender?: boolean,
   ): Promise<void>
   /**
    * Called at boot for each Blender job still queued or running, in the context of the user who

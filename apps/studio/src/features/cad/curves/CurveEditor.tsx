@@ -28,13 +28,15 @@ export function CurveEditor({
   viewer: Viewer | null
   original?: NodeOf<'curve'>
   snapSources: readonly EvaluatedCurve[]
-  onSave(definition: Pick<NodeOf<'curve'>, 'plane' | 'points' | 'closed'>): void
+  onSave(definition: Pick<NodeOf<'curve'>, 'plane' | 'planeOffset' | 'points' | 'closed'>): void
   onCancel(): void
 }) {
   const fieldId = useId()
   const root = useRef<HTMLElement>(null)
   const aperture = useRef<HTMLDivElement>(null)
   const [plane, setPlane] = useState<CurvePlane>(original?.plane ?? 'front')
+  const [position, setPosition] = useState(String(original?.planeOffset ?? 0))
+  const offset = Number(position)
   const [points, setPoints] = useState<CurvePoint[]>(original?.points ?? [])
   const [closed, setClosed] = useState(original?.closed ?? false)
   const [selected, setSelected] = useState<string | null>(null)
@@ -43,7 +45,7 @@ export function CurveEditor({
   const [u, setU] = useState('')
   const [v, setV] = useState('')
   const [error, setError] = useState('')
-  const world = points.map((p) => pointFromCurvePlane(plane, [p.u, p.v]))
+  const world = points.map((p) => pointFromCurvePlane(plane, [p.u, p.v], offset))
   useProjection(viewer)
 
   // Changing vertices must not move the camera underneath the pointer.
@@ -51,7 +53,7 @@ export function CurveEditor({
   useLayoutEffect(() => {
     setSnap(null)
     if (viewer) viewer.viewConstructionPlane(plane, world)
-  }, [viewer, plane])
+  }, [viewer, plane, offset])
   useLayoutEffect(() => root.current?.focus({ preventScroll: true }), [])
 
   const choose = (p: CurvePoint) => {
@@ -77,10 +79,17 @@ export function CurveEditor({
     return rect ? { x: x - rect.left, y: y - rect.top } : { x: 0, y: 0 }
   }
   const snapAt = (x: number, y: number) =>
-    viewer && snapEnabled ? snapCurve(snapSources, plane, { x, y }, (p) => viewer.project(p)) : null
+    viewer && snapEnabled
+      ? snapCurve(snapSources, plane, { x, y }, (p) => viewer.project(p), offset)
+      : null
 
   const submit = () => {
-    const definition = CurveDefinition.safeParse({ plane, points, closed })
+    const definition = CurveDefinition.safeParse({
+      plane,
+      points,
+      closed,
+      ...(offset || original?.planeOffset ? { planeOffset: offset } : {}),
+    })
     if (!definition.success) {
       setError(definition.error.issues[0]?.message ?? 'Check the curve points.')
       return
@@ -131,7 +140,8 @@ export function CurveEditor({
               }
             }
             const snapped = snapAt(x, y)
-            const hit = snapped?.point ?? viewer.pointOnConstructionPlane(plane, x, y)?.map(round)
+            const hit =
+              snapped?.point ?? viewer.pointOnConstructionPlane(plane, x, y, offset)?.map(round)
             if (hit) acceptPoint(hit as CurveCoordinates)
           }}
         >
@@ -142,7 +152,7 @@ export function CurveEditor({
                 [
                   [-250, 0],
                   [250, 0],
-                ].map((p) => pointFromCurvePlane(plane, p as CurveCoordinates)),
+                ].map((p) => pointFromCurvePlane(plane, p as CurveCoordinates, offset)),
               )}
               fill="none"
               className="stroke-line-strong"
@@ -153,7 +163,7 @@ export function CurveEditor({
                 [
                   [0, -250],
                   [0, 250],
-                ].map((p) => pointFromCurvePlane(plane, p as CurveCoordinates)),
+                ].map((p) => pointFromCurvePlane(plane, p as CurveCoordinates, offset)),
               )}
               fill="none"
               className="stroke-line-strong"
@@ -203,6 +213,20 @@ export function CurveEditor({
       <div className="glass-strong pointer-events-auto absolute inset-x-3 bottom-3 mx-auto flex max-w-[34rem] flex-col gap-2 rounded-lg border border-line px-3 py-3 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-medium">{original ? 'Edit curve points' : 'Draw curve'}</h2>
+          <label htmlFor={`${fieldId}-offset`} className="flex items-center gap-1 text-xs">
+            {{ front: 'Y', top: 'Z', right: 'X' }[plane]} plane (mm)
+            <Input
+              id={`${fieldId}-offset`}
+              aria-label="Plane position (mm)"
+              className="w-16"
+              type="number"
+              step="any"
+              min="-250"
+              max="250"
+              value={position}
+              onChange={(e) => setPosition(e.target.value)}
+            />
+          </label>
           <Segmented
             aria-label="Curve drawing plane"
             value={plane}

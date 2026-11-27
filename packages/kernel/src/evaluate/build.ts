@@ -54,6 +54,7 @@ function place(out: FeatureOutput, matrix: Mat4): Placed {
   const move = (solid: Solid) => (still ? solid : solid.transformed(matrix))
   const s = uniformScaleOf(matrix)
   return {
+    sheets: (out.sheets ?? []).map((b) => ({ ...b, solid: move(b.solid) })),
     bodies: (out.bodies ?? []).map((b) => ({
       ...b,
       solid: move(b.solid),
@@ -125,6 +126,14 @@ function checkGeometry(placed: Placed, env: BuildEnvironment): void {
       )
   const budget = NODE_LIMITS.triangles[env.detail]
   let triangles = 0
+  for (const { solid } of placed.sheets) {
+    const mesh = solid.triangles(env.quality)
+    if (!mesh.indices.length || !(solid.area() > 1e-9))
+      throw new Error('The surface has no measurable area. Check the curves and their order.')
+    triangles += mesh.indices.length / 3
+    if (triangles > budget)
+      throw new Error(`The surface exceeds the ${count(budget)} triangle limit.`)
+  }
   for (const solid of solids) {
     const tris = solid.triangles(env.quality)
     // Checked as the meshes are made, so a runaway pattern stops at the limit, not after it.
@@ -146,6 +155,7 @@ function checkGeometry(placed: Placed, env: BuildEnvironment): void {
 }
 
 function* solidsOf(placed: Placed): Iterable<Solid> {
+  for (const s of placed.sheets) yield s.solid
   for (const b of placed.bodies) yield b.solid
   for (const c of placed.cuts) yield c.solid
   for (const a of placed.additions) yield a.solid
@@ -350,6 +360,7 @@ export function failedResult(result: NodeResult, reason: string): NodeResult {
 }
 
 export function disposeResult(result: NodeResult): void {
+  for (const s of result.sheets ?? []) s.solid.dispose()
   for (const b of result.bodies) b.solid.dispose()
   for (const c of result.cuts) c.solid.dispose()
   for (const a of result.additions) a.solid.dispose()

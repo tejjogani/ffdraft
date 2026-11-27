@@ -27,7 +27,7 @@ try {
   const template = await rpc('pieces.create', { title: 'Built CAD guide', templateId: 'solitaire' })
   const guide = readFileSync(new URL('../../../docs/first-time-cad.md', import.meta.url), 'utf8')
   const titles = Array.from(guide.matchAll(/^## (.+)$/gm), ([, title]) => title.trim())
-  assert.ok(titles.length >= 2, 'Expected multiple guide steps')
+  assert.ok(titles.length >= 3, 'Expected at least three guide steps')
 
   const trigger = page.getByRole('button', { name: 'CAD guide', exact: true })
   const dialog = page.getByRole('dialog', { name: 'CAD guide', exact: true })
@@ -58,7 +58,17 @@ try {
       await trigger.and(page.locator(':focus')).waitFor()
       await trigger.click()
       await checkStep(0)
-      for (let step = 1; step < titles.length; step++) {
+      // The same pointer position should advance through steps with different amounts of text.
+      await next.click({ trial: true })
+      const nextBounds = await next.boundingBox()
+      assert.ok(nextBounds)
+      const clickNextInPlace = () =>
+        page.mouse.click(nextBounds.x + nextBounds.width / 2, nextBounds.y + nextBounds.height / 2)
+      await clickNextInPlace()
+      await checkStep(1)
+      await clickNextInPlace()
+      await checkStep(2)
+      for (let step = 3; step < titles.length; step++) {
         await next.click()
         await checkStep(step)
       }

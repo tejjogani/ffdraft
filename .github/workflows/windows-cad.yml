@@ -141,8 +141,11 @@ jobs:
             Test-PaveStage 'Verify imported mesh editing in Chromium' {
               pnpm exec tsx apps/studio/e2e/mesh-edit.ts $env:PAVE_TEST_URL
             }
+            Test-PaveStage 'Build linked loft and sweep features in Chromium' {
+              pnpm exec tsx apps/studio/e2e/section-modeling.ts $env:PAVE_TEST_URL
+            }
             Test-PaveStage 'Install and verify managed Blender through Studio' {
-              pnpm exec tsx apps/studio/e2e/render-engine-setup.ts $env:PAVE_TEST_URL $logs
+              pnpm exec tsx apps/studio/e2e/first-render-install.ts $env:PAVE_TEST_URL (Join-Path $logs 'first-render.png')
               $engine = Invoke-RestMethod -Method Post -Uri "$env:PAVE_TEST_URL/api/rpc/renders.engine" -ContentType 'application/json' -Body '{}'
               if (-not $engine.available -or (Split-Path -Leaf $engine.path) -ne 'blender.exe') {
                 throw 'Pavé did not select the managed Windows Blender executable.'

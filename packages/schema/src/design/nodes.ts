@@ -30,6 +30,9 @@ export const BODY_KINDS = [
   'meshBody',
   'relief',
   'revolve',
+  'loft',
+  'railSweep',
+  'thickenSurface',
   'pipe',
   'primitive',
   'boolean',
@@ -653,6 +656,77 @@ export const Revolve = z
       'Turn a closed curve around an axis to make a solid, or supply an SVG radius-height profile about Z.',
   })
 
+const curveIds = (minimum: number, maximum: number) =>
+  z.array(z.string().min(1)).min(minimum).max(maximum)
+const capped = toggle('Cap ends', true, {
+  description: 'Create a casting solid from closed sections. Turn off to model a sheet.',
+})
+
+export const Loft = z
+  .object({
+    ...base,
+    ...metal,
+    kind: z.literal('loft'),
+    sections: curveIds(2, 32).meta({
+      title: 'Sections',
+      description: 'Ordered construction or NURBS curve IDs, from the first profile to the last.',
+    }),
+    ruled: toggle('Ruled', false, {
+      description: 'Connect consecutive sections with straight spans.',
+    }),
+    capped,
+  })
+  .refine((n) => new Set(n.sections).size === n.sections.length, {
+    path: ['sections'],
+    message: 'Choose each section only once.',
+  })
+  .meta({
+    title: 'Loft',
+    description: 'Build an associative surface or solid through ordered profiles.',
+  })
+
+export const RailSweep = z
+  .object({
+    ...base,
+    ...metal,
+    kind: z.literal('railSweep'),
+    rails: curveIds(1, 2).meta({
+      title: 'Rails',
+      description: 'One or two distinct guiding curve IDs.',
+    }),
+    sections: curveIds(1, 32).meta({
+      title: 'Sections',
+      description: 'Ordered cross-section curve IDs placed along the rails.',
+    }),
+    capped,
+  })
+  .refine((n) => new Set([...n.rails, ...n.sections]).size === n.rails.length + n.sections.length, {
+    path: ['rails'],
+    message: 'Give each rail and section its own curve.',
+  })
+  .meta({
+    title: 'Rail sweep',
+    description: 'Sweep editable cross sections along one or two guide curves.',
+  })
+
+export const ThickenSurface = z
+  .object({
+    ...base,
+    ...metal,
+    kind: z.literal('thickenSurface'),
+    surface: ref('Source surface', ['loft', 'railSweep'], {
+      description: 'The ID of an uncapped loft or rail sweep.',
+    }),
+    thickness: mm('Thickness', 0.05, 20, 1),
+    reverse: toggle('Reverse direction', false, {
+      description: 'Build the solid on the other side of the source surface.',
+    }),
+  })
+  .meta({
+    title: 'Thicken surface',
+    description: 'Give an uncapped loft or rail sweep a measured thickness to form a solid.',
+  })
+
 export const Pipe = z
   .object({
     ...base,
@@ -873,6 +947,9 @@ export const NODE_SCHEMAS = {
   vectorBody: VectorBody,
   meshBody: MeshBody,
   relief: Relief,
+  loft: Loft,
+  railSweep: RailSweep,
+  thickenSurface: ThickenSurface,
   revolve: Revolve,
   pipe: Pipe,
   primitive: Primitive,
@@ -900,6 +977,9 @@ export const NodeSchema = z.discriminatedUnion('kind', [
   VectorBody,
   MeshBody,
   Relief,
+  Loft,
+  RailSweep,
+  ThickenSurface,
   Revolve,
   Pipe,
   Primitive,
@@ -919,6 +999,13 @@ export type Node = z.infer<typeof NodeSchema>
 export type NodeInput = z.input<typeof NodeSchema>
 export type NodeOf<K extends NodeKind> = Extract<Node, { kind: K }>
 export type NodeInputOf<K extends NodeKind> = Extract<NodeInput, { kind: K }>
+
+/** An editable loft or rail sweep evaluated as a surface. */
+export function isSectionSurface(
+  node: Node | undefined,
+): node is (NodeOf<'loft'> | NodeOf<'railSweep'>) & { capped: false } {
+  return (node?.kind === 'loft' || node?.kind === 'railSweep') && !node.capped
+}
 
 export const isBodyKind = (k: NodeKind): boolean => (BODY_KINDS as readonly string[]).includes(k)
 
@@ -982,6 +1069,12 @@ export function nodeRefs(n: Node): string[] {
       return n.host ? [n.host] : []
     case 'chain':
       return n.through ? [n.through] : []
+    case 'loft':
+      return n.sections
+    case 'railSweep':
+      return [...n.rails, ...n.sections]
+    case 'thickenSurface':
+      return [n.surface]
     case 'revolve':
     case 'pipe':
       return n.curve === undefined ? [] : [n.curve]

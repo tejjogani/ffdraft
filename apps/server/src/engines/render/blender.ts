@@ -210,6 +210,19 @@ export class BlenderSetup {
     return this.installStatus()
   }
 
+  /** Join the current managed install, or start one after discovery has finished. */
+  async prepareRender(): Promise<{ engine: RenderEngineStatus; setupCanceled?: boolean }> {
+    await this.probed
+    await this.#configuring?.catch(() => undefined)
+    this.install()
+    await this.#installation?.done
+    const install = this.installStatus()
+    if (install.phase === 'cancelled') return { engine: this.#status, setupCanceled: true }
+    if (install.phase === 'failed')
+      return { engine: { ...this.#status, reason: install.reason ?? 'Blender setup failed.' } }
+    return { engine: this.#status }
+  }
+
   async cancelInstall(): Promise<RenderInstallStatus> {
     const installation = this.#installation
     installation?.controller.abort()

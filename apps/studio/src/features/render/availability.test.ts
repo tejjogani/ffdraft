@@ -56,6 +56,15 @@ describe('render availability from production geometry', () => {
     }
   })
 
+  it('identifies an uncapped modeling surface so the designer can thicken it', () => {
+    expect(
+      renderAvailability({
+        ...available(),
+        evaluation: { ...empty, referenceParts: [{ ...sourcePart, modelingSheet: true }] },
+      }),
+    ).toBe('sheets')
+  })
+
   it('accepts either production metal or stones alongside imported references', () => {
     const design = designFrom('other', [{ ...imported, importRole: 'unassigned' }])
     for (const evaluation of [

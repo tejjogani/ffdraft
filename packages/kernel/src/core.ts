@@ -244,6 +244,8 @@ export interface Addition {
 }
 
 export interface FeatureOutput {
+  /** Open modeling surfaces, excluded from casting. */
+  sheets?: Body[]
   bodies?: Body[]
   stones?: Stone[]
   cuts?: Cut[]
@@ -268,6 +270,7 @@ export interface NodeResult {
   readonly hash: string
   /** The node's own transform, already applied to bodies, stones, cuts, additions and frames. */
   readonly matrix: Mat4
+  readonly sheets?: readonly Body[]
   readonly bodies: readonly Body[]
   readonly stones: readonly Stone[]
   readonly cuts: readonly Cut[]

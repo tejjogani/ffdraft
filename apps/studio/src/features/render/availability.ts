@@ -17,5 +17,6 @@ export function renderAvailability({ design, evaluation, status, stale }: Render
     return isRhinoRoleBody(node) && node.visible !== false && importRoleOf(node) === 'unassigned'
   })
   if (needsReview) return 'review-roles'
+  if (references.some((p) => p.modelingSheet)) return 'sheets'
   return references.length ? 'references' : 'empty'
 }

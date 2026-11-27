@@ -23,6 +23,14 @@ try {
     colorScheme: 'light',
   })
   page.setDefaultTimeout(10_000)
+  // Compare screenshots at the same resolution. Auto can lower the viewport's pixel ratio
+  // while framing an isolated stone on a slow GPU, changing the sampled facet colors.
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      'pave:performance',
+      JSON.stringify({ state: { mode: 'sharp' }, version: 0 }),
+    )
+  })
   // WebKit cannot automate the OS save picker. Capture the file handed to that boundary.
   await page.addInitScript(
     testWebkit
@@ -200,6 +208,13 @@ try {
     // A compositor screenshot reads the pixels actually drawn on screen, including overlays.
     await page.mouse.click(blank.x, blank.y)
     await page.mouse.move(0, 0)
+    // Give the on-demand canvas redraw a frame and the compositor a chance to present it.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    )
     const bytes = await page.screenshot({ clip: { x: p.x - 3, y: p.y - 3, width: 7, height: 7 } })
     return page.evaluate(async (base64) => {
       const image = new Image()

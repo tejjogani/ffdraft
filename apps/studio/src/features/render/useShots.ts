@@ -87,7 +87,7 @@ export function useShots(pieceId: string, canRender: boolean) {
     }
   }
 
-  /** Queues a take of each shot; Blender when it is set up, else this window draws a preview. */
+  /** Queues a take of each shot using the engine selected by the server. */
   const render = async (
     list: Shot[],
     extra: { retryOf?: string; note?: string; engine?: 'browser' } = {},
@@ -133,6 +133,7 @@ export function useShots(pieceId: string, canRender: boolean) {
           pieceId,
           title: take.title,
           retryOf: take.id,
+          engine: take.engine,
           ...(take.sceneId ? { sceneId: take.sceneId } : { scene: take.requestedScene }),
           ...(take.groupId ? { groupId: take.groupId } : {}),
           ...(take.variantLabel ? { variantLabel: take.variantLabel } : {}),

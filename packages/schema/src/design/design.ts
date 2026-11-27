@@ -6,13 +6,14 @@
  * undo/redo, a replayable history and a per-edit trace of who (person or agent run) did what.
  */
 import { z } from 'zod'
-import { revolveProfileError } from './curve'
+import { revolveProfileError, sectionIsClosed } from './curve'
 import { customMountFitForStone, customMountPartIssue } from './custom-mount'
 import { DESIGN_VERSION, migrateDesign, prongLayout } from './mount'
 import {
   importRoleOf,
   importSourceRole,
   isBodyKind,
+  isSectionSurface,
   type Node,
   type NodeInput,
   NodeSchema,
@@ -537,12 +538,40 @@ export function validateDesign(design: Design): DesignIssue[] {
         })
       else if (
         (n.kind === 'pave' || n.kind === 'engraving' || n.kind === 'boolean') &&
-        !isBodyKind(target.kind)
+        (!isBodyKind(target.kind) || isSectionSurface(target))
       )
         issues.push({
           level: 'error',
           nodeId: id,
           message: `"${id}" needs a solid body but "${r}" is a ${target.kind}`,
+        })
+      else if (n.kind === 'thickenSurface' && !isSectionSurface(target))
+        issues.push({
+          level: 'error',
+          nodeId: id,
+          message: `“${id}” needs an uncapped loft or rail sweep as its source surface.`,
+        })
+      else if (
+        (n.kind === 'loft' || n.kind === 'railSweep') &&
+        target.kind !== 'curve' &&
+        target.kind !== 'nurbsCurve'
+      )
+        issues.push({
+          level: 'error',
+          nodeId: id,
+          message: `"${id}" needs a construction or NURBS curve for "${r}".`,
+        })
+      else if (
+        (n.kind === 'loft' || n.kind === 'railSweep') &&
+        n.capped &&
+        n.sections.includes(r) &&
+        (target.kind === 'curve' || target.kind === 'nurbsCurve') &&
+        !sectionIsClosed(target)
+      )
+        issues.push({
+          level: 'error',
+          nodeId: id,
+          message: `Close section "${r}" to cap "${id}", or choose a surface.`,
         })
       else if ((n.kind === 'pipe' || n.kind === 'revolve') && target.kind !== 'curve')
         issues.push({

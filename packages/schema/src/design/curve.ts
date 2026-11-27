@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { Node, NodeOf } from './nodes'
+import { pointOnNurbs } from './nurbs'
 import { DrawnProfile, PROFILE_PLANES, type ProfilePlane } from './profile'
 
 export const CURVE_POINT_LIMIT = 128
@@ -17,6 +18,10 @@ export type CurvePoint = z.infer<typeof CurvePoint>
 export const CurveDefinition = z
   .object({
     plane: z.enum(PROFILE_PLANES).meta({ title: 'Drawing plane' }),
+    planeOffset: coordinate.optional().meta({
+      title: 'Plane position (mm)',
+      description: 'World Y on Front, Z on Top or X on Right. Defaults to 0 mm.',
+    }),
     points: z.array(CurvePoint).min(2).max(CURVE_POINT_LIMIT).meta({
       title: 'Curve points',
       description:
@@ -41,13 +46,21 @@ export const CurveDefinition = z
     if (message) ctx.addIssue({ code: 'custom', path: ['points'], message })
   })
 
+export function sectionIsClosed(curve: NodeOf<'curve'> | NodeOf<'nurbsCurve'>): boolean {
+  if (curve.kind === 'curve') return curve.closed
+  const start = pointOnNurbs(curve, curve.knots[curve.degree - 1]!)
+  const end = pointOnNurbs(curve, curve.knots[curve.controlPoints.length - 1]!)
+  return Math.hypot(start[0] - end[0], start[1] - end[1], start[2] - end[2]) <= 1e-7
+}
+
 export function pointFromCurvePlane(
   plane: CurvePlane,
   [u, v]: CurveCoordinates,
+  offset = 0,
 ): [number, number, number] {
-  if (plane === 'front') return [u, 0, v]
-  if (plane === 'right') return [0, u, v]
-  return [u, v, 0]
+  if (plane === 'front') return [u, offset, v]
+  if (plane === 'right') return [offset, u, v]
+  return [u, v, offset]
 }
 
 export function pointOnCurvePlane(
@@ -68,7 +81,9 @@ export function pipePath(
     return pipe.points ? { points: pipe.points, closed: pipe.closed } : null
   if (source?.kind !== 'curve' || source.id !== pipe.curve) return null
   return {
-    points: source.points.map(({ u, v }) => pointFromCurvePlane(source.plane, [u, v])),
+    points: source.points.map(({ u, v }) =>
+      pointFromCurvePlane(source.plane, [u, v], source.planeOffset),
+    ),
     closed: source.closed,
     plane: source.plane,
   }

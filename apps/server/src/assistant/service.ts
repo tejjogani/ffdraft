@@ -4,11 +4,11 @@
  */
 import {
   continueJob,
+  focusFor,
+  guideFor,
   jobMessage,
   modelForRun,
   newJob,
-  focusFor,
-  guideFor,
   resolveTiers,
 } from '@pave/agent'
 import type { AiJob, CommandOutput, CommandParsedInput, Run, Thread } from '@pave/schema'
@@ -59,6 +59,8 @@ export class Assistant implements AssistantService {
    * canceling the takes and marking the run canceled. One event loop, so the set needs no lock.
    */
   readonly #stopping = new Set<string>()
+  /** Attested local Studio interactions, retained only while one run is live or waiting. */
+  readonly #localRenderRuns = new Set<string>()
 
   constructor(deps: AssistantDeps, available: (orgId: string) => boolean) {
     this.#deps = deps
@@ -230,6 +232,7 @@ export class Assistant implements AssistantService {
       )!,
     })
     for (const r of waiting) {
+      this.#localRenderRuns.delete(r.id)
       await ctx.repo.steps.update(
         and(eq(t.agentStep.runId, r.id), eq(t.agentStep.status, 'awaiting-approval'))!,
         { status: 'denied' },
@@ -241,13 +244,27 @@ export class Assistant implements AssistantService {
   }
 
   /** Starts (or nudges) the run's session in the driver; failures end the run, never the server. */
-  #start(who: Pick<ServiceContext, 'orgId' | 'userId'>, runId: string, threadId: string): void {
+  #start(
+    who: Pick<ServiceContext, 'orgId' | 'userId' | 'localRenderInstall'>,
+    runId: string,
+    threadId: string,
+  ): void {
+    if (who.localRenderInstall) this.#localRenderRuns.add(runId)
     const { driver } = this.#deps
     void driver.start(runId, threadId, async (signal) => {
       const deps = this.#deps
       let host: RunHost | null = null
       try {
-        host = await RunHost.open(deps, { ...who, runId }, signal)
+        host = await RunHost.open(
+          deps,
+          {
+            orgId: who.orgId,
+            userId: who.userId,
+            runId,
+            localRenderInstall: () => this.#localRenderRuns.has(runId),
+          },
+          signal,
+        )
         const row = await host.ctx.repo.runs.first(eq(t.agentRun.id, runId))
         // A nudge after the run already ended or still waits finds nothing to announce.
         if (row?.status === 'running') {
@@ -287,7 +304,10 @@ export class Assistant implements AssistantService {
         const run = host
           ? await host.ctx.repo.runs.first(eq(t.agentRun.id, runId)).catch(() => undefined)
           : undefined
-        if (run && !LIVE_RUNS.includes(run.status)) this.#deps.clients.delete(runId)
+        if (!run || !LIVE_RUNS.includes(run.status)) {
+          this.#deps.clients.delete(runId)
+          this.#localRenderRuns.delete(runId)
+        }
       }
     })
   }
@@ -305,12 +325,14 @@ export class Assistant implements AssistantService {
       note: input.note ?? null,
       ...(input.answers ? { answers: input.answers } : {}),
     })
+    if (!sctx.localRenderInstall) this.#localRenderRuns.delete(run.id)
     if (run.threadId) this.#start(sctx, run.id, run.threadId)
     return toRun(await getRun(ctx, input.runId))
   }
 
   async cancel(runId: string, sctx: ServiceContext): Promise<Run> {
     const ctx = await this.#ctx(sctx)
+    this.#localRenderRuns.delete(runId)
     if (this.#deps.driver.isLive(runId)) await this.#deps.driver.abort(runId, 'cancel')
     const run = await getRun(ctx, runId)
     if (!LIVE_RUNS.includes(run.status)) return toRun(run)
@@ -369,6 +391,7 @@ export class Assistant implements AssistantService {
     const ctx = await this.#ctx(sctx)
     const run = toRun(await getRun(ctx, runId))
     if (!run.job) throw conflict('Only an AI job can be paused; stop this run instead')
+    this.#localRenderRuns.delete(runId)
     if (this.#deps.driver.isLive(runId)) await this.#deps.driver.abort(runId, reason)
     const now = toRun(await getRun(ctx, runId))
     if (LIVE_RUNS.includes(now.status))
