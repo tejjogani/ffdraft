@@ -34,13 +34,22 @@ Open Construction curves in Features to browse the guides. On an imported Rhino 
 
 For a product image, open Renders and choose a shot. Under Look, choose Studio white or Soft gradient. Use Review materials to confirm the production alloys and gemstones. A view-only hide or backdrop choice in CAD belongs to that workspace.
 
-### Preview an unassigned Rhino model in Renders
+### Save several render views of one piece
 
-If the Render view is empty after import, choose **Preview imported CAD**. Pavé opens a Studio white shot with the visible bodies in their source appearance. Use Source materials or Neutral clay under Look. When a shot already shows confirmed metal or stones, use **Look → Show unassigned bodies** to include the remaining bodies. Confirmed materials keep their appearance. Hidden bodies, parts set to Reference, and construction geometry stay out.
+1. Open **Renders** in the project. Choose **Add view**, then **Hero**, **Front**, **Top**, **Detail** or **Copy current**. Name the view and choose **Add view** to save it.
+2. For a straight, articulated import, choose **Ring pose → Circular band** to arrange the links in a loop for this view. Its diameter follows the source length. Choose **As imported** for a straight layout. Each view saves its own pose. CAD, casting measurements and exports keep the original geometry.
+3. Drag the viewfinder to orbit, Shift-drag to pan and use the wheel or pinch to zoom. Under **Look**, choose your lighting. For a soft floor reflection choose **White gloss** under Ground. The view saves your camera and settings.
+4. Press **Render** for one image or **Render all** for the saved set. A shot is the saved setup. A take is a finished image or movie. Choose a motion on the shot to make a moving take. Supported local Mac and Windows installations prepare Blender on the first render.
 
-To photograph a piece, save its angle in Renders, choose a lighting look, and press **Render**. For a catalog photo with a reflection under the setting, choose **White gloss** in the Ground selector. On a supported local Mac or Windows installation the studio prepares Blender when the first render needs it. To direct the same shot with Project AI, ask “Keep this camera angle and turn the light so I can see the rim of each prong.” Save the still before adding a push-in or turntable. See the [worked public KeyShot comparison](research/keyshot-to-cycles.md).
+For example, keep a **Straight top** view, add a **Circular hero** view, then add a **Setting detail** view to show the claws and stones. A straight run of individually modeled settings can be posed this way. A single fused mesh keeps its modeled shape. The presentation pose does not certify clasp engagement or fit.
 
-Choose a still or any of the shot’s motion options, then render with Blender. The preview setting is saved on that shot. Turn it off under **Look** to return to confirmed materials alone. Previewing leaves the CAD roles, casting weights, stone counts, and exports unchanged.
+In **Project AI**, try “Save three views of this piece: a circular Hero, a straight Top and a close-up of the emerald settings. Show me the framing before you render.” Claude can create, change, preview and render the same saved views.
+
+### Photograph a Rhino import in its source materials
+
+For a model made entirely of unassigned Rhino bodies, the standard views open with **Source materials**. An emerald or metal uses its imported appearance wherever the file provides it. Choose **Neutral clay** to inspect the shape. If a project also has confirmed production materials, use **Show unassigned bodies** to include the rest for that view. Hidden bodies, reference geometry and construction guides stay out of the render. **Review materials** is where you confirm actual production roles.
+
+For a lighting example with the original CAD and published product image, see the [worked KeyShot comparison](research/keyshot-to-cycles.md).
 
 To update the actual piece, select the part, edit its dimensions in the Inspector, or choose Edit handmade mount and Save mount edit. Undo reverses a saved design change. Export for Rhino to write a new .3dm.
 

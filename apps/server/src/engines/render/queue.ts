@@ -230,6 +230,11 @@ export function createRenderQueue(o: RenderQueueOptions) {
         includeUnassignedRhino: job.requestedScene.includeUnassignedRhino,
         pose: job.requestedScene.pose,
       })
+      if (job.requestedScene.pose === 'circular-band' && !subject.circularBandDiameterMm)
+        throw new AppError(
+          'conflict',
+          'Circular band requires a straight row of separate parts. Choose As imported for this view.',
+        )
       if (subject.parts.length === 0 && subject.stones.length === 0)
         throw new AppError('conflict', 'Nothing to render: the piece has no metal or stones.')
       let reported = 0

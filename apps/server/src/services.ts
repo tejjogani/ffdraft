@@ -135,6 +135,7 @@ type Box = { min: Vec3; max: Vec3 }
  * without the server depending on the render package.
  */
 export interface RenderSubject {
+  circularBandDiameterMm?: number
   bounds: Box
   /** Support points of the geometry, so presets frame the real silhouette. */
   silhouette?: Vec3[]

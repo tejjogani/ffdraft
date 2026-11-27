@@ -12,7 +12,7 @@ import type { AssetResolver, Evaluation, Kernel } from '@pave/kernel/types'
 import { writeGlb } from '@pave/kernel/write-glb'
 import { fitToPhoto, shade, viewCamera } from '@pave/match'
 import { buildProductionPackage } from '@pave/production/node'
-import { renderEvaluation, subjectOf } from '@pave/render'
+import { circularBandLayout, renderEvaluation, subjectOf } from '@pave/render'
 import type { Design } from '@pave/schema'
 import type { FromWorker, KernelTask, TaskResults, ToWorker, WorkerConfig } from './protocol'
 import { summarize } from './summary'
@@ -119,13 +119,16 @@ async function run(
         signal,
       })
       signal.throwIfAborted()
-      const render = renderEvaluation(
-        evaluation,
-        task.design,
-        task.includeUnassignedRhino,
-        task.pose,
-      )
-      const subject = subjectOf(render)
+      const source = renderEvaluation(evaluation, task.design, task.includeUnassignedRhino)
+      const layout = circularBandLayout(source)
+      const render =
+        layout && task.pose === 'circular-band'
+          ? renderEvaluation(source, task.design, false, task.pose)
+          : source
+      const subject = {
+        ...subjectOf(render),
+        ...(layout && { circularBandDiameterMm: layout.diameterMm }),
+      }
       if (task.kind === 'subject') return { result: subject, transfer: [] }
       // Empty subjects are refused by the render queue before Blender starts.
       const glb = own(

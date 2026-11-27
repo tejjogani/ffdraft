@@ -1646,6 +1646,8 @@ export const commands = {
       /** What matters about the piece in pictures, one plain line each. */
       features: z.array(z.string()),
       centreStoneNodeId: id.nullable(),
+      /** Diameter at the centreline of a render-only circular arrangement, when the geometry supports it. */
+      circularBandDiameterMm: z.number().positive().optional(),
       /** Settings to put on a shot when framing included the unassigned Rhino bodies. */
       sceneOptions: importedSceneOptions.optional(),
       shots: z.array(
