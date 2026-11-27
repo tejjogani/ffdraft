@@ -36,6 +36,12 @@ Select a retained Rhino solid in Features and choose Copy face borders in the In
 
 For a curve imported as NURBS, select its name in Features and choose Edit control points. Click a point on the dashed control polygon or enter its point number, then drag it in the selected view or type X, Y and Z in millimetres. The solid line previews the curve. Adjust Weight to change how strongly a point attracts the curve. Save points records one edit. Export as Rhino .3dm to bring the edited curve back into Rhino.
 
+## Take an assembly back into Rhino
+
+In the CAD builder, choose Export, then For Rhino. Open the downloaded .3dm and select two parts that were separate in the source file. Independent imported solids keep their names, layer paths and placement, including parts of the same alloy that touch. Imported construction curves keep their NURBS control points and weights.
+
+Read the export summary for the counts of native solids, curves and evaluated meshes. A mesh edit or a feature that cuts the metal can change the exported geometry type. Choose For casting when you need a watertight STL. Use Save as Pavé file to carry the editable Pavé project to another installation.
+
 ## Export a mesh from Rhino
 
 If a solid has no saved render mesh, save the original with its render meshes in Rhino and try the import again. To bring it in as a mesh, select it in Rhino and run Mesh. Preview the result, select the generated mesh objects, then choose File → Export Selected and save as .3dm to carry separate parts and the document units. You can also choose STL. In Pavé, set the STL source units to the same units used for the export and check a known measurement before importing. A single STL comes into Features as one part.
