@@ -17,7 +17,12 @@ import { freeRhino, loadRhino3dm } from '../runtime/rhino'
 import type { IndexedTriangles } from '../solid/meshing'
 import type { Bounds } from '../types'
 import { readStullerMaterial } from './matrix-stuller'
-import { inheritedMaterial, RHINO_INHERITED_MATERIAL, rhinoContextReader } from './rhino-context'
+import {
+  inheritedMaterial,
+  inheritedMaterialAppearance,
+  RHINO_INHERITED_MATERIAL,
+  rhinoContextReader,
+} from './rhino-context'
 import {
   CURVE_SOURCE_ID_KEY,
   type PlacedRhinoCurve,
@@ -571,15 +576,21 @@ export async function readRhino3dm(
             return
           }
           const placements = savedPlacements ?? parentPlacements
+          const inheritedAppearance = inheritedMaterialAppearance(placements)
           // The material on a baked member may have been projected from its archived occurrence.
           const inherited =
             savedPlacements &&
             attrs?.getUserString(RHINO_INHERITED_MATERIAL) === '1' &&
-            material.material === inheritedMaterial(savedPlacements)
+            material.material === inheritedMaterial(placements) &&
+            material.materialAppearance?.color === inheritedAppearance?.color &&
+            Math.abs(
+              (material.materialAppearance?.opacity ?? 1) - (inheritedAppearance?.opacity ?? 1),
+            ) < 1e-12
           const rhinoContext: RhinoContext | undefined =
             groups.length ||
             placements.length ||
             material.material ||
+            material.materialAppearance ||
             material.materialFromParent ||
             stullerMaterial
               ? {

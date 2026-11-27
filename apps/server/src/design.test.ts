@@ -207,7 +207,10 @@ describe('design document', () => {
       ops,
     })
     const before = (await api.call('pieces.get', { id: piece.id })).design
-    const context = { groups: [{ id: 'source:1', name: 'Guide set' }], placements: [] }
+    const context = {
+      groups: [{ id: 'source:1', name: 'Guide set' }],
+      placements: [{ id: 'source:2', definitionId: 'source:3', material: 'Blue enamel' }],
+    }
     const recovery = {
       pieceId: piece.id,
       baseVersion: importing.version,
@@ -309,6 +312,41 @@ describe('design document', () => {
       reverts: [removed.change.id],
     })
     expect((await api.call('pieces.get', { id: piece.id })).design).toEqual(enriched)
+
+    const materialAppearance = { color: '#102c68', opacity: 0.7 }
+    const coloredContext = {
+      ...supplierContext,
+      materialAppearance,
+      placements: [{ ...context.placements[0]!, materialAppearance }],
+    }
+    const colors = {
+      pieceId: piece.id,
+      label: 'Recover source appearance',
+      ops: supplierOps.map((op) => ({ ...op, patch: { rhinoContext: coloredContext } })),
+    }
+    const colorChange = await api.call('design.apply', colors)
+    const colored = (await api.call('pieces.get', { id: piece.id })).design
+    expect(colored.nodes['curve-0']).toEqual({
+      ...enriched.nodes['curve-0'],
+      rhinoContext: coloredContext,
+    })
+    expect((await api.fail('design.apply', colors)).status).toBe(400)
+    const colorUndo = await api.call('design.apply', {
+      pieceId: piece.id,
+      label: 'Undo source appearance',
+      ops: colorChange.change.inverse,
+      baseVersion: colorChange.version,
+      reverts: [colorChange.change.id],
+    })
+    expect((await api.call('pieces.get', { id: piece.id })).design).toEqual(enriched)
+    await api.call('design.apply', {
+      pieceId: piece.id,
+      label: 'Redo source appearance',
+      ops: colorUndo.change.inverse,
+      baseVersion: colorUndo.version,
+      reverts: [colorUndo.change.id],
+    })
+    expect((await api.call('pieces.get', { id: piece.id })).design).toEqual(colored)
   })
 
   it('describes the selected project feature with the field names and units used to edit it', async () => {
