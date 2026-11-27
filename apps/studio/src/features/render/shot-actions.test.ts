@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { rpc } from '../../lib/rpc'
-import { queueCadRender, queueShotAction } from './shot-actions'
+import { freshTitle, queueCadRender, queueShotAction } from './shot-actions'
+
+it('keeps an automatically suffixed view name within the shot title limit', () => {
+  const title = 'A'.repeat(80)
+  expect(freshTitle(title, [title, `${title.slice(0, 78)} 2`])).toBe(`${title.slice(0, 78)} 3`)
+})
 
 function deferred() {
   let resolve!: () => void

@@ -38,8 +38,13 @@ export function takeShotIntent(pieceId: string): string | null {
 
 /** A title not already in the list: "View", "View 2", … */
 export function freshTitle(base: string, taken: readonly string[]): string {
-  if (!taken.includes(base)) return base
-  for (let n = 2; ; n++) if (!taken.includes(`${base} ${n}`)) return `${base} ${n}`
+  const title = base.slice(0, 80).trimEnd()
+  if (!taken.includes(title)) return title
+  for (let n = 2; ; n++) {
+    const suffix = ` ${n}`
+    const candidate = `${title.slice(0, 80 - suffix.length).trimEnd()}${suffix}`
+    if (!taken.includes(candidate)) return candidate
+  }
 }
 
 /**

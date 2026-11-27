@@ -207,16 +207,30 @@ try {
   assert.match(await unassignedExport.text(), /Nothing to export.*no metal/)
 
   await page.goto(`${base}/pieces/${pieceId}/render`)
-  await page.getByText('Source labels by body count', { exact: true }).waitFor()
-  await page.getByText('White Gold (2)', { exact: true }).waitFor()
-  const preview = page.getByRole('button', { name: 'Preview imported CAD', exact: true })
-  const include = page.getByRole('switch', { name: 'Show unassigned bodies' })
-  const previewCount = page.getByText(
-    '2 unassigned bodies shown. Source materials where available.',
-    {
-      exact: true,
-    },
-  )
+  const appearance = page.getByRole('group', { name: 'Imported bodies' })
+  const source = appearance.getByRole('button', { name: 'Source materials', exact: true })
+  const clay = appearance.getByRole('button', { name: 'Neutral clay', exact: true })
+  const include = appearance.getByRole('button', { name: 'Include imported bodies', exact: true })
+  const exclude = appearance.getByRole('button', { name: 'Exclude imported bodies', exact: true })
+  const renderActions = page.getByRole('group', { name: 'Render actions' })
+  const renderButton = renderActions.getByRole('button', { name: /^Render( preview)?$/ })
+  await source.waitFor()
+  const dimensions = async (target: typeof source, width: number, height: number) => {
+    await until(async () => {
+      const box = await target.boundingBox()
+      return (
+        !!box &&
+        box.x >= 0 &&
+        box.y >= 0 &&
+        box.x + box.width <= width &&
+        box.y + box.height <= height
+      )
+    })
+  }
+  await dimensions(source, 1440, 900)
+  await dimensions(renderButton, 1440, 900)
+  assert.equal(await source.getAttribute('aria-pressed'), 'true')
+  assert.deepEqual(await rpc('scenes.list', { pieceId }), [])
   const initialization = '**/api/rpc/scenes.ensureDefaults'
   let replyAborted = false
   await page.route(initialization, async (route) => {
@@ -225,7 +239,7 @@ try {
     await route.abort('connectionaborted')
     replyAborted = true
   })
-  await preview.click()
+  await clay.click()
   await until(async () => replyAborted)
   await page.unroute(initialization)
   const initialized: CommandOutput<'scenes.list'> = await rpc('scenes.list', { pieceId })
@@ -238,28 +252,74 @@ try {
       ['Macro', 4],
     ],
   )
-  assert.equal(initialized[0]?.scene.look, 'catalog-white')
   assert.equal(initialized[0]?.scene.includeUnassignedRhino, true)
-  assert.equal(initialized[0]?.scene.importedBodyLook, 'source')
+  assert.equal(initialized[0]?.scene.importedBodyLook, 'clay')
   await page.reload()
-  await previewCount.waitFor()
-  assert.equal(await include.getAttribute('aria-checked'), 'true')
-  await page.getByRole('button', { name: 'Neutral clay', exact: true }).click()
-  await page.getByText('2 unassigned bodies shown. Neutral clay.', { exact: true }).waitFor()
+  await clay.waitFor()
+  assert.equal(await clay.getAttribute('aria-pressed'), 'true')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await dimensions(source, 390, 844)
+  await dimensions(clay, 390, 844)
+  await dimensions(renderButton, 390, 844)
+  await source.click()
   await until(
-    async () => (await rpc('scenes.list', { pieceId }))[0]?.scene.importedBodyLook === 'clay',
+    async () => (await rpc('scenes.list', { pieceId }))[0]?.scene.importedBodyLook === 'source',
+  )
+  await exclude.click()
+  await include.waitFor()
+  await until(
+    async () => (await rpc('scenes.list', { pieceId }))[0]?.scene.includeUnassignedRhino === false,
   )
   await page.reload()
-  await page.getByText('2 unassigned bodies shown. Neutral clay.', { exact: true }).waitFor()
-  await page.getByRole('button', { name: 'Source materials', exact: true }).click()
-  await previewCount.waitFor()
+  await include.waitFor()
+  assert.ok(await renderButton.isDisabled())
+  await renderActions
+    .getByText('Include imported bodies to render this shot.', { exact: true })
+    .waitFor()
   await include.click()
-  await preview.waitFor()
-  await until(async () =>
-    (await rpc('scenes.list', { pieceId })).every(
-      (shot: CommandOutput<'scenes.list'>[number]) => shot.scene.includeUnassignedRhino !== true,
-    ),
+  await source.waitFor()
+  await until(
+    async () => (await rpc('scenes.list', { pieceId }))[0]?.scene.includeUnassignedRhino === true,
   )
+  await rpc('scenes.update', {
+    id: initialized[0]!.id,
+    patch: { output: { width: 512, height: 512, quality: 'preview' } },
+  })
+  await page.reload()
+  await renderButton.waitFor()
+  // A slow submission exercises the pre-queue state and the repeat-click guard. Use a browser
+  // take so this check can run on platforms without Blender.
+  const createRender = '**/api/rpc/renders.create'
+  const completeRender = '**/api/rpc/renders.complete'
+  let renderAttempts = 0
+  const responseGate = Promise.withResolvers<void>()
+  const completionGate = Promise.withResolvers<void>()
+  await page.route(createRender, async (route) => {
+    renderAttempts++
+    await responseGate.promise
+    await route.continue({ postData: { ...route.request().postDataJSON(), engine: 'browser' } })
+  })
+  await page.route(completeRender, async (route) => {
+    await completionGate.promise
+    await route.continue()
+  })
+  await renderButton.dblclick()
+  await renderActions.getByText('Starting render…', { exact: true }).waitFor()
+  assert.ok(await renderButton.isDisabled())
+  responseGate.resolve()
+  await renderActions.getByText('Queued', { exact: true }).waitFor()
+  completionGate.resolve()
+  await renderActions
+    .getByRole('button', { name: 'View take', exact: true })
+    .waitFor({ timeout: 120_000 })
+  assert.equal(renderAttempts, 1)
+  await page.unroute(createRender)
+  await page.unroute(completeRender)
+  await exclude.click()
+  await until(
+    async () => (await rpc('scenes.list', { pieceId }))[0]?.scene.includeUnassignedRhino === false,
+  )
+  await page.setViewportSize({ width: 1440, height: 900 })
   assert.equal((await readReopened()).version, reopened.piece.version)
   await page.getByRole('link', { name: 'Review materials' }).click()
   const review = page.getByRole('dialog', { name: 'Review materials' })
@@ -337,6 +397,45 @@ try {
 
   await undo()
   await until(async () => (await piece()).design.order.length === 2)
+
+  const fresh = await rpc('pieces.create', { templateId: 'solitaire', title: 'New view check' })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto(`${base}/pieces/${fresh.id}/render`)
+  const addView = page.getByRole('button', { name: 'Add view', exact: true })
+  await addView.waitFor()
+  await dimensions(addView, 390, 844)
+  assert.deepEqual(await rpc('scenes.list', { pieceId: fresh.id }), [])
+  await addView.click()
+  await page.getByRole('menuitem', { name: 'Top', exact: true }).click()
+  const newView = page.getByRole('dialog', { name: 'Add view' })
+  await newView.getByRole('textbox', { name: 'View name' }).fill('Catalogue top')
+  await newView.getByRole('button', { name: 'Add view' }).click()
+  await page.getByLabel('Live preview of the Catalogue top shot').waitFor()
+  const freshShots = (await rpc('scenes.list', {
+    pieceId: fresh.id,
+  })) as CommandOutput<'scenes.list'>
+  assert.deepEqual(
+    freshShots.map(({ title }) => title),
+    ['Hero', 'Front', 'Top', 'Macro', 'Catalogue top'],
+  )
+  assert.equal(freshShots.at(-1)?.scene.camera.preset, 'top')
+  await page.waitForURL((url) => url.searchParams.get('shot') === freshShots.at(-1)!.id)
+  await page.reload()
+  await page.getByLabel('Live preview of the Catalogue top shot').waitFor()
+  await rpc('scenes.update', { id: freshShots.at(-1)!.id, patch: { pose: 'circular-band' } })
+  await page.reload()
+  await renderActions
+    .getByText('Circular band requires a straight row of separate parts. Choose As imported.')
+    .waitFor()
+  assert.ok(await renderButton.isDisabled())
+  await page.getByRole('button', { name: 'As imported', exact: true }).click()
+  await until(async () => {
+    const views = (await rpc('scenes.list', { pieceId: fresh.id })) as CommandOutput<'scenes.list'>
+    return views.at(-1)?.scene.pose === 'as-designed' && views.at(-1)?.scene.camera.preset === 'top'
+  })
+  await page.goto(`${base}/pieces/${fresh.id}/render?shot=${initialized[0]!.id}`)
+  await page.getByLabel('Live preview of the Hero shot').waitFor()
+  await page.waitForURL((url) => !url.searchParams.has('shot'))
   console.log(
     'Passed Rhino and STL import preview, cancel, named assembly, reopen, role confirmation, STL readback and grouped undo.',
   )
