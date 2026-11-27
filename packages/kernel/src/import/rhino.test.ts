@@ -43,6 +43,15 @@ function named(name: string, layerIndex = 0) {
   return attrs
 }
 
+function blockReference(id: string, xform: Transform) {
+  // The binding's (definition id, transform) constructor is missing from its .d.ts.
+  const BlockReference = rhino.InstanceReference as unknown as new (
+    id: string,
+    xform: Transform,
+  ) => InstanceReference
+  return new BlockReference(id, xform)
+}
+
 describe('readRhino3dm', () => {
   it('keeps independent Rhino objects, nested layer names, and their shared origin in millimetres', async () => {
     const bytes = writeFile((doc) => {
@@ -110,6 +119,14 @@ describe('readRhino3dm', () => {
       expect(cache(partialBox.faces().get(0), quad())).toBe(true)
       doc.objects().addBrep(sphere, named('Cached sphere'))
       doc.objects().addBrep(partialBox, named('Incomplete box'))
+      const definitions = doc.instanceDefinitions()
+      const id = definitions.add('Sphere', '', '', '', [0, 0, 0], [sphere], [named('Cache')])
+      doc
+        .objects()
+        .addInstanceObject(
+          blockReference(definitions.get(id).id, rhino.Transform.translationXYZ(5, 0, 0)),
+          named('Cached copy'),
+        )
       doc.objects().addPolyline(
         [
           [0, 0, 0],
@@ -120,26 +137,25 @@ describe('readRhino3dm', () => {
     })
 
     const result = await readRhino3dm(bytes)
-    expect(result.objects.map(({ name }) => name)).toEqual(['Cached sphere'])
-    expect(result.objects[0]!.bounds).toEqual({ min: [-1, -1, -1], max: [1, 1, 1] })
-    expect(parseMesh(result.objects[0]!.bytes).mesh.indices).toHaveLength(24)
+    expect(result.objects.map(({ name, bounds }) => ({ name, bounds }))).toEqual([
+      { name: 'Cached sphere', bounds: { min: [-1, -1, -1], max: [1, 1, 1] } },
+      { name: 'Cached copy / Cache', bounds: { min: [4, -1, -1], max: [6, 1, 1] } },
+    ])
+    for (const { bytes } of result.objects) {
+      expect(parseMesh(bytes).mesh.indices).toHaveLength(24)
+    }
     expect(result.skipped).toMatchObject([
       { name: 'Incomplete box', reason: expect.stringMatching(/render mesh.*Mesh/) },
       { name: 'Construction', reason: expect.stringMatching(/curve/i) },
     ])
   })
 
-  it('does not import geometry inside a Rhino block at its definition coordinates', async () => {
+  it('imports a Rhino block at the instance placement and excludes its definition geometry', async () => {
     const bytes = writeFile((doc) => {
       const definitions = doc.instanceDefinitions()
       const index = definitions.add('Mount', '', '', '', [0, 0, 0], [quad()], [named('Definition')])
       expect(index).toBeGreaterThanOrEqual(0)
-      // The binding's (definition id, transform) constructor is missing from its .d.ts.
-      const BlockReference = rhino.InstanceReference as unknown as new (
-        id: string,
-        xform: Transform,
-      ) => InstanceReference
-      const ref = new BlockReference(
+      const ref = blockReference(
         definitions.get(index).id,
         rhino.Transform.translationXYZ(100, 0, 0),
       )
@@ -148,11 +164,76 @@ describe('readRhino3dm', () => {
     })
 
     const result = await readRhino3dm(bytes)
-    expect(result.objects.map(({ name }) => name)).toEqual(['Freestanding'])
-    expect(result.skipped).toMatchObject([
-      { name: 'Definition', reason: expect.stringMatching(/block/i) },
-      { name: 'Mount copy', reason: expect.stringMatching(/block/i) },
+    expect(result.objects).toMatchObject([
+      { name: 'Mount copy / Definition', bounds: { min: [100, -1, 0], max: [101, 1, 0] } },
+      { name: 'Freestanding', bounds: { min: [10, -1, 0], max: [11, 1, 0] } },
     ])
+    expect(result.skipped).toEqual([])
+  })
+
+  it('composes nested block transforms before converting the units and preserves mirrored winding', async () => {
+    const bytes = writeFile((doc) => {
+      const definitions = doc.instanceDefinitions()
+      const inner = definitions.add(
+        'Leaf',
+        '',
+        '',
+        '',
+        [0, 0, 0],
+        [quad(), new rhino.LineCurve([0, 0, 0], [1, 0, 0])],
+        [named('Stone'), named('Guide')],
+      )
+      const mirror = rhino.Transform.mirror([0, 0, 0], [1, 0, 0])
+      mirror.m03 = 3
+      mirror.m13 = 4
+      const nested = blockReference(definitions.get(inner).id, mirror)
+      const outer = definitions.add('Mount', '', '', '', [0, 0, 0], [nested], [named('Mirrored')])
+      const scale = rhino.Transform.scale([0, 0, 0], 2)
+      scale.m03 = 10
+      doc
+        .objects()
+        .addInstanceObject(blockReference(definitions.get(outer).id, scale), named('Outer'))
+    }, rhino.UnitSystem.Centimeters)
+
+    const result = await readRhino3dm(bytes)
+    expect(result.objects).toMatchObject([
+      { name: 'Outer / Mirrored / Stone', bounds: { min: [140, 60, 0], max: [160, 100, 0] } },
+    ])
+    const stl = new DataView(result.objects[0]!.bytes.buffer)
+    expect(stl.getFloat32(84 + 8, true)).toBe(1)
+    expect(stl.getFloat32(134 + 8, true)).toBe(1)
+    expect(result.skipped).toMatchObject([
+      { name: 'Outer / Mirrored / Guide', reason: expect.stringMatching(/curve/i) },
+    ])
+  })
+
+  it('limits repeated block expansion before allocating unbounded output', async () => {
+    const bytes = writeFile((doc) => {
+      const definitions = doc.instanceDefinitions()
+      const leaf = definitions.add('Leaf', '', '', '', [0, 0, 0], [quad()], [named('Part')])
+      const leafId = definitions.get(leaf).id
+      const copies = Array.from({ length: 71 }, (_, i) =>
+        blockReference(leafId, rhino.Transform.translationXYZ(i, 0, 0)),
+      )
+      const layer = definitions.add(
+        'Row',
+        '',
+        '',
+        '',
+        [0, 0, 0],
+        copies,
+        copies.map(() => named('Copy')),
+      )
+      const layerId = definitions.get(layer).id
+      const objects = doc.objects()
+      for (let i = 0; i < 71; i++) {
+        objects.addInstanceObject(
+          blockReference(layerId, rhino.Transform.translationXYZ(0, i, 0)),
+          named('Row'),
+        )
+      }
+    })
+    await expect(readRhino3dm(bytes)).rejects.toThrow(/complexity limit/)
   })
 
   it('returns a review with zero parts when every object is unsupported', async () => {
