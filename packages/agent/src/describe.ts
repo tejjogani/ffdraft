@@ -75,6 +75,11 @@ export const TOOL_CHIPS = {
   },
   'pieces.delete': { running: 'Deleting the piece', done: 'Deleted the piece' },
   'design.apply': { running: 'Editing the design', done: (i) => i.label },
+  'design.capabilities': {
+    quiet: true,
+    running: 'Checking available CAD tools',
+    done: 'Checked available CAD tools',
+  },
   'design.describe': {
     quiet: true,
     running: 'Inspecting the CAD feature',

@@ -115,6 +115,11 @@ class Project:
         self._version = piece["version"]
         return self
 
+    def modeling_options(self, operation: str | None = None) -> JsonObject:
+        """List CAD operations or inspect the inputs and limitations of one operation."""
+        fields = {"operation": operation} if operation is not None else {}
+        return self._cad_rpc("design.capabilities", **fields)
+
     def describe(self, feature_id: str) -> JsonObject:
         """Read one feature's values and schema, including field units and limits."""
         return self._cad_rpc("design.describe", nodeId=feature_id)

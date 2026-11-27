@@ -725,6 +725,24 @@ export const commands = {
   }),
 
   // ── Design document ───────────────────────────────────────────────────────────────────────
+  'design.capabilities': def({
+    description:
+      'Look up a modeling operation in this project before promising a Rhino edit. Omit operation for names. A feature lookup returns its creation schema. Limits and unverified requests are explicit.',
+    kind: 'query',
+    tool: true,
+    input: z.object({ pieceId: id, operation: z.string().trim().min(1).max(100).optional() }),
+    output: z.object({
+      pieceId: id,
+      version: z.number().int(),
+      operation: z.string().nullable(),
+      status: z.enum(['available', 'limited', 'unavailable', 'unverified']),
+      detail: z.string(),
+      tools: z.array(z.string()),
+      names: z.array(z.string()),
+      projectKinds: z.array(z.enum(NODE_KINDS)),
+      schema: z.record(z.string(), z.unknown()).optional(),
+    }),
+  }),
   'design.describe': def({
     description:
       'Inspect one feature by its id in this project. Returns the current values and input JSON Schema used by the CAD editor, including field descriptions, conditions, units, ranges and defaults. Use its version as baseVersion for a subsequent design.apply.',

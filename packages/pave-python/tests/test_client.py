@@ -63,6 +63,16 @@ class StudioTest(unittest.TestCase):
         self.assertEqual(self.request("pieces.get"), {"id": "ring"})
         return project
 
+    def test_project_modeling_options(self):
+        project = self.project()
+        for operation in (None, "closedSweep2"):
+            self.reply({"version": 0, "status": "unavailable" if operation else "unverified"})
+            project.modeling_options(operation)
+            expected = {"pieceId": "ring"}
+            if operation:
+                expected["operation"] = operation
+            self.assertEqual(self.request("design.capabilities"), expected)
+
     def test_read_features_in_design_order(self):
         project = self.project()
         self.assertEqual(project.version, 0)

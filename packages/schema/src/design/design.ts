@@ -14,6 +14,7 @@ import {
   importSourceRole,
   isBodyKind,
   isSectionSurface,
+  NODE_SCHEMAS,
   type Node,
   type NodeInput,
   NodeSchema,
@@ -210,9 +211,33 @@ function parseOp(raw: unknown): Op {
   return r.data as Op
 }
 
-function parseNode(raw: unknown, op: Op): Node {
+/** An assistant's requested geometry fields must survive parsing before its edit can be recorded. */
+function checkRequestedFields(submitted: unknown, parsed: unknown, path: string, op: Op) {
+  if (Array.isArray(submitted) && Array.isArray(parsed)) {
+    for (const [i, value] of submitted.entries())
+      checkRequestedFields(value, parsed[i], `${path}[${i}]`, op)
+  } else if (isObject(submitted) && isObject(parsed)) {
+    for (const [key, value] of Object.entries(submitted)) {
+      if (value === null) continue // JSON merge patch removes this property.
+      const field = `${path}.${key}`
+      if (!Object.hasOwn(parsed, key)) throw new OpError(`Unsupported CAD field "${field}".`, op)
+      checkRequestedFields(value, parsed[key], field, op)
+    }
+  }
+}
+
+function parseNode(raw: unknown, op: Op, checkFields: boolean): Node {
   const r = NodeSchema.safeParse(raw)
   if (!r.success) throw new OpError(z.prettifyError(r.error), op)
+  if (checkFields && (op.t === 'add' || op.t === 'update')) {
+    const submitted = op.t === 'add' ? op.node : op.patch
+    const kind = r.data.kind
+    for (const key of Object.keys(submitted)) {
+      if (!Object.hasOwn(NODE_SCHEMAS[kind].shape, key))
+        throw new OpError(`Unsupported CAD field "${kind}.${key}".`, op)
+    }
+    checkRequestedFields(submitted, r.data, kind, op)
+  }
   return r.data
 }
 
@@ -227,7 +252,11 @@ function dependents(design: Design, id: string): string[] {
  * Applies ops in order and returns the new design plus the ops that undo them.
  * Pure: the input is not mutated. Throws {@link OpError}; nothing is applied on failure.
  */
-export function applyOps(input: Design, ops: readonly Op[]): { design: Design; inverse: Op[] } {
+export function applyOps(
+  input: Design,
+  ops: readonly Op[],
+  options?: { checkRequestedFields?: boolean },
+): { design: Design; inverse: Op[] } {
   // An old document is read with the meaning its values had before it is edited, so an edit
   // never changes what the untouched parts of a version 1 piece look like.
   const design = migrateDesign(input)
@@ -251,7 +280,7 @@ export function applyOps(input: Design, ops: readonly Op[]): { design: Design; i
     const op = parseOp(raw)
     switch (op.t) {
       case 'add': {
-        const node = parseNode(op.node, op)
+        const node = parseNode(op.node, op, options?.checkRequestedFields === true)
         if (node.id === '') throw new OpError('A node id cannot be empty', op)
         // A JSON object cannot keep this key through a save and load (the record parser drops
         // it), so the node would vanish from a saved design while the outliner still lists it.
@@ -268,7 +297,11 @@ export function applyOps(input: Design, ops: readonly Op[]): { design: Design; i
         if (!prev) throw new OpError(`No node "${op.id}"`, op)
         if ('id' in op.patch || 'kind' in op.patch)
           throw new OpError('id and kind cannot be changed; add a new node instead', op)
-        const parsed = parseNode(mergePatch(prev, op.patch), op)
+        const parsed = parseNode(
+          mergePatch(prev, op.patch),
+          op,
+          options?.checkRequestedFields === true,
+        )
         const updated =
           parsed.kind === 'setting' &&
           parsed.importSourceId &&

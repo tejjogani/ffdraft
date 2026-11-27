@@ -121,7 +121,9 @@ async function commitOnce(ctx: Ctx, tx: Ctx['repo'], planned: CommitInput | Plan
 
   let applied: { design: Design; inverse: Op[] }
   try {
-    applied = applyOps(piece.design, input.ops)
+    applied = applyOps(piece.design, input.ops, {
+      checkRequestedFields: ctx.actor.type === 'agent',
+    })
   } catch (err) {
     if (!(err instanceof OpError)) throw err
     throw new AppError(input.invalidAs ?? 'bad_request', err.message, { op: err.op })

@@ -17,6 +17,7 @@ import {
 import { and, desc, eq, lt, sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { putAsset } from '../assets/assets'
+import { cadCapabilities } from '../cad-capabilities'
 import * as t from '../db/schema'
 import { commitChange, FACTS_DETAIL, storeFacts, toStoredChange } from '../design'
 import { AppError, badRequest, conflict, notFound } from '../errors'
@@ -219,6 +220,10 @@ class UnchangedStone extends Error {
 }
 
 export const design: HandlerGroup<'design'> = {
+  'design.capabilities': async (ctx, { pieceId, operation }) => {
+    const piece = await getPiece(ctx, pieceId)
+    return { pieceId, version: piece.version, ...cadCapabilities(piece.design, operation) }
+  },
   'design.describe': async (ctx, { pieceId, nodeId }) => {
     const piece = await getPiece(ctx, pieceId)
     if (!Object.hasOwn(piece.design.nodes, nodeId)) throw notFound('Feature', nodeId)
