@@ -134,14 +134,36 @@ export function ShotInspector({
         />
         {showImportPreview && (
           <div className="flex items-center justify-between gap-3">
-            <span className="text-xs">Show unassigned bodies in clay</span>
+            <span className="text-xs">Show unassigned bodies</span>
             <Switch
-              aria-label="Show unassigned bodies in clay"
+              aria-label="Show unassigned bodies"
               checked={scene.includeUnassignedRhino === true}
               disabled={importPreviewDisabled}
-              onChange={(on) => onChange({ includeUnassignedRhino: on ? true : null })}
+              onChange={(on) =>
+                onChange(
+                  on
+                    ? {
+                        includeUnassignedRhino: true,
+                        importedBodyLook: scene.importedBodyLook ?? 'source',
+                      }
+                    : { includeUnassignedRhino: null },
+                )
+              }
             />
           </div>
+        )}
+        {showImportPreview && scene.includeUnassignedRhino && (
+          <Segmented
+            size="sm"
+            aria-label="Imported body appearance"
+            disabled={importPreviewDisabled}
+            value={scene.importedBodyLook ?? 'clay'}
+            options={[
+              { value: 'source', label: 'Source materials' },
+              { value: 'clay', label: 'Neutral clay' },
+            ]}
+            onChange={(importedBodyLook) => onChange({ importedBodyLook })}
+          />
         )}
       </Section>
 

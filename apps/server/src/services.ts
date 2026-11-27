@@ -55,6 +55,7 @@ import type {
   RenderJob,
   Run,
   SearchResult,
+  SourceRenderAppearance,
   Thread,
   View,
 } from '@pave/schema'
@@ -144,6 +145,7 @@ export interface RenderSubject {
     plating: PlatingId
     bounds: Box
     importRole?: 'unassigned'
+    sourceAppearance?: SourceRenderAppearance
   }[]
   stones: {
     id: string

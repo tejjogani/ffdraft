@@ -210,8 +210,8 @@ try {
   await page.getByText('Source labels by body count', { exact: true }).waitFor()
   await page.getByText('White Gold (2)', { exact: true }).waitFor()
   const preview = page.getByRole('button', { name: 'Preview imported CAD', exact: true })
-  const include = page.getByRole('switch', { name: 'Show unassigned bodies in clay' })
-  const previewCount = page.getByText('2 unassigned bodies appear in neutral clay.', {
+  const include = page.getByRole('switch', { name: 'Show unassigned bodies' })
+  const previewCount = page.getByText('2 unassigned bodies shown. Source materials where available.', {
     exact: true,
   })
   await preview.click()

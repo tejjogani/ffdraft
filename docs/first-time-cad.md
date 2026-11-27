@@ -34,7 +34,7 @@ For a product image, open Renders and choose a shot. Under Look, choose Studio w
 
 ### Preview an unassigned Rhino model in Renders
 
-If the Render view is empty after import, choose **Preview imported CAD**. Pavé opens a Studio white shot with visible unassigned Rhino bodies in neutral clay. When a shot already shows confirmed metal or stones, use **Look → Show unassigned bodies in clay** to add the remaining bodies in clay. Confirmed materials keep their appearance. Hidden bodies, parts set to Reference, and construction geometry stay out.
+If the Render view is empty after import, choose **Preview imported CAD**. Pavé opens a Studio white shot with the visible bodies in their source appearance. Use Source materials or Neutral clay under Look. When a shot already shows confirmed metal or stones, use **Look → Show unassigned bodies** to include the remaining bodies. Confirmed materials keep their appearance. Hidden bodies, parts set to Reference, and construction geometry stay out.
 
 Choose a still or any of the shot’s motion options, then render with Blender. The preview setting is saved on that shot. Turn it off under **Look** to return to confirmed materials alone. Previewing leaves the CAD roles, casting weights, stone counts, and exports unchanged.
 
@@ -161,3 +161,5 @@ Press Render beside Export in CAD to render the saved design. To frame a differe
 ## Make a custom ring band to finger size
 
 Use Draw curve and choose Right at X plane position 0 mm. For a 4 mm wide, 2 mm thick band, enter Y and Z coordinates (−2, −1), (2, −1), (2, 1), and (−2, 1). Turn on Closed curve and save. With the curve selected, choose Make ring band. The new band opens at US 6. Use Ring size in the Inspector to change the bore while keeping the profile dimensions. Use Edit points on the linked curve to change the cross-section.
+
+In CAD, choose Rendered to see imported material appearances. Known gemstone labels use Pavé’s gemstone optics. A bound custom diffuse color supplies a surface color. An imported appearance can be inspected before confirming an alloy or gemstone in Review materials.

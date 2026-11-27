@@ -174,6 +174,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
       const updated = await s.adjust(catalog, {
         look: 'catalog-white',
         includeUnassignedRhino: true,
+        importedBodyLook: 'source',
       })
       if (updated) setSelectedKey(updated.key)
     } finally {
@@ -433,9 +434,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
             <div className="flex flex-wrap items-center gap-x-3 border-b border-line px-4 py-2 text-xs text-fg-muted">
               <span>
                 {includesImport
-                  ? sourceMaterials.count === 1
-                    ? '1 unassigned body appears in neutral clay.'
-                    : `${sourceMaterials.count} unassigned bodies appear in neutral clay.`
+                  ? `${sourceMaterials.count} unassigned ${sourceMaterials.count === 1 ? 'body shown' : 'bodies shown'}. ${shot?.scene.importedBodyLook === 'source' ? 'Source materials where available.' : 'Neutral clay.'}`
                   : sourceMaterials.count === 1
                     ? '1 unassigned body is excluded from this render.'
                     : `${sourceMaterials.count} unassigned bodies are excluded from this render.`}
@@ -495,7 +494,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                 description={
                   baseAvailability === 'review-roles' ? (
                     <>
-                      See unassigned bodies in neutral clay with studio lighting.
+                      Preview the imported model with its source materials and studio lighting.
                       {sourceMaterials.labels && (
                         <span className="mt-2 block break-words">
                           <span className="block font-medium">Source labels by body count</span>

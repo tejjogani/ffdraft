@@ -53,6 +53,7 @@ export interface GemMaterial {
 }
 
 export interface SurfaceMaterial {
+  opacity?: number
   kind: 'surface'
   color: Rgb
   roughness: number

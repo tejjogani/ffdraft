@@ -240,6 +240,8 @@ export function createSurfaceGemMaterial(m: SurfaceMaterial): MeshPhysicalMateri
   return new MeshPhysicalMaterial({
     color: new Color().setRGB(m.color[0], m.color[1], m.color[2], LinearSRGBColorSpace),
     roughness: m.roughness,
+    opacity: m.opacity ?? 1,
+    transparent: (m.opacity ?? 1) < 1,
     metalness: 0,
     ior: m.ior,
     clearcoat: m.coat,

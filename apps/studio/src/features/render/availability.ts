@@ -1,8 +1,7 @@
 import type { Evaluation } from '@pave/kernel'
 import { unassignedRhinoBody } from '@pave/render'
+import { sourceMaterialLabel } from '@pave/schema'
 import type { PieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
-
-import { sourceMaterialLabel } from '../../lib/source-material'
 
 type RenderGeometry = Pick<Evaluation, 'parts' | 'stones' | 'referenceParts'>
 type RenderEvaluation = Pick<PieceEvaluation, 'design' | 'status' | 'stale'> & {

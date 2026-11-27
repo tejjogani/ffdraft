@@ -177,10 +177,15 @@ describe('geometry engine', () => {
         kind: 'other',
       })
       const input = {
-        kind: 'meshBody',
-        source: { type: 'asset', assetId, rhinoLayer: 'Fixture' },
+        kind: 'meshBody' as const,
+        source: {
+          type: 'asset' as const,
+          assetId,
+          rhinoLayer: 'Fixture',
+          rhinoContext: { groups: [], placements: [], material: 'Emerald' },
+        },
         keepSourcePlacement: true,
-      } as const
+      }
       await api.call('design.apply', {
         pieceId: piece.id,
         label: 'Import fixture bodies',
@@ -257,8 +262,27 @@ describe('geometry engine', () => {
       expect(resolved.materials[resolved.assignments.unassigned!]).toMatchObject({
         kind: 'surface',
       })
+      const sourceScene = RenderSceneSchema.parse({ ...scene, importedBodyLook: 'source' })
+      const color = resolveScene(sourceScene, subject)
+      expect(
+        subject.parts.find((part) => part.nodeId === 'unassigned')?.sourceAppearance,
+      ).toMatchObject({
+        kind: 'gem',
+        stone: 'emerald',
+      })
+      expect(color.materials[color.assignments.unassigned!]).toMatchObject({
+        kind: 'gem',
+        ior: expect.any(Number),
+        attenuationColor: [0.05, 0.6, 0.25],
+      })
+      expect(Object.keys(color.assignments).sort()).toEqual(
+        Object.keys(resolved.assignments).sort(),
+      )
       const assigned = subject.parts.find(({ nodeId }) => nodeId === 'cast-metal')
-      if (assigned) expect(resolved.assignments[assigned.id]).toContain('au18k-yellow')
+      if (assigned) {
+        expect(resolved.assignments[assigned.id]).toContain('au18k-yellow')
+        expect(color.assignments[assigned.id]).toBe(resolved.assignments[assigned.id])
+      }
 
       const capture = await api.call('scenes.capture', { ids: [saved.id], size: 192 })
       expect(capture.version).toBe(savedPiece.version)

@@ -105,6 +105,7 @@ def _gem(name: str, m: Material) -> bpy.types.Material:
 def _surface(name: str, m: Material) -> bpy.types.Material:
     mat, tree, out = _tree(name)
     bsdf = tree.nodes.new("ShaderNodeBsdfPrincipled")
+    bsdf.inputs["Alpha"].default_value = m.get("opacity", 1.0)
     bsdf.inputs["Base Color"].default_value = _rgba(m["color"])
     bsdf.inputs["Roughness"].default_value = m["roughness"]
     bsdf.inputs["IOR"].default_value = m["ior"]
