@@ -12,7 +12,9 @@ On a smaller screen, use the Features and Inspector buttons above the model to o
 
 Open the destination project’s CAD builder and choose Import model. Pick a .3dm and check its layers and selected dimensions in millimetres. Leave out display stands and lighting geometry. For a metal-only casting, leave out gemstone layers too. If stones and metal share a layer, separate them in Rhino first. Pavé treats each included part as a mesh body.
 
-Review the skipped objects before choosing Import. You can select the new parts in Features and change their material, finish or transform. Undo removes the import in one edit. After reopening the project, use History and choose Revert on the import. Keep the original .3dm for Rhino curves, editable surfaces, and design history.
+Select **Include editable curves** to bring in Rhino curves from the selected layers. Pavé keeps NURBS control points, knots and weights. Lines, arcs and connected joined curves convert to NURBS with the same shape and domain. A converted arc or joined curve can use a different parameterization within that domain. Select an imported curve in Features to edit its control points and weights in Inspector. Export as .3dm to keep the curve geometry editable in Rhino.
+
+Review the skipped objects before choosing Import. You can select the new parts in Features and change their material, finish or transform. Undo removes the import in one edit. After reopening the project, use History and choose Revert on the import. Keep the original .3dm for editable surfaces and Rhino design history.
 
 ## Edit a Rhino curve
 

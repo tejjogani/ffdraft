@@ -23,6 +23,13 @@ const unitOptions = (Object.keys(STL_UNITS) as StlUnit[]).map((value) => ({
   label: STL_UNITS[value].label,
 }))
 const UPLOAD_BATCH = 4
+const importName = (name: string) => name.slice(0, 80).replace(/[\uD800-\uDBFF]$/, '')
+
+function importCount(meshes: number, curves: number) {
+  if (!curves) return plural(meshes, 'part')
+  if (!meshes) return plural(curves, 'curve')
+  return `${plural(meshes, 'part')} and ${plural(curves, 'curve')}`
+}
 
 function dimensions(bounds: Bounds): string {
   return `${bounds.max
@@ -48,12 +55,14 @@ export function ModelImport({
   const nativeUploaded = useRef(new Map<ArrayBuffer, Promise<string>>())
   const [file, setFile] = useState(initialFile)
   const [stlUnit, setStlUnit] = useState<StlUnit>('mm')
+  const [includeCurves, setIncludeCurves] = useState(false)
   const [preview, setPreview] = useState<ModelPreview | null>(null)
   const [excludedLayers, setExcludedLayers] = useState(new Set<string | null>())
   const [error, setError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [uploadedCount, setUploadedCount] = useState(0)
   const layerId = useId()
+  const curvesId = useId()
 
   useEffect(() => {
     if (!file) return
@@ -67,18 +76,18 @@ export function ModelImport({
       setError('The model reader didn’t start. Try choosing the file again.')
       worker.terminate()
     }
-    worker.postMessage({ file, stlUnit } satisfies ModelRequest)
+    worker.postMessage({ file, stlUnit, includeCurves } satisfies ModelRequest)
     return () => worker.terminate()
-  }, [file, stlUnit])
+  }, [file, stlUnit, includeCurves])
 
   useEffect(() => () => upload.current?.abort(), [])
 
-  const resetPreview = () => {
+  const resetPreview = (resetLayers = true) => {
     uploaded.current.clear()
     nativeUploaded.current.clear()
     setError(null)
     setPreview(null)
-    setExcludedLayers(new Set())
+    if (resetLayers) setExcludedLayers(new Set())
   }
   const cancel = () => {
     upload.current?.abort()
@@ -88,14 +97,27 @@ export function ModelImport({
   const reading = file && !preview && !error
   const stl = file && isStlFile(file.name)
   const parts = preview?.parts ?? []
-  const layers = new Map<string | null, number>()
-  if (!stl) for (const { layer } of parts) layers.set(layer, (layers.get(layer) ?? 0) + 1)
+  const curves = preview?.curves ?? []
+  const entries = [...parts, ...curves]
+  const layers = new Map<string | null, { meshes: number; curves: number }>()
+  if (!stl) {
+    for (const item of entries) {
+      const totals = layers.get(item.layer) ?? { meshes: 0, curves: 0 }
+      if ('bytes' in item) totals.meshes++
+      else totals.curves++
+      layers.set(item.layer, totals)
+    }
+  }
   const selected = parts.filter((part) => !excludedLayers.has(part.layer))
-  const count = selected.length
-  // Each imported part adds one operation. Uploads are assets and need no design metadata ops.
+  const selectedCurves = curves.filter((curve) => !excludedLayers.has(curve.layer))
+  const selectedItems = [...selected, ...selectedCurves]
+  const count = selectedItems.length
+  const meshCount = selected.length
+  const selectedLabel = importCount(meshCount, selectedCurves.length)
+  // A mesh or a curve each adds one operation to the same import edit.
   const limit =
     count > MAX_DESIGN_CHANGE_OPS
-      ? `Select layers with up to ${MAX_DESIGN_CHANGE_OPS} parts, or export smaller Rhino files.`
+      ? `Select layers with up to ${MAX_DESIGN_CHANGE_OPS} items, or export smaller Rhino files.`
       : selected.some((part) => part.bytes.byteLength > PAVE_LIMITS.entryBytes)
         ? 'A mesh part is too large to save in a Pavé file. Export a coarser mesh.'
         : null
@@ -127,7 +149,7 @@ export function ModelImport({
     setUploadedCount(0)
     setError(null)
     try {
-      for (let i = 0; i < count; i += UPLOAD_BATCH) {
+      for (let i = 0; i < meshCount; i += UPLOAD_BATCH) {
         const batch = await Promise.allSettled(
           selected.slice(i, i + UPLOAD_BATCH).map(async (part) => {
             try {
@@ -148,7 +170,7 @@ export function ModelImport({
         controller.signal.throwIfAborted()
         const failed = batch.find((result) => result.status === 'rejected')
         if (failed) throw failed.reason
-        setUploadedCount(Math.min(i + UPLOAD_BATCH, count))
+        setUploadedCount(Math.min(i + UPLOAD_BATCH, meshCount))
       }
       const nodes = await Promise.all(
         selected.map(async (part): Promise<NodeInput> => {
@@ -157,7 +179,7 @@ export function ModelImport({
           const nativeAssetId = native && (await nativeUploaded.current.get(native.bytes.buffer))
           return {
             id: newId('meshBody'),
-            name: part.name.slice(0, 80).replace(/[\uD800-\uDBFF]$/, ''),
+            name: importName(part.name),
             kind: 'meshBody',
             source: {
               type: 'asset',
@@ -176,6 +198,18 @@ export function ModelImport({
           }
         }),
       )
+      for (const curve of selectedCurves) {
+        nodes.push({
+          id: newId('nurbsCurve'),
+          kind: 'nurbsCurve',
+          name: importName(curve.name),
+          degree: curve.degree,
+          knots: curve.knots,
+          controlPoints: curve.controlPoints,
+          ...(curve.layer && { rhinoLayer: curve.layer }),
+          ...(curve.sourceObjectId && { sourceObjectId: curve.sourceObjectId }),
+        })
+      }
       onImport(nodes, `Imported ${file.name.slice(0, 150)}`)
       onClose()
     } catch (err) {
@@ -191,7 +225,7 @@ export function ModelImport({
       open
       onOpenChange={(open) => !open && cancel()}
       title="Import model"
-      description="Add parts from Rhino (.3dm) or STL."
+      description="Add Rhino (.3dm) geometry or an STL mesh."
       footer={
         <>
           <Button onClick={cancel}>Cancel</Button>
@@ -201,7 +235,7 @@ export function ModelImport({
             onClick={() => void commit()}
           >
             {uploading ? <Spinner className="size-3.5" /> : null}
-            {uploading ? 'Importing…' : count ? `Import ${plural(count, 'part')}` : 'Import'}
+            {uploading ? 'Importing…' : count ? `Import ${selectedLabel}` : 'Import'}
           </Button>
         </>
       }
@@ -219,6 +253,7 @@ export function ModelImport({
             resetPreview()
             setFile(selected)
             setStlUnit('mm')
+            setIncludeCurves(false)
           }}
         />
         <div className="flex items-center justify-between gap-3">
@@ -249,6 +284,26 @@ export function ModelImport({
             />
           </div>
         )}
+        {file && !stl && (
+          <div className="flex items-start gap-2 text-sm">
+            <Checkbox
+              id={curvesId}
+              className="mt-0.5"
+              checked={includeCurves}
+              disabled={uploading}
+              onChange={(checked) => {
+                resetPreview(false)
+                setIncludeCurves(checked)
+              }}
+            />
+            <label htmlFor={curvesId} className="cursor-pointer">
+              Include editable curves
+              <span className="block text-xs text-fg-muted">
+                Lines, arcs and joined curves import as editable NURBS.
+              </span>
+            </label>
+          </div>
+        )}
         {reading && (
           <p role="status" className="flex items-center gap-2 text-sm text-fg-muted">
             <Spinner className="size-3.5" />
@@ -267,9 +322,9 @@ export function ModelImport({
               <fieldset className="space-y-1">
                 <legend className="text-sm font-medium">Rhino layers</legend>
                 <p className="pb-1 text-xs text-fg-muted">
-                  Selected parts import as metal. Exclude gemstone and setup layers for casting.
+                  Meshes import as metal. Exclude gemstone and setup layers for casting.
                 </p>
-                {[...layers].map(([layer, layerCount], i) => (
+                {[...layers].map(([layer, totals], i) => (
                   <div key={layer ?? ''} className="flex items-center gap-2 text-sm">
                     <Checkbox
                       id={`${layerId}-${i}`}
@@ -291,7 +346,7 @@ export function ModelImport({
                     >
                       <span className="min-w-0 break-words">{layer ?? 'No layer'}</span>
                       <span className="shrink-0 text-xs text-fg-muted">
-                        {plural(layerCount, 'part')}
+                        {importCount(totals.meshes, totals.curves)}
                       </span>
                     </label>
                   </div>
@@ -303,23 +358,28 @@ export function ModelImport({
                 <p className="flex flex-wrap justify-between gap-2 border-y border-line py-2 text-sm">
                   <span className="text-fg-muted">{stl ? 'Overall' : 'Selected'} X × Y × Z</span>
                   <span className="font-medium tabular-nums">
-                    {dimensions(unionBounds(selected.map(({ bounds }) => bounds)))}
+                    {dimensions(unionBounds(selectedItems.map(({ bounds }) => bounds)))}
                   </span>
                 </p>
                 {!stl && (
                   <details className="pt-2 text-sm" open={count <= 5}>
                     <summary className="cursor-pointer text-fg-muted">
-                      {plural(count, 'selected part', 'selected parts')}
+                      {selectedLabel} selected
                     </summary>
                     <ul className="divide-y divide-line pl-4">
-                      {selected.map(({ name, bounds }, i) => (
+                      {selectedItems.map((item, i) => (
                         <li
-                          key={`${i}-${name}`}
+                          key={`${i}-${item.name}`}
                           className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-1.5"
                         >
-                          <span className="min-w-0 break-words">{name}</span>
+                          <span className="min-w-0 break-words">
+                            {item.name}
+                            {'converted' in item && item.converted && (
+                              <span className="ml-2 text-xs text-fg-muted">Converted to NURBS</span>
+                            )}
+                          </span>
                           <span className="text-xs text-fg-muted tabular-nums">
-                            {dimensions(bounds)}
+                            {dimensions(item.bounds)}
                           </span>
                         </li>
                       ))}
@@ -329,9 +389,11 @@ export function ModelImport({
               </section>
             ) : (
               <p role="status" className="text-sm text-fg-muted">
-                {parts.length > 0
-                  ? 'Select a layer to import its parts.'
-                  : 'No solid mesh parts found. Export your Rhino objects as STL or save the .3dm with render meshes.'}
+                {entries.length > 0
+                  ? 'Select a layer to import its objects.'
+                  : includeCurves
+                    ? 'No solid meshes or supported curves found.'
+                    : 'No solid mesh parts found. Include editable curves or save the .3dm with render meshes.'}
               </p>
             )}
             {limit && (
@@ -357,9 +419,9 @@ export function ModelImport({
             )}
           </>
         )}
-        {uploading && (
+        {uploading && meshCount > 0 && (
           <p className="text-sm text-fg-muted">
-            Uploaded {uploadedCount} of {count} parts
+            Uploaded {uploadedCount} of {meshCount} parts
           </p>
         )}
         {error && (

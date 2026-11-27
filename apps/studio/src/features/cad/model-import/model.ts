@@ -1,4 +1,4 @@
-import type { RhinoNativePart } from '@pave/kernel/rhino-import'
+import type { RhinoCurveObject, RhinoNativePart } from '@pave/kernel/rhino-import'
 import type { Bounds } from '@pave/kernel/types'
 
 export const MODEL_ACCEPT = '.3dm,.stl'
@@ -26,12 +26,14 @@ export interface ModelPart {
 export interface ModelPreview {
   units: string
   parts: ModelPart[]
+  curves: readonly RhinoCurveObject[]
   skipped: { name: string; layer: string | null; reason: string }[]
 }
 
 export interface ModelRequest {
   file: File
   stlUnit: StlUnit
+  includeCurves: boolean
 }
 
 export type ModelResponse = { preview: ModelPreview } | { error: string }

@@ -31,6 +31,8 @@ export interface MeshSelection {
   stones: boolean
   /** Only parts made from (and stones placed by) these nodes. */
   only?: readonly string[]
+  /** The caller writes a non-mesh object even if no parts or stones are present. */
+  allowEmpty?: boolean
 }
 
 /**
@@ -96,7 +98,7 @@ function placedGem(mesh: MeshData, m: readonly number[]): IndexedTriangles {
   return { positions: out, indices: welded.indices }
 }
 
-/** Every mesh export: one object per part, and per stone when asked; never an empty file. */
+/** Each mesh export gets one object per part, and per stone when asked. */
 export function sceneObjects(scene: Scene, selection: MeshSelection): MeshObject[] {
   const only = selection.only && new Set(selection.only)
   const metal: MetalObject[] = scene.parts
@@ -123,7 +125,7 @@ export function sceneObjects(scene: Scene, selection: MeshSelection): MeshObject
         }))
     : []
   const objects = [...uniqueNames(metal), ...stones]
-  if (objects.length === 0) throw new Error(nothingToExport(selection))
+  if (!selection.allowEmpty && objects.length === 0) throw new Error(nothingToExport(selection))
   return objects
 }
 

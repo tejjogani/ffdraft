@@ -115,6 +115,27 @@ describe('Rhino curve import', () => {
     ])
   })
 
+  it('reports an actionable omission for a disconnected PolyCurve and keeps other curves', async () => {
+    const doc = new rhino.File3dm()
+    doc.settings().modelUnitSystem = rhino.UnitSystem.Millimeters
+    const index = layer(doc, 'Profiles')
+    const poly = new rhino.PolyCurve()
+    expect(poly.appendSegment(new rhino.LineCurve([0, 0, 0], [1, 0, 0]))).toBe(true)
+    expect(poly.appendSegment(new rhino.LineCurve([3, 0, 0], [4, 0, 0]))).toBe(true)
+    doc.objects().addCurve(poly, attributes('Disconnected', index))
+    doc.objects().addCurve(weightedSpline(), attributes('Bent rail', index))
+
+    const result = await readRhino3dm(doc.toByteArray(), { includeCurves: true })
+    expect(result.curves.map(({ name }) => name)).toEqual(['Bent rail'])
+    expect(result.skipped).toEqual([
+      {
+        name: 'Disconnected',
+        layer: 'Profiles',
+        reason: expect.stringMatching(/gaps.*segments.*separately/i),
+      },
+    ])
+  })
+
   it('converts connected mixed PolyCurves to one NURBS curve and preserves their domain', async () => {
     const doc = new rhino.File3dm()
     doc.settings().modelUnitSystem = rhino.UnitSystem.Millimeters
