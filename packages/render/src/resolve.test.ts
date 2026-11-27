@@ -235,6 +235,28 @@ describe('resolveScene', () => {
     expect(front.camera.elevation).toBeGreaterThanOrEqual(16)
   })
 
+  it('places a white glossy floor at contact height and preserves the saved camera', () => {
+    const camera = {
+      preset: 'custom' as const,
+      position: [0, -80, 40] as Vec3,
+      target: [0, 0, 20] as Vec3,
+    }
+    const base = resolveScene(scene({ look: 'catalog-white', camera }), ring)
+    const white = resolveScene(
+      scene({ look: 'catalog-white', camera, ground: 'white-gloss' }),
+      ring,
+    )
+    expect(white.ground).toMatchObject({
+      kind: 'white-gloss',
+      z: ring.report.bounds.min[2],
+      color: [0.86, 0.86, 0.86],
+      roughness: 0.1,
+      ior: 1.62,
+    })
+    expect(white.camera).toEqual(base.camera)
+    expect(base.ground.kind).toBe('shadow')
+  })
+
   it('preserves an explicitly composed black acrylic camera', () => {
     const camera = {
       preset: 'custom' as const,

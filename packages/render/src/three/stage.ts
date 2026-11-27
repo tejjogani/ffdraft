@@ -1,6 +1,6 @@
 /**
  * Places a resolved scene's camera, background, ground and animation in a three.js scene so
- * the viewport previews what Blender will render. Depth of field and the acrylic's blur are
+ * the viewport previews what Blender will render. Depth of field and the roughness of reflections are
  * left to the final render.
  */
 import {
@@ -83,7 +83,7 @@ const ACRYLIC_SHADER = {
       vWorld = world.xyz;
       gl_Position = projectionMatrix * viewMatrix * world;
     }`,
-  // Dielectric mirror: Schlick Fresnel weights the planar reflection over the dark base.
+  // Dielectric mirror: Schlick Fresnel weights the planar reflection over the floor color.
   fragmentShader: /* glsl */ `
     uniform vec3 color;
     uniform sampler2D tDiffuse;
@@ -158,7 +158,7 @@ function shadowCaster(
 function ground(g: ResolvedGround, resolved: ResolvedScene): Group {
   const group = zUpGroup('pave-ground')
   if (g.kind === 'none') return group
-  if (g.kind === 'reflective') {
+  if (g.kind === 'reflective' || g.kind === 'white-gloss') {
     const mirror = new Reflector(new PlaneGeometry(g.size, g.size), {
       shader: { ...ACRYLIC_SHADER, uniforms: UniformsUtils.clone(ACRYLIC_SHADER.uniforms) },
       color: new Color().setRGB(...g.color, LinearSRGBColorSpace),
@@ -168,7 +168,7 @@ function ground(g: ResolvedGround, resolved: ResolvedScene): Group {
     ;(mirror.material as ShaderMaterial).uniforms.ior!.value = g.ior
     mirror.position.set(resolved.subject.center[0], resolved.subject.center[1], g.z)
     group.add(mirror)
-    return group
+    if (g.kind === 'reflective') return group
   }
   if (g.kind === 'sweep') {
     const sweep = new Mesh(

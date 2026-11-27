@@ -83,7 +83,14 @@ export type ResolvedGround =
       color: Rgb
       roughness: number
     }
-  | { kind: 'reflective'; z: number; size: number; color: Rgb; roughness: number; ior: number }
+  | {
+      kind: 'reflective' | 'white-gloss'
+      z: number
+      size: number
+      color: Rgb
+      roughness: number
+      ior: number
+    }
 
 export type Ease = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut'
 

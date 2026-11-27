@@ -41,6 +41,15 @@ const BACKDROPS = [
   { value: 'transparent', label: 'Transparent' },
 ] as const
 
+const GROUNDS = [
+  { value: 'look', label: 'As the look' },
+  { value: 'none', label: 'None' },
+  { value: 'shadow', label: 'Contact shadow' },
+  { value: 'sweep', label: 'Seamless paper' },
+  { value: 'reflective', label: 'Black acrylic' },
+  { value: 'white-gloss', label: 'White gloss' },
+] as const satisfies ReadonlyArray<{ value: RenderScene['ground']; label: string }>
+
 /** A slider that shows its value while dragged and reports once on release. */
 function LiveSlider({
   value,
@@ -260,6 +269,12 @@ export function ShotInspector({
           value={scene.environment.background === 'color' ? 'look' : scene.environment.background}
           onChange={(background) => onChange({ environment: { background } })}
           options={BACKDROPS.map((b) => ({ value: b.value, label: `Backdrop: ${b.label}` }))}
+        />
+        <Select
+          aria-label="Ground"
+          value={scene.ground}
+          onChange={(ground) => onChange({ ground })}
+          options={GROUNDS.map((g) => ({ value: g.value, label: `Ground: ${g.label}` }))}
         />
       </Section>
 

@@ -70,7 +70,7 @@ class Background(TypedDict):
 
 
 class Ground(TypedDict):
-    kind: Literal["none", "shadow", "sweep", "reflective"]
+    kind: Literal["none", "shadow", "sweep", "reflective", "white-gloss"]
     z: NotRequired[float]
     size: NotRequired[float]
     azimuth: NotRequired[float]

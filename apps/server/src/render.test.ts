@@ -123,6 +123,23 @@ describe('saved shots and takes', () => {
     },
   )
 
+  it('saves White gloss without changing the locked shot camera or design version', async () => {
+    const piece = await api.call('pieces.create', { templateId: 'halo' })
+    const shot = await api.call('scenes.create', {
+      pieceId: piece.id,
+      title: 'Studio floor',
+      scene: { camera: { preset: 'hero', locked: true } },
+    })
+    const updated = await api.call('scenes.update', {
+      id: shot.id,
+      patch: { ground: 'white-gloss' },
+    })
+    const [saved] = await api.call('scenes.list', { pieceId: piece.id })
+    expect(saved?.scene.ground).toBe('white-gloss')
+    expect(updated.scene).toEqual({ ...shot.scene, ground: 'white-gloss' })
+    expect((await api.call('pieces.get', { id: piece.id })).version).toBe(piece.version)
+  })
+
   it('returns the imported preview settings with camera suggestions, including without a kernel', async () => {
     const { id: pieceId } = await api.call('pieces.create', { kind: 'ring' })
     const query = { pieceId, includeUnassignedRhino: true }

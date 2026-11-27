@@ -537,13 +537,15 @@ export const RenderSceneSchema = z.object({
     })
     .default({ rotation: 0, intensity: 1, background: 'look' })
     .meta({ title: 'Environment', group: 'Light direction' }),
-  /** `shadow` = soft contact shadow only, `sweep` = seamless paper, `reflective` = black acrylic. */
-  ground: z.enum(['look', 'none', 'shadow', 'sweep', 'reflective']).default('look').meta({
-    title: 'Ground',
-    group: 'Backdrop',
-    description:
-      'shadow = soft contact shadow only; sweep = seamless paper; reflective = black acrylic.',
-  }),
+  ground: z
+    .enum(['look', 'none', 'shadow', 'sweep', 'reflective', 'white-gloss'])
+    .default('look')
+    .meta({
+      title: 'Ground',
+      group: 'Backdrop',
+      description:
+        'shadow = soft contact shadow only; sweep = seamless paper; reflective = black acrylic; white-gloss = pale floor with a soft reflection.',
+    }),
   /** Extra small hard lights that pull fire out of diamonds. */
   sparkle: z.number().min(0).max(1).default(0.4).meta({
     title: 'Sparkle',

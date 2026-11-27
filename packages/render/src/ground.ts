@@ -1,7 +1,14 @@
 /** Ground and background resolution. */
 import type { RenderScene } from '@pave/schema'
 import { hexToRgb } from './color'
-import { ACRYLIC_IOR, type Background, DEFAULT_GROUNDS, type GroundKind, type Look } from './looks'
+import {
+  ACRYLIC_IOR,
+  type Background,
+  DEFAULT_GROUNDS,
+  type GroundKind,
+  type Look,
+  WHITE_GLOSS_IOR,
+} from './looks'
 import type { Vec3 } from './math'
 import type { ResolvedGround } from './types'
 
@@ -47,13 +54,14 @@ export function resolveGround(
         roughness: spec.roughness,
       }
     case 'reflective':
+    case 'white-gloss':
       return {
         kind,
         z: floorZ,
         size: radius * 120,
         color: spec.color,
         roughness: spec.roughness,
-        ior: ACRYLIC_IOR,
+        ior: kind === 'white-gloss' ? WHITE_GLOSS_IOR : ACRYLIC_IOR,
       }
   }
 }
