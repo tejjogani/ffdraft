@@ -82,6 +82,11 @@ export function Inspector({
   const drawn = isProfileNode(node) ? node : null
   const rhinoLayer =
     node.kind === 'meshBody' && node.source.type === 'asset' ? node.source.rhinoLayer : null
+  const hasRhinoSurface =
+    node.kind === 'meshBody' &&
+    node.source.type === 'asset' &&
+    node.source.nativeAssetId &&
+    node.source.nativeMeshAssetId === node.source.assetId
   const included = node.visible !== false
   const picked = stone ? evaluation?.stones.find((s) => s.id === stone) : undefined
   const prongTips = evaluation?.prongTips?.filter((tip) => tip.nodeId === node.id)
@@ -109,6 +114,11 @@ export function Inspector({
             {rhinoLayer && (
               <p className="mt-1 truncate text-xs text-fg-muted" title={rhinoLayer}>
                 Rhino layer · {rhinoLayer}
+              </p>
+            )}
+            {hasRhinoSurface && (
+              <p className="mt-1 text-xs text-fg-muted">
+                Rhino surface retained. Shape edits export as a mesh.
               </p>
             )}
           </div>

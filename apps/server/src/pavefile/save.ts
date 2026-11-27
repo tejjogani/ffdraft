@@ -34,6 +34,7 @@ import { getPiece } from '../lookups'
 import { pinBoardOf, pinnedRows } from '../references/pins'
 import { viewOnlyAssets } from '../references/rights'
 import { serviceContext } from '../service-context'
+import { meshAssetIds } from './mesh-assets'
 import { writeZip, type ZipEntry } from './zip'
 
 export const APP_NAME = 'Pavé'
@@ -120,6 +121,7 @@ export async function savePieceFile(
     ...(piece.origin?.sourceAssetIds ?? []),
     ...directions.flatMap((d) => d.previewAssetIds),
     ...pins.flatMap((r) => (r.assetId ? [r.assetId] : [])),
+    ...meshAssetIds([piece.design, ...directions.map((d) => d.design)], changes),
   ]
   const ids = [...new Set(wanted)]
   const held = await heldBack(ctx, ids)

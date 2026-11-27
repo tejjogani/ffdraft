@@ -570,7 +570,7 @@ describe.each([
     const design = make()
     const evaluation = await kernel.evaluate(design, { detail: 'production' })
     const result = await exportOf(design, '3dm')
-    expect(result.notes.join(' ')).toMatch(/meshes and curves only.*STEP/)
+    expect(result.notes.join(' ')).toMatch(/bodies export as meshes.*STEP/)
     const rhino = await loadRhino3dm()
     const doc = rhino.File3dm.fromByteArray(result.bytes)
     expect(doc.settings().modelUnitSystem).toBe(rhino.UnitSystem.Millimeters)

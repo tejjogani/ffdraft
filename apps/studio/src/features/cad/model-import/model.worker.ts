@@ -67,10 +67,12 @@ port.onmessage = async ({ data }: MessageEvent<ModelRequest>) => {
   try {
     const preview = await previewModel(data)
     const response: ModelResponse = { preview }
-    port.postMessage(
-      response,
-      preview.parts.map((part) => part.bytes.buffer),
-    )
+    const buffers = new Set<ArrayBuffer>()
+    for (const part of preview.parts) {
+      buffers.add(part.bytes.buffer)
+      if (part.native) buffers.add(part.native.bytes.buffer)
+    }
+    port.postMessage(response, [...buffers])
   } catch (err) {
     const response: ModelResponse = { error: err instanceof Error ? err.message : String(err) }
     port.postMessage(response)

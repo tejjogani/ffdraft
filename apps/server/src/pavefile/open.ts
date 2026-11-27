@@ -38,6 +38,7 @@ import { AppError } from '../errors'
 import { toPiece } from '../handlers/pieces'
 import { createId } from '../ids'
 import { ensure, getCollection } from '../lookups'
+import { mapDesignMeshAssets, mapOpMeshAssets } from './mesh-assets'
 import { MAX_HOPS } from './save'
 import { readZip, ZipRefused } from './zip'
 
@@ -309,6 +310,8 @@ export async function openPieceFile(
       assetId.set(a.id, stored.id)
     }
     const asset = (id: string | null) => (id === null ? null : (assetId.get(id) ?? null))
+    // Legacy .pave files could point at a local mesh without carrying its bytes.
+    const meshAsset = (id: string) => assetId.get(id) ?? id
 
     const inserted = await tx.pieces.insert({
       id: pieceId,
@@ -320,7 +323,7 @@ export async function openPieceFile(
       stage: file.piece.stage,
       brief: file.piece.brief,
       spec: file.piece.spec,
-      design: file.design,
+      design: mapDesignMeshAssets(file.design, meshAsset),
       version: file.piece.version,
       coverAssetId: asset(file.piece.coverAssetId),
       coverAuto: file.piece.coverAuto,
@@ -335,7 +338,7 @@ export async function openPieceFile(
       directions: file.piece.directions.map((d, i) => ({
         ...d,
         previewAssetIds: d.previewAssetIds.map((id) => asset(id)!),
-        design: file.directionDesigns[i]!,
+        design: mapDesignMeshAssets(file.directionDesigns[i]!, meshAsset),
       })),
       chosenDirectionId: file.piece.chosenDirectionId,
       // Letters are never reused, so the count is at least how many there are.
@@ -351,8 +354,8 @@ export async function openPieceFile(
           seq: c.seq,
           // The wire schema types `add.node` loosely; a later undo applies them through applyOps,
           // which validates every node.
-          ops: c.ops as Op[],
-          inverse: c.inverse as Op[],
+          ops: (c.ops as Op[]).map((op) => mapOpMeshAssets(op, meshAsset)),
+          inverse: (c.inverse as Op[]).map((op) => mapOpMeshAssets(op, meshAsset)),
           actor: c.actor,
           actorType: c.actor.type,
           actorUserId: c.userId ?? (c.actor.type === 'user' ? c.actor.id : null),

@@ -1,3 +1,6 @@
+/// <reference path="../export/rhino3dmModule.d.ts" />
+/// <reference path="./vite.d.ts" />
+
 import type { RhinoModule } from 'rhino3dm'
 import { isNode, readPackageFile } from './host'
 

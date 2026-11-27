@@ -25,8 +25,9 @@ const MIN_HOLLOW_WALL = 0.7
 /** Smoothing works on a mesh this even, relative to the height (~0.27 mm on a 40 mm piece). */
 const SMOOTH_EDGE = 1 / 150
 
-async function sourceManifold(node: MeshBodyNode, ctx: BuildContext): Promise<Manifold> {
-  if (node.source.type === 'builtin') return BUILTINS[node.source.name]()
+async function sourceManifold(node: MeshBodyNode, ctx: BuildContext) {
+  if (node.source.type === 'builtin')
+    return { manifold: BUILTINS[node.source.name](), nativeMeshUnmodified: false }
   if (!ctx.assets)
     throw new Error('No asset store is connected, so the imported mesh cannot be loaded')
   const bytes = await ctx.assets(node.source.assetId)
@@ -62,7 +63,17 @@ async function sourceManifold(node: MeshBodyNode, ctx: BuildContext): Promise<Ma
       code: 'mesh.repaired',
       message: `Repaired the ${label} mesh: ${fixes.join(', ')}.`,
     })
-  return manifold
+  const nativeMeshUnmodified =
+    node.source.nativeAssetId !== undefined &&
+    node.source.nativeMeshAssetId === node.source.assetId &&
+    edited === mesh &&
+    !report.resurfaced &&
+    report.holes === 0 &&
+    report.shells <= 1 &&
+    report.voids === 0 &&
+    report.fragments === 0 &&
+    report.specks === 0
+  return { manifold, nativeMeshUnmodified }
 }
 
 export const meshBody = defineFeature('meshBody', async (node, ctx) => {
@@ -72,7 +83,8 @@ export const meshBody = defineFeature('meshBody', async (node, ctx) => {
     if (!tracked.has(m)) tracked.add(ctx.track(m))
     return m
   }
-  let m = keep(await sourceManifold(node, ctx))
+  const source = await sourceManifold(node, ctx)
+  let m = keep(source.manifold)
   // Measured meshes are already in mm. Fit the others before applying millimetre tolerances.
   const sourceBounds = m.boundingBox()
   const height = node.keepSourcePlacement ? sourceBounds.max[2] - sourceBounds.min[2] : node.height
@@ -147,6 +159,15 @@ export const meshBody = defineFeature('meshBody', async (node, ctx) => {
   // The solid owns a handle of its own; `body` stays tracked and is freed with the build.
   return {
     bodies: [{ solid: solidFromManifold(body.translate([0, 0, 0])), ...metalOf(node) }],
-    data: { hidden },
+    data: {
+      hidden,
+      nativeMeshUnmodified:
+        source.nativeMeshUnmodified &&
+        node.keepSourcePlacement &&
+        node.detail === 1 &&
+        node.smooth === 0 &&
+        node.flatBack === 0 &&
+        node.hollow === 0,
+    },
   }
 })
