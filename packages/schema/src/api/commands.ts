@@ -302,6 +302,15 @@ const meshRequest = {
 
 /** The geometry facts the assistant reasons over (no meshes). */
 export const EvaluationSummarySchema = z.object({
+  modelingSurfaces: z
+    .array(
+      z.object({
+        nodeId: id,
+        areaMm2: z.number(),
+        boundsMm: z.object({ x: z.number(), y: z.number(), z: z.number() }),
+      }),
+    )
+    .optional(),
   metalMassG: z.number(),
   metals: z.array(z.object({ material: z.string(), volumeMm3: z.number(), massG: z.number() })),
   stoneCount: z.number(),

@@ -5,7 +5,18 @@ import type { EvaluationSummary } from '@pave/schema'
 export function summarize(evaluation: Evaluation): EvaluationSummary {
   const { report, diagnostics } = evaluation
   const { min, max } = report.bounds
+  const surfaces = evaluation.referenceParts
+    ?.filter((p) => p.modelingSheet)
+    .map((part) => {
+      const { min, max } = part.bounds
+      return {
+        nodeId: part.nodeId,
+        areaMm2: part.areaMm2,
+        boundsMm: { x: max[0] - min[0], y: max[1] - min[1], z: max[2] - min[2] },
+      }
+    })
   return {
+    ...(surfaces?.length && { modelingSurfaces: surfaces }),
     metalMassG: report.metalMassG,
     metals: report.metals.map(({ material, volumeMm3, massG }) => ({ material, volumeMm3, massG })),
     stoneCount: report.stoneCount,
