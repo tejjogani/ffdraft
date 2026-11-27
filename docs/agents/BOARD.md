@@ -4,9 +4,18 @@ _Written by lane A only (see `docs/agents/OPERATING-MODEL.md`). Other lanes writ
 
 ## Current work and plan review
 
-Reviewed integration `e80dc0f` on 26 November 2026. At the start of the review Pavé had **zero open feature PRs, zero open GitHub issues and zero active implementation agents in this team**. Three Astra reviewers audited project UX, CAD and production. The corrective work below is **queued and unassigned**. The earlier A/B/C board below is a historical worklog.
+Reviewed integration `e80dc0f` on 26 November 2026. At the start of the review Pavé had **zero open feature PRs, zero open GitHub issues and zero active implementation agents in this team**. Three Astra reviewers audited project UX, CAD and production. The table below records the queue at that review. Later modeling and import work is recorded here. The earlier A/B/C board below is a historical worklog.
 
 Forty local worktrees were present. The two local branch tips outside integration contain patch-equivalent Blender commits. One worktree contains a byte-identical installer copy. Another has an uncommitted test for rejecting a stale project thread before storing a message. Preserve that test for the project-context workstream and check coverage before integrating it. Neither worktree shows an active implementation assignment.
+
+### Rhino migration and modeling worklog
+
+| Area | Delivered | Verification |
+| --- | --- | --- |
+| Model exchange | Import model in the project CAD builder reads Rhino mesh objects and complete saved surface meshes at their world positions in millimetres. Review layers and skipped objects before adding. Unit selection is available for STL. | Round-trip a measured multi-part fixture from another unit system through the editor, the saved project and exported STL. Confirm one undo removes only the imported parts. |
+| Construction tools | Make wire follows the straight legs and corners of drawn polylines. Revolve turns a closed profile around a measured in-plane axis. Both retain the source curve ID. | Independent STL cross-sections for wires, export bounds and annulus volume for revolve, plus browser and Python edits and undo. |
+
+The next modeling work is one-rail sweep with a separate section, then loft. The migration milestone after mesh import is independently editable curves and surfaces, with a way to identify imported gems and associate them with settings. The earlier project-context and production issues below retain their own acceptance checks.
 
 ### Work to dispatch first
 
