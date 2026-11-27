@@ -9,9 +9,16 @@ import {
   pointOnNurbs,
   withNurbsPoint,
 } from '@pave/schema'
-import type { File3dm, RhinoModule } from 'rhino3dm'
+import type {
+  File3dm,
+  File3dmLayerTable,
+  GeometryBase,
+  ObjectAttributes,
+  RhinoModule,
+} from 'rhino3dm'
+import type { NodeResult } from '../core'
 import { transformPoint } from '../geometry/vec'
-import type { RhinoCurveObject, RhinoMeshObject } from '../import/rhino'
+import type { RhinoCurveObject, RhinoMeshObject, RhinoNativePart } from '../import/rhino'
 import type { LocalKernel } from '../kernel'
 import { readEditableMesh } from '../mesh/edit'
 import { archive, handles, nativeShape, readCurve, sourceCurve } from './rhino-archive'
@@ -20,7 +27,7 @@ type CurveNode = NodeOf<'nurbsCurve'>
 type Point = [number, number, number]
 type CurveData = ReturnType<typeof readCurve>
 
-function near(
+export function near(
   actual: readonly number[],
   expected: readonly number[],
   label: string,
@@ -56,6 +63,44 @@ function checkCurve(actual: CurveData, expected: CurveNode) {
     )
 }
 
+export function importedCurve(part: RhinoCurveObject, id: string): NodeInputOf<'nurbsCurve'> {
+  return {
+    id,
+    kind: 'nurbsCurve',
+    degree: part.degree,
+    knots: part.knots,
+    controlPoints: part.controlPoints,
+    rhinoLayer: part.layer ?? undefined,
+    sourceObjectId: part.sourceObjectId,
+  }
+}
+
+export function checkExportedCurve(
+  rhino: RhinoModule,
+  geometry: GeometryBase,
+  props: ObjectAttributes,
+  layers: File3dmLayerTable,
+  node: CurveNode,
+) {
+  return handles((hold) => {
+    ok(
+      geometry instanceof rhino.NurbsCurve && geometry.isValid,
+      'Expected an exact native NURBS curve.',
+    )
+    ok(
+      props.getUserString('paveSourceObjectId') === (node.sourceObjectId ?? ''),
+      'Curve provenance changed.',
+    )
+    ok(
+      hold(layers.findIndex(props.layerIndex))?.fullPath === (node.rhinoLayer || 'Curves'),
+      'Curve export layer changed.',
+    )
+    const actual = readCurve(geometry)
+    checkCurve(actual, node)
+    return actual
+  })
+}
+
 async function curveReadback(rhino: RhinoModule, kernel: LocalKernel, design: Design) {
   const output = await kernel.export(design, '3dm', { stones: false })
   return archive(rhino, output.bytes, (doc, hold) => {
@@ -77,21 +122,7 @@ async function curveReadback(rhino: RhinoModule, kernel: LocalKernel, design: De
         const node = design.nodes[id]
         ok(node?.kind === 'nurbsCurve' && !seen.has(id), 'Missing, unexpected or duplicate curve.')
         seen.add(id)
-        ok(
-          geometry instanceof rhino.NurbsCurve && geometry.isValid,
-          'Expected an exact native NURBS curve.',
-        )
-        ok(
-          props.getUserString('paveSourceObjectId') === (node.sourceObjectId ?? ''),
-          'Curve provenance changed.',
-        )
-        ok(
-          take(layers.findIndex(props.layerIndex))?.fullPath === (node.rhinoLayer || 'Curves'),
-          'Curve export layer changed.',
-        )
-        const actual = readCurve(geometry)
-        checkCurve(actual, node)
-        samples.set(id, actual)
+        samples.set(id, checkExportedCurve(rhino, geometry, props, layers, node))
       })
     }
     return samples
@@ -107,17 +138,7 @@ export async function probeCurves(
   scale: number | undefined,
 ) {
   if (!imported.length) return { roundTripped: 0, sourceCompared: 0, editedAndUndone: false }
-  const inputs = imported.map(
-    (part, i): NodeInputOf<'nurbsCurve'> => ({
-      id: `curve-${i}`,
-      kind: 'nurbsCurve',
-      degree: part.degree,
-      knots: part.knots,
-      controlPoints: part.controlPoints,
-      rhinoLayer: part.layer ?? undefined,
-      sourceObjectId: part.sourceObjectId,
-    }),
-  )
+  const inputs = imported.map((part, i) => importedCurve(part, `curve-${i}`))
   const design = designFrom('other', inputs)
   const baseline = await curveReadback(rhino, kernel, design)
   let sourceCompared = 0
@@ -213,6 +234,57 @@ function disjoint(a: RhinoMeshObject, b: RhinoMeshObject) {
   )
 }
 
+export function checkNativeProvenance(
+  attrs: ObjectAttributes,
+  source: Pick<RhinoNativePart, 'objectId' | 'instancePath'>,
+) {
+  ok(attrs.getUserString('rhinoObjectId') === source.objectId, 'Native source identity changed.')
+  ok(
+    attrs.getUserString('rhinoInstancePath') ===
+      (source.instancePath.length ? JSON.stringify(source.instancePath) : ''),
+    'Native block provenance changed.',
+  )
+}
+
+export function readNativeSource(rhino: RhinoModule, source: RhinoNativePart) {
+  return archive(rhino, source.bytes, (doc, hold) => {
+    const table = hold(doc.objects())
+    ok(
+      table.count === 1 && hold(doc.settings()).modelUnitSystem === rhino.UnitSystem.Millimeters,
+      'Invalid native source archive.',
+    )
+    const geometry = hold(hold(table.get(0)).geometry())
+    ok(geometry instanceof rhino.Brep, 'Expected a native source BRep.')
+    return nativeShape(rhino, doc, geometry, false)
+  })
+}
+
+export function checkNativeShape(
+  reopened: ReturnType<typeof nativeShape>,
+  reference: ReturnType<typeof nativeShape>,
+  placement: RhinoNativePart['transform'],
+) {
+  deepStrictEqual(
+    reopened.topology,
+    reference.topology,
+    'Native trim topology changed during export.',
+  )
+  if (reopened.type === 'instance') {
+    ok(placement, 'An instance was added to an unplaced native solid.')
+    near(reopened.placement!, placement, 'Native instance placement changed.')
+  }
+  for (const [i, point] of reference.samples.entries()) {
+    const expected = placement ? transformPoint(placement, point) : point
+    const sample = reopened.samples[i]!
+    const actual = reopened.placement ? transformPoint(reopened.placement, sample) : sample
+    near(actual, expected, 'Native edge samples lost their shape or placement.')
+  }
+}
+
+export const hasUnchangedNativeMesh = (node: NodeResult | undefined): boolean =>
+  node?.status === 'ok' &&
+  (node.data as { nativeMeshUnmodified?: boolean } | undefined)?.nativeMeshUnmodified === true
+
 function readBodyExport(rhino: RhinoModule, doc: File3dm, design: Design) {
   return handles((hold) => {
     ok(
@@ -247,23 +319,55 @@ function readBodyExport(rhino: RhinoModule, doc: File3dm, design: Design) {
           })
           return
         }
-        ok(
-          attrs.getUserString('rhinoObjectId') === node.source.rhinoObjectId,
-          'Native source identity changed.',
-        )
-        ok(
-          attrs.getUserString('rhinoInstancePath') ===
-            (node.source.rhinoInstancePath?.length
-              ? JSON.stringify(node.source.rhinoInstancePath)
-              : ''),
-          'Native block provenance changed.',
-        )
+        ok(node.source.rhinoObjectId, 'Missing native source provenance.')
+        checkNativeProvenance(attrs, {
+          objectId: node.source.rhinoObjectId,
+          instancePath: node.source.rhinoInstancePath ?? [],
+        })
         read.set(id, nativeShape(rhino, doc, geometry))
       })
     }
     ok(read.size === design.order.length, 'An expected body was missing from the export.')
     return read
   })
+}
+
+export function measuredMeshAssets() {
+  const data = new Map<string, Uint8Array>()
+  const idForSidecar = new Map<string, string>()
+  const makeNode = (source: RhinoMeshObject, id: string): NodeInputOf<'meshBody'> => {
+    data.set(id, source.bytes)
+    const native = source.native
+    let nativeAssetId: string | undefined
+    if (native) {
+      nativeAssetId = idForSidecar.get(native.objectId) ?? `${id}-source`
+      idForSidecar.set(native.objectId, nativeAssetId)
+      data.set(nativeAssetId, native.bytes)
+    }
+    return {
+      id,
+      kind: 'meshBody',
+      source: {
+        type: 'asset',
+        assetId: id,
+        rhinoLayer: source.layer ?? undefined,
+        ...(native && {
+          nativeAssetId,
+          nativeMeshAssetId: id,
+          nativeTransform: native.transform && [...native.transform],
+          rhinoObjectId: native.objectId,
+          rhinoInstancePath: [...native.instancePath],
+        }),
+      },
+      keepSourcePlacement: true,
+    }
+  }
+  const assets = async (id: string) => {
+    const bytes = data.get(id)
+    ok(bytes, 'A local in-memory asset is missing.')
+    return bytes
+  }
+  return { makeNode, assets }
 }
 
 export async function probeBodies(
@@ -306,78 +410,31 @@ export async function probeBodies(
   envelope.bounds[direction > 0 ? 'max' : 'min'][axis] = point[axis]!
   const sibling = sorted.find((other) => other !== part && disjoint(envelope, other))
 
-  const data = new Map<string, Uint8Array>()
-  const idForSidecar = new Map<string, string>()
-  const makeNode = (source: RhinoMeshObject, id: string): NodeInputOf<'meshBody'> => {
-    data.set(id, source.bytes)
-    const native = source.native
-    let nativeAssetId: string | undefined
-    if (native) {
-      nativeAssetId = idForSidecar.get(native.objectId) ?? `${id}-source`
-      idForSidecar.set(native.objectId, nativeAssetId)
-      data.set(nativeAssetId, native.bytes)
-    }
-    return {
-      id,
-      kind: 'meshBody',
-      source: {
-        type: 'asset',
-        assetId: id,
-        ...(native && {
-          nativeAssetId,
-          nativeMeshAssetId: id,
-          nativeTransform: native.transform && [...native.transform],
-          rhinoObjectId: native.objectId,
-          rhinoInstancePath: [...native.instancePath],
-        }),
-      },
-      keepSourcePlacement: true,
-    }
-  }
-  const assets = async (id: string) => {
-    const bytes = data.get(id)
-    ok(bytes, 'A local in-memory asset is missing.')
-    return bytes
-  }
+  const { makeNode, assets } = measuredMeshAssets()
   const chosen = makeNode(part, 'selected')
   const design = designFrom('other', sibling ? [chosen, makeNode(sibling, 'untouched')] : [chosen])
+  const draft = await kernel.scene(design, { detail: 'draft', assets })
+  const selectedNative = hasUnchangedNativeMesh(draft.nodes.get(chosen.id))
+  const untouchedNative = hasUnchangedNativeMesh(draft.nodes.get('untouched'))
   const output = async (scope: Design) =>
     archive(rhino, (await kernel.export(scope, '3dm', { assets, stones: false })).bytes, (doc) =>
       readBodyExport(rhino, doc, scope),
     )
   const baseline = await output(design)
   const before = baseline.get(chosen.id)!
-  const checkNative = (source: RhinoMeshObject, selected: typeof before) => {
-    if (!source.native) {
-      ok(selected.type === 'mesh', 'A mesh-only source exported as an unexpected native solid.')
+  const checkNative = (source: RhinoMeshObject, selected: typeof before, eligible: boolean) => {
+    if (!source.native || !eligible) {
+      ok(
+        selected.type === 'mesh',
+        'A source without an eligible native solid did not export as a mesh.',
+      )
       return
     }
     ok(selected.type !== 'mesh', 'The controlled native source exported as a mesh before any edit.')
-    const reference = archive(rhino, source.native.bytes, (doc, hold) => {
-      const table = hold(doc.objects())
-      ok(
-        table.count === 1 && hold(doc.settings()).modelUnitSystem === rhino.UnitSystem.Millimeters,
-        'Invalid native source archive.',
-      )
-      return nativeShape(rhino, doc, hold(hold(table.get(0)).geometry()))
-    })
-    deepStrictEqual(
-      selected.topology,
-      reference.topology,
-      'Native trim topology changed during export.',
-    )
-    if (selected.type === 'instance')
-      near(selected.placement!, source.native.transform!, 'Native instance placement changed.')
-    const placement = source.native.transform
-    for (const [i, point] of reference.samples.entries()) {
-      const expected = placement ? transformPoint(placement, point) : point
-      const reopened = selected.samples[i]!
-      const actual = selected.placement ? transformPoint(selected.placement, reopened) : reopened
-      near(actual, expected, 'Native edge samples lost their shape or placement.')
-    }
+    checkNativeShape(selected, readNativeSource(rhino, source.native), source.native.transform)
   }
-  checkNative(part, before)
-  if (sibling) checkNative(sibling, baseline.get('untouched')!)
+  checkNative(part, before, selectedNative)
+  if (sibling) checkNative(sibling, baseline.get('untouched')!, untouchedNative)
   const update = applyOps(design, [
     {
       t: 'update',
