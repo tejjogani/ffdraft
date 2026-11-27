@@ -53,7 +53,7 @@ export function curveWire(
       )
       const edges = points
         .slice(0, node.closed ? points.length : -1)
-        .map((point, i) => track(makeLine(point, points[(i + 1) % points.length]!)))
+        .map((point, i) => track(makeLine([...point], [...points[(i + 1) % points.length]!])))
       return { wire: track(assembleWire(edges)), closed: node.closed }
     }
     if (node.kind === 'nurbsCurve') {
