@@ -14,7 +14,7 @@ import { CHECK_NAMES, runCheck, withoutCascades } from '../dfm/index'
 import type { HeadData } from '../features/setting'
 import { transformPoint } from '../geometry/vec'
 import { discardRuntime, isRuntimeFault, runtimeGeneration } from '../runtime/index'
-import type { Detail, Diagnostic, EvaluateOptions, Evaluation } from '../types'
+import type { Detail, Diagnostic, EvaluatedCurve, EvaluateOptions, Evaluation } from '../types'
 import {
   type Assembly,
   activeResults,
@@ -288,18 +288,20 @@ export class Evaluator {
       ...stoneDiagnostics(stones),
     ]
 
-    const curves = active.flatMap(({ id, node }) =>
-      node.kind === 'curve'
-        ? [
-            {
-              nodeId: id,
-              plane: node.plane,
-              closed: node.closed,
-              points: node.points.map(({ u, v }) => pointFromCurvePlane(node.plane, [u, v])),
-            },
-          ]
-        : [],
-    )
+    const curves = active.flatMap<EvaluatedCurve>(({ id, node, data }) => {
+      if (node.kind === 'curve')
+        return [
+          {
+            nodeId: id,
+            plane: node.plane,
+            closed: node.closed,
+            points: node.points.map(({ u, v }) => pointFromCurvePlane(node.plane, [u, v])),
+          },
+        ]
+      if (node.kind === 'nurbsCurve' && data)
+        return [{ nodeId: id, closed: false, points: data as [number, number, number][] }]
+      return []
+    })
     const prongTips = active.flatMap(({ id, node, data, matrix }) =>
       node.kind === 'setting'
         ? (data as HeadData).claws.flatMap(({ number, tip }) =>

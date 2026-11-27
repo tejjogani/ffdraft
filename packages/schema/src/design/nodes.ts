@@ -16,6 +16,7 @@ import { RING_SIZE_SYSTEMS } from '../domain/sizes'
 import { CurveDefinition } from './curve'
 import { choice, deg, follows, int, mm, ratio, ref, text, toggle, vec3 } from './fields'
 import { MeshEdits } from './mesh-edit'
+import { NurbsDefinition } from './nurbs'
 import { DrawnProfile } from './profile'
 
 /** Kinds that produce a solid another feature can attach to, cut into or cover with stones. */
@@ -769,6 +770,18 @@ export const ConstructionCurve = CurveDefinition.safeExtend({
   transform: z.never().optional(),
 }).meta({ title: 'Construction curve', description: 'An editable planar polyline in millimetres.' })
 
+export const NurbsCurve = NurbsDefinition.safeExtend({
+  ...base,
+  kind: z.literal('nurbsCurve'),
+  transform: z.never().optional(),
+  rhinoLayer: z.string().optional().meta({ title: 'Rhino layer' }),
+  sourceObjectId: z.string().optional().meta({ title: 'Source Rhino object' }),
+}).meta({
+  title: 'NURBS curve',
+  description:
+    'An editable spatial curve with measured control points, rational weights and a knot vector.',
+})
+
 export const NODE_SCHEMAS = {
   ringShank: RingShank,
   gem: Gem,
@@ -790,6 +803,7 @@ export const NODE_SCHEMAS = {
   pattern: Pattern,
   group: Group,
   curve: ConstructionCurve,
+  nurbsCurve: NurbsCurve,
 } as const
 
 export type NodeKind = keyof typeof NODE_SCHEMAS
@@ -816,6 +830,7 @@ export const NodeSchema = z.discriminatedUnion('kind', [
   Pattern,
   Group,
   ConstructionCurve,
+  NurbsCurve,
 ])
 
 export type Node = z.infer<typeof NodeSchema>

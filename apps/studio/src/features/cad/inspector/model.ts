@@ -81,7 +81,21 @@ export function inspectorModel(node: Node, opts: { advanced?: boolean } = {}): I
                 : f.key !== 'profile',
             )
           : d.fields
-  const rows = rowsFor(fields, value, [], !!opts.advanced)
+  const shown =
+    node.kind === 'nurbsCurve'
+      ? fields.filter(
+          (f) =>
+            ![
+              'degree',
+              'knots',
+              'controlPoints',
+              'rhinoLayer',
+              'sourceObjectId',
+              'transform',
+            ].includes(f.key),
+        )
+      : fields
+  const rows = rowsFor(shown, value, [], !!opts.advanced)
   const sections: InspectorSection[] = []
   const section = (group: string | undefined) => {
     const id = group ?? 'general'
@@ -96,8 +110,8 @@ export function inspectorModel(node: Node, opts: { advanced?: boolean } = {}): I
   }
   for (const row of rows) section(row.field.meta.group).rows.push(row)
   const advanced = opts.advanced
-    ? countRows(rows) - countRows(rowsFor(fields, value, [], false))
-    : countRows(rowsFor(fields, value, [], true)) - countRows(rows)
+    ? countRows(rows) - countRows(rowsFor(shown, value, [], false))
+    : countRows(rowsFor(shown, value, [], true)) - countRows(rows)
   // Fine-tuning adds to the form without pushing the essentials down: sections made only of
   // advanced fields (the transform) follow the ones a feature is usually set up with.
   const onlyAdvanced = (s: InspectorSection) => s.rows.every((r) => r.field.meta.advanced)

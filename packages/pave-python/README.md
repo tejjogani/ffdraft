@@ -80,3 +80,18 @@ edit = project.set_mesh_vertices(
 )
 project.undo(edit["version"])
 ```
+
+## Edit a NURBS control point
+
+Use the project feature ID and the version returned by `describe`. Each control point stores Euclidean XYZ in millimetres and a rational weight. This example moves an interior point of an open curve 0.25 mm while preserving its weight, knots and degree.
+
+```python
+rail = project.describe("gallery-rail")
+points = rail["values"]["controlPoints"]
+points[2][2] += 0.25
+project.apply(
+    [{"t": "update", "id": "gallery-rail", "patch": {"controlPoints": points}}],
+    "Raise gallery rail control point",
+    base_version=rail["version"],
+)
+```

@@ -20,6 +20,7 @@ import { runCommand } from '../../../lib/commands'
 import type { DesignSession } from '../../../lib/design-session/store'
 import { carats, mm } from '../../../lib/format'
 import { diaexBrowseLink } from '../../sourcing/links'
+import { NurbsControls } from '../curves/NurbsControls'
 import { isProfileNode, type ProfileNode, profileSize } from '../profiles/profile'
 import { useWorkspace } from '../state/workspace'
 import { FieldEditContext, useNodeEdit } from './edit'
@@ -153,6 +154,15 @@ export function Inspector({
         {/* Keyed by feature: another feature's form opens at its top, not where this one was scrolled. */}
         <ScrollArea key={node.id} className="flex-1">
           <div className="flex flex-col pb-6">
+            {node.kind === 'nurbsCurve' && (
+              <NurbsControls
+                key={`${pieceId}/${node.id}`}
+                node={node}
+                session={session}
+                pieceId={pieceId}
+                readOnly={readOnly || selection.length !== 1}
+              />
+            )}
             {node.kind === 'curve' && (
               <section
                 aria-label="Construction curve points"

@@ -44,4 +44,5 @@ export const KIND_ICON: Record<NodeKind, LucideIcon> = {
   pattern: Repeat2,
   group: Folder,
   curve: Spline,
+  nurbsCurve: Spline,
 }
