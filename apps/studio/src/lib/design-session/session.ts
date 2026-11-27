@@ -13,6 +13,7 @@ export interface ApplyRequest {
   label: string
   ops: Op[]
   reverts?: string[]
+  baseVersion?: number
 }
 
 export interface SessionTransport {
@@ -164,6 +165,7 @@ export function createDesignSession(
         label: next.label,
         ops: next.ops,
         ...(next.reverts ? { reverts: next.reverts } : {}),
+        ...(next.baseVersion !== undefined ? { baseVersion: next.baseVersion } : {}),
       })
       .then(
         (answer) => {
@@ -180,6 +182,15 @@ export function createDesignSession(
           const kind = deps.classify(error)
           if (kind === 'retry') return retryLater()
           offlineAttempts = 0
+          if (kind === 'conflict' && next.baseVersion !== undefined) {
+            // A targeted edit was planned against this exact design. Catch up without
+            // replanning or replaying it against geometry the designer did not see.
+            void resync()
+            update((s) =>
+              core.reject(s, next.id, 'The design changed. Reopen the editor to try again.'),
+            )
+            return
+          }
           if (kind === 'conflict' && !conflicted.has(next.id)) {
             // Catch up, then send it once more on top of the latest state (resync pumps when
             // done); a second conflict is final.

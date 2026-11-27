@@ -22,6 +22,10 @@ For a curve imported as NURBS, select its name in Features and choose Edit contr
 
 If a solid has no saved display mesh, select it in Rhino and run Mesh. Preview the result, select the generated mesh objects, then choose File → Export Selected and save as .3dm to carry separate parts and the document units. You can also choose STL. In Pavé, set the STL source units to the same units used for the export and check a known measurement before importing. A single STL comes into Features as one part.
 
+## Edit an imported mesh
+
+Select a Rhino or STL part brought in with Import model and choose Edit mesh in the Inspector. Choose Vertex, Edge or Face, then click a visible component. Orbit the part or choose a view such as Bottom to reach the other side. For an exact vertex, enter its zero-based ID. Type the X, Y and Z displacement in source millimetres to preview the move. Choose Save mesh edit to record one change, or Cancel to discard the preview. Undo reverses the change.
+
 ## Make a ring band thicker or thinner
 
 Select Band. In the Band section of the Inspector, Thickness at top changes the wall near the setting. Thickness at base changes the wall on the palm side. Click a value, type the new measurement in millimetres and press Enter. For example, changing a 1.5 mm base to 1.8 mm adds 0.3 mm there.

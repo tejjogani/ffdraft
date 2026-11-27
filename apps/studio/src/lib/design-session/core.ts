@@ -38,6 +38,7 @@ export interface PendingChange {
   label: string
   /** Ids of earlier changes this one undoes (undo / redo). */
   reverts?: string[]
+  baseVersion?: number
   /** Whether the outbox has sent it (it may be retried under the same id). */
   sent: boolean
   /**
@@ -171,6 +172,8 @@ function derive(s: SessionState): SessionState {
 
 export interface CommitOptions {
   label?: string
+  /** Required server version for edits planned against a specific design. */
+  baseVersion?: number
   reverts?: string[]
   /** Change id; generated when omitted. */
   id?: string
@@ -207,6 +210,7 @@ function record(
     label,
     sent: false,
     ...(opts.reverts ? { reverts: opts.reverts } : {}),
+    ...(opts.baseVersion !== undefined ? { baseVersion: opts.baseVersion } : {}),
   }
   const next: SessionState = {
     ...s,
@@ -266,11 +270,34 @@ function guardPatch(
   for (const [k, before] of Object.entries(inverse)) {
     const wrote = forward[k]
     const now = cur[k]
+    if (
+      k === 'meshEdits' &&
+      isObject(wrote) &&
+      typeof wrote.assetId === 'string' &&
+      (!isObject(now) || now.assetId !== wrote.assetId)
+    )
+      continue
     if (isObject(before) && isObject(wrote) && !('type' in wrote)) {
       const sub = guardPatch(before, wrote, now)
       if (Object.keys(sub).length) out[k] = sub
     } else if (sameJson(now, wrote === null ? undefined : mergePatch(undefined, wrote))) {
       out[k] = before
+    } else if (
+      k === 'meshEdits' &&
+      before === null &&
+      isObject(wrote) &&
+      isObject(wrote.vertices) &&
+      isObject(now) &&
+      isObject(now.vertices)
+    ) {
+      // Undo of the first edit would normally remove the entire map. Keep later moves,
+      // including any picked vertices a collaborator has since moved again.
+      const vertices = guardPatch(
+        Object.fromEntries(Object.keys(wrote.vertices).map((id) => [id, null])),
+        wrote.vertices,
+        now.vertices,
+      )
+      if (Object.keys(vertices).length) out[k] = { assetId: now.assetId, vertices }
     } else if (isObject(wrote) && isObject(now) && sameJson(mergePatch(cur[k], wrote), now)) {
       // A variant still exactly as written (merge-patch over its previous value).
       out[k] = before
@@ -327,7 +354,19 @@ function revertOwn(s: SessionState, id: string, kind: 'undo' | 'redo'): SessionS
       ],
     }
   try {
-    return record(s, ops, { label: label.slice(0, 200), reverts: [id] }, kind, change.base)
+    const changesMesh = ops.some((op) => op.t === 'update' && Object.hasOwn(op.patch, 'meshEdits'))
+    return record(
+      s,
+      ops,
+      {
+        label: label.slice(0, 200),
+        reverts: [id],
+        // The guarded mesh patch was computed against settled state, including pending edits.
+        ...(changesMesh ? { baseVersion: s.version + s.pending.length } : {}),
+      },
+      kind,
+      change.base,
+    )
   } catch (err) {
     if (!(err instanceof OpError)) throw err
     return { ...s, notices: [...s.notices, { type: 'dropped', label, reason: err.message }] }
