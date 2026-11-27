@@ -1,7 +1,7 @@
 import type { Design } from '@pave/schema'
 import { boundsOfPositions, transformTessellation, unionBounds } from '../solid/meshing'
 import type { Bounds, Evaluation, Part, StoneInstance } from '../types'
-import { multiply, transformPoint, type Mat4, type Vec3 } from './vec'
+import { type Mat4, multiply, transformPoint, type Vec3 } from './vec'
 
 type Subject = Pick<Evaluation, 'parts' | 'stones'>
 const center = (b: Bounds, i: number) => (b.min[i]! + b.max[i]!) / 2
@@ -12,39 +12,107 @@ function stoneBox(s: StoneInstance): Bounds {
   return { min: [x - r, y - r, z - r], max: [x + r, y + r, z + r] }
 }
 
+/** The principal horizontal direction of the component centres, independent of CAD orientation. */
+function rowDirection(boxes: Bounds[]) {
+  const meanX = boxes.reduce((sum, b) => sum + center(b, 0), 0) / boxes.length
+  const meanY = boxes.reduce((sum, b) => sum + center(b, 1), 0) / boxes.length
+  let xx = 0
+  let yy = 0
+  let xy = 0
+  for (const box of boxes) {
+    const x = center(box, 0) - meanX
+    const y = center(box, 1) - meanY
+    xx += x * x
+    yy += y * y
+    xy += x * y
+  }
+  const angle = Math.atan2(2 * xy, xx - yy) / 2
+  return { x: Math.cos(angle), y: Math.sin(angle) }
+}
+
 /** Only offer articulation for a long, flat row of separate components. All distances are in mm. */
 export function circularBandLayout({ parts, stones }: Subject) {
   if (parts.length + stones.length < 4) return null
   const boxes = [...parts.map((p) => p.bounds), ...stones.map(stoneBox)]
+  const direction = rowDirection(boxes)
   const bounds = unionBounds(boxes)
-  const spans = bounds.max.map((max, i) => max - bounds.min[i]!)
-  const axis = spans[0]! >= spans[1]! ? 0 : 1
-  const side = axis === 0 ? 1 : 0
-  const length = spans[axis]!
-  if (!(length > 0 && length >= 3 * Math.max(spans[side]!, spans[2]!))) return null
-  if (boxes.some((b) => b.max[axis] - b.min[axis] > length / 3)) return null
-  return { axis, side, length, bounds, diameterMm: length / Math.PI } as const
+  const { x, y } = direction
+  let minSide = Infinity
+  let maxSide = -Infinity
+  let minAlong = Infinity
+  let maxAlong = -Infinity
+  let longestBody = 0
+  const intervals = new Map<string, { min: number; max: number }>()
+  for (const part of parts) {
+    const positions = part.mesh.positions
+    let min = Infinity
+    let max = -Infinity
+    for (let i = 0; i < positions.length; i += 3) {
+      const vx = positions[i]!,
+        vy = positions[i + 1]!
+      const along = x * vx + y * vy
+      const side = -y * vx + x * vy
+      min = Math.min(min, along)
+      max = Math.max(max, along)
+      minSide = Math.min(minSide, side)
+      maxSide = Math.max(maxSide, side)
+    }
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return null
+    intervals.set(part.id, { min, max })
+    minAlong = Math.min(minAlong, min)
+    maxAlong = Math.max(maxAlong, max)
+    longestBody = Math.max(longestBody, max - min)
+  }
+  for (const stone of stones) {
+    const vx = stone.matrix[12]!,
+      vy = stone.matrix[13]!
+    const radius = Math.max(stone.dims.width, stone.dims.length, stone.dims.depth) / 2
+    const along = x * vx + y * vy
+    const side = -y * vx + x * vy
+    minAlong = Math.min(minAlong, along - radius)
+    maxAlong = Math.max(maxAlong, along + radius)
+    minSide = Math.min(minSide, side - radius)
+    maxSide = Math.max(maxSide, side + radius)
+    longestBody = Math.max(longestBody, 2 * radius)
+  }
+  const length = maxAlong - minAlong
+  if (!(length > 0 && length >= 3 * Math.max(maxSide - minSide, bounds.max[2] - bounds.min[2])))
+    return null
+  if (longestBody > length / 3) return null
+  return {
+    direction,
+    midAlong: (minAlong + maxAlong) / 2,
+    midSide: (minSide + maxSide) / 2,
+    length,
+    intervals,
+    bounds,
+    diameterMm: length / Math.PI,
+  }
 }
 type Layout = NonNullable<ReturnType<typeof circularBandLayout>>
 
-/** Each source station is moved with one rotation and translation. Its local top faces outwards. */
+/** Map the row tangent to a circle tangent, its width to the vertical axis and its top radially outward. */
 function frame(layout: Layout, anchor: number): Mat4 {
-  const { axis, side, bounds, diameterMm } = layout
+  const { direction, midAlong, midSide, bounds, diameterMm } = layout
   const radius = diameterMm / 2
-  const angle = (anchor - center(bounds, axis)) / radius
-  const s = Math.sin(angle),
-    c = Math.cos(angle)
-  const tangent: Vec3 = [c, s, 0],
-    outward: Vec3 = [s, -c, 0]
-  const x: Vec3 = axis === 0 ? tangent : [0, 0, -1]
-  const y: Vec3 = axis === 0 ? [0, 0, 1] : tangent
-  const mid: Vec3 = [center(bounds, 0), center(bounds, 1), center(bounds, 2)]
-  const pivot: Vec3 = axis === 0 ? [anchor, mid[side], mid[2]] : [mid[side], anchor, mid[2]]
-  const destination: Vec3 = [mid[0] + radius * s, mid[1] - radius * c, mid[2]]
-  const t = destination.map(
+  const angle = (anchor - midAlong) / radius
+  const sin = Math.sin(angle),
+    cos = Math.cos(angle)
+  const dx = direction.x,
+    dy = direction.y
+  const x: Vec3 = [dx * cos, dx * sin, -dy]
+  const y: Vec3 = [dy * cos, dy * sin, dx]
+  const outward: Vec3 = [sin, -cos, 0]
+  const pivot: Vec3 = [dx * anchor - dy * midSide, dy * anchor + dx * midSide, center(bounds, 2)]
+  const destination: Vec3 = [
+    dx * midAlong - dy * midSide + radius * sin,
+    dy * midAlong + dx * midSide - radius * cos,
+    center(bounds, 2),
+  ]
+  const translation = destination.map(
     (value, i) => value - x[i]! * pivot[0] - y[i]! * pivot[1] - outward[i]! * pivot[2],
   )
-  return [...x, 0, ...y, 0, ...outward, 0, ...t, 1]
+  return [...x, 0, ...y, 0, ...outward, 0, ...translation, 1]
 }
 
 function sourceGroup(p: Part, design: Design | null) {
@@ -69,22 +137,24 @@ export function poseCircularBand(evaluation: Evaluation, design: Design | null):
     const key = keys[i]
     if (!key) continue
     const g = groups.get(key) ?? { min: Infinity, max: -Infinity, gemSum: 0, gems: 0 }
-    g.min = Math.min(g.min, p.bounds.min[layout.axis])
-    g.max = Math.max(g.max, p.bounds.max[layout.axis])
+    const interval = layout.intervals.get(p.id)!
+    g.min = Math.min(g.min, interval.min)
+    g.max = Math.max(g.max, interval.max)
     if (p.sourceAppearance?.kind === 'gem') {
-      g.gemSum += center(p.bounds, layout.axis)
+      g.gemSum += (interval.min + interval.max) / 2
       g.gems++
     }
     groups.set(key, g)
   }
   const parts = evaluation.parts.map((p, i) => {
     const group = groups.get(keys[i] ?? '')
+    const interval = layout.intervals.get(p.id)!
     const anchor =
       group && group.max - group.min <= layout.length / 3
         ? group.gems
           ? group.gemSum / group.gems
           : (group.min + group.max) / 2
-        : center(p.bounds, layout.axis)
+        : (interval.min + interval.max) / 2
     const transform = frame(layout, anchor)
     const posed = transformTessellation(transform, p)
     return {
@@ -96,7 +166,12 @@ export function poseCircularBand(evaluation: Evaluation, design: Design | null):
   })
   const stones = evaluation.stones.map((s) => ({
     ...s,
-    matrix: Array.from(multiply(frame(layout, s.matrix[12 + layout.axis]!), s.matrix)),
+    matrix: Array.from(
+      multiply(
+        frame(layout, s.matrix[12]! * layout.direction.x + s.matrix[13]! * layout.direction.y),
+        s.matrix,
+      ),
+    ),
   }))
   const boxes = parts.map((p) => p.bounds)
   for (const stone of stones) {

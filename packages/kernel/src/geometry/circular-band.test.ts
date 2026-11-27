@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { boundsOfPositions } from '../solid/meshing'
 import type { Bounds, Evaluation, Part } from '../types'
 import { circularBandLayout, poseCircularBand } from './circular-band'
 
@@ -57,6 +58,23 @@ describe('circular band render pose', () => {
       expect(circularBandLayout(posed)).toBeNull()
     },
   )
+  it('recognizes a row laid diagonally on the CAD workplane without stretching its circumference', () => {
+    const source = fixture(0)
+    const cos = Math.SQRT1_2
+    const parts = source.parts.map((part) => {
+      const positions = part.mesh.positions.slice()
+      for (let i = 0; i < positions.length; i += 3) {
+        const x = positions[i]!
+        const y = positions[i + 1]!
+        positions[i] = cos * (x - y)
+        positions[i + 1] = cos * (x + y)
+      }
+      return { ...part, mesh: { ...part.mesh, positions }, bounds: boundsOfPositions(positions) }
+    })
+    expect(circularBandLayout({ parts, stones: [] })?.length).toBeCloseTo(64, 3)
+    const circle = poseCircularBand({ ...source, parts }, null).report.bounds
+    expect(circle.max[0] - circle.min[0]).toBeCloseTo(circle.max[1] - circle.min[1], 3)
+  })
   it('does not pose a single solid or an already circular assembly', () => {
     const e = fixture(0)
     const single = { ...e, parts: e.parts.slice(0, 1) }
