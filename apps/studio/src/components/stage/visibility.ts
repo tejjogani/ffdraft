@@ -4,6 +4,11 @@ export interface ViewerPick {
   partId?: string
 }
 
+export interface ViewTarget extends ViewerPick {
+  /** The evaluated part that owns an independently selectable shell. */
+  parentPartId?: string
+}
+
 export interface ViewVisibilityState {
   /** Entire features to hide, including their stones. */
   hidden: readonly string[]
@@ -13,7 +18,7 @@ export interface ViewVisibilityState {
   isolated?: readonly ViewerPick[]
 }
 
-export function createViewVisibility(state: ViewVisibilityState): (target: ViewerPick) => boolean {
+export function createViewVisibility(state: ViewVisibilityState): (target: ViewTarget) => boolean {
   const hiddenNodes = new Set(state.hidden)
   const hiddenStones = new Set(state.hiddenStones)
   const hiddenParts = new Set(state.hiddenParts)
@@ -26,19 +31,21 @@ export function createViewVisibility(state: ViewVisibilityState): (target: Viewe
     else isolatedNodes.add(nodeId)
   }
   const isIsolated = !!state.isolated?.length
-  return ({ nodeId, stoneId, partId }) => {
+  return ({ nodeId, stoneId, partId, parentPartId }) => {
     if (hiddenNodes.has(nodeId)) return false
     if (stoneId !== undefined && hiddenStones.has(stoneId)) return false
     if (partId !== undefined && hiddenParts.has(partId)) return false
+    if (parentPartId !== undefined && hiddenParts.has(parentPartId)) return false
     return (
       !isIsolated ||
       isolatedNodes.has(nodeId) ||
       (stoneId !== undefined && isolatedStones.get(stoneId) === nodeId) ||
-      (partId !== undefined && isolatedParts.get(partId) === nodeId)
+      (partId !== undefined && isolatedParts.get(partId) === nodeId) ||
+      (parentPartId !== undefined && isolatedParts.get(parentPartId) === nodeId)
     )
   }
 }
 
-export function isViewTargetVisible(state: ViewVisibilityState, target: ViewerPick): boolean {
+export function isViewTargetVisible(state: ViewVisibilityState, target: ViewTarget): boolean {
   return createViewVisibility(state)(target)
 }

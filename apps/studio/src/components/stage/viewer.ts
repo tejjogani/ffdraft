@@ -87,9 +87,15 @@ import {
   type OutlineMaterial,
   readPalette,
 } from './materials'
+import { isShellOf, MetalBatch } from './metal-shells'
 import { type GpuTier, gemQualityFor, gpuTier, type QualityPolicy, qualityFor } from './quality'
 import { StoneBatch } from './stone-batch'
-import { createViewVisibility, type ViewerPick, type ViewVisibilityState } from './visibility'
+import {
+  createViewVisibility,
+  type ViewerPick,
+  type ViewTarget,
+  type ViewVisibilityState,
+} from './visibility'
 
 export type { ViewerPick } from './visibility'
 
@@ -147,10 +153,12 @@ const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').match
 interface Built {
   model: PaveModel
   /** Every metal mesh and stone batch of the model with its original material. */
-  metals: Mesh[]
+  metals: Map<Mesh, MetalBatch>
+  /** A whole-node pick would also affect other pieces with this owner. */
+  exactMetalNodes: Set<string>
   gems: Map<InstancedMesh, StoneBatch>
   originals: Map<Mesh, Material>
-  visibility?: (target: ViewerPick) => boolean
+  visibility?: (target: ViewTarget) => boolean
 }
 
 /** Metal geometry kept across evaluations by `Part.rev`, with its picking BVH and GPU buffers. */
@@ -591,13 +599,19 @@ export class Viewer {
       environment: this.environment,
       gemQuality: this.policy.rest,
     })
-    const metals: Mesh[] = []
+    const metals = new Map<Mesh, MetalBatch>()
     const gems = new Map<InstancedMesh, StoneBatch>()
     const originals = new Map<Mesh, Material>()
     const stoneTargets = new Map(
       evaluation.stones.map(({ id, nodeId }) => [id, { nodeId, stoneId: id }]),
     )
-    const revs = new Map(evaluation.parts.map((p) => [p.id, p.rev]))
+    const parts = new Map(evaluation.parts.map((part) => [part.id, part]))
+    const exactMetalNodes = new Set(evaluation.stones.map((stone) => stone.nodeId))
+    const metalNodes = new Set<string>()
+    for (const { nodeId } of parts.values()) {
+      if (metalNodes.has(nodeId)) exactMetalNodes.add(nodeId)
+      metalNodes.add(nodeId)
+    }
     const referenceIds = new Set(input.referenceParts?.map((p) => p.id))
     const generation = ++this.generation
     model.object.traverse((o) => {
@@ -607,12 +621,13 @@ export class Viewer {
         originals.set(o, o.material as Material)
       } else if (o instanceof Mesh) {
         o.userData.reference = referenceIds.has(o.name)
-        metals.push(o)
+        const part = parts.get(o.name)!
         originals.set(o, o.material as Material)
-        this.reuseGeometry(o, revs.get(o.name), generation)
+        this.reuseGeometry(o, part.rev, generation)
+        metals.set(o, new MetalBatch(o, part))
       }
     })
-    this.built = { model, metals, gems, originals }
+    this.built = { model, metals, exactMetalNodes, gems, originals }
     this.scene.add(model.object)
     if (previous) this.release(previous)
     for (const [rev, entry] of this.geometries)
@@ -665,6 +680,7 @@ export class Viewer {
    */
   private release(b: Built): void {
     b.model.object.removeFromParent()
+    for (const batch of b.metals.values()) batch.resetGeometry()
     const kept = new Set([...this.geometries.values()].map((e) => e.geometry))
     const done = new Set<object>()
     b.model.object.traverse((o) => {
@@ -677,6 +693,7 @@ export class Viewer {
         // without this every evaluation leaks them (a software GPU runs out mid-scrub).
         bvhOf(material)?.dispose()
       }
+      if (o instanceof InstancedMesh) o.dispose()
       done.add(o.geometry).add(material)
     })
   }
@@ -693,7 +710,8 @@ export class Viewer {
       const b = this.built
       if (!b || this.moving) return
       const run = () => {
-        if (this.built === b) for (const t of [...b.metals, ...b.gems.keys()]) indexForPicking(t)
+        if (this.built === b)
+          for (const t of [...b.metals.keys(), ...b.gems.keys()]) indexForPicking(t)
       }
       if ('requestIdleCallback' in window) requestIdleCallback(run, { timeout: 2000 })
       else run()
@@ -769,7 +787,13 @@ export class Viewer {
     this.standIn = this.wantsStandIn()
     this.applyMaterials()
     if (b.visibility !== this.isVisible) {
-      for (const mesh of b.metals) mesh.visible = this.isVisible(metalTarget(mesh))
+      const { hiddenParts = [], isolated = [] } = this.state
+      const exactParts = [...hiddenParts, ...isolated.map((target) => target.partId), part]
+      for (const batch of b.metals.values())
+        batch.setVisibility(
+          this.isVisible,
+          exactParts.some((id) => batch.ownsShell(id)),
+        )
       for (const batch of b.gems.values()) batch.setVisibility(this.isVisible)
       b.visibility = this.isVisible
     }
@@ -778,7 +802,7 @@ export class Viewer {
       display !== 'technical' &&
       !xray &&
       !this.state.isolated?.length &&
-      b.metals.some((mesh) => mesh.visible && !mesh.userData.reference)
+      [...b.metals.keys()].some((mesh) => mesh.visible && !mesh.userData.reference)
     if (display === 'technical') this.addTechnical(b)
     else if (xray) this.addEdges(m.xrayEdges)
     this.addGhosts()
@@ -790,7 +814,12 @@ export class Viewer {
       (part == null || target.partId === part)
     const aiTint = new Set(this.state.aiTint ?? [])
     if (aiTint.size)
-      this.outline(b, (target) => aiTint.has(target.nodeId) && !isSelected(target), null, m.aiTint)
+      this.outline(
+        b,
+        (target) => aiTint.has(target.nodeId) && !selected.has(target.nodeId),
+        null,
+        m.aiTint,
+      )
     this.outline(b, isSelected, m.selected, m.tint)
     if (hover)
       this.outline(
@@ -819,7 +848,7 @@ export class Viewer {
     const { display, xray } = this.state
     const m = this.materials
     const clay = display === 'clay' || this.standIn
-    for (const mesh of b.metals)
+    for (const mesh of b.metals.keys())
       mesh.material =
         xray && display !== 'technical'
           ? m.xray
@@ -853,10 +882,15 @@ export class Viewer {
     material: OutlineMaterial | null,
     tint: MeshBasicMaterial | null,
   ): void {
-    for (const mesh of b.metals) {
-      if (!mesh.visible || !match(metalTarget(mesh))) continue
-      if (material) this.overlay.add(new Mesh(mesh.geometry, material))
-      if (tint) this.overlay.add(new Mesh(mesh.geometry, tint))
+    for (const batch of b.metals.values()) {
+      const geometry = batch.matchingGeometry(match)
+      if (!geometry) continue
+      const ink = material ? new Mesh(geometry, material) : null
+      const color = tint ? new Mesh(geometry, tint) : null
+      const owner = ink ?? color
+      if (owner && geometry !== batch.mesh.geometry) owner.userData.ownsGeometry = true
+      if (ink) this.overlay.add(ink)
+      if (color) this.overlay.add(color)
     }
     for (const [mesh, { targets }] of b.gems) {
       const picked: number[] = []
@@ -914,6 +948,7 @@ export class Viewer {
     for (const nodeId of failed)
       for (const part of this.lastGood.get(nodeId) ?? []) {
         if (!this.isVisible({ nodeId, partId: part.id })) continue
+        if (this.state.hiddenParts?.some((id) => isShellOf(part.id, id))) continue
         const g = new BufferGeometry()
         g.setAttribute('position', new BufferAttribute(part.mesh.positions, 3))
         g.setAttribute('normal', new BufferAttribute(part.mesh.normals, 3))
@@ -926,6 +961,13 @@ export class Viewer {
 
   // ── Camera ───────────────────────────────────────────────────────────────────────────────
 
+  private visibleMetalParts(): Part[] {
+    const parts: Part[] = []
+    for (const batch of this.built?.metals.values() ?? [])
+      if (batch.mesh.visible) parts.push(batch.visiblePart)
+    return parts
+  }
+
   private pointsFor(nodeIds?: readonly string[]): Vec3[] {
     const e = this.evaluation
     if (!nodeIds?.length && this.frameFocus.length) {
@@ -937,7 +979,7 @@ export class Viewer {
         .filter((curve) => this.isVisible(curve))
         .flatMap((curve) => curve.points)
       if (!e) return construction
-      const parts = e.parts.filter((p) => this.isVisible({ nodeId: p.nodeId, partId: p.id }))
+      const parts = this.visibleMetalParts()
       const stones = e.stones.filter((s) => this.isVisible({ nodeId: s.nodeId, stoneId: s.id }))
       if (!parts.length && !stones.length) return construction
       const subject = subjectOf({ ...e, parts, stones })
@@ -953,9 +995,8 @@ export class Viewer {
     const pts: Vec3[] = this.constructionFrame
       .filter((curve) => ids.has(curve.nodeId) && this.isVisible(curve))
       .flatMap((curve) => curve.points)
-    for (const p of e?.parts ?? [])
-      if (ids.has(p.nodeId) && this.isVisible({ nodeId: p.nodeId, partId: p.id }))
-        pts.push(...corners(p.bounds))
+    for (const part of this.visibleMetalParts())
+      if (ids.has(part.nodeId)) pts.push(...corners(part.bounds))
     for (const s of e?.stones ?? [])
       if (ids.has(s.nodeId) && this.isVisible({ nodeId: s.nodeId, stoneId: s.id })) {
         const r = s.dims.width * 0.6
@@ -1182,11 +1223,15 @@ export class Viewer {
   private readonly raycaster = new Raycaster()
 
   /** What is under a point given in CSS pixels relative to the canvas. */
-  pick(x: number, y: number): ViewerPick | null {
+  pick(x: number, y: number, precise = true): ViewerPick | null {
     const b = this.built
     this.camera.updateMatrixWorld()
     this.raycaster.setFromCamera(this.ndc(x, y), this.camera)
-    const targets = b ? [...b.gems.keys(), ...b.metals].filter((mesh) => mesh.visible) : []
+    const depth = this.camera.getWorldDirection(new Vector3()).dot(this.raycaster.ray.direction)
+    this.raycaster.near = this.camera.near / depth
+    this.raycaster.far = this.camera.far / depth
+    this.raycaster.firstHitOnly = true
+    const targets = b ? [...b.gems.keys(), ...b.metals.keys()].filter((mesh) => mesh.visible) : []
     for (const target of targets) {
       target.updateWorldMatrix(true, false)
       indexForPicking(target)
@@ -1201,12 +1246,9 @@ export class Viewer {
       )
     if (hit.object instanceof InstancedMesh && hit.instanceId !== undefined)
       return b.gems.get(hit.object)?.targets[hit.instanceId] ?? null
-    const target = metalTarget(hit.object as Mesh)
-    return b.metals.some(
-      (mesh) => mesh !== hit.object && metalTarget(mesh).nodeId === target.nodeId,
-    )
-      ? target
-      : { nodeId: target.nodeId }
+    const metal = b.metals.get(hit.object as Mesh)
+    if (!metal) return null
+    return metal.pick(hit.faceIndex ?? undefined, b.exactMetalNodes.has(metal.part.nodeId), precise)
   }
 
   /** Whether the camera is being moved (picking pauses meanwhile). */
@@ -1460,13 +1502,10 @@ function sameIsolation(
   )
 }
 
-function metalTarget(mesh: Mesh): ViewerPick {
-  return { nodeId: mesh.userData.nodeId as string, partId: mesh.name }
-}
-
 function indexForPicking(mesh: Mesh): void {
   if (!mesh.geometry.boundsTree)
-    (mesh.geometry as unknown as { computeBoundsTree(): void }).computeBoundsTree()
+    // Indirection keeps face indices aligned with the evaluated triangles for shell picking.
+    mesh.geometry.computeBoundsTree({ indirect: true })
 }
 
 function corners(b: Bounds): Vec3[] {
