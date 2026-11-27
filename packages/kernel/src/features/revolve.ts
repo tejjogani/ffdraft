@@ -1,4 +1,5 @@
 /** Lathe forms: an SVG profile in the (radius, height) half-plane turned about the Z axis. */
+import { pointFromCurvePlane } from '@pave/schema'
 import { assembleWire, type Edge, makeBezierCurve, makeFace, makeLine, revolution } from 'replicad'
 import { defineFeature, metalOf, solidFromBrep } from '../core'
 import { parsePathData, type SubPath } from '../geometry/svgPath'
@@ -75,19 +76,35 @@ function checkProfile(path: SubPath): void {
 }
 
 export const revolve = defineFeature('revolve', (node, ctx) => {
-  const paths = parsePathData(node.profile)
-  if (paths.length === 0) throw new Error('the profile is empty')
-  const bodies = paths.map((path) => {
-    checkProfile(path)
-    const edges = profileEdges(path).map((e) => ctx.track(e))
-    if (edges.length < 2)
-      throw new Error('the profile needs at least two segments to enclose an area')
+  type Point = [number, number, number]
+  const turn = (edges: Edge[], origin: Point, direction: Point) => {
     const wire = ctx.track(assembleWire(edges))
     const face = ctx.track(makeFace(wire))
     return {
-      solid: solidFromBrep(revolution(face, [0, 0, 0], [0, 0, 1], node.angle)),
+      solid: solidFromBrep(revolution(face, origin, direction, node.angle)),
       ...metalOf(node),
     }
-  })
-  return { bodies }
+  }
+  if (node.curve !== undefined) {
+    const source = ctx.input(node.curve).node
+    if (source.kind !== 'curve') throw new Error('Revolve needs a construction curve.')
+    const points = source.points.map(({ u, v }) => pointFromCurvePlane(source.plane, [u, v]))
+    const edges = points.map((p, i) => ctx.track(makeLine(p, points[(i + 1) % points.length]!)))
+    const vertical = node.axis !== 'horizontal'
+    const offset = node.axisOffset ?? 0
+    const origin = pointFromCurvePlane(source.plane, vertical ? [offset, 0] : [0, offset])
+    const direction = pointFromCurvePlane(source.plane, vertical ? [0, 1] : [1, 0])
+    return { bodies: [turn(edges, origin, direction)] }
+  }
+  const paths = parsePathData(node.profile ?? '')
+  if (!paths.length) throw new Error('the profile is empty')
+  return {
+    bodies: paths.map((path) => {
+      checkProfile(path)
+      const edges = profileEdges(path).map((e) => ctx.track(e))
+      if (edges.length < 2)
+        throw new Error('the profile needs at least two segments to enclose an area')
+      return turn(edges, [0, 0, 0], [0, 0, 1])
+    }),
+  }
 })

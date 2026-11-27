@@ -6,9 +6,9 @@ exports[`the frozen system prompt > has a stable hash (snapshot) that covers the
     7082,
     41253,
     10638,
-    15616,
+    15979,
   ],
-  "hash": "prompt-13da1643b9d4a3",
+  "hash": "prompt-03cc58f627def1",
 }
 `;
 
@@ -196,11 +196,14 @@ Shared value lists:
 - depth: number 0.1–6 mm = 0.8
 - rim: number 0–4 mm = 0.8
 - invert: boolean = false
-## revolve: Revolve. A lathe form: domes, beads, cups, bezels.
+## revolve: Revolve. Turn a closed curve around an axis to make a solid, or supply an SVG radius-height profile about Z.
 - material: <metal> = "au18k-yellow"
 - finish: <finish> = "polished"
 - plating: <plating> = "none"
-- profile (required): string. SVG path in mm in the (radius, height) half-plane; revolved about Z.
+- profile: string. SVG path in mm in the (radius, height) half-plane; revolved about Z.
+- curve: id of a curve node. A closed construction curve. Editing its points rebuilds the solid.
+- axis: vertical | horizontal. Direction on the drawing plane. Defaults to vertical.
+- axisOffset: number -250–250 mm. Horizontal position of a vertical axis or vertical position of a horizontal axis. Defaults to 0 mm.
 - angle: number 1–360° = 360
 ## pipe: Wire. A smooth wire swept along a construction curve or path points.
 - material: <metal> = "au18k-yellow"

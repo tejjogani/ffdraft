@@ -8,6 +8,7 @@ import { z } from 'zod'
 import { GEM_CUTS, GEM_MATERIALS } from '../domain/gems'
 import { FINISHES, METALS, PLATINGS } from '../domain/metals'
 import { formatRingSize, type RingSize } from '../domain/sizes'
+import { defaultRevolveOffset, revolveProfileError } from './curve'
 import { applyOps, type Design, newId, type Op } from './design'
 import type { FieldMeta, FieldWidget } from './fields'
 import { NODE_SCHEMAS, type Node, type NodeInput, type NodeKind, nodeRefs } from './nodes'
@@ -390,6 +391,24 @@ export function defaultNode(
   for (const f of describeNode(kind).fields) {
     if (f.key in node) continue
     if (kind === 'pipe' && f.key === 'curve' && 'points' in node) continue
+    if (kind === 'revolve' && f.key === 'curve') {
+      if ('profile' in node) continue
+      const matches = [hint.target, ...design.order.toReversed()]
+      const curve = matches
+        .map((id) => id && design.nodes[id])
+        .find(
+          (n) =>
+            n &&
+            n.kind === 'curve' &&
+            !revolveProfileError(n, 'vertical', defaultRevolveOffset(n, 'vertical')),
+        )
+      if (curve && curve.kind === 'curve') {
+        node.curve = curve.id
+        node.axis = 'vertical'
+        node.axisOffset = defaultRevolveOffset(curve, 'vertical')
+      } else missing.push({ key: 'curve', title: 'Closed profile curve' })
+      continue
+    }
     const value = fill(f, p, node, true)
     if (value !== undefined) node[f.key] = value
     else if (f.required && f.default === undefined)

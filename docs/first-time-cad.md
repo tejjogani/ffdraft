@@ -45,3 +45,5 @@ Draw profile lets you draw a closed outline or rectangle and extrude it into a s
 Select the result and use Edit profile or Edit points to revise it. Undo reverses an edit. Open Project history to review changes, or return to the project and open Render studio to set up a shot.
 
 To make a metal wire, draw a construction curve, select it and choose Make wire. Set Wire width and Wire thickness in the inspector. Edit points on the original curve to reshape the wire.
+
+To turn a cross-section into a bezel or band, draw a closed curve on the Front plane. For a practice bezel, enter (3, 0), (5, 0), (5, 4), and (3, 4) in mm. Select the curve and choose **Revolve**. A vertical axis at 0 mm and a 360° sweep make a 10 mm outer diameter, 6 mm bore and 4 mm height. Choose **Create solid**. You can change the sweep or axis in the inspector, or choose **Edit points** on the curve to reshape the bezel.

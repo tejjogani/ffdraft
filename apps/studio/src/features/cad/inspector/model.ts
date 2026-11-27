@@ -60,7 +60,10 @@ const countRows = (rows: readonly InspectorRow[]): number =>
 
 export function inspectorModel(node: Node, opts: { advanced?: boolean } = {}): InspectorModel {
   const d = describeNode(node.kind)
-  const value = node as unknown as Record<string, unknown>
+  const value: Record<string, unknown> =
+    node.kind === 'revolve' && node.curve !== undefined
+      ? { axis: 'vertical', axisOffset: 0, ...node }
+      : node
   const fields = isProfileNode(node)
     ? d.fields.filter(
         (f) => !['source', 'height', 'bevel', 'bevelSize', 'border', 'join'].includes(f.key),
@@ -71,7 +74,13 @@ export function inspectorModel(node: Node, opts: { advanced?: boolean } = {}): I
         ? d.fields.filter((f) =>
             node.curve === undefined ? f.key !== 'curve' : !['points', 'closed'].includes(f.key),
           )
-        : d.fields
+        : node.kind === 'revolve'
+          ? d.fields.filter((f) =>
+              node.curve === undefined
+                ? !['curve', 'axis', 'axisOffset'].includes(f.key)
+                : f.key !== 'profile',
+            )
+          : d.fields
   const rows = rowsFor(fields, value, [], !!opts.advanced)
   const sections: InspectorSection[] = []
   const section = (group: string | undefined) => {

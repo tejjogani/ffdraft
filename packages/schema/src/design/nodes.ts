@@ -510,14 +510,45 @@ export const Revolve = z
     ...base,
     kind: z.literal('revolve'),
     ...metal,
-    profile: z.string().max(20_000).meta({
+    profile: z.string().max(20_000).optional().meta({
       title: 'Profile',
       widget: 'path',
       description: 'SVG path in mm in the (radius, height) half-plane; revolved about Z.',
     }),
+    curve: ref('Profile curve', ['curve'], {
+      description: 'A closed construction curve. Editing its points rebuilds the solid.',
+    }).optional(),
+    axis: z.enum(['vertical', 'horizontal']).optional().meta({
+      title: 'Rotation axis',
+      description: 'Direction on the drawing plane. Defaults to vertical.',
+    }),
+    axisOffset: z.number().min(-250).max(250).optional().meta({
+      title: 'Axis offset',
+      unit: 'mm',
+      step: 0.05,
+      description:
+        'Horizontal position of a vertical axis or vertical position of a horizontal axis. Defaults to 0 mm.',
+    }),
     angle: deg('Sweep', 1, 360, 360),
   })
-  .meta({ title: 'Revolve', description: 'A lathe form: domes, beads, cups, bezels.' })
+  .superRefine(({ curve, profile, axis, axisOffset }, ctx) => {
+    if ((curve === undefined) === (profile === undefined))
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Revolve needs exactly one closed curve or SVG profile.',
+      })
+    if (profile !== undefined && (axis !== undefined || axisOffset !== undefined))
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'An SVG profile revolves about world Z. Use a construction curve to choose the axis.',
+      })
+  })
+  .meta({
+    title: 'Revolve',
+    description:
+      'Turn a closed curve around an axis to make a solid, or supply an SVG radius-height profile about Z.',
+  })
 
 export const Pipe = z
   .object({
@@ -797,6 +828,7 @@ export function nodeRefs(n: Node): string[] {
       return n.host ? [n.host] : []
     case 'chain':
       return n.through ? [n.through] : []
+    case 'revolve':
     case 'pipe':
       return n.curve === undefined ? [] : [n.curve]
     case 'pattern':

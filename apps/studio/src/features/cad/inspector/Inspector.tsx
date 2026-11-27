@@ -6,7 +6,15 @@ import type { Evaluation } from '@pave/kernel'
 import { type Design, type NodeOf, nodeTitle } from '@pave/schema'
 import { Button, Chip, cn, ScrollArea, Switch } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
-import { ArrowUpRight, Cable, PencilRuler, Scale, SlidersHorizontal, Trash2 } from 'lucide-react'
+import {
+  ArrowUpRight,
+  Cable,
+  PencilRuler,
+  RotateCw,
+  Scale,
+  SlidersHorizontal,
+  Trash2,
+} from 'lucide-react'
 import { useEffect, useMemo } from 'react'
 import { runCommand } from '../../../lib/commands'
 import type { DesignSession } from '../../../lib/design-session/store'
@@ -29,6 +37,7 @@ export interface InspectorProps {
   onDelete(ids: string[]): void
   onEditProfile(node: ProfileNode): void
   onEditCurve(node: NodeOf<'curve'>): void
+  onRevolve(curve: string): void
   onMakeWire(curve: string): void
   onLocateProng(at: [number, number, number]): void
   empty: React.ReactNode
@@ -44,6 +53,7 @@ export function Inspector({
   onDelete,
   onEditProfile,
   onEditCurve,
+  onRevolve,
   onMakeWire,
   onLocateProng,
   empty,
@@ -152,6 +162,11 @@ export function Inspector({
                     <Button size="sm" icon={Cable} onClick={() => onMakeWire(node.id)}>
                       Make wire
                     </Button>
+                    {node.closed && (
+                      <Button size="sm" icon={RotateCw} onClick={() => onRevolve(node.id)}>
+                        Revolve
+                      </Button>
+                    )}
                   </div>
                 )}
               </section>

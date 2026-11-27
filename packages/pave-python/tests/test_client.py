@@ -145,6 +145,18 @@ class StudioTest(unittest.TestCase):
         self.assertEqual(preview["after"]["caratTotal"], 1.25)
         self.assertEqual(project.version, 0)
 
+    def test_revolve_uses_the_project_edit_guard_and_measured_axis(self):
+        project = self.project()
+        self.reply({"version": 1, "change": {"seq": 1}})
+        project.revolve_curve("outline", solid_id="bezel", axis="horizontal",
+                              axis_offset_mm=-2, angle_degrees=180, change_id="spin-1")
+        body = self.request("design.apply")
+        self.assertEqual((body["baseVersion"], body["changeId"]), (0, "spin-1"))
+        self.assertEqual(body["ops"], [{"t": "add", "node": {
+            "id": "bezel", "kind": "revolve", "curve": "outline", "axis": "horizontal",
+            "axisOffset": -2, "angle": 180,
+        }}])
+
     def test_make_wire_names_its_rail_and_preserves_the_edit_guard(self):
         project = self.project()
         self.reply({"version": 1, "change": {"seq": 1}})
