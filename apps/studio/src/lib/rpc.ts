@@ -93,6 +93,7 @@ export const QUERY_NAMES = [
   'projects.summary',
   'design.describe',
   'design.rhinoEdges',
+  'design.rhinoFaceBorders',
   'design.rhinoCapFaces',
   'design.meshComponents',
   'design.history',

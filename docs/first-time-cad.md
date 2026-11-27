@@ -28,6 +28,10 @@ Choose the moving face by its direction or centre in project coordinates. The op
 
 In Features, select an imported part with a retained Rhino solid. Choose Copy edge as curve, then click its outline in the drawing or enter the edge number. Use Top, Front or Right to separate edges that overlap on screen. Choose Copy curve. The new curve appears in Features and has its own Edit control points tool. Editing the curve leaves the original part in place.
 
+## Copy a Rhino face’s borders
+
+Select a retained Rhino solid in Features and choose Copy face borders in the Inspector. Choose an eligible face by number and inspect the outline and holes in the preview. Use Next faces to browse larger solids. Copy borders creates one independent curve for the outer border and one per hole. Undo removes all curves made by that copy. The solid stays in place.
+
 ## Edit a Rhino curve
 
 For a curve imported as NURBS, select its name in Features and choose Edit control points. Click a point on the dashed control polygon or enter its point number, then drag it in the selected view or type X, Y and Z in millimetres. The solid line previews the curve. Adjust Weight to change how strongly a point attracts the curve. Save points records one edit. Export as Rhino .3dm to bring the edited curve back into Rhino.
