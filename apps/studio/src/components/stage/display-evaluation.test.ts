@@ -62,6 +62,12 @@ describe('initial model view', () => {
     expect(initialModelView({ ...draft, parts: [production] })).toBe('three-quarter')
   })
 
+  it('keeps a generated ring in its hero view when a reference body is added', () => {
+    expect(initialModelView({ ...draft, report: { ...draft.report, ringInnerDiameter: 18 } })).toBe(
+      'hero',
+    )
+  })
+
   it('uses the conventional front view for a modelled pendant', () => {
     const pendant = { ...reference, id: 'pendant', importRole: undefined }
     expect(initialModelView({ ...draft, parts: [pendant], referenceParts: [] })).toBe('front')

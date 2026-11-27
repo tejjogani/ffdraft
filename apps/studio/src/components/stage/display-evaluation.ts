@@ -29,7 +29,8 @@ export function displayEvaluation(evaluation: Evaluation): Evaluation {
 export function initialModelView(evaluation: Evaluation): CameraPreset | null {
   const { parts, stones, referenceParts, report } = evaluation
   if (!parts.length && !stones.length && !referenceParts?.length) return null
+  if (report.ringInnerDiameter !== undefined) return 'hero'
   if (referenceParts?.length || parts.some((part) => part.importRole !== undefined))
     return 'three-quarter'
-  return report.ringInnerDiameter !== undefined ? 'hero' : 'front'
+  return 'front'
 }

@@ -22,7 +22,9 @@ Review the skipped objects before choosing Import. Select the new parts in Featu
 
 Click a stone on the ring, even a single diamond in a pavé row. Choose Hide stone to see its seat or Isolate stone to zoom in on it. The same actions work on a metal part. Exit isolation returns to your earlier view. Show all brings back hidden items. The saved piece, metal weight and exports keep their geometry.
 
-Open Construction curves in Features to browse the guides. On an imported Rhino assembly, the eye beside the group shows or hides them together. Use Views to switch between the studio and dark backdrops.
+Open Construction curves in Features to browse the guides. On an imported Rhino assembly, the eye beside the group shows or hides them together. Imported assemblies open at a three-quarter angle. Drag on the model to orbit it. Use Views to switch between the studio and dark backdrops.
+
+For a product image, open Renders and choose a shot. Under Look, choose Studio white or Soft gradient. If the CAD Inspector says Unassigned, use Review role to identify the imported metals and stones first. A view-only hide or backdrop choice in CAD belongs to that workspace.
 
 To update the actual piece, select the part, edit its dimensions in the Inspector, or choose Edit handmade mount and Save mount edit. Undo reverses a saved design change. Export for Rhino to write a new .3dm.
 
