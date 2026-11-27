@@ -6,6 +6,7 @@
 import type { RingSizeSystem } from '@pave/schema'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { metalShellOf } from '../../../components/stage/visibility'
 import type { WheelDevice } from '../../../components/stage/wheel'
 
 export type DisplayMode = 'rendered' | 'clay' | 'technical'
@@ -61,11 +62,20 @@ export function targetHidden(
   mask: Pick<ViewMask, 'hidden' | 'hiddenStones' | 'hiddenParts'>,
   target: NodePick,
 ) {
+  const shell = metalShellOf(target.partId)
   return (
+    (!!shell && mask.hiddenParts.includes(shell.partId)) ||
     mask.hidden.includes(target.nodeId) ||
     (!!target.stoneId && mask.hiddenStones.includes(target.stoneId)) ||
     (!!target.partId && mask.hiddenParts.includes(target.partId))
   )
+}
+
+function targetAndParents(target: NodePick): NodePick[] {
+  const { nodeId, stoneId, partId } = target
+  if (!stoneId && !partId) return [target]
+  const shell = metalShellOf(partId)
+  return shell ? [target, { nodeId, partId: shell.partId }, { nodeId }] : [target, { nodeId }]
 }
 
 function retainedMask(
@@ -266,9 +276,7 @@ export const useWorkspace = create<WorkspaceState>()(
       setTargetsHidden: (targets, hide) => {
         const s = get()
         // Revealing a child also restores visibility of its containing feature.
-        const changed = hide
-          ? targets
-          : targets.flatMap((t) => (t.stoneId || t.partId ? [t, { nodeId: t.nodeId }] : [t]))
+        const changed = hide ? targets : targets.flatMap(targetAndParents)
         const mask = updateMask(s, changed, hide)
         if (s.beforeIsolation && s.isolated.every((t) => targetHidden(mask, t))) {
           set({
@@ -282,9 +290,7 @@ export const useWorkspace = create<WorkspaceState>()(
         if (!targets.length) return
         const s = get()
         const prior = s.beforeIsolation ?? maskOf(s)
-        const reveal = targets.flatMap((t) =>
-          t.stoneId || t.partId ? [t, { nodeId: t.nodeId }] : [t],
-        )
+        const reveal = targets.flatMap(targetAndParents)
         set({ ...updateMask(prior, reveal, false), isolated: [...targets], beforeIsolation: prior })
       },
       exitIsolation: () => {

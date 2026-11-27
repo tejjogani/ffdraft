@@ -121,6 +121,18 @@ describe('component visibility', () => {
     ws().showAll()
     expect(ws()).toMatchObject({ hidden: [], hiddenStones: [], isolated: [] })
   })
+  it('reveals an isolated shell when its parent part was hidden, then restores the hide', () => {
+    const parent = { nodeId: 'chain', partId: 'chain#metal' }
+    const shell = { nodeId: parent.nodeId, partId: parent.partId + '#shell:2' }
+    ws().toggleTarget(parent)
+    ws().isolateTargets([shell])
+    expect(ws().hiddenParts).toEqual([])
+    ws().exitIsolation()
+    expect(ws().hiddenParts).toEqual([parent.partId])
+    ws().toggleTarget(shell)
+    expect(ws().hiddenParts).toEqual([])
+  })
+
   it('isolates an explicitly hidden selection and restores the prior view', () => {
     ws().setTargetsHidden([{ nodeId: 'pave' }, a], true)
     ws().isolateTargets([a])

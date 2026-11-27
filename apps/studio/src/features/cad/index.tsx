@@ -54,7 +54,7 @@ import { displayBounds } from '../../components/stage/display-evaluation'
 import { QualityIndicator } from '../../components/stage/QualityIndicator'
 import { Stage } from '../../components/stage/Stage'
 import type { Viewer, ViewerState } from '../../components/stage/viewer'
-import { createViewVisibility } from '../../components/stage/visibility'
+import { createViewVisibility, metalShellOf } from '../../components/stage/visibility'
 import { runCommand } from '../../lib/commands'
 import { canRedo, canUndo, hasGap } from '../../lib/design-session/core'
 import { useDesignSession, useSessionState } from '../../lib/design-session/store'
@@ -221,7 +221,7 @@ export function PieceDesign({ pieceId }: { pieceId: string }) {
       </div>
     )
   if (!piece.data) return null
-  return <Workspace piece={piece.data} />
+  return <Workspace key={piece.data.id} piece={piece.data} />
 }
 
 function Workspace({ piece }: { piece: Piece }) {
@@ -853,12 +853,15 @@ function Workspace({ piece }: { piece: Piece }) {
   useEffect(() => {
     if (backdrop) viewerHandle?.refreshTheme()
   }, [viewerHandle, backdrop])
+  const shell = metalShellOf(part)
   const selectedTitle =
     owner && typeof selectedOrdinal === 'number' && selectedOrdinal >= 0 && owner.kind !== 'gem'
       ? `Stone ${selectedOrdinal + 1} of ${ownerStones?.length} · ${nodeTitle(owner)}`
-      : selection.length
-        ? selection.map((id) => (view.nodes[id] ? nodeTitle(view.nodes[id]!) : id)).join(', ')
-        : 'Nothing'
+      : owner && shell
+        ? `Part ${shell.index + 1} · ${nodeTitle(owner)}`
+        : selection.length
+          ? selection.map((id) => (view.nodes[id] ? nodeTitle(view.nodes[id]!) : id)).join(', ')
+          : 'Nothing'
 
   const targets = selectedTargets({ selection, stone, part })
   const allHidden =
@@ -938,7 +941,7 @@ function Workspace({ piece }: { piece: Piece }) {
   )
 
   return (
-    <div ref={root} className="absolute inset-0 flex min-h-[520px]">
+    <div ref={root} className="absolute inset-0 flex min-h-0">
       {dockOutliner && (
         <aside
           data-region="outliner"

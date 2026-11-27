@@ -73,7 +73,7 @@ export function PiecePage({ id }: { id: string }) {
 
   const p = piece.data
   return (
-    <div className="flex min-h-full flex-col">
+    <div className={cn('flex flex-col', bleed ? 'min-h-0 flex-1' : 'min-h-full')}>
       <PieceHeader piece={p} stage={stage} area={area} />
       {!area && <Column className="pb-0!">{p ? <PieceHero piece={p} /> : <HeroSkeleton />}</Column>}
       {p && stage && (

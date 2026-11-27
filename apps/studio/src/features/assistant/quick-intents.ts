@@ -71,14 +71,15 @@ const instanceOf = (stoneId: string): number | undefined => {
 export function subjectFor(
   pieceId: string,
   design: Design,
-  pick: { nodeId: string; stoneId?: string } | null,
+  pick: { nodeId: string; stoneId?: string; partId?: string } | null,
   evaluation?: Evaluation | null,
 ): Subject {
   const node = pick ? design.nodes[pick.nodeId] : undefined
   if (!pick || !node) return { type: 'piece', pieceId }
   // A click on a stone is about the stone, whatever node carries it (a chain's stones too); a
   // stone node's tree row is about its stones even without a click on one.
-  if (!isStoneNode(node) && !pick.stoneId) return { type: 'part', pieceId, nodeId: node.id }
+  if (pick.partId || (!isStoneNode(node) && !pick.stoneId))
+    return { type: 'part', pieceId, nodeId: node.id }
   const stones = evaluation?.stones.filter((s) => s.nodeId === node.id)
   const clicked = pick.stoneId ? stones?.find((s) => s.id === pick.stoneId) : undefined
   const instance = pick.stoneId && node.kind !== 'gem' ? instanceOf(pick.stoneId) : undefined
