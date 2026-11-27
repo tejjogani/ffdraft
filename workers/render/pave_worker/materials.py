@@ -85,7 +85,9 @@ def _gem(name: str, m: Material) -> bpy.types.Material:
     bsdf.inputs["IOR"].default_value = m["ior"]
     bsdf.inputs["Transmission Weight"].default_value = 1.0
     # Cycles 5.3 traces dispersion in RGB; even 1024-sample diamond takes retain colour mosaic.
-    bsdf.inputs["Transmission Dispersion Scale"].default_value = 0.0
+    dispersion = bsdf.inputs.get("Transmission Dispersion Scale")
+    if dispersion is not None:
+        dispersion.default_value = 0.0
     tree.links.new(bsdf.outputs[0], out.inputs["Surface"])
 
     # σ = −ln(colour) / distance per channel; density = max σ, colour = 1 − σ / density.
