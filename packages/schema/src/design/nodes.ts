@@ -198,6 +198,17 @@ export const Gem = z
     ...base,
     kind: z.literal('gem'),
     ...stone,
+    importSourceId: z.string().min(1).optional(),
+    importSourceFit: z
+      .object({
+        cut: z.enum(GEM_CUT_IDS),
+        length: z.number().positive(),
+        width: z.number().positive(),
+        depth: z.number().positive(),
+        /** The source's original girdle frame, in world millimetres. */
+        transform: Transform.optional(),
+      })
+      .optional(),
     width: mm('Width', 0.6, 40, 6.5, {
       group: 'Stone',
       widget: 'stoneSize',
@@ -246,6 +257,9 @@ export const Setting = z
     ...base,
     kind: z.literal('setting'),
     ...metal,
+    importSourceId: z.string().min(1).optional(),
+    /** Set on the first edit to a confirmed head's geometry; undo restores the original shape. */
+    importSourceRegenerated: z.literal(true).optional(),
     gem: ref('Holds', ['gem']),
     style: choice('Style', ['prong', 'basket', 'bezel', 'halfBezel', 'flush'], 'prong', {
       labels: { halfBezel: 'Half bezel' },
@@ -455,11 +469,15 @@ export const VectorBody = z
       'Text, a logo path or a shape, extruded into a solid: name pendants, charms, tags.',
   })
 
+export const ImportRoleSchema = z.enum(['unassigned', 'reference', 'metal', 'stone', 'setting'])
+export type ImportRole = z.infer<typeof ImportRoleSchema>
+
 export const MeshBody = z
   .object({
     ...base,
     kind: z.literal('meshBody'),
     ...metal,
+    importRole: ImportRoleSchema.optional(),
     source: z
       .discriminatedUnion('type', [
         z.object({
@@ -847,17 +865,43 @@ export type NodeInputOf<K extends NodeKind> = Extract<NodeInput, { kind: K }>
 
 export const isBodyKind = (k: NodeKind): boolean => (BODY_KINDS as readonly string[]).includes(k)
 
+/** Old Rhino imports have provenance but no role. Other imports keep their existing metal behavior. */
+export function importRoleOf(node: NodeOf<'meshBody'>): ImportRole | undefined {
+  const { source, importRole } = node
+  if (importRole !== undefined) return importRole
+  if (
+    source.type === 'asset' &&
+    (source.rhinoLayer !== undefined ||
+      source.rhinoObjectId !== undefined ||
+      source.rhinoInstancePath !== undefined ||
+      source.nativeAssetId !== undefined)
+  )
+    return 'unassigned'
+}
+
+/** Whether a source is geometry for modeling or exchange until it is assigned to production. */
+export function isImportReference(node: Node): node is NodeOf<'meshBody'> {
+  if (node.kind !== 'meshBody') return false
+  const role = importRoleOf(node)
+  return role !== undefined && role !== 'metal'
+}
+
+export function importSourceRole(node: Node): 'stone' | 'setting' | undefined {
+  if (node.kind === 'gem' && node.importSourceId) return 'stone'
+  if (node.kind === 'setting' && node.importSourceId) return 'setting'
+}
+
 /** Ids of every node this node depends on. Drives evaluation order and integrity checks. */
 export function nodeRefs(n: Node): string[] {
   switch (n.kind) {
-    case 'gem':
-      return n.placement.type === 'ringTop'
-        ? [n.placement.shank]
-        : n.placement.type === 'surface'
-          ? [n.placement.host]
-          : []
+    case 'gem': {
+      const refs = n.importSourceId ? [n.importSourceId] : []
+      if (n.placement.type === 'ringTop') refs.push(n.placement.shank)
+      if (n.placement.type === 'surface') refs.push(n.placement.host)
+      return [...new Set(refs)]
+    }
     case 'setting':
-      return [n.gem]
+      return n.importSourceId ? [n.gem, n.importSourceId] : [n.gem]
     case 'halo':
       return n.head ? [n.around, n.head] : [n.around]
     case 'gemRow':
