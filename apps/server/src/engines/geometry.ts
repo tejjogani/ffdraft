@@ -34,7 +34,12 @@ export function createGeometry(pool: KernelPool): GeometryService {
 
     async renderInput(design, sctx, call) {
       const { glb, subject } = await pool.run(
-        { kind: 'renderInput', design, includeUnassignedRhino: call?.includeUnassignedRhino },
+        {
+          kind: 'renderInput',
+          design,
+          includeUnassignedRhino: call?.includeUnassignedRhino,
+          pose: call?.pose,
+        },
         poolOptions(sctx, call),
       )
       return { glb: { bytes: glb, name: 'piece.glb', mime: 'model/gltf-binary' }, subject }
@@ -42,7 +47,12 @@ export function createGeometry(pool: KernelPool): GeometryService {
 
     subject: (design, sctx, call) =>
       pool.run(
-        { kind: 'subject', design, includeUnassignedRhino: call?.includeUnassignedRhino },
+        {
+          kind: 'subject',
+          design,
+          includeUnassignedRhino: call?.includeUnassignedRhino,
+          pose: call?.pose,
+        },
         poolOptions(sctx, call),
       ),
 

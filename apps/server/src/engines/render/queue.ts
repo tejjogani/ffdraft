@@ -227,6 +227,7 @@ export function createRenderQueue(o: RenderQueueOptions) {
         pieceId: piece.id,
         signal,
         includeUnassignedRhino: job.requestedScene.includeUnassignedRhino,
+        pose: job.requestedScene.pose,
       })
       if (subject.parts.length === 0 && subject.stones.length === 0)
         throw new AppError('conflict', 'Nothing to render: the piece has no metal or stones.')

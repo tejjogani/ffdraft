@@ -39,7 +39,12 @@ async function drawTake(job: RenderJob): Promise<void> {
   }
   // three.js loads only when a take is drawn, so the shell stays light.
   const { renderStill } = await import('./shot-renderer')
-  const render = renderEvaluation(evaluation, piece.design, job.scene.includeUnassignedRhino)
+  const render = renderEvaluation(
+    evaluation,
+    piece.design,
+    job.scene.includeUnassignedRhino,
+    job.scene.pose,
+  )
   if (!render.parts.length && !render.stones.length) {
     await fail('Nothing to render. Review the design or preview its unassigned Rhino bodies.')
     return

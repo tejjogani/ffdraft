@@ -96,9 +96,10 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
     s.shots[0] ??
     null
   const includesImport = shot?.scene.includeUnassignedRhino
+  const pose = shot?.scene.pose
   const render = useMemo(
-    () => evaluation && renderEvaluation(evaluation, geometry.design, includesImport),
-    [evaluation, geometry.design, includesImport],
+    () => evaluation && renderEvaluation(evaluation, geometry.design, includesImport, pose),
+    [evaluation, geometry.design, includesImport, pose],
   )
   const hasPreview = !!(render?.parts.length || render?.stones.length)
   const canRender = !!shot && canRenderShot(shot.scene)

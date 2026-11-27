@@ -411,6 +411,11 @@ export const ANIMATION_TYPES = [
 export type AnimationType = (typeof ANIMATION_TYPES)[number]
 
 export const RenderSceneSchema = z.object({
+  pose: z.enum(['as-designed', 'circular-band']).optional().meta({
+    title: 'Jewelry pose',
+    description:
+      'A render-only pose. Circular band arranges a straight row of separate links around a circle at their current scale. Each station stays rigid. As designed uses the saved CAD.',
+  }),
   /** Saved shots without a chosen look retain their original neutral appearance. */
   importedBodyLook: z.enum(['source', 'clay']).optional().meta({
     description:

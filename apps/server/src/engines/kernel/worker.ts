@@ -8,7 +8,7 @@
  */
 import { parentPort, workerData } from 'node:worker_threads'
 import { createKernel, type LocalKernel } from '@pave/kernel'
-import type { AssetResolver, Kernel } from '@pave/kernel/types'
+import type { AssetResolver, Evaluation, Kernel } from '@pave/kernel/types'
 import { writeGlb } from '@pave/kernel/write-glb'
 import { fitToPhoto, shade, viewCamera } from '@pave/match'
 import { buildProductionPackage } from '@pave/production/node'
@@ -119,7 +119,12 @@ async function run(
         signal,
       })
       signal.throwIfAborted()
-      const render = renderEvaluation(evaluation, task.design, task.includeUnassignedRhino)
+      const render = renderEvaluation(
+        evaluation,
+        task.design,
+        task.includeUnassignedRhino,
+        task.pose,
+      )
       const subject = subjectOf(render)
       if (task.kind === 'subject') return { result: subject, transfer: [] }
       // Empty subjects are refused by the render queue before Blender starts.
@@ -154,13 +159,10 @@ async function run(
     }
     case 'picture': {
       const evaluation = await kernel.evaluate(task.design, { detail: 'draft', assets, signal })
-      const preview = task.shots?.some((shot) => shot.includeUnassignedRhino)
-        ? renderEvaluation(
-            await kernel.evaluate(task.design, { detail: 'production', assets, signal }),
-            task.design,
-            true,
-          )
+      const production = task.shots?.length
+        ? await kernel.evaluate(task.design, { detail: 'production', assets, signal })
         : null
+      const geometries = new Map<string, Evaluation>()
       // A pendant's chain would shrink the pendant to a speck, so it is left out, unless the
       // chain is the whole piece (a Cuban link, a tennis bracelet).
       const chains = Object.entries(task.design.nodes)
@@ -173,20 +175,28 @@ async function run(
         ? task.shots.map((s) => ({
             camera: s.camera,
             size: { width: s.width, height: s.height },
-            imported: s.includeUnassignedRhino,
+            imported: s.includeUnassignedRhino === true,
+            pose: s.pose,
           }))
         : task.views.map((view) => ({
             camera: viewCamera(evaluation, view, { hide }),
             size: { width: task.size, height: task.size },
             imported: false,
+            pose: undefined,
           }))
-      for (const { camera, size, imported } of jobs) {
+      for (const { camera, size, imported, pose } of jobs) {
         signal.throwIfAborted()
+        let subject = evaluation
+        if (production) {
+          const key = JSON.stringify([imported, pose ?? 'as-designed'])
+          subject = geometries.get(key) ?? renderEvaluation(production, task.design, imported, pose)
+          geometries.set(key, subject)
+        }
         images.push(
           own(
-            shade((imported && preview) || evaluation, camera, size, {
+            shade(subject, camera, size, {
               focus: task.focus,
-              hide: imported ? [] : hide,
+              hide: production ? [] : hide,
               ...(task.metal ? { metal: task.metal } : {}),
             }),
           ),

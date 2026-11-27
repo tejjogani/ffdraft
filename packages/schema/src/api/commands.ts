@@ -145,6 +145,7 @@ const none = z.object({})
 /** A JSON merge patch (RFC 7396): objects merge, arrays and scalars replace, null deletes. */
 const mergePatch = z.record(z.string(), z.unknown())
 const importedSceneOptions = RenderSceneSchema.pick({
+  pose: true,
   includeUnassignedRhino: true,
   importedBodyLook: true,
 })

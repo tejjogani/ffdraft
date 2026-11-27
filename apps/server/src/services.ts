@@ -53,6 +53,7 @@ import type {
   RenderEngineStatus,
   RenderInstallStatus,
   RenderJob,
+  RenderScene,
   Run,
   SearchResult,
   SourceRenderAppearance,
@@ -171,6 +172,7 @@ export interface GeometryCall {
 export interface RenderGeometryCall extends GeometryCall {
   /** A shot's opt-in to show unassigned Rhino geometry. */
   includeUnassignedRhino?: boolean
+  pose?: RenderScene['pose']
 }
 
 export interface GeometryService extends Service {
@@ -306,6 +308,7 @@ export interface CaptureService extends Service {
 export type RenderJobPatch = Partial<
   Pick<
     RenderJob,
+    RenderScene,
     | 'status'
     | 'progress'
     | 'assetIds'
