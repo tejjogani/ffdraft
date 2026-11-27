@@ -1,13 +1,25 @@
 import { RenderSceneSchema } from '@pave/schema'
-import { InstancedMesh, Mesh, Vector3 } from 'three'
-import { describe, expect, it } from 'vitest'
-import { paveBar, solitaireRing } from '../../fixtures'
+import {
+  DirectionalLight,
+  InstancedMesh,
+  type Material,
+  Mesh,
+  PerspectiveCamera,
+  Scene,
+  Vector3,
+  WebGLRenderTarget,
+} from 'three'
+import { Reflector } from 'three/addons/objects/Reflector.js'
+import type { MeshBVHUniformStruct } from 'three-mesh-bvh'
+import { describe, expect, it, vi } from 'vitest'
+import { paveBar, roundBrilliant, solitaireRing } from '../../fixtures'
 import { cameraPose } from '../camera'
 import { resolveScene } from '../resolve'
 import { buildRigScene, captureFloor, sparkleUniforms } from './environment'
 import { evaluationToThree } from './evaluation'
 import { GemMaterial } from './gem'
 import { toThreePoint, toThreeQuat, zUpGroup } from './space'
+import { applyResolvedScene } from './stage'
 
 const resolved = (look: 'studio-soft' | 'black-acrylic' | 'editorial-warm' = 'studio-soft') =>
   resolveScene(RenderSceneSchema.parse({ look }), solitaireRing())
@@ -32,6 +44,65 @@ describe('space', () => {
 })
 
 describe('evaluationToThree', () => {
+  it('keeps the original triangle order and vertex buffers of an off-origin imported gem', () => {
+    const ring = solitaireRing()
+    const mesh = roundBrilliant()
+    for (let i = 0; i < mesh.positions.length; i += 3) mesh.positions[i]! += 36
+    const original = mesh.indices.slice()
+    const bounds: typeof ring.report.bounds = { min: [35.5, -0.5, -0.5], max: [36.5, 0.5, 0.5] }
+    const imported = {
+      ...ring.parts[0]!,
+      id: 'imported-diamond',
+      nodeId: 'imported-diamond',
+      importRole: 'unassigned' as const,
+      sourceAppearance: { kind: 'gem', stone: 'diamond' } as const,
+      mesh,
+      bounds,
+    }
+    const evaluation = {
+      ...ring,
+      parts: [imported],
+      stones: [],
+      report: { ...ring.report, bounds: imported.bounds },
+    }
+    const settings = RenderSceneSchema.parse({
+      includeUnassignedRhino: true,
+      importedBodyLook: 'source',
+    })
+    const model = evaluationToThree(evaluation, resolveScene(settings, evaluation))
+    const rendered = model.object.getObjectByName(imported.id)
+    expect(rendered).toBeInstanceOf(Mesh)
+    const { geometry, material } = rendered as Mesh
+    expect(material).toBeInstanceOf(GemMaterial)
+    expect(geometry.getAttribute('position').array).toBe(mesh.positions)
+    expect(geometry.getAttribute('normal').array).toBe(mesh.normals)
+    expect(geometry.index?.array).toBe(mesh.indices)
+    expect(mesh.indices).toEqual(original)
+    model.dispose()
+    expect(mesh.indices).toEqual(original)
+  })
+
+  it('releases shared gem textures once after the last material is disposed', () => {
+    const ring = solitaireRing()
+    ring.stones.push({ ...ring.stones[0]!, id: 'melee:0', role: 'melee' })
+    const model = evaluationToThree(ring)
+    const batches: InstancedMesh[] = []
+    model.object.traverse((o) => {
+      if (o instanceof InstancedMesh) batches.push(o)
+    })
+    expect(batches).toHaveLength(2)
+    const [hero, melee] = batches as [InstancedMesh, InstancedMesh]
+    expect(hero.geometry).toBe(melee.geometry)
+    const material = hero.material as GemMaterial
+    const bvh = material.uniforms.bvh!.value as MeshBVHUniformStruct
+    expect((melee.material as GemMaterial).uniforms.bvh!.value).toBe(bvh)
+    const dispose = vi.spyOn(bvh, 'dispose')
+    material.dispose()
+    expect(dispose).not.toHaveBeenCalled()
+    model.dispose()
+    expect(dispose).toHaveBeenCalledTimes(1)
+  })
+
   it('builds one mesh per part and instanced gems', () => {
     const model = evaluationToThree(solitaireRing(), resolved())
     const meshes: Mesh[] = []
@@ -86,5 +157,34 @@ describe('environment', () => {
     expect(a.positions).toHaveLength(r.rig.sparkles.length)
     expect(a.positions[0]!.distanceTo(b.positions[0]!)).toBeGreaterThan(1)
     expect(a.radiance[0]!.x).toBeGreaterThan(0)
+  })
+})
+
+describe('render stage disposal', () => {
+  it('releases the directional shadow and blur targets when rebuilding a preview', () => {
+    const scene = new Scene()
+    const stage = applyResolvedScene(scene, new PerspectiveCamera(), resolved())
+    const light = scene.getObjectByProperty('type', 'DirectionalLight') as DirectionalLight
+    expect(light).toBeInstanceOf(DirectionalLight)
+    // WebGLRenderer allocates these on the first draw.
+    light.shadow.map = new WebGLRenderTarget(1, 1)
+    light.shadow.mapPass = new WebGLRenderTarget(1, 1)
+    const shadow = vi.spyOn(light.shadow.map, 'dispose')
+    const blur = vi.spyOn(light.shadow.mapPass, 'dispose')
+    stage.dispose()
+    expect(shadow).toHaveBeenCalledTimes(1)
+    expect(blur).toHaveBeenCalledTimes(1)
+  })
+
+  it('lets the acrylic reflector dispose its material and render target once', () => {
+    const scene = new Scene()
+    const stage = applyResolvedScene(scene, new PerspectiveCamera(), resolved('black-acrylic'))
+    const mirror = scene.getObjectByProperty('isReflector', true) as Reflector
+    expect(mirror).toBeInstanceOf(Reflector)
+    const material = vi.spyOn(mirror.material as Material, 'dispose')
+    const target = vi.spyOn(mirror.getRenderTarget(), 'dispose')
+    stage.dispose()
+    expect(material).toHaveBeenCalledTimes(1)
+    expect(target).toHaveBeenCalledTimes(1)
   })
 })
