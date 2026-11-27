@@ -184,7 +184,8 @@ async function write3dm(
             (await native.writeSource(
               o.native.nodeId,
               multiply(o.stone.matrix, o.native.matrix),
-              attrs, affineContext,
+              attrs,
+              affineContext,
             ))
       if (!preserved) {
         const mesh = new rhino.Mesh()

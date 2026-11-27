@@ -199,7 +199,9 @@ export function nativeSolidWriter(
           transform.similarityType === rhino.TransformSimilarityType.NotSimilarity &&
           !placed.makeDeformable()
         ) {
-          if (!addAffineInstance(source.nativeAssetId!, original, transform, attrs, affineContext?.()))
+          if (
+            !addAffineInstance(source.nativeAssetId!, original, transform, attrs, affineContext?.())
+          )
             return useMesh()
           retained++
           return true
@@ -221,14 +223,19 @@ export function nativeSolidWriter(
   }
 
   return {
-    write(part: ScenePart, attrs: ObjectAttributes, affineContext?: () => AffineContext): Promise<boolean> {
+    write(
+      part: ScenePart,
+      attrs: ObjectAttributes,
+      affineContext?: () => AffineContext,
+    ): Promise<boolean> {
       const source = part.sources[0]
       if (!part.preservesNativeSurface || !source) return Promise.resolve(false)
       const original = source.body.nativeImport
       return writeSource(
         original?.nodeId ?? source.nodeId,
         original?.matrix ?? scene.nodes.get(source.nodeId)?.matrix ?? IDENTITY,
-        attrs, affineContext,
+        attrs,
+        affineContext,
       )
     },
     writeSource,
