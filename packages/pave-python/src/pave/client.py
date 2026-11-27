@@ -348,6 +348,24 @@ class Project:
             change_id=change_id,
         )
 
+    def make_ring_band(
+        self,
+        curve_id: str,
+        *,
+        solid_id: str,
+        size: JsonObject,
+        base_version: int | None = None,
+        change_id: str | None = None,
+    ) -> JsonObject:
+        """Make a circular band from a closed Top or Right profile at plane position zero."""
+        node = {"id": solid_id, "kind": "revolve", "curve": curve_id, "size": size}
+        return self.apply(
+            [{"t": "add", "node": node}],
+            "Make ring band",
+            base_version=base_version,
+            change_id=change_id,
+        )
+
     def make_wire(
         self,
         curve_id: str,

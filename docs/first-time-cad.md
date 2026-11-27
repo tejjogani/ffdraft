@@ -147,3 +147,7 @@ Use Sweep 1 rail for a shoulder that follows one guide. Place the cross section 
 ## Render your CAD
 
 Press Render beside Export in CAD to render the saved design. To frame a different shot, open Render Studio, select the shot and press Render. For a catalog image choose Studio white. Black acrylic gives a dark reflective surface. The first render on a supported local workstation installs Blender automatically. You can follow the download in View progress and continue designing. The finished image appears in the project's takes. In the project chat, asking for a Blender render uses the same CAD and render queue.
+
+## Make a custom ring band to finger size
+
+Use Draw curve and choose Right at X plane position 0 mm. For a 4 mm wide, 2 mm thick band, enter Y and Z coordinates (−2, −1), (2, −1), (2, 1), and (−2, 1). Turn on Closed curve and save. With the curve selected, choose Make ring band. The new band opens at US 6. Use Ring size in the Inspector to change the bore while keeping the profile dimensions. Use Edit points on the linked curve to change the cross-section.

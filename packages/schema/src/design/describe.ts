@@ -267,7 +267,10 @@ export function describeNode(kind: NodeKind): NodeDescription {
 }
 
 /** A node's display name: its own name, else its kind's title ("Ring band"). */
-export function nodeTitle(node: Pick<NodeInput, 'kind'> & { name?: string }): string {
+export function nodeTitle(
+  node: Pick<NodeInput, 'kind'> & { name?: string; size?: unknown },
+): string {
+  if (node.kind === 'revolve' && node.size !== undefined) return node.name || 'Custom ring band'
   return node.name || describeNode(node.kind).title
 }
 

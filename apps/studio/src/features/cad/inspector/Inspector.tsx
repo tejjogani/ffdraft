@@ -10,6 +10,7 @@ import {
   isRhinoRoleBody,
   type NodeOf,
   nodeTitle,
+  ringBandProfileError,
 } from '@pave/schema'
 import { Button, Chip, cn, ScrollArea, Switch } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
@@ -33,6 +34,7 @@ import { NurbsControls } from '../curves/NurbsControls'
 import { RhinoEdgeCopy } from '../curves/RhinoEdgeCopy'
 import { RhinoFaceBorders } from '../curves/RhinoFaceBorders'
 import { isSectionFeature, type SectionFeature, sectionCurveOptions } from '../curves/section-model'
+import { KIND_ICON } from '../kindIcon'
 import { type ImportedMesh, isImportedMesh } from '../mesh-edit/model'
 import { isProfileNode, type ProfileNode, profileSize } from '../profiles/profile'
 import { RhinoEndFaceTool } from '../rhino/RhinoEndFaceTool'
@@ -57,6 +59,7 @@ export interface InspectorProps {
   onReviewRhinoRole(id: string): void
   onEditCurve(node: NodeOf<'curve'>): void
   onRevolve(curve: string): void
+  onMakeRingBand(curve: string): void
   onEditSectionFeature(node: SectionFeature): void
   canEditSectionFeature(node: SectionFeature): boolean
   onMakeWire(curve: string): void
@@ -78,6 +81,7 @@ export function Inspector({
   onReviewRhinoRole,
   onEditCurve,
   onRevolve,
+  onMakeRingBand,
   onEditSectionFeature,
   canEditSectionFeature,
   onMakeWire,
@@ -94,6 +98,7 @@ export function Inspector({
     [node, fineTune],
   )
 
+  const bandProfileError = node?.kind === 'curve' ? ringBandProfileError(node) : undefined
   const edit = useNodeEdit(node, design, session, readOnly, prior)
   // A gesture belongs to the feature it was started on: leaving that feature (or the
   // inspector) ends it as a change rather than leaving it live and unsaved.
@@ -295,9 +300,20 @@ export function Inspector({
                       Make wire
                     </Button>
                     {node.closed && (
-                      <Button size="sm" icon={RotateCw} onClick={() => onRevolve(node.id)}>
-                        Revolve
-                      </Button>
+                      <>
+                        <Button size="sm" icon={RotateCw} onClick={() => onRevolve(node.id)}>
+                          Revolve
+                        </Button>
+                        <Button
+                          size="sm"
+                          icon={KIND_ICON.ringShank}
+                          disabled={!!bandProfileError}
+                          title={bandProfileError}
+                          onClick={() => onMakeRingBand(node.id)}
+                        >
+                          Make ring band
+                        </Button>
+                      </>
                     )}
                   </div>
                 )}

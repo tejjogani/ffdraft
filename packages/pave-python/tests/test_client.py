@@ -378,6 +378,18 @@ class StudioTest(unittest.TestCase):
             "axisOffset": -2, "angle": 180,
         }}])
 
+    def test_make_ring_band_uses_finger_size_and_keeps_the_edit_guard(self):
+        project = self.project()
+        self.reply({"version": 1, "change": {"seq": 1}})
+        project.make_ring_band("outline", solid_id="custom-band", size={"system": "us", "value": 7},
+                               change_id="band-1")
+        body = self.request("design.apply")
+        self.assertEqual((body["baseVersion"], body["changeId"]), (0, "band-1"))
+        self.assertEqual(body["ops"], [{"t": "add", "node": {
+            "id": "custom-band", "kind": "revolve", "curve": "outline",
+            "size": {"system": "us", "value": 7},
+        }}])
+
     def test_set_mesh_vertices_binds_to_the_observed_source_and_version(self):
         project = self.project()
         self.reply({"version": 1, "change": {"seq": 1}})
