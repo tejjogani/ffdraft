@@ -1,6 +1,6 @@
 import type { Evaluation, Part } from '@pave/kernel'
 import { describe, expect, it } from 'vitest'
-import { displayEvaluation } from './display-evaluation'
+import { displayEvaluation, initialModelView } from './display-evaluation'
 
 const bounds = { min: [20, 30, 40], max: [21, 32, 43] } as const
 const reference = {
@@ -48,5 +48,27 @@ describe('import references in the viewport', () => {
     const view = displayEvaluation(piece)
     expect(view.parts).toEqual([production, reference])
     expect(view.report.bounds).toEqual({ min: [-3, -4, -5], max: [21, 32, 43] })
+  })
+})
+
+describe('initial model view', () => {
+  it('opens a reference-only import in three-quarter view', () => {
+    expect(initialModelView(draft)).toBe('three-quarter')
+    expect(initialModelView(displayEvaluation(draft))).toBe('three-quarter')
+  })
+
+  it('opens an import mixed with a modelled feature in three-quarter view', () => {
+    const production = { ...reference, id: 'band', importRole: undefined }
+    expect(initialModelView({ ...draft, parts: [production] })).toBe('three-quarter')
+  })
+
+  it('uses the conventional front view for a modelled pendant', () => {
+    const pendant = { ...reference, id: 'pendant', importRole: undefined }
+    expect(initialModelView({ ...draft, parts: [pendant], referenceParts: [] })).toBe('front')
+  })
+
+  it('leaves initial framing to the construction plane for a curve-only design', () => {
+    const curve = { nodeId: 'profile', closed: false, plane: 'top' as const, points: [] }
+    expect(initialModelView({ ...draft, referenceParts: [], curves: [curve] })).toBeNull()
   })
 })

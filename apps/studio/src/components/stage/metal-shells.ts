@@ -1,6 +1,6 @@
 import type { Bounds, Part } from '@pave/kernel'
 import { BufferAttribute, BufferGeometry, type Mesh, Ray, Vector3 } from 'three'
-import type { ViewerPick, ViewTarget } from './visibility'
+import { metalShellOf, type ViewerPick, type ViewTarget } from './visibility'
 
 const SHELL_SUFFIX = '#shell:'
 /** Avoid blocking pointer input on imported scan meshes with millions of triangles. */
@@ -107,7 +107,7 @@ export class MetalBatch {
 }
 
 export function isShellOf(partId: string, id: string | null | undefined): boolean {
-  return id?.startsWith(`${partId}${SHELL_SUFFIX}`) ?? false
+  return metalShellOf(id)?.partId === partId
 }
 
 export function geometryOf(part: Part): BufferGeometry {

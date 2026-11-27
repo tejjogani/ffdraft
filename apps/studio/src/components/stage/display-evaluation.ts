@@ -1,4 +1,5 @@
 import type { Bounds, Evaluation } from '@pave/kernel'
+import type { CameraPreset } from '@pave/render'
 
 export function displayBounds(evaluation: Evaluation): Bounds {
   const { referenceParts = [], report, parts, stones } = evaluation
@@ -23,4 +24,12 @@ export function displayEvaluation(evaluation: Evaluation): Evaluation {
     parts: [...piece.parts, ...referenceParts],
     report: { ...piece.report, bounds: displayBounds(evaluation) },
   }
+}
+
+export function initialModelView(evaluation: Evaluation): CameraPreset | null {
+  const { parts, stones, referenceParts, report } = evaluation
+  if (!parts.length && !stones.length && !referenceParts?.length) return null
+  if (referenceParts?.length || parts.some((part) => part.importRole !== undefined))
+    return 'three-quarter'
+  return report.ringInnerDiameter !== undefined ? 'hero' : 'front'
 }

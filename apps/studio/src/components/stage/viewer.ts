@@ -77,7 +77,7 @@ import {
   sameQuality,
 } from './adaptive'
 import { pickConstructionCurve } from './construction-pick'
-import { displayEvaluation } from './display-evaluation'
+import { displayEvaluation, initialModelView } from './display-evaluation'
 import { viewportScene } from './environment'
 import { ImagePlaneLayer, type ImagePlaneSpec } from './image-planes'
 import {
@@ -367,7 +367,7 @@ export class Viewer {
     const first = curves[0]
     const wasEmpty = this.constructionFrame.length === 0
     this.constructionFrame = curves
-    if (first && wasEmpty && !this.evaluation?.parts.length && !this.evaluation?.stones.length) {
+    if (first && wasEmpty && !this.framedOnce) {
       const points = curves.flatMap((c) => c.points)
       if (first.plane) this.viewConstructionPlane(first.plane, points)
       else if (points.length) this.look(40, 25, points, 0.64, false)
@@ -640,9 +640,11 @@ export class Viewer {
     this.placeShadow(evaluation.report.bounds, evaluation.report.ringInnerDiameter !== undefined)
     this.applyGemQuality()
     this.applyLook()
-    if (!this.framedOnce && evaluation.parts.length + evaluation.stones.length > 0) {
+    const preset = !this.framedOnce && initialModelView(input)
+    if (preset) {
       this.framedOnce = true
-      this.view(this.defaultView(), false)
+      const { azimuth, elevation, fill } = CAMERA_PRESETS[preset]
+      this.look(azimuth, elevation, this.pointsFor(undefined, false), fill, false)
     }
   }
 
@@ -968,16 +970,18 @@ export class Viewer {
     return parts
   }
 
-  private pointsFor(nodeIds?: readonly string[]): Vec3[] {
+  private pointsFor(nodeIds?: readonly string[], includeConstruction = true): Vec3[] {
     const e = this.evaluation
     if (!nodeIds?.length && this.frameFocus.length) {
-      const focused = this.nodePoints(this.frameFocus)
+      const focused = this.nodePoints(this.frameFocus, includeConstruction)
       if (focused.length) return focused
     }
     if (!nodeIds?.length) {
-      const construction = this.constructionFrame
-        .filter((curve) => this.isVisible(curve))
-        .flatMap((curve) => curve.points)
+      const construction = includeConstruction
+        ? this.constructionFrame
+            .filter((curve) => this.isVisible(curve))
+            .flatMap((curve) => curve.points)
+        : []
       if (!e) return construction
       const parts = this.visibleMetalParts()
       const stones = e.stones.filter((s) => this.isVisible({ nodeId: s.nodeId, stoneId: s.id }))
@@ -985,16 +989,18 @@ export class Viewer {
       const subject = subjectOf({ ...e, parts, stones })
       return [...(subject.silhouette ?? corners(e.report.bounds)), ...construction]
     }
-    const pts = this.nodePoints(nodeIds)
-    return pts.length ? pts : this.pointsFor()
+    const pts = this.nodePoints(nodeIds, includeConstruction)
+    return pts.length ? pts : this.pointsFor(undefined, includeConstruction)
   }
 
-  private nodePoints(nodeIds: readonly string[]): Vec3[] {
+  private nodePoints(nodeIds: readonly string[], includeConstruction = true): Vec3[] {
     const e = this.evaluation
     const ids = new Set(nodeIds)
-    const pts: Vec3[] = this.constructionFrame
-      .filter((curve) => ids.has(curve.nodeId) && this.isVisible(curve))
-      .flatMap((curve) => curve.points)
+    const pts: Vec3[] = includeConstruction
+      ? this.constructionFrame
+          .filter((curve) => ids.has(curve.nodeId) && this.isVisible(curve))
+          .flatMap((curve) => curve.points)
+      : []
     for (const part of this.visibleMetalParts())
       if (ids.has(part.nodeId)) pts.push(...corners(part.bounds))
     for (const s of e?.stones ?? [])
@@ -1112,12 +1118,6 @@ export class Viewer {
         p.y >= HUD_BAND_PX &&
         p.y <= this.height - HUD_BAND_PX,
     )
-  }
-
-  private defaultView(): CameraPreset {
-    return this.evaluation && this.evaluation.report.ringInnerDiameter !== undefined
-      ? 'hero'
-      : 'front'
   }
 
   /** Frames the whole piece (or the given nodes) from the current direction. */

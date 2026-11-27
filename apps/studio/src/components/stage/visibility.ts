@@ -49,3 +49,13 @@ export function createViewVisibility(state: ViewVisibilityState): (target: ViewT
 export function isViewTargetVisible(state: ViewVisibilityState, target: ViewTarget): boolean {
   return createViewVisibility(state)(target)
 }
+
+/** A picked shell's parent evaluated part and zero-based ordinal in that part. */
+export function metalShellOf(
+  id: string | null | undefined,
+): { partId: string; index: number } | null {
+  if (!id) return null
+  const match = /^(.*)#shell:(\d+)$/.exec(id)
+  const index = Number(match?.[2])
+  return match?.[1] && Number.isSafeInteger(index) ? { partId: match[1], index } : null
+}
