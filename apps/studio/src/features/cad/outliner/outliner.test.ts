@@ -153,7 +153,8 @@ describe('Features panel', () => {
         aiTouched: new Set<string>(),
         readOnly: true,
         onDelete: () => {},
-        subjectOf: (nodeId) => ({ type: 'part', pieceId: 'piece', nodeId }),
+        subjectOf: (nodeId) =>
+          nodeId ? { type: 'part', pieceId: 'piece', nodeId } : { type: 'piece', pieceId: 'piece' },
         header: null,
       }),
     )

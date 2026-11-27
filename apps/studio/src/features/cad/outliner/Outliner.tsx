@@ -57,8 +57,8 @@ export interface OutlinerProps {
   aiTouched: ReadonlySet<string>
   readOnly: boolean
   onDelete(ids: string[]): void
-  /** What a row's menu is about: a stone (a gem, or a whole row, halo or pavé) or a part. */
-  subjectOf(nodeId: string): Subject
+  /** What the menu is about: the piece, a feature, or an individual stone. */
+  subjectOf(nodeId: string | null, stoneId?: string): Subject
   header: React.ReactNode
 }
 
@@ -275,9 +275,12 @@ export function Outliner({
                 <ContextMenu
                   key={row.key}
                   content={
-                    <MenuItem icon={EyeIcon} onClick={toggleConstruction}>
-                      {label}
-                    </MenuItem>
+                    <>
+                      <MenuItem icon={EyeIcon} onClick={toggleConstruction}>
+                        {label}
+                      </MenuItem>
+                      <AskAiSection subject={subjectOf(null)} />
+                    </>
                   }
                 >
                   {item}
@@ -308,6 +311,7 @@ export function Outliner({
                       <MenuItem icon={Scan} onClick={toggleIsolation}>
                         {isolateLabel}
                       </MenuItem>
+                      {selected && <AskAiSection subject={subjectOf(row.nodeId, row.id)} />}
                     </>
                   }
                 >
