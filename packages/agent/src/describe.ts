@@ -85,6 +85,11 @@ export const TOOL_CHIPS = {
     running: 'Reading Rhino edges',
     done: 'Read Rhino edges',
   },
+  'design.rhinoFaceBorders': {
+    quiet: true,
+    running: 'Reading Rhino face borders',
+    done: 'Read Rhino face borders',
+  },
   'design.rhinoCapFaces': {
     quiet: true,
     running: 'Reading Rhino end faces',

@@ -126,6 +126,7 @@ const def = <I extends z.ZodType, O extends z.ZodType, const T extends ToolFlag 
 
 const id = z.string()
 export const MAX_RHINO_EDGE_PAGE_SIZE = 100
+export const MAX_RHINO_FACE_BORDER_PAGE_SIZE = 30
 const meshPoint = z.tuple([z.number(), z.number(), z.number()])
 const componentId = z.number().int().nonnegative()
 /** Every format the CAD exports to; which of them count is in plans/plans.ts. */
@@ -749,6 +750,48 @@ export const commands = {
         )
         .max(MAX_RHINO_EDGE_PAGE_SIZE),
       curve: NurbsDefinition.optional(),
+      reason: z.string().nullable(),
+    }),
+  }),
+  'design.rhinoFaceBorders': def({
+    kind: 'query',
+    tool: true,
+    description:
+      'Read the complete outer and inner borders of a retained Rhino face in project XYZ millimetres. Page by source face index with offset and limit (maximum 30). faceCount includes ineligible source faces, so a page can be empty. Pass faceIndex to receive one exact closed NURBS curve per loop, outer first. To copy the whole border, use one design.apply at the returned version and add one new nurbsCurve per loop with a fresh ID and its degree, knots and controlPoints. Faces with seams, repeated edges, singular trims or gaps are ineligible.',
+    input: z.object({
+      pieceId: id,
+      nodeId: id,
+      offset: componentId.default(0),
+      limit: z.number().int().min(1).max(MAX_RHINO_FACE_BORDER_PAGE_SIZE).default(20),
+      faceIndex: componentId.optional(),
+    }),
+    output: z.object({
+      pieceId: id,
+      nodeId: id,
+      version: componentId,
+      nativeAssetId: id.nullable(),
+      faceCount: componentId,
+      faces: z
+        .array(
+          z.object({
+            faceIndex: componentId,
+            loops: z
+              .array(
+                z.object({
+                  kind: z.enum(['outer', 'inner']),
+                  preview: z.array(meshPoint).min(2).max(97),
+                }),
+              )
+              .min(1)
+              .max(12),
+          }),
+        )
+        .max(MAX_RHINO_FACE_BORDER_PAGE_SIZE),
+      curves: z
+        .array(NurbsDefinition.safeExtend({ kind: z.enum(['outer', 'inner']) }))
+        .min(1)
+        .max(12)
+        .optional(),
       reason: z.string().nullable(),
     }),
   }),

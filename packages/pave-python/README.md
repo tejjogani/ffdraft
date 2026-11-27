@@ -111,6 +111,20 @@ project.undo(change["version"])
 
 Pass an `edge_index` to `rhino_edges` to inspect the exact definition before duplicating. The `at` argument guards the version from the edge selection.
 
+### Duplicate a native Rhino face border
+
+Page through the source face indices with `rhino_face_borders`, up to 30 per page. `faceCount` includes ineligible faces, so a page can be empty. Pass a zero-based `face_index` to inspect one face's exact closed outer and inner curves in project millimetres.
+
+```python
+border = project.rhino_face_borders("sleeve", face_index=3)
+changed = project.duplicate_rhino_face_border(
+    "sleeve", 3, ["outside-rim", "inside-rim"], at=border["version"],
+)
+project.undo(changed["version"])
+```
+
+Supply one new node ID per loop in the returned order, outer first. All curves are added in one versioned edit. A face with a seam, a repeated edge, an edgeless trim or a gap returns its reason.
+
 ## Edit a NURBS control point
 
 Use the project feature ID and the version returned by `describe`. Each control point stores Euclidean XYZ in millimetres and a rational weight. This example moves an interior point of an open curve 0.25 mm while preserving its weight, knots and degree.

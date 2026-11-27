@@ -165,6 +165,50 @@ class Project:
             base_version=version, change_id=change_id,
         )
 
+    def rhino_face_borders(
+        self, feature_id: str, *, offset: int = 0, limit: int = 20,
+        face_index: int | None = None,
+    ) -> JsonObject:
+        """Read a page of native face borders or all the exact loops of one face."""
+        if face_index is not None:
+            return self._cad_rpc("design.rhinoFaceBorders", nodeId=feature_id, faceIndex=face_index)
+        return self._cad_rpc("design.rhinoFaceBorders", nodeId=feature_id, offset=offset, limit=limit)
+
+    def duplicate_rhino_face_border(
+        self, feature_id: str, face_index: int, new_node_ids: Iterable[str],
+        *, at: int | None = None, change_id: str | None = None,
+    ) -> JsonObject:
+        """Add one independent NURBS curve per loop in a single undoable edit, outer first."""
+        selected = self.rhino_face_borders(feature_id, face_index=face_index)
+        version = selected["version"]
+        if at is not None and at != version:
+            raise RpcError(
+                409, "conflict",
+                f"The piece is at version {version}, not {at}. Select its Rhino face again.",
+                {"currentVersion": version},
+            )
+        curves = selected.get("curves")
+        if not curves:
+            raise ValueError(selected.get("reason") or "This Rhino face has no supported border.")
+        ids = list(new_node_ids) if not isinstance(new_node_ids, str) else []
+        if (
+            len(ids) != len(curves)
+            or any(not isinstance(node_id, str) or not node_id for node_id in ids)
+            or len(set(ids)) != len(ids)
+        ):
+            raise ValueError("Give one unique node ID per face loop, outer first.")
+        return self.apply(
+            [{
+                "t": "add",
+                "node": {
+                    "id": node_id, "kind": "nurbsCurve", "degree": curve["degree"],
+                    "knots": curve["knots"], "controlPoints": curve["controlPoints"],
+                },
+            } for node_id, curve in zip(ids, curves)],
+            "Duplicate Rhino face border",
+            base_version=version, change_id=change_id,
+        )
+
     def rhino_cap_faces(self, feature_id: str) -> JsonObject:
         """Read native end-face IDs, project-space normals, thickness, and source version."""
         return self._cad_rpc("design.rhinoCapFaces", nodeId=feature_id)

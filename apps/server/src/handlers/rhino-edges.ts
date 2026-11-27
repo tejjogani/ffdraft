@@ -1,8 +1,7 @@
 import { inspectRhinoEdges } from '@pave/kernel/rhino-edges'
-import { getAssetRow } from '../assets/assets'
-import { AppError, badRequest } from '../errors'
+import { badRequest } from '../errors'
 import { getPiece } from '../lookups'
-import { meshWasReshaped, retainedRhinoPart } from './rhino-source'
+import { meshWasReshaped, retainedRhinoBytes, retainedRhinoPart } from './rhino-source'
 import type { Handler } from './types'
 
 export const rhinoEdges: Handler<'design.rhinoEdges'> = async (ctx, input) => {
@@ -20,11 +19,7 @@ export const rhinoEdges: Handler<'design.rhinoEdges'> = async (ctx, input) => {
   if (meshWasReshaped(part.node))
     return unsupported('Undo mesh shaping on this part to access its native Rhino edges.')
 
-  const source = await getAssetRow(ctx, part.nativeAssetId).catch((error: unknown) => {
-    if (error instanceof AppError && error.status === 404) return null
-    throw error
-  })
-  const bytes = source && (await ctx.blobs.get(source.sha256))
+  const bytes = await retainedRhinoBytes(ctx, part.nativeAssetId)
   if (!bytes) return unsupported('The retained Rhino solid is unavailable.')
   try {
     return {

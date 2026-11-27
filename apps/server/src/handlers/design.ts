@@ -25,6 +25,7 @@ import { serviceContext } from '../service-context'
 import { assertAttested } from './pieces'
 import { offsetRhinoCapFace, rhinoCapFaces } from './rhino-caps'
 import { rhinoEdges } from './rhino-edges'
+import { rhinoFaceBorders } from './rhino-face-borders'
 import type { HandlerGroup } from './types'
 
 type ChangeRow = typeof t.designChange.$inferSelect
@@ -196,6 +197,7 @@ export const design: HandlerGroup<'design'> = {
     }
   },
   'design.rhinoEdges': rhinoEdges,
+  'design.rhinoFaceBorders': rhinoFaceBorders,
   'design.rhinoCapFaces': rhinoCapFaces,
   'design.offsetRhinoCap': offsetRhinoCapFace,
   'design.meshComponents': async (ctx, { pieceId, nodeId, offset, limit, vertexIds, faceIds }) => {

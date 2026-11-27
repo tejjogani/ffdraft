@@ -144,6 +144,52 @@ class StudioTest(unittest.TestCase):
         self.assertEqual(result["version"], 4)
         self.assertEqual(project.version, 4)
 
+    def test_duplicates_both_rhino_face_loops_in_one_versioned_edit(self):
+        project = self.project()
+        curve = {"degree": 1, "knots": [0, 1, 2, 3], "controlPoints": [
+            [0, 0, 0, 1], [2, 0, 0, 1], [0, 2, 0, 1], [0, 0, 0, 1],
+        ]}
+        self.reply({"version": 3, "nativeAssetId": "source", "faceCount": 4, "faces": []})
+        page = project.rhino_face_borders("sleeve", offset=2, limit=1)
+        self.assertEqual(self.request("design.rhinoFaceBorders"), {
+            "pieceId": "ring", "nodeId": "sleeve", "offset": 2, "limit": 1,
+        })
+        self.reply({"version": 3, "nativeAssetId": "source", "curves": [
+            {"kind": "outer", **curve}, {"kind": "inner", **curve},
+        ]})
+        self.reply({"version": 4, "change": {"id": "copy-loops", "seq": 4}})
+        result = project.duplicate_rhino_face_border(
+            "sleeve", 3, ["outer-rim", "bore-rim"], at=page["version"], change_id="copy-loops",
+        )
+        self.assertEqual(self.request("design.rhinoFaceBorders"), {
+            "pieceId": "ring", "nodeId": "sleeve", "faceIndex": 3,
+        })
+        self.assertEqual(self.request("design.apply"), {
+            "pieceId": "ring", "baseVersion": 3, "changeId": "copy-loops",
+            "label": "Duplicate Rhino face border",
+            "ops": [
+                {"t": "add", "node": {"id": node, "kind": "nurbsCurve", **curve}}
+                for node in ["outer-rim", "bore-rim"]
+            ],
+        })
+        self.assertEqual(result["version"], 4)
+
+    def test_rhino_face_border_refuses_missing_loop_ids_and_stale_versions(self):
+        project = self.project()
+        self.reply({"version": 4, "nativeAssetId": "source", "curves": [
+            {"kind": "outer"}, {"kind": "inner"},
+        ]})
+        with self.assertRaisesRegex(ValueError, "one unique node ID"):
+            project.duplicate_rhino_face_border("sleeve", 3, ["one"], at=4)
+        self.request("design.rhinoFaceBorders")
+        self.assertTrue(self.server.requests.empty())
+        self.reply({"version": 4, "nativeAssetId": "source", "curves": []})
+        with self.assertRaises(RpcError) as raised:
+            project.duplicate_rhino_face_border("sleeve", 3, ["one", "two"], at=3)
+        self.assertEqual(raised.exception.status, 409)
+        self.request("design.rhinoFaceBorders")
+        self.assertTrue(self.server.requests.empty())
+
     def test_rhino_edge_duplication_refuses_an_outdated_selection(self):
         project = self.project()
         self.reply({"version": 4, "nativeAssetId": "new-source", "curve": {

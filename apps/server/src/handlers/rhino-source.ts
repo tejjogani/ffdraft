@@ -1,5 +1,7 @@
 import type { Design, NodeOf } from '@pave/schema'
-import { notFound } from '../errors'
+import { getAssetRow } from '../assets/assets'
+import type { Ctx } from '../context'
+import { AppError, notFound } from '../errors'
 
 export function retainedRhinoPart(design: Design, nodeId: string) {
   if (!Object.hasOwn(design.nodes, nodeId)) throw notFound('Feature', nodeId)
@@ -23,4 +25,12 @@ export function meshWasReshaped(node: NodeOf<'meshBody'>) {
     node.hollow !== 0 ||
     node.detail !== 1
   )
+}
+
+export async function retainedRhinoBytes(ctx: Ctx, assetId: string) {
+  const source = await getAssetRow(ctx, assetId).catch((error: unknown) => {
+    if (error instanceof AppError && error.status === 404) return null
+    throw error
+  })
+  return source && (await ctx.blobs.get(source.sha256))
 }
