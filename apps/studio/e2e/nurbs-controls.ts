@@ -56,6 +56,7 @@ try {
       { id, value },
     )
   const open = async () => {
+    await page.getByRole('treeitem', { name: /^Construction curves/ }).press('ArrowRight')
     await page.getByRole('treeitem', { name: /Gallery rail/ }).click()
     await page.getByRole('button', { name: 'Edit control points', exact: true }).click()
     return page.getByRole('dialog', { name: 'Edit control points' })
