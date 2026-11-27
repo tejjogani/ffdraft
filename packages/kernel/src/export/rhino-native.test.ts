@@ -12,7 +12,7 @@ beforeAll(async () => {
 })
 afterAll(() => kernel.dispose())
 
-async function importedSpheres() {
+async function importedSpheres(blockScale = -1, shear = 0) {
   const doc = new rhino.File3dm()
   doc.settings().modelUnitSystem = rhino.UnitSystem.Centimeters
   const sphere = rhino.Brep.createFromSphere(new rhino.Sphere([0, 0, 0], 1))
@@ -48,7 +48,8 @@ async function importedSpheres() {
     t: Transform,
   ) => InstanceReference
   const matrix = rhino.Transform.identity()
-  matrix.m00 = -1
+  matrix.m00 = blockScale
+  matrix.m01 = shear
   matrix.m03 = 8
   const first = new Ref(def.id, matrix)
   const second = new Ref(def.id, rhino.Transform.translationXYZ(15, 0, 0))
@@ -214,6 +215,38 @@ describe('native Rhino solid export', () => {
 
     const scoped = await kernel.export(changed, '3dm', { assets, stones: false, only: ['part-1'] })
     expect(readRhinoExport(scoped.bytes)).toMatchObject([{ nodeIds: 'part-1', native: true }])
+  })
+
+  it('keeps an exact affine instance when baking its analytic surface would distort it', async () => {
+    const parts = await importedSpheres(-2, 0.25)
+    const { design, assets } = fixture(parts)
+    const { bytes } = await kernel.export(design, '3dm', { assets, only: ['part-1'] })
+    const doc = rhino.File3dm.fromByteArray(bytes)
+    const table = doc.objects()
+    const defs = doc.instanceDefinitions()
+    expect(table.count).toBe(2)
+    expect(defs.count).toBe(1)
+    const objects = [table.get(0), table.get(1)]
+    const [placed, leaf] = objects
+      .map((object) => object.geometry())
+      .sort(
+        (a, b) =>
+          Number(b instanceof rhino.InstanceReference) -
+          Number(a instanceof rhino.InstanceReference),
+      )
+    expect(placed).toBeInstanceOf(rhino.InstanceReference)
+    expect(leaf).toBeInstanceOf(rhino.Brep)
+    const definition = defs.findId((placed as InstanceReference).parentIdefId)
+    expect(definition.getObjectIds()).toHaveLength(1)
+    const transform = (placed as InstanceReference).xform
+    expect([transform.m00, transform.m01, transform.m11, transform.m22, transform.m03]).toEqual([
+      -2, 0.25, 1, 1, 80,
+    ])
+    const box = leaf!.getBoundingBox(true)
+    expect(box.min).toEqual([-10, -10, -10])
+    expect(box.max).toEqual([10, 10, 10])
+    for (const obj of [box, transform, definition, leaf!, placed!, ...objects, defs, table, doc])
+      freeRhino(obj)
   })
 
   it('exports evaluated meshes after changes and restores the native BRep on undo', async () => {

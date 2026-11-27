@@ -222,6 +222,45 @@ describe('readRhino3dm', () => {
     expect(result.objects.map((object) => object.name)).toEqual(['Visible part'])
   })
 
+  it('preserves a capped Rhino extrusion as a native solid with its trimmed faces', async () => {
+    const r = 0.8
+    const h = 1.2
+    const circle = new rhino.Circle([0, 0, 0], r)
+    const cylinder = new rhino.Cylinder(circle, h)
+    const extrusion = rhino.Extrusion.createCylinderExtrusion(cylinder, true, true)
+    const render = new rhino.Mesh()
+    const vertices = render.vertices()
+    for (const z of [0, h]) {
+      vertices.add(r, 0, z)
+      vertices.add(0, r, z)
+      vertices.add(-r, 0, z)
+      vertices.add(0, -r, z)
+    }
+    const faces = render.faces()
+    faces.addQuadFace(3, 2, 1, 0)
+    faces.addQuadFace(4, 5, 6, 7)
+    for (let i = 0; i < 4; i++) {
+      const next = (i + 1) % 4
+      faces.addQuadFace(i, next, next + 4, i + 4)
+    }
+    expect(extrusion.setMesh(render, rhino.MeshType.Render)).toBe(true)
+    const bytes = writeFile((doc) => {
+      doc.objects().addExtrusion(extrusion, named('Capped extrusion'))
+    }, rhino.UnitSystem.Centimeters)
+
+    const result = await readRhino3dm(bytes)
+    const part = result.objects[0]!
+    expect(part.name).toBe('Capped extrusion')
+    expect(part.bounds).toEqual({ min: [-8, -8, 0], max: [8, 8, 12] })
+    expect(result.skipped).toEqual([])
+    const archive = rhino.File3dm.fromByteArray(part.native!.bytes)
+    const brep = archive.objects().get(0).geometry()
+    expect(brep).toBeInstanceOf(rhino.Brep)
+    if (!(brep instanceof rhino.Brep)) throw new Error('Missing native extrusion geometry')
+    expect(brep.isSolid).toBe(true)
+    expect(brep.faces().count).toBe(3)
+  })
+
   it('imports a Rhino block at the instance placement and excludes its definition geometry', async () => {
     const bytes = writeFile((doc) => {
       const definitions = doc.instanceDefinitions()

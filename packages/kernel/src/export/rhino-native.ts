@@ -1,4 +1,13 @@
-import type { Brep, File3dmObjectTable, ObjectAttributes, RhinoModule, Transform } from 'rhino3dm'
+import type {
+  Brep,
+  File3dm,
+  File3dmInstanceDefinitionTable,
+  File3dmObjectTable,
+  InstanceReference,
+  ObjectAttributes,
+  RhinoModule,
+  Transform,
+} from 'rhino3dm'
 import type { Quality, Scene, ScenePart } from '../core'
 import { IDENTITY, type Mat4, multiply } from '../geometry/vec'
 import { MAX_RHINO_FILE_BYTES } from '../import/rhino'
@@ -83,11 +92,14 @@ function readBrep(rhino: RhinoModule, bytes: Uint8Array): Brep | null {
 /** Native solid geometry shared by placements is read once. Each export object owns its placement. */
 export function nativeSolidWriter(
   rhino: RhinoModule,
+  doc: File3dm,
   objects: File3dmObjectTable,
   scene: Scene,
   { assets, signal }: Pick<ExportOptions, 'assets' | 'signal'>,
 ) {
   const sources = new Map<string, Brep | null>()
+  let definitions: File3dmInstanceDefinitionTable | undefined
+  const definitionIds = new Map<string, string>()
   const unavailable: string[] = []
   let retained = 0
 
@@ -102,6 +114,53 @@ export function nativeSolidWriter(
     sources.set(assetId, source)
     signal?.throwIfAborted()
     return source
+  }
+
+  const addAffineInstance = (
+    assetId: string,
+    original: Brep,
+    transform: Transform,
+    attrs: ObjectAttributes,
+  ): boolean => {
+    // Some analytic Rhino surfaces cannot be baked through shear or nonuniform scale.
+    // A new single-leaf block keeps the original exact surface and applies the affine
+    // placement without bringing its siblings or any original definition into the file.
+    const key = `${assetId}:${attrs.layerIndex}`
+    let id = definitionIds.get(key)
+    if (!id) {
+      definitions ??= doc.instanceDefinitions()
+      const leaf = new rhino.ObjectAttributes()
+      leaf.name = 'Solid'
+      leaf.layerIndex = attrs.layerIndex
+      const index = definitions.add(
+        `Pavé Rhino solid ${definitionIds.size + 1}`,
+        '',
+        '',
+        '',
+        [0, 0, 0],
+        [original],
+        [leaf],
+      )
+      freeRhino(leaf)
+      if (index < 0) return false
+      const definition = definitions.get(index)
+      id = definition.id
+      freeRhino(definition)
+      definitionIds.set(key, id)
+    }
+    // The binding's (definition id, transform) constructor is missing from its .d.ts.
+    const Ref = rhino.InstanceReference as unknown as new (
+      id: string,
+      transform: Transform,
+    ) => InstanceReference
+    const instance = new Ref(id, transform)
+    const count = objects.count
+    try {
+      objects.addInstanceObject(instance, attrs)
+      return objects.count === count + 1
+    } finally {
+      freeRhino(instance)
+    }
   }
 
   return {
@@ -124,6 +183,10 @@ export function nativeSolidWriter(
         return false
       }
       if (!original) return useMesh()
+      if (source.rhinoObjectId) attrs.setUserString('rhinoObjectId', source.rhinoObjectId)
+      if (source.rhinoInstancePath?.length)
+        attrs.setUserString('rhinoInstancePath', JSON.stringify(source.rhinoInstancePath))
+
       const placed = original.duplicate() as Brep
       const matrix = source.nativeTransform
         ? multiply(result.matrix, source.nativeTransform)
@@ -132,23 +195,21 @@ export function nativeSolidWriter(
       try {
         if (transform) {
           const determinant = transform.determinant()
-          if (
-            !transform.isAffine ||
-            determinant === 0 ||
-            !Number.isFinite(determinant) ||
-            // OpenNURBS can silently distort analytic surfaces under a non-uniform scale.
-            (transform.similarityType === rhino.TransformSimilarityType.NotSimilarity &&
-              !placed.makeDeformable()) ||
-            !placed.transform(transform)
-          )
+          if (!transform.isAffine || determinant === 0 || !Number.isFinite(determinant))
             return useMesh()
+          if (
+            transform.similarityType === rhino.TransformSimilarityType.NotSimilarity &&
+            !placed.makeDeformable()
+          ) {
+            if (!addAffineInstance(source.nativeAssetId!, original, transform, attrs))
+              return useMesh()
+            retained++
+            return true
+          }
+          if (!placed.transform(transform)) return useMesh()
           if (determinant < 0) placed.flip()
           if (!placed.isSolid || !placed.isValid) return useMesh()
         }
-
-        if (source.rhinoObjectId) attrs.setUserString('rhinoObjectId', source.rhinoObjectId)
-        if (source.rhinoInstancePath?.length)
-          attrs.setUserString('rhinoInstancePath', JSON.stringify(source.rhinoInstancePath))
 
         const count = objects.count
         objects.addBrep(placed, attrs)
@@ -170,6 +231,7 @@ export function nativeSolidWriter(
       ]
     },
     dispose() {
+      if (definitions) freeRhino(definitions)
       for (const source of sources.values()) if (source) freeRhino(source)
     },
   }

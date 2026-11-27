@@ -78,7 +78,7 @@ async function write3dm(scene: Scene, objects: readonly MeshObject[], options: E
     return o
   }
   const objectTable = hold(doc.objects())
-  const native = nativeSolidWriter(rhino, objectTable, scene, options)
+  const native = nativeSolidWriter(rhino, doc, objectTable, scene, options)
   try {
     const settings = hold(doc.settings())
     const layerTable = hold(doc.layers())
