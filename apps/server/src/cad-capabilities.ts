@@ -7,6 +7,11 @@ type Operation = { status: Support; detail: string; tools: AgentToolName[] }
 
 // Product operations whose scope a Rhino command name or a feature schema alone cannot describe.
 const operations: Record<string, Operation> = {
+  customProfileBand: {
+    status: 'available',
+    detail: 'Revolve a closed Top or Right meridian profile on the finger axis to a specified ring size. Changing its size preserves the section. Edit the source curve to change the section. A custom revolved band cannot directly host a generated stone row.',
+    tools: ['design.apply', 'design.describe', 'design.evaluate'],
+  },
   sweep1: {
     status: 'limited',
     detail:

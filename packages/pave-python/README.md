@@ -227,3 +227,5 @@ project.apply(
     "Resize custom band to US 7",
 )
 ```
+
+Use `project.modeling_options()` for the available modeling operation names. For example, `project.modeling_options("customProfileBand")` returns the supported scope and commands. `project.modeling_options("revolve")` returns the feature creation schema.
