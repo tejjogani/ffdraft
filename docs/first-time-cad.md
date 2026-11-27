@@ -38,7 +38,7 @@ For a product image, open Renders and choose a shot. Under Look, choose Studio w
 
 1. Open **Renders** in the project. Choose **Add view**, then **Hero**, **Front**, **Top**, **Detail** or **Copy current**. Name the view and choose **Add view** to save it.
 2. For a straight, articulated import, choose **Ring pose → Circular band** to arrange the links in a loop for this view. Its diameter follows the source length. Choose **As imported** for a straight layout. Each view saves its own pose. CAD, casting measurements and exports keep the original geometry.
-3. Drag the viewfinder to orbit, Shift-drag to pan and use the wheel or pinch to zoom. Under **Look**, choose your lighting. For a soft floor reflection choose **White gloss** under Ground. The view saves your camera and settings.
+3. Choose **Expand preview** in the viewfinder for more screen space. Press Escape to return. Drag to orbit, Shift-drag to pan and use the wheel or pinch to zoom. Under **Look**, choose your lighting. For a soft floor reflection choose **White gloss** under Ground. The view saves your camera and settings.
 4. Press **Render** for one image or **Render all** for the saved set. A shot is the saved setup. A take is a finished image or movie. Choose a motion on the shot to make a moving take. Supported local Mac and Windows installations prepare Blender on the first render.
 
 For example, keep a **Straight top** view, add a **Circular hero** view, then add a **Setting detail** view to show the claws and stones. A straight run of individually modeled settings can be posed this way. A single fused mesh keeps its modeled shape. The presentation pose does not certify clasp engagement or fit.
