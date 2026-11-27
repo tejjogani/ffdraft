@@ -69,6 +69,19 @@ function collapsed(u: Vec3, v: Vec3, normal: Vec3): boolean {
   return length(normal) <= AREA_EPSILON * Math.max(dot(u, u), dot(v, v))
 }
 
+/** Zero-area faces can appear when deformed coordinates are rounded to mesh precision. */
+export function checkDeformedTriangleAreas({ positions, indices }: IndexedTriangles): void {
+  if (!positions.every(Number.isFinite))
+    throw new Error('The deformation moves mesh vertices out of range')
+  for (let i = 0; i < indices.length; i += 3) {
+    const a = point(positions, indices[i]!)
+    const u = sub(point(positions, indices[i + 1]!), a)
+    const v = sub(point(positions, indices[i + 2]!), a)
+    if (collapsed(u, v, cross(u, v)))
+      throw new Error(`The deformation collapses mesh triangle ${i / 3}`)
+  }
+}
+
 /** Roots of a quadratic on the edit path, using a formula that retains the smaller root. */
 function roots(a: number, b: number, c: number): number[] {
   if (Math.abs(a) <= AREA_EPSILON * Math.abs(b)) return b === 0 ? [] : [-c / b]

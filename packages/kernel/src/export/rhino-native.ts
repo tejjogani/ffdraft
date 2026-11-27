@@ -195,10 +195,8 @@ export function nativeSolidWriter(
         const determinant = transform.determinant()
         if (!transform.isAffine || determinant === 0 || !Number.isFinite(determinant))
           return useMesh()
-        if (
-          transform.similarityType === rhino.TransformSimilarityType.NotSimilarity &&
-          !placed.makeDeformable()
-        ) {
+        const affine = transform.similarityType === rhino.TransformSimilarityType.NotSimilarity
+        const keepInstance = () => {
           if (
             !addAffineInstance(source.nativeAssetId!, original, transform, attrs, affineContext?.())
           )
@@ -206,9 +204,10 @@ export function nativeSolidWriter(
           retained++
           return true
         }
-        if (!placed.transform(transform)) return useMesh()
+        if (affine && !placed.makeDeformable()) return keepInstance()
+        if (!placed.transform(transform)) return affine ? keepInstance() : useMesh()
         if (determinant < 0) placed.flip()
-        if (!placed.isSolid || !placed.isValid) return useMesh()
+        if (!placed.isSolid || !placed.isValid) return affine ? keepInstance() : useMesh()
       }
 
       const count = objects.count

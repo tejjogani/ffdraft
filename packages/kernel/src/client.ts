@@ -265,4 +265,5 @@ export function createKernelClient(options: KernelClientOptions = {}): KernelCli
     },
   }
 }
+export { mountFitMatrix, mountFitToGemMatrix } from './geometry/mount-fit'
 export type * from './types'

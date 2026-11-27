@@ -518,6 +518,7 @@ function independentImports(
   targeted: ReadonlyMap<string, readonly Solid[]>,
   scoped: ReadonlyMap<Solid, readonly Solid[]>,
   everywhere: readonly Solid[],
+  gemBoxes: readonly Bounds[],
   additions: readonly HostedAddition[],
 ): Set<string> {
   const hosts = new Set(additions.map(({ host }) => host.id))
@@ -541,10 +542,11 @@ function independentImports(
       hosts.has(id)
     )
       continue
-    const { material, solid } = bodies[0]!
+    const { material, solid, customMount } = bodies[0]!
     const box = solid.bounds()
     // Account for the submicron translation of production seats below.
-    if (cutters.some((cut) => boundsOverlap(cut, box, Math.max(...GENERAL_POSITION)))) continue
+    const near = (cut: Bounds) => boundsOverlap(cut, box, Math.max(...GENERAL_POSITION))
+    if (cutters.some(near) || (!customMount && gemBoxes.some(near))) continue
     if (
       [...byMaterial].some(
         ([alloy, boxes]) => alloy !== material && boxes.some((other) => boundsOverlap(other, box)),
@@ -585,11 +587,14 @@ export function assembleProduction(
     const targeted = new Map<string, Solid[]>()
     const scoped = new Map<Solid, Solid[]>()
     const everywhere: Solid[] = []
+    const gemCutters: Solid[] = []
+    const hasCustomMount = active.some((result) => result.bodies.some((body) => body.customMount))
     const settings = settingsByGem(results.values())
     for (const result of active)
       for (const cut of result.cuts) {
         const targets = cutTargets(cut, design, settings)
-        if (targets === 'all') everywhere.push(cut.solid)
+        if (targets === 'all')
+          (cut.gemSeat && hasCustomMount ? gemCutters : everywhere).push(cut.solid)
         else if (cut.importSeatGem) {
           const hosts = isCopiedSeat(result)
             ? [result]
@@ -612,8 +617,18 @@ export function assembleProduction(
         if (host) additions.push({ nodeId: result.id, host, addition })
       }
 
+    const gemBoxes = gemCutters.map((solid) => solid.bounds())
+    const gemSeats = gemCutters.length
+      ? temp(fuse(batch(gemCutters, quality, temp)).translate(GENERAL_POSITION))
+      : null
+    const seatFor = (solid: Solid, customMount: boolean | undefined) =>
+      !customMount &&
+      gemSeats &&
+      gemBoxes.some((box) => boundsOverlap(box, solid.bounds(), Math.max(...GENERAL_POSITION)))
+        ? gemSeats
+        : null
     const independent = separateImportedBodies
-      ? independentImports(active, targeted, scoped, everywhere, additions)
+      ? independentImports(active, targeted, scoped, everywhere, gemBoxes, additions)
       : new Set<string>()
     const parts: ScenePart[] = []
     const chains = new Set(
@@ -666,8 +681,13 @@ export function assembleProduction(
         const bodyTool = specific
           ? fuse(batch([...(cutters ?? []), ...specific], quality, temp))
           : tool
-        if (bodyTool) group.precut.push(temp(body.solid.manifold(quality).subtract(bodyTool)))
-        else {
+        const seat = seatFor(body.solid, body.customMount)
+        if (bodyTool || seat) {
+          let cut = body.solid.manifold(quality)
+          if (bodyTool) cut = temp(cut.subtract(bodyTool))
+          if (seat) cut = temp(cut.subtract(seat))
+          group.precut.push(cut)
+        } else {
           group.solids.push(body.solid)
           group.prioritySolids?.push(body.solid)
         }
@@ -677,7 +697,9 @@ export function assembleProduction(
     for (const { nodeId, host, addition } of additions) {
       const spec = specOf(host.bodies[0]!)
       const group = groupFor(spec)
+      const seat = addition.afterCuts ? null : seatFor(addition.solid, host.bodies[0]!.customMount)
       if (addition.afterCuts) group.late.push(addition.solid)
+      else if (seat) group.precut.push(temp(addition.solid.manifold(quality).subtract(seat)))
       else {
         group.solids.push(addition.solid)
         group.prioritySolids?.push(addition.solid)
@@ -700,6 +722,7 @@ export function assembleProduction(
     // so it stays filled: kept, it would read as a bare cavity and the stone as held by nothing.
     const sealedCuts = [
       ...everywhere,
+      ...gemCutters,
       ...[...targeted.values()].flat(),
       ...new Set([...scoped.values()].flat()),
     ].map((c) => c.bounds())

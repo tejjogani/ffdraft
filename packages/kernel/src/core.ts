@@ -190,6 +190,8 @@ export interface Body extends MetalSpec {
   solid: Solid
   /** Modeling identity of a retained original, including a mesh without a native sidecar. */
   importSourceId?: string
+  /** A retained mount that already has its own stone openings. */
+  customMount?: true
   /** An unchanged native source and its placement underneath this body's mesh. */
   nativeImport?: { nodeId: string; matrix: Mat4 }
   /**
@@ -226,8 +228,10 @@ export interface Cut {
   solid: Solid
   /** Node ids whose bodies are cut, or every metal body the cutter touches. */
   targets: 'all' | readonly string[]
-  /** An imported stone may only cut its own regenerated setting or explicit host. */
+  /** A scoped stone seat only cuts its own generated setting or explicit host. */
   importSeatGem?: string
+  /** An ordinary loose stone seat should leave unrelated custom mounts alone. */
+  gemSeat?: true
 }
 
 /** Metal added to another node's body, in that body's alloy. */

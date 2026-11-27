@@ -191,6 +191,7 @@ function readRhinoExport(bytes: Uint8Array) {
         }
         return {
           native,
+          affineInstance: geometry instanceof rhino.InstanceReference,
           valid: geometry.isValid,
           trims,
           min,
@@ -520,6 +521,262 @@ describe('native Rhino solid export', () => {
 })
 
 describe('Rhino import roles', () => {
+  it('deforms a single placement of a shared native sphere with an affine cage', async () => {
+    const parts = await importedSpheres()
+    const { design, assets } = fixture(parts)
+    const { design: placed } = applyOps(design, [
+      {
+        t: 'update',
+        id: 'part-1',
+        patch: { transform: { position: [4, 3, 7], rotation: [0, 0, 90], scale: 2 } },
+      },
+      { t: 'update', id: 'part-2', patch: { source: { nativeAssetId: 'native-1' } } },
+    ])
+    const { design: deformed } = applyOps(placed, [
+      {
+        t: 'update',
+        id: 'part-1',
+        patch: {
+          mountCage: {
+            min: [-16, 143, -13],
+            max: [24, 183, 27],
+            offsets: [
+              [2, 1, -3],
+              [2, 1, -3],
+              [12, 21, -3],
+              [12, 21, -3],
+              [2, 1, -3],
+              [2, 1, -3],
+              [12, 21, -3],
+              [12, 21, -3],
+            ],
+          },
+        },
+      },
+    ])
+    const changed = await kernel.evaluate(deformed, { assets })
+    const baseline = await kernel.evaluate(placed, { assets })
+    expect(changed.parts.find((p) => p.nodeId === 'part-1')?.bounds).toEqual({
+      min: [-9, 144, -16],
+      max: [31, 204, 24],
+    })
+    expect(changed.parts.find((p) => p.nodeId === 'part-2')?.bounds).toEqual(
+      baseline.parts.find((p) => p.nodeId === 'part-2')?.bounds,
+    )
+    const output = await kernel.export(deformed, '3dm', { assets, only: ['part-1', 'part-2'] })
+    const { objects } = await readRhino3dm(output.bytes)
+    expect(objects).toHaveLength(2)
+    expect(objects.every((o) => o.native)).toBe(true)
+    const edited = objects.find((o) => o.name.startsWith(parts[1]!.name))!
+    expect(edited.bounds).toEqual({ min: [-9, 144, -16], max: [31, 204, 24] })
+    expect(objects.find((o) => o.name === parts[2]!.name)?.bounds).toEqual(parts[2]!.bounds)
+  })
+
+  it('uses a different affine cage placement for each separate solid on a shared cage', async () => {
+    const parts = await importedBoxes()
+    const { design, assets } = fixture(parts)
+    const { design: deformed } = applyOps(
+      design,
+      ['part-0', 'part-1'].map((id) => ({
+        t: 'update',
+        id,
+        patch: {
+          mountCage: {
+            mode: 'byPart',
+            min: [0, 0, 0],
+            max: [4, 2, 2],
+            offsets: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 1],
+            ],
+          },
+        },
+      })),
+    )
+    const output = await kernel.export(deformed, '3dm', { assets, stones: false })
+    const { objects, skipped } = await readRhino3dm(output.bytes)
+    expect(skipped).toEqual([])
+    expect(
+      objects.map(({ bounds, layer, native }) => ({ bounds, layer, native: !!native })),
+    ).toEqual([
+      {
+        bounds: { min: [0, 0, -0.125], max: [2, 2, 2.25] },
+        layer: 'Workshop::Stock',
+        native: true,
+      },
+      {
+        bounds: { min: [2, 0, -0.25], max: [4, 2, 2.625] },
+        layer: 'Workshop::Stock',
+        native: true,
+      },
+    ])
+    expect(output.notes[0]).toMatch(/2 native Rhino solids retained, 0 evaluated mesh bodies/)
+  })
+
+  it('exports a nonlinear cage as a connected mesh and restores the immutable BRep on undo', async () => {
+    const parts = (await importedSpheres()).slice(0, 1)
+    const { design, assets, data } = fixture(parts)
+    const originalAsset = data.get('native-0')!.slice()
+    const { design: deformed, inverse } = applyOps(design, [
+      {
+        t: 'update',
+        id: 'part-0',
+        patch: {
+          mountCage: {
+            min: [-10, -10, -10],
+            max: [10, 10, 10],
+            offsets: [
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 0],
+              [0, 0, 4],
+            ],
+          },
+        },
+      },
+    ])
+    const before = await kernel.evaluate(design, { assets })
+    const after = await kernel.evaluate(deformed, { assets })
+    expect(after.parts[0]?.mesh.indices).toEqual(before.parts[0]?.mesh.indices)
+    expect(after.parts[0]?.bounds).toEqual({ min: [-10, -10, -10], max: [10, 10, 11] })
+    const output = await kernel.export(deformed, '3dm', { assets, stones: false })
+    expect(readRhinoExport(output.bytes)).toMatchObject([{ nodeIds: 'part-0', native: false }])
+    expect(output.notes.some((note) => /nonlinear cage/i.test(note))).toBe(true)
+    expect(data.get('native-0')).toEqual(originalAsset)
+    const restored = applyOps(deformed, inverse).design
+    expect(restored).toEqual(design)
+    const original = await kernel.export(restored, '3dm', { assets, stones: false })
+    expect(readRhinoExport(original.bytes)).toMatchObject([{ nodeIds: 'part-0', native: true }])
+  })
+
+  it('rejects a cage that folds an interior cross section', async () => {
+    const { design } = fixture((await importedSpheres()).slice(0, 1))
+    expect(() =>
+      applyOps(design, [
+        {
+          t: 'update',
+          id: 'part-0',
+          patch: {
+            mountCage: {
+              min: [-10, -10, -10],
+              max: [10, 10, 10],
+              offsets: [
+                [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0],
+                [0, 0, 0],
+                [-25, 0, 0],
+                [0, 0, 0],
+                [-25, 0, 0],
+              ],
+            },
+          },
+        },
+      ]),
+    ).toThrow(/fold|collaps/i)
+  })
+
+  it('refits only a linked custom mount from its original frame and reverses repeated changes', async () => {
+    const { design, assets } = fixture(await importedBoxes(3))
+    const { design: original } = applyOps(design, [
+      { t: 'update', id: 'part-0', patch: { importRole: 'stone' } },
+      {
+        t: 'add',
+        node: {
+          id: 'gem',
+          kind: 'gem',
+          width: 2,
+          importSourceId: 'part-0',
+          transform: { position: [1, 1, 1] },
+          importSourceFit: {
+            cut: 'round',
+            width: 2,
+            length: 2,
+            depth: 2,
+            transform: { position: [1, 1, 1] },
+          },
+        },
+      },
+      {
+        t: 'add',
+        node: { id: 'other-gem', kind: 'gem', width: 1, transform: { position: [3, 1, 1.9] } },
+      },
+      {
+        t: 'update',
+        id: 'part-1',
+        patch: {
+          mountCage: {
+            min: [2, 0, 0],
+            max: [4, 2, 2],
+            offsets: [
+              [0.5, 0, 0],
+              [0.5, 0, 0],
+              [0.5, 0, 0],
+              [0.5, 0, 0],
+              [0.5, 0, 0],
+              [0.5, 0, 0],
+              [0.5, 0, 0],
+              [0.5, 0, 0],
+            ],
+          },
+          mountFit: {
+            gem: 'gem',
+            base: { width: 2, length: 2, depth: 2 },
+            frame: { position: [1, 1, 1], rotation: [0, 0, 0] },
+          },
+        },
+      },
+    ])
+    const { design: refit, inverse } = applyOps(original, [
+      {
+        t: 'update',
+        id: 'gem',
+        patch: {
+          transform: { position: [1, 3, 1] },
+          sourcing: {
+            provider: 'lab',
+            sku: 'larger',
+            measured: { width: 3, length: 4, depth: 1.5 },
+          },
+        },
+      },
+    ])
+    const before = await kernel.evaluate(original, { assets })
+    const after = await kernel.evaluate(refit, { assets })
+    expect(after.parts.find((p) => p.nodeId === 'part-1')?.bounds).toEqual({
+      min: [3.25, 1, 0.25],
+      max: [6.25, 5, 1.75],
+    })
+    expect(after.parts.find((p) => p.nodeId === 'part-2')?.bounds).toEqual(
+      before.parts.find((p) => p.nodeId === 'part-2')?.bounds,
+    )
+    expect(after.stones.find((s) => s.nodeId === 'other-gem')).toEqual(
+      before.stones.find((s) => s.nodeId === 'other-gem'),
+    )
+    const output = await kernel.export(original, '3dm', { assets, only: ['part-1'] })
+    expect(readRhinoExport(output.bytes)).toMatchObject([{ native: true, volume: 8 }])
+    const refitExport = await kernel.export(refit, '3dm', { assets, only: ['part-1'] })
+    expect(readRhinoExport(refitExport.bytes)).toMatchObject([
+      { native: true, trims: 4 },
+      { affineInstance: true, nodeIds: 'part-1', volume: 18 },
+    ])
+    const restored = await kernel.evaluate(applyOps(refit, inverse).design, { assets })
+    expect(restored.parts.find((p) => p.nodeId === 'part-1')?.bounds).toEqual(
+      before.parts.find((p) => p.nodeId === 'part-1')?.bounds,
+    )
+  })
+
   it('keeps source and reference geometry out of both reports and casting, while preserving BReps in 3dm', async () => {
     const { design, assets } = fixture(await importedBoxes(3))
     const classified = applyOps(design, [

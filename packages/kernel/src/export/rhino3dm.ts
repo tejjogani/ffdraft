@@ -58,7 +58,8 @@ function importedObject(scene: Scene, o: MeshObject) {
   const source = o.kind === 'metal' ? o.part.sources[0] : undefined
   const nodeId =
     o.kind === 'stone' ? o.importSourceId : (source?.body.importSourceId ?? source?.nodeId)
-  const node = nodeId === undefined ? undefined : scene.nodes.get(nodeId)?.node
+  const result = nodeId === undefined ? undefined : scene.nodes.get(nodeId)
+  const node = result?.node
   if (node?.kind !== 'meshBody' || node.source.type !== 'asset' || !node.keepSourcePlacement)
     return null
   const { rhinoLayer, rhinoObjectId, rhinoInstancePath, rhinoContext } = node.source
@@ -68,6 +69,8 @@ function importedObject(scene: Scene, o: MeshObject) {
     path: rhinoLayer?.split('::').filter(Boolean),
     context: rhinoContext,
     hasNativeSource: Boolean(node.source.nativeAssetId),
+    nonlinearMountCage:
+      (result?.data as { nonlinearMountCage?: boolean } | undefined)?.nonlinearMountCage === true,
     strings: {
       ...(role && { importRole: role }),
       ...(rhinoObjectId && { rhinoObjectId }),
@@ -211,7 +214,9 @@ async function write3dm(
           meshBodies++
           if (imported?.hasNativeSource && !o.part.preservesNativeSurface)
             evaluatedImports.push(
-              `“${imported.name}” uses the evaluated mesh because the current body could not retain its original native surface.`,
+              imported.nonlinearMountCage
+                ? `“${imported.name}” uses the evaluated mesh for its nonlinear cage. The original Rhino solid remains in the project.`
+                : `“${imported.name}” uses the evaluated mesh because the current body could not retain its original native surface.`,
             )
         }
       }
