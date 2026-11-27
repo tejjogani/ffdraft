@@ -91,6 +91,7 @@ export const QUERY_NAMES = [
   'pieces.get',
   'pieces.estimate',
   'projects.summary',
+  'design.capabilities',
   'design.describe',
   'design.rhinoEdges',
   'design.rhinoFaceBorders',
