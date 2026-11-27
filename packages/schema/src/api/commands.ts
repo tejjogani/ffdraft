@@ -13,7 +13,9 @@ import { z } from 'zod'
 import {
   ChangeSchema,
   DesignSchema,
+  isModelImportAdd,
   MAX_DESIGN_CHANGE_OPS,
+  MAX_MODEL_IMPORT_OPS,
   OpSchema,
   PIECE_KINDS,
 } from '../design/design'
@@ -787,21 +789,31 @@ export const commands = {
     }),
   }),
   'design.apply': def({
-    description:
-      'Edit a piece’s CAD by applying ops to its feature tree: add / update / remove / move nodes. Updates are JSON merge patches. All ops in one call form a single undoable change; give it a short human label. Fails atomically with a precise message if an op is invalid.',
+    description: `Edit a piece’s CAD by adding, updating, removing or moving features. Updates are JSON merge patches. Each call is one undoable change with a short human label. General edits allow up to ${MAX_DESIGN_CHANGE_OPS} operations. Model imports and their undo can include up to ${MAX_MODEL_IMPORT_OPS} parts and curves. Fails atomically with a precise message if an operation is invalid.`,
     kind: 'mutation',
     tool: true,
-    input: z.object({
-      pieceId: id,
-      /** Version the ops were authored against; omitted = apply on top of whatever is current. */
-      baseVersion: z.number().int().optional(),
-      label: z.string().min(1).max(200),
-      ops: z.array(OpSchema).min(1).max(MAX_DESIGN_CHANGE_OPS),
-      /** Client-generated id so retries are idempotent. */
-      changeId: z.string().optional(),
-      /** When these ops undo earlier changes (a guarded undo), their ids. */
-      reverts: z.array(id).min(1).max(200).optional(),
-    }),
+    input: z
+      .object({
+        pieceId: id,
+        /** Version the ops were authored against; omitted = apply on top of whatever is current. */
+        baseVersion: z.number().int().optional(),
+        label: z.string().min(1).max(200),
+        ops: z.array(OpSchema).min(1).max(MAX_MODEL_IMPORT_OPS),
+        /** Client-generated id so retries are idempotent. */
+        changeId: z.string().optional(),
+        /** When these ops undo earlier changes (a guarded undo), their ids. */
+        reverts: z.array(id).min(1).max(200).optional(),
+      })
+      .refine(
+        ({ ops, reverts }) =>
+          ops.length <= MAX_DESIGN_CHANGE_OPS ||
+          ops.every(isModelImportAdd) ||
+          (reverts?.length === 1 && ops.every((op) => op.t === 'remove' && !op.cascade)),
+        {
+          path: ['ops'],
+          message: `Edits over ${MAX_DESIGN_CHANGE_OPS} operations must import measured model parts or NURBS curves, or undo one recorded model import. No operation may cascade.`,
+        },
+      ),
     output: z.object({ version: z.number().int(), change: StoredChangeSchema }),
   }),
   'design.history': def({

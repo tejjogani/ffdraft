@@ -66,8 +66,22 @@ export type Op =
   | { t: 'move'; id: string; index: number }
   | { t: 'setKind'; kind: PieceKind }
 
-/** Largest undoable edit accepted by the design API. */
+/** Largest general edit accepted by the design API. */
 export const MAX_DESIGN_CHANGE_OPS = 500
+/** Model imports and their inverses remain one history entry up to this many nodes. */
+export const MAX_MODEL_IMPORT_OPS = 1000
+
+export function isModelImportAdd(op: z.infer<typeof OpSchema>): boolean {
+  if (op.t !== 'add') return false
+  const { kind, source, keepSourcePlacement } = op.node
+  return (
+    kind === 'nurbsCurve' ||
+    (kind === 'meshBody' &&
+      keepSourcePlacement === true &&
+      isObject(source) &&
+      source.type === 'asset')
+  )
+}
 
 export const ActorSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('user'), id: z.string() }),

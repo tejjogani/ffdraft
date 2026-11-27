@@ -24,6 +24,55 @@ const all: [string, CommandDef][] = [
 ]
 
 describe('the command registry', () => {
+  it('allows a larger batch of measured model additions or removals from one recorded change', () => {
+    const accepts = (ops: unknown[], reverts?: string[]) =>
+      commands['design.apply'].input.safeParse({
+        pieceId: 'project',
+        label: 'Import',
+        ops,
+        reverts,
+      }).success
+    const adds = Array.from({ length: 1001 }, (_, i) => ({
+      t: 'add',
+      node:
+        i % 2 === 0
+          ? {
+              id: `body-${i}`,
+              kind: 'meshBody',
+              source: { type: 'asset', assetId: 'stl' },
+              keepSourcePlacement: true,
+            }
+          : {
+              id: `curve-${i}`,
+              kind: 'nurbsCurve',
+              degree: 1,
+              knots: [0, 1],
+              controlPoints: [
+                [0, 0, 0, 1],
+                [1, 0, 0, 1],
+              ],
+            },
+    }))
+    expect(accepts(adds.slice(0, 1000))).toBe(true)
+    expect(accepts(adds)).toBe(false)
+    const other = { t: 'update', id: 'body-0', patch: { visible: false } }
+    expect(accepts([...adds.slice(0, 499), other])).toBe(true)
+    expect(accepts([...adds.slice(0, 500), other])).toBe(false)
+    expect(
+      accepts([
+        ...adds.slice(0, 500),
+        { t: 'add', node: { kind: 'meshBody', source: { type: 'builtin' } } },
+      ]),
+    ).toBe(false)
+    const removals = adds.slice(0, 501).map(({ node }) => ({ t: 'remove', id: node.id }))
+    expect(accepts(removals)).toBe(false)
+    expect(accepts(removals, ['import'])).toBe(true)
+    expect(accepts(removals, ['import', 'other'])).toBe(false)
+    expect(
+      accepts([...removals.slice(0, 500), { ...removals[500], cascade: true }], ['import']),
+    ).toBe(false)
+  })
+
   it('names every command noun.verb, once across commands and client tools', () => {
     for (const [name] of all) expect(name).toMatch(/^[a-z][a-z0-9]*(\.[a-z][a-zA-Z0-9]*)+$/)
     const names = all.map(([n]) => n)
