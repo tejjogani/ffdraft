@@ -81,6 +81,22 @@ edit = project.set_mesh_vertices(
 project.undo(edit["version"])
 ```
 
+### Move a native Rhino end face
+
+Select a straight-sided Rhino sleeve or plate with retained native geometry. Inspect the end faces and choose the one whose outward normal points in the direction you want to extend. Distances are signed project millimetres. This example extends the upper end and keeps the opposite end and through-holes fixed.
+
+```python
+ends = project.rhino_cap_faces("sleeve")
+upper = next(face for face in ends["faces"] if face["normal"][2] > 0.999)
+change = project.offset_rhino_cap(
+    "sleeve", ends["nativeAssetId"], upper["faceIndex"], 0.25,
+    base_version=ends["version"],
+)
+project.undo(change["version"])
+```
+
+If the returned list is empty, read `reason` for the geometry requirement.
+
 ## Edit a NURBS control point
 
 Use the project feature ID and the version returned by `describe`. Each control point stores Euclidean XYZ in millimetres and a rational weight. This example moves an interior point of an open curve 0.25 mm while preserving its weight, knots and degree.

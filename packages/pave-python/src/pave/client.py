@@ -130,6 +130,22 @@ class Project:
         self._record_write(result)
         return result
 
+    def rhino_cap_faces(self, feature_id: str) -> JsonObject:
+        """Read native end-face IDs, project-space normals, thickness, and source version."""
+        return self._cad_rpc("design.rhinoCapFaces", nodeId=feature_id)
+
+    def offset_rhino_cap(
+        self, feature_id: str, native_asset_id: str, face_index: int, offset_mm: float,
+        *, base_version: int, change_id: str | None = None,
+    ) -> JsonObject:
+        """Offset one native end face in project mm, keeping the opposite end fixed."""
+        result = self._cad_rpc(
+            "design.offsetRhinoCap", nodeId=feature_id, nativeAssetId=native_asset_id,
+            faceIndex=face_index, offsetMm=offset_mm, **self._write_guard(base_version, change_id),
+        )
+        self._record_write(result)
+        return result
+
     def mesh_components(
         self, feature_id: str, *, offset: int = 0, limit: int = 30,
         vertex_ids: Iterable[int] | None = None, face_ids: Iterable[int] | None = None,

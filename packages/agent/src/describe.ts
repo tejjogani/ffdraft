@@ -80,6 +80,12 @@ export const TOOL_CHIPS = {
     running: 'Inspecting the CAD feature',
     done: 'Inspected the CAD feature',
   },
+  'design.rhinoCapFaces': {
+    quiet: true,
+    running: 'Reading Rhino end faces',
+    done: 'Read Rhino end faces',
+  },
+  'design.offsetRhinoCap': { running: 'Moving the end face', done: 'Moved the Rhino end face' },
   'design.meshComponents': {
     quiet: true,
     running: 'Reading mesh points and faces',

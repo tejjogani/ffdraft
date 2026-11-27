@@ -20,6 +20,7 @@ import { getPiece } from '../lookups'
 import { editableMesh } from '../mesh-components'
 import { exportClaim, withClaim } from '../plans'
 import { serviceContext } from '../service-context'
+import { rhinoCapFaces, offsetRhinoCapFace } from './rhino-caps'
 import { assertAttested } from './pieces'
 import type { HandlerGroup } from './types'
 
@@ -191,6 +192,8 @@ export const design: HandlerGroup<'design'> = {
       schema: z.toJSONSchema(NODE_SCHEMAS[node.kind], { io: 'input' }),
     }
   },
+  'design.rhinoCapFaces': rhinoCapFaces,
+  'design.offsetRhinoCap': offsetRhinoCapFace,
   'design.meshComponents': async (ctx, { pieceId, nodeId, offset, limit, vertexIds, faceIds }) => {
     const piece = await getPiece(ctx, pieceId)
     if (!Object.hasOwn(piece.design.nodes, nodeId)) throw notFound('Feature', nodeId)

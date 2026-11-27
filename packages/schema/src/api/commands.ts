@@ -717,6 +717,49 @@ export const commands = {
       schema: z.record(z.string(), z.unknown()),
     }),
   }),
+  'design.rhinoCapFaces': def({
+    kind: 'query',
+    tool: true,
+    description:
+      'List the editable planar end faces of the selected native Rhino part. Centers, outward unit normals and thicknesses are in project coordinates and millimetres. Each face is paired with the opposite face that will stay fixed. Pass the same project, node, native asset ID, face index and version to design.offsetRhinoCap.',
+    input: z.object({ pieceId: id, nodeId: id }),
+    output: z.object({
+      pieceId: id,
+      nodeId: id,
+      version: componentId,
+      nativeAssetId: id.nullable(),
+      reason: z.string().nullable(),
+      faces: z.array(
+        z.object({
+          faceIndex: componentId,
+          oppositeFaceIndex: componentId,
+          normal: meshPoint,
+          center: meshPoint,
+          spanMm: z.number().positive(),
+          innerLoops: componentId,
+        }),
+      ),
+    }),
+  }),
+  'design.offsetRhinoCap': def({
+    kind: 'mutation',
+    tool: true,
+    description:
+      'Move one listed Rhino end face along its outward normal by a signed distance in project millimetres. The opposite face stays fixed and through-holes retain their size. Use a positive distance to add thickness or a negative distance to remove it. This writes one undoable change.',
+    input: z.object({
+      pieceId: id,
+      nodeId: id,
+      nativeAssetId: id,
+      faceIndex: componentId,
+      offsetMm: z
+        .number()
+        .finite()
+        .refine((value) => value !== 0, 'Choose a non-zero distance.'),
+      baseVersion: componentId,
+      changeId: id.optional(),
+    }),
+    output: z.object({ version: componentId, change: StoredChangeSchema }),
+  }),
   'design.meshComponents': def({
     description:
       'Read the editable vertices and triangular faces of an imported mesh body in this project. IDs remain stable for the same source asset. Coordinates are absolute XYZ millimetres in the source frame before part transforms. Each face contains three vertex IDs. Page through both lists with offset and limit, or request specific IDs to inspect the endpoints of a face. Pass assetId and version back when writing meshEdits with design.apply.',
