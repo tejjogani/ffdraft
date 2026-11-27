@@ -1,8 +1,8 @@
 import { designFrom } from '@pave/schema'
 import { expect, it } from 'vitest'
+import { step } from '../export/step'
 import { curve } from '../features/curve'
 import { loft } from '../features/loft'
-import { step } from '../export/step'
 import { loadRuntime } from '../runtime/index'
 import { Evaluator } from './evaluate'
 

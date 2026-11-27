@@ -133,6 +133,37 @@ class LiveCadTest(unittest.TestCase):
         current.undo(result["change"]["seq"])
         self.assertAlmostEqual(current.evaluate()["metalMassG"], before, places=4)
 
+    def test_linked_sections_and_sweeps_over_http(self):
+        studio = Studio(os.environ["PAVE_TEST_URL"].rstrip("/"))
+        piece = studio._rpc("pieces.create", {"kind": "other", "title": "Python shoulder study"})
+        project = studio.project(piece["id"])
+        points = [{"id": str(i), "u": u, "v": v}
+                  for i, (u, v) in enumerate([(0, 0), (4, 0), (4, 2), (0, 2)])]
+        sections = [{"kind": "curve", "id": name, "plane": "top", "closed": True,
+                     "points": points, "planeOffset": height}
+                    for name, height in [("base", 0), ("rim", 10)]]
+        rails = [
+            {"kind": "nurbsCurve", "id": "straight", "degree": 1, "knots": [0, 1],
+             "controlPoints": [[0, 0, 0, 1], [0, 0, 10, 1]]},
+            {"kind": "nurbsCurve", "id": "bowed", "degree": 2, "knots": [0, 0, 1, 1],
+             "controlPoints": [[4, 0, 0, 1], [9, 0, 3, 1], [4, 0, 10, 1]]},
+        ]
+        project.apply([{"t": "add", "node": node} for node in sections + rails], "Draw curves")
+        create = project.loft(["base", "rim"], feature_id="head", ruled=True)
+        self.assertAlmostEqual(project.evaluate()["metals"][0]["volumeMm3"], 80, places=3)
+        edit = project.apply(
+            [{"t": "update", "id": "rim", "patch": {"planeOffset": 12}}], "Raise the rim"
+        )
+        project = studio.project(piece["id"])
+        self.assertAlmostEqual(project.evaluate()["metals"][0]["volumeMm3"], 96, places=3)
+        project.undo(edit["change"]["seq"])
+        project.undo(create["change"]["seq"])
+        one = project.rail_sweep(["straight"], ["base"], feature_id="shoulder")
+        self.assertAlmostEqual(project.evaluate()["metals"][0]["volumeMm3"], 80, places=3)
+        project.undo(one["change"]["seq"])
+        project.rail_sweep(["straight", "bowed"], ["base"], feature_id="shoulder")
+        self.assertAlmostEqual(project.evaluate()["metals"][0]["volumeMm3"], 113.333, places=2)
+
     def test_imported_mesh_vertex_edit_export_and_undo(self):
         import struct
 

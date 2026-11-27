@@ -4,9 +4,11 @@ import assert from 'node:assert/strict'
 import { writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { setTimeout } from 'node:timers/promises'
-import type { RenderInstallStatus, RenderJob } from '@pave/schema'
+import type { RenderInstallStatus, RenderJob, Run, Step } from '@pave/schema'
 
-const [base, file] = process.argv.slice(2)
+// Pass --assistant with PAVE_ASSISTANT=scripted:section-render-proof to exercise the project harness.
+const [base, file, mode] = process.argv.slice(2)
+const assistant = mode === '--assistant'
 assert.ok(base && file, 'Pass the disposable local URL and output PNG path.')
 const { chromium, webkit } = createRequire(import.meta.url)(
   'playwright',
@@ -42,7 +44,36 @@ try {
     .first()
     .waitFor({ timeout: 60_000 })
   assert.equal((await rpc<RenderInstallStatus>('renders.installStatus', {})).phase, 'idle')
-  await page.getByRole('button', { name: 'Render', exact: true }).click()
+  if (assistant) {
+    const { run } = await rpc<{ run: Run }>('threads.send', {
+      text: 'Render the current project with Blender on a white catalog background.',
+      clientId: 'first-render-test',
+      clientMessageId: id,
+      context: { pieceId: id },
+    })
+    const deadline = Date.now() + 60_000
+    let approved = false
+    while (Date.now() < deadline) {
+      const trace = await rpc<{ run: Run; steps: Step[] }>('traces.run', { id: run.id })
+      const request = trace.steps.find(
+        (step) => step.name === 'renders.create' && step.status === 'awaiting-approval',
+      )
+      if (request) {
+        await rpc('runs.decide', {
+          runId: run.id,
+          toolCallId: request.toolCallId,
+          decision: 'approve',
+        })
+        approved = true
+        break
+      }
+      assert.equal(trace.run.status === 'failed', false, trace.run.error ?? 'Assistant run failed')
+      await setTimeout(100)
+    }
+    assert.ok(approved, 'The assistant never requested the render.')
+  } else {
+    await page.getByRole('button', { name: 'Render', exact: true }).click()
+  }
   await page.getByText('Downloading Blender', { exact: false }).first().waitFor({ timeout: 90_000 })
   let lastPhase = ''
   const phases = new Set<string>()
@@ -59,6 +90,7 @@ try {
     assert.equal(takes.length, 1)
     const job = takes[0]!
     assert.equal(job.engine, 'blender')
+    assert.equal(job.actor.type, assistant ? 'agent' : 'user')
     assert.ok(job.status !== 'failed', job.error ?? 'Render failed')
     if (job.status === 'done') {
       assert.ok(phases.has('downloading') && phases.has('ready'))
@@ -66,9 +98,15 @@ try {
       assert.ok(result.ok())
       const bytes = await result.body()
       assert.equal(bytes.subarray(0, 8).toString('hex'), '89504e470d0a1a0a')
-      assert.equal(bytes.readUInt32BE(16), 768)
+      assert.equal(bytes.readUInt32BE(16), assistant ? 640 : 768)
       await writeFile(file, bytes)
-      console.log('Single Render click produced', job.id, job.device, job.seconds + 's', file)
+      console.log(
+        assistant ? 'Approved assistant render produced' : 'Single Render click produced',
+        job.id,
+        job.device,
+        job.seconds + 's',
+        file,
+      )
       break
     }
     await setTimeout(600)
