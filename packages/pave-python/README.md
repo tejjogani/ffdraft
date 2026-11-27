@@ -68,6 +68,16 @@ project.make_wire(
 )
 ```
 
+## Review an imported part’s role
+
+Use the source feature ID from the open project. The role plan previews the same choices as the Studio review dialog. Apply it at the returned version to record one undoable edit.
+
+```python
+plan = project.plan_import_roles([{"sourceId": "working-copy", "role": "reference"}])
+if plan["ops"]:
+    project.apply(plan["ops"], "Confirm the working copy as a reference", base_version=plan["version"])
+```
+
 ## Edit a point on an imported part
 
 Read the part's mesh to get source-space coordinates and stable vertex IDs. A face contains three vertex IDs. To move a complete face, pass new coordinates for all three in the same edit. The asset ID and project version bind the edit to the geometry you inspected.

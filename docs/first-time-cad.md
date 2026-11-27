@@ -20,7 +20,9 @@ Review the skipped objects before choosing Import. Select the new parts in Featu
 
 ## Tell Pavé which parts are metal or stones
 
-Choose Review Rhino roles in CAD. Select a part and check its source layer, group and appearance. Choose Metal and an alloy for anything the caster should weigh. Choose Reference for a display stand, an unused copy or a guide solid. Use the eye in Features to hide a reference while working.
+Choose Review Rhino roles in CAD. If an older import is missing labels, choose Recover Rhino source labels and select the original .3dm. Check the exact matches before applying them.
+
+Select a part and check its source layer, group and appearance. Choose Metal and an alloy for anything the caster should weigh. Choose Reference for a display stand, an unused copy or a guide solid. Use the eye in Features to hide a reference while working.
 
 Choose Stone for a gemstone. Confirm the species, cut, width, length, depth and girdle position. Check the orientation on a tilted or asymmetric stone. For repeated stones, expand the matches and tick only the ones used in the piece. A matching loose copy can sit beside a finished ring. Choose Confirm role to record one undoable decision.
 
