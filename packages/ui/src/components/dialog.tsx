@@ -102,7 +102,7 @@ export function Dialog({
 
 export const DialogClose = Base.Close
 
-export interface SheetProps {
+export interface SheetProps extends Pick<ComponentProps<typeof Base.Popup>, 'finalFocus'> {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   trigger?: ReactElement
@@ -121,6 +121,7 @@ export function Sheet({
   children,
   side = 'right',
   className,
+  finalFocus,
 }: SheetProps) {
   return (
     <Base.Root open={open} onOpenChange={onOpenChange && ((o) => onOpenChange(o))}>
@@ -128,6 +129,7 @@ export function Sheet({
       <Base.Portal>
         <Base.Backdrop className={backdrop} />
         <Base.Popup
+          finalFocus={finalFocus}
           className={cn(
             'glass-strong shadow-pop fixed top-2 bottom-2 z-50 flex w-[min(440px,calc(100vw-16px))] flex-col rounded-xl text-fg outline-none',
             'transition-[opacity,translate] duration-180 ease-out data-starting-style:opacity-0 data-ending-style:opacity-0',

@@ -49,6 +49,8 @@ export const grams = (v: number): string => `${num(v, v < 10 ? 2 : 1)} g`
 /** Melee is weighed in thousandths: a 0.8 mm stone is 0.003 ct, not "0 ct". */
 export const carats = (v: number): string => `${num(v, v !== 0 && Math.abs(v) < 0.1 ? 3 : 2)} ct`
 export const mm = (v: number): string => `${num(v, 2)} mm`
+export const stoneMeasure = (width: number, length: number, weight: number): string =>
+  `${mm(width)}${length === width ? '' : ` × ${mm(length)}`} · ${carats(weight)}`
 export const compact = (v: number): string =>
   v.toLocaleString(undefined, { notation: 'compact', maximumFractionDigits: 1 })
 

@@ -12,6 +12,7 @@ import {
   customMountPartIssue,
   type Design,
   type DrawnProfile,
+  GEM_MATERIALS,
   type ImportedRoleChoice,
   importRoleOf,
   isBodyKind,
@@ -62,11 +63,13 @@ import { ZoomControl } from '../../components/stage/ZoomControl'
 import { runCommand } from '../../lib/commands'
 import { canRedo, canUndo, hasGap } from '../../lib/design-session/core'
 import { useDesignSession, useSessionState } from '../../lib/design-session/store'
+import { stoneMeasure } from '../../lib/format'
 import { evaluationScheduler, useKernelInfo } from '../../lib/kernel/client'
 import { usePieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { activeOrg, useSession } from '../../lib/session'
+import { sourceMaterialLabel } from '../../lib/source-material'
 import { useCurrentView } from '../../lib/use-current-view'
 import { useAssistant } from '../../stores/assistant'
 import { useUI } from '../../stores/ui'
@@ -98,6 +101,7 @@ import { ChangeChip } from './hud/ChangeChip'
 import { pieceFigures } from './hud/figures'
 import { Hud } from './hud/Hud'
 import { toIssues } from './hud/issues'
+import { SelectionDetails } from './hud/SelectionDetails'
 import { useProductionCheck } from './hud/useProductionCheck'
 import { useNodeEdit } from './inspector/edit'
 import { Inspector } from './inspector/Inspector'
@@ -383,11 +387,18 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
   const compact =
     width - (dockOutliner ? OUTLINER_PX : 0) - (dockInspector ? INSPECTOR_PX : 0) < COMPACT_VIEW_PX
   const [sheet, setSheet] = useState<'outliner' | 'inspector' | null>(null)
+  const inspectorTrigger = useRef<HTMLButtonElement>(null)
+  const inspectorReturn = useRef<HTMLElement | null>(null)
+  const openInspector = (trigger: HTMLElement | null) => {
+    inspectorReturn.current = trigger
+    setSheet('inspector')
+  }
   const featuresId = useId()
   const showFeatures = useRef<HTMLButtonElement>(null)
   const hideFeatures = useRef<HTMLButtonElement>(null)
   const moveFeaturesFocus = useRef(false)
   useLayoutEffect(() => {
+    if (dockInspector && sheet === 'inspector') setSheet(null)
     const sheetDocked = canDockOutliner && sheet === 'outliner'
     if (sheetDocked) {
       setSheet(null)
@@ -397,7 +408,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
     moveFeaturesFocus.current = false
     const destination = dockOutliner ? hideFeatures : showFeatures
     destination.current?.focus({ preventScroll: true })
-  }, [canDockOutliner, dockOutliner, sheet])
+  }, [canDockOutliner, dockInspector, dockOutliner, sheet])
   const toggleFeatures = () => {
     moveFeaturesFocus.current = true
     setAddOpen(false)
@@ -738,14 +749,14 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
       { label: 'Made a custom ring band' },
     )
     ws().select([id])
-    if (!dockInspector) setSheet('inspector')
+    if (!dockInspector) openInspector(null)
   }
 
   const makeWire = (id: string) => {
     if (!session || readOnly || profile || curve || session.get().view.nodes[id]?.kind !== 'curve')
       return
     add('pipe', id)
-    if (!dockInspector) setSheet('inspector')
+    if (!dockInspector) openInspector(null)
   }
   const saveCurve = (
     definition: Pick<NodeOf<'curve'>, 'plane' | 'planeOffset' | 'points' | 'closed'>,
@@ -1046,6 +1057,27 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
           : 'Nothing'
 
   const targets = selectedTargets({ selection, stone, part })
+  const showSelectionDetails = !dockInspector && targets.length > 0
+  const pickedStone = selectedOrdinal === undefined ? undefined : ownerStones?.[selectedOrdinal]
+  const rhinoSource =
+    owner?.kind === 'meshBody' && owner.source.type === 'asset' ? owner.source : null
+  const supplier = rhinoSource?.rhinoContext?.stullerMaterial
+  const sourceMaterial =
+    sourceMaterialLabel(rhinoSource?.rhinoContext) ??
+    (supplier && 'stoneFamily' in supplier ? supplier.stoneFamily : undefined)
+  const meshDetails = [
+    sourceMaterial && `Source material · ${sourceMaterial}`,
+    rhinoSource?.rhinoLayer && `Rhino layer · ${rhinoSource.rhinoLayer}`,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  const selectionDetail = pickedStone
+    ? `${GEM_MATERIALS[pickedStone.stone].label} · ${stoneMeasure(pickedStone.dims.width, pickedStone.dims.length, pickedStone.carat)}`
+    : meshDetails ||
+      (owner && selectedTitle !== nodeTitle({ kind: owner.kind })
+        ? nodeTitle({ kind: owner.kind })
+        : undefined)
+  const selectionHeading = selection.length > 1 ? `${selection.length} selected` : selectedTitle
   const allHidden =
     targets.length > 0 &&
     targets.every((t) => targetHidden({ hidden, hiddenStones, hiddenParts }, t))
@@ -1190,6 +1222,11 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
             captureCover(v, piece, session?.get().version !== mountedVersion.current, !readOnly)
           }
           onPick={(p, { additive }) => ws().pick(p, additive)}
+          onDoublePick={
+            !dockInspector && !curve && !profile && !sheet
+              ? () => openInspector(viewer.current?.canvas ?? null)
+              : undefined
+          }
           onHover={(p) => ws().setHover(p)}
           onContextMenu={openViewportMenu}
         >
@@ -1243,13 +1280,23 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
                     open={sheet === 'outliner'}
                     onOpenChange={(o) => {
                       if (!o) setAddOpen(false)
-                      setSheet(o ? 'outliner' : null)
+                      setSheet((current) =>
+                        o ? 'outliner' : current === 'outliner' ? null : current,
+                      )
                     }}
+                    finalFocus={() => sheet !== 'inspector'}
                     title="Features"
                     side="left"
                   >
-                    <div data-region="outliner" className="h-full">
-                      {outliner}
+                    <div data-region="outliner" className="flex h-full min-h-0 flex-col gap-2">
+                      <div className="min-h-0 flex-1">{outliner}</div>
+                      {showSelectionDetails && (
+                        <SelectionDetails
+                          title={selectionHeading}
+                          detail={selectionDetail}
+                          onInspect={() => openInspector(showFeatures.current)}
+                        />
+                      )}
                     </div>
                   </Sheet>
                 )}
@@ -1277,10 +1324,11 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
                 />
                 {!dockInspector && (
                   <Button
+                    ref={inspectorTrigger}
                     icon={PanelRight}
                     aria-label="Inspector"
                     title="Inspector"
-                    onClick={() => setSheet('inspector')}
+                    onClick={(e) => openInspector(e.currentTarget)}
                     className="glass h-9 shrink-0 rounded-lg px-2.5 shadow-sm"
                   >
                     <span className="hidden sm:inline">Inspector</span>
@@ -1350,86 +1398,99 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
             />
           ) : null}
           {!empty && !curve && (
-            <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex items-end justify-between gap-3 [&>*]:pointer-events-auto">
-              {viewerHandle && <ZoomControl viewer={viewerHandle} />}
-              <div className="flex min-w-0 flex-wrap items-end gap-1.5">
-                {(targets.length > 0 || isolated.length > 0 || hasHidden) && (
-                  <fieldset
-                    aria-label="Selection visibility"
-                    className="glass flex max-w-full flex-wrap items-center gap-1 rounded-lg p-1 shadow-sm"
-                  >
-                    {targets.length > 0 && (
-                      <>
-                        <span
-                          className="max-w-36 truncate px-1.5 text-xs font-medium"
-                          title={selectedTitle}
-                        >
-                          {selectedTitle}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => runCommand('design.hideSelected')}
-                        >
-                          {allHidden ? 'Show' : 'Hide'} {kindLabel}
-                        </Button>
-                        {!isolated.length && (
+            <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex flex-col gap-2">
+              <div className="flex flex-wrap items-end gap-2 [&>*]:pointer-events-auto">
+                {viewerHandle && <ZoomControl viewer={viewerHandle} />}
+                {showSelectionDetails && (
+                  <SelectionDetails
+                    title={selectionHeading}
+                    detail={selectionDetail}
+                    onInspect={openInspector}
+                  />
+                )}
+              </div>
+              <div className="flex items-end justify-between gap-3 [&>*]:pointer-events-auto">
+                <div className="flex min-w-0 flex-wrap items-end gap-1.5">
+                  {(targets.length > 0 || isolated.length > 0 || hasHidden) && (
+                    <fieldset
+                      aria-label="Selection visibility"
+                      className="glass flex max-w-full flex-wrap items-center gap-1 rounded-lg p-1 shadow-sm"
+                    >
+                      {targets.length > 0 && (
+                        <>
+                          {!showSelectionDetails && (
+                            <span
+                              className="max-w-36 truncate px-1.5 text-xs font-medium"
+                              title={selectedTitle}
+                            >
+                              {selectedTitle}
+                            </span>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => runCommand('view.isolateSelected')}
+                            onClick={() => runCommand('design.hideSelected')}
                           >
-                            Isolate {kindLabel}
+                            {allHidden ? 'Show' : 'Hide'} {kindLabel}
                           </Button>
-                        )}
-                      </>
-                    )}
-                    {isolated.length > 0 && (
-                      <Button size="sm" onClick={() => runCommand('view.exitIsolation')}>
-                        Exit isolation
-                      </Button>
-                    )}
-                    {hasHidden && !isolated.length && (
+                          {!isolated.length && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => runCommand('view.isolateSelected')}
+                            >
+                              Isolate {kindLabel}
+                            </Button>
+                          )}
+                        </>
+                      )}
+                      {isolated.length > 0 && (
+                        <Button size="sm" onClick={() => runCommand('view.exitIsolation')}>
+                          Exit isolation
+                        </Button>
+                      )}
+                      {hasHidden && !isolated.length && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label="Show all hidden features"
+                          onClick={() => runCommand('view.showAll')}
+                        >
+                          Show all
+                        </Button>
+                      )}
+                    </fieldset>
+                  )}
+                  {!compact &&
+                    !targets.length &&
+                    !isolated.length &&
+                    steps.map((s, i) => (
                       <Button
-                        variant="ghost"
+                        key={s.label}
                         size="sm"
-                        aria-label="Show all hidden features"
-                        onClick={() => runCommand('view.showAll')}
+                        variant="secondary"
+                        icon={stepping === s.label ? undefined : Plus}
+                        disabled={!!stepping}
+                        className="glass shadow-sm"
+                        onClick={() => runCommand(`design.next.${i}`)}
                       >
-                        Show all
+                        {stepping === s.label && <Spinner className="size-3" />}
+                        {s.label}
                       </Button>
-                    )}
-                  </fieldset>
-                )}
-                {!compact &&
-                  !targets.length &&
-                  !isolated.length &&
-                  steps.map((s, i) => (
-                    <Button
-                      key={s.label}
-                      size="sm"
-                      variant="secondary"
-                      icon={stepping === s.label ? undefined : Plus}
-                      disabled={!!stepping}
-                      className="glass shadow-sm"
-                      onClick={() => runCommand(`design.next.${i}`)}
-                    >
-                      {stepping === s.label && <Spinner className="size-3" />}
-                      {s.label}
-                    </Button>
-                  ))}
-                <QualityIndicator source={viewerHandle} className="self-end" />
+                    ))}
+                  <QualityIndicator source={viewerHandle} className="self-end" />
+                </div>
+                <Hud
+                  design={view}
+                  figures={figures}
+                  issues={issues}
+                  check={check}
+                  evaluating={status === 'evaluating'}
+                  readOnly={readOnly}
+                  onShow={show}
+                  onFix={fix}
+                />
               </div>
-              <Hud
-                design={view}
-                figures={figures}
-                issues={issues}
-                check={check}
-                evaluating={status === 'evaluating'}
-                readOnly={readOnly}
-                onShow={show}
-                onFix={fix}
-              />
             </div>
           )}
         </Stage>
@@ -1449,7 +1510,14 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
       {!dockInspector && (
         <Sheet
           open={sheet === 'inspector'}
-          onOpenChange={(o) => setSheet(o ? 'inspector' : null)}
+          onOpenChange={(o) =>
+            setSheet((current) => (o ? 'inspector' : current === 'inspector' ? null : current))
+          }
+          finalFocus={() =>
+            inspectorReturn.current?.isConnected
+              ? inspectorReturn.current
+              : (inspectorTrigger.current ?? true)
+          }
           title="Inspector"
           side="right"
         >
@@ -1489,7 +1557,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
             )
             ws().select([id])
             setRevolveSource(null)
-            if (!dockInspector) setSheet('inspector')
+            if (!dockInspector) openInspector(null)
           }}
         />
       )}
@@ -1524,7 +1592,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
             }
             setSectionEditor(null)
             ws().select([id])
-            if (!dockInspector) setSheet('inspector')
+            if (!dockInspector) openInspector(null)
           }}
         />
       )}

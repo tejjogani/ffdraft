@@ -28,7 +28,8 @@ import {
 import { useEffect, useMemo } from 'react'
 import { runCommand } from '../../../lib/commands'
 import type { DesignSession } from '../../../lib/design-session/store'
-import { carats, mm } from '../../../lib/format'
+import { stoneMeasure } from '../../../lib/format'
+import { sourceMaterialLabel } from '../../../lib/source-material'
 import { diaexBrowseLink } from '../../sourcing/links'
 import { NurbsControls } from '../curves/NurbsControls'
 import { RhinoEdgeCopy } from '../curves/RhinoEdgeCopy'
@@ -113,6 +114,10 @@ export function Inspector({
   const drawn = isProfileNode(node) ? node : null
   const rhinoLayer =
     node.kind === 'meshBody' && node.source.type === 'asset' ? node.source.rhinoLayer : null
+  const sourceMaterial =
+    node.kind === 'meshBody' && node.source.type === 'asset'
+      ? sourceMaterialLabel(node.source.rhinoContext)
+      : undefined
   const retainedRhinoAsset =
     node.kind === 'meshBody' &&
     node.source.type === 'asset' &&
@@ -155,6 +160,11 @@ export function Inspector({
                 Rhino layer · {rhinoLayer}
               </p>
             )}
+            {sourceMaterial && (
+              <p className="mt-1 truncate text-xs text-fg-muted" title={sourceMaterial}>
+                Source material · {sourceMaterial}
+              </p>
+            )}
             {retainedRhinoAsset && (
               <p className="mt-1 text-xs text-fg-muted">
                 Rhino surface retained. Mesh edits export as a mesh.
@@ -167,9 +177,7 @@ export function Inspector({
           <div className="flex items-center gap-2 border-b border-line px-4 py-2 text-xs text-fg-muted">
             <span className="text-fg-subtle">This stone</span>
             <span className="font-mono tabular text-fg">
-              {mm(picked.dims.width)}
-              {picked.dims.length !== picked.dims.width && ` × ${mm(picked.dims.length)}`} ·{' '}
-              {carats(picked.carat)}
+              {stoneMeasure(picked.dims.width, picked.dims.length, picked.carat)}
             </span>
           </div>
         )}

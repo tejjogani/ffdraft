@@ -11,7 +11,7 @@ export function ZoomControl({ viewer }: { viewer: Viewer }) {
   if (percent === null) return null
   const { minDistance, maxDistance } = viewer.controls
   return (
-    <div className="glass absolute bottom-full left-0 mb-2 flex h-9 items-center gap-1 rounded-lg px-1 shadow-sm">
+    <div className="glass flex h-9 items-center gap-1 rounded-lg px-1 shadow-sm">
       <IconButton
         icon={Minus}
         label="Zoom out"

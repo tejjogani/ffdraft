@@ -8,6 +8,8 @@ Choose Add feature beside Features to browse the modeling tools. Under Bodies, R
 
 Click a part in the 3D view or choose its name in Features. On a solitaire, Band is the ring and Head is the metal setting around the centre stone. The Inspector shows controls for the selected part.
 
+On smaller screens, selecting a part shows its details beside an Inspect button. Choose Inspect to open the full Inspector, including from the Features panel. You can also double-click a part in the 3D view to open its Inspector.
+
 For more room on a wide screen, use Hide Features beside Add feature and Hide sidebar in the page header. To bring them back, choose Features above the model or Show sidebar in the header. You can also toggle the sidebar with Command plus backslash on Mac or Ctrl plus backslash on Windows and Linux.
 
 On a smaller screen, use Features and Inspector above the model to open those panels. If your project is empty, start with a template to try the material and stone controls.
