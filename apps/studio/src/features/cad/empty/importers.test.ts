@@ -13,6 +13,7 @@ describe('classifying a dropped file', () => {
   it('goes by the extension, whatever its case', () => {
     expect(classifyImport('ring.stl')).toBe('mesh')
     expect(classifyImport('RING.STL')).toBe('mesh')
+    expect(classifyImport('ring.3DM')).toBe('model')
     expect(classifyImport('crest.final.SVG')).toBe('svg')
     expect(classifyImport('photo.jpeg')).toBe('image')
     expect(classifyImport('scan.3mf')).toBe('mesh')

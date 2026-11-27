@@ -77,6 +77,7 @@ import { toIssues } from './hud/issues'
 import { useProductionCheck } from './hud/useProductionCheck'
 import { useNodeEdit } from './inspector/edit'
 import { Inspector } from './inspector/Inspector'
+import { ModelImport } from './model-import/ModelImport'
 import { addNode, addPrepared, dependentsOf, remove, setField } from './ops'
 import { AddMenu } from './outliner/AddMenu'
 import { Outliner } from './outliner/Outliner'
@@ -211,6 +212,10 @@ function Workspace({ piece }: { piece: Piece }) {
   const auth = useSession()
   const role = activeOrg(auth)?.role ?? 'viewer'
   const readOnly = role === 'viewer' || role === 'guest'
+  const [modelImport, setModelImport] = useState<{ pieceId: string; file: File | null } | null>(
+    null,
+  )
+  const openModelImport = (file: File | null = null) => setModelImport({ pieceId, file })
   const navigate = useNavigate()
   const isCurrent = useCurrentView()
   const kernel = useKernelInfo()
@@ -369,6 +374,16 @@ function Workspace({ piece }: { piece: Piece }) {
   const importNode = (node: NodeInput, kind: Design['kind']) => {
     session?.commit(addPrepared(view, node, kind))
     ws().select([node.id])
+  }
+
+  const importModel = (nodes: NodeInput[], label: string) => {
+    if (!session || readOnly) throw new Error('This design is read-only.')
+    const design = session.get().view
+    session.commit(
+      nodes.flatMap((node) => addPrepared(design, node)),
+      { label },
+    )
+    ws().select(nodes.map((node) => node.id))
   }
 
   const drawProfile = () => {
@@ -770,6 +785,7 @@ function Workspace({ piece }: { piece: Piece }) {
                   canSaveFile={!empty}
                   simplified={simplified}
                   compact={compact}
+                  onImportModel={readOnly ? undefined : () => openModelImport()}
                 />
                 {!dockInspector && (
                   <Button
@@ -827,7 +843,13 @@ function Workspace({ piece }: { piece: Piece }) {
               assistantAvailable={auth.capabilities.assistant}
               onBuild={buildFromSpec}
               onImport={importNode}
-              {...(!readOnly ? { onDrawProfile: drawProfile, onDrawCurve: drawCurve } : {})}
+              {...(!readOnly
+                ? {
+                    onDrawProfile: drawProfile,
+                    onDrawCurve: drawCurve,
+                    onImportModel: openModelImport,
+                  }
+                : {})}
             />
           ) : !empty ? (
             <StageStatus
@@ -942,6 +964,14 @@ function Workspace({ piece }: { piece: Piece }) {
             setRevolveSource(null)
             if (!dockInspector) setSheet('inspector')
           }}
+        />
+      )}
+      {!readOnly && session && modelImport?.pieceId === pieceId && (
+        <ModelImport
+          key={pieceId}
+          initialFile={modelImport.file}
+          onClose={() => setModelImport(null)}
+          onImport={importModel}
         />
       )}
       <Dialog

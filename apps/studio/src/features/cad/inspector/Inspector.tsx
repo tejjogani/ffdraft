@@ -80,6 +80,8 @@ export function Inspector({
   const listed = node.kind === 'gem' && node.sourcing?.provider === 'diaex' ? node.sourcing : null
   const listing = diaexBrowseLink(listed?.url)
   const drawn = isProfileNode(node) ? node : null
+  const rhinoLayer =
+    node.kind === 'meshBody' && node.source.type === 'asset' ? node.source.rhinoLayer : null
   const included = node.visible !== false
   const picked = stone ? evaluation?.stones.find((s) => s.id === stone) : undefined
   const prongTips = evaluation?.prongTips?.filter((tip) => tip.nodeId === node.id)
@@ -104,6 +106,11 @@ export function Inspector({
             <p className="mt-0.5 line-clamp-2 text-xs text-fg-subtle" title={model.description}>
               {nodeTitle(node) === model.title ? (model.description ?? model.title) : model.title}
             </p>
+            {rhinoLayer && (
+              <p className="mt-1 truncate text-xs text-fg-muted" title={rhinoLayer}>
+                Rhino layer · {rhinoLayer}
+              </p>
+            )}
           </div>
           {selection.length > 1 && <Chip>{selection.length} selected</Chip>}
         </header>

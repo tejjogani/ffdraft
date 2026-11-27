@@ -10,7 +10,13 @@
  */
 
 import { z } from 'zod'
-import { ChangeSchema, DesignSchema, OpSchema, PIECE_KINDS } from '../design/design'
+import {
+  ChangeSchema,
+  DesignSchema,
+  MAX_DESIGN_CHANGE_OPS,
+  OpSchema,
+  PIECE_KINDS,
+} from '../design/design'
 import { DirectionSchema, MIX_PARTS } from '../design/directions'
 import {
   IntakeDetailsSchema,
@@ -719,7 +725,7 @@ export const commands = {
       /** Version the ops were authored against; omitted = apply on top of whatever is current. */
       baseVersion: z.number().int().optional(),
       label: z.string().min(1).max(200),
-      ops: z.array(OpSchema).min(1).max(200),
+      ops: z.array(OpSchema).min(1).max(MAX_DESIGN_CHANGE_OPS),
       /** Client-generated id so retries are idempotent. */
       changeId: z.string().optional(),
       /** When these ops undo earlier changes (a guarded undo), their ids. */

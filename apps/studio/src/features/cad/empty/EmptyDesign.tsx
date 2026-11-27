@@ -28,6 +28,7 @@ import { type ReactNode, useRef, useState } from 'react'
 import { KindGlyph } from '../../../components/KindGlyph'
 import { uploadAsset } from '../../../lib/assets'
 import { assistant } from '../../../stores/assistant'
+import { isStlFile } from '../model-import/model'
 import {
   builtinNode,
   classifyImport,
@@ -47,6 +48,7 @@ export interface EmptyDesignProps {
   onBuild(spec: PieceSpecInput): Promise<void>
   /** Adds an imported node; `kind` is the piece type it implies. */
   onImport(node: NodeInput, kind: Design['kind']): void
+  onImportModel?(file: File): void
   onDrawProfile?(): void
   onDrawCurve?(): void
 }
@@ -59,6 +61,7 @@ export function EmptyDesign({
   assistantAvailable,
   onBuild,
   onImport,
+  onImportModel,
   onDrawProfile,
   onDrawCurve,
 }: EmptyDesignProps) {
@@ -117,7 +120,7 @@ export function EmptyDesign({
                 assistantAvailable={assistantAvailable}
                 onQuickStart={() => setStep('quick')}
               />
-              <ImportDoor design={design} onImport={onImport} />
+              <ImportDoor design={design} onImport={onImport} onImportModel={onImportModel} />
               <ImageDoor onImport={onImport} />
             </div>
           </>
@@ -243,9 +246,11 @@ function DescribeDoor({
 function ImportDoor({
   design,
   onImport,
+  onImportModel,
 }: {
   design: Design
   onImport: EmptyDesignProps['onImport']
+  onImportModel: EmptyDesignProps['onImportModel']
 }) {
   const input = useRef<HTMLInputElement>(null)
   const [name, setName] = useState('')
@@ -253,15 +258,16 @@ function ImportDoor({
   const [over, setOver] = useState(false)
   const take = async (file: File) => {
     const kind = classifyImport(file.name)
+    if (kind === 'model' || isStlFile(file.name)) return onImportModel?.(file)
     if (/\.(step|stp)$/i.test(file.name))
       return toast({
         title: 'STEP can’t be opened as CAD yet',
-        description: 'That is planned. Export it as STL, OBJ, GLB, 3MF or PLY and open that.',
+        description: 'Export it as STL, OBJ, GLB, 3MF or PLY and open that.',
       })
     if (!kind)
       return toast.error(
         'That file type isn’t supported',
-        'Use STL, OBJ, GLB, 3MF, PLY, SVG or an image.',
+        'Use Rhino (.3dm), STL, OBJ, GLB, 3MF, PLY, SVG or an image.',
       )
     setBusy(true)
     try {
@@ -284,7 +290,7 @@ function ImportDoor({
   }
   return (
     <section
-      aria-label="Drop a mesh or SVG here to bring it in"
+      aria-label="Drop a Rhino model, mesh or SVG here to import it"
       onDragOver={(e) => {
         e.preventDefault()
         setOver(true)
@@ -301,7 +307,7 @@ function ImportDoor({
       <Door
         icon={FileUp}
         title="Bring something in"
-        description="Drop a mesh or an SVG logo, type a name, or start from a model."
+        description="Drop a Rhino model, mesh or SVG logo, type a name, or start from a built-in model."
       >
         <input
           ref={input}

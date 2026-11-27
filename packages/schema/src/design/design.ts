@@ -66,6 +66,9 @@ export type Op =
   | { t: 'move'; id: string; index: number }
   | { t: 'setKind'; kind: PieceKind }
 
+/** Largest undoable edit accepted by the design API. */
+export const MAX_DESIGN_CHANGE_OPS = 500
+
 export const ActorSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('user'), id: z.string() }),
   z.object({

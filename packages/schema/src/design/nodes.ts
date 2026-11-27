@@ -463,6 +463,7 @@ export const MeshBody = z
         z.object({
           type: z.literal('asset'),
           assetId: z.string().meta({ title: 'Mesh', widget: 'asset' }),
+          rhinoLayer: z.string().optional(),
         }),
         z.object({
           type: z.literal('builtin'),
@@ -470,7 +471,14 @@ export const MeshBody = z
         }),
       ])
       .meta({ title: 'Source' }),
-    height: mm('Height', 3, 200, 40, { description: 'The mesh is scaled to this overall height.' }),
+    keepSourcePlacement: toggle('Keep source size and position', false, {
+      advanced: true,
+      description: 'Use the coordinates in the mesh asset, in millimetres.',
+    }),
+    height: mm('Height', 3, 200, 40, {
+      description: 'The mesh is scaled to this overall height.',
+      when: { keepSourcePlacement: [false] },
+    }),
     flatBack: ratio('Flat back', 0, 0.9, 0, {
       widget: 'slider',
       description: 'Slices this fraction off the back so the piece lies flat.',

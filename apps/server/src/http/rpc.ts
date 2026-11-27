@@ -51,9 +51,8 @@ function localInstallRequest(c: HttpContext, runtime: Runtime): boolean {
 }
 
 /**
- * The most a command's input may weigh. Files travel through `POST /api/assets`; the largest
- * input the contract's own bounds allow is a `design.apply` of 200 ops with 200 kB paths (40 MB),
- * so nothing valid is refused, and the server never buffers a body without end.
+ * Files travel through `POST /api/assets`, with asset IDs in the command input. This separate
+ * bound keeps a batch with large inline paths from filling the server's memory.
  */
 const MAX_COMMAND_BYTES = 64 * 1024 * 1024
 
