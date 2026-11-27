@@ -97,6 +97,7 @@ export const QUERY_NAMES = [
   'design.rhinoCapFaces',
   'design.planImportRoles',
   'design.meshComponents',
+  'design.inspectMount',
   'design.history',
   'design.evaluate',
   'sourcing.search',

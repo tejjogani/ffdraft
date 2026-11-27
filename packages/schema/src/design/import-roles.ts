@@ -70,6 +70,8 @@ export function rhinoRoleFrameIssue(node: Mesh, design?: Design): string | undef
   if (
     !node.keepSourcePlacement ||
     node.meshEdits ||
+    node.mountCage ||
+    node.mountFit ||
     node.flatBack ||
     node.hollow ||
     node.smooth ||

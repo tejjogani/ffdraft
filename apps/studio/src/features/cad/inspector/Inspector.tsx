@@ -4,6 +4,7 @@
  */
 import type { Evaluation } from '@pave/kernel'
 import {
+  customMountPartIssue,
   type Design,
   isImportReference,
   isRhinoRoleBody,
@@ -51,6 +52,7 @@ export interface InspectorProps {
   onDelete(ids: string[]): void
   onEditProfile(node: ProfileNode): void
   onEditMesh(node: ImportedMesh): void
+  onEditMount(nodeIds: string[]): void
   onReviewRhinoRole(id: string): void
   onEditCurve(node: NodeOf<'curve'>): void
   onRevolve(curve: string): void
@@ -69,6 +71,7 @@ export function Inspector({
   onDelete,
   onEditProfile,
   onEditMesh,
+  onEditMount,
   onReviewRhinoRole,
   onEditCurve,
   onRevolve,
@@ -107,6 +110,9 @@ export function Inspector({
     node.source.nativeAssetId
   const roleSource =
     node.kind === 'gem' || node.kind === 'setting' ? design.nodes[node.importSourceId ?? ''] : node
+  const mountIds = selection.filter((id) => !customMountPartIssue(design, id))
+  const mountIssue =
+    selection.length === 1 && isImportedMesh(node) && customMountPartIssue(design, node.id)
   const included = node.visible !== false
   const includeLabel = isImportReference(node)
     ? 'Include source in Rhino export'
@@ -211,6 +217,29 @@ export function Inspector({
                 )}
               </section>
             )}
+            {!edit.readOnly && mountIds.length > 0 && (
+              <section className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-3">
+                <Button
+                  size="sm"
+                  icon={BoxSelect}
+                  aria-haspopup="dialog"
+                  onClick={() => onEditMount(mountIds)}
+                >
+                  Edit handmade mount
+                </Button>
+                {mountIds.length < selection.length && (
+                  <p className="text-xs text-fg-muted">
+                    {mountIds.length} of {selection.length} selected features can share the cage.
+                  </p>
+                )}
+              </section>
+            )}
+            {!edit.readOnly &&
+              mountIssue &&
+              node.kind === 'meshBody' &&
+              (node.importRole === 'stone' || node.importRole === 'setting') && (
+                <p className="border-b border-line px-4 py-3 text-xs text-fg-muted">{mountIssue}</p>
+              )}
             {isImportedMesh(node) && !edit.readOnly && selection.length === 1 && (
               <section className="flex flex-wrap gap-2 border-b border-line px-4 py-3">
                 {retainedRhinoAsset && session && (

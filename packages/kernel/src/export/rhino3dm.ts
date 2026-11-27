@@ -58,7 +58,8 @@ function importedObject(scene: Scene, o: MeshObject) {
   const source = o.kind === 'metal' ? o.part.sources[0] : undefined
   const nodeId =
     o.kind === 'stone' ? o.importSourceId : (source?.body.importSourceId ?? source?.nodeId)
-  const node = nodeId === undefined ? undefined : scene.nodes.get(nodeId)?.node
+  const result = nodeId === undefined ? undefined : scene.nodes.get(nodeId)
+  const node = result?.node
   if (node?.kind !== 'meshBody' || node.source.type !== 'asset' || !node.keepSourcePlacement)
     return null
   const { rhinoLayer, rhinoObjectId, rhinoInstancePath, rhinoContext } = node.source
@@ -68,6 +69,8 @@ function importedObject(scene: Scene, o: MeshObject) {
     path: rhinoLayer?.split('::').filter(Boolean),
     context: rhinoContext,
     hasNativeSource: Boolean(node.source.nativeAssetId),
+    nonlinearMountCage:
+      (result?.data as { nonlinearMountCage?: boolean } | undefined)?.nonlinearMountCage === true,
     strings: {
       ...(role && { importRole: role }),
       ...(rhinoObjectId && { rhinoObjectId }),
@@ -211,7 +214,9 @@ async function write3dm(
           meshBodies++
           if (imported?.hasNativeSource && !o.part.preservesNativeSurface)
             evaluatedImports.push(
-              `“${imported.name}” uses the evaluated mesh because the current body could not retain its original native surface.`,
+              imported.nonlinearMountCage
+                ? `“${imported.name}” uses the evaluated mesh for its nonlinear cage. The original Rhino solid remains in the project.`
+                : `“${imported.name}” uses the evaluated mesh because the current body could not retain its original native surface.`,
             )
         }
       }
@@ -308,6 +313,9 @@ export const rhino3dm = defineExporter({
       curves,
       options,
     )
+    const independentMount = objects.some(
+      (o) => o.kind === 'metal' && o.part.fused === null && o.part.sources[0]?.body.customMount,
+    )
     return {
       bytes,
       mime: 'application/x-3dm',
@@ -315,6 +323,11 @@ export const rhino3dm = defineExporter({
       notes: [
         `${retained} native Rhino solid${retained === 1 ? '' : 's'} retained, ${meshBodies} evaluated mesh ${meshBodies === 1 ? 'body' : 'bodies'}, ${curves.length} editable NURBS curve${curves.length === 1 ? '' : 's'}.`,
         ...nativeNotes,
+        ...(independentMount
+          ? [
+              'Handmade mount metal is exchanged as independent design parts. Production outputs seat overlapping alloys.',
+            ]
+          : []),
         'Evaluated bodies export as meshes. STEP carries exact Pavé geometry where available.',
         'Curve layers keep their Rhino paths. New curves, chain centre lines and stone girdles appear under Curves.',
         'Each object carries user strings: node ids, alloy, finish and plating for metal; stone, cut, carat and size for stones.',

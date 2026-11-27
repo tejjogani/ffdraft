@@ -1,7 +1,12 @@
 import { inspectRhinoEdges } from '@pave/kernel/rhino-edges'
 import { badRequest } from '../errors'
 import { getPiece } from '../lookups'
-import { meshWasReshaped, retainedRhinoBytes, retainedRhinoPart } from './rhino-source'
+import {
+  currentNativePlacement,
+  meshWasReshaped,
+  retainedRhinoBytes,
+  retainedRhinoPart,
+} from './rhino-source'
 import type { Handler } from './types'
 
 export const rhinoEdges: Handler<'design.rhinoEdges'> = async (ctx, input) => {
@@ -22,14 +27,18 @@ export const rhinoEdges: Handler<'design.rhinoEdges'> = async (ctx, input) => {
   const bytes = await retainedRhinoBytes(ctx, part.nativeAssetId)
   if (!bytes) return unsupported('The retained Rhino solid is unavailable.')
   try {
+    const placement = await currentNativePlacement(ctx, piece.design, part)
+    if (!placement)
+      return unsupported(
+        'The mount bends continuously across this part. Clear its cage to use the original native edges and borders.',
+      )
     return {
       ...base,
       ...(await inspectRhinoEdges(bytes, {
         offset,
         limit,
         edgeIndex,
-        nativeTransform: part.source.nativeTransform ?? undefined,
-        projectTransform: part.node.transform ?? undefined,
+        ...placement,
       })),
     }
   } catch (error) {

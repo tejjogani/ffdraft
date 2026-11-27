@@ -4,11 +4,29 @@
  * and hollowed (docs/research/06-freeform.md §4). By default it stands in the XZ plane facing −Y
  * with its back on y = 0. Measured imports keep the asset's millimetre scale and placement.
  */
-import type { NodeOf } from '@pave/schema'
+import {
+  mountCageAffine,
+  mountCageContains,
+  mountCageForPart,
+  mountCageIsAffine,
+  mountCageIsSafe,
+  mountCagePoint,
+  type NodeOf,
+} from '@pave/schema'
 import type { Manifold } from 'manifold-3d'
 import { BUILTINS } from '../builtin/index'
 import { type BuildContext, defineFeature, metalOf, solidFromManifold } from '../core'
-import { applyMeshVertexEdits } from '../mesh/edit'
+import { mountFitFrameMatrix } from '../geometry/mount-fit'
+import {
+  composeTransform,
+  IDENTITY,
+  invertSimilarity,
+  isIdentity,
+  multiply,
+  transformPoint,
+  type Vec3,
+} from '../geometry/vec'
+import { applyMeshVertexEdits, checkDeformedTriangleAreas } from '../mesh/edit'
 import { flatBack, flatPlacement, scaleToHeight } from '../mesh/fit'
 import { parseMesh } from '../mesh/parse/index'
 import type { HiddenSurfaces } from '../mesh/pave/region'
@@ -17,6 +35,8 @@ import { repairMesh } from '../mesh/repair'
 import { hollowBody } from '../mesh/shell'
 import { simplifyToDetail } from '../mesh/simplify'
 import { smoothManifold } from '../mesh/smooth'
+import { boundsOfPositions, transformTriangles } from '../solid/meshing'
+import { lazySolid, trianglesFromManifold } from '../solid/solid'
 
 type MeshBodyNode = NodeOf<'meshBody'>
 
@@ -25,9 +45,19 @@ const MIN_HOLLOW_WALL = 0.7
 /** Smoothing works on a mesh this even, relative to the height (~0.27 mm on a 40 mm piece). */
 const SMOOTH_EDGE = 1 / 150
 
+/** Source coordinates include Rhino's placement, but the evaluator adds the node placement. */
+const placementOf = (node: MeshBodyNode) =>
+  node.transform
+    ? composeTransform(node.transform.position, node.transform.rotation, node.transform.scale)
+    : IDENTITY
+
 async function sourceManifold(node: MeshBodyNode, ctx: BuildContext) {
   if (node.source.type === 'builtin')
-    return { manifold: BUILTINS[node.source.name](), nativeMeshUnmodified: false }
+    return {
+      manifold: BUILTINS[node.source.name](),
+      nativeMeshUnmodified: false,
+      originalCentre: undefined,
+    }
   if (!ctx.assets)
     throw new Error('No asset store is connected, so the imported mesh cannot be loaded')
   const bytes = await ctx.assets(node.source.assetId)
@@ -35,6 +65,12 @@ async function sourceManifold(node: MeshBodyNode, ctx: BuildContext) {
   const { mesh, format } = parseMesh(bytes)
   const edits = node.meshEdits?.vertices
   const edited = edits && Object.keys(edits).length ? applyMeshVertexEdits(mesh, edits) : mesh
+  let originalCentre: Vec3 | undefined
+  if (node.mountCage?.mode === 'byPart' && !mountCageIsAffine(node.mountCage)) {
+    const placed = transformTriangles(placementOf(node), edited)
+    const { min, max } = boundsOfPositions(placed.positions)
+    originalCentre = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2]
+  }
   const { manifold, report } = repairMesh(edited)
   const label = format.toUpperCase()
   const fixes = [
@@ -73,7 +109,60 @@ async function sourceManifold(node: MeshBodyNode, ctx: BuildContext) {
     report.voids === 0 &&
     report.fragments === 0 &&
     report.specks === 0
-  return { manifold, nativeMeshUnmodified }
+  return { manifold, nativeMeshUnmodified, originalCentre }
+}
+
+function deformMount(
+  node: MeshBodyNode,
+  body: Manifold,
+  originalCentre: Vec3 | undefined,
+  ctx: BuildContext,
+) {
+  let cage = node.mountCage
+  if (cage && originalCentre) {
+    if (!mountCageContains(cage, originalCentre))
+      throw new Error('The source part lies outside this mount cage')
+    cage = mountCageForPart(cage, originalCentre)
+  }
+  if (cage && !mountCageIsSafe(cage))
+    throw new Error('This cage could fold or collapse the mount. Reduce the corner movement.')
+
+  let fit = IDENTITY
+  if (node.mountFit) {
+    const gem = ctx.input(node.mountFit.gem).stones[0]
+    if (!gem) throw new Error('The fitted stone does not have a usable girdle frame')
+    fit = mountFitFrameMatrix(node.mountFit, gem.frame, gem.dims)
+  }
+  const placed = placementOf(node)
+  const unplaced = invertSimilarity(placed)
+  const nonlinear = !!cage && !mountCageIsAffine(cage)
+  // Build in source-local space. The evaluator will apply the normal node placement next.
+  const affine = nonlinear
+    ? undefined
+    : multiply(unplaced, multiply(cage ? multiply(fit, mountCageAffine(cage)) : fit, placed))
+  if (!cage && isIdentity(fit)) return undefined
+  if (affine && isIdentity(affine)) return undefined
+
+  const source = trianglesFromManifold(body)
+  const result = affine
+    ? transformTriangles(affine, source)
+    : { positions: new Float32Array(source.positions.length), indices: source.indices }
+  if (nonlinear && cage) {
+    const fitAndReturn = multiply(unplaced, fit)
+    for (let i = 0; i < source.positions.length; i += 3) {
+      const original = transformPoint(placed, [
+        source.positions[i]!,
+        source.positions[i + 1]!,
+        source.positions[i + 2]!,
+      ])
+      if (!mountCageContains(cage, original))
+        throw new Error('The source part extends outside this mount cage')
+      const moved = transformPoint(fitAndReturn, mountCagePoint(cage, original))
+      result.positions.set(moved, i)
+    }
+  }
+  checkDeformedTriangleAreas(result)
+  return { solid: lazySolid({ mesh: () => result }), affine, nonlinear }
 }
 
 export const meshBody = defineFeature('meshBody', async (node, ctx) => {
@@ -137,8 +226,28 @@ export const meshBody = defineFeature('meshBody', async (node, ctx) => {
       })
   }
 
+  const deformation =
+    node.mountCage || node.mountFit
+      ? deformMount(node, body, source.originalCentre, ctx)
+      : undefined
+  const sourceUnchanged =
+    source.nativeMeshUnmodified &&
+    node.keepSourcePlacement &&
+    node.detail === 1 &&
+    node.smooth === 0 &&
+    node.flatBack === 0 &&
+    node.hollow === 0
+
+  if (deformation?.nonlinear && node.source.type === 'asset' && node.source.nativeAssetId)
+    ctx.report({
+      level: 'info',
+      code: 'mesh.mountCageMesh',
+      message:
+        'This nonlinear cage uses the evaluated mesh. The original Rhino solid is retained in the project.',
+    })
+
   // A closed sheet thinner than any casting can hold passes every topology check.
-  const box = body.boundingBox()
+  const box = deformation?.solid.bounds() ?? body.boundingBox()
   const thinnest = Math.min(...[0, 1, 2].map((k) => box.max[k]! - box.min[k]!))
   if (thinnest < MIN_HOLLOW_WALL)
     ctx.report({
@@ -158,16 +267,19 @@ export const meshBody = defineFeature('meshBody', async (node, ctx) => {
     })
   // The solid owns a handle of its own; `body` stays tracked and is freed with the build.
   return {
-    bodies: [{ solid: solidFromManifold(body.translate([0, 0, 0])), ...metalOf(node) }],
+    bodies: [
+      {
+        solid: deformation?.solid ?? solidFromManifold(body.translate([0, 0, 0])),
+        ...metalOf(node),
+        ...((node.mountCage || node.mountFit) && { customMount: true, importSourceId: node.id }),
+        ...(sourceUnchanged &&
+          deformation?.affine && { nativeImport: { nodeId: node.id, matrix: deformation.affine } }),
+      },
+    ],
     data: {
       hidden,
-      nativeMeshUnmodified:
-        source.nativeMeshUnmodified &&
-        node.keepSourcePlacement &&
-        node.detail === 1 &&
-        node.smooth === 0 &&
-        node.flatBack === 0 &&
-        node.hollow === 0,
+      nativeMeshUnmodified: sourceUnchanged && !deformation,
+      nonlinearMountCage: deformation?.nonlinear === true,
     },
   }
 })

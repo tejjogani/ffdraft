@@ -11,7 +11,9 @@
  * keeps who made each change. A rights confirmation (attestation) is a statement by a person in
  * the organisation that saved the file, so it is kept only when the file was saved here.
  */
+
 import { createHash } from 'node:crypto'
+import type { MountMember } from '@pave/schema'
 import {
   DesignVersionError,
   isPaveEntryName,
@@ -38,6 +40,7 @@ import { AppError } from '../errors'
 import { toPiece } from '../handlers/pieces'
 import { createId } from '../ids'
 import { ensure, getCollection } from '../lookups'
+import { validateMountBounds } from '../mesh-components'
 import { mapDesignMeshAssets, mapOpMeshAssets } from './mesh-assets'
 import { MAX_HOPS } from './save'
 import { readZip, ZipRefused } from './zip'
@@ -313,6 +316,11 @@ export async function openPieceFile(
     // Legacy .pave files could point at a local mesh without carrying its bytes.
     const meshAsset = (id: string) => assetId.get(id) ?? id
 
+    const design = mapDesignMeshAssets(file.design, meshAsset)
+    for (const node of Object.values(design.nodes)) {
+      if (node.kind === 'meshBody' && node.mountCage && node.source.type === 'asset')
+        await validateMountBounds(tctx, node as MountMember)
+    }
     const inserted = await tx.pieces.insert({
       id: pieceId,
       createdBy: ctx.user.id,
@@ -323,7 +331,7 @@ export async function openPieceFile(
       stage: file.piece.stage,
       brief: file.piece.brief,
       spec: file.piece.spec,
-      design: mapDesignMeshAssets(file.design, meshAsset),
+      design,
       version: file.piece.version,
       coverAssetId: asset(file.piece.coverAssetId),
       coverAuto: file.piece.coverAuto,

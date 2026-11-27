@@ -24,6 +24,7 @@ import { getPiece } from '../lookups'
 import { editableMesh } from '../mesh-components'
 import { exportClaim, withClaim } from '../plans'
 import { serviceContext } from '../service-context'
+import { editMount, inspectMount } from './handmade-mount'
 import { assertAttested } from './pieces'
 import { offsetRhinoCapFace, rhinoCapFaces } from './rhino-caps'
 import { rhinoEdges } from './rhino-edges'
@@ -235,6 +236,8 @@ export const design: HandlerGroup<'design'> = {
   'design.rhinoFaceBorders': rhinoFaceBorders,
   'design.rhinoCapFaces': rhinoCapFaces,
   'design.offsetRhinoCap': offsetRhinoCapFace,
+  'design.editMount': editMount,
+  'design.inspectMount': inspectMount,
   'design.planImportRoles': async (ctx, { pieceId, choices }) => {
     const piece = await getPiece(ctx, pieceId)
     try {

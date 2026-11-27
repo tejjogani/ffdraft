@@ -267,7 +267,11 @@ export const gem = defineFeature('gem', (node, ctx) => {
                 node.placement.type === 'surface' ? { open: dims.depth } : {},
               ),
               targets: 'all',
-              ...(node.importSourceId && { importSeatGem: node.id }),
+              ...(node.importSourceId ||
+              (node.placement.type === 'surface' &&
+                ctx.input(node.placement.host).bodies.some((body) => body.customMount))
+                ? { importSeatGem: node.id }
+                : { gemSeat: true }),
             },
           ]
         : [],

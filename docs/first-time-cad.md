@@ -28,7 +28,7 @@ Choose Stone for a gemstone. Confirm the species, cut, width, length, depth and 
 
 ## Fit a sourced stone to an imported setting
 
-In Review Rhino roles, select the stone and choose the separate solid that forms its complete setting. Pick its alloy and a replacement style. Check each proposed pairing if you apply the choice to matching parts. Multiple solids that together form one handmade mounting need individual CAD work.
+In Review Rhino roles, select the stone and choose the separate solid that forms its complete setting. Pick its alloy and a replacement style. Check each proposed pairing if you apply the choice to matching parts. For a handmade mounting built from separate claws or rails, use Edit handmade mount on the original metal parts.
 
 Open Stone sourcing in the same project. Find the confirmed stone, preview a measured alternative and choose Fit this stone. The selected stone and linked head use the new measurements. A changed fit rebuilds that head in the chosen style. Use Undo to return to the source geometry.
 
@@ -87,6 +87,18 @@ The band and head can use different metals. To change the whole piece at once, r
 Select Head in Features. Under Style, try Basket. Set Gallery rails to 2, choose Claw under Tip, and adjust Prong wire. Fine-tune gives you Prong rotation and Taper. For an open-sided setting, choose Half bezel and adjust Half-bezel arcs and Bezel wall. The head keeps its link to the centre stone.
 
 On a prong or basket head, pick Prong 1. Use the locate button to see which tip it is. Enter 0.25 mm in Tip offset to move it outward, then press Enter. A negative value moves it inward. For an additional custom solid, use Draw profile, then select the solid and choose Edit profile to change its outline.
+
+## Reshape a handmade setting
+
+In project CAD, select an imported claw or rail in Features. Choose Edit handmade mount in the Inspector and include the other parts you want to change. Leave the band out to keep its shape.
+
+Choose a casting alloy for any unassigned Rhino parts. Keep each part’s surfaces lets each solid move, stretch or shear. Bend across parts applies a continuous bend to all selected parts. A nonlinear bend exports as a mesh for the affected solids. The Pavé project retains the original geometry and editable cage.
+
+To lean the tips on one side, select the upper corner nearest those tips. Drag it or enter 0.25 in the appropriate axis field and choose Move handles. Orbit the preview to check the tips, bases and joints. Choose Save mount edit.
+
+To follow a sourced diamond, choose a confirmed stone under Stone fit and alloy and save. Open Stone sourcing to preview a replacement at its measured width, length and depth. Recheck contact and wire thickness. Rhino modeling export carries the independent mount parts. Production exports account for intersecting alloys.
+
+Use CAD Undo to reverse the edit. To remove the cage and stone link later, open the same parts, choose Restore original, then Save mount edit. Saving a .pave file keeps the controls for future edits.
 
 ## Change the centre stone
 

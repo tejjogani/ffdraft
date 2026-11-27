@@ -16,6 +16,7 @@ import { RING_SIZE_SYSTEMS } from '../domain/sizes'
 import { CurveDefinition } from './curve'
 import { choice, deg, follows, int, mm, ratio, ref, text, toggle, vec3 } from './fields'
 import { MeshEdits } from './mesh-edit'
+import { mountCageIsSafe } from './mount-cage'
 import { NurbsDefinition } from './nurbs'
 import { DrawnProfile } from './profile'
 import { RhinoContext } from './rhino-context'
@@ -476,6 +477,42 @@ export const VectorBody = z
 export const ImportRoleSchema = z.enum(['unassigned', 'reference', 'metal', 'stone', 'setting'])
 export type ImportRole = z.infer<typeof ImportRoleSchema>
 
+const CagePoint = z.tuple([z.number(), z.number(), z.number()])
+
+const MountCageShape = z.strictObject({
+  min: CagePoint,
+  max: CagePoint,
+  offsets: z.tuple([
+    CagePoint,
+    CagePoint,
+    CagePoint,
+    CagePoint,
+    CagePoint,
+    CagePoint,
+    CagePoint,
+    CagePoint,
+  ]),
+  mode: z.enum(['byPart', 'freeform']).optional(),
+})
+/** World coordinates of the original placed mount and the displacements at its eight corners. */
+export const MountCage = MountCageShape.refine(
+  mountCageIsSafe,
+  'This cage could fold or collapse the mount. Reduce the corner movement.',
+)
+export type MountCage = z.infer<typeof MountCageShape>
+
+/** Frozen source-girdle frame and size for a mount that follows a confirmed imported gem. */
+export const MountFit = z.strictObject({
+  gem: ref('Fitted stone', ['gem']).min(1),
+  base: z.strictObject({
+    width: z.number().positive(),
+    length: z.number().positive(),
+    depth: z.number().positive(),
+  }),
+  frame: z.strictObject({ position: CagePoint, rotation: CagePoint }),
+})
+export type MountFit = z.infer<typeof MountFit>
+
 export const MeshBody = z
   .object({
     ...base,
@@ -507,6 +544,8 @@ export const MeshBody = z
       description: 'Use the coordinates in the mesh asset, in millimetres.',
     }),
     meshEdits: MeshEdits.optional(),
+    mountCage: MountCage.optional().meta({ internal: true }),
+    mountFit: MountFit.optional().meta({ internal: true }),
     height: mm('Height', 3, 200, 40, {
       description: 'The mesh is scaled to this overall height.',
       when: { keepSourcePlacement: [false] },
@@ -533,6 +572,18 @@ export const MeshBody = z
       path: ['meshEdits'],
       message:
         'Mesh edits require the same source asset and its original placement. Clear the edits to change either.',
+    },
+  )
+  .refine(
+    (node) =>
+      (!node.mountCage && !node.mountFit) ||
+      (node.keepSourcePlacement &&
+        node.source.type === 'asset' &&
+        (node.importRole === 'metal' ||
+          (node.importRole === undefined && !hasRhinoProvenance(node.source)))),
+    {
+      path: ['mountCage'],
+      message: 'A custom mount needs a placed mesh or a Rhino part confirmed as metal.',
     },
   )
   .meta({
@@ -875,14 +926,22 @@ export const isBodyKind = (k: NodeKind): boolean => (BODY_KINDS as readonly stri
 export function importRoleOf(node: NodeOf<'meshBody'>): ImportRole | undefined {
   const { source, importRole } = node
   if (importRole !== undefined) return importRole
-  if (
-    source.type === 'asset' &&
-    (source.rhinoLayer !== undefined ||
-      source.rhinoObjectId !== undefined ||
-      source.rhinoInstancePath !== undefined ||
-      source.nativeAssetId !== undefined)
-  )
+  if (source.type === 'asset' && hasRhinoProvenance(source))
     return node.material === DEFAULT_METAL ? 'unassigned' : 'metal'
+}
+
+function hasRhinoProvenance(source: {
+  rhinoLayer?: string
+  rhinoObjectId?: string
+  rhinoInstancePath?: readonly string[]
+  nativeAssetId?: string
+}): boolean {
+  return (
+    source.rhinoLayer !== undefined ||
+    source.rhinoObjectId !== undefined ||
+    source.rhinoInstancePath !== undefined ||
+    source.nativeAssetId !== undefined
+  )
 }
 
 /** Whether a source is geometry for modeling or exchange until it is assigned to production. */
@@ -908,6 +967,8 @@ export function nodeRefs(n: Node): string[] {
     }
     case 'setting':
       return n.importSourceId ? [n.gem, n.importSourceId] : [n.gem]
+    case 'meshBody':
+      return n.mountFit ? [n.mountFit.gem] : []
     case 'halo':
       return n.head ? [n.around, n.head] : [n.around]
     case 'gemRow':

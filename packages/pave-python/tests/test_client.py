@@ -70,6 +70,36 @@ class StudioTest(unittest.TestCase):
         project.features["head"]["kind"] = "bad"
         self.assertEqual(project.features["head"]["kind"], "setting")
 
+    def test_measured_stone_fit_can_be_previewed_and_committed(self):
+        project = self.project()
+        fit = {
+            "provider": "diaex", "sku": "FIXTURE",
+            "measured": {"width": 5.5, "length": 7.2, "depth": 3.3},
+        }
+        self.reply({"version": 3, "applied": False})
+        preview = project.replace_stone("center", fit=fit, dry_run=True)
+        expected = {
+            "pieceId": "ring", "target": {"nodeId": "center"},
+            "change": {"fit": fit}, "dryRun": True,
+        }
+        self.assertEqual(self.request("design.replaceStone"), expected)
+        self.assertEqual(project.version, 0)
+        self.reply({"version": 4, "applied": True, "change": {"id": "refit", "seq": 4}})
+        project.replace_stone(
+            "center", fit=fit, base_version=preview["version"], change_id="refit",
+        )
+        self.assertEqual(self.request("design.replaceStone"), {
+            **expected, "dryRun": False, "baseVersion": 3, "changeId": "refit",
+        })
+        self.assertEqual(project.version, 4)
+
+    def test_replace_stone_requires_one_sizing_method(self):
+        project = self.project()
+        for options in ({}, {"carat": 1.0, "fit": {}}):
+            with self.subTest(options=options), self.assertRaisesRegex(ValueError, "carat or fit"):
+                project.replace_stone("center", **options)
+        self.assertTrue(self.server.requests.empty())
+
     def test_apply_uses_a_guard_and_keeps_version_on_old_retry(self):
         project = self.project()
         self.reply({"version": 1, "change": {"id": "move-tip", "seq": 1}})
@@ -119,6 +149,60 @@ class StudioTest(unittest.TestCase):
             "baseVersion": 3, "offsetMm": 0.25, "changeId": "thicken",
         })
         self.assertEqual(project.version, 4)
+
+    def test_mount_inspection_reads_only_the_selected_members(self):
+        project = self.project()
+        bounds = {"min": [-3, -3, 0], "max": [9, 3, 2]}
+        inspected = {"version": 3, "bounds": bounds, "parts": [
+            {"nodeId": "sleeve", "assetId": "source-a", "native": True, "bounds": bounds},
+        ]}
+        self.reply(inspected)
+        self.assertEqual(project.inspect_mount(iter(["sleeve"])), inspected)
+        self.assertEqual(self.request("design.inspectMount"), {
+            "pieceId": "ring", "nodeIds": ["sleeve"],
+        })
+        self.assertEqual(project.version, 0)
+
+    def test_mount_edit_commits_one_guarded_change(self):
+        project = self.project()
+        cage = {
+            "min": [-3, -3, 0], "max": [9, 3, 2],
+            "offsets": [[0, 0, 0]] * 7 + [[1.25, 0, 0.2]],
+            "mode": "byPart",
+        }
+        change = {"version": 4, "change": {"id": "reshape", "seq": 4}}
+        self.reply(change)
+        result = project.edit_mount(
+            ["sleeve", "bail"], cage=cage, fit_gem_id="center", material="pt950",
+            base_version=3, change_id="reshape",
+        )
+        self.assertEqual(self.request("design.editMount"), {
+            "pieceId": "ring", "nodeIds": ["sleeve", "bail"], "cage": cage,
+            "fitGemId": "center", "material": "pt950", "baseVersion": 3,
+            "changeId": "reshape",
+        })
+        self.assertEqual(result, change)
+        self.assertEqual(project.version, 4)
+        self.reply(piece(4))
+        self.assertEqual(list(project.features), ["band", "head"])
+        self.assertEqual(self.request("pieces.get"), {"id": "ring"})
+
+    def test_mount_edit_distinguishes_clearing_from_omitting_options(self):
+        project = self.project()
+        self.reply({"version": 1, "change": {"id": "alloy", "seq": 1}})
+        project.edit_mount(["sleeve"], material="pt950", base_version=0, change_id="alloy")
+        self.assertEqual(self.request("design.editMount"), {
+            "pieceId": "ring", "nodeIds": ["sleeve"], "material": "pt950",
+            "baseVersion": 0, "changeId": "alloy",
+        })
+        self.reply({"version": 2, "change": {"id": "clear", "seq": 2}})
+        project.edit_mount(["sleeve"], cage=None, fit_gem_id=None, base_version=1)
+        clear = self.request("design.editMount")
+        self.assertEqual(clear.pop("changeId")[:4], "chg_")
+        self.assertEqual(clear, {
+            "pieceId": "ring", "nodeIds": ["sleeve"], "cage": None,
+            "fitGemId": None, "baseVersion": 1,
+        })
 
     def test_duplicates_an_exact_rhino_edge_as_one_independent_curve(self):
         project = self.project()

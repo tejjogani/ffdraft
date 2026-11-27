@@ -78,6 +78,55 @@ if plan["ops"]:
     project.apply(plan["ops"], "Confirm the working copy as a reference", base_version=plan["version"])
 ```
 
+## Edit a handmade mount
+
+Pass the feature IDs of the imported parts you confirmed as metal. Inspection returns
+each part's source asset ID, whether it retains native geometry, and the part and selection
+bounds in project millimetres. Use the returned version to guard the edit.
+
+```python
+members = ["lower-gallery", "upper-gallery"]
+mount = project.inspect_mount(members)
+cage = {
+    "min": mount["bounds"]["min"],
+    "max": mount["bounds"]["max"],
+    "offsets": [[0, 0, 0] for _ in range(7)] + [[0.25, 0, 0.15]],
+    "mode": "byPart",
+}
+changed = project.edit_mount(
+    members, cage=cage, material="pt950", base_version=mount["version"],
+)
+project.undo(changed["change"]["seq"])
+```
+
+The cage has eight corners. Index each one by `x + 2*y + 4*z`, using 0 for
+the minimum and 1 for the maximum along each axis. Each offset is an XYZ vector
+in project millimetres. `byPart` applies a separate affine transform to each
+member and allows export as placed native geometry where the source permits it.
+`freeform` applies the full trilinear warp and exports the evaluated mesh for
+nonlinear edits.
+
+Use `fit_gem_id` to link the selected members to the original girdle of a confirmed
+imported stone. A measured replacement then refits those members using its length,
+width and depth in millimetres.
+
+```python
+gem_id = "centre-stone"
+mount = project.inspect_mount(members)
+project.edit_mount(members, fit_gem_id=gem_id, base_version=mount["version"])
+fit = {
+    "provider": "diaex",
+    "sku": "supplier-stone-id",
+    "measured": {"length": 7.2, "width": 5.5, "depth": 3.3},
+}
+preview = project.replace_stone(gem_id, fit=fit, dry_run=True)
+project.replace_stone(gem_id, fit=fit, base_version=preview["version"])
+```
+
+Pass `cage=None` or `fit_gem_id=None` to clear that setting. Omit it to keep its
+saved value. Pass the same `change_id`, base version and arguments to retry
+a write after a transport error.
+
 ## Edit a point on an imported part
 
 Read the part's mesh to get source-space coordinates and stable vertex IDs. A face contains three vertex IDs. To move a complete face, pass new coordinates for all three in the same edit. The asset ID and project version bind the edit to the geometry you inspected.

@@ -120,6 +120,7 @@ jobs:
           pnpm exec tsx apps/studio/e2e/rhino-end-face.ts "$PAVE_TEST_URL"
           pnpm exec tsx apps/studio/e2e/rhino-edge.ts "$PAVE_TEST_URL"
           pnpm exec tsx apps/studio/e2e/rhino-face-borders.ts "$PAVE_TEST_URL"
+          pnpm exec tsx apps/studio/e2e/handmade-mount.ts "$PAVE_TEST_URL"
           pnpm exec tsx apps/studio/e2e/nurbs-controls.ts "$PAVE_TEST_URL"
           pnpm exec tsx apps/studio/e2e/mesh-edit.ts "$PAVE_TEST_URL"
 
