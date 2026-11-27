@@ -644,7 +644,7 @@ export function assembleProduction(
           solids: [],
           precut: [],
           late: [],
-          ...(independent.size > 0 && { prioritySolids: [] }),
+          ...(independent.size > 0 || gemSeats ? { prioritySolids: [] } : {}),
         }
         groups.set(spec.material, group)
       }
@@ -682,15 +682,13 @@ export function assembleProduction(
           ? fuse(batch([...(cutters ?? []), ...specific], quality, temp))
           : tool
         const seat = seatFor(body.solid, body.customMount)
+        if (!bodyTool) group.prioritySolids?.push(body.solid)
         if (bodyTool || seat) {
           let cut = body.solid.manifold(quality)
           if (bodyTool) cut = temp(cut.subtract(bodyTool))
           if (seat) cut = temp(cut.subtract(seat))
           group.precut.push(cut)
-        } else {
-          group.solids.push(body.solid)
-          group.prioritySolids?.push(body.solid)
-        }
+        } else group.solids.push(body.solid)
         group.sources.push({ nodeId: result.id, body })
       }
     }
@@ -699,10 +697,10 @@ export function assembleProduction(
       const group = groupFor(spec)
       const seat = addition.afterCuts ? null : seatFor(addition.solid, host.bodies[0]!.customMount)
       if (addition.afterCuts) group.late.push(addition.solid)
-      else if (seat) group.precut.push(temp(addition.solid.manifold(quality).subtract(seat)))
       else {
-        group.solids.push(addition.solid)
         group.prioritySolids?.push(addition.solid)
+        if (seat) group.precut.push(temp(addition.solid.manifold(quality).subtract(seat)))
+        else group.solids.push(addition.solid)
       }
       group.sources.push({ nodeId, body: { solid: addition.solid, ...spec } })
     }

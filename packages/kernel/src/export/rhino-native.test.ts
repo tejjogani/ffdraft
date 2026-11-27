@@ -777,6 +777,62 @@ describe('Rhino import roles', () => {
     )
   })
 
+  it('keeps the same alloy priority for an ordinary stone seat beside a distant custom mount', async () => {
+    const { design, assets } = fixture(await importedBoxes(1))
+    const baseline = applyOps(design, [
+      {
+        t: 'update',
+        id: 'part-0',
+        patch: { material: 'ag925-sterling', transform: { position: [40, 0, 0] } },
+      },
+      {
+        t: 'add',
+        node: {
+          id: 'surround',
+          kind: 'primitive',
+          shape: 'box',
+          size: [3, 3, 3],
+          material: 'pt950',
+        },
+      },
+      {
+        t: 'add',
+        node: {
+          id: 'inlay',
+          kind: 'primitive',
+          shape: 'box',
+          size: [2, 2, 2],
+          material: 'au18k-white',
+        },
+      },
+      {
+        t: 'add',
+        node: { id: 'stone', kind: 'gem', width: 1, transform: { position: [0, 0, 1.25] } },
+      },
+    ]).design
+    const changed = applyOps(baseline, [
+      {
+        t: 'update',
+        id: 'part-0',
+        patch: {
+          mountCage: {
+            min: [40, 0, 0],
+            max: [42, 2, 2],
+            offsets: Array.from({ length: 8 }, () => [0.25, 0, 0]),
+          },
+        },
+      },
+    ]).design
+    const before = await kernel.evaluate(baseline, { assets, detail: 'production' })
+    const after = await kernel.evaluate(changed, { assets, detail: 'production' })
+    const gold = (parts: typeof before.parts) =>
+      parts
+        .filter((part) => part.material === 'au18k-white')
+        .reduce((sum, part) => sum + part.volumeMm3, 0)
+    expect(gold(before.parts)).toBeGreaterThan(7)
+    expect(gold(after.parts)).toBeCloseTo(gold(before.parts), 6)
+  })
+
   it('keeps source and reference geometry out of both reports and casting, while preserving BReps in 3dm', async () => {
     const { design, assets } = fixture(await importedBoxes(3))
     const classified = applyOps(design, [
