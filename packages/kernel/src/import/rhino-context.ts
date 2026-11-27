@@ -10,9 +10,7 @@ type SourceGroup = RhinoContext['groups'][number]
 export type SourcePlacement = RhinoContext['placements'][number]
 type SourceMaterial = Pick<RhinoContext, 'material' | 'materialFromParent'>
 
-export function inheritedMaterial(placements: readonly SourcePlacement[]): string | undefined {
-  return placements.findLast((placement) => !placement.materialFromParent)?.material
-}
+export { inheritedMaterial } from '@pave/schema'
 
 export function rhinoContextReader(rhino: RhinoModule, doc: File3dm) {
   const groupTable = doc.groups()

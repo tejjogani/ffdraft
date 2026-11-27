@@ -6,7 +6,7 @@
  * undo/redo, a replayable history and a per-edit trace of who (person or agent run) did what.
  */
 import { z } from 'zod'
-import { revolveProfileError, sectionIsClosed } from './curve'
+import { revolveProfileError, ringBandProfileError, sectionIsClosed } from './curve'
 import { customMountFitForStone, customMountPartIssue } from './custom-mount'
 import { DESIGN_VERSION, migrateDesign, prongLayout } from './mount'
 import {
@@ -14,12 +14,13 @@ import {
   importSourceRole,
   isBodyKind,
   isSectionSurface,
+  NODE_SCHEMAS,
   type Node,
   type NodeInput,
   NodeSchema,
   nodeRefs,
 } from './nodes'
-import { RhinoContext } from './rhino-context'
+import { RhinoContext, RhinoStullerMaterial } from './rhino-context'
 
 export const PIECE_KINDS = [
   'ring',
@@ -94,9 +95,17 @@ export function isModelImportAdd(op: z.infer<typeof OpSchema>): boolean {
   )
 }
 
+// Undo of an additive supplier recovery records only the changed field in its merge patch.
+const recoveredContext = z
+  .union([
+    RhinoContext.strict(),
+    z.strictObject({ stullerMaterial: RhinoStullerMaterial.nullable() }),
+  ])
+  .nullable()
+
 const RhinoLabelUpdate = z.union([
-  z.strictObject({ rhinoContext: RhinoContext.strict().nullable() }),
-  z.strictObject({ source: z.strictObject({ rhinoContext: RhinoContext.strict().nullable() }) }),
+  z.strictObject({ rhinoContext: recoveredContext }),
+  z.strictObject({ source: z.strictObject({ rhinoContext: recoveredContext }) }),
 ])
 
 /** Identifies an update consisting only of a Rhino metadata field or its removal. */
@@ -210,9 +219,33 @@ function parseOp(raw: unknown): Op {
   return r.data as Op
 }
 
-function parseNode(raw: unknown, op: Op): Node {
+/** An assistant's requested geometry fields must survive parsing before its edit can be recorded. */
+function checkRequestedFields(submitted: unknown, parsed: unknown, path: string, op: Op) {
+  if (Array.isArray(submitted) && Array.isArray(parsed)) {
+    for (const [i, value] of submitted.entries())
+      checkRequestedFields(value, parsed[i], `${path}[${i}]`, op)
+  } else if (isObject(submitted) && isObject(parsed)) {
+    for (const [key, value] of Object.entries(submitted)) {
+      if (value === null) continue // JSON merge patch removes this property.
+      const field = `${path}.${key}`
+      if (!Object.hasOwn(parsed, key)) throw new OpError(`Unsupported CAD field "${field}".`, op)
+      checkRequestedFields(value, parsed[key], field, op)
+    }
+  }
+}
+
+function parseNode(raw: unknown, op: Op, checkFields: boolean): Node {
   const r = NodeSchema.safeParse(raw)
   if (!r.success) throw new OpError(z.prettifyError(r.error), op)
+  if (checkFields && (op.t === 'add' || op.t === 'update')) {
+    const submitted = op.t === 'add' ? op.node : op.patch
+    const kind = r.data.kind
+    for (const key of Object.keys(submitted)) {
+      if (!Object.hasOwn(NODE_SCHEMAS[kind].shape, key))
+        throw new OpError(`Unsupported CAD field "${kind}.${key}".`, op)
+    }
+    checkRequestedFields(submitted, r.data, kind, op)
+  }
   return r.data
 }
 
@@ -227,7 +260,11 @@ function dependents(design: Design, id: string): string[] {
  * Applies ops in order and returns the new design plus the ops that undo them.
  * Pure: the input is not mutated. Throws {@link OpError}; nothing is applied on failure.
  */
-export function applyOps(input: Design, ops: readonly Op[]): { design: Design; inverse: Op[] } {
+export function applyOps(
+  input: Design,
+  ops: readonly Op[],
+  options?: { checkRequestedFields?: boolean },
+): { design: Design; inverse: Op[] } {
   // An old document is read with the meaning its values had before it is edited, so an edit
   // never changes what the untouched parts of a version 1 piece look like.
   const design = migrateDesign(input)
@@ -251,7 +288,7 @@ export function applyOps(input: Design, ops: readonly Op[]): { design: Design; i
     const op = parseOp(raw)
     switch (op.t) {
       case 'add': {
-        const node = parseNode(op.node, op)
+        const node = parseNode(op.node, op, options?.checkRequestedFields === true)
         if (node.id === '') throw new OpError('A node id cannot be empty', op)
         // A JSON object cannot keep this key through a save and load (the record parser drops
         // it), so the node would vanish from a saved design while the outliner still lists it.
@@ -268,7 +305,11 @@ export function applyOps(input: Design, ops: readonly Op[]): { design: Design; i
         if (!prev) throw new OpError(`No node "${op.id}"`, op)
         if ('id' in op.patch || 'kind' in op.patch)
           throw new OpError('id and kind cannot be changed; add a new node instead', op)
-        const parsed = parseNode(mergePatch(prev, op.patch), op)
+        const parsed = parseNode(
+          mergePatch(prev, op.patch),
+          op,
+          options?.checkRequestedFields === true,
+        )
         const updated =
           parsed.kind === 'setting' &&
           parsed.importSourceId &&
@@ -580,7 +621,9 @@ export function validateDesign(design: Design): DesignIssue[] {
           message: `"${id}" needs a construction curve but "${r}" is a ${target.kind}.`,
         })
       else if (n.kind === 'revolve' && target.kind === 'curve') {
-        const message = revolveProfileError(target, n.axis, n.axisOffset)
+        const message = n.size
+          ? ringBandProfileError(target)
+          : revolveProfileError(target, n.axis, n.axisOffset)
         if (message) issues.push({ level: 'error', nodeId: id, message })
       }
     }

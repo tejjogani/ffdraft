@@ -193,6 +193,28 @@ saved in the app), refuses to start without one, and never prints it.
 | `--only=design,edit` | Only some of the journeys: `design`, `photo`, `edit`, `render` |
 | `--tiers` | Also a quick check of each tier's model (a few cents to about a dollar more) |
 
+### Reference replication benchmark
+
+```bash
+pnpm agent:reference-replication --blender --out=/tmp/pave-reference-scripted
+pnpm agent:reference-replication --live --blender --out=/tmp/pave-reference-live
+```
+
+The benchmark prepares a synthetic image of a round six-claw solitaire on a plain court
+band. The assistant receives the image through Take to CAD, with the measurements and
+grading camera held back. The benchmark approves the specification and build, checks the
+editable stone, setting and shank against the source, and compares their outlines at the same
+camera. With `--blender`, it also approves one Blender preview of the same saved CAD version.
+Set `PAVE_BLENDER` in your terminal to use a specific Blender executable.
+
+The default run uses scripted answers over the Claude SDK and local HTTP. `--live` makes paid
+Claude API requests with an `ANTHROPIC_API_KEY` set in your terminal. With the key absent it
+writes a `skipped` report before starting any model or render work. Each run writes a JSON
+report, and a successful run saves the source JPEG, structured read, fitted CAD comparisons,
+and an editable `.pave` archive. The Blender run also saves its PNG. This fixture measures
+one silhouette and its visible features. It cannot establish how the system handles a new
+photograph or hidden geometry.
+
 ### 4. Try the whole journey
 
 Open the assistant with **Assistant** in the sidebar, or `Ctrl+J` (`⌘J` on a Mac). Each

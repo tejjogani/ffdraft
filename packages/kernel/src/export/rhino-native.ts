@@ -10,6 +10,7 @@ import type {
 } from 'rhino3dm'
 import type { Scene, ScenePart } from '../core'
 import { IDENTITY, type Mat4, multiply } from '../geometry/vec'
+import { PAVE_STULLER_FIELD } from '../import/matrix-stuller'
 import { MAX_RHINO_FILE_BYTES } from '../import/rhino'
 import { freeRhino } from '../runtime/rhino'
 import type { ExportOptions } from '../types'
@@ -105,17 +106,21 @@ export function nativeSolidWriter(
     // Some analytic Rhino surfaces cannot be baked through shear or nonuniform scale.
     // A new single-leaf block keeps the original exact surface and applies the affine
     // placement without bringing its siblings or any original definition into the file.
+    const memberSupplier =
+      !context?.memberMaterialFromParent && attrs.getUserString(PAVE_STULLER_FIELD)
     const key = JSON.stringify([
       assetId,
       attrs.layerIndex,
       context?.memberMaterialIndex,
       context?.memberMaterialFromParent,
+      memberSupplier,
     ])
     let id = definitionIds.get(key)
     if (!id) {
       definitions ??= doc.instanceDefinitions()
       const leaf = new rhino.ObjectAttributes()
       leaf.name = 'Solid'
+      if (memberSupplier) leaf.setUserString(PAVE_STULLER_FIELD, memberSupplier)
       leaf.layerIndex = attrs.layerIndex
       if (context?.memberMaterialFromParent) {
         leaf.materialSource = rhino.ObjectMaterialSource.MaterialFromParent

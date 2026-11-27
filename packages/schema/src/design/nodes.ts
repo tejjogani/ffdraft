@@ -12,7 +12,7 @@
 import { z } from 'zod'
 import { GEM_CUT_IDS, GEM_MATERIAL_IDS } from '../domain/gems'
 import { FINISH_IDS, METAL_IDS, PLATING_IDS } from '../domain/metals'
-import { RING_SIZE_SYSTEMS } from '../domain/sizes'
+import { RING_SIZE_SYSTEMS, ringInnerDiameter } from '../domain/sizes'
 import { CurveDefinition } from './curve'
 import { choice, deg, follows, int, mm, ratio, ref, text, toggle, vec3 } from './fields'
 import { MeshEdits } from './mesh-edit'
@@ -112,10 +112,10 @@ const stone = {
 /** Melee-sized stones: shown with the stone-size control and snapped to stock diameters. */
 const meleeSize = { widget: 'stoneSize', snap: 'melee' } as const
 
-const RingSizeSchema = z
-  .object({ system: z.enum(RING_SIZE_SYSTEMS), value: z.number().min(0).max(80) })
-  .default({ system: 'us', value: 6 })
-  .meta({ title: 'Ring size', widget: 'ringSize' })
+const RingSizeSchema = z.object({
+  system: z.enum(RING_SIZE_SYSTEMS),
+  value: z.number().min(0).max(80),
+})
 
 const fontChoice = choice('Font', ['sans', 'serif', 'script', 'block'], 'sans')
 
@@ -126,7 +126,10 @@ export const RingShank = z
     ...base,
     kind: z.literal('ringShank'),
     ...metal,
-    size: RingSizeSchema,
+    size: RingSizeSchema.default({ system: 'us', value: 6 }).meta({
+      title: 'Ring size',
+      widget: 'ringSize',
+    }),
     profile: choice('Profile', ['court', 'dShape', 'flat', 'flatCourt', 'knifeEdge'], 'court', {
       labels: { dShape: 'D-shape', flatCourt: 'Flat court', knifeEdge: 'Knife edge' },
       description:
@@ -624,6 +627,12 @@ export const Revolve = z
     curve: ref('Profile curve', ['curve'], {
       description: 'A closed construction curve. Editing its points rebuilds the solid.',
     }).optional(),
+    size: RingSizeSchema.optional().meta({
+      title: 'Ring size',
+      widget: 'ringSize',
+      description:
+        'Makes a circular band with this inner diameter from a closed Top or Right construction curve at plane position 0. Requires a full turn around world Y.',
+    }),
     axis: z.enum(['vertical', 'horizontal']).optional().meta({
       title: 'Rotation axis',
       description: 'Direction on the drawing plane. Defaults to vertical.',
@@ -637,12 +646,44 @@ export const Revolve = z
     }),
     angle: deg('Sweep', 1, 360, 360),
   })
-  .superRefine(({ curve, profile, axis, axisOffset }, ctx) => {
+  .superRefine(({ curve, profile, size, angle, axis, axisOffset, transform }, ctx) => {
     if ((curve === undefined) === (profile === undefined))
       ctx.addIssue({
         code: 'custom',
         message: 'Revolve needs exactly one closed curve or SVG profile.',
       })
+    if (size !== undefined) {
+      if (curve === undefined || profile !== undefined)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['size'],
+          message: 'A sized ring band needs a closed construction curve.',
+        })
+      if (angle !== 360)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['angle'],
+          message: 'A sized ring band requires a full 360° turn.',
+        })
+      if (axis !== undefined || axisOffset !== undefined)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['size'],
+          message: 'A sized ring band uses the native ring axis. Remove the axis and axis offset.',
+        })
+      if (ringInnerDiameter(size) <= 0)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['size'],
+          message: 'A sized ring band needs a positive inner diameter.',
+        })
+      if (transform !== undefined && transform.scale !== 1)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['transform', 'scale'],
+          message: 'Use ring size to resize a custom band, or edit its source profile.',
+        })
+    }
     if (profile !== undefined && (axis !== undefined || axisOffset !== undefined))
       ctx.addIssue({
         code: 'custom',

@@ -4,11 +4,11 @@ exports[`the frozen system prompt > has a stable hash (snapshot) that covers the
 {
   "chars": [
     7082,
-    43855,
+    44965,
     10638,
-    19163,
+    19464,
   ],
-  "hash": "prompt-0016d8b8545514",
+  "hash": "prompt-0d32637d26e89b",
 }
 `;
 
@@ -183,6 +183,7 @@ Shared value lists:
       - groups (required): list of object
       - placements (required): list of object (0–32 items)
       - topology: string
+      - stullerMaterial: any
       - material: string
       - materialFromParent: true
     - nativeAssetId: string
@@ -240,6 +241,9 @@ Shared value lists:
 - plating: <plating> = "none"
 - profile: string. SVG path in mm in the (radius, height) half-plane; revolved about Z.
 - curve: id of a curve node. A closed construction curve. Editing its points rebuilds the solid.
+- size: object. Makes a circular band with this inner diameter from a closed Top or Right construction curve at plane position 0. Requires a full turn around world Y.
+  - system (required): us | uk | eu | jp | mm
+  - value (required): number 0–80
 - axis: vertical | horizontal. Direction on the drawing plane. Defaults to vertical.
 - axisOffset: number -250–250 mm. Horizontal position of a vertical axis or vertical position of a horizontal axis. Defaults to 0 mm.
 - angle: number 1–360° = 360
@@ -331,6 +335,7 @@ Shared value lists:
   - groups (required): list of object
   - placements (required): list of object (0–32 items)
   - topology: string
+  - stullerMaterial: any
   - material: string
   - materialFromParent: true
 - sourceObjectId: string"

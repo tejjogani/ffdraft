@@ -27,6 +27,7 @@ import {
   type PieceSpecInput,
   reviewRhinoRoles,
   rhinoRoleLinks,
+  ringBandProfileError,
   sameJson,
 } from '@pave/schema'
 import {
@@ -55,6 +56,7 @@ import { QualityIndicator } from '../../components/stage/QualityIndicator'
 import { Stage } from '../../components/stage/Stage'
 import type { Viewer, ViewerState } from '../../components/stage/viewer'
 import { createViewVisibility, metalShellOf } from '../../components/stage/visibility'
+import { ZoomControl } from '../../components/stage/ZoomControl'
 import { runCommand } from '../../lib/commands'
 import { canRedo, canUndo, hasGap } from '../../lib/design-session/core'
 import { useDesignSession, useSessionState } from '../../lib/design-session/store'
@@ -319,7 +321,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
             ready: null,
             pending: 'Wait for the geometry to finish updating.',
             failed: 'Retry the geometry engine before rendering.',
-            'review-roles': 'Assign metal or stone roles to the imported geometry.',
+            'review-roles': 'Assign metals and gemstones to the imported bodies in Pavé.',
             references: 'Add a solid body or stone to render.',
             sheets: 'Use Thicken surface in Add feature to give the sheet a wall.',
             empty: 'Add a solid body or stone to render.',
@@ -601,7 +603,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
   const confirmRhinoRoles = (choices: ImportedRoleChoice[]) => {
     const { session, latest } = currentRhinoReview()
     const ops = reviewRhinoRoles(latest.view, choices)
-    session.commit(ops, { label: 'Confirmed Rhino roles', baseVersion: latest.version })
+    session.commit(ops, { label: 'Reviewed project materials', baseVersion: latest.version })
     if (choices[0]) selectRhinoRoleBody(choices[0].sourceId, session.get().view)
     setRhinoReview(null)
   }
@@ -693,6 +695,25 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
   }
   const selectedProfile =
     revolveSource?.pieceId === pieceId ? view.nodes[revolveSource.id] : undefined
+
+  const makeRingBand = (curveId: string) => {
+    if (!session || readOnly || curve || profile) return
+    const current = session.get().view
+    const source = current.nodes[curveId]
+    if (source?.kind !== 'curve' || ringBandProfileError(source)) return
+    const id = newId('revolve')
+    session.commit(
+      addPrepared(current, {
+        kind: 'revolve',
+        id,
+        curve: curveId,
+        size: { system: 'us', value: 6 },
+      }),
+      { label: 'Made a custom ring band' },
+    )
+    ws().select([id])
+    if (!dockInspector) setSheet('inspector')
+  }
 
   const makeWire = (id: string) => {
     if (!session || readOnly || profile || curve || session.get().view.nodes[id]?.kind !== 'curve')
@@ -866,6 +887,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
     drawProfile,
     drawCurve,
     makeWire,
+    makeRingBand,
     revolveCurve,
     openSectionTool,
     canRenderSavedDesign: !readOnly && renderBlocked === null,
@@ -1057,6 +1079,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
         }
       }}
       onRevolve={revolveCurve}
+      onMakeRingBand={makeRingBand}
       onEditSectionFeature={(node) => openSectionTool(sectionToolFor(node), node)}
       canEditSectionFeature={(node) => kernel.kinds.includes(node.kind)}
       onMakeWire={makeWire}
@@ -1262,6 +1285,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
           ) : null}
           {!empty && !curve && (
             <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex items-end justify-between gap-3 [&>*]:pointer-events-auto">
+              {viewerHandle && <ZoomControl viewer={viewerHandle} />}
               <div className="flex min-w-0 flex-wrap items-end gap-1.5">
                 {(targets.length > 0 || isolated.length > 0 || hasHidden) && (
                   <fieldset

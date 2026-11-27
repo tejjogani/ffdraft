@@ -215,3 +215,17 @@ project.rail_sweep(["inner", "outer"], ["shoulder-section"], feature_id="shoulde
 ```
 
 Set `capped=False` to work with a sheet. `project.evaluate()` reports each visible modeling surface's area and dimensions in millimetres alongside the casting metrics.
+
+## Make a sized custom ring band
+
+Create a closed construction curve on the Top or Right plane at plane position zero. On Top, X is radial and Y is along the finger. On Right, Z is radial and Y is along the finger. The band uses the curve's dimensions in millimetres and a full turn about Y. The minimum radius follows the chosen finger size as the band resizes.
+
+```python
+project.make_ring_band("section", solid_id="band", size={"system": "us", "value": 6})
+project.apply(
+    [{"t": "update", "id": "band", "patch": {"size": {"system": "us", "value": 7}}}],
+    "Resize custom band to US 7",
+)
+```
+
+Use `project.modeling_options()` for the available modeling operation names. For example, `project.modeling_options("customProfileBand")` returns the supported scope and commands. `project.modeling_options("revolve")` returns the feature creation schema.

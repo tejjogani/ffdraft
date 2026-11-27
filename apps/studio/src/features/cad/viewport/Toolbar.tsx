@@ -209,10 +209,10 @@ export function FileToolbar({
           ))}
         {onReviewRhinoRoles &&
           (compact ? (
-            <IconButton icon={ListChecks} label="Review Rhino roles" onClick={onReviewRhinoRoles} />
+            <IconButton icon={ListChecks} label="Review materials" onClick={onReviewRhinoRoles} />
           ) : (
             <Button size="sm" variant="ghost" icon={ListChecks} onClick={onReviewRhinoRoles}>
-              Review Rhino roles
+              Review materials
             </Button>
           ))}
         {canSaveFile && (

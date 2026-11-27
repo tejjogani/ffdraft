@@ -63,6 +63,16 @@ class StudioTest(unittest.TestCase):
         self.assertEqual(self.request("pieces.get"), {"id": "ring"})
         return project
 
+    def test_project_modeling_options(self):
+        project = self.project()
+        for operation in (None, "closedSweep2"):
+            self.reply({"version": 0, "status": "unavailable" if operation else "unverified"})
+            project.modeling_options(operation)
+            expected = {"pieceId": "ring"}
+            if operation:
+                expected["operation"] = operation
+            self.assertEqual(self.request("design.capabilities"), expected)
+
     def test_read_features_in_design_order(self):
         project = self.project()
         self.assertEqual(project.version, 0)
@@ -366,6 +376,18 @@ class StudioTest(unittest.TestCase):
         self.assertEqual(body["ops"], [{"t": "add", "node": {
             "id": "bezel", "kind": "revolve", "curve": "outline", "axis": "horizontal",
             "axisOffset": -2, "angle": 180,
+        }}])
+
+    def test_make_ring_band_uses_finger_size_and_keeps_the_edit_guard(self):
+        project = self.project()
+        self.reply({"version": 1, "change": {"seq": 1}})
+        project.make_ring_band("outline", solid_id="custom-band", size={"system": "us", "value": 7},
+                               change_id="band-1")
+        body = self.request("design.apply")
+        self.assertEqual((body["baseVersion"], body["changeId"]), (0, "band-1"))
+        self.assertEqual(body["ops"], [{"t": "add", "node": {
+            "id": "custom-band", "kind": "revolve", "curve": "outline",
+            "size": {"system": "us", "value": 7},
         }}])
 
     def test_set_mesh_vertices_binds_to_the_observed_source_and_version(self):

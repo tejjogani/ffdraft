@@ -115,6 +115,11 @@ class Project:
         self._version = piece["version"]
         return self
 
+    def modeling_options(self, operation: str | None = None) -> JsonObject:
+        """List CAD operations or inspect the inputs and limitations of one operation."""
+        fields = {"operation": operation} if operation is not None else {}
+        return self._cad_rpc("design.capabilities", **fields)
+
     def describe(self, feature_id: str) -> JsonObject:
         """Read one feature's values and schema, including field units and limits."""
         return self._cad_rpc("design.describe", nodeId=feature_id)
@@ -339,6 +344,24 @@ class Project:
         return self.apply(
             [{"t": "add", "node": node}],
             "Revolve profile",
+            base_version=base_version,
+            change_id=change_id,
+        )
+
+    def make_ring_band(
+        self,
+        curve_id: str,
+        *,
+        solid_id: str,
+        size: JsonObject,
+        base_version: int | None = None,
+        change_id: str | None = None,
+    ) -> JsonObject:
+        """Make a circular band from a closed Top or Right profile at plane position zero."""
+        node = {"id": solid_id, "kind": "revolve", "curve": curve_id, "size": size}
+        return self.apply(
+            [{"t": "add", "node": node}],
+            "Make ring band",
             base_version=base_version,
             change_id=change_id,
         )

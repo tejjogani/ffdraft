@@ -95,6 +95,7 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
           'references.search',
           'references.read',
           'design.history',
+          'design.capabilities',
           'design.describe',
           'design.rhinoCapFaces',
           'design.inspectMount',

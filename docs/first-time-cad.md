@@ -24,15 +24,17 @@ Review the skipped objects before choosing Import. Select the new parts in Featu
 
 Click a stone on the ring, even a single diamond in a pavé row. Choose Hide stone to see its seat or Isolate stone to zoom in on it. The same actions work on a metal part. Exit isolation returns to your earlier view. Show all brings back hidden items. The saved piece, metal weight and exports keep their geometry.
 
+Drag the zoom slider at the lower left of the 3D view for a close-up, or use its minus and plus buttons. With the slider focused, use the arrow keys for small steps. To fit the whole piece again, clear the selection and choose Fit to view in the toolbar.
+
 Open Construction curves in Features to browse the guides. On an imported Rhino assembly, the eye beside the group shows or hides them together. Imported assemblies open at a three-quarter angle. Drag on the model to orbit it. Use Views to switch between the studio and dark backdrops.
 
-For a product image, open Renders and choose a shot. Under Look, choose Studio white or Soft gradient. If the CAD Inspector says Unassigned, use Review role to identify the imported metals and stones first. A view-only hide or backdrop choice in CAD belongs to that workspace.
+For a product image, open Renders and choose a shot. Under Look, choose Studio white or Soft gradient. If the CAD Inspector says Unassigned, choose Review materials to assign metals and gemstones in Pavé. A view-only hide or backdrop choice in CAD belongs to that workspace.
 
 To update the actual piece, select the part, edit its dimensions in the Inspector, or choose Edit handmade mount and Save mount edit. Undo reverses a saved design change. Export for Rhino to write a new .3dm.
 
 ## Tell Pavé which parts are metal or stones
 
-Choose Review Rhino roles in CAD. If an older import is missing labels, choose Recover Rhino source labels and select the original .3dm. Check the exact matches before applying them.
+Choose Review materials in CAD or Renders. The source material labels help identify each body. Choose its project alloy or gemstone before rendering. If an older import is missing display or supplier labels, choose Recover Rhino source labels and select the original .3dm. Check the exact matches before applying them. For supported Matrix files, the review also shows Stuller metal codes or stone families from the original body or block placement. Confirm the production alloy and gemstone yourself.
 
 Select a part and check its source layer, group and appearance. Choose Metal and an alloy for anything the caster should weigh. Choose Reference for a display stand, an unused copy or a guide solid. Use the eye in Features to hide a reference while working.
 
@@ -40,7 +42,7 @@ Choose Stone for a gemstone. Confirm the species, cut, width, length, depth and 
 
 ## Fit a sourced stone to an imported setting
 
-In Review Rhino roles, select the stone and choose the separate solid that forms its complete setting. Pick its alloy and a replacement style. Check each proposed pairing if you apply the choice to matching parts. For a handmade mounting built from separate claws or rails, use Edit handmade mount on the original metal parts.
+In Review materials, select the stone and choose the separate solid that forms its complete setting. Pick its alloy and a replacement style. Check each proposed pairing if you apply the choice to matching parts. For a handmade mounting built from separate claws or rails, use Edit handmade mount on the original metal parts.
 
 Open Stone sourcing in the same project. Find the confirmed stone, preview a measured alternative and choose Fit this stone. The selected stone and linked head use the new measurements. A changed fit rebuilds that head in the chosen style. Use Undo to return to the source geometry.
 
@@ -147,3 +149,7 @@ Use Sweep 1 rail for a shoulder that follows one guide. Place the cross section 
 ## Render your CAD
 
 Press Render beside Export in CAD to render the saved design. To frame a different shot, open Render Studio, select the shot and press Render. For a catalog image choose Studio white. Black acrylic gives a dark reflective surface. The first render on a supported local workstation installs Blender automatically. You can follow the download in View progress and continue designing. The finished image appears in the project's takes. In the project chat, asking for a Blender render uses the same CAD and render queue.
+
+## Make a custom ring band to finger size
+
+Use Draw curve and choose Right at X plane position 0 mm. For a 4 mm wide, 2 mm thick band, enter Y and Z coordinates (−2, −1), (2, −1), (2, 1), and (−2, 1). Turn on Closed curve and save. With the curve selected, choose Make ring band. The new band opens at US 6. Use Ring size in the Inspector to change the bore while keeping the profile dimensions. Use Edit points on the linked curve to change the cross-section.

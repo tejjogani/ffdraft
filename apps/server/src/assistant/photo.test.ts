@@ -6,13 +6,16 @@
  * the server draws the capture). The model's turns stand in for Claude; everything else is real.
  */
 import type { BetaMessageStreamParams } from '@anthropic-ai/sdk/resources/beta/messages/messages'
-import { applyOps, buildDesign, type PhotoRead, TEMPLATES } from '@pave/schema'
 import { and, eq, like } from 'drizzle-orm'
-import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import * as t from '../db/schema'
-import { serviceContext } from '../service-context'
 import { BOOT_TIMEOUT, type Client, client } from '../test/harness'
+import {
+  encodeReference,
+  referenceDesign,
+  referencePixels,
+  SCRIPTED_READ,
+} from './reference-replication-fixture'
 import { type AssistantServer, assistantServer, settled, text, tool } from './testing'
 
 const KEY = 'sk-ant-test-0000000000000000000000000000-KEYZ'
@@ -40,60 +43,11 @@ function result<T>(params: BetaMessageStreamParams, id: string): { json: T; bloc
   throw new Error(`no result for ${id}`)
 }
 
-/** The read Claude would give of the photo: a six-claw round solitaire seen three-quarter. */
-const READ: PhotoRead = {
-  observations: 'A round brilliant in six claws on a plain court band, seen from front and above.',
-  kind: { value: 'ring', visible: 'yes' },
-  view: 'threeQuarter',
-  archetype: { value: 'solitaire', visible: 'yes' },
-  stones: [
-    {
-      role: 'center',
-      cut: 'round',
-      arrangement: 'single',
-      setting: 'prong',
-      prongs: 6,
-      countVisible: 1,
-      widthToCentre: 1,
-      visible: 'yes',
-    },
-  ],
-  band: {
-    profile: 'court',
-    shoulder: 'plain',
-    widthToStone: 0.3,
-    taperTopToBottom: 1,
-    visible: 'yes',
-  },
-  body: null,
-  metal: { colour: 'white', finish: 'polished', visible: 'yes' },
-  notVisible: ['the inside of the band'],
-  unsure: [],
-  plainBackground: true,
-}
-
 describe('a design from a photo', () => {
   it('reads, builds through the canon, fits to the outline and looks from the photo’s angle', async () => {
-    // The photo: a solitaire with six claws, a larger stone and a wider band than the template.
-    const base = buildDesign({
-      ...TEMPLATES.find((x) => x.id === 'solitaire')!.spec,
-      stones: [{ role: 'center', cut: 'round', carat: 1, setting: 'prong', prongs: 6 }],
-    })
-    const width = (base.nodes.center as { width: number }).width * 1.15
-    const band = (base.nodes.band as { widthTop: number }).widthTop * 1.35
-    const truth = applyOps(base, [
-      { t: 'update', id: 'center', patch: { width } },
-      { t: 'update', id: 'band', patch: { widthTop: band, widthBottom: band } },
-    ] as never).design
+    const { truth, width, band } = referenceDesign()
     // Drawn by the server's own kernel worker, the way a capture with no window is.
-    const c0 = await s.server.runtime.context(s.server.runtime.local!)
-    const size = { width: 480, height: 480 }
-    const { images } = await c0.services.get('geometry').picture!(
-      truth,
-      { views: ['three-quarter'], size: size.width, focus: [] },
-      serviceContext(c0),
-    )
-    const jpeg = await sharp(images[0]!, { raw: { ...size, channels: 4 } })
+    const jpeg = await encodeReference(await referencePixels(s.server, truth, false))
       .jpeg({ quality: 92 })
       .toBuffer()
     const form = new FormData()
@@ -113,7 +67,7 @@ describe('a design from a photo', () => {
       // The read itself: a separate structured-output call on the run's own client.
       ({ params }) => {
         readRequest = params
-        return { content: [text(JSON.stringify(READ))] }
+        return { content: [text(JSON.stringify(SCRIPTED_READ))] }
       },
       ({ params }) => {
         const { json } = result<{ specDraft: unknown; cutout: { ok: boolean } }>(params, 'tr')

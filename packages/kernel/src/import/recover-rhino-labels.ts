@@ -50,7 +50,7 @@ function labelTarget(node: Node): LabelTarget | undefined {
 export function hasRecoverableRhinoLabels(design: Design): boolean {
   return Object.values(design.nodes).some((node) => {
     const target = labelTarget(node)
-    return Boolean(target?.key && !target.context)
+    return Boolean(target?.key && !target.context?.stullerMaterial)
   })
 }
 
@@ -113,10 +113,6 @@ export async function recoverRhinoLabels(
     target: LabelTarget,
   ): Promise<RhinoLabelRecovery['ops'][number] | undefined> => {
     signal?.throwIfAborted()
-    if (target.context) {
-      counts.alreadyLabeled++
-      return
-    }
     const { key } = target
     if (!key) {
       counts.unmatched++
@@ -124,6 +120,11 @@ export async function recoverRhinoLabels(
     }
     const part = target.kind === 'part' ? parts.get(key) : undefined
     const curve = target.kind === 'curve' ? curves.get(key) : undefined
+    const sourceContext = part?.rhinoContext ?? curve?.rhinoContext
+    if (target.context && (target.context.stullerMaterial || !sourceContext?.stullerMaterial)) {
+      counts.alreadyLabeled++
+      return
+    }
     if (designKeys.get(key) === null || part === null || curve === null) {
       counts.ambiguous++
       return
@@ -132,7 +133,12 @@ export async function recoverRhinoLabels(
       counts.unmatched++
       return
     }
-    const context = part?.rhinoContext ?? curve?.rhinoContext
+    // A reread generates new group and placement IDs. Keep the project's namespace and
+    // add only the supplier fields when the original labels were already saved.
+    const context =
+      target.context && sourceContext?.stullerMaterial
+        ? { ...target.context, stullerMaterial: sourceContext.stullerMaterial }
+        : sourceContext
     if (!context) {
       counts.unlabeled++
       return

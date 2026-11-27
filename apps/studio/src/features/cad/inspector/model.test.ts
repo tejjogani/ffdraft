@@ -99,6 +99,20 @@ describe('inspector model', () => {
     expect(size.field.widget).toBe('ringSize')
   })
 
+  it('offers the ring-size control only on a sized revolve', () => {
+    const revolve = NodeSchema.parse({ id: 'band', kind: 'revolve', curve: 'profile' })
+    const sized = NodeSchema.parse({ ...revolve, size: { system: 'us', value: 7 } })
+    expect(rowsOf(revolve).map((r) => r.field.key)).toContain('axisOffset')
+    expect(rowsOf(revolve).map((r) => r.field.key)).not.toContain('size')
+    const rows = rowsOf(sized, true)
+    expect(rows.find((r) => r.field.key === 'size')).toMatchObject({
+      value: { system: 'us', value: 7 },
+      field: { widget: 'ringSize' },
+    })
+    for (const key of ['axis', 'angle', 'axisOffset', 'scale'])
+      expect(rows.some((r) => r.field.key === key)).toBe(false)
+  })
+
   it('shows the active variant of a choice as nested rows', () => {
     const gem = nodeOf(designs[0]!, 'gem')
     const placement = rowsOf(gem).find((r) => r.field.key === 'placement')!

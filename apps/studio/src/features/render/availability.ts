@@ -1,10 +1,37 @@
 import type { Evaluation } from '@pave/kernel'
-import { importRoleOf, isRhinoRoleBody } from '@pave/schema'
+import { importRoleOf, isRhinoRoleBody, type Node } from '@pave/schema'
 import type { PieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
+
+import { sourceMaterialLabel } from '../../lib/source-material'
 
 type RenderGeometry = Pick<Evaluation, 'parts' | 'stones' | 'referenceParts'>
 type RenderEvaluation = Pick<PieceEvaluation, 'design' | 'status' | 'stale'> & {
   evaluation: RenderGeometry | null
+}
+
+function unassignedBody(node: Node | undefined) {
+  return isRhinoRoleBody(node) && node.visible !== false && importRoleOf(node) === 'unassigned'
+    ? node
+    : undefined
+}
+
+export function sourceMaterialSummary(
+  design: RenderEvaluation['design'],
+  references: RenderGeometry['referenceParts'],
+) {
+  let count = 0
+  const counts = new Map<string, number>()
+  for (const id of new Set(references?.map(({ nodeId }) => nodeId))) {
+    const body = unassignedBody(design?.nodes[id])
+    if (!body) continue
+    count++
+    const label = sourceMaterialLabel(body.source.rhinoContext)
+    if (label) counts.set(label, (counts.get(label) ?? 0) + 1)
+  }
+  const labels = [...counts].sort((a, b) => b[1] - a[1])
+  const shown = labels.slice(0, 4).map(([label, count]) => `${label} (${count})`)
+  if (labels.length > shown.length) shown.push(`+${labels.length - shown.length} more`)
+  return { count, labels: shown.join(', ') }
 }
 
 export function renderAvailability({ design, evaluation, status, stale }: RenderEvaluation) {
@@ -12,10 +39,7 @@ export function renderAvailability({ design, evaluation, status, stale }: Render
   if (status !== 'ready' || stale || !evaluation) return 'pending'
   if (evaluation.parts.length || evaluation.stones.length) return 'ready'
   const references = evaluation.referenceParts ?? []
-  const needsReview = references.some(({ nodeId }) => {
-    const node = design?.nodes[nodeId]
-    return isRhinoRoleBody(node) && node.visible !== false && importRoleOf(node) === 'unassigned'
-  })
+  const needsReview = references.some(({ nodeId }) => unassignedBody(design?.nodes[nodeId]))
   if (needsReview) return 'review-roles'
   if (references.some((p) => p.modelingSheet)) return 'sheets'
   return references.length ? 'references' : 'empty'

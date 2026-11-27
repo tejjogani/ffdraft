@@ -14,7 +14,7 @@ export function customMountPartIssue(design: Design, id: string): string | undef
   const role = importRoleOf(n)
   if (role === 'stone') return 'This part is a stone. Choose its surrounding metal.'
   if (role === 'setting')
-    return 'This part already belongs to a replacement head. Detach the head in Review Rhino roles before editing the original mounting.'
+    return 'This part already belongs to a replacement head. Detach the head in Review materials before editing the original mounting.'
   if (n.flatBack || n.hollow || n.smooth || n.detail !== 1)
     return 'Restore the original mesh shaping options before measuring a control box for this part.'
   if (

@@ -1,7 +1,7 @@
 import type { Part, StoneInstance } from '@pave/kernel'
 import { designFrom } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
-import { renderAvailability } from './availability'
+import { renderAvailability, sourceMaterialSummary } from './availability'
 
 const imported = {
   id: 'source',
@@ -108,5 +108,58 @@ describe('render availability from production geometry', () => {
       'pending',
     )
     expect(renderAvailability({ ...available(), status: 'error', evaluation: null })).toBe('failed')
+  })
+})
+
+it('counts source display labels on distinct visible unassigned bodies in the render evaluation', () => {
+  const outer = { id: 'outer', definitionId: 'outer-def', material: 'Emerald' }
+  const inner = { id: 'inner', definitionId: 'inner-def' }
+  const body = (id: string, material?: string) => ({
+    ...imported,
+    id,
+    source: {
+      ...imported.source,
+      rhinoContext: {
+        groups: [],
+        placements: [],
+        material,
+      },
+    },
+  })
+  const inherited = (id: string, fromParent: boolean) => ({
+    ...imported,
+    id,
+    source: {
+      ...imported.source,
+      rhinoContext: {
+        groups: [],
+        materialFromParent: true as const,
+        placements: [outer, { ...inner, ...(fromParent && { materialFromParent: true as const }) }],
+      },
+    },
+  })
+  const design = designFrom('other', [
+    body('metal', '/White Gold-b46dab22-34ed-4666-af9c-908cd8a75324'),
+    body('other-metal', '/White Gold-b46dab22-34ed-4666-af9c-908cd8a75324'),
+    inherited('gem', true),
+    inherited('empty', false),
+    body('excluded', 'Ruby'),
+    { ...body('reference', 'Sapphire'), importRole: 'reference' },
+    { ...body('hidden', 'Topaz'), visible: false },
+    body('literal', '/Library/Stone-2024'),
+  ])
+  const referenceParts = [
+    'metal',
+    'metal',
+    'other-metal',
+    'gem',
+    'empty',
+    'reference',
+    'hidden',
+    'literal',
+  ].map((nodeId) => ({ nodeId }) as Part)
+  expect(sourceMaterialSummary(design, referenceParts)).toEqual({
+    count: 5,
+    labels: 'White Gold (2), Emerald (1), /Library/Stone-2024 (1)',
   })
 })

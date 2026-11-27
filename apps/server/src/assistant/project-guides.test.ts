@@ -259,3 +259,76 @@ it('copies the outside rim and hole as a single scoped assistant change', async 
   expect((await api.call('pieces.get', { id: current.pieceId })).design).toEqual(before.design)
   expect((await api.call('pieces.get', { id: other.pieceId })).version).toBe(unrelated.version)
 })
+
+it('checks modeling support in this project and rejects an invented placement edit atomically', async () => {
+  const ring = await api.call('pieces.create', { templateId: 'halo', title: 'Reference fit' })
+  const other = await api.call('pieces.create', { title: 'Separate commission' })
+  const lookup = { pieceId: ring.id, operation: 'moveGeneratedStone' }
+  const availability = await api.call('design.capabilities', lookup)
+  expect(availability).toMatchObject({
+    version: ring.version,
+    status: 'unavailable',
+    tools: [],
+  })
+  expect(availability.projectKinds).toContain('gemRow')
+  const loft = await api.call('design.capabilities', { pieceId: ring.id, operation: 'Loft' })
+  expect(loft).toMatchObject({
+    status: 'available',
+    tools: ['design.apply'],
+    schema: { properties: { sections: {} } },
+  })
+  expect(
+    await api.call('design.capabilities', { pieceId: ring.id, operation: 'closedSweep2' }),
+  ).toMatchObject({ status: 'unavailable' })
+  expect(
+    await api.call('design.capabilities', { pieceId: ring.id, operation: 'acmePluginCommand' }),
+  ).toMatchObject({ status: 'unverified', tools: [] })
+  server.model.push(
+    { content: [tool('design_capabilities', { ...lookup, pieceId: other.id }, 'other')] },
+    { content: [tool('design_capabilities', lookup, 'check')] },
+    {
+      content: [
+        tool(
+          'design_apply',
+          {
+            pieceId: ring.id,
+            baseVersion: ring.version,
+            label: 'Move one shoulder stone',
+            ops: [
+              {
+                t: 'update',
+                id: 'row',
+                patch: { stoneWidth: 1.3, pinnedStoneOffsets: { 4: [0.2, 0, 0] } },
+              },
+            ],
+          },
+          'invalid',
+        ),
+      ],
+    },
+    {
+      content: [
+        text(
+          'The generated row supports width and spacing. Individual permanent offsets are unavailable.',
+        ),
+      ],
+    },
+  )
+  const { run } = await api.call('threads.send', {
+    text: 'Move and lock just the fourth shoulder stone',
+    context: { pieceId: ring.id, stage: 'cad' },
+    clientId: 'test',
+    clientMessageId: 'look-up-generated-stone-edit',
+  })
+  await settled(server.parts, run.id)
+  const { steps } = await api.call('traces.run', { id: run.id })
+  expect(steps.filter((s) => s.kind === 'tool').map((s) => [s.name, s.isError])).toEqual([
+    ['design.capabilities', true],
+    ['design.capabilities', false],
+    ['design.apply', true],
+  ])
+  const unchanged = await api.call('pieces.get', { id: ring.id })
+  expect(unchanged.version).toBe(ring.version)
+  expect(unchanged.design).toEqual(ring.design)
+  expect(await api.call('design.history', { pieceId: ring.id })).toEqual([])
+})

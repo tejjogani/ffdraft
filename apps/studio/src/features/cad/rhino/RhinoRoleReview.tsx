@@ -23,6 +23,7 @@ import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'rea
 import { createPortal } from 'react-dom'
 import { assetUrl } from '../../../lib/assets'
 import { plural } from '../../../lib/format'
+import { sourceMaterialLabel } from '../../../lib/source-material'
 import type { ImportedMesh } from '../mesh-edit/model'
 import { RecoverRhinoLabels } from '../model-import/RecoverRhinoLabels'
 import { isolatedStoneIds, measureRhinoRoleBody } from '../model-import/role-measurements'
@@ -71,15 +72,20 @@ function sourceHint(body: ImportedMesh, placeNumbers: ReadonlyMap<string, number
   const placements = context?.placements ?? []
   const path = placementPath(body)
   const place = placements.at(-1)
-  const material =
-    context?.material ??
-    (context?.materialFromParent && placements.findLast((item) => item.material)?.material)
+  const material = sourceMaterialLabel(context)
+  const supplier = context?.stullerMaterial
+  const supplierLabel =
+    supplier &&
+    ('metal' in supplier
+      ? `Stuller metal · ${supplier.metal}`
+      : `Stuller stone family · ${supplier.stoneFamily}${supplier.stoneColor ? ` · ${supplier.stoneColor}` : ''}`)
   const groupNames = context?.groups.map((group) => group.name).filter(Boolean) ?? []
   return [
+    material && `Source material · ${material}`,
+    supplierLabel,
     body.source.rhinoLayer,
     path.length > 0 && `Placement ${placeNumbers.get(JSON.stringify(path))}`,
     place?.layer && place.layer !== body.source.rhinoLayer && place.layer,
-    material,
     groupNames.length > 0 && `Group ${groupNames.join(', ')}`,
   ]
     .filter(Boolean)
@@ -257,8 +263,8 @@ export function RhinoRoleReview({
       open
       onOpenChange={(open) => !open && onClose()}
       initialFocus={filterRef}
-      title="Review Rhino roles"
-      description="Classify imported bodies for editing, rendering, and production."
+      title="Review materials"
+      description="Use the source labels to identify each body, then choose its metal alloy or gemstone in Pavé."
       className="top-[8dvh]! max-h-[calc(92dvh-1rem)]! w-[min(800px,calc(100vw-24px))]"
       footer={<div ref={setFooter} className="flex gap-2" />}
     >

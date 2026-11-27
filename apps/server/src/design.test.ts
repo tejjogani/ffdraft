@@ -272,6 +272,43 @@ describe('design document', () => {
       reverts: [undone.change.id],
     })
     expect((await api.call('pieces.get', { id: piece.id })).design).toEqual(after)
+
+    const supplierContext = { ...context, stullerMaterial: { metal: 'TEST-14K' } }
+    const supplierOps = recovery.ops.map((op) => ({
+      ...op,
+      patch: { rhinoContext: supplierContext },
+    }))
+    const supplier = { pieceId: piece.id, label: 'Recover supplier fields', ops: supplierOps }
+    expect(
+      (
+        await api.fail('design.apply', {
+          ...supplier,
+          ops: [
+            { ...supplierOps[0]!, patch: { rhinoContext: { ...supplierContext, groups: [] } } },
+            ...supplierOps.slice(1),
+          ],
+        })
+      ).status,
+    ).toBe(400)
+    const filled = await api.call('design.apply', supplier)
+    const enriched = (await api.call('pieces.get', { id: piece.id })).design
+    expect((await api.fail('design.apply', supplier)).status).toBe(400)
+    const removed = await api.call('design.apply', {
+      pieceId: piece.id,
+      label: 'Undo supplier fields',
+      ops: filled.change.inverse,
+      baseVersion: filled.version,
+      reverts: [filled.change.id],
+    })
+    expect((await api.call('pieces.get', { id: piece.id })).design).toEqual(after)
+    await api.call('design.apply', {
+      pieceId: piece.id,
+      label: 'Redo supplier fields',
+      ops: removed.change.inverse,
+      baseVersion: removed.version,
+      reverts: [removed.change.id],
+    })
+    expect((await api.call('pieces.get', { id: piece.id })).design).toEqual(enriched)
   })
 
   it('describes the selected project feature with the field names and units used to edit it', async () => {

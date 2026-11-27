@@ -36,7 +36,7 @@ import { useUI } from '../../stores/ui'
 import { useReadOnly } from '../assistant/AskAiSection'
 import { jobState } from '../assistant/jobs/status'
 import { useStageJob } from '../assistant/jobs/useJob'
-import { renderAvailability } from './availability'
+import { renderAvailability, sourceMaterialSummary } from './availability'
 import { engineLabel, useRenderInstallStatus } from './EngineDialog'
 import { ShotInspector } from './ShotInspector'
 import { addShot, saveHouseShot, takeShotIntent } from './shot-actions'
@@ -51,6 +51,10 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
   const geometry = usePieceEvaluation(pieceId, 'production')
   const { evaluation } = geometry
   const availability = renderAvailability(geometry)
+  const sourceMaterials = useMemo(
+    () => sourceMaterialSummary(geometry.design, evaluation?.referenceParts),
+    [geometry.design, evaluation?.referenceParts],
+  )
   const canRender = availability === 'ready'
   const s = useShots(pieceId, canRender)
   const viewfinder = useRef<ViewfinderHandle>(null)
@@ -382,6 +386,25 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
             </div>
           </div>
 
+          {canRender && sourceMaterials.count > 0 && (
+            <div className="flex flex-wrap items-center gap-x-3 border-b border-line px-4 py-2 text-xs text-fg-muted">
+              <span>
+                {sourceMaterials.count === 1
+                  ? '1 unassigned body is excluded from this render.'
+                  : `${sourceMaterials.count} unassigned bodies are excluded from this render.`}
+              </span>
+              {!readOnly && (
+                <Link
+                  to="/pieces/$id/design"
+                  params={{ id: pieceId }}
+                  search={{ review: 'rhino-roles' }}
+                  className="font-medium text-fg underline underline-offset-2"
+                >
+                  Review materials
+                </Link>
+              )}
+            </div>
+          )}
           <div className="stage relative min-h-[360px] flex-1 overflow-hidden p-4 @5xl:min-h-0">
             {pair && pair.length === 2 ? (
               <Compare a={pair[0]!} b={pair[1]!} onClose={() => setComparing(null)} />
@@ -423,13 +446,23 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                       : 'No geometry to render'
                 }
                 description={
-                  availability === 'review-roles'
-                    ? 'Assign a metal or stone role to each imported body you want to render.'
-                    : availability === 'sheets'
-                      ? 'In CAD, select the sheet and choose Add feature → Thicken surface to make a renderable solid.'
-                      : availability === 'references'
-                        ? 'The imported reference bodies are available in CAD. Renders use the piece’s metal and stones.'
-                        : 'The viewfinder shows metal and stones from the design.'
+                  availability === 'review-roles' ? (
+                    <>
+                      Assign metals and gemstones to the imported bodies you want to render in Pavé.
+                      {sourceMaterials.labels && (
+                        <span className="mt-2 block break-words">
+                          <span className="block font-medium">Source labels by body count</span>
+                          <span className="block">{sourceMaterials.labels}</span>
+                        </span>
+                      )}
+                    </>
+                  ) : availability === 'sheets' ? (
+                    'In CAD, select the sheet and choose Add feature → Thicken surface to make a renderable solid.'
+                  ) : availability === 'references' ? (
+                    'The imported reference bodies are available in CAD. Renders use the piece’s metal and stones.'
+                  ) : (
+                    'The viewfinder shows metal and stones from the design.'
+                  )
                 }
                 action={
                   availability === 'review-roles' && !readOnly ? (
@@ -442,7 +475,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                         '[--ink:var(--cad-ink)] [--ink-fg:var(--cad-paper)]',
                       )}
                     >
-                      Review Rhino roles
+                      Review materials
                     </Link>
                   ) : availability === 'sheets' ? (
                     <Link
