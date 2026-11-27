@@ -1,4 +1,4 @@
-import { type Design, type Node, type NodeOf, nodeTitle } from '@pave/schema'
+import { type Design, type Node, type NodeOf, nodeTitle, sectionIsClosed } from '@pave/schema'
 
 export const SECTION_TOOLS = [
   { id: 'loft', kind: 'loft', title: 'Loft', minSections: 2, rails: 0 },
@@ -88,7 +88,7 @@ export function sectionDraftProblem(design: Design, tool: SectionTool, draft: Se
   if (draft.capped) {
     const openSection = sections.findIndex((id) => {
       const curve = design.nodes[id]
-      return curve?.kind === 'curve' && !curve.closed
+      return isSourceCurve(curve) && !sectionIsClosed(curve)
     })
     if (openSection >= 0)
       return `Close Section ${openSection + 1} or choose Surface for the output.`

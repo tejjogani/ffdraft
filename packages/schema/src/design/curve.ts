@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import type { Node, NodeOf } from './nodes'
+import { pointOnNurbs } from './nurbs'
 import { DrawnProfile, PROFILE_PLANES, type ProfilePlane } from './profile'
 
 export const CURVE_POINT_LIMIT = 128
@@ -40,6 +41,13 @@ export const CurveDefinition = z
       message = 'Consecutive curve points must be in different places.'
     if (message) ctx.addIssue({ code: 'custom', path: ['points'], message })
   })
+
+export function sectionIsClosed(curve: NodeOf<'curve'> | NodeOf<'nurbsCurve'>): boolean {
+  if (curve.kind === 'curve') return curve.closed
+  const start = pointOnNurbs(curve, curve.knots[curve.degree - 1]!)
+  const end = pointOnNurbs(curve, curve.knots[curve.controlPoints.length - 1]!)
+  return Math.hypot(start[0] - end[0], start[1] - end[1], start[2] - end[2]) <= 1e-7
+}
 
 export function pointFromCurvePlane(
   plane: CurvePlane,

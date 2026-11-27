@@ -77,7 +77,7 @@ it('builds exact non-metal sheets from open sections or closed uncapped sections
     line('lineB', 3),
     circle('base', 0, 2),
     circle('rim', 3, 2),
-    { id: 'flat', kind: 'loft', sections: ['lineA', 'lineB'] },
+    { id: 'flat', kind: 'loft', sections: ['lineA', 'lineB'], capped: false },
     { id: 'tube', kind: 'loft', sections: ['base', 'rim'], capped: false },
   ])
   const scene = await kernel.scene(design)
@@ -97,7 +97,7 @@ it('reports conflicting section closure while leaving unrelated metal available'
   const design = designFrom('other', [
     line('line', 0),
     circle('rim', 3, 2),
-    { id: 'broken', kind: 'loft', sections: ['line', 'rim'] },
+    { id: 'broken', kind: 'loft', sections: ['line', 'rim'], capped: false },
     { id: 'other', kind: 'primitive', shape: 'box' },
   ])
   const scene = await kernel.scene(design)

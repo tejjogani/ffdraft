@@ -325,6 +325,25 @@ class StudioTest(unittest.TestCase):
         self.assertEqual(preview["after"]["caratTotal"], 1.25)
         self.assertEqual(project.version, 0)
 
+    def test_section_tools_keep_order_and_use_the_observed_project_version(self):
+        project = self.project()
+        self.reply({"version": 1, "change": {"seq": 1}})
+        project.loft(["lower", "rim"], feature_id="head", ruled=True, change_id="head-1")
+        body = self.request("design.apply")
+        self.assertEqual((body["baseVersion"], body["changeId"]), (0, "head-1"))
+        self.assertEqual(body["ops"][0]["node"], {
+            "kind": "loft", "id": "head", "sections": ["lower", "rim"],
+            "ruled": True, "capped": True,
+        })
+        self.reply({"version": 2, "change": {"seq": 2}})
+        project.rail_sweep(["inner", "outer"], ["top"], feature_id="shoulder", capped=False)
+        body = self.request("design.apply")
+        self.assertEqual(body["baseVersion"], 1)
+        self.assertEqual(body["ops"][0]["node"], {
+            "kind": "railSweep", "id": "shoulder", "rails": ["inner", "outer"],
+            "sections": ["top"], "capped": False,
+        })
+
     def test_revolve_uses_the_project_edit_guard_and_measured_axis(self):
         project = self.project()
         self.reply({"version": 1, "change": {"seq": 1}})

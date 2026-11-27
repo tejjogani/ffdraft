@@ -1,5 +1,5 @@
 import { designFrom } from '@pave/schema'
-import { draw } from 'replicad'
+import { makePolygon } from 'replicad'
 import { expect, it } from 'vitest'
 import { defineFeature, metalOf, solidFromBrep } from '../core'
 import { step } from '../export/step'
@@ -7,12 +7,21 @@ import { loadRuntime } from '../runtime/index'
 import { Evaluator } from './evaluate'
 
 it('displays an editable exact sheet at both details, excludes it from casting and writes it to STEP', async () => {
-  const feature = defineFeature('primitive', (node, ctx) => {
-    const profile = ctx.track(
-      draw([0, 0]).lineTo([4, 0]).lineTo([4, 3]).lineTo([0, 3]).close().sketchOnPlane(),
-    )
-    return { sheets: [{ ...metalOf(node), solid: solidFromBrep(profile.face()) }] }
-  })
+  const feature = defineFeature('primitive', (node) => ({
+    sheets: [
+      {
+        ...metalOf(node),
+        solid: solidFromBrep(
+          makePolygon([
+            [0, 0, 0],
+            [4, 0, 0],
+            [4, 3, 0],
+            [0, 3, 0],
+          ]),
+        ),
+      },
+    ],
+  }))
   await loadRuntime()
   const evaluator = new Evaluator([feature])
   try {

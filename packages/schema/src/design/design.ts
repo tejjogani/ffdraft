@@ -6,7 +6,7 @@
  * undo/redo, a replayable history and a per-edit trace of who (person or agent run) did what.
  */
 import { z } from 'zod'
-import { revolveProfileError } from './curve'
+import { revolveProfileError, sectionIsClosed } from './curve'
 import { customMountFitForStone, customMountPartIssue } from './custom-mount'
 import { DESIGN_VERSION, migrateDesign, prongLayout } from './mount'
 import {
@@ -559,8 +559,8 @@ export function validateDesign(design: Design): DesignIssue[] {
         (n.kind === 'loft' || n.kind === 'railSweep') &&
         n.capped &&
         n.sections.includes(r) &&
-        target.kind === 'curve' &&
-        !target.closed
+        (target.kind === 'curve' || target.kind === 'nurbsCurve') &&
+        !sectionIsClosed(target)
       )
         issues.push({
           level: 'error',

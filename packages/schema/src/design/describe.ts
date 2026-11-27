@@ -390,6 +390,14 @@ export function defaultNode(
   const missing: MissingField[] = []
   for (const f of describeNode(kind).fields) {
     if (f.key in node) continue
+    if ((kind === 'loft' || kind === 'railSweep') && (f.key === 'sections' || f.key === 'rails')) {
+      missing.push({
+        key: f.key,
+        title: f.key === 'rails' ? 'Guide curves' : 'Ordered section curves',
+        refKinds: ['curve', 'nurbsCurve'],
+      })
+      continue
+    }
     if (kind === 'pipe' && f.key === 'curve' && 'points' in node) continue
     if (kind === 'revolve' && f.key === 'curve') {
       if ('profile' in node) continue

@@ -10,7 +10,9 @@ export const loft = defineFeature('loft', (node, ctx) => {
   const closed = sections[0]!.closed
   if (sections.some((section) => section.closed !== closed))
     throw new Error('The section curves must all be open or all be closed.')
-  const capped = node.capped && closed
+  if (node.capped && !closed)
+    throw new Error('Close the sections or choose Surface for the output.')
+  const capped = node.capped
   const { oc } = runtime()
   try {
     const builder = ctx.track(new oc.BRepOffsetAPI_ThruSections(capped, node.ruled, 1e-6))
