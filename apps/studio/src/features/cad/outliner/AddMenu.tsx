@@ -1,6 +1,6 @@
 /** "Add feature": the kinds this kernel can build, grouped, each disabled with a reason when its references cannot be met. */
 import type { Design, NodeKind } from '@pave/schema'
-import { IconButton, Menu, MenuGroup, MenuItem } from '@pave/ui'
+import { Button, Menu, MenuGroup, MenuItem } from '@pave/ui'
 import { Plus } from 'lucide-react'
 import type { ReactElement } from 'react'
 import type { SectionTool } from '../curves/section-model'
@@ -19,7 +19,15 @@ export interface AddMenuProps {
 export function AddMenu({ design, kinds, target, onAdd, open, onOpenChange }: AddMenuProps) {
   const groups = addMenu(design, kinds, target)
   const trigger: ReactElement = (
-    <IconButton icon={Plus} label="Add feature" shortcut="a" size="sm" disabled={!groups.length} />
+    <Button
+      icon={Plus}
+      size="sm"
+      aria-keyshortcuts="A"
+      title="Add feature (A)"
+      disabled={!groups.length}
+    >
+      Add feature
+    </Button>
   )
   return (
     <Menu trigger={trigger} align="start" open={open} onOpenChange={onOpenChange} className="w-72">

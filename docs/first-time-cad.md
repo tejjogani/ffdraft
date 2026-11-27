@@ -4,6 +4,8 @@ Open a project, choose CAD builder, then choose CAD guide to follow these steps 
 
 ## Select the part you want to change
 
+Choose Add feature beside Features to browse the modeling tools. Under Bodies, Ring band starts a sized shank. Loft and the two Sweep commands shape metal from curves. Under Stones, add a Stone, select it, then add a Setting. For small diamonds around a centre stone use Halo. For diamonds along a band use Stone row. Press A to open the same menu.
+
 Click a part in the 3D view or choose its name in Features. On a solitaire, Band is the ring and Head is the metal setting around the centre stone. The Inspector shows controls for the selected part.
 
 On a smaller screen, use the Features and Inspector buttons above the model to open those panels. If your project is empty, start with a template to try the material and stone controls.

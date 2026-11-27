@@ -62,11 +62,13 @@ function option(design: Design, kind: NodeKind, target?: string): AddOption {
         : m.title,
     )
     .join(', ')
+    .toLowerCase()
+  const article = /^(a|an|the) /.test(needs) ? '' : /^[aeiou]/.test(needs) ? 'an ' : 'a '
   return {
     kind,
     title: d.title,
     ...(d.description ? { description: d.description } : {}),
-    disabled: missing.length ? `Needs a ${needs.toLowerCase()}` : null,
+    disabled: missing.length ? `Needs ${article}${needs}` : null,
   }
 }
 

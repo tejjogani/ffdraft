@@ -133,6 +133,49 @@ class LiveCadTest(unittest.TestCase):
         current.undo(result["change"]["seq"])
         self.assertAlmostEqual(current.evaluate()["metalMassG"], before, places=4)
 
+    def test_customer_revision_of_a_halo_ring(self):
+        studio = Studio(os.environ["PAVE_TEST_URL"])
+        piece = studio._rpc("pieces.create", {"templateId": "halo", "title": "Halo revision"})
+        project = studio.project(piece["id"])
+        original = project.evaluate(detail="production")
+        self.assertEqual(original["stoneCount"], 31)
+        fit = {
+            "provider": "diaex", "sku": "WORKSHOP-FIXTURE",
+            "measured": {"length": 6.4, "width": 6.3, "depth": 4.0},
+        }
+        preview = project.replace_stone("center", fit=fit, dry_run=True)
+        self.assertFalse(preview["applied"])
+        self.assertNotIn("sourcing", studio.project(piece["id"]).features["center"])
+        project.replace_stone("center", fit=fit, base_version=preview["version"])
+        fitted = project.evaluate(detail="production")
+        center = next(lot for lot in fitted["lots"] if lot["role"] == "center")
+        self.assertEqual((center["length"], center["width"]), (6.4, 6.3))
+        self.assertGreater(fitted["boundsMm"]["y"], original["boundsMm"]["y"])
+        self.assertGreater(fitted["metalMassG"], original["metalMassG"])
+
+        resize = project.apply(
+            [{"t": "update", "id": "band", "patch": {"size": {"system": "us", "value": 7}}}],
+            "Change the finger size",
+        )
+        reopened = studio.project(piece["id"])
+        features = reopened.features
+        self.assertEqual(features["band"]["size"]["value"], 7)
+        self.assertEqual(features["head"]["gem"], "center")
+        self.assertEqual(features["halo"]["around"], "center")
+        self.assertEqual(features["row"]["host"], "band")
+        self.assertEqual(features["center"]["sourcing"]["sku"], fit["sku"])
+        resized = reopened.evaluate(detail="production")
+        self.assertEqual(resized["lots"], fitted["lots"])
+        self.assertGreater(resized["boundsMm"]["x"], fitted["boundsMm"]["x"])
+        self.assertGreater(resized["metalMassG"], fitted["metalMassG"])
+
+        reopened.undo(resize["change"]["seq"])
+        self.assertEqual(reopened.features["band"]["size"]["value"], 6)
+        self.assertEqual(reopened.features["center"]["sourcing"]["sku"], fit["sku"])
+        restored = reopened.evaluate(detail="production")
+        self.assertAlmostEqual(restored["metalMassG"], fitted["metalMassG"], places=5)
+        self.assertEqual(restored["lots"], fitted["lots"])
+
     def test_linked_sections_and_sweeps_over_http(self):
         studio = Studio(os.environ["PAVE_TEST_URL"].rstrip("/"))
         piece = studio._rpc("pieces.create", {"kind": "other", "title": "Python shoulder study"})

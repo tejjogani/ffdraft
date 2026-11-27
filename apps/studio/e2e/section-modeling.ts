@@ -99,7 +99,10 @@ try {
       ops: curves.map((node) => ({ t: 'add', node })),
     })
     await page.goto(base + '/pieces/' + id + '/design')
-    await button('Add feature').click()
+    const addFeature = button('Add feature')
+    await addFeature.waitFor()
+    assert.equal(await addFeature.textContent(), 'Add feature')
+    await addFeature.click()
     await page.getByRole('menuitem', { name: title, exact: true }).click()
     const dialog = page.getByRole('dialog', { name: title })
     for (const [field, option] of inputs) {
