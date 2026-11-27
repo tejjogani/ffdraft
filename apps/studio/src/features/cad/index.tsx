@@ -9,6 +9,7 @@ import type { Diagnostic, ExportFormat } from '@pave/kernel'
 import type { Vec3 } from '@pave/render'
 import {
   applyOps,
+  customMountPartIssue,
   type Design,
   type DrawnProfile,
   type ImportedRoleChoice,
@@ -92,6 +93,7 @@ import {
   type VertexPositions,
 } from './mesh-edit/model'
 import { ModelImport } from './model-import/ModelImport'
+import { MountEditor, mountSessionBusy } from './mount-editor/MountEditor'
 import { addNode, addPrepared, dependentsOf, remove, setField } from './ops'
 import { AddMenu } from './outliner/AddMenu'
 import { Outliner } from './outliner/Outliner'
@@ -248,6 +250,15 @@ function Workspace({ piece }: { piece: Piece }) {
   // A draft can only be used in the project and access level where it was opened.
   // biome-ignore lint/correctness/useExhaustiveDependencies: each transition clears the editor
   useEffect(() => setMeshEditor(null), [pieceId, readOnly])
+  const [mountEditor, setMountEditor] = useState<{
+    pieceId: string
+    orgId?: string
+    design: Design
+    ids: string[]
+    version: number
+  } | null>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: clear drafts at project and permission transitions
+  useEffect(() => setMountEditor(null), [pieceId, org?.id, readOnly])
   const navigate = useNavigate()
   const isCurrent = useCurrentView()
   const kernel = useKernelInfo()
@@ -496,6 +507,28 @@ function Workspace({ piece }: { piece: Piece }) {
     }
     setSheet(null)
     setMeshEditor({ pieceId, node: current, version: state.version })
+  }
+
+  const editMount = (ids: string[]) => {
+    if (!session || readOnly || profile || curve || !isCurrent()) return
+    const state = session.get()
+    if (mountSessionBusy(state)) {
+      toast({ title: 'Wait for the design to finish saving, then open Edit handmade mount.' })
+      return
+    }
+    const selected = ids.filter((id) => !customMountPartIssue(state.confirmed, id))
+    if (selected.length === 0) {
+      toast({ title: 'The selected parts changed. Select eligible imported bodies again.' })
+      return
+    }
+    setSheet(null)
+    setMountEditor({
+      pieceId,
+      orgId: org?.id,
+      design: state.confirmed,
+      ids: selected,
+      version: state.version,
+    })
   }
 
   const saveMesh = (positions: VertexPositions, component: ComponentKind) => {
@@ -793,6 +826,7 @@ function Workspace({ piece }: { piece: Piece }) {
       readOnly={readOnly}
       onDelete={requestDelete}
       onEditMesh={editMesh}
+      onEditMount={editMount}
       onReviewRhinoRole={openRhinoRoleReview}
       onEditProfile={(original) => setProfile({ original })}
       onLocateProng={(at) => {
@@ -1115,6 +1149,21 @@ function Workspace({ piece }: { piece: Piece }) {
           }}
         />
       )}
+      {!readOnly &&
+        session &&
+        mountEditor?.pieceId === pieceId &&
+        mountEditor.orgId === org?.id && (
+          <MountEditor
+            key={pieceId}
+            pieceId={pieceId}
+            design={mountEditor.design}
+            initialIds={mountEditor.ids}
+            baseVersion={mountEditor.version}
+            session={session}
+            isCurrent={isCurrent}
+            onClose={() => setMountEditor(null)}
+          />
+        )}
       {!readOnly && session && meshEditor?.pieceId === pieceId && (
         <MeshEditor
           key={`${pieceId}/${meshEditor.node.id}`}
