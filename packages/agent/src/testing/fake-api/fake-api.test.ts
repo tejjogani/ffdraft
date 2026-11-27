@@ -22,6 +22,7 @@ import {
   toApiMessages,
 } from '../../anthropic'
 import { buildReadRequest } from '../../photo'
+import { signThinking } from './binding'
 import {
   agentSource,
   DEFAULT_FAKE_KEY,
@@ -602,6 +603,39 @@ describe('the fake through the real SDK', () => {
 })
 
 describe('recording and replay', () => {
+  it('keeps an ID-shaped thinking MAC out of tool call and result ID alignment', () => {
+    const messages = (prefix: string, id: string) => [
+      {
+        role: 'assistant',
+        content: [
+          {
+            type: 'thinking',
+            thinking: 'Plan',
+            signature: signThinking('claude-opus-5-5', prefix, 'Plan'),
+          },
+          { id, type: 'tool_use', name: 'read', input: {} },
+        ],
+      },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'Done' }] },
+    ]
+    // This real deterministic MAC begins with "wdf_", just like a generated identifier.
+    const liveSignature = signThinking('claude-opus-5-5', 'prefix-339', 'Plan')
+    expect(liveSignature.split('.')[2]).toMatch(/^wdf_/)
+    const report = align(
+      messages('prefix-0', 'toolu_fake1_1_recorded'),
+      messages('prefix-339', 'toolu_fake1_1_current'),
+    )
+    expect([...report.ids]).toEqual([['toolu_fake1_1_recorded', 'toolu_fake1_1_current']])
+    expect(report.structural).toEqual([])
+    expect(report.drift).toHaveLength(1)
+    const [difference] = report.drift
+    expect(difference?.at).toBe('messages.0')
+    expect(Buffer.from(difference!.recorded, 'hex').toString()).toBe(
+      signThinking('claude-opus-5-5', 'prefix-0', 'Plan'),
+    )
+    expect(Buffer.from(difference!.live, 'hex').toString()).toBe(liveSignature)
+  })
+
   it('reports just the changed decimal when the next tool operation tag is unchanged', () => {
     const result = (width: number) => [
       {
