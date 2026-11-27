@@ -13,7 +13,9 @@ export interface SceneSubject {
    * without them the bounding-box corners are framed.
    */
   silhouette?: Vec3[]
-  parts: Pick<Part, 'id' | 'nodeId' | 'material' | 'finish' | 'plating' | 'bounds'>[]
+  parts: (Pick<Part, 'id' | 'nodeId' | 'material' | 'finish' | 'plating' | 'bounds'> & {
+    importRole?: 'unassigned'
+  })[]
   stones: Pick<StoneInstance, 'id' | 'nodeId' | 'stone' | 'role' | 'matrix'>[]
 }
 
@@ -48,13 +50,14 @@ export function subjectOf(input: Evaluation | SceneSubject): SceneSubject {
   return {
     bounds: input.report.bounds,
     silhouette: supportPoints(input),
-    parts: input.parts.map(({ id, nodeId, material, finish, plating, bounds }) => ({
+    parts: input.parts.map(({ id, nodeId, material, finish, plating, bounds, importRole }) => ({
       id,
       nodeId,
       material,
       finish,
       plating,
       bounds,
+      ...(importRole === 'unassigned' && { importRole }),
     })),
     stones: input.stones.map(({ id, nodeId, stone, role, matrix }) => ({
       id,

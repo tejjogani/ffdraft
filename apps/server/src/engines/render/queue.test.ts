@@ -78,6 +78,28 @@ it('renders new studio lighting instead of reusing an image cached by the earlie
   expect(cacheKeyOf(take, '5.3.0')).not.toBe(priorKey)
 })
 
+it('does not reuse an ordinary take for a neutral imported CAD preview', () => {
+  const take = job('take')
+  const key = cacheKeyOf(take, '5.3.0')
+  expect(
+    cacheKeyOf(
+      { ...take, requestedScene: { ...take.requestedScene, includeUnassignedRhino: false } },
+      '5.3.0',
+    ),
+  ).toBe(key)
+  const withPreview = {
+    ...take,
+    requestedScene: RenderSceneSchema.parse({
+      ...take.requestedScene,
+      includeUnassignedRhino: true,
+    }),
+  }
+  expect(cacheKeyOf(withPreview, '5.3.0')).not.toBe(key)
+  expect(cacheKeyOf({ ...withPreview, sourceVersion: take.sourceVersion + 1 }, '5.3.0')).not.toBe(
+    cacheKeyOf(withPreview, '5.3.0'),
+  )
+})
+
 const piece = { id: 'pce', version: 1, design: {} } as Parameters<
   ReturnType<typeof createRenderQueue>['submit']
 >[1]

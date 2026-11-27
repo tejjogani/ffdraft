@@ -8,8 +8,14 @@
  * (mod+enter, mod+shift+enter). The first Blender take can install
  * the engine. Browser takes are marked "Preview quality". On a phone the columns stack.
  */
-import { machineTime, redoTarget, resetCameraPatch, undoTarget } from '@pave/render'
-import type { RenderJob } from '@pave/schema'
+import {
+  machineTime,
+  redoTarget,
+  renderEvaluation,
+  resetCameraPatch,
+  undoTarget,
+} from '@pave/render'
+import type { RenderJob, RenderScene } from '@pave/schema'
 import {
   AiMark,
   Button,
@@ -50,23 +56,19 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
   // Production detail, as Blender takes use: the viewfinder frames and fingerprints the take.
   const geometry = usePieceEvaluation(pieceId, 'production')
   const { evaluation } = geometry
-  const availability = renderAvailability(geometry)
+  const baseAvailability = renderAvailability(geometry)
   const sourceMaterials = useMemo(
     () => sourceMaterialSummary(geometry.design, evaluation?.referenceParts),
     [geometry.design, evaluation?.referenceParts],
   )
-  const canRender = availability === 'ready'
-  const s = useShots(pieceId, canRender)
+  const canRenderShot = (scene: RenderScene) =>
+    baseAvailability === 'ready' ||
+    (baseAvailability === 'review-roles' && scene.includeUnassignedRhino === true)
+  const s = useShots(pieceId, canRenderShot)
   const viewfinder = useRef<ViewfinderHandle>(null)
   const readOnly = useReadOnly()
   const renderJob = useStageJob(pieceId, 'render').run
   const jobInReview = renderJob ? jobState(renderJob) === 'review' : false
-  const hasPreview = !!(evaluation?.parts.length || evaluation?.stones.length)
-  const emptyView =
-    availability === 'review-roles' ||
-    availability === 'references' ||
-    availability === 'sheets' ||
-    availability === 'empty'
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   // A shot made elsewhere ("Render this view") is selected once the list has it.
   const [wanted, setWanted] = useState<string | null>(() => takeShotIntent(pieceId))
@@ -75,6 +77,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
   const houses = useRpc('scenes.list', { pieceId: null })
   const [viewing, setViewing] = useState<string | null>(null)
   const [comparing, setComparing] = useState<[string, string] | null>(null)
+  const [enablingImport, setEnablingImport] = useState(false)
   const setEngineOpen = useUI((s) => s.setEngineSetupOpen)
 
   const defaults = s.piece ? shotList(undefined, s.piece.kind) : []
@@ -84,7 +87,28 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
       candidate.saved?.position === defaultIndex + 1 &&
       candidate.title === defaults[defaultIndex]?.title,
   )
-  const shot = s.shots.find((x) => x.key === selectedKey) ?? savedDefault ?? s.shots[0] ?? null
+  const shot =
+    s.shots.find((x) => x.key === selectedKey) ??
+    savedDefault ??
+    (baseAvailability === 'review-roles'
+      ? s.shots.find((x) => x.scene.includeUnassignedRhino)
+      : undefined) ??
+    s.shots[0] ??
+    null
+  const includesImport = shot?.scene.includeUnassignedRhino
+  const render = useMemo(
+    () => evaluation && renderEvaluation(evaluation, geometry.design, includesImport),
+    [evaluation, geometry.design, includesImport],
+  )
+  const hasPreview = !!(render?.parts.length || render?.stones.length)
+  const canRender = !!shot && canRenderShot(shot.scene)
+  const renderableShots = s.shots.filter(({ scene }) => canRenderShot(scene))
+  const emptyView =
+    !canRender &&
+    (baseAvailability === 'review-roles' ||
+      baseAvailability === 'references' ||
+      baseAvailability === 'sheets' ||
+      baseAvailability === 'empty')
   // A default shot becomes a saved one on the first edit: follow it by position.
   useEffect(() => {
     if (wanted && s.shots.some((x) => x.key === wanted)) {
@@ -114,8 +138,8 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
   )
   const all = useRpc(
     'renders.estimate',
-    { pieceId, takes: s.shots.map((x) => ({ scene: x.scene })) },
-    { enabled: canRender && s.shots.length > 0 },
+    { pieceId, takes: renderableShots.map((x) => ({ scene: x.scene })) },
+    { enabled: renderableShots.length > 0 },
   )
   const predictedEngine =
     estimate.data?.engine ??
@@ -128,14 +152,33 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
     : null
 
   const renderShots = (shots: Shot[], engine?: 'browser') => {
-    if (!canRender) return
     viewfinder.current?.commitPending()
-    void s.render(shots, { engine })
+    void s.render(
+      shots.filter(({ scene }) => canRenderShot(scene)),
+      { engine },
+    )
   }
   const rerenderTake = (take: RenderJob) => {
-    if (!canRender) return
     viewfinder.current?.commitPending()
     void s.rerender(take)
+  }
+
+  const previewImport = async () => {
+    const catalog =
+      s.shots.find(({ scene }) => scene.look === 'catalog-white') ??
+      s.shots.find(({ scene }) => scene.camera.preset === 'hero') ??
+      s.shots[0]
+    if (!catalog || enablingImport) return
+    setEnablingImport(true)
+    try {
+      const updated = await s.adjust(catalog, {
+        look: 'catalog-white',
+        includeUnassignedRhino: true,
+      })
+      if (updated) setSelectedKey(updated.key)
+    } finally {
+      setEnablingImport(false)
+    }
   }
 
   const commands: Command[] = shot
@@ -179,8 +222,8 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
           title: 'Render all shots',
           group: 'Piece',
           shortcut: 'mod+shift+enter',
-          when: () => canRender,
-          run: () => renderShots(s.shots),
+          when: () => renderableShots.length > 0,
+          run: () => renderShots(renderableShots),
         },
       ]
     : []
@@ -257,7 +300,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               <MenuItem
                 icon={Copy}
                 onClick={() =>
-                  void addShot(pieceId, s.piece!.kind, `${shot.title} copy`, shot.scene)
+                  void addShot(pieceId, `${shot.title} copy`, shot.scene)
                     .then((row) => setSelectedKey(row.id))
                     .catch((e: Error) => toast.error('Couldn’t add the shot', e.message))
                 }
@@ -285,7 +328,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                     <MenuItem
                       key={h.id}
                       onClick={() =>
-                        void addShot(pieceId, s.piece!.kind, h.title, h.scene)
+                        void addShot(pieceId, h.title, h.scene)
                           .then((row) => setSelectedKey(row.id))
                           .catch((e: Error) => toast.error('Couldn’t add the shot', e.message))
                       }
@@ -363,11 +406,11 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               <Button
                 size="sm"
                 variant="secondary"
-                disabled={!shot || !canRender}
-                onClick={() => renderShots(s.shots)}
+                disabled={renderableShots.length === 0}
+                onClick={() => renderShots(renderableShots)}
               >
                 Render all
-                {canRender && all.data && !browser && (
+                {all.data && renderableShots.length > 0 && !browser && (
                   <span className="hidden font-mono text-2xs text-fg-subtle @lg:inline">
                     {machineTime(all.data.seconds)}
                   </span>
@@ -389,9 +432,13 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
           {canRender && sourceMaterials.count > 0 && (
             <div className="flex flex-wrap items-center gap-x-3 border-b border-line px-4 py-2 text-xs text-fg-muted">
               <span>
-                {sourceMaterials.count === 1
-                  ? '1 unassigned body is excluded from this render.'
-                  : `${sourceMaterials.count} unassigned bodies are excluded from this render.`}
+                {includesImport
+                  ? sourceMaterials.count === 1
+                    ? '1 unassigned body appears in neutral clay.'
+                    : `${sourceMaterials.count} unassigned bodies appear in neutral clay.`
+                  : sourceMaterials.count === 1
+                    ? '1 unassigned body is excluded from this render.'
+                    : `${sourceMaterials.count} unassigned bodies are excluded from this render.`}
               </span>
               {!readOnly && (
                 <Link
@@ -439,45 +486,52 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               <EmptyState
                 className="stage cad-studio-backdrop absolute inset-4 justify-center rounded-lg [--fg:var(--cad-ink)] [--fg-muted:var(--cad-ink)]"
                 title={
-                  availability === 'review-roles'
-                    ? 'Review materials before rendering'
-                    : availability === 'sheets'
+                  baseAvailability === 'review-roles'
+                    ? 'Preview your imported CAD'
+                    : baseAvailability === 'sheets'
                       ? 'Give the surface a thickness'
                       : 'No geometry to render'
                 }
                 description={
-                  availability === 'review-roles' ? (
+                  baseAvailability === 'review-roles' ? (
                     <>
-                      Assign metals and gemstones to the imported bodies you want to render in Pavé.
+                      See unassigned bodies in neutral clay with studio lighting.
                       {sourceMaterials.labels && (
                         <span className="mt-2 block break-words">
                           <span className="block font-medium">Source labels by body count</span>
                           <span className="block">{sourceMaterials.labels}</span>
                         </span>
                       )}
+                      {!readOnly && (
+                        <Link
+                          to="/pieces/$id/design"
+                          params={{ id: pieceId }}
+                          search={{ review: 'rhino-roles' }}
+                          className="mt-2 block font-medium underline underline-offset-2"
+                        >
+                          Review materials
+                        </Link>
+                      )}
                     </>
-                  ) : availability === 'sheets' ? (
+                  ) : baseAvailability === 'sheets' ? (
                     'In CAD, select the sheet and choose Add feature → Thicken surface to make a renderable solid.'
-                  ) : availability === 'references' ? (
+                  ) : baseAvailability === 'references' ? (
                     'The imported reference bodies are available in CAD. Renders use the piece’s metal and stones.'
                   ) : (
                     'The viewfinder shows metal and stones from the design.'
                   )
                 }
                 action={
-                  availability === 'review-roles' && !readOnly ? (
-                    <Link
-                      to="/pieces/$id/design"
-                      params={{ id: pieceId }}
-                      search={{ review: 'rhino-roles' }}
-                      className={cn(
-                        buttonClass({ variant: 'primary' }),
-                        '[--ink:var(--cad-ink)] [--ink-fg:var(--cad-paper)]',
-                      )}
+                  baseAvailability === 'review-roles' && !readOnly ? (
+                    <Button
+                      variant="primary"
+                      className="[--ink:var(--cad-ink)] [--ink-fg:var(--cad-paper)]"
+                      disabled={enablingImport}
+                      onClick={() => void previewImport()}
                     >
-                      Review materials
-                    </Link>
-                  ) : availability === 'sheets' ? (
+                      Preview imported CAD
+                    </Button>
+                  ) : baseAvailability === 'sheets' ? (
                     <Link
                       to="/pieces/$id/design"
                       params={{ id: pieceId }}
@@ -488,7 +542,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                   ) : undefined
                 }
               />
-            ) : availability === 'failed' && !hasPreview ? (
+            ) : baseAvailability === 'failed' && !hasPreview ? (
               <EmptyState
                 className="absolute inset-4 justify-center"
                 title="Couldn’t prepare the viewfinder"
@@ -501,7 +555,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
             ) : shot ? (
               <Viewfinder
                 ref={viewfinder}
-                evaluation={hasPreview ? evaluation : null}
+                evaluation={hasPreview ? render : null}
                 scene={shot.scene}
                 design={{ pieceId, version: s.piece.version }}
                 label={`Live preview of the ${shot.title} shot`}
@@ -520,7 +574,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               shot &&
               !shot.scene.animation &&
               !emptyView &&
-              availability !== 'failed' && (
+              baseAvailability !== 'failed' && (
                 <span className="glass absolute bottom-3 left-3 rounded-md px-2 py-1 text-2xs whitespace-nowrap text-fg-muted">
                   Viewfinder ·{' '}
                   {browser ? 'takes draw in the browser' : 'takes render exactly this in Blender'}
@@ -601,6 +655,10 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
           {shot && (
             <ShotInspector
               scene={shot.scene}
+              showImportPreview={
+                !!includesImport || (baseAvailability === 'ready' && sourceMaterials.count > 0)
+              }
+              importPreviewDisabled={readOnly}
               engine={predictedEngine}
               estimate={
                 canRender && estimate.data

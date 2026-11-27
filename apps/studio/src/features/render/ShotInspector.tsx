@@ -85,6 +85,8 @@ export function ShotInspector({
   estimate,
   engine,
   disabled,
+  showImportPreview,
+  importPreviewDisabled,
 }: {
   scene: RenderScene
   onChange: (patch: Patch) => void
@@ -92,6 +94,8 @@ export function ShotInspector({
   estimate: { seconds: number; basis: string } | null
   engine: 'blender' | 'browser' | null
   disabled?: boolean
+  showImportPreview?: boolean
+  importPreviewDisabled?: boolean
 }) {
   const lead = LOOK_CHOICES.slice(0, 3)
   const more = LOOK_CHOICES.slice(3)
@@ -128,6 +132,17 @@ export function ShotInspector({
           placeholder="More looks…"
           options={more.map((l) => ({ value: l.look, label: l.label, hint: l.hint }))}
         />
+        {showImportPreview && (
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs">Show unassigned bodies in clay</span>
+            <Switch
+              aria-label="Show unassigned bodies in clay"
+              checked={scene.includeUnassignedRhino === true}
+              disabled={importPreviewDisabled}
+              onChange={(on) => onChange({ includeUnassignedRhino: on ? true : null })}
+            />
+          </div>
+        )}
       </Section>
 
       <Section title="Angle">

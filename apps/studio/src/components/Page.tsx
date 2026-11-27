@@ -1,6 +1,6 @@
 import { cn, IconButton } from '@pave/ui'
 import { Link, type LinkProps } from '@tanstack/react-router'
-import { ChevronLeft, Menu as MenuIcon, PanelLeft } from 'lucide-react'
+import { ChevronLeft, Menu as MenuIcon, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { Fragment, type ReactNode, type Ref } from 'react'
 import { useNarrow } from '../lib/narrow'
 import { isDockedOpen, useAssistant } from '../stores/assistant'
@@ -27,8 +27,8 @@ export function PageHeader({
   className?: string
 }) {
   const narrow = useNarrow()
-  // On a phone the sidebar is always a drawer, so the header always offers it.
   const collapsed = useUI((s) => s.sidebarCollapsed) || narrow
+  const navigationOpen = useUI((s) => (narrow ? s.mobileNavOpen : !s.sidebarCollapsed))
   const toggle = useUI((s) => s.toggleSidebar)
   // On a phone only the current page is named, with a way back to its parent: a full trail
   // would truncate every crumb into nothing.
@@ -44,15 +44,18 @@ export function PageHeader({
         className,
       )}
     >
-      {collapsed && (
-        <IconButton
-          icon={narrow ? MenuIcon : PanelLeft}
-          label={narrow ? 'Open navigation' : 'Show sidebar'}
-          shortcut="mod+\"
-          onClick={toggle}
-          className="app-no-drag"
-        />
-      )}
+      <IconButton
+        id="app-sidebar-toggle"
+        icon={narrow ? MenuIcon : collapsed ? PanelLeftOpen : PanelLeftClose}
+        label={narrow ? 'Open navigation' : collapsed ? 'Show sidebar' : 'Hide sidebar'}
+        aria-expanded={navigationOpen}
+        aria-controls={
+          navigationOpen ? (narrow ? 'app-navigation-drawer' : 'app-sidebar') : undefined
+        }
+        shortcut="mod+\"
+        onClick={toggle}
+        className="app-no-drag"
+      />
       {narrow && parent?.link && (
         <Link
           {...parent.link}

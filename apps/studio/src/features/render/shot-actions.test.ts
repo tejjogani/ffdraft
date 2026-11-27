@@ -58,20 +58,20 @@ describe('rendering saved CAD', () => {
     const front = { id: 'front', title: 'Front' }
     const hero = { id: 'hero', title: 'Hero' }
     const call = vi.spyOn(rpc, 'call').mockImplementation(async (name) => {
-      if (name === 'scenes.list') {
+      if (name === 'scenes.ensureDefaults') {
         await loading.promise
-        return [front, hero] as never
+        return { shots: [front, hero], editedId: null } as never
       }
       if (name === 'renders.create') return { id: 'take' } as never
       throw new Error(`Unexpected ${name}`)
     })
     try {
-      const first = queueCadRender('ring', 'ring', 3, () => true)
-      const duplicate = queueCadRender('ring', 'ring', 3, () => true)
+      const first = queueCadRender('ring', 3, () => true)
+      const duplicate = queueCadRender('ring', 3, () => true)
       loading.resolve()
       await expect(Promise.all([first, duplicate])).resolves.toEqual([hero, hero])
       expect(call.mock.calls).toEqual([
-        ['scenes.list', { pieceId: 'ring' }],
+        ['scenes.ensureDefaults', { pieceId: 'ring' }],
         [
           'renders.create',
           { pieceId: 'ring', baseVersion: 3, sceneId: 'hero', title: 'Hero', engine: 'blender' },
@@ -83,20 +83,25 @@ describe('rendering saved CAD', () => {
   })
 
   it('stops before submitting when the active piece or saved CAD changes', async () => {
-    const call = vi.spyOn(rpc, 'call').mockResolvedValue([{ id: 'front', title: 'Front' }] as never)
+    const call = vi
+      .spyOn(rpc, 'call')
+      .mockResolvedValue({ shots: [{ id: 'front', title: 'Front' }], editedId: null } as never)
     try {
       const switched = vi.fn().mockReturnValueOnce(true).mockReturnValueOnce(false)
-      await expect(queueCadRender('old-piece', 'ring', 3, switched)).resolves.toBeNull()
+      await expect(queueCadRender('old-piece', 3, switched)).resolves.toBeNull()
       const unsaved = vi
         .fn()
         .mockReturnValueOnce(true)
         .mockImplementationOnce(() => {
           throw new Error('Wait for the design to save.')
         })
-      await expect(queueCadRender('dirty-piece', 'ring', 3, unsaved)).rejects.toThrow(
+      await expect(queueCadRender('dirty-piece', 3, unsaved)).rejects.toThrow(
         'Wait for the design to save.',
       )
-      expect(call.mock.calls.map(([name]) => name)).toEqual(['scenes.list', 'scenes.list'])
+      expect(call.mock.calls.map(([name]) => name)).toEqual([
+        'scenes.ensureDefaults',
+        'scenes.ensureDefaults',
+      ])
     } finally {
       call.mockRestore()
     }

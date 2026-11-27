@@ -1602,9 +1602,19 @@ export const commands = {
     }),
     output: SavedSceneSchema,
   }),
+  'scenes.ensureDefaults': def({
+    description:
+      'Save a piece’s default shots and an optional first edit together. Existing saved shots are returned as they are.',
+    kind: 'mutation',
+    input: z.object({
+      pieceId: id,
+      edit: z.object({ key: z.string(), patch: mergePatch }).optional(),
+    }),
+    output: z.object({ shots: z.array(SavedSceneSchema), editedId: id.nullable() }),
+  }),
   'scenes.update': def({
     description:
-      'Adjust a saved shot. `patch` is a JSON merge patch on its scene (e.g. {"camera":{"focalLength":105}}); the result is re-validated, and the viewfinder shows the change before any render time is spent. Each change can be undone (scenes.revert). To move the camera, set {"camera":{"preset":"custom","position":[x,y,z],"target":[x,y,z]}} in the piece\'s millimetres (Z up, the front faces −Y; the result names the current pose) and optionally `roll` in degrees; keep the target to orbit, move both to pan. A shot whose camera is `locked` cannot be moved until a person unlocks it.',
+      'Adjust a saved shot. `patch` is a JSON merge patch on its scene (e.g. {"camera":{"focalLength":105}}); the result is re-validated, and the viewfinder shows the change before any render time is spent. Set `includeUnassignedRhino: true` when the designer asks for a neutral preview of unassigned Rhino bodies on this shot. Each change can be undone (scenes.revert). To move the camera, set {"camera":{"preset":"custom","position":[x,y,z],"target":[x,y,z]}} in the piece\'s millimetres (Z up, the front faces −Y; the result names the current pose) and optionally `roll` in degrees; keep the target to orbit, move both to pan. A shot whose camera is `locked` cannot be moved until a person unlocks it.',
     kind: 'mutation',
     tool: true,
     input: z.object({
@@ -1625,6 +1635,8 @@ export const commands = {
     input: z.object({
       pieceId: id,
       aspect: z.enum(['1:1', '4:5', '9:16', '16:9', '3:2']).default('1:1'),
+      /** Frame the same geometry as a shot opted in to a neutral imported CAD preview. */
+      includeUnassignedRhino: z.boolean().optional(),
     }),
     output: z.object({
       kind: z.enum(PIECE_KINDS),

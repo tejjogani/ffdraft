@@ -9,11 +9,29 @@ import { RACK_FOCUS_FSTOP, resolveAnimation } from './animation'
 import { resolveCamera } from './camera'
 import { resolveBackground, resolveGround } from './ground'
 import { LOOKS } from './looks'
-import { gemKey, gemMaterial, metalKey, metalMaterial, type ResolvedMaterial } from './materials'
+import {
+  gemKey,
+  gemMaterial,
+  metalKey,
+  metalMaterial,
+  type ResolvedMaterial,
+  type SurfaceMaterial,
+} from './materials'
 import { resolveOutput } from './quality'
 import { resolveRig } from './rig'
 import { boundsCenter, boundsRadius, type SceneSubject, subjectOf } from './subject'
 import { RESOLVED_SCENE_VERSION, type ResolvedScene } from './types'
+
+const IMPORT_CLAY = 'surface:imported-clay'
+const importClay: SurfaceMaterial = {
+  kind: 'surface',
+  color: [0.34, 0.34, 0.34],
+  roughness: 0.56,
+  ior: 1.45,
+  subsurfaceMm: 0,
+  thinFilm: null,
+  coat: 0,
+}
 
 function resolveMaterials(scene: RenderScene, subject: SceneSubject) {
   const materials: Record<string, ResolvedMaterial> = {}
@@ -21,6 +39,11 @@ function resolveMaterials(scene: RenderScene, subject: SceneSubject) {
   // '*' applies to the whole piece; a node's own override wins over it.
   const override = (nodeId: string) => ({ ...scene.overrides['*'], ...scene.overrides[nodeId] })
   for (const part of subject.parts) {
+    if (scene.includeUnassignedRhino && part.importRole === 'unassigned') {
+      materials[IMPORT_CLAY] = importClay
+      assignments[part.id] = IMPORT_CLAY
+      continue
+    }
     const o = override(part.nodeId)
     const metal = o.material ?? part.material
     const finish = o.finish ?? part.finish

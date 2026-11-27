@@ -8,7 +8,9 @@ Choose Add feature beside Features to browse the modeling tools. Under Bodies, R
 
 Click a part in the 3D view or choose its name in Features. On a solitaire, Band is the ring and Head is the metal setting around the centre stone. The Inspector shows controls for the selected part.
 
-On a smaller screen, use the Features and Inspector buttons above the model to open those panels. If your project is empty, start with a template to try the material and stone controls.
+For more room on a wide screen, use Hide Features beside Add feature and Hide sidebar in the page header. To bring them back, choose Features above the model or Show sidebar in the header. You can also toggle the sidebar with Command plus backslash on Mac or Ctrl plus backslash on Windows and Linux.
+
+On a smaller screen, use Features and Inspector above the model to open those panels. If your project is empty, start with a template to try the material and stone controls.
 
 ## Bring in an existing Rhino model
 
@@ -28,13 +30,19 @@ Drag the zoom slider at the lower left of the 3D view for a close-up, or use its
 
 Open Construction curves in Features to browse the guides. On an imported Rhino assembly, the eye beside the group shows or hides them together. Imported assemblies open at a three-quarter angle. Drag on the model to orbit it. Use Views to switch between the studio and dark backdrops.
 
-For a product image, open Renders and choose a shot. Under Look, choose Studio white or Soft gradient. If the CAD Inspector says Unassigned, choose Review materials to assign metals and gemstones in Pavé. A view-only hide or backdrop choice in CAD belongs to that workspace.
+For a product image, open Renders and choose a shot. Under Look, choose Studio white or Soft gradient. Use Review materials to confirm the production alloys and gemstones. A view-only hide or backdrop choice in CAD belongs to that workspace.
+
+### Preview an unassigned Rhino model in Renders
+
+If the Render view is empty after import, choose **Preview imported CAD**. Pavé opens a Studio white shot with visible unassigned Rhino bodies in neutral clay. When a shot already shows confirmed metal or stones, use **Look → Show unassigned bodies in clay** to add the remaining bodies in clay. Confirmed materials keep their appearance. Hidden bodies, parts set to Reference, and construction geometry stay out.
+
+Choose a still or any of the shot’s motion options, then render with Blender. The preview setting is saved on that shot. Turn it off under **Look** to return to confirmed materials alone. Previewing leaves the CAD roles, casting weights, stone counts, and exports unchanged.
 
 To update the actual piece, select the part, edit its dimensions in the Inspector, or choose Edit handmade mount and Save mount edit. Undo reverses a saved design change. Export for Rhino to write a new .3dm.
 
 ## Tell Pavé which parts are metal or stones
 
-Choose Review materials in CAD or Renders. The source material labels help identify each body. Choose its project alloy or gemstone before rendering. If an older import is missing display or supplier labels, choose Recover Rhino source labels and select the original .3dm. Check the exact matches before applying them. For supported Matrix files, the review also shows Stuller metal codes or stone families from the original body or block placement. Confirm the production alloy and gemstone yourself.
+Choose Review materials in CAD or Renders. The source material labels help identify each body. Choose its project alloy or gemstone for a material-accurate render. If an older import is missing display or supplier labels, choose Recover Rhino source labels and select the original .3dm. Check the exact matches before applying them. For supported Matrix files, the review also shows Stuller metal codes or stone families from the original body or block placement. Confirm the production alloy and gemstone yourself.
 
 Select a part and check its source layer, group and appearance. Choose Metal and an alloy for anything the caster should weigh. Choose Reference for a display stand, an unused copy or a guide solid. Use the eye in Features to hide a reference while working.
 

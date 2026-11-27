@@ -9,9 +9,10 @@
 import { parentPort, workerData } from 'node:worker_threads'
 import { createKernel, type LocalKernel } from '@pave/kernel'
 import type { AssetResolver, Kernel } from '@pave/kernel/types'
+import { writeGlb } from '@pave/kernel/write-glb'
 import { fitToPhoto, shade, viewCamera } from '@pave/match'
 import { buildProductionPackage } from '@pave/production/node'
-import { subjectOf } from '@pave/render'
+import { renderEvaluation, subjectOf } from '@pave/render'
 import type { Design } from '@pave/schema'
 import type { FromWorker, KernelTask, TaskResults, ToWorker, WorkerConfig } from './protocol'
 import { summarize } from './summary'
@@ -110,26 +111,22 @@ async function run(
         transfer: [bytes.buffer],
       }
     }
-    case 'renderInput': {
-      // GLB is written from a production evaluation; the subject comes from the same one,
-      // which the export has just cached, so the second call costs no geometry.
-      const glb = own((await kernel.export(task.design, 'glb', { stones: true, assets })).bytes)
-      signal.throwIfAborted()
-      const evaluation = await kernel.evaluate(task.design, {
-        detail: 'production',
-        assets,
-        signal,
-      })
-      return { result: { glb, subject: subjectOf(evaluation) }, transfer: [glb.buffer] }
-    }
+    case 'renderInput':
     case 'subject': {
-      // The production evaluation, as for a take, so framing matches what Blender frames.
       const evaluation = await kernel.evaluate(task.design, {
         detail: 'production',
         assets,
         signal,
       })
-      return { result: subjectOf(evaluation), transfer: [] }
+      signal.throwIfAborted()
+      const render = renderEvaluation(evaluation, task.design, task.includeUnassignedRhino)
+      const subject = subjectOf(render)
+      if (task.kind === 'subject') return { result: subject, transfer: [] }
+      // Empty subjects are refused by the render queue before Blender starts.
+      const glb = own(
+        render.parts.length || render.stones.length ? writeGlb(render) : new Uint8Array(),
+      )
+      return { result: { glb, subject }, transfer: [glb.buffer] }
     }
     case 'package': {
       const evaluation = await kernel.evaluate(task.design, {
@@ -157,6 +154,13 @@ async function run(
     }
     case 'picture': {
       const evaluation = await kernel.evaluate(task.design, { detail: 'draft', assets, signal })
+      const preview = task.shots?.some((shot) => shot.includeUnassignedRhino)
+        ? renderEvaluation(
+            await kernel.evaluate(task.design, { detail: 'production', assets, signal }),
+            task.design,
+            true,
+          )
+        : null
       // A pendant's chain would shrink the pendant to a speck, so it is left out, unless the
       // chain is the whole piece (a Cuban link, a tennis bracelet).
       const chains = Object.entries(task.design.nodes)
@@ -166,18 +170,23 @@ async function run(
       // Rasterising is synchronous; check between views so a cancel lands between pictures.
       const images: Uint8Array<ArrayBuffer>[] = []
       const jobs = task.shots
-        ? task.shots.map((s) => ({ camera: s.camera, size: { width: s.width, height: s.height } }))
+        ? task.shots.map((s) => ({
+            camera: s.camera,
+            size: { width: s.width, height: s.height },
+            imported: s.includeUnassignedRhino,
+          }))
         : task.views.map((view) => ({
             camera: viewCamera(evaluation, view, { hide }),
             size: { width: task.size, height: task.size },
+            imported: false,
           }))
-      for (const { camera, size } of jobs) {
+      for (const { camera, size, imported } of jobs) {
         signal.throwIfAborted()
         images.push(
           own(
-            shade(evaluation, camera, size, {
+            shade((imported && preview) || evaluation, camera, size, {
               focus: task.focus,
-              hide,
+              hide: imported ? [] : hide,
               ...(task.metal ? { metal: task.metal } : {}),
             }),
           ),

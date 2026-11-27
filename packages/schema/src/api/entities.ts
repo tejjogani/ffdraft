@@ -411,6 +411,11 @@ export const ANIMATION_TYPES = [
 export type AnimationType = (typeof ANIMATION_TYPES)[number]
 
 export const RenderSceneSchema = z.object({
+  /** Opt in per shot. Unassigned Rhino surfaces appear with a neutral render material. */
+  includeUnassignedRhino: z.boolean().optional().meta({
+    description:
+      'Include visible unassigned Rhino bodies as neutral clay in this shot only. Confirmed materials, CAD roles, casting facts and exports are unaffected. Defaults to off.',
+  }),
   /** Lighting + staging recipe; see @pave/render for the catalogue. */
   look: z
     .enum([

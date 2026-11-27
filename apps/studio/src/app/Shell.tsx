@@ -77,21 +77,24 @@ function Shell() {
   return (
     // The muted backdrop is what the frosted sidebar sits on (on desktop, the window vibrancy).
     <div className="flex h-dvh overflow-hidden bg-bg-muted">
-      {narrow && <MobileNav />}
-      <AnimatePresence initial={false}>
-        {!collapsed && !narrow && (
-          <motion.div
-            key="sidebar"
-            className="h-full shrink-0"
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -8 }}
-            transition={{ duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
-          >
-            <Sidebar />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {narrow ? (
+        <MobileNav />
+      ) : (
+        <AnimatePresence initial={false}>
+          {!collapsed && (
+            <motion.div
+              key="sidebar"
+              className="h-full shrink-0"
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -8 }}
+              transition={{ duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
+            >
+              <Sidebar />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
       <main id="main" className="relative flex min-w-0 flex-1 flex-col overflow-y-auto bg-bg">
         <RenderEngineSetup />
         <Suspense fallback={null}>

@@ -108,6 +108,7 @@ export function Sidebar({ drawer = false }: { drawer?: boolean }) {
   const toggle = useUI((s) => s.toggleSidebar)
   return (
     <aside
+      id={drawer ? 'app-navigation-drawer' : 'app-sidebar'}
       aria-label="Sidebar"
       className={cn(
         'flex h-full shrink-0 flex-col border-r border-glass-line',
@@ -118,14 +119,15 @@ export function Sidebar({ drawer = false }: { drawer?: boolean }) {
       <div className="app-drag h-(--chrome-top) shrink-0" />
       <div className="flex items-center gap-1 px-2">
         <WorkspaceSwitcher />
-        <IconButton
-          icon={ChevronsLeft}
-          label={drawer ? 'Close navigation' : 'Hide sidebar'}
-          shortcut="mod+\"
-          onClick={toggle}
-          size="sm"
-          className={drawer ? undefined : 'hover-reveal'}
-        />
+        {drawer && (
+          <IconButton
+            icon={ChevronsLeft}
+            label="Close navigation"
+            shortcut="mod+\"
+            onClick={toggle}
+            size="sm"
+          />
+        )}
       </div>
 
       <div className="mt-2 flex flex-col gap-px px-2">
