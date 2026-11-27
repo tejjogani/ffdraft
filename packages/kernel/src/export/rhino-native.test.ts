@@ -79,6 +79,49 @@ async function importedSpheres(blockScale = -1, shear = 0, denseSeam = false) {
   return parts
 }
 
+async function importedBoxes(count = 2) {
+  const doc = new rhino.File3dm()
+  doc.settings().modelUnitSystem = rhino.UnitSystem.Millimeters
+  const parent = new rhino.Layer()
+  parent.name = 'Workshop'
+  const layers = doc.layers()
+  const parentIndex = layers.add(parent)
+  const layer = new rhino.Layer()
+  layer.name = 'Stock'
+  layer.parentLayerId = layers.get(parentIndex).id
+  const layerIndex = layers.add(layer)
+  const objects = doc.objects()
+  for (let i = 0; i < count; i++) {
+    const box = rhino.Brep.createFromBoundingBox(
+      new rhino.BoundingBox([2 * i, 0, 0], [2 * i + 2, 2, 2]),
+    )
+    const faces = box.faces()
+    const vertices = box.vertices()
+    for (let j = 0; j < faces.count; j++) {
+      const face = faces.get(j)
+      const trims = face.outerLoop().trims
+      const display = new rhino.Mesh()
+      const points = display.vertices()
+      for (let k = 0; k < trims.count; k++) {
+        const [x, y, z] = vertices.get(trims.get(k).startVertexIndex).location
+        points.add(x!, y!, z!)
+      }
+      if (face.orientationIsReversed) display.faces().addQuadFace(0, 3, 2, 1)
+      else display.faces().addQuadFace(0, 1, 2, 3)
+      const cache = face.setMesh as unknown as (mesh: Mesh, type: MeshType) => boolean
+      expect(cache.call(face, display, rhino.MeshType.Render)).toBe(true)
+    }
+    const attrs = new rhino.ObjectAttributes()
+    attrs.name = `Stock ${i + 1}`
+    attrs.layerIndex = layerIndex
+    objects.addBrep(box, attrs)
+  }
+  const result = await readRhino3dm(doc.toByteArray())
+  expect(result.skipped).toEqual([])
+  expect(result.objects.every((o) => o.native)).toBe(true)
+  return result.objects
+}
+
 function fixture(parts: readonly RhinoMeshObject[]) {
   const data = new Map<string, Uint8Array>()
   const nodes = parts.map((part, i): NodeInput => {
@@ -96,6 +139,7 @@ function fixture(parts: readonly RhinoMeshObject[]) {
         assetId,
         nativeAssetId,
         nativeMeshAssetId: assetId,
+        rhinoLayer: part.layer ?? undefined,
         nativeTransform: native?.transform && [...native.transform],
         rhinoObjectId: native?.objectId,
         rhinoInstancePath: native?.instancePath && [...native.instancePath],
@@ -153,6 +197,7 @@ function readRhinoExport(bytes: Uint8Array) {
           rhinoId: attributes.getUserString('rhinoObjectId'),
           instancePath: attributes.getUserString('rhinoInstancePath'),
           nodeIds: attributes.getUserString('nodeIds'),
+          volume: Number(attributes.getUserString('volumeMm3')),
         }
       } finally {
         for (const handle of [box, geometry, attributes, object]) freeRhino(handle)
@@ -165,6 +210,153 @@ function readRhinoExport(bytes: Uint8Array) {
 }
 
 describe('native Rhino solid export', () => {
+  it('keeps touching same-alloy imports and their Rhino layers separate from generated metal', async () => {
+    const parts = await importedBoxes()
+    const { design, assets } = fixture(parts)
+    const model = applyOps(design, [
+      {
+        t: 'add',
+        node: {
+          kind: 'primitive',
+          id: 'authored',
+          shape: 'box',
+          size: [2, 2, 2],
+          transform: { position: [4, 0, 0] },
+        },
+      },
+      {
+        t: 'add',
+        node: {
+          kind: 'nurbsCurve',
+          id: 'profile',
+          degree: 2,
+          knots: [0, 0, 1, 1],
+          controlPoints: [
+            [1, 0, 0, 1],
+            [1, 1, 0, Math.SQRT1_2],
+            [0, 1, 0, 1],
+          ],
+        },
+      },
+    ]).design
+    const production = await kernel.evaluate(model, { detail: 'production', assets })
+    expect(production.parts).toHaveLength(1)
+    const casting = await kernel.export(model, 'stl', { assets })
+    const exported = await kernel.export(model, '3dm', { assets, stones: false })
+    expect(exported.notes[0]).toMatch(
+      /2 native Rhino solids.*1 evaluated mesh body.*1 editable NURBS curve/,
+    )
+    const readback = await readRhino3dm(exported.bytes, { includeCurves: true })
+    expect(
+      readback.objects.filter((o) => o.native).map((o) => [o.name, o.layer, o.bounds]),
+    ).toEqual(parts.map((o) => [o.name, o.layer, o.bounds]))
+    expect(readback.objects.filter((o) => !o.native)).toHaveLength(1)
+    expect(readback.curves[0]?.controlPoints[1]?.[3]).toBeCloseTo(Math.SQRT1_2, 12)
+    const scoped = await kernel.export(model, '3dm', { assets, only: ['part-1'] })
+    expect(readRhinoExport(scoped.bytes)).toMatchObject([{ nodeIds: 'part-1', native: true }])
+    expect((await kernel.evaluate(model, { detail: 'production', assets })).parts).toEqual(
+      production.parts,
+    )
+    expect((await kernel.export(model, 'stl', { assets })).bytes).toEqual(casting.bytes)
+  })
+
+  it('exports only the surviving imported body and a separate result of a Boolean on its neighbour', async () => {
+    const { design, assets } = fixture(await importedBoxes())
+    const model = applyOps(design, [
+      {
+        t: 'add',
+        node: {
+          kind: 'primitive',
+          id: 'tool',
+          shape: 'box',
+          size: [1, 1, 3],
+          transform: { position: [1, 1, 0] },
+        },
+      },
+      {
+        t: 'add',
+        node: { kind: 'boolean', id: 'cut', op: 'subtract', target: 'part-0', tools: ['tool'] },
+      },
+    ]).design
+    const exported = await kernel.export(model, '3dm', { assets, stones: false })
+    const objects = readRhinoExport(exported.bytes)
+    expect(objects.find((o) => o.nodeIds === 'part-1')).toMatchObject({ native: true })
+    expect(objects.find((o) => o.nodeIds === 'cut')).toMatchObject({ native: false })
+    expect(objects).toHaveLength(2)
+  })
+
+  it('keeps a production engraving on one import without withholding its untouched neighbour', async () => {
+    const { design, assets } = fixture(await importedBoxes())
+    const model = applyOps(design, [
+      {
+        t: 'add',
+        node: {
+          id: 'engraved',
+          kind: 'engraving',
+          host: 'part-0',
+          where: 'front',
+          text: 'H',
+          size: 0.8,
+          depth: 0.3,
+        },
+      },
+    ]).design
+    const exported = await kernel.export(model, '3dm', { assets, stones: false })
+    const objects = readRhinoExport(exported.bytes)
+    expect(objects).toHaveLength(2)
+    const cut = objects.find((o) => o.nodeIds === 'part-0')
+    expect(cut?.native).toBe(false)
+    expect(cut!.volume).toBeLessThan(8)
+    expect(objects.find((o) => o.nodeIds === 'part-1')).toMatchObject({ native: true, volume: 8 })
+  })
+
+  it('maintains cross-alloy seating priority when a distant body leaves an alloy group', async () => {
+    const { design, assets } = fixture(await importedBoxes())
+    const model = applyOps(design, [
+      { t: 'update', id: 'part-1', patch: { transform: { position: [20, 0, 0] } } },
+      {
+        t: 'add',
+        node: {
+          id: 'inset',
+          kind: 'primitive',
+          shape: 'box',
+          size: [3, 2, 2],
+          material: 'au18k-white',
+          transform: { position: [0, 1, 1] },
+        },
+      },
+    ]).design
+    const exported = await kernel.export(model, '3dm', { assets, only: ['part-0'] })
+    expect(readRhinoExport(exported.bytes)).toMatchObject([
+      { nodeIds: 'part-0', native: false, min: [1.5, 0, 0], volume: 2 },
+    ])
+  })
+
+  it('falls back separately for stale and unavailable native sources touching an untouched import', async () => {
+    const { design, assets, data } = fixture(await importedBoxes(3))
+    data.delete('native-1')
+    const source = design.nodes['part-2']
+    if (source?.kind !== 'meshBody' || source.source.type !== 'asset')
+      throw Error('Fixture is missing its mesh')
+    const model = applyOps(design, [
+      {
+        t: 'update',
+        id: 'part-2',
+        patch: { source: { ...source.source, nativeMeshAssetId: 'stale' } },
+      },
+    ]).design
+    const exported = await kernel.export(model, '3dm', { assets, stones: false })
+    expect(exported.notes[0]).toMatch(/1 native Rhino solid.*2 evaluated mesh bodies/)
+    expect(
+      readRhinoExport(exported.bytes).sort((a, b) => a.nodeIds.localeCompare(b.nodeIds)),
+    ).toMatchObject([
+      { nodeIds: 'part-0', native: true },
+      { nodeIds: 'part-1', native: false },
+      { nodeIds: 'part-2', native: false },
+    ])
+    expect(exported.notes.some((note) => /Stock 2.*source archive/.test(note))).toBe(true)
+  })
+
   it('retains the original BRep when casting cleanup collapses a short cache edge', async () => {
     const { design, assets } = fixture((await importedSpheres(-1, 0, true)).slice(0, 1))
     const native = await kernel.export(design, '3dm', { assets, stones: false })

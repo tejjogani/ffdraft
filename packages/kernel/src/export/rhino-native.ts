@@ -154,10 +154,6 @@ export function nativeSolidWriter(
         return false
       }
       if (!original) return useMesh()
-      if (source.rhinoObjectId) attrs.setUserString('rhinoObjectId', source.rhinoObjectId)
-      if (source.rhinoInstancePath?.length)
-        attrs.setUserString('rhinoInstancePath', JSON.stringify(source.rhinoInstancePath))
-
       const placed = original.duplicate() as Brep
       const matrix = source.nativeTransform
         ? multiply(result.matrix, source.nativeTransform)
@@ -192,14 +188,14 @@ export function nativeSolidWriter(
         freeRhino(placed)
       }
     },
+    get count() {
+      return retained
+    },
     notes(): string[] {
-      return [
-        `${retained} native Rhino solid${retained === 1 ? '' : 's'} retained. Other bodies export as meshes. STEP carries exact Pavé geometry where available.`,
-        ...unavailable.map(
-          (name) =>
-            `“${name}” uses the evaluated mesh because its native source archive could not be used.`,
-        ),
-      ]
+      return unavailable.map(
+        (name) =>
+          `“${name}” uses the evaluated mesh because its native source archive could not be used.`,
+      )
     },
     dispose() {
       if (definitions) freeRhino(definitions)

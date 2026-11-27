@@ -10,7 +10,7 @@ import { fromFrame } from '../geometry/vec'
 import { CURVE_SOURCE_ID_KEY } from '../import/rhino-curve'
 import { freeRhino as free, loadRhino3dm } from '../runtime/rhino'
 import type { ExportOptions } from '../types'
-import { type MeshObject, metalNotes, objectColor, sceneObjects } from './meshes'
+import { type MeshObject, objectColor, sceneObjects } from './meshes'
 import { writeRhinoNurbsCurve } from './rhino-curve'
 import { nativeSolidWriter } from './rhino-native'
 
@@ -44,6 +44,24 @@ function userStrings(o: MeshObject): Record<string, string> {
     depthMm: s.dims.depth.toFixed(2),
     setting: s.setting,
     role: s.role,
+  }
+}
+
+/** A singleton imported source carries its own modeling identity even if geometry uses a mesh. */
+function importedObject(scene: Scene, o: MeshObject) {
+  if (o.kind !== 'metal' || o.part.sources.length !== 1) return null
+  const node = scene.nodes.get(o.part.sources[0]!.nodeId)?.node
+  if (node?.kind !== 'meshBody' || node.source.type !== 'asset' || !node.keepSourcePlacement)
+    return null
+  const { rhinoLayer, rhinoObjectId, rhinoInstancePath } = node.source
+  return {
+    name: node.name?.trim() || o.name,
+    path: rhinoLayer?.split('::').filter(Boolean),
+    hasNativeSource: Boolean(node.source.nativeAssetId),
+    strings: {
+      ...(rhinoObjectId && { rhinoObjectId }),
+      ...(rhinoInstancePath?.length && { rhinoInstancePath: JSON.stringify(rhinoInstancePath) }),
+    },
   }
 }
 
@@ -117,13 +135,22 @@ async function write3dm(
       for (const [k, v] of Object.entries(strings)) a.setUserString(k, v)
       return a
     }
+    let meshBodies = 0
+    const evaluatedImports: string[] = []
     for (const o of objects) {
       options.signal?.throwIfAborted()
+      const imported = importedObject(scene, o)
       const layer =
         o.kind === 'metal'
-          ? layerFor(['Metal', METALS[o.material].label], objectColor(o))
+          ? layerFor(
+              imported?.path?.length ? imported.path : ['Metal', METALS[o.material].label],
+              objectColor(o),
+            )
           : layerFor(['Stones'], '#9fd3ff')
-      const attrs = attributes(o.name, layer, userStrings(o))
+      const attrs = attributes(imported?.name ?? o.name, layer, {
+        ...userStrings(o),
+        ...imported?.strings,
+      })
       if (o.kind === 'metal' && (await native.write(o.part, attrs))) {
         free(attrs)
         continue
@@ -143,9 +170,18 @@ async function write3dm(
       normals.computeNormals()
       free(normals)
       mesh.compact()
-      objectTable.addMesh(mesh, attrs)
+      const meshId = objectTable.addMesh(mesh, attrs)
       free(attrs)
       free(mesh)
+      if (meshId === '00000000-0000-0000-0000-000000000000')
+        throw new Error(`Rhino could not write mesh “${imported?.name ?? o.name}”.`)
+      if (o.kind === 'metal') {
+        meshBodies++
+        if (imported?.hasNativeSource && !o.part.preservesNativeSurface)
+          evaluatedImports.push(
+            `“${imported.name}” uses the evaluated mesh because the current body could not retain its original native surface.`,
+          )
+      }
       if (o.kind === 'stone') {
         const curve = attributes(`${o.name} girdle`, layerFor(['Curves', 'Girdles'], '#5a8fb8'), {
           stoneId: o.stone.id,
@@ -195,7 +231,12 @@ async function write3dm(
         free(attrs)
       }
     hold(doc.strings()).set('generator', 'Pave')
-    return { bytes: doc.toByteArray(), nativeNotes: native.notes() }
+    return {
+      bytes: doc.toByteArray(),
+      meshBodies,
+      retained: native.count,
+      nativeNotes: [...native.notes(), ...evaluatedImports],
+    }
   } finally {
     native.dispose()
     for (const table of held) free(table)
@@ -206,6 +247,7 @@ async function write3dm(
 export const rhino3dm = defineExporter({
   format: '3dm',
   detail: 'production',
+  separateImportedBodies: true,
   async run(scene, options) {
     const only = options.only && new Set(options.only)
     const curves: NodeOf<'nurbsCurve'>[] = []
@@ -223,21 +265,22 @@ export const rhino3dm = defineExporter({
       ...(options.only && { only: options.only }),
       allowEmpty: curves.length > 0,
     })
-    const { bytes, nativeNotes } = await write3dm(scene, objects, curves, options)
+    const { bytes, meshBodies, retained, nativeNotes } = await write3dm(
+      scene,
+      objects,
+      curves,
+      options,
+    )
     return {
       bytes,
       mime: 'application/x-3dm',
       extension: '3dm',
       notes: [
-        ...(curves.length
-          ? [
-              `${curves.length} editable NURBS curve${curves.length === 1 ? '' : 's'} in millimetres.`,
-            ]
-          : []),
+        `${retained} native Rhino solid${retained === 1 ? '' : 's'} retained, ${meshBodies} evaluated mesh ${meshBodies === 1 ? 'body' : 'bodies'}, ${curves.length} editable NURBS curve${curves.length === 1 ? '' : 's'}.`,
         ...nativeNotes,
+        'Evaluated bodies export as meshes. STEP carries exact Pavé geometry where available.',
         'Curve layers keep their Rhino paths. New curves, chain centre lines and stone girdles appear under Curves.',
         'Each object carries user strings: node ids, alloy, finish and plating for metal; stone, cut, carat and size for stones.',
-        ...metalNotes(scene, objects),
       ],
     }
   },

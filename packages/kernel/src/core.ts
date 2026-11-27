@@ -358,6 +358,8 @@ export interface Exporter {
   format: ExportFormat
   /** Detail the scene is evaluated at before `run` is called. */
   detail: Detail
+  /** Keep independent imported bodies separate in the production-detail modeling scene. */
+  separateImportedBodies?: boolean
   run(scene: Scene, options: ExportOptions): ExportResult | Promise<ExportResult>
 }
 

@@ -222,6 +222,7 @@ export function createKernel(): LocalKernel {
         prepared.design,
         {
           detail: exporter.detail,
+          separateImportedBodies: exporter.separateImportedBodies,
           ...(options.assets ? { assets: options.assets } : {}),
           ...(options.signal ? { signal: options.signal } : {}),
         },
