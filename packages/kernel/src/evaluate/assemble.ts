@@ -8,6 +8,7 @@
 import { type Design, METALS, type MetalId } from '@pave/schema'
 import type { Manifold } from 'manifold-3d'
 import {
+  type Addition,
   type Body,
   type Cavity,
   IDENTITY,
@@ -436,6 +437,8 @@ interface MetalGroup {
   sources: Source[]
   /** Bodies and additions to fuse. */
   solids: Solid[]
+  /** Original alloy order and volume still govern cross-alloy seating in a Rhino export. */
+  prioritySolids?: Solid[]
   /** Bodies that already had their own cutters (engraving) applied. */
   precut: Manifold[]
   /** Additions fused after the seats are cut. */
@@ -471,12 +474,66 @@ function matchesSourceMesh(original: Manifold, assembled: Manifold): boolean {
   }
 }
 
+interface HostedAddition {
+  nodeId: string
+  host: NodeResult
+  addition: Addition
+}
+
+/**
+ * A modeling archive keeps independently imported bodies in the outliner. Keep possible
+ * production mutations in the usual assembly so an original cannot replace a seated, engraved,
+ * two-tone or augmented casting. Source bodies arrive here after visibility and consumption.
+ */
+function independentImports(
+  active: readonly NodeResult[],
+  targeted: ReadonlyMap<string, readonly Solid[]>,
+  everywhere: readonly Solid[],
+  additions: readonly HostedAddition[],
+): Set<string> {
+  const hosts = new Set(additions.map(({ host }) => host.id))
+  const cutters = everywhere.map((solid) => solid.bounds())
+  const byMaterial = new Map<MetalId, Bounds[]>()
+  const include = (material: MetalId, solid: Solid) => {
+    const boxes = byMaterial.get(material) ?? []
+    boxes.push(solid.bounds())
+    byMaterial.set(material, boxes)
+  }
+  for (const result of active) for (const body of result.bodies) include(body.material, body.solid)
+  for (const { host, addition } of additions) include(host.bodies[0]!.material, addition.solid)
+  const independent = new Set<string>()
+  for (const { id, node, bodies } of active) {
+    if (
+      node.kind !== 'meshBody' ||
+      node.source.type !== 'asset' ||
+      !node.keepSourcePlacement ||
+      bodies.length !== 1 ||
+      targeted.has(id) ||
+      hosts.has(id)
+    )
+      continue
+    const { material, solid } = bodies[0]!
+    const box = solid.bounds()
+    // Account for the submicron translation of production seats below.
+    if (cutters.some((cut) => boundsOverlap(cut, box, Math.max(...GENERAL_POSITION)))) continue
+    if (
+      [...byMaterial].some(
+        ([alloy, boxes]) => alloy !== material && boxes.some((other) => boundsOverlap(other, box)),
+      )
+    )
+      continue
+    independent.add(id)
+  }
+  return independent
+}
+
 export function assembleProduction(
   design: Design,
   results: ReadonlyMap<string, NodeResult>,
   quality: Quality,
   /** Hash of everything that went into this assembly; the parts' `rev`. */
   rev: string,
+  separateImportedBodies = false,
 ): Assembly {
   const { manifold: mf } = runtime()
   const consumed = consumedBy(results)
@@ -512,6 +569,17 @@ export function assembleProduction(
           }
       }
 
+    const additions: HostedAddition[] = []
+    for (const result of active)
+      for (const addition of result.additions) {
+        const host = resolveTarget(addition.target, consumed, results)
+        if (host) additions.push({ nodeId: result.id, host, addition })
+      }
+
+    const independent = separateImportedBodies
+      ? independentImports(active, targeted, everywhere, additions)
+      : new Set<string>()
+    const parts: ScenePart[] = []
     const chains = new Set(
       active.filter((r) => r.node.kind === 'chain').flatMap((r) => r.bodies.map((b) => b.solid)),
     )
@@ -519,30 +587,63 @@ export function assembleProduction(
     const groupFor = (spec: MetalSpec): MetalGroup => {
       let group = groups.get(spec.material)
       if (!group) {
-        group = { spec, sources: [], solids: [], precut: [], late: [] }
+        group = {
+          spec,
+          sources: [],
+          solids: [],
+          precut: [],
+          late: [],
+          ...(independent.size > 0 && { prioritySolids: [] }),
+        }
         groups.set(spec.material, group)
       }
       return group
     }
     for (const result of active) {
+      if (independent.has(result.id)) {
+        const body = result.bodies[0]!
+        const spec = specOf(body)
+        groupFor(spec).prioritySolids?.push(body.solid)
+        parts.push({
+          part: partOf(
+            result.id,
+            result.id,
+            rev,
+            labelOf(result.node),
+            spec,
+            [body.solid],
+            quality,
+            body.solid.volume(),
+          ),
+          fused: null,
+          sources: [{ nodeId: result.id, body }],
+          namedAfter: result.id,
+          ...(nativeCandidates.has(result.id) && { preservesNativeSurface: true }),
+        })
+        continue
+      }
       const cutters = targeted.get(result.id)
       const tool = cutters && fuse(batch(cutters, quality, temp))
       for (const body of result.bodies) {
         const group = groupFor(specOf(body))
         if (tool) group.precut.push(temp(body.solid.manifold(quality).subtract(tool)))
-        else group.solids.push(body.solid)
+        else {
+          group.solids.push(body.solid)
+          group.prioritySolids?.push(body.solid)
+        }
         group.sources.push({ nodeId: result.id, body })
       }
     }
-    for (const result of active)
-      for (const addition of result.additions) {
-        const host = resolveTarget(addition.target, consumed, results)
-        if (!host) continue
-        const spec = specOf(host.bodies[0]!)
-        const group = groupFor(spec)
-        ;(addition.afterCuts ? group.late : group.solids).push(addition.solid)
-        group.sources.push({ nodeId: result.id, body: { solid: addition.solid, ...spec } })
+    for (const { nodeId, host, addition } of additions) {
+      const spec = specOf(host.bodies[0]!)
+      const group = groupFor(spec)
+      if (addition.afterCuts) group.late.push(addition.solid)
+      else {
+        group.solids.push(addition.solid)
+        group.prioritySolids?.push(addition.solid)
       }
+      group.sources.push({ nodeId, body: { solid: addition.solid, ...spec } })
+    }
 
     // Cutters and the metal they cut are built from the same outlines, so their edges often
     // coincide exactly — which leaves bodies pinched along an edge. A tenth of a micron of
@@ -551,7 +652,6 @@ export function assembleProduction(
       everywhere.length > 0
         ? temp(fuse(batch(everywhere, quality, temp)).translate(GENERAL_POSITION))
         : null
-    const parts: ScenePart[] = []
     const cutterBoxes = [...everywhere, ...[...groups.values()].flatMap((g) => g.late)].map((c) =>
       c.bounds(),
     )
@@ -565,7 +665,8 @@ export function assembleProduction(
     // an accent) keeps its shape and the larger one (the band) is cut to receive it — as a
     // jeweler seats a separately cast head. Parts are put back in design order afterwards.
     const designOrder = [...groups.keys()]
-    const metalOf = (g: MetalGroup) => g.solids.reduce((sum, s) => sum + s.volume(), 0)
+    const metalOf = (g: MetalGroup) =>
+      (g.prioritySolids ?? g.solids).reduce((sum, s) => sum + s.volume(), 0)
     const bySize =
       groups.size > 1 ? [...groups].sort(([, a], [, b]) => metalOf(a) - metalOf(b)) : [...groups]
     for (const [material, group] of bySize) {

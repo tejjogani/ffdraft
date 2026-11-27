@@ -40,6 +40,8 @@ interface DetailCache {
   checks: { key: string; value: Diagnostic[] } | null
 }
 
+type SceneOptions = EvaluateOptions & { separateImportedBodies?: boolean }
+
 const LEVEL_ORDER = { error: 0, warning: 1, info: 2 } as const
 
 /**
@@ -76,7 +78,7 @@ export class Evaluator {
    */
   withScene<T>(
     design: Design,
-    options: EvaluateOptions,
+    options: SceneOptions,
     use: (scene: Scene) => T | Promise<T>,
   ): Promise<T> {
     return this.exclusive(async () => use(await this.evaluate(design, options)))
@@ -156,13 +158,15 @@ export class Evaluator {
     disposeResult(result)
   }
 
-  private async evaluate(design: Design, options: EvaluateOptions): Promise<Scene> {
+  private async evaluate(design: Design, options: SceneOptions): Promise<Scene> {
     const started = performance.now()
     // Another kernel in this thread may have faulted and replaced the shared runtime: what this
     // one cached lives in the dropped heap and must be forgotten (never freed, never reused).
     if (this.generation !== runtimeGeneration()) this.forget()
     const detail = options.detail ?? 'draft'
     const quality = QUALITY[detail]
+    const separateImportedBodies =
+      detail === 'production' && options.separateImportedBodies === true
     const cache = this.caches[detail]
     // A corrupt document (an order entry with no node, a node missing from the order) is
     // evaluated as far as it makes sense and reported, never a TypeError from deep inside.
@@ -274,7 +278,7 @@ export class Evaluator {
 
     await breathe()
     const assembleStarted = performance.now()
-    const assembly = this.assembleOrDrop(design, results, detail, cache)
+    const assembly = this.assembleOrDrop(design, results, detail, cache, separateImportedBodies)
     const parts = withCurrentNames(assembly.parts, results)
     timings['@assemble'] = performance.now() - assembleStarted
 
@@ -348,7 +352,7 @@ export class Evaluator {
     // so the interactive view shows them too. They depend only on the node results, so they are
     // reused, like the production assembly, while no node changed.
     const checkStarted = performance.now()
-    const checkKey = combineHashes([...results.values()].map((r) => r.hash))
+    const checkKey = assemblyKey(results, separateImportedBodies)
     if (cache.checks?.key !== checkKey) {
       // One check at a time with a breather between them, so an abort (or a newer request)
       // does not wait for every check of a heavy production piece. A check that cannot run
@@ -377,9 +381,10 @@ export class Evaluator {
     results: Map<string, NodeResult>,
     detail: Detail,
     cache: DetailCache,
+    separateImportedBodies: boolean,
   ): Assembly {
     try {
-      return this.assemble(design, results, detail, cache)
+      return this.assemble(design, results, detail, cache, separateImportedBodies)
     } catch (error) {
       if (isRuntimeFault(error)) throw error
       const quality = QUALITY[detail]
@@ -407,7 +412,7 @@ export class Evaluator {
       cache.draftParts.clear()
       cache.assembly?.value.dispose()
       cache.assembly = null
-      return this.assemble(design, results, detail, cache)
+      return this.assemble(design, results, detail, cache, separateImportedBodies)
     }
   }
 
@@ -416,16 +421,26 @@ export class Evaluator {
     results: ReadonlyMap<string, NodeResult>,
     detail: Detail,
     cache: DetailCache,
+    separateImportedBodies: boolean,
   ): Assembly {
     if (detail === 'draft') return assembleDraft(design, results, QUALITY.draft, cache.draftParts)
     // Fusing is the expensive step, so the whole production assembly is reused when no node
     // (or its visibility, which is part of the node hash) changed.
-    const key = combineHashes([...results.values()].map((r) => r.hash))
+    const key = assemblyKey(results, separateImportedBodies)
     if (cache.assembly?.key !== key) {
       cache.assembly?.value.dispose()
       cache.assembly = null
-      cache.assembly = { key, value: assembleProduction(design, results, QUALITY.production, key) }
+      cache.assembly = {
+        key,
+        value: assembleProduction(design, results, QUALITY.production, key, separateImportedBodies),
+      }
     }
     return cache.assembly.value
   }
+}
+
+function assemblyKey(results: ReadonlyMap<string, NodeResult>, separateImportedBodies: boolean) {
+  const hashes = [...results.values()].map((r) => r.hash)
+  if (separateImportedBodies) hashes.push('separate-imported-bodies')
+  return combineHashes(hashes)
 }
