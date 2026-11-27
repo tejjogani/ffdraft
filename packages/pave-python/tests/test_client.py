@@ -106,6 +106,20 @@ class StudioTest(unittest.TestCase):
         self.assertEqual(self.request("design.apply"), first)
         self.assertEqual(project.version, 2)
 
+    def test_native_face_offset_uses_inspected_source_and_version(self):
+        project = self.project()
+        self.reply({"nativeAssetId": "original", "version": 3, "faces": [{"faceIndex": 2}]})
+        listed = project.rhino_cap_faces("sleeve")
+        self.assertEqual(self.request("design.rhinoCapFaces"), {"pieceId": "ring", "nodeId": "sleeve"})
+        self.reply({"version": 4, "change": {"id": "thicken", "seq": 4}})
+        project.offset_rhino_cap("sleeve", listed["nativeAssetId"], listed["faces"][0]["faceIndex"],
+                                 0.25, base_version=listed["version"], change_id="thicken")
+        self.assertEqual(self.request("design.offsetRhinoCap"), {
+            "pieceId": "ring", "nodeId": "sleeve", "nativeAssetId": "original", "faceIndex": 2,
+            "baseVersion": 3, "offsetMm": 0.25, "changeId": "thicken",
+        })
+        self.assertEqual(project.version, 4)
+
     def test_conflict_keeps_guard_until_explicit_refresh(self):
         project = self.project()
         self.reply(

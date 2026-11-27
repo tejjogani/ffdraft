@@ -1337,6 +1337,7 @@ async function afterCommand(
   if (
     (command === 'design.apply' ||
       command === 'design.revert' ||
+      command === 'design.offsetRhinoCap' ||
       (command === 'design.replaceStone' && out?.applied === true)) &&
     typeof out?.version === 'number'
   )

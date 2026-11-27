@@ -96,6 +96,7 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
           'references.read',
           'design.history',
           'design.describe',
+          'design.rhinoCapFaces',
           'design.meshComponents',
           'match.traceOutline',
           'freeform.analyze',
@@ -115,7 +116,13 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
       {
         id: 'build',
         label: 'Build the CAD and its production detail',
-        tools: ['pieces.buildFromSpec', 'design.apply', 'design.replaceStone', 'design.revert'],
+        tools: [
+          'pieces.buildFromSpec',
+          'design.apply',
+          'design.offsetRhinoCap',
+          'design.replaceStone',
+          'design.revert',
+        ],
       },
       {
         id: 'check',

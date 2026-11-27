@@ -115,3 +115,43 @@ it('links a scoped CAD inspection and write to the run trace and undoable projec
   expect((await api.call('design.describe', inspect)).values).toEqual(project.design.nodes.band)
   expect((await api.call('pieces.get', { id: other.id })).version).toBe(other.version)
 })
+
+it('records native face inspection and the signed thickness change through the project assistant', async () => {
+  const { createRhinoSleeve } = await import('../test/rhino-sleeve')
+  const ref = await createRhinoSleeve(server.server, api)
+  const listed = await api.call('design.rhinoCapFaces', ref)
+  const top = listed.faces.find((f) => f.normal[1] < -0.999)!
+  server.model.push(
+    { content: [tool('design_rhinoCapFaces', ref, 'inspectEnd')], stop_reason: 'tool_use' },
+    {
+      content: [
+        tool(
+          'design_offsetRhinoCap',
+          {
+            ...ref,
+            baseVersion: listed.version,
+            nativeAssetId: listed.nativeAssetId,
+            faceIndex: top.faceIndex,
+            offsetMm: 0.25,
+          },
+          'moveEnd',
+        ),
+      ],
+      stop_reason: 'tool_use',
+    },
+    { content: [text('Moved the end by 0.25 mm.')], stop_reason: 'end_turn' },
+  )
+  const { run } = await api.call('threads.send', {
+    text: 'Make this sleeve 0.25 mm longer.',
+    clientId: 'test',
+    clientMessageId: 'native-end-edit',
+    context: { pieceId: ref.pieceId, stage: 'cad' },
+  })
+  await settled(server.parts, run.id)
+  const history = await api.call('design.history', { pieceId: ref.pieceId })
+  expect(history[0]?.actor).toMatchObject({ runId: run.id })
+  const moved = await api.call('design.rhinoCapFaces', ref)
+  expect(moved.faces.find((f) => f.faceIndex === top.faceIndex)?.spanMm).toBeCloseTo(2.25, 7)
+  await api.call('design.revert', { pieceId: ref.pieceId, runId: run.id })
+  expect((await api.call('design.rhinoCapFaces', ref)).faces).toEqual(listed.faces)
+})
