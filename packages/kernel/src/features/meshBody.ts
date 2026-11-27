@@ -8,6 +8,7 @@ import type { NodeOf } from '@pave/schema'
 import type { Manifold } from 'manifold-3d'
 import { BUILTINS } from '../builtin/index'
 import { type BuildContext, defineFeature, metalOf, solidFromManifold } from '../core'
+import { applyMeshVertexEdits } from '../mesh/edit'
 import { flatBack, flatPlacement, scaleToHeight } from '../mesh/fit'
 import { parseMesh } from '../mesh/parse/index'
 import type { HiddenSurfaces } from '../mesh/pave/region'
@@ -31,7 +32,9 @@ async function sourceManifold(node: MeshBodyNode, ctx: BuildContext): Promise<Ma
   const bytes = await ctx.assets(node.source.assetId)
   ctx.signal?.throwIfAborted()
   const { mesh, format } = parseMesh(bytes)
-  const { manifold, report } = repairMesh(mesh)
+  const edits = node.meshEdits?.vertices
+  const edited = edits && Object.keys(edits).length ? applyMeshVertexEdits(mesh, edits) : mesh
+  const { manifold, report } = repairMesh(edited)
   const label = format.toUpperCase()
   const fixes = [
     report.merged > 0 && `welded ${report.merged.toLocaleString('en')} duplicate vertices`,

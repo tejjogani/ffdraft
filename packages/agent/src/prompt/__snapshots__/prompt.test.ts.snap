@@ -6,9 +6,9 @@ exports[`the frozen system prompt > has a stable hash (snapshot) that covers the
     7082,
     41253,
     10638,
-    16139,
+    16509,
   ],
-  "hash": "prompt-0ae25574c58d44",
+  "hash": "prompt-1734f02c1f8a71",
 }
 `;
 
@@ -181,6 +181,9 @@ Shared value lists:
   - type "builtin":
     - name: trophy | crown | dice = "trophy"
 - keepSourcePlacement: boolean = false. Use the coordinates in the mesh asset, in millimetres.
+- meshEdits: object. Direct vertex edits on a measured mesh asset that keeps its source placement.
+  - assetId (required): string. The same asset id as source.assetId.
+  - vertices (required): object. Sparse zero-based source vertex ids mapped to absolute [x, y, z] positions in millimetres. IDs follow first occurrence of each unique source position in triangle order.
 - height: number 3–200 mm = 40. only when keepSourcePlacement is false. The mesh is scaled to this overall height.
 - flatBack: number 0–0.9 = 0. Slices this fraction off the back so the piece lies flat.
 - hollow: number 0–5 mm = 0. 0 keeps the body solid.
