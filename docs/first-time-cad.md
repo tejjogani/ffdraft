@@ -32,7 +32,7 @@ To update the actual piece, select the part, edit its dimensions in the Inspecto
 
 ## Tell Pavé which parts are metal or stones
 
-Choose Review materials in CAD or Renders. The source material labels help identify each body. Choose its project alloy or gemstone before rendering. If an older import is missing labels, choose Recover Rhino source labels and select the original .3dm. Check the exact matches before applying them.
+Choose Review materials in CAD or Renders. The source material labels help identify each body. Choose its project alloy or gemstone before rendering. If an older import is missing display or supplier labels, choose Recover Rhino source labels and select the original .3dm. Check the exact matches before applying them. For supported Matrix files, the review also shows Stuller metal codes or stone families from the original body or block placement. Confirm the production alloy and gemstone yourself.
 
 Select a part and check its source layer, group and appearance. Choose Metal and an alloy for anything the caster should weigh. Choose Reference for a display stand, an unused copy or a guide solid. Use the eye in Features to hide a reference while working.
 

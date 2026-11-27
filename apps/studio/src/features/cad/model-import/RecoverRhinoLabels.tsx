@@ -125,7 +125,7 @@ export function RecoverRhinoLabels({
         </Button>
       }
       title="Recover Rhino source labels"
-      description="Choose the original Rhino file to recover groups, block placements, and display material names by exact match."
+      description="Choose the original Rhino file to recover groups, block placements, display materials, and available Stuller supplier labels by exact match."
       footer={
         <>
           <Button variant="ghost" disabled={saving} onClick={close}>

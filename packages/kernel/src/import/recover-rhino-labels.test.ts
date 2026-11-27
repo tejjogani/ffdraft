@@ -154,3 +154,26 @@ describe('recoverRhinoLabels', () => {
     expect(result.counts.ambiguous).toBe(1)
   })
 })
+
+it('recovers supplier fields on an already labeled body only after exact geometry verification', async () => {
+  const existing = { ...context, archiveId: 'existing-scope' }
+  const design = designFrom('other', [body('seat', { context: existing })])
+  const stullerMaterial = { metal: 'TEST-14K' }
+  const source = {
+    objects: [{ ...part, rhinoContext: { ...context, archiveId: 'new-read', stullerMaterial } }],
+    curves: [],
+  }
+  const result = await recoverRhinoLabels(design, source, async () => part.bytes)
+  expect(result.ops).toEqual([
+    {
+      t: 'update',
+      id: 'seat',
+      patch: { source: { rhinoContext: { ...existing, stullerMaterial } } },
+    },
+  ])
+  expect((await recoverRhinoLabels(design, source, async () => new Uint8Array([9]))).ops).toEqual(
+    [],
+  )
+  const updated = applyOps(design, result.ops).design
+  expect((await recoverRhinoLabels(updated, source, async () => part.bytes)).ops).toEqual([])
+})

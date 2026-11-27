@@ -80,6 +80,7 @@ function contextArchive(affine = false) {
     const objects = hold(doc.objects())
     const first = hold(new rhino.ObjectAttributes())
     first.name = 'First'
+    first.setUserString('paveSourceStullerMaterial', JSON.stringify({ metal: 'TEST-14K' }))
     first.layerIndex = firstLayer
     first.materialSource = rhino.ObjectMaterialSource.MaterialFromObject
     first.materialIndex = bronze
@@ -175,6 +176,7 @@ describe('Rhino source context', () => {
     expect(first).toMatchObject({
       layer: 'Block members',
       rhinoContext: {
+        stullerMaterial: { metal: 'TEST-14K' },
         groups: [{ name: 'Workshop group' }],
         placements: [{ layer: 'First placement', material: 'Display bronze' }],
       },
@@ -242,6 +244,7 @@ describe('Rhino source context', () => {
     expect(first).toMatchObject({
       layer: 'Block members',
       rhinoContext: {
+        stullerMaterial: { metal: 'TEST-14K' },
         groups: [{ name: 'Workshop group' }],
         placements: [{ layer: 'First placement', material: 'Display bronze' }],
       },
@@ -298,6 +301,7 @@ describe('Rhino source context', () => {
       layer: 'Block members',
       bounds: source.objects[0]?.bounds,
       rhinoContext: {
+        stullerMaterial: { metal: 'TEST-14K' },
         groups: [{ name: 'Workshop group' }],
         placements: [{ layer: 'First placement', material: 'Display bronze' }],
         materialFromParent: true,
@@ -325,6 +329,7 @@ describe('Rhino source context', () => {
     expect(first).toMatchObject({
       layer: 'Block members',
       rhinoContext: {
+        stullerMaterial: { metal: 'TEST-14K' },
         groups: [{ name: 'Workshop group' }],
         placements: [{ layer: 'First placement', material: 'Display bronze' }],
         materialFromParent: true,

@@ -105,6 +105,7 @@ function matchKey(node: RhinoBody): string | undefined {
     member ?? ctx?.topology,
     rhinoLayer,
     ctx?.material,
+    ctx?.stullerMaterial,
     placed.map((p) => [p.definitionId, p.layer, p.material]),
   ])
 }

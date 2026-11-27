@@ -43,6 +43,23 @@ describe('review imported jewelry parts', () => {
   it('keeps differently labelled occurrences outside the suggested selection', () => {
     expect(rhinoRoleCandidates(design(), 'a')).toEqual(['a', 'b'])
   })
+  it('keeps supplier families separate when placements share a display material', () => {
+    const before = design()
+    const changed = applyOps(before, [
+      {
+        t: 'update',
+        id: 'b',
+        patch: {
+          source: {
+            rhinoContext: {
+              stullerMaterial: { stoneFamily: 'Tourmaline', stoneColor: 'Green' },
+            },
+          },
+        },
+      },
+    ]).design
+    expect(rhinoRoleCandidates(changed, 'a')).toEqual(['a'])
+  })
   it('keeps otherwise identical anonymous solids from two imported archives separate', () => {
     const part = (id: string, archiveId: string): NodeInputOf<'meshBody'> => ({
       id,

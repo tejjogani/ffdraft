@@ -6,6 +6,7 @@ import type {
   ObjectAttributes,
   RhinoModule,
 } from 'rhino3dm'
+import { PAVE_STULLER_FIELD } from '../import/matrix-stuller'
 import {
   inheritedMaterial,
   RHINO_INHERITED_MATERIAL,
@@ -64,6 +65,8 @@ export function rhinoContextWriter(rhino: RhinoModule, doc: File3dm) {
 
   return {
     write(attrs: ObjectAttributes, context: RhinoContext) {
+      if (context.stullerMaterial)
+        attrs.setUserString(PAVE_STULLER_FIELD, JSON.stringify(context.stullerMaterial))
       for (const group of context.groups) attrs.addToGroup(groupIndex(group))
       const name = context.materialFromParent
         ? inheritedMaterial(context.placements)
