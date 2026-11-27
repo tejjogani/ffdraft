@@ -29,7 +29,9 @@ interface Chip {
 /** The measure worth pinning for a node, read from its fields' widgets. */
 function chipFor(edit: FieldEdit, evaluation: Evaluation): Chip | null {
   const rows = inspectorModel(edit.node).sections.flatMap((s) => s.rows)
-  const parts = evaluation.parts.filter((p) => p.nodeId === edit.node.id)
+  const parts = [...evaluation.parts, ...(evaluation.referenceParts ?? [])].filter(
+    (p) => p.nodeId === edit.node.id,
+  )
   const stones = evaluation.stones.filter((s) => s.nodeId === edit.node.id)
   const ring = rows.find((r) => r.field.widget === 'ringSize')
   if (ring && evaluation.report.ringInnerDiameter) {

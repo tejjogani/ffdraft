@@ -48,6 +48,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { displayBounds } from '../../components/stage/display-evaluation'
 import { QualityIndicator } from '../../components/stage/QualityIndicator'
 import { Stage } from '../../components/stage/Stage'
 import type { Viewer, ViewerState } from '../../components/stage/viewer'
@@ -871,7 +872,7 @@ function Workspace({ piece }: { piece: Piece }) {
           <ImagePlanes
             viewer={viewerHandle}
             pieceId={pieceId}
-            bounds={evaluation?.report.bounds ?? null}
+            bounds={evaluation ? displayBounds(evaluation) : null}
             readOnly={readOnly}
             stoneMm={evaluation?.stones.find((x) => x.role === 'center')?.dims.width ?? null}
           />

@@ -76,6 +76,7 @@ import {
   qualityState,
   sameQuality,
 } from './adaptive'
+import { displayEvaluation } from './display-evaluation'
 import { viewportScene } from './environment'
 import { ImagePlaneLayer, type ImagePlaneSpec } from './image-planes'
 import {
@@ -190,6 +191,7 @@ export class Viewer {
   private readonly decor: Group = zUpGroup('cad-decor')
   private readonly shadow: Mesh
   private built: Built | null = null
+  private inputEvaluation: Evaluation | null = null
   private evaluation: Evaluation | null = null
   private environment: PaveEnvironment | null = null
   private envRadius = 0
@@ -526,8 +528,10 @@ export class Viewer {
 
   // ── Content ──────────────────────────────────────────────────────────────────────────────
 
-  setEvaluation(evaluation: Evaluation): void {
-    if (evaluation === this.evaluation) return
+  setEvaluation(input: Evaluation): void {
+    if (input === this.inputEvaluation) return
+    this.inputEvaluation = input
+    const evaluation = displayEvaluation(input)
     const failed = new Set(
       evaluation.diagnostics.filter((d) => d.code === 'feature.failed').map((d) => d.nodeId),
     )
@@ -588,6 +592,7 @@ export class Viewer {
     const originals = new Map<Mesh, Material>()
     const matrices = new Map<InstancedMesh, Float32Array>()
     const revs = new Map(evaluation.parts.map((p) => [p.id, p.rev]))
+    const referenceIds = new Set(input.referenceParts?.map((p) => p.id))
     const generation = ++this.generation
     model.object.traverse((o) => {
       if (o instanceof InstancedMesh) {
@@ -595,6 +600,7 @@ export class Viewer {
         matrices.set(o, (o.instanceMatrix.array as Float32Array).slice())
         originals.set(o, o.material as Material)
       } else if (o instanceof Mesh) {
+        o.userData.reference = referenceIds.has(o.name)
         metals.push(o)
         originals.set(o, o.material as Material)
         this.reuseGeometry(o, revs.get(o.name), generation)
@@ -760,10 +766,10 @@ export class Viewer {
       mesh.material =
         xray && display !== 'technical'
           ? m.xray
-          : clay
-            ? m.clayMetal
-            : display === 'technical'
-              ? m.paper
+          : display === 'technical'
+            ? m.paper
+            : clay || mesh.userData.reference
+              ? m.clayMetal
               : b.originals.get(mesh)!
     for (const gems of b.gems)
       gems.material = clay
@@ -1156,7 +1162,7 @@ export class Viewer {
    */
   async capture(opts: CaptureOptions): Promise<Blob[]> {
     const saved = {
-      evaluation: this.evaluation,
+      evaluation: this.inputEvaluation,
       state: this.state,
       position: this.controls.getPosition(new Vector3()),
       target: this.controls.getTarget(new Vector3()),
@@ -1212,7 +1218,7 @@ export class Viewer {
       }
     } finally {
       // Back to what the viewport showed, including a newer evaluation that reached it meanwhile.
-      if (saved.evaluation && saved.evaluation !== this.evaluation)
+      if (saved.evaluation && saved.evaluation !== this.inputEvaluation)
         this.setEvaluation(saved.evaluation)
       this.state = saved.state
       this.camera.near = saved.near
@@ -1296,7 +1302,8 @@ export class Viewer {
   }
 
   private readonly onContextRestored = (): void => {
-    const evaluation = this.evaluation
+    const evaluation = this.inputEvaluation
+    this.inputEvaluation = null
     this.evaluation = null
     this.environment = null
     // GPU buffers did not survive the loss: nothing cached may be reused.
