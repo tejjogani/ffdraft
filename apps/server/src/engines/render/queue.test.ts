@@ -34,11 +34,19 @@ const geometry = (parts: RenderSubject['parts']) =>
   }) as unknown as GeometryService
 
 /** A Blender that is "available" and is in fact Node, which refuses Blender's arguments. */
+const probedStatus = () => ({
+  available: true,
+  version: '0',
+  device: null,
+  path: null,
+  reason: null,
+})
 const notBlender = {
   ready: Promise.resolve(),
   probed: Promise.resolve(),
   available: true,
-  status: () => ({ available: true, version: '0', device: null, path: null, reason: null }),
+  status: probedStatus,
+  prepareRender: async () => ({ engine: probedStatus() }),
   runtime: () => ({ blenderPath: process.execPath }),
   noteDevice: () => {},
 } as unknown as BlenderSetup
@@ -72,6 +80,7 @@ it('renders new studio lighting instead of reusing an image cached by the earlie
     'blender',
     take.autoTune,
     2,
+    'jewelry-lighting-v2',
     '5.3.0',
   ])
   const priorKey = 'sha256:' + createHash('sha256').update(old).digest('hex')

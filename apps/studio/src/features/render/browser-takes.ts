@@ -39,7 +39,14 @@ async function drawTake(job: RenderJob): Promise<void> {
   }
   // three.js loads only when a take is drawn, so the shell stays light.
   const { renderStill } = await import('./shot-renderer')
-  const render = renderEvaluation(evaluation, piece.design, job.scene.includeUnassignedRhino)
+  const source = renderEvaluation(evaluation, piece.design, job.scene.includeUnassignedRhino)
+  const render = renderEvaluation(source, piece.design, false, job.scene.pose)
+  if (job.scene.pose === 'circular-band' && render === source) {
+    await fail(
+      'Circular band requires a straight row of separate parts. Choose As imported for this view.',
+    )
+    return
+  }
   if (!render.parts.length && !render.stones.length) {
     await fail('Nothing to render. Review the design or preview its unassigned Rhino bodies.')
     return

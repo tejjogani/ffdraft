@@ -71,6 +71,10 @@ const invalidate = (names: QueryName[]) => {
 function refresh(event: ServerEvent): void {
   switch (event.type) {
     case 'design.changed': {
+      // Saved shots derive their implicit imported preview settings from the current design.
+      void queryClient.invalidateQueries({
+        queryKey: rpcKey('scenes.list', { pieceId: event.pieceId }),
+      })
       if (livePieces.has(event.pieceId)) {
         invalidate(['design.history', 'pieces.list', 'renders.list'])
         return

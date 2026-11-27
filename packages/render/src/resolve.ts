@@ -17,6 +17,7 @@ import {
   type ResolvedMaterial,
   type SurfaceMaterial,
 } from './materials'
+import { importedShotMaterial } from './materials/imported'
 import { resolveOutput } from './quality'
 import { resolveRig } from './rig'
 import { boundsCenter, boundsRadius, type SceneSubject, subjectOf } from './subject'
@@ -40,8 +41,22 @@ function resolveMaterials(scene: RenderScene, subject: SceneSubject) {
   const override = (nodeId: string) => ({ ...scene.overrides['*'], ...scene.overrides[nodeId] })
   for (const part of subject.parts) {
     if (scene.includeUnassignedRhino && part.importRole === 'unassigned') {
-      materials[IMPORT_CLAY] = importClay
-      assignments[part.id] = IMPORT_CLAY
+      const preview =
+        scene.importedBodyLook === 'source'
+          ? importedShotMaterial(
+              part.sourceAppearance,
+              scene.overrides[part.nodeId],
+              scene.overrides['*'],
+            )
+          : undefined
+      if (preview) {
+        const key = `source:${JSON.stringify(preview)}`
+        materials[key] ??= preview
+        assignments[part.id] = key
+      } else {
+        materials[IMPORT_CLAY] = importClay
+        assignments[part.id] = IMPORT_CLAY
+      }
       continue
     }
     const o = override(part.nodeId)

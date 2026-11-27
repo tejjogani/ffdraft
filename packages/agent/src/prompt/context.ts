@@ -53,6 +53,8 @@ export interface TurnContext {
   date: string
   piece: ContextPiece | null
   selection: ContextSelection[]
+  /** The saved Render view selected when this message was sent. */
+  shot?: { id: string; title: string } | null
   board: { id: string; title: string } | null
   attachments: { assetId: string; name: string; mime: string }[]
   references: { id: string; title: string; viewOnly: boolean }[]
@@ -152,6 +154,7 @@ export function renderContext(c: TurnContext): string {
         : 'nothing',
     ),
   )
+  if (c.shot) out.push(line('Open render shot', `${q(c.shot.title)} (id ${c.shot.id})`))
   if (c.board) out.push(line('Board', `${q(c.board.title)} (id ${c.board.id})`))
   if (c.attachments.length)
     out.push(

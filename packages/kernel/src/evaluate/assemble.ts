@@ -5,7 +5,14 @@
  * production  per alloy: bodies + additions fused, seats and engravings cut, late additions
  *             (beads) fused back, then split into connected, watertight shells.
  */
-import { type Design, importRoleOf, isImportReference, METALS, type MetalId } from '@pave/schema'
+import {
+  type Design,
+  importRoleOf,
+  isImportReference,
+  METALS,
+  type MetalId,
+  sourceRenderAppearance,
+} from '@pave/schema'
 import type { Manifold } from 'manifold-3d'
 import {
   type Addition,
@@ -375,6 +382,11 @@ export function assembleDraft(
                 reference ? 0 : fusedVolume(solids, quality),
               ),
               ...(role && { importRole: role }),
+              ...(role === 'unassigned' &&
+                result.node.kind === 'meshBody' &&
+                result.node.source.type === 'asset' && {
+                  sourceAppearance: sourceRenderAppearance(result.node.source.rhinoContext),
+                }),
             },
             fused: null,
             sources: group,
@@ -1060,6 +1072,10 @@ export function assembleReferences(active: readonly NodeResult[], quality: Quali
             0,
           ),
           importRole: role,
+          ...(role === 'unassigned' &&
+            node.source.type === 'asset' && {
+              sourceAppearance: sourceRenderAppearance(node.source.rhinoContext),
+            }),
         },
         fused: null,
         sources: bodies.map((body) => ({ nodeId: id, body })),

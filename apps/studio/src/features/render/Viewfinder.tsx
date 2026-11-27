@@ -13,15 +13,17 @@ import type { Evaluation } from '@pave/kernel'
 import {
   customCameraPatch,
   type Framing,
+  importedStationDetail,
   poseOf,
   type ResolvedCamera,
   type ResolvedScene,
   sceneHash,
+  subjectOf,
   type ViewPose,
 } from '@pave/render'
 import type { RenderScene } from '@pave/schema'
 import { Chip, cn, IconButton } from '@pave/ui'
-import { Grid3x3, Lock, LockOpen, Pause, Play, RotateCcw } from 'lucide-react'
+import { Grid3x3, Lock, LockOpen, Maximize2, Minimize2, Pause, Play, RotateCcw } from 'lucide-react'
 import {
   type Ref,
   useEffect,
@@ -98,12 +100,24 @@ export function Viewfinder({
   className?: string
   /** A finished gesture, as a scene patch. */
   onCommit: (patch: Record<string, unknown>) => void
-  onLock: (locked: boolean) => void
+  onLock: (locked: boolean, camera?: Record<string, unknown>) => void
   onReset: () => void
   /** The fingerprint of the scene now drawn (what a take of this view renders). */
   onHash?: (hash: string | null) => void
 }) {
   const host = useRef<HTMLDivElement>(null)
+  const previewDialog = useRef<HTMLDialogElement>(null)
+  const [expanded, setExpanded] = useState(false)
+  const expandButton = useRef<HTMLButtonElement | null>(null)
+  const resizePreview = (expand: boolean) => {
+    const dialog = previewDialog.current
+    if (!dialog) return
+    dialog.close()
+    if (expand) dialog.showModal()
+    else dialog.show()
+    setExpanded(expand)
+    expandButton.current?.focus({ preventScroll: true })
+  }
   const canvas = useRef<HTMLCanvasElement>(null)
   const renderer = useRef<ShotRenderer | null>(null)
   /** The same renderer as state, for the quality indicator. */
@@ -179,7 +193,20 @@ export function Viewfinder({
     // A new still quality (the setting changed, or the machine proved slow) draws again.
   }, [evaluation, scene, fit.width, fit.height, quality?.stillDpr, quality?.stillEffects])
 
-  const points = useMemo(() => (evaluation ? framingPoints(evaluation) : []), [evaluation])
+  const detail = useMemo(
+    () =>
+      evaluation &&
+      scene.includeUnassignedRhino &&
+      !scene.camera.locked &&
+      (scene.camera.preset === 'hero' || scene.camera.preset === 'macro')
+        ? importedStationDetail(scene.camera, subjectOf(evaluation))
+        : null,
+    [evaluation, scene.camera, scene.includeUnassignedRhino],
+  )
+  const points = useMemo(
+    () => detail?.points ?? (evaluation ? framingPoints(evaluation) : []),
+    [detail, evaluation],
+  )
   const radius = resolved?.subject.radius ?? 10
   const current = pose ?? (resolved ? poseOf(resolved.camera, radius) : null)
   const framing: Framing | null = current ? framingOf(current, aspect, points) : null
@@ -379,130 +406,167 @@ export function Viewfinder({
 
   return (
     <div className={className}>
-      <div
-        ref={host}
-        className="relative flex size-full flex-col items-center justify-center gap-2"
+      <dialog
+        ref={previewDialog}
+        open
+        role={expanded ? 'dialog' : 'presentation'}
+        aria-label={expanded ? 'Expanded render preview' : undefined}
+        onCancel={(event) => {
+          event.preventDefault()
+          resizePreview(false)
+        }}
+        className={cn(
+          'absolute inset-0 m-0 size-full max-h-none max-w-none border-0 bg-transparent p-0 text-inherit',
+          expanded && 'fixed! inset-0! z-50 h-dvh! w-screen! bg-bg! p-3!',
+        )}
       >
         <div
-          className="relative"
-          style={{ width: fit.width, height: fit.height }}
-          // biome-ignore lint/a11y/noNoninteractiveTabindex: the viewfinder takes keys to frame the shot
-          tabIndex={0}
-          data-scene-hash={hash ?? undefined}
-          role="application"
-          aria-label={`${label}. Viewfinder: drag to orbit, shift-drag to pan, alt-drag to roll, scroll to come closer; arrow keys orbit, alt+arrows pan, plus and minus zoom, brackets roll.`}
-          onKeyDown={onKeyDown}
+          ref={host}
+          className="relative flex size-full flex-col items-center justify-center gap-2"
         >
-          <canvas
-            ref={canvas}
-            role="img"
-            aria-label={label}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
-            onContextMenu={(e) => e.preventDefault()}
-            style={{ width: fit.width, height: fit.height, touchAction: 'none' }}
-            className={cn(
-              'block rounded-sm shadow-[0_0_0_1px_var(--line)]',
-              locked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing',
-              (failed || !evaluation) && 'invisible',
+          <div
+            className="relative"
+            style={{ width: fit.width, height: fit.height }}
+            // biome-ignore lint/a11y/noNoninteractiveTabindex: the viewfinder takes keys to frame the shot
+            tabIndex={0}
+            data-scene-hash={hash ?? undefined}
+            role="application"
+            aria-label={`${label}. Viewfinder: drag to orbit, shift-drag to pan, alt-drag to roll, scroll to come closer; arrow keys orbit, alt+arrows pan, plus and minus zoom, brackets roll.`}
+            onKeyDown={onKeyDown}
+          >
+            <canvas
+              ref={canvas}
+              role="img"
+              aria-label={label}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+              onContextMenu={(e) => e.preventDefault()}
+              style={{ width: fit.width, height: fit.height, touchAction: 'none' }}
+              className={cn(
+                'block rounded-sm shadow-[0_0_0_1px_var(--line)]',
+                locked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing',
+                (failed || !evaluation) && 'invisible',
+              )}
+            />
+            {!failed && evaluation && (
+              <FrameOverlay framing={framing} grid={grid} width={fit.width} height={fit.height} />
             )}
-          />
-          {!failed && evaluation && (
-            <FrameOverlay framing={framing} grid={grid} width={fit.width} height={fit.height} />
-          )}
-          {!failed && evaluation && (
-            <div className="pointer-events-none absolute inset-x-2 top-2 flex items-start justify-between gap-2">
-              <div className="flex flex-wrap gap-1">
-                {framing && (
-                  <Chip tone={tone} className="bg-bg/85 tabular" aria-live="polite">
-                    {framing.label}
+            {!failed && evaluation && (
+              <div className="pointer-events-none absolute inset-x-2 top-2 flex items-start justify-between gap-2">
+                <div className="flex flex-wrap gap-1">
+                  {framing && (
+                    <Chip tone={tone} className="bg-bg/85 tabular" aria-live="polite">
+                      {framing.label}
+                    </Chip>
+                  )}
+                  <Chip outline className="bg-bg/85 font-mono">
+                    {scene.output.width}×{scene.output.height}
                   </Chip>
-                )}
-                <Chip outline className="bg-bg/85 font-mono">
-                  {scene.output.width}×{scene.output.height}
-                </Chip>
-                {custom && <Chip className="bg-bg/85">Custom view</Chip>}
-                {/* Top left: the bottom-left corner carries the Render tab's caption. */}
-                <QualityIndicator source={live} className="pointer-events-auto" />
+                  {custom && <Chip className="bg-bg/85">Custom view</Chip>}
+                  {/* Top left: the bottom-left corner carries the Render tab's caption. */}
+                  <QualityIndicator source={live} className="pointer-events-auto" />
+                </div>
+                <div className="pointer-events-auto flex items-center gap-0.5 rounded-md bg-bg/85 p-0.5 shadow-sm">
+                  <IconButton
+                    icon={expanded ? Minimize2 : Maximize2}
+                    label={expanded ? 'Reduce preview' : 'Expand preview'}
+                    size="sm"
+                    onClick={(event) => {
+                      expandButton.current = event.currentTarget
+                      resizePreview(!expanded)
+                    }}
+                  />
+                  <IconButton
+                    icon={Grid3x3}
+                    size="sm"
+                    label="Rule-of-thirds grid"
+                    active={grid}
+                    onClick={() => {
+                      const next = !grid
+                      setGrid(next)
+                      try {
+                        localStorage.setItem(GRID_KEY, next ? '1' : '0')
+                      } catch {
+                        // A private window: the grid simply is not remembered.
+                      }
+                    }}
+                  />
+                  <IconButton
+                    icon={locked ? Lock : LockOpen}
+                    size="sm"
+                    label={locked ? 'Unlock camera' : 'Lock camera'}
+                    active={locked}
+                    onClick={() => {
+                      if (!locked && detail && resolved && current) {
+                        takePending()
+                        const { preset, basePreset } = scene.camera
+                        onLock(
+                          true,
+                          customCameraPatch(
+                            current,
+                            resolved.subject,
+                            preset === 'custom' ? basePreset : preset,
+                          ).camera,
+                        )
+                        return
+                      }
+                      commitPending()
+                      onLock(!locked)
+                    }}
+                  />
+                  <IconButton
+                    icon={RotateCcw}
+                    size="sm"
+                    label="Reset to the preset"
+                    disabled={!custom || locked}
+                    onClick={() => {
+                      takePending()
+                      onReset()
+                    }}
+                  />
+                </div>
               </div>
-              <div className="pointer-events-auto flex items-center gap-0.5 rounded-md bg-bg/85 p-0.5 shadow-sm">
-                <IconButton
-                  icon={Grid3x3}
-                  size="sm"
-                  label="Rule-of-thirds grid"
-                  active={grid}
-                  onClick={() => {
-                    const next = !grid
-                    setGrid(next)
-                    try {
-                      localStorage.setItem(GRID_KEY, next ? '1' : '0')
-                    } catch {
-                      // A private window: the grid simply is not remembered.
-                    }
-                  }}
-                />
-                <IconButton
-                  icon={locked ? Lock : LockOpen}
-                  size="sm"
-                  label={locked ? 'Unlock camera' : 'Lock camera'}
-                  active={locked}
-                  onClick={() => {
-                    commitPending()
-                    onLock(!locked)
-                  }}
-                />
-                <IconButton
-                  icon={RotateCcw}
-                  size="sm"
-                  label="Reset to the preset"
-                  disabled={!custom || locked}
-                  onClick={() => {
-                    takePending()
-                    onReset()
-                  }}
-                />
-              </div>
-            </div>
+            )}
+            {hint && (
+              <p
+                role="status"
+                className="glass pointer-events-none absolute bottom-10 left-1/2 -translate-x-1/2 rounded-md px-2 py-1 text-xs whitespace-nowrap"
+              >
+                {hint}
+              </p>
+            )}
+            {hash && !failed && evaluation && (
+              <span
+                className="pointer-events-none absolute right-2 bottom-2 rounded-xs bg-bg/85 px-1.5 py-0.5 font-mono text-3xs text-fg-muted"
+                title="Fingerprint of the exact scene a take of this view renders. A take with the same fingerprint is this picture."
+              >
+                scene {hash.slice(0, 8)}
+              </span>
+            )}
+          </div>
+          {motion && !failed && evaluation && (
+            <MotionScrubber
+              width={Math.min(box.width, Math.max(220, fit.width))}
+              frame={frame}
+              frameCount={motion.frameCount}
+              fps={motion.fps}
+              playing={playing}
+              onFrame={(f) => {
+                setPlaying(false)
+                setFrame(f)
+              }}
+              onPlay={setPlaying}
+            />
           )}
-          {hint && (
-            <p
-              role="status"
-              className="glass pointer-events-none absolute bottom-10 left-1/2 -translate-x-1/2 rounded-md px-2 py-1 text-xs whitespace-nowrap"
-            >
-              {hint}
+          {failed && (
+            <p className="absolute max-w-sm text-center text-sm text-fg-muted">
+              The live preview isn’t available in this browser ({failed}). Takes still render.
             </p>
           )}
-          {hash && !failed && evaluation && (
-            <span
-              className="pointer-events-none absolute right-2 bottom-2 rounded-xs bg-bg/85 px-1.5 py-0.5 font-mono text-3xs text-fg-muted"
-              title="Fingerprint of the exact scene a take of this view renders. A take with the same fingerprint is this picture."
-            >
-              scene {hash.slice(0, 8)}
-            </span>
-          )}
         </div>
-        {motion && !failed && evaluation && (
-          <MotionScrubber
-            width={Math.min(box.width, Math.max(220, fit.width))}
-            frame={frame}
-            frameCount={motion.frameCount}
-            fps={motion.fps}
-            playing={playing}
-            onFrame={(f) => {
-              setPlaying(false)
-              setFrame(f)
-            }}
-            onPlay={setPlaying}
-          />
-        )}
-        {failed && (
-          <p className="absolute max-w-sm text-center text-sm text-fg-muted">
-            The live preview isn’t available in this browser ({failed}). Takes still render.
-          </p>
-        )}
-      </div>
+      </dialog>
     </div>
   )
 }

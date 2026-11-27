@@ -142,7 +142,8 @@ export class Assistant implements AssistantService {
           title: titleFrom(input.text),
           pieceId: input.context.pieceId ?? null,
           boardId: input.context.boardId ?? null,
-          sceneId: input.context.sceneId ?? null,
+          // A project conversation follows the open view on each message.
+          sceneId: input.context.pieceId ? null : (input.context.sceneId ?? null),
           promptHash: guideFor(
             focusFor({
               piece: !!input.context.pieceId,

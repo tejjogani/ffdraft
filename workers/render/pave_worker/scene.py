@@ -91,9 +91,14 @@ def import_piece(glb: Path, scene: Scene) -> tuple[bpy.types.Object, list[bpy.ty
         obj.parent = piece
         obj.matrix_parent_inverse = Matrix.Identity(4)
         obj.matrix_basis = Matrix.Translation(-piece.location) @ world
-        obj.data.materials.clear()
-        obj.data.materials.append(materials[key])
-        if obj.get("role") == "gem":
+        # Instances can share geometry and still use different shot materials.
+        if not obj.data.materials:
+            obj.data.materials.append(materials[key])
+        for slot in obj.material_slots:
+            slot.link = "OBJECT"
+            slot.material = materials[key]
+        # An imported gemstone keeps its original CAD role and triangle mesh.
+        if obj.get("role") == "gem" or scene["materials"][key]["kind"] == "gem":
             gems.append(obj)
     for obj in [o for o in bpy.context.scene.objects if o.type == "EMPTY" and not o.children and o is not piece]:
         bpy.data.objects.remove(obj)
@@ -245,6 +250,11 @@ def build_ground(g: Ground, center: Vec3) -> list[bpy.types.Object]:
         reflected_floor.visible_camera = False
         reflected_floor.data.materials.append(material)
         return [camera_floor, reflected_floor]
+    if kind == "white-gloss":
+        # The pale floor receives the softboxes so it shows both contact shadow and reflection.
+        obj = _plane("white-gloss", g["z"], g["size"], (center[0], center[1]))
+        obj.data.materials.append(_principled("white-gloss", g["color"], g["roughness"], g["ior"]))
+        return [obj]
     # Sweep: extrude the [depth, height] profile across its width, facing the camera.
     hw = g["width"] * MM / 2
     profile = g["profile"]

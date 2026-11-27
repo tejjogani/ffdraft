@@ -53,8 +53,10 @@ import type {
   RenderEngineStatus,
   RenderInstallStatus,
   RenderJob,
+  RenderScene,
   Run,
   SearchResult,
+  SourceRenderAppearance,
   Thread,
   View,
 } from '@pave/schema'
@@ -133,6 +135,7 @@ type Box = { min: Vec3; max: Vec3 }
  * without the server depending on the render package.
  */
 export interface RenderSubject {
+  circularBandDiameterMm?: number
   bounds: Box
   /** Support points of the geometry, so presets frame the real silhouette. */
   silhouette?: Vec3[]
@@ -144,6 +147,7 @@ export interface RenderSubject {
     plating: PlatingId
     bounds: Box
     importRole?: 'unassigned'
+    sourceAppearance?: SourceRenderAppearance
   }[]
   stones: {
     id: string
@@ -169,6 +173,7 @@ export interface GeometryCall {
 export interface RenderGeometryCall extends GeometryCall {
   /** A shot's opt-in to show unassigned Rhino geometry. */
   includeUnassignedRhino?: boolean
+  pose?: RenderScene['pose']
 }
 
 export interface GeometryService extends Service {
@@ -348,6 +353,8 @@ export interface RenderQueue extends Service {
 /** Finds and configures Blender on this machine. */
 export interface RenderEngineService extends Service {
   status(sctx: ServiceContext): Promise<RenderEngineStatus>
+  /** Whether discovery can safely retry an already confirmed managed engine on render. */
+  hasKnownManagedBlender?(): boolean
   /** Probes `blenderPath` (null = discover again) and saves it only if it works. */
   configure(blenderPath: string | null, sctx: ServiceContext): Promise<RenderEngineStatus>
   installStatus?(): RenderInstallStatus

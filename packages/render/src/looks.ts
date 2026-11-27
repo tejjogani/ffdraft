@@ -60,11 +60,11 @@ export type Background =
   | { kind: 'solid'; color: Rgb }
   | { kind: 'gradient'; top: Rgb; bottom: Rgb }
 
-export type GroundKind = 'none' | 'shadow' | 'sweep' | 'reflective'
+export type GroundKind = 'none' | 'shadow' | 'sweep' | 'reflective' | 'white-gloss'
 
 export interface GroundSpec {
   kind: GroundKind
-  /** Linear albedo of a sweep or acrylic surface. */
+  /** Linear albedo of the floor material. */
   color: Rgb
   roughness: number
 }
@@ -110,9 +110,11 @@ export const DEFAULT_GROUNDS: Record<GroundKind, GroundSpec> = {
   sweep: { kind: 'sweep', color: [0.75, 0.75, 0.75], roughness: 0.6 },
   // Black acrylic: research §3, roughness 0.05–0.10, IOR 1.49.
   reflective: { kind: 'reflective', color: [0.004, 0.004, 0.004], roughness: 0.06 },
+  'white-gloss': { kind: 'white-gloss', color: [0.86, 0.86, 0.86], roughness: 0.1 },
 }
 
 export const ACRYLIC_IOR = 1.49
+export const WHITE_GLOSS_IOR = 1.62
 
 const grey = (v: number): Rgb => [v, v, v]
 

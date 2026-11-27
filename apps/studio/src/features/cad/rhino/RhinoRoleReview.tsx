@@ -17,13 +17,13 @@ import {
   rhinoRoleCandidates,
   rhinoRoleFrameIssue,
   rhinoRoleLinks,
+  sourceMaterialLabel,
 } from '@pave/schema'
 import { Button, Chip, Dialog, Input, Select } from '@pave/ui'
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { assetUrl } from '../../../lib/assets'
 import { plural } from '../../../lib/format'
-import { sourceMaterialLabel } from '../../../lib/source-material'
 import type { ImportedMesh } from '../mesh-edit/model'
 import { RecoverRhinoLabels } from '../model-import/RecoverRhinoLabels'
 import { isolatedStoneIds, measureRhinoRoleBody } from '../model-import/role-measurements'

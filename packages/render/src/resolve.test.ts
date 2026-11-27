@@ -68,6 +68,42 @@ describe('resolveScene', () => {
     expect(JSON.parse(JSON.stringify(a))).toEqual(a)
   })
 
+  it('restyles original imported meshes for one shot while keeping clay and unrelated parts intact', () => {
+    const subject = subjectOf(ring)
+    const template = subject.parts[0]!
+    subject.parts = ['setting', 'gem', 'unnamed', 'other'].map((id) => ({
+      ...template,
+      id,
+      nodeId: id,
+      importRole: 'unassigned',
+      sourceAppearance:
+        id === 'setting'
+          ? { kind: 'metal', metal: 'pt950' }
+          : id === 'gem'
+            ? { kind: 'gem', stone: 'emerald' }
+            : undefined,
+    }))
+    const input = scene({
+      includeUnassignedRhino: true,
+      importedBodyLook: 'source',
+      overrides: {
+        '*': { material: 'au18k-rose' },
+        gem: { stone: 'ruby' },
+        unnamed: { stone: 'diamond' },
+      },
+    })
+    const shot = resolveScene(input, subject)
+    expect(shot.materials[shot.assignments.setting!]).toEqual(
+      metalMaterial('au18k-rose', 'polished', 'none'),
+    )
+    expect(shot.materials[shot.assignments.gem!]).toEqual(gemMaterial('ruby'))
+    expect(shot.materials[shot.assignments.unnamed!]).toEqual(gemMaterial('diamond'))
+    expect(shot.assignments.other).toBe('surface:imported-clay')
+    expect(resolveScene({ ...input, importedBodyLook: 'clay' }, subject).assignments.gem).toBe(
+      'surface:imported-clay',
+    )
+  })
+
   it('resolves every look', () => {
     for (const look of LOOK_IDS) {
       const r = resolveScene(scene({ look }), ring)
@@ -197,6 +233,28 @@ describe('resolveScene', () => {
     expect(acrylic.camera.distance).toBeCloseTo(noFloor.camera.distance)
     const front = resolveScene(scene({ look: 'black-acrylic', camera: { preset: 'front' } }), ring)
     expect(front.camera.elevation).toBeGreaterThanOrEqual(16)
+  })
+
+  it('places a white glossy floor at contact height and preserves the saved camera', () => {
+    const camera = {
+      preset: 'custom' as const,
+      position: [0, -80, 40] as Vec3,
+      target: [0, 0, 20] as Vec3,
+    }
+    const base = resolveScene(scene({ look: 'catalog-white', camera }), ring)
+    const white = resolveScene(
+      scene({ look: 'catalog-white', camera, ground: 'white-gloss' }),
+      ring,
+    )
+    expect(white.ground).toMatchObject({
+      kind: 'white-gloss',
+      z: ring.report.bounds.min[2],
+      color: [0.86, 0.86, 0.86],
+      roughness: 0.1,
+      ior: 1.62,
+    })
+    expect(white.camera).toEqual(base.camera)
+    expect(base.ground.kind).toBe('shadow')
   })
 
   it('preserves an explicitly composed black acrylic camera', () => {

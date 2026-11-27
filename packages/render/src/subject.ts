@@ -14,6 +14,7 @@ export interface SceneSubject {
    */
   silhouette?: Vec3[]
   parts: (Pick<Part, 'id' | 'nodeId' | 'material' | 'finish' | 'plating' | 'bounds'> & {
+    sourceAppearance?: Part['sourceAppearance']
     importRole?: 'unassigned'
   })[]
   stones: Pick<StoneInstance, 'id' | 'nodeId' | 'stone' | 'role' | 'matrix'>[]
@@ -50,15 +51,17 @@ export function subjectOf(input: Evaluation | SceneSubject): SceneSubject {
   return {
     bounds: input.report.bounds,
     silhouette: supportPoints(input),
-    parts: input.parts.map(({ id, nodeId, material, finish, plating, bounds, importRole }) => ({
-      id,
-      nodeId,
-      material,
-      finish,
-      plating,
-      bounds,
-      ...(importRole === 'unassigned' && { importRole }),
-    })),
+    parts: input.parts.map(
+      ({ id, nodeId, material, finish, plating, bounds, importRole, sourceAppearance }) => ({
+        id,
+        nodeId,
+        material,
+        finish,
+        plating,
+        bounds,
+        ...(importRole === 'unassigned' && { importRole, sourceAppearance }),
+      }),
+    ),
     stones: input.stones.map(({ id, nodeId, stone, role, matrix }) => ({
       id,
       nodeId,

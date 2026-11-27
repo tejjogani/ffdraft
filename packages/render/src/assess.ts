@@ -144,7 +144,11 @@ function framingIssues(
   return issues
 }
 
-export function assessRender(m: RenderMetrics, scene: RenderScene): RenderIssue[] {
+export function assessRender(
+  m: RenderMetrics,
+  scene: RenderScene,
+  intentionalCrop = false,
+): RenderIssue[] {
   const issues: RenderIssue[] = []
   const issue = (i: RenderIssue) => issues.push(i)
   const focal = (k: number): SceneAdjustment => ({
@@ -170,8 +174,9 @@ export function assessRender(m: RenderMetrics, scene: RenderScene): RenderIssue[
     return issues
   }
 
-  // A macro crops the piece on purpose; framing checks would only fight it.
-  if (scene.camera.preset !== 'macro') issues.push(...framingIssues(box, scene, focal))
+  // The whole-piece mask extends outside an intentional detail crop.
+  if (scene.camera.preset !== 'macro' && !intentionalCrop)
+    issues.push(...framingIssues(box, scene, focal))
 
   if (m.clippedPct > CHECKS.maxClippedPct) {
     issue({

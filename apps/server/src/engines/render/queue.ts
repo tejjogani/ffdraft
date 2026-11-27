@@ -79,8 +79,9 @@ export function cacheKeyOf(job: RenderJob, blenderVersion: string | null): strin
     job.autoTune,
     RESOLVED_SCENE_VERSION,
     // Invalidate prior renders when the Cycles lighting or material recipes change.
-    'jewelry-lighting-v2',
+    'jewelry-lighting-v3',
     blenderVersion,
+    ...(includeUnassignedRhino ? ['imported-camera-v1'] : []),
   ])
   return `sha256:${createHash('sha256').update(key).digest('hex')}`
 }
@@ -189,8 +190,7 @@ export function createRenderQueue(o: RenderQueueOptions) {
         off = () => signal.removeEventListener('abort', abort)
       })
       const { engine, setupCanceled } = await Promise.race([
-        entry.engineReady ??
-          o.blender.probed.then(() => ({ engine: o.blender.status(), setupCanceled: false })),
+        entry.engineReady ?? o.blender.prepareRender(false),
         interrupted,
       ]).finally(() => off?.())
       signal.throwIfAborted()
@@ -228,7 +228,13 @@ export function createRenderQueue(o: RenderQueueOptions) {
         pieceId: piece.id,
         signal,
         includeUnassignedRhino: job.requestedScene.includeUnassignedRhino,
+        pose: job.requestedScene.pose,
       })
+      if (job.requestedScene.pose === 'circular-band' && !subject.circularBandDiameterMm)
+        throw new AppError(
+          'conflict',
+          'Circular band requires a straight row of separate parts. Choose As imported for this view.',
+        )
       if (subject.parts.length === 0 && subject.stones.length === 0)
         throw new AppError('conflict', 'Nothing to render: the piece has no metal or stones.')
       let reported = 0
@@ -295,9 +301,12 @@ export function createRenderQueue(o: RenderQueueOptions) {
   const accept: RenderQueue['submit'] = async (job, piece, handle, sctx, setupBlender) => {
     if (closing) throw new AppError('internal', 'The server is shutting down; try again shortly.')
     const queue = waiting.get(sctx.orgId) ?? []
-    // Attach every take to this installation at submission, including takes behind a busy slot.
-    // If setup fails, the whole batch sees that failure and a later explicit retry can start it again.
-    const engineReady = setupBlender ? o.blender.prepareRender() : undefined
+    // Attach the whole batch to pending engine setup, including takes behind a busy slot.
+    // A later render can retry a failed setup.
+    const engineReady =
+      setupBlender || (!o.blender.available && o.blender.hasKnownManagedBlender())
+        ? o.blender.prepareRender(setupBlender ?? false)
+        : undefined
     queue.push({ job, piece, handle, sctx, engineReady, controller: new AbortController() })
     waiting.set(sctx.orgId, queue)
     pump()

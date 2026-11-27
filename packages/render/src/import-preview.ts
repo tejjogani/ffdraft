@@ -1,5 +1,17 @@
+import { poseCircularBand } from '@pave/kernel/circular-band'
 import type { Bounds, Evaluation, Part } from '@pave/kernel/types'
-import { type Design, importRoleOf, isRhinoRoleBody } from '@pave/schema'
+import { type Design, importRoleOf, isRhinoRoleBody, type RenderScene } from '@pave/schema'
+
+/** For pieces with only unassigned Rhino bodies, fill the shot's missing preview settings. */
+export function withImportedBodyDefaults(scene: RenderScene, importOnly: boolean): RenderScene {
+  if (!importOnly || scene.includeUnassignedRhino === false) return scene
+  if (scene.includeUnassignedRhino && scene.importedBodyLook) return scene
+  return {
+    ...scene,
+    includeUnassignedRhino: true,
+    importedBodyLook: scene.importedBodyLook ?? 'source',
+  }
+}
 
 /** Eligible meshes are already present and visible in the kernel's modeling reference output. */
 export function unassignedRhinoBody(
@@ -16,7 +28,7 @@ export function unassignedRhinoBody(
 }
 
 /** Shares mesh buffers with production. Only this view's parts and framing bounds change. */
-export function renderEvaluation(
+function includedBodies(
   evaluation: Evaluation,
   design: Design | null,
   includeUnassignedRhino: boolean | undefined,
@@ -42,4 +54,14 @@ export function renderEvaluation(
     parts: [...evaluation.parts, ...parts],
     report: { ...evaluation.report, bounds: { min, max } },
   }
+}
+
+export function renderEvaluation(
+  evaluation: Evaluation,
+  design: Design | null,
+  includeUnassignedRhino?: boolean,
+  pose?: RenderScene['pose'],
+): Evaluation {
+  const visible = includedBodies(evaluation, design, includeUnassignedRhino)
+  return pose === 'circular-band' ? poseCircularBand(visible, design) : visible
 }

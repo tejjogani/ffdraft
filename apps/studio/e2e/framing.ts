@@ -132,13 +132,21 @@ try {
     await page.getByRole('button', { name: 'Views' }).click()
     await page.getByRole('menuitem', { name: 'Render this view' }).click()
   } else await page.getByRole('button', { name: 'Render this view' }).click()
-  await page.waitForURL(/\/render$/)
+  await page.waitForURL((url) => url.pathname.endsWith('/render'))
   await viewfinder().waitFor()
   await settle()
   await settle()
   const fromCad = (await shotsOf(piece.id)).find((s) => s.title === 'CAD view')
   report.cadView = fromCad?.scene.camera
   await shot('02-render-this-view')
+  const preview = page.getByRole('application', { name: /Viewfinder/ })
+  const previousHash = await preview.getAttribute('data-scene-hash')
+  await page.getByRole('button', { name: 'Expand preview' }).click()
+  await page.getByRole('dialog', { name: 'Expanded render preview' }).waitFor()
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: 'Expand preview' }).waitFor()
+  if ((await preview.getAttribute('data-scene-hash')) !== previousHash)
+    throw new Error('Expanding the preview changed the shot')
 
   // ── 2. Frame it by hand ──────────────────────────────────────────────────────────────────
   await dragBy(-60, 25) // orbit
@@ -186,7 +194,7 @@ try {
   await settle()
 
   // Saved as a house shot as framed, before the comparison below changes its backdrop.
-  await page.getByRole('button', { name: 'Add shot' }).click()
+  await page.getByRole('button', { name: 'Add view' }).click()
   await page.getByRole('menuitem', { name: /as a house shot/ }).click()
   await page.waitForTimeout(1200)
 
@@ -269,7 +277,7 @@ try {
   await page.goto(`${BASE}/pieces/${halo.id}/render`)
   await viewfinder().waitFor()
   await settle()
-  await page.getByRole('button', { name: 'Add shot' }).click()
+  await page.getByRole('button', { name: 'Add view' }).click()
   await page.waitForTimeout(400)
   await shot('07-house-shots-menu')
   await page.getByRole('menuitem', { name: 'CAD view' }).click()

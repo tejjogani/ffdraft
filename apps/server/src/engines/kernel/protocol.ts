@@ -5,7 +5,7 @@
 import type { ExportFormat, ExportResult } from '@pave/kernel/types'
 import type { Camera as MatchCamera, PhotoFitOutcome, ViewSeed } from '@pave/match'
 import type { Manifest, PieceInfo, ProductionOptions, RenderImage } from '@pave/production'
-import type { Design, EvaluationSummary, PieceSpec, View } from '@pave/schema'
+import type { Design, EvaluationSummary, PieceSpec, RenderScene, View } from '@pave/schema'
 import type { RenderSubject } from '../../services'
 
 /** What the package builder needs besides the design; the worker evaluates it itself. */
@@ -20,9 +20,19 @@ export interface PackageBuild {
 export type KernelTask =
   | { kind: 'evaluate'; design: Design; detail: 'draft' | 'production' }
   | { kind: 'export'; design: Design; format: ExportFormat; stones: boolean }
-  | { kind: 'renderInput'; design: Design; includeUnassignedRhino?: boolean }
+  | {
+      kind: 'renderInput'
+      design: Design
+      includeUnassignedRhino?: boolean
+      pose?: RenderScene['pose']
+    }
   /** The subject summary alone (bounds, support points), for framing without a render. */
-  | { kind: 'subject'; design: Design; includeUnassignedRhino?: boolean }
+  | {
+      kind: 'subject'
+      design: Design
+      includeUnassignedRhino?: boolean
+      pose?: RenderScene['pose']
+    }
   | { kind: 'package'; design: Design; build: PackageBuild }
   /** Shaded clay pictures (RGBA, `size`×`size`) from the software rasteriser. */
   | {
@@ -45,6 +55,7 @@ export interface PictureShot {
   width: number
   height: number
   includeUnassignedRhino?: boolean
+  pose?: RenderScene['pose']
 }
 
 export interface PhotoFitTask {

@@ -49,7 +49,6 @@ const vertexShader = /* glsl */ `
 varying vec3 vWorldPosition;
 varying vec3 vLocalPosition;
 flat varying mat3 vToLocal;
-flat varying vec3 vGemCenter;
 
 void main() {
   mat4 toWorld = modelMatrix;
@@ -60,7 +59,6 @@ void main() {
   vWorldPosition = world.xyz;
   vLocalPosition = position;
   vToLocal = inverse( mat3( toWorld ) );
-  vGemCenter = toWorld[ 3 ].xyz;
   gl_Position = projectionMatrix * viewMatrix * world;
 }
 `
@@ -89,7 +87,6 @@ uniform float sparkleCos[ ${MAX_SPARKLES} ];
 varying vec3 vWorldPosition;
 varying vec3 vLocalPosition;
 flat varying mat3 vToLocal;
-flat varying vec3 vGemCenter;
 
 float fresnelDielectric( float cosI, float eta ) {
   // eta = n_incident / n_transmitted
@@ -105,7 +102,7 @@ vec3 environment( vec3 dir ) {
   vec3 c = textureLod( envMap, envRotation * dir, 0.0 ).rgb * envIntensity;
   for ( int i = 0; i < ${MAX_SPARKLES}; i ++ ) {
     if ( i >= sparkleCount ) break;
-    vec3 toLight = normalize( sparklePosition[ i ] - vGemCenter );
+    vec3 toLight = normalize( sparklePosition[ i ] - vWorldPosition );
     c += sparkleRadiance[ i ] * smoothstep( sparkleCos[ i ] - 1e-4, sparkleCos[ i ], dot( dir, toLight ) );
   }
   return c;
@@ -165,17 +162,24 @@ void main() {
 }
 `
 
-/** One BVH per gem geometry; pavé InstancedMeshes reuse it. */
-const bvhCache = new WeakMap<BufferGeometry, MeshBVHUniformStruct>()
+interface GemBvh {
+  uniform: MeshBVHUniformStruct
+  references: number
+}
 
-function bvhUniform(geometry: BufferGeometry): MeshBVHUniformStruct {
-  let struct = bvhCache.get(geometry)
-  if (!struct) {
-    struct = new MeshBVHUniformStruct()
-    struct.updateFrom(new MeshBVH(geometry, { targetLeafSize: 4 }))
-    bvhCache.set(geometry, struct)
+/** Materials on the same gem geometry share the four BVH data textures. */
+const bvhCache = new WeakMap<BufferGeometry, GemBvh>()
+
+function bvhFor(geometry: BufferGeometry): GemBvh {
+  let bvh = bvhCache.get(geometry)
+  if (!bvh) {
+    const uniform = new MeshBVHUniformStruct()
+    // The index array belongs to the kernel. Pack a private reordered index into the textures.
+    uniform.updateFrom(new MeshBVH(geometry, { targetLeafSize: 4, indirect: true }))
+    bvh = { uniform, references: 0 }
+    bvhCache.set(geometry, bvh)
   }
-  return struct
+  return bvh
 }
 
 export interface SparkleUniforms {
@@ -186,6 +190,7 @@ export interface SparkleUniforms {
 
 export class GemMaterial extends ShaderMaterial {
   constructor(optics: GemOptics, geometry: BufferGeometry, quality: GemQuality = GEM_QUALITY.hero) {
+    const bvh = bvhFor(geometry)
     const sigma = optics.attenuationColor.map(
       (c) => -Math.log(Math.max(c, 1e-6)) / optics.attenuationDistance,
     )
@@ -193,7 +198,7 @@ export class GemMaterial extends ShaderMaterial {
       vertexShader,
       fragmentShader,
       uniforms: {
-        bvh: { value: bvhUniform(geometry) },
+        bvh: { value: bvh.uniform },
         envMap: { value: null },
         envRotation: { value: new Matrix3() },
         envIntensity: { value: 1 },
@@ -210,6 +215,17 @@ export class GemMaterial extends ShaderMaterial {
       defines: quality.dispersion ? { DISPERSION: '' } : {},
     })
     this.name = 'GemMaterial'
+    bvh.references++
+    // The live viewer can replace the mesh's BufferGeometry after material creation. The
+    // material still owns its reference to the textures built for that original geometry.
+    const release = () => {
+      this.removeEventListener('dispose', release)
+      if (--bvh.references === 0) {
+        bvhCache.delete(geometry)
+        bvh.uniform.dispose()
+      }
+    }
+    this.addEventListener('dispose', release)
   }
 
   setQuality(quality: GemQuality): void {
@@ -240,6 +256,8 @@ export function createSurfaceGemMaterial(m: SurfaceMaterial): MeshPhysicalMateri
   return new MeshPhysicalMaterial({
     color: new Color().setRGB(m.color[0], m.color[1], m.color[2], LinearSRGBColorSpace),
     roughness: m.roughness,
+    opacity: m.opacity ?? 1,
+    transparent: (m.opacity ?? 1) < 1,
     metalness: 0,
     ior: m.ior,
     clearcoat: m.coat,

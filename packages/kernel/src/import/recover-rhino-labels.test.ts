@@ -177,3 +177,60 @@ it('recovers supplier fields on an already labeled body only after exact geometr
   const updated = applyOps(design, result.ops).design
   expect((await recoverRhinoLabels(updated, source, async () => part.bytes)).ops).toEqual([])
 })
+
+it('fills missing source colors without replacing the legacy placement identities or existing supplier fields', async () => {
+  const placement = {
+    id: 'legacy-placement',
+    definitionId: 'legacy-definition',
+    material: 'Enamel',
+  }
+  const saved: RhinoContext = {
+    ...context,
+    placements: [placement],
+    stullerMaterial: { metal: 'TEST-14K' },
+  }
+  const materialAppearance = { color: '#305060', opacity: 0.65 }
+  const placed = { color: '#553300', opacity: 1 }
+  const design = designFrom('other', [body('seat', { context: saved })])
+  const source = {
+    objects: [
+      {
+        ...part,
+        rhinoContext: {
+          ...context,
+          materialAppearance,
+          placements: [
+            {
+              ...placement,
+              id: 'read-placement',
+              definitionId: 'read-definition',
+              materialAppearance: placed,
+            },
+          ],
+        },
+      },
+    ],
+    curves: [],
+  }
+  const { ops } = await recoverRhinoLabels(design, source, async () => part.bytes)
+  expect(ops).toEqual([
+    {
+      t: 'update',
+      id: 'seat',
+      patch: {
+        source: {
+          rhinoContext: {
+            ...saved,
+            materialAppearance,
+            placements: [{ ...placement, materialAppearance: placed }],
+          },
+        },
+      },
+    },
+  ])
+  expect((await recoverRhinoLabels(design, source, async () => new Uint8Array([9]))).ops).toEqual(
+    [],
+  )
+  const updated = applyOps(design, ops).design
+  expect((await recoverRhinoLabels(updated, source, async () => part.bytes)).ops).toEqual([])
+})

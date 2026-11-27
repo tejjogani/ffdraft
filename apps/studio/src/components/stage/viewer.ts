@@ -583,7 +583,12 @@ export class Viewer {
     this.planes.setBounds(evaluation.report.bounds)
     const resolved = viewportScene(
       resolveScene(
-        RenderSceneSchema.parse({ look: 'studio-soft', output: { width: 1024, height: 1024 } }),
+        RenderSceneSchema.parse({
+          look: 'studio-soft',
+          includeUnassignedRhino: true,
+          importedBodyLook: 'source',
+          output: { width: 1024, height: 1024 },
+        }),
         evaluation,
       ),
     )
@@ -631,8 +636,9 @@ export class Viewer {
         gems.set(o, new StoneBatch(o, targets))
         originals.set(o, o.material as Material)
       } else if (o instanceof Mesh) {
-        o.userData.reference = referenceIds.has(o.name)
         const part = parts.get(o.name)!
+        o.userData.reference = referenceIds.has(o.name)
+        o.userData.hasSourceAppearance = Boolean(part.sourceAppearance)
         originals.set(o, o.material as Material)
         this.reuseGeometry(o, part.rev, generation)
         metals.set(o, new MetalBatch(o, part))
@@ -700,12 +706,7 @@ export class Viewer {
       if (!(o instanceof Mesh)) return
       if (!kept.has(o.geometry) && !done.has(o.geometry)) o.geometry.dispose()
       const material = b.originals.get(o) ?? (o.material as Material)
-      if (!done.has(material)) {
-        material.dispose()
-        // A gem shader's BVH lives in data textures that `Material.dispose` does not free;
-        // without this every evaluation leaks them (a software GPU runs out mid-scrub).
-        bvhOf(material)?.dispose()
-      }
+      if (!done.has(material)) material.dispose()
       if (o instanceof InstancedMesh) o.dispose()
       done.add(o.geometry).add(material)
     })
@@ -869,7 +870,7 @@ export class Viewer {
           ? m.xray
           : display === 'technical'
             ? m.paper
-            : clay || mesh.userData.reference
+            : clay || (mesh.userData.reference && !mesh.userData.hasSourceAppearance)
               ? m.clayMetal
               : b.originals.get(mesh)!
     for (const gems of b.gems.keys())
@@ -1522,12 +1523,6 @@ function stoneEdges(gems: InstancedMesh): Float32Array[] {
     out.push(placed)
   }
   return out
-}
-
-function bvhOf(material: Material): { dispose(): void } | undefined {
-  const uniform = (material as { uniforms?: { bvh?: { value?: { dispose?: () => void } } } })
-    .uniforms?.bvh?.value
-  return typeof uniform?.dispose === 'function' ? (uniform as { dispose(): void }) : undefined
 }
 
 function sameIsolation(

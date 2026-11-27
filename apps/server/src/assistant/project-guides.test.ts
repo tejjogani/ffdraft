@@ -12,6 +12,43 @@ beforeAll(async () => {
 }, BOOT_TIMEOUT)
 afterAll(() => server?.server.dispose())
 
+it('tells Claude which saved shot was open per message without pinning the project thread', async () => {
+  const project = await api.call('pieces.create', { title: 'Current render view' })
+  const other = await api.call('pieces.create', { title: 'Other render view' })
+  const [firstShot, secondShot, foreignShot] = await Promise.all(
+    [project.id, project.id, other.id].map((pieceId) =>
+      api.call('scenes.create', { pieceId, title: 'Hero', scene: {} }),
+    ),
+  )
+  const message = (clientMessageId: string, sceneId?: string, threadId?: string) => ({
+    text: 'Look at this view',
+    clientId: 'test',
+    clientMessageId,
+    threadId,
+    context: { pieceId: project.id, stage: 'render' as const, sceneId },
+  })
+  const send = async (input: ReturnType<typeof message>) => {
+    server.model.push({ content: [text('Viewed')], stop_reason: 'end_turn' })
+    const out = await api.call('threads.send', input)
+    await settled(server.parts, out.run.id)
+    const messages = JSON.stringify(server.model.requests.at(-1)!.messages)
+    return { ...out, lines: messages.match(/Open render shot: [^\n]*?\(id scn_[\w-]+\)/g) ?? [] }
+  }
+  const first = await send(message('render-view-first', firstShot!.id))
+  expect(first.lines.at(-1)).toContain(firstShot!.id)
+  expect(first.thread.context.sceneId).toBeNull()
+  const second = await send(message('render-view-second', secondShot!.id, first.thread.id))
+  expect(second.thread.id).toBe(first.thread.id)
+  expect(second.lines.at(-1)).toContain(secondShot!.id)
+  const third = await send(message('render-view-cleared', undefined, first.thread.id))
+  expect(third.lines).toEqual(second.lines)
+  const invalid = await api.fail(
+    'threads.send',
+    message('render-view-foreign', foreignShot!.id, first.thread.id),
+  )
+  expect(invalid.status).toBe(400)
+})
+
 it('keeps a project thread while changing focus and records the instructions actually sent', async () => {
   const brief = 'A 32 mm Cuban-chain pendant in white gold'
   const project = await api.call('pieces.create', {

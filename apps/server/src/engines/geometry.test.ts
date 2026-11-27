@@ -1,11 +1,12 @@
 /** The kernel through the server: evaluation, cached facts, exports and tenancy. */
 import { readRhino3dm } from '@pave/kernel/rhino-import'
 import { resolveScene, sceneHash } from '@pave/render'
-import { type EvaluationSummary, RenderSceneSchema } from '@pave/schema'
+import { type CommandInput, type EvaluationSummary, RenderSceneSchema } from '@pave/schema'
 import rhino3dm from 'rhino3dm'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { freeRhino } from '../../../../packages/kernel/src/runtime/rhino'
+import { framingRefusal } from '../cinema'
 import { serviceContext } from '../service-context'
 import { assetBytes, engineServer, until } from '../test/engines'
 import { BOOT_TIMEOUT, type Client, client, signUp, type TestServer } from '../test/harness'
@@ -174,47 +175,132 @@ describe('geometry engine', () => {
       const { id: assetId } = (await uploaded.json()) as { id: string }
       const piece = await api.call('pieces.create', {
         title: 'Imported Rhino render',
-        kind: 'other',
+        kind: 'ring',
       })
+      const legacy = !mixed ? await api.call('scenes.ensureDefaults', { pieceId: piece.id }) : null
+      const prior = legacy
+        ? await api.call('renders.create', { pieceId: piece.id, sceneId: legacy.shots[0]!.id })
+        : null
+      if (prior) await api.call('renders.complete', { id: prior.id, assetIds: [assetId] })
       const input = {
-        kind: 'meshBody',
-        source: { type: 'asset', assetId, rhinoLayer: 'Fixture' },
+        kind: 'meshBody' as const,
+        source: {
+          type: 'asset' as const,
+          assetId,
+          rhinoLayer: 'Fixture',
+          rhinoContext: { groups: [], placements: [], material: 'Emerald' },
+        },
         keepSourcePlacement: true,
-      } as const
+      }
+      const ops = [
+        { t: 'add', node: { ...input, id: 'unassigned' } },
+        {
+          t: 'add',
+          node: { ...input, id: 'hidden', visible: false, transform: { position: [40, 0, 0] } },
+        },
+        {
+          t: 'add',
+          node: {
+            ...input,
+            id: 'reference',
+            importRole: 'reference',
+            transform: { position: [80, 0, 0] },
+          },
+        },
+        ...(mixed
+          ? [
+              {
+                t: 'add',
+                node: {
+                  ...input,
+                  id: 'cast-metal',
+                  importRole: 'metal',
+                  material: 'au18k-yellow',
+                  transform: { position: [-8, 0, 0] },
+                },
+              } as const,
+            ]
+          : []),
+      ] satisfies CommandInput<'design.apply'>['ops']
       await api.call('design.apply', {
         pieceId: piece.id,
         label: 'Import fixture bodies',
-        ops: [
-          { t: 'add', node: { ...input, id: 'unassigned' } },
-          {
-            t: 'add',
-            node: { ...input, id: 'hidden', visible: false, transform: { position: [40, 0, 0] } },
-          },
-          {
-            t: 'add',
-            node: {
-              ...input,
-              id: 'reference',
-              importRole: 'reference',
-              transform: { position: [80, 0, 0] },
-            },
-          },
-          ...(mixed
-            ? [
-                {
-                  t: 'add',
-                  node: {
-                    ...input,
-                    id: 'cast-metal',
-                    importRole: 'metal',
-                    material: 'au18k-yellow',
-                    transform: { position: [-8, 0, 0] },
-                  },
-                } as const,
-              ]
-            : []),
-        ],
+        ops,
       })
+      const opened = await api.call('scenes.ensureDefaults', { pieceId: piece.id })
+      expect(opened.shots.map(({ title }) => title)).toEqual(['Hero', 'Front', 'Top', 'Macro'])
+      if (legacy) expect(opened.shots.map(({ id }) => id)).toEqual(legacy.shots.map(({ id }) => id))
+      for (const shot of opened.shots) {
+        expect(shot.scene.includeUnassignedRhino).toBe(mixed ? undefined : true)
+        expect(shot.scene.importedBodyLook).toBe(mixed ? undefined : 'source')
+      }
+      expect(await api.call('scenes.list', { pieceId: piece.id })).toEqual(opened.shots)
+      if (prior) {
+        const done = await api.call('renders.get', { id: prior.id })
+        expect(done.status).toBe('done')
+        expect(done.scene).toEqual(prior.scene)
+        expect(done.requestedScene).toEqual(prior.requestedScene)
+        const fresh = await api.call('pieces.create', { kind: 'ring' })
+        await api.call('design.apply', { pieceId: fresh.id, label: 'Import', ops })
+        const defaults = await api.call('scenes.ensureDefaults', { pieceId: fresh.id })
+        for (const shot of defaults.shots) {
+          expect(shot.scene).toMatchObject({
+            includeUnassignedRhino: true,
+            importedBodyLook: 'source',
+          })
+          const take = await api.call('renders.create', { pieceId: fresh.id, sceneId: shot.id })
+          expect(take.requestedScene).toEqual(shot.scene)
+        }
+        const hero = opened.shots[0]!
+        const request = { pieceId: piece.id, sceneId: hero.id, engine: 'browser' as const }
+        const agent = await server.runtime.context({
+          ...server.runtime.local!,
+          actor: { type: 'agent', runId: 'render-import-only' },
+        })
+        expect(await framingRefusal(agent, request)).toBeNull()
+        const authored = await server.runtime.invoke('renders.create', request, agent)
+        expect(authored?.requestedScene).toEqual(hero.scene)
+        const estimate = (takes: CommandInput<'renders.estimate'>['takes']) =>
+          api.call('renders.estimate', { pieceId: piece.id, takes, engine: 'blender' })
+        expect(await estimate([{ sceneId: hero.id }])).toEqual(
+          await estimate([{ scene: hero.scene }]),
+        )
+        await api.call('design.apply', {
+          pieceId: fresh.id,
+          label: 'Hide the only visible unassigned body',
+          ops: [{ t: 'update', id: 'unassigned', patch: { visible: false } }],
+        })
+        const [noVisible] = await api.call('scenes.list', { pieceId: fresh.id })
+        expect(noVisible?.scene.includeUnassignedRhino).toBeUndefined()
+        expect(
+          (
+            await api.fail('renders.create', {
+              ...request,
+              pieceId: fresh.id,
+              sceneId: noVisible!.id,
+            })
+          ).status,
+        ).toBe(409)
+        const clay = await api.call('scenes.update', {
+          id: hero.id,
+          patch: { includeUnassignedRhino: true, importedBodyLook: 'clay' },
+        })
+        expect(clay.scene.importedBodyLook).toBe('clay')
+        expect(
+          (await api.call('renders.create', { pieceId: piece.id, sceneId: hero.id }))
+            .requestedScene,
+        ).toEqual(clay.scene)
+        const hidden = await api.call('scenes.update', {
+          id: hero.id,
+          patch: { includeUnassignedRhino: false },
+        })
+        expect(hidden.scene.includeUnassignedRhino).toBe(false)
+        expect(
+          (await api.fail('renders.create', { pieceId: piece.id, sceneId: hero.id })).status,
+        ).toBe(409)
+        const restored = await api.call('scenes.revert', { id: hero.id })
+        expect(restored.scene.scene).toEqual(clay.scene)
+      }
       const savedPiece = await api.call('pieces.get', { id: piece.id })
       const evaluate = () =>
         api.call('design.evaluate', { pieceId: piece.id, detail: 'production' })
@@ -232,7 +318,9 @@ describe('geometry engine', () => {
       const scene = (
         await api.call('scenes.update', { id: saved.id, patch: { includeUnassignedRhino: true } })
       ).scene
-      expect((await api.call('scenes.list', { pieceId: piece.id }))[0]?.scene).toEqual(scene)
+      expect(scene.importedBodyLook).toBe(mixed ? undefined : 'source')
+      const reopened = await api.call('scenes.list', { pieceId: piece.id })
+      expect(reopened.find(({ id }) => id === saved.id)?.scene).toEqual(scene)
 
       const { glb, subject } = await geometry.renderInput(savedPiece.design, serviceContext(ctx), {
         pieceId: piece.id,
@@ -253,12 +341,31 @@ describe('geometry engine', () => {
           .map((node) => node.name)
           .sort(),
       ).toEqual(subject.parts.map((part) => part.id).sort())
-      const resolved = resolveScene(scene, subject)
+      const resolved = resolveScene({ ...scene, importedBodyLook: 'clay' }, subject)
       expect(resolved.materials[resolved.assignments.unassigned!]).toMatchObject({
         kind: 'surface',
       })
+      const sourceScene = RenderSceneSchema.parse({ ...scene, importedBodyLook: 'source' })
+      const color = resolveScene(sourceScene, subject)
+      expect(
+        subject.parts.find((part) => part.nodeId === 'unassigned')?.sourceAppearance,
+      ).toMatchObject({
+        kind: 'gem',
+        stone: 'emerald',
+      })
+      expect(color.materials[color.assignments.unassigned!]).toMatchObject({
+        kind: 'gem',
+        ior: expect.any(Number),
+        attenuationColor: [0.05, 0.6, 0.25],
+      })
+      expect(Object.keys(color.assignments).sort()).toEqual(
+        Object.keys(resolved.assignments).sort(),
+      )
       const assigned = subject.parts.find(({ nodeId }) => nodeId === 'cast-metal')
-      if (assigned) expect(resolved.assignments[assigned.id]).toContain('au18k-yellow')
+      if (assigned) {
+        expect(resolved.assignments[assigned.id]).toContain('au18k-yellow')
+        expect(color.assignments[assigned.id]).toBe(resolved.assignments[assigned.id])
+      }
 
       const capture = await api.call('scenes.capture', { ids: [saved.id], size: 192 })
       expect(capture.version).toBe(savedPiece.version)

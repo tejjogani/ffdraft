@@ -3,6 +3,7 @@ import {
   DEFAULT_SHOTS,
   estimateTakeSeconds,
   rateFrom,
+  type SceneSubject,
   shotChangeRefusal,
 } from '@pave/render'
 import {
@@ -13,7 +14,13 @@ import {
   type SavedScene,
 } from '@pave/schema'
 import { and, asc, desc, eq, gt, inArray, isNull, lt, max, type SQL } from 'drizzle-orm'
-import { captureShots, suggestShots } from '../cinema'
+import {
+  captureShots,
+  completeImportedShot,
+  importedShotSubject,
+  needsImportedShotDefaults,
+  suggestShots,
+} from '../cinema'
 import { type Ctx, publish } from '../context'
 import * as t from '../db/schema'
 import { BLENDER_INSTALL_UNAVAILABLE } from '../engines/render/blender'
@@ -88,15 +95,23 @@ export async function toRenderJobs(ctx: Ctx, rows: RenderRow[]): Promise<RenderJ
 
 const one = async (ctx: Ctx, row: RenderRow) => (await toRenderJobs(ctx, [row]))[0]!
 
-const toSavedScene = (r: SceneRow): SavedScene => ({
+const toSavedScene = (r: SceneRow, imported: SceneSubject | null): SavedScene => ({
   id: r.id,
   pieceId: r.pieceId,
   title: r.title,
-  scene: r.scene,
+  scene: completeImportedShot(r.scene, imported),
   position: r.position,
   takeId: r.takeId,
   updatedAt: r.updatedAt.toISOString(),
 })
+
+async function savedSceneForPiece(ctx: Ctx, row: SceneRow): Promise<SavedScene> {
+  const imported =
+    row.pieceId && needsImportedShotDefaults(row.scene)
+      ? await importedShotSubject(ctx, await getPiece(ctx, row.pieceId))
+      : null
+  return toSavedScene(row, imported)
+}
 
 const announce = (ctx: Ctx, row: RenderRow) =>
   publishJob(ctx, { kind: 'render', id: row.id, pieceId: row.pieceId }, row)
@@ -138,7 +153,7 @@ function canSetupBlender(ctx: Ctx): boolean {
   )
 }
 
-/** Auto uses Blender when available or when this local owner can install it. */
+/** Auto uses Blender when available, when a known installation can be rechecked, or for setup. */
 export function engineFor(
   ctx: Ctx,
   asked: 'auto' | 'blender' | 'browser',
@@ -146,7 +161,9 @@ export function engineFor(
 ): 'blender' | 'browser' {
   if (asked !== 'auto') return asked
   return ctx.services.isConfigured('renderQueue') &&
-    (ctx.services.capabilities().blender || (purpose === 'take' && canSetupBlender(ctx)))
+    (ctx.services.capabilities().blender ||
+      ctx.services.optional('renderEngine')?.hasKnownManagedBlender?.() ||
+      (purpose === 'take' && canSetupBlender(ctx)))
     ? 'blender'
     : 'browser'
 }
@@ -230,8 +247,13 @@ async function noteRerender(ctx: Ctx, row: RenderRow, shot: SceneRow | null): Pr
 
 export const render: HandlerGroup<'renders' | 'scenes'> = {
   'scenes.list': async (ctx, { pieceId }) => {
-    await ensure(getPiece, ctx, pieceId)
-    return (await savedScenes(ctx, pieceId)).map(toSavedScene)
+    const piece = pieceId ? await getPiece(ctx, pieceId) : null
+    const rows = await savedScenes(ctx, pieceId)
+    const imported =
+      piece && rows.some(({ scene }) => needsImportedShotDefaults(scene))
+        ? await importedShotSubject(ctx, piece)
+        : null
+    return rows.map((row) => toSavedScene(row, imported))
   },
 
   'scenes.create': async (ctx, input) => {
@@ -253,7 +275,7 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     const row =
       input.pieceId === null ? await create(ctx) : await withShotList(ctx, input.pieceId, create)
     announceScene(ctx, row)
-    return toSavedScene(row)
+    return savedSceneForPiece(ctx, row)
   },
 
   'scenes.ensureDefaults': async (ctx, { pieceId, edit }) => {
@@ -285,7 +307,13 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
       return { rows, created: true, editedId: rows[index]?.id ?? null }
     })
     if (result.created) for (const row of result.rows) announceScene(ctx, row)
-    return { shots: result.rows.map(toSavedScene), editedId: result.editedId }
+    const imported = result.rows.some(({ scene }) => needsImportedShotDefaults(scene))
+      ? await importedShotSubject(ctx, await getPiece(ctx, pieceId))
+      : null
+    return {
+      shots: result.rows.map((row) => toSavedScene(row, imported)),
+      editedId: result.editedId,
+    }
   },
 
   'scenes.update': async (ctx, { id, patch, takeId, ...rest }) => {
@@ -308,7 +336,7 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     announceScene(ctx, row)
     if (before) await noteShotChange(ctx, row, (before as SceneRow).scene, row.scene)
     if (swappedIn) await noteSwap(ctx, row, swappedIn)
-    return toSavedScene(row)
+    return savedSceneForPiece(ctx, row)
   },
 
   'scenes.suggest': (ctx, input) => suggestShots(ctx, input, ctx.signal),
@@ -320,7 +348,7 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
   'scenes.revert': async (ctx, { id, changeId }) => {
     const { row, change } = await revertScene(ctx, id, changeId)
     announceScene(ctx, row)
-    return { scene: toSavedScene(row), change: change! }
+    return { scene: await savedSceneForPiece(ctx, row), change: change! }
   },
 
   'scenes.delete': async (ctx, { id }) => {
@@ -359,7 +387,7 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
 
   'renders.estimate': async (ctx, input) => {
     const piece = await getPiece(ctx, input.pieceId)
-    const scenes = await Promise.all(
+    const requested = await Promise.all(
       input.takes.map(async (take) => {
         if (take.scene) return take.scene
         const saved = await getScene(ctx, take.sceneId!)
@@ -372,8 +400,8 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     if (engine === 'browser')
       return {
         engine,
-        seconds: scenes.length * BROWSER_TAKE_SECONDS,
-        takes: scenes.map(() => BROWSER_TAKE_SECONDS),
+        seconds: requested.length * BROWSER_TAKE_SECONDS,
+        takes: requested.map(() => BROWSER_TAKE_SECONDS),
         basis: 'browser' as const,
         device: null,
       }
@@ -381,7 +409,8 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     const device =
       (await ctx.services.optional('renderEngine')?.status(serviceContext(ctx)))?.device ?? null
     const rate = rateFrom(await renderHistory(ctx), device)
-    const takes = scenes.map((s) => Math.round(estimateTakeSeconds(s, input.autoTune, rate)))
+    // Work is estimated from output size, motion and quality before resolving imported appearance.
+    const takes = requested.map((s) => Math.round(estimateTakeSeconds(s, input.autoTune, rate)))
     return {
       engine,
       seconds: takes.reduce((a, b) => a + b, 0),
@@ -408,8 +437,20 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
       engine === 'blender' &&
       input.purpose === 'take' &&
       !ctx.services.capabilities().blender &&
+      !ctx.services.optional('renderEngine')?.hasKnownManagedBlender?.() &&
       canSetupBlender(ctx)
-    const scene = input.scene ?? saved!.scene
+    const imported = await importedShotSubject(ctx, piece)
+    const scene = completeImportedShot(input.scene ?? saved!.scene, imported)
+    if (
+      imported &&
+      imported.stones.length === 0 &&
+      !imported.parts.some(
+        (part) => part.importRole !== 'unassigned' || scene.includeUnassignedRhino,
+      )
+    )
+      throw conflict(
+        'Nothing to render. Show the unassigned Rhino bodies or choose a piece with visible geometry.',
+      )
     // A locked shot is rendered as it is framed: the assistant cannot re-frame it in passing.
     if (saved && input.scene && ctx.actor.type === 'agent') {
       const refusal = shotChangeRefusal(saved.scene, input.scene, 'agent')

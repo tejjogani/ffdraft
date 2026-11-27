@@ -9,6 +9,7 @@
  * the engine. Browser takes are marked "Preview quality". On a phone the columns stack.
  */
 import {
+  circularBandLayout,
   machineTime,
   redoTarget,
   renderEvaluation,
@@ -23,16 +24,12 @@ import {
   cn,
   EmptyState,
   IconButton,
-  Menu,
-  MenuGroup,
-  MenuItem,
-  MenuSeparator,
+  Segmented,
   Skeleton,
-  toast,
 } from '@pave/ui'
-import { Link } from '@tanstack/react-router'
-import { Camera, Columns2, Copy, House, Play, Plus, Redo2, Settings2, Undo2, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate } from '@tanstack/react-router'
+import { Camera, Columns2, Play, Redo2, Settings2, Undo2, X } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { assetUrl } from '../../lib/assets'
 import { type Command, useRegisterCommands } from '../../lib/commands'
 import { usePieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
@@ -42,17 +39,56 @@ import { useUI } from '../../stores/ui'
 import { useReadOnly } from '../assistant/AskAiSection'
 import { jobState } from '../assistant/jobs/status'
 import { useStageJob } from '../assistant/jobs/useJob'
+import { AddViewMenu } from './AddViewMenu'
 import { renderAvailability, sourceMaterialSummary } from './availability'
 import { engineLabel, useRenderInstallStatus } from './EngineDialog'
 import { ShotInspector } from './ShotInspector'
-import { addShot, saveHouseShot, takeShotIntent } from './shot-actions'
+import { takeShotIntent } from './shot-actions'
 import { isLive, pickOf, type Shot, shotList, takeLabel, takeMedia, takesOf } from './shots'
 import { TakeMedia } from './TakeMedia'
 import { TakeTile } from './TakeTile'
 import { useShots } from './useShots'
 import { Viewfinder, type ViewfinderHandle } from './Viewfinder'
 
-export function RenderStudio({ pieceId }: { pieceId: string }) {
+const renderBlocked: Partial<Record<ReturnType<typeof renderAvailability>, string>> = {
+  pending: 'Preparing the model…',
+  'review-roles': 'Include imported bodies to render this shot.',
+  failed: 'The model could not be prepared.',
+  sheets: 'Give the surface thickness in CAD to render it.',
+  references: 'Confirm a body as metal or stone in CAD to render it.',
+  empty: 'Add metal or stones in CAD to render this shot.',
+}
+
+function takeStatus(take: RenderJob | undefined): string {
+  switch (take?.status) {
+    case 'queued':
+      return 'Queued'
+    case 'running':
+      return `Rendering ${Math.round(take.progress * 100)}%`
+    case 'done':
+      return 'Take ready'
+    case 'failed':
+      return 'Render failed'
+    case 'canceled':
+      return 'Render canceled'
+    default:
+      return ''
+  }
+}
+
+export function RenderStudio({ pieceId, shotId }: { pieceId: string; shotId?: string }) {
+  const navigate = useNavigate()
+  const linkShot = useCallback(
+    (id?: string) =>
+      void navigate({
+        to: '/pieces/$id/render',
+        params: { id: pieceId },
+        search: id ? { shot: id } : {},
+        replace: true,
+        resetScroll: false,
+      }),
+    [navigate, pieceId],
+  )
   // Production detail, as Blender takes use: the viewfinder frames and fingerprints the take.
   const geometry = usePieceEvaluation(pieceId, 'production')
   const { evaluation } = geometry
@@ -61,15 +97,26 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
     () => sourceMaterialSummary(geometry.design, evaluation?.referenceParts),
     [geometry.design, evaluation?.referenceParts],
   )
-  const canRenderShot = (scene: RenderScene) =>
+  const circular = useMemo(() => {
+    if (!evaluation) return { design: false, imported: false }
+    const composed = renderEvaluation(evaluation, geometry.design, true)
+    const design = !!circularBandLayout(evaluation)
+    return { design, imported: composed === evaluation ? design : !!circularBandLayout(composed) }
+  }, [evaluation, geometry.design])
+  const canRenderGeometry = (scene: RenderScene) =>
     baseAvailability === 'ready' ||
     (baseAvailability === 'review-roles' && scene.includeUnassignedRhino === true)
-  const s = useShots(pieceId, canRenderShot)
+  const validPose = (scene: RenderScene) =>
+    scene.pose !== 'circular-band' ||
+    (scene.includeUnassignedRhino ? circular.imported : circular.design)
+  const canRenderShot = (scene: RenderScene) => canRenderGeometry(scene) && validPose(scene)
+  const s = useShots(pieceId, canRenderShot, baseAvailability === 'review-roles')
   const viewfinder = useRef<ViewfinderHandle>(null)
+  const shotListElement = useRef<HTMLElement>(null)
   const readOnly = useReadOnly()
   const renderJob = useStageJob(pieceId, 'render').run
   const jobInReview = renderJob ? jobState(renderJob) === 'review' : false
-  const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const [defaultKey, setDefaultKey] = useState<string | null>(null)
   // A shot made elsewhere ("Render this view") is selected once the list has it.
   const [wanted, setWanted] = useState<string | null>(() => takeShotIntent(pieceId))
   const [liveHash, setLiveHash] = useState<string | null>(null)
@@ -77,48 +124,98 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
   const houses = useRpc('scenes.list', { pieceId: null })
   const [viewing, setViewing] = useState<string | null>(null)
   const [comparing, setComparing] = useState<[string, string] | null>(null)
-  const [enablingImport, setEnablingImport] = useState(false)
+  const [submittingRender, setSubmittingRender] = useState(false)
+  const renderingRequest = useRef(false)
   const setEngineOpen = useUI((s) => s.setEngineSetupOpen)
 
   const defaults = s.piece ? shotList(undefined, s.piece.kind) : []
-  const defaultIndex = defaults.findIndex((preset) => preset.key === selectedKey)
+  const defaultIndex = defaults.findIndex((preset) => preset.key === defaultKey)
   const savedDefault = s.shots.find(
     (candidate) =>
       candidate.saved?.position === defaultIndex + 1 &&
       candidate.title === defaults[defaultIndex]?.title,
   )
+  const linked = s.shots.find((x) => x.saved && x.key === shotId)
   const shot =
-    s.shots.find((x) => x.key === selectedKey) ??
+    linked ??
+    s.shots.find((x) => !x.saved && x.key === defaultKey) ??
     savedDefault ??
-    (baseAvailability === 'review-roles'
-      ? s.shots.find((x) => x.scene.includeUnassignedRhino)
-      : undefined) ??
     s.shots[0] ??
     null
   const includesImport = shot?.scene.includeUnassignedRhino
+  const pose = shot?.scene.pose
   const render = useMemo(
-    () => evaluation && renderEvaluation(evaluation, geometry.design, includesImport),
-    [evaluation, geometry.design, includesImport],
+    () => evaluation && renderEvaluation(evaluation, geometry.design, includesImport, pose),
+    [evaluation, geometry.design, includesImport, pose],
   )
+  const canCircularBand = includesImport ? circular.imported : circular.design
   const hasPreview = !!(render?.parts.length || render?.stones.length)
   const canRender = !!shot && canRenderShot(shot.scene)
   const renderableShots = s.shots.filter(({ scene }) => canRenderShot(scene))
   const emptyView =
-    !canRender &&
+    (!shot || !canRenderGeometry(shot.scene)) &&
     (baseAvailability === 'review-roles' ||
       baseAvailability === 'references' ||
       baseAvailability === 'sheets' ||
       baseAvailability === 'empty')
   // A default shot becomes a saved one on the first edit: follow it by position.
   useEffect(() => {
-    if (wanted && s.shots.some((x) => x.key === wanted)) {
-      setSelectedKey(wanted)
+    if (s.loading) return
+    if (wanted && s.shots.some((x) => x.saved && x.key === wanted)) {
       setWanted(null)
-    } else if (selectedKey && !s.shots.some((x) => x.key === selectedKey))
-      setSelectedKey(savedDefault?.key ?? null)
-  }, [selectedKey, wanted, s.shots, savedDefault?.key])
+      setDefaultKey(null)
+      linkShot(wanted)
+    } else if (savedDefault) {
+      setDefaultKey(null)
+      linkShot(savedDefault.key)
+    } else if (shotId && !linked) linkShot()
+  }, [linkShot, linked, s.loading, s.shots, savedDefault, shotId, wanted])
+
+  const activeShotKey = shot?.key
+  useLayoutEffect(() => {
+    const list = shotListElement.current
+    const card = activeShotKey && !s.loading ? list?.querySelector('[aria-current="true"]') : null
+    if (!list || !card) return
+    const reveal = () => {
+      const frame = list.getBoundingClientRect()
+      const active = card.getBoundingClientRect()
+      const x = frame.left + list.clientLeft
+      const y = frame.top + list.clientTop
+      // Scroll the strip alone. Moving the outer page would also move the viewfinder.
+      const left =
+        active.left < x ? active.left - x : Math.max(0, active.right - x - list.clientWidth)
+      const top =
+        active.top < y ? active.top - y : Math.max(0, active.bottom - y - list.clientHeight)
+      if (left || top) list.scrollBy({ left, top, behavior: 'instant' })
+    }
+    reveal()
+    const resize = new ResizeObserver(reveal)
+    resize.observe(list)
+    resize.observe(card)
+    return () => resize.disconnect()
+  }, [activeShotKey, s.loading])
 
   const takes = useMemo(() => (shot ? takesOf(shot, s.takes) : []), [shot, s.takes])
+  const activeTake = takes.find(isLive)
+  const latestTake = takes[0]
+  const blockedReason = readOnly
+    ? 'You have view-only access.'
+    : shot && canRenderGeometry(shot.scene) && !validPose(shot.scene)
+      ? 'Circular band requires a straight row of separate parts. Choose As imported.'
+      : !canRender && renderBlocked[baseAvailability]
+  const readyTake =
+    !submittingRender && !activeTake && latestTake?.status === 'done' && latestTake.assetIds.length
+      ? latestTake
+      : null
+  const renderStatus = submittingRender
+    ? 'Starting render…'
+    : activeTake
+      ? takeStatus(activeTake)
+      : blockedReason || takeStatus(latestTake)
+  const launchableShots = renderableShots.filter(
+    (candidate) => !takesOf(candidate, s.takes).some(isLive),
+  )
+  const canLaunch = !!shot && canRender && !readOnly && !submittingRender && !activeTake
   const history = useRpc(
     'scenes.history',
     { id: shot?.saved?.id ?? '' },
@@ -138,8 +235,8 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
   )
   const all = useRpc(
     'renders.estimate',
-    { pieceId, takes: renderableShots.map((x) => ({ scene: x.scene })) },
-    { enabled: renderableShots.length > 0 },
+    { pieceId, takes: launchableShots.map((x) => ({ scene: x.scene })) },
+    { enabled: launchableShots.length > 0 },
   )
   const predictedEngine =
     estimate.data?.engine ??
@@ -151,34 +248,28 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
     ? (comparing.map((id) => s.takes.find((t) => t.id === id)).filter(Boolean) as RenderJob[])
     : null
 
-  const renderShots = (shots: Shot[], engine?: 'browser') => {
-    viewfinder.current?.commitPending()
-    void s.render(
-      shots.filter(({ scene }) => canRenderShot(scene)),
-      { engine },
-    )
+  const renderShots = async (shots: Shot[], engine?: 'browser') => {
+    const eligible = shots.filter((candidate) => launchableShots.includes(candidate))
+    if (renderingRequest.current || readOnly || !eligible.length) return
+    renderingRequest.current = true
+    setSubmittingRender(true)
+    try {
+      viewfinder.current?.commitPending()
+      await s.render(eligible, { engine })
+    } finally {
+      renderingRequest.current = false
+      setSubmittingRender(false)
+    }
   }
   const rerenderTake = (take: RenderJob) => {
     viewfinder.current?.commitPending()
     void s.rerender(take)
   }
 
-  const previewImport = async () => {
-    const catalog =
-      s.shots.find(({ scene }) => scene.look === 'catalog-white') ??
-      s.shots.find(({ scene }) => scene.camera.preset === 'hero') ??
-      s.shots[0]
-    if (!catalog || enablingImport) return
-    setEnablingImport(true)
-    try {
-      const updated = await s.adjust(catalog, {
-        look: 'catalog-white',
-        includeUnassignedRhino: true,
-      })
-      if (updated) setSelectedKey(updated.key)
-    } finally {
-      setEnablingImport(false)
-    }
+  const adjustShot = (patch: Record<string, unknown>) => {
+    if (!shot || readOnly) return
+    viewfinder.current?.commitPending()
+    void s.adjust(shot, patch)
   }
 
   const commands: Command[] = shot
@@ -207,14 +298,14 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
           group: 'Piece',
           icon: Play,
           shortcut: 'mod+enter',
-          when: () => canRender,
+          when: () => canLaunch,
           run: () => renderShots([shot]),
         },
         {
           id: 'render.browserPreview',
           title: 'Render browser preview',
           group: 'Piece',
-          when: () => canRender && !browser,
+          when: () => canLaunch && !browser,
           run: () => renderShots([shot], 'browser'),
         },
         {
@@ -222,8 +313,8 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
           title: 'Render all shots',
           group: 'Piece',
           shortcut: 'mod+shift+enter',
-          when: () => renderableShots.length > 0,
-          run: () => renderShots(renderableShots),
+          when: () => launchableShots.length > 0 && !submittingRender && !readOnly,
+          run: () => renderShots(launchableShots),
         },
       ]
     : []
@@ -266,6 +357,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
       <div className="flex min-h-full flex-col @5xl:h-full @5xl:flex-row">
         {/* Shots */}
         <nav
+          ref={shotListElement}
           aria-label="Shots"
           className="flex shrink-0 gap-1.5 overflow-x-auto border-b border-line bg-bg p-2 @5xl:w-56 @5xl:flex-col @5xl:overflow-y-auto @5xl:border-r @5xl:border-b-0"
         >
@@ -281,65 +373,13 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               live={takesOf(x, s.takes).some(isLive)}
               onSelect={() => {
                 viewfinder.current?.commitPending()
-                setSelectedKey(x.key)
+                setDefaultKey(x.saved ? null : x.key)
+                if (x.saved || shotId) linkShot(x.saved?.id)
                 setViewing(null)
                 setComparing(null)
               }}
             />
           ))}
-          <Menu
-            trigger={
-              <Button size="sm" variant="ghost" icon={Plus} className="shrink-0 justify-start">
-                Add shot
-              </Button>
-            }
-            align="start"
-            className="min-w-56"
-          >
-            {shot && (
-              <MenuItem
-                icon={Copy}
-                onClick={() =>
-                  void addShot(pieceId, `${shot.title} copy`, shot.scene)
-                    .then((row) => setSelectedKey(row.id))
-                    .catch((e: Error) => toast.error('Couldn’t add the shot', e.message))
-                }
-              >
-                Copy of {shot.title}
-              </MenuItem>
-            )}
-            {shot && (
-              <MenuItem
-                icon={House}
-                onClick={() =>
-                  void saveHouseShot(shot.title, shot.scene)
-                    .then((h) => toast.success(`Saved “${h.title}” as a house shot`))
-                    .catch((e: Error) => toast.error('Couldn’t save the house shot', e.message))
-                }
-              >
-                Save {shot.title} as a house shot
-              </MenuItem>
-            )}
-            {!!houses.data?.length && (
-              <>
-                <MenuSeparator />
-                <MenuGroup label="House shots">
-                  {houses.data.map((h) => (
-                    <MenuItem
-                      key={h.id}
-                      onClick={() =>
-                        void addShot(pieceId, h.title, h.scene)
-                          .then((row) => setSelectedKey(row.id))
-                          .catch((e: Error) => toast.error('Couldn’t add the shot', e.message))
-                      }
-                    >
-                      {h.title}
-                    </MenuItem>
-                  ))}
-                </MenuGroup>
-              </>
-            )}
-          </Menu>
           {!s.shots.some((x) => x.saved) && (
             <p className="hidden px-2 pt-2 text-2xs text-fg-subtle @5xl:block">
               The standard set for a {s.piece.kind}. It is saved the first time you change or render
@@ -350,108 +390,222 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
 
         {/* Stage, filmstrip */}
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
-            <button
-              type="button"
-              onClick={() => setEngineOpen(true)}
-              className={cn(
-                'inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs shadow-[inset_0_0_0_1px_var(--line)] hover:bg-bg-hover',
-                browser ? 'text-warn' : 'text-fg-muted',
+          <div className="sticky top-0 z-10 bg-bg">
+            <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-2">
+              {shot && (
+                <AddViewMenu
+                  pieceId={pieceId}
+                  shot={shot}
+                  houses={houses.data ?? []}
+                  disabled={readOnly}
+                  beforeOpen={() => viewfinder.current?.commitPending()}
+                  onAdded={(id) => {
+                    setDefaultKey(null)
+                    linkShot(id)
+                    setViewing(null)
+                    setComparing(null)
+                  }}
+                />
               )}
-            >
-              <Settings2 className="size-3.5" aria-hidden />
-              {engineLabel(s.engine, setup.data)}
-            </button>
-            <span className="flex items-center gap-0.5">
-              <IconButton
-                icon={Undo2}
-                label="Undo the last shot change"
-                shortcut="mod+z"
-                size="sm"
-                disabled={!undo}
-                onClick={() => shot && undo && s.revert(shot, undo.id)}
-              />
-              <IconButton
-                icon={Redo2}
-                label="Redo"
-                shortcut="mod+shift+z"
-                size="sm"
-                disabled={!redo}
-                onClick={() => shot && redo && s.revert(shot, redo.id)}
-              />
-            </span>
-            <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
-              {!browser && shot && (
+              <button
+                type="button"
+                onClick={() => setEngineOpen(true)}
+                className={cn(
+                  'inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs shadow-[inset_0_0_0_1px_var(--line)] hover:bg-bg-hover',
+                  browser ? 'text-warn' : 'text-fg-muted',
+                )}
+              >
+                <Settings2 className="size-3.5" aria-hidden />
+                {engineLabel(s.engine, setup.data)}
+              </button>
+              <span className="flex items-center gap-0.5">
+                <IconButton
+                  icon={Undo2}
+                  label="Undo the last shot change"
+                  shortcut="mod+z"
+                  size="sm"
+                  disabled={!undo}
+                  onClick={() => shot && undo && s.revert(shot, undo.id)}
+                />
+                <IconButton
+                  icon={Redo2}
+                  label="Redo"
+                  shortcut="mod+shift+z"
+                  size="sm"
+                  disabled={!redo}
+                  onClick={() => shot && redo && s.revert(shot, redo.id)}
+                />
+              </span>
+              <fieldset
+                aria-label="Render actions"
+                className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1.5"
+              >
+                {!browser && shot && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={!canLaunch}
+                    onClick={() => void renderShots([shot], 'browser')}
+                  >
+                    Browser preview
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="ghost"
-                  disabled={!canRender}
-                  onClick={() => renderShots([shot], 'browser')}
+                  onClick={() => {
+                    viewfinder.current?.commitPending()
+                    assistant.open({
+                      context: { pieceId },
+                      prompt: shot?.saved
+                        ? 'For this shot, '
+                        : shot
+                          ? `For the ${shot.title} view, `
+                          : undefined,
+                    })
+                  }}
                 >
-                  Browser preview
+                  <AiMark className="size-3" /> Direct it…
                 </Button>
-              )}
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() =>
-                  assistant.open({
-                    context: { pieceId },
-                    prompt: shot ? `For the ${shot.title} shot: ` : undefined,
-                  })
-                }
-              >
-                <AiMark className="size-3" /> Direct it…
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                disabled={renderableShots.length === 0}
-                onClick={() => renderShots(renderableShots)}
-              >
-                Render all
-                {all.data && renderableShots.length > 0 && !browser && (
-                  <span className="hidden font-mono text-2xs text-fg-subtle @lg:inline">
-                    {machineTime(all.data.seconds)}
-                  </span>
-                )}
-              </Button>
-              <Button
-                size="sm"
-                // While a Render job waits for review, its Accept is the one ink action here.
-                variant={jobInReview ? 'secondary' : 'primary'}
-                icon={Camera}
-                disabled={!shot || !canRender}
-                onClick={() => shot && renderShots([shot])}
-              >
-                {browser ? 'Render preview' : 'Render'}
-              </Button>
-            </div>
-          </div>
-
-          {canRender && sourceMaterials.count > 0 && (
-            <div className="flex flex-wrap items-center gap-x-3 border-b border-line px-4 py-2 text-xs text-fg-muted">
-              <span>
-                {includesImport
-                  ? sourceMaterials.count === 1
-                    ? '1 unassigned body appears in neutral clay.'
-                    : `${sourceMaterials.count} unassigned bodies appear in neutral clay.`
-                  : sourceMaterials.count === 1
-                    ? '1 unassigned body is excluded from this render.'
-                    : `${sourceMaterials.count} unassigned bodies are excluded from this render.`}
-              </span>
-              {!readOnly && (
-                <Link
-                  to="/pieces/$id/design"
-                  params={{ id: pieceId }}
-                  search={{ review: 'rhino-roles' }}
-                  className="font-medium text-fg underline underline-offset-2"
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={!launchableShots.length || submittingRender || readOnly}
+                  onClick={() => void renderShots(launchableShots)}
                 >
-                  Review materials
-                </Link>
-              )}
+                  Render all
+                  {all.data && launchableShots.length > 0 && !browser && (
+                    <span className="hidden font-mono text-2xs text-fg-subtle @lg:inline">
+                      {machineTime(all.data.seconds)}
+                    </span>
+                  )}
+                </Button>
+                <Button
+                  size="sm"
+                  // While a Render job waits for review, its Accept is the one ink action here.
+                  variant={jobInReview ? 'secondary' : 'primary'}
+                  icon={Camera}
+                  disabled={!canLaunch}
+                  onClick={() => shot && void renderShots([shot])}
+                >
+                  {browser ? 'Render preview' : 'Render'}
+                </Button>
+                <span role="status" className="text-xs text-fg-muted empty:sr-only">
+                  {renderStatus}
+                </span>
+                {readyTake && readyTake.id !== viewing && (
+                  <Button size="sm" variant="ghost" onClick={() => actions.open(readyTake)}>
+                    View take
+                  </Button>
+                )}
+              </fieldset>
             </div>
-          )}
+
+            {shot &&
+              (sourceMaterials.count > 0 ||
+                canCircularBand ||
+                shot.scene.pose === 'circular-band') && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-line px-3 py-1.5 text-xs text-fg-muted">
+                  {sourceMaterials.count > 0 && (
+                    <fieldset
+                      aria-label="Imported bodies"
+                      className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1"
+                      title={sourceMaterials.labels || undefined}
+                    >
+                      <span className="font-medium text-fg">Imported bodies</span>
+                      {includesImport ? (
+                        <>
+                          <Segmented
+                            aria-label="Imported body appearance"
+                            value={shot.scene.importedBodyLook ?? 'clay'}
+                            disabled={readOnly}
+                            options={[
+                              { value: 'source', label: 'Source materials' },
+                              { value: 'clay', label: 'Neutral clay' },
+                            ]}
+                            onChange={(importedBodyLook) => adjustShot({ importedBodyLook })}
+                          />
+                          {!readOnly && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              aria-label="Exclude imported bodies"
+                              onClick={() => adjustShot({ includeUnassignedRhino: false })}
+                            >
+                              Exclude
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          {!readOnly && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() =>
+                                adjustShot({
+                                  includeUnassignedRhino: true,
+                                  importedBodyLook: shot.scene.importedBodyLook ?? 'source',
+                                })
+                              }
+                            >
+                              Include imported bodies
+                            </Button>
+                          )}
+                          <span>
+                            {sourceMaterials.count === 1
+                              ? '1 unassigned body is excluded from this render.'
+                              : `${sourceMaterials.count} unassigned bodies are excluded from this render.`}
+                          </span>
+                        </>
+                      )}
+                      {!readOnly && (
+                        <Link
+                          to="/pieces/$id/design"
+                          params={{ id: pieceId }}
+                          search={{ review: 'rhino-roles' }}
+                          className="font-medium text-fg underline underline-offset-2"
+                        >
+                          Review materials
+                        </Link>
+                      )}
+                    </fieldset>
+                  )}
+                  {(canCircularBand || shot.scene.pose === 'circular-band') && (
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-fg">Ring pose</span>
+                      <Segmented
+                        aria-label="Ring pose"
+                        disabled={readOnly}
+                        value={shot.scene.pose ?? 'as-designed'}
+                        options={[
+                          { value: 'as-designed', label: 'As imported' },
+                          { value: 'circular-band', label: 'Circular band' },
+                        ]}
+                        onChange={(pose) => {
+                          const { camera } = shot.scene
+                          adjustShot({
+                            pose,
+                            ...(!camera.locked && {
+                              camera: {
+                                preset:
+                                  camera.preset === 'custom'
+                                    ? (camera.basePreset ?? 'hero')
+                                    : camera.preset,
+                                position: null,
+                                target: null,
+                                framedOn: null,
+                                roll: 0,
+                              },
+                            }),
+                          })
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+          </div>
           <div className="stage relative min-h-[360px] flex-1 overflow-hidden p-4 @5xl:min-h-0">
             {pair && pair.length === 2 ? (
               <Compare a={pair[0]!} b={pair[1]!} onClose={() => setComparing(null)} />
@@ -487,51 +641,22 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                 className="stage cad-studio-backdrop absolute inset-4 justify-center rounded-lg [--fg:var(--cad-ink)] [--fg-muted:var(--cad-ink)]"
                 title={
                   baseAvailability === 'review-roles'
-                    ? 'Preview your imported CAD'
+                    ? 'Imported bodies are excluded'
                     : baseAvailability === 'sheets'
                       ? 'Give the surface a thickness'
                       : 'No geometry to render'
                 }
                 description={
-                  baseAvailability === 'review-roles' ? (
-                    <>
-                      See unassigned bodies in neutral clay with studio lighting.
-                      {sourceMaterials.labels && (
-                        <span className="mt-2 block break-words">
-                          <span className="block font-medium">Source labels by body count</span>
-                          <span className="block">{sourceMaterials.labels}</span>
-                        </span>
-                      )}
-                      {!readOnly && (
-                        <Link
-                          to="/pieces/$id/design"
-                          params={{ id: pieceId }}
-                          search={{ review: 'rhino-roles' }}
-                          className="mt-2 block font-medium underline underline-offset-2"
-                        >
-                          Review materials
-                        </Link>
-                      )}
-                    </>
-                  ) : baseAvailability === 'sheets' ? (
-                    'In CAD, select the sheet and choose Add feature → Thicken surface to make a renderable solid.'
-                  ) : baseAvailability === 'references' ? (
-                    'The imported reference bodies are available in CAD. Renders use the piece’s metal and stones.'
-                  ) : (
-                    'The viewfinder shows metal and stones from the design.'
-                  )
+                  baseAvailability === 'review-roles'
+                    ? undefined
+                    : baseAvailability === 'sheets'
+                      ? 'In CAD, select the sheet and choose Add feature → Thicken surface to make a renderable solid.'
+                      : baseAvailability === 'references'
+                        ? 'The imported reference bodies are available in CAD. Renders use the piece’s metal and stones.'
+                        : 'The viewfinder shows metal and stones from the design.'
                 }
                 action={
-                  baseAvailability === 'review-roles' && !readOnly ? (
-                    <Button
-                      variant="primary"
-                      className="[--ink:var(--cad-ink)] [--ink-fg:var(--cad-paper)]"
-                      disabled={enablingImport}
-                      onClick={() => void previewImport()}
-                    >
-                      Preview imported CAD
-                    </Button>
-                  ) : baseAvailability === 'sheets' ? (
+                  baseAvailability === 'sheets' ? (
                     <Link
                       to="/pieces/$id/design"
                       params={{ id: pieceId }}
@@ -562,8 +687,8 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                 className="absolute inset-4"
                 onHash={onHash}
                 onCommit={(patch) => void s.adjust(shot, patch)}
-                onLock={(locked) =>
-                  void s.adjust(shot, { camera: { locked: locked ? true : null } })
+                onLock={(locked, camera) =>
+                  void s.adjust(shot, { camera: { ...camera, locked: locked ? true : null } })
                 }
                 onReset={() => void s.adjust(shot, resetCameraPatch(shot.scene.camera))}
               />
@@ -655,20 +780,13 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
           {shot && (
             <ShotInspector
               scene={shot.scene}
-              showImportPreview={
-                !!includesImport || (baseAvailability === 'ready' && sourceMaterials.count > 0)
-              }
-              importPreviewDisabled={readOnly}
               engine={predictedEngine}
               estimate={
                 canRender && estimate.data
                   ? { seconds: perTake ?? 0, basis: estimate.data.basis }
                   : null
               }
-              onChange={(patch) => {
-                viewfinder.current?.commitPending()
-                void s.adjust(shot, patch)
-              }}
+              onChange={adjustShot}
             />
           )}
         </aside>
@@ -696,7 +814,7 @@ function ShotRow({
       aria-current={active ? 'true' : undefined}
       onClick={onSelect}
       className={cn(
-        'flex shrink-0 items-center gap-2 rounded-md p-1.5 text-left text-sm hover:bg-bg-hover',
+        'flex max-w-full shrink-0 items-center gap-2 rounded-md p-1.5 text-left text-sm hover:bg-bg-hover',
         active && 'bg-bg-active',
       )}
     >

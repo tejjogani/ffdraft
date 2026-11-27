@@ -8,6 +8,8 @@ Choose Add feature beside Features to browse the modeling tools. Under Bodies, R
 
 Click a part in the 3D view or choose its name in Features. On a solitaire, Band is the ring and Head is the metal setting around the centre stone. The Inspector shows controls for the selected part.
 
+On smaller screens, selecting a part shows its details beside an Inspect button. Choose Inspect to open the full Inspector, including from the Features panel. You can also double-click a part in the 3D view to open its Inspector.
+
 For more room on a wide screen, use Hide Features beside Add feature and Hide sidebar in the page header. To bring them back, choose Features above the model or Show sidebar in the header. You can also toggle the sidebar with Command plus backslash on Mac or Ctrl plus backslash on Windows and Linux.
 
 On a smaller screen, use Features and Inspector above the model to open those panels. If your project is empty, start with a template to try the material and stone controls.
@@ -32,11 +34,22 @@ Open Construction curves in Features to browse the guides. On an imported Rhino 
 
 For a product image, open Renders and choose a shot. Under Look, choose Studio white or Soft gradient. Use Review materials to confirm the production alloys and gemstones. A view-only hide or backdrop choice in CAD belongs to that workspace.
 
-### Preview an unassigned Rhino model in Renders
+### Save several render views of one piece
 
-If the Render view is empty after import, choose **Preview imported CAD**. Pavé opens a Studio white shot with visible unassigned Rhino bodies in neutral clay. When a shot already shows confirmed metal or stones, use **Look → Show unassigned bodies in clay** to add the remaining bodies in clay. Confirmed materials keep their appearance. Hidden bodies, parts set to Reference, and construction geometry stay out.
+1. Open **Renders** in the project. Choose **Add view**, then **Hero**, **Front**, **Top**, **Detail** or **Copy current**. Name the view and choose **Add view** to save it.
+2. For a straight, articulated import, choose **Ring pose → Circular band** to arrange the links in a loop for this view. Its diameter follows the source length. Choose **As imported** for a straight layout. Each view saves its own pose. CAD, casting measurements and exports keep the original geometry.
+3. Choose **Expand preview** in the viewfinder for more screen space. Press Escape to return. Drag to orbit, Shift-drag to pan and use the wheel or pinch to zoom. Under **Look**, choose your lighting. For a soft floor reflection choose **White gloss** under Ground. The view saves your camera and settings.
+4. Press **Render** for one image or **Render all** for the saved set. A shot is the saved setup. A take is a finished image or movie. Choose a motion on the shot to make a moving take. The toolbar shows progress and offers **View take** when the render finishes. Supported local Mac and Windows installations prepare Blender on the first render.
 
-Choose a still or any of the shot’s motion options, then render with Blender. The preview setting is saved on that shot. Turn it off under **Look** to return to confirmed materials alone. Previewing leaves the CAD roles, casting weights, stone counts, and exports unchanged.
+For example, keep a **Straight top** view, add a **Circular hero** view, then add a **Setting detail** view to show the claws and stones. A straight run of individually modeled settings can be posed this way. A single fused mesh keeps its modeled shape. The presentation pose does not certify clasp engagement or fit.
+
+In **Project AI**, try “Save three views of this piece: a circular Hero, a straight Top and a close-up of the emerald settings. Show me the framing before you render.” Claude can create, change, preview and render the same saved views.
+
+### Photograph a Rhino import in its source materials
+
+For a model made entirely of unassigned Rhino bodies, the standard views open with **Source materials**. An emerald or metal uses its imported appearance wherever the file provides it. Choose **Neutral clay** to inspect the shape. If a project also has confirmed production materials, use **Show unassigned bodies** to include the rest for that view. Hidden bodies, reference geometry and construction guides stay out of the render. **Review materials** is where you confirm actual production roles.
+
+For a lighting example with the original CAD and published product image, see the [worked KeyShot comparison](research/keyshot-to-cycles.md).
 
 To update the actual piece, select the part, edit its dimensions in the Inspector, or choose Edit handmade mount and Save mount edit. Undo reverses a saved design change. Export for Rhino to write a new .3dm.
 
@@ -161,3 +174,5 @@ Press Render beside Export in CAD to render the saved design. To frame a differe
 ## Make a custom ring band to finger size
 
 Use Draw curve and choose Right at X plane position 0 mm. For a 4 mm wide, 2 mm thick band, enter Y and Z coordinates (−2, −1), (2, −1), (2, 1), and (−2, 1). Turn on Closed curve and save. With the curve selected, choose Make ring band. The new band opens at US 6. Use Ring size in the Inspector to change the bore while keeping the profile dimensions. Use Edit points on the linked curve to change the cross-section.
+
+In CAD, choose Rendered to see imported material appearances. Known gemstone labels use Pavé’s gemstone optics. A bound custom diffuse color supplies a surface color. An imported appearance can be inspected before confirming an alloy or gemstone in Review materials.

@@ -10,6 +10,7 @@ import {
   type Op,
   OpError,
   readRhinoLabelUpdate,
+  recoverRhinoContext,
   replaceStone,
   reviewRhinoRoles,
   type StoredChange,
@@ -91,19 +92,16 @@ function validateRhinoLabelBatch(design: Design, ops: Op[], original?: ChangeRow
       const recorded = written.context
       const stillMatches =
         recorded && !('groups' in recorded)
-          ? deepEqual(current?.stullerMaterial ?? null, recorded.stullerMaterial)
+          ? Object.entries(recorded).every(([key, value]) =>
+              deepEqual(current?.[key as keyof typeof recorded] ?? null, value),
+            )
           : deepEqual(current ?? null, recorded)
       if (!stillMatches) throw conflict('The Rhino source labels changed after this recovery.')
     } else {
       const next = update.context
       if (!next || !('groups' in next))
         throw badRequest('A Rhino label recovery requires the complete original source context.')
-      if (
-        current &&
-        (current.stullerMaterial ||
-          !next.stullerMaterial ||
-          !deepEqual({ ...current, stullerMaterial: next.stullerMaterial }, next))
-      )
+      if (current && !deepEqual(recoverRhinoContext(current, next), next))
         throw badRequest('A Rhino label recovery can only fill in missing source labels.')
     }
   }

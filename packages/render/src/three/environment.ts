@@ -24,6 +24,7 @@ import {
   Vector3,
   type WebGLRenderer,
 } from 'three'
+import type { Rgb } from '../color'
 import type { ResolvedRig, ResolvedScene } from '../types'
 import type { SparkleUniforms } from './gem'
 import { toThreePoint, zUpGroup } from './space'
@@ -62,15 +63,12 @@ function panelMesh(p: ResolvedRig['panels'][number], scale: number): Mesh {
 }
 
 /**
- * Radiance of a sweep floor under the piece: albedo × irradiance / π, with the irradiance of
+ * Diffuse radiance of the floor under the piece: albedo × irradiance / π, with the irradiance of
  * the ambient gradient (∫ L cos dω = π·horizon + 2π/3·(zenith − horizon)) plus each panel as a
  * small emitter. Cycles sees the real sweep in reflections; the PMREM gets this flat stand-in.
  */
-export function sweepFloorRadiance(resolved: ResolvedScene): [number, number, number] | null {
-  const g = resolved.ground
-  if (g.kind !== 'sweep') return null
-  const { ambient, panels, pivot } = resolved.rig
-  const floor = new Vector3(pivot[0], pivot[1], g.z)
+function diffuseFloorRadiance({ ambient, panels, pivot }: ResolvedRig, z: number, color: Rgb): Rgb {
+  const floor = new Vector3(pivot[0], pivot[1], z)
   const e = [0, 1, 2].map(
     (c) =>
       Math.PI * ambient.horizon[c]! +
@@ -85,14 +83,13 @@ export function sweepFloorRadiance(resolved: ResolvedScene): [number, number, nu
     const k = (cos * p.size[0] * p.size[1] * (p.gradient[0] + p.gradient[1])) / 2 / (d * d)
     for (let c = 0; c < 3; c++) e[c]! += p.radiance[c]! * k
   }
-  return [0, 1, 2].map((c) => (g.color[c]! * e[c]!) / Math.PI) as [number, number, number]
+  return [0, 1, 2].map((c) => (color[c]! * e[c]!) / Math.PI) as Rgb
 }
 
 /**
  * What the PMREM sees below the horizon. Cycles has the real ground in the scene; the capture
- * gets a stand-in: a sweep is a flat emitter at its lit radiance, black acrylic a mirrored copy
- * of the rig dimmed by the acrylic's Fresnel reflectance at grazing view (where reflections in
- * a ring's lower half come from).
+ * gets a stand-in: a pale floor is a flat emitter at its lit radiance, and black acrylic is a
+ * mirrored copy of the rig dimmed by Fresnel reflectance at grazing view.
  */
 export type CaptureFloor =
   | { kind: 'emitter'; z: number; radiance: [number, number, number] }
@@ -108,8 +105,8 @@ export function captureFloor(resolved: ResolvedScene): CaptureFloor | undefined 
   const g = resolved.ground
   if (g.kind === 'reflective')
     return { kind: 'mirror', z: g.z, reflectance: grazingReflectance(g.ior) }
-  const radiance = sweepFloorRadiance(resolved)
-  if (radiance && g.kind === 'sweep') return { kind: 'emitter', z: g.z, radiance }
+  if (g.kind === 'sweep' || g.kind === 'white-gloss')
+    return { kind: 'emitter', z: g.z, radiance: diffuseFloorRadiance(resolved.rig, g.z, g.color) }
   return undefined
 }
 

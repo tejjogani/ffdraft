@@ -4,6 +4,7 @@
  * first edit, adjust a shot, render one or all, cancel, star, swap a take into the set, set the
  * cover. Every write goes through the same commands the assistant uses.
  */
+import { withImportedBodyDefaults } from '@pave/render'
 import {
   diffPatch,
   mergePatch,
@@ -20,7 +21,11 @@ import { reportPlanLimit } from '../plans/plan-limit'
 import { ensureShotsSaved, queueShotAction } from './shot-actions'
 import { type Shot, shotForTake, shotList, takeMedia } from './shots'
 
-export function useShots(pieceId: string, canRender: (scene: RenderScene) => boolean) {
+export function useShots(
+  pieceId: string,
+  canRender: (scene: RenderScene) => boolean,
+  importOnly: boolean,
+) {
   // A plan-limit toast can keep a preview action after the design changes.
   const renderAllowed = useRef({ pieceId, canRender })
   renderAllowed.current = { pieceId, canRender }
@@ -28,9 +33,16 @@ export function useShots(pieceId: string, canRender: (scene: RenderScene) => boo
     renderAllowed.current.pieceId === pieceId && renderAllowed.current.canRender(scene)
   const piece = useRpc('pieces.get', { id: pieceId })
   const saved = useRpc('scenes.list', { pieceId })
-  const takes = useRpc('renders.list', { pieceId, limit: 200 })
+  const takesInput = { pieceId, limit: 200 }
+  const takes = useRpc('renders.list', takesInput)
   const engine = useRpc('renders.engine', {})
-  const shots = piece.data ? shotList(saved.data, piece.data.kind) : []
+  const shots = piece.data
+    ? shotList(saved.data, piece.data.kind).map((shot) =>
+        !shot.saved && importOnly
+          ? { ...shot, scene: withImportedBodyDefaults(shot.scene, importOnly) }
+          : shot,
+      )
+    : []
   const sceneListKey = rpcKey('scenes.list', { pieceId })
   const pieceKind = piece.data?.kind ?? 'ring'
 
@@ -136,12 +148,17 @@ export function useShots(pieceId: string, canRender: (scene: RenderScene) => boo
           if (!canStartRender(shot.scene)) return
           const row = await savedFor(shot)
           if (!canStartRender(row.scene)) return
-          await rpc.call('renders.create', {
+          const take = await rpc.call('renders.create', {
             pieceId,
             sceneId: row.id,
             title: row.title,
             ...extra,
           })
+          queryClient.setQueryData<RenderJob[]>(rpcKey('renders.list', takesInput), (existing) =>
+            existing?.some(({ id }) => id === take.id)
+              ? existing
+              : [take, ...(existing ?? [])].slice(0, takesInput.limit),
+          )
           done++
         }
       })

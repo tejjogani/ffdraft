@@ -69,19 +69,29 @@ export class PaveModel {
     const resolve = (key: string, fallback: () => ResolvedMaterial): ResolvedMaterial =>
       resolved?.materials[key] ?? fallback()
 
+    const quality = { ...GEM_QUALITY, ...options.gemQuality }
     for (const part of evaluation.parts) {
       const key =
         resolved?.assignments[part.id] ?? metalKey(part.material, part.finish, part.plating)
-      let material = materials.get(key)
-      if (!material) {
-        const m = resolve(key, () => metalMaterial(part.material, part.finish, part.plating))
-        if (m.kind === 'gem') throw new Error(`Part ${part.id} is assigned gem material ${key}`)
-        material = m.kind === 'surface' ? createSurfaceGemMaterial(m) : createMetalMaterialFrom(m)
-        materials.set(key, material)
-        this.disposables.push(material)
-      }
       const geometry = geometryOf(part.mesh)
       this.disposables.push(geometry)
+      const m = resolve(key, () => metalMaterial(part.material, part.finish, part.plating))
+      let material: Material
+      if (m.kind === 'gem') {
+        // The ray tracer needs the BVH of this exact imported mesh.
+        const gem = new GemMaterial(m, geometry, quality.melee)
+        this.gems.push({ material: gem, tier: 'melee' })
+        this.disposables.push(gem)
+        material = gem
+      } else {
+        const cached = materials.get(key)
+        if (cached) material = cached
+        else {
+          material = m.kind === 'surface' ? createSurfaceGemMaterial(m) : createMetalMaterialFrom(m)
+          materials.set(key, material)
+          this.disposables.push(material)
+        }
+      }
       const mesh = new Mesh(geometry, material)
       mesh.name = part.id
       mesh.userData = { nodeId: part.nodeId, role: 'metal' }
@@ -96,7 +106,6 @@ export class PaveModel {
       const key = `${s.meshKey}|${resolved?.assignments[s.id] ?? gemKey(s.stone)}|${tierOf(s.role)}`
       groups.set(key, [...(groups.get(key) ?? []), s])
     }
-    const quality = { ...GEM_QUALITY, ...options.gemQuality }
     for (const [key, stones] of groups) {
       const [meshKey, materialKey, tier] = key.split('|') as [string, string, Tier]
       let geometry = gemGeometry.get(meshKey)

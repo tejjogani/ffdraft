@@ -20,6 +20,7 @@ interface Saved {
 }
 
 type RuntimeSelection = Pick<RuntimeOptions, 'blenderPath' | 'pythonPath'>
+type Discovery = { runtime: RuntimeSelection; status: RenderEngineStatus }
 
 const UNPROBED: RenderEngineStatus = {
   available: false,
@@ -40,6 +41,7 @@ export const BLENDER_INSTALL_UNAVAILABLE: RenderInstallStatus = {
 
 const BOOT_WAIT_MS = 20_000
 const DISCOVERY_PROBE_MS = 8_000
+const MANAGED_RETRY_PROBE_MS = 30_000
 const compatible = (version: string | null): boolean => /^5\.3\.\d+$/.test(version ?? '')
 
 export class BlenderSetup {
@@ -48,10 +50,12 @@ export class BlenderSetup {
   readonly #env: NodeJS.ProcessEnv
   readonly #lifetime = new AbortController()
   #configuredPath: string | null = null
+  #savedStatus: RenderEngineStatus | undefined
   #runtime: RuntimeSelection = {}
   #status: RenderEngineStatus = UNPROBED
   #saving: Promise<void> = Promise.resolve()
   #configuring: Promise<RenderEngineStatus> | null = null
+  #rechecking: Promise<void> | null = null
   #checked = false
   #installStatus: RenderInstallStatus
   #installation: { controller: AbortController; done: Promise<void> } | null = null
@@ -99,31 +103,43 @@ export class BlenderSetup {
   async #start(): Promise<void> {
     const saved = await this.#load()
     this.#configuredPath = saved?.blenderPath ?? null
-    const found = await this.#discover(this.#configuredPath)
-    this.#lifetime.signal.throwIfAborted()
-    this.#runtime = found.runtime
-    const device = saved?.status?.path === found.status.path ? saved.status.device : null
-    this.#status = { ...found.status, device: found.status.available ? device : null }
+    this.#savedStatus = saved?.status
+    this.#useDiscovered(await this.#discover(this.#configuredPath))
   }
 
-  async #discover(configuredPath: string | null): Promise<{
-    runtime: RuntimeSelection
-    status: RenderEngineStatus
-  }> {
+  #useDiscovered(found: Discovery): void {
+    this.#lifetime.signal.throwIfAborted()
+    this.#runtime = found.runtime
+    const saved = this.#savedStatus
+    const sameEngine = saved?.path === found.status.path && saved?.version === found.status.version
+    this.#status = {
+      ...found.status,
+      device: found.status.available && sameEngine ? saved.device : null,
+    }
+  }
+
+  async #discover(
+    configuredPath: string | null,
+    managedProbeMs = DISCOVERY_PROBE_MS,
+  ): Promise<Discovery> {
     const signal = this.#lifetime.signal
     const installed = resolveRuntime({ env: this.#env })
     const fallback: RuntimeSelection =
       installed.kind === 'bpy'
         ? { pythonPath: installed.command }
         : { blenderPath: installed.command }
+    let failedSelection: Discovery | undefined
     if (configuredPath) {
       const runtime = { blenderPath: configuredPath }
       const status = await probe(runtime, signal)
       if (status.available) return { runtime, status }
+      failedSelection = { runtime, status }
     }
     const explicit = !!(this.#env.PAVE_PYTHON || this.#env.PAVE_BLENDER)
     const status = await probe(fallback, signal, !explicit)
-    if (status.available || !this.#dataDir) return { runtime: fallback, status }
+    if (status.available) return { runtime: fallback, status }
+    if (explicit) failedSelection ??= { runtime: fallback, status }
+    if (!this.#dataDir) return failedSelection ?? { runtime: fallback, status }
 
     const managed = managedBlenderPath(this.#dataDir)
     const candidates = await installedBlenderCandidates(this.#env)
@@ -131,10 +147,27 @@ export class BlenderSetup {
       signal.throwIfAborted()
       if (!path || !existsSync(path) || path === status.path || path === configuredPath) continue
       const runtime = { blenderPath: path }
-      const candidate = await probe(runtime, signal, true, DISCOVERY_PROBE_MS)
+      const candidate = await probe(
+        runtime,
+        signal,
+        true,
+        path === managed ? managedProbeMs : DISCOVERY_PROBE_MS,
+      )
+      signal.throwIfAborted()
       if (candidate.available) return { runtime, status: candidate }
+      if (path === managed) {
+        console.error('Checking the installed Blender failed:', candidate.reason)
+        failedSelection ??= {
+          runtime,
+          status: {
+            ...candidate,
+            reason:
+              'The installed Blender could not start. Retry the render, or check Blender in Pavé’s Render engine settings.',
+          },
+        }
+      }
     }
-    return { runtime: fallback, status }
+    return failedSelection ?? { runtime: fallback, status }
   }
 
   get available(): boolean {
@@ -143,6 +176,19 @@ export class BlenderSetup {
 
   status(): RenderEngineStatus {
     return this.#status
+  }
+
+  /** A failed launch is retryable for the current managed package after a prior successful probe. */
+  hasKnownManagedBlender(): boolean {
+    const saved = this.#savedStatus
+    const path = this.#dataDir && managedBlenderPath(this.#dataDir)
+    return (
+      !!path &&
+      saved?.available === true &&
+      saved.path === path &&
+      compatible(saved.version) &&
+      existsSync(path)
+    )
   }
 
   /** The same executable and runtime kind that passed the probe. */
@@ -154,7 +200,7 @@ export class BlenderSetup {
   async configure(blenderPath: string | null): Promise<RenderEngineStatus> {
     await this.probed
     this.#lifetime.signal.throwIfAborted()
-    if (this.#installation || this.#configuring)
+    if (this.#installation || this.#configuring || this.#rechecking)
       throw conflict('Wait for the current Blender setup to finish.')
     this.#configuring = this.#configure(blenderPath)
     try {
@@ -191,6 +237,7 @@ export class BlenderSetup {
       !this.#installStatus.supported ||
       !this.#checked ||
       this.#configuring ||
+      this.#rechecking ||
       this.#installation ||
       this.#status.available ||
       this.#lifetime.signal.aborted
@@ -210,10 +257,25 @@ export class BlenderSetup {
     return this.installStatus()
   }
 
-  /** Join the current managed install, or start one after discovery has finished. */
-  async prepareRender(): Promise<{ engine: RenderEngineStatus; setupCanceled?: boolean }> {
+  /** Recheck an existing engine before rendering, with installation gated by the caller. */
+  async prepareRender(
+    allowInstall: boolean,
+  ): Promise<{ engine: RenderEngineStatus; setupCanceled?: boolean }> {
     await this.probed
     await this.#configuring?.catch(() => undefined)
+    if (this.available || this.#lifetime.signal.aborted) return { engine: this.#status }
+    if (this.hasKnownManagedBlender()) {
+      if (this.#installation) {
+        await this.#installation.done
+      } else {
+        this.#rechecking ??= this.#recheckManaged().finally(() => {
+          this.#rechecking = null
+        })
+        await this.#rechecking
+      }
+      return { engine: this.#status }
+    }
+    if (!allowInstall) return { engine: this.#status }
     this.install()
     await this.#installation?.done
     const install = this.installStatus()
@@ -221,6 +283,14 @@ export class BlenderSetup {
     if (install.phase === 'failed')
       return { engine: { ...this.#status, reason: install.reason ?? 'Blender setup failed.' } }
     return { engine: this.#status }
+  }
+
+  async #recheckManaged(): Promise<void> {
+    try {
+      this.#useDiscovered(await this.#discover(this.#configuredPath, MANAGED_RETRY_PROBE_MS))
+    } catch (err) {
+      if (!this.#lifetime.signal.aborted) console.error('Rechecking Blender failed:', err)
+    }
   }
 
   async cancelInstall(): Promise<RenderInstallStatus> {
@@ -270,7 +340,13 @@ export class BlenderSetup {
 
   async dispose(): Promise<void> {
     this.#lifetime.abort()
-    await Promise.allSettled([this.cancelInstall(), this.probed, this.#configuring, this.#saving])
+    await Promise.allSettled([
+      this.cancelInstall(),
+      this.probed,
+      this.#configuring,
+      this.#rechecking,
+      this.#saving,
+    ])
   }
 
   /** Remembers the device Cycles reported, for `renders.engine`. */

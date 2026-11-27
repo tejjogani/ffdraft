@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { placeOf, tabPath } from './place'
+import { placeOf, renderShotId, tabPath } from './place'
 
 describe('placeOf', () => {
   it('reads the piece and its tab, the overview being the piece’s own page', () => {
@@ -22,4 +22,19 @@ describe('placeOf', () => {
     for (const tab of ['overview', 'design', 'render', 'history'] as const)
       expect(placeOf(`/pieces/p${tabPath(tab)}`).tab).toBe(tab)
   })
+})
+
+it('resolves the selected saved Render shot by project and ID as the view changes', () => {
+  const first = { id: 'scn_1', pieceId: 'pc_1' }
+  const second = { id: 'scn_2', pieceId: 'pc_1' }
+  const foreign = { id: 'scn_3', pieceId: 'pc_2' }
+  const saved = [first, second, foreign]
+  const render = placeOf('/pieces/pc_1/render')
+  expect(renderShotId(render, undefined, saved)).toBe(first.id)
+  expect(renderShotId(render, second.id, saved)).toBe(second.id)
+  expect(renderShotId(render, first.id, saved)).toBe(first.id)
+  expect(renderShotId(render, foreign.id, saved)).toBeNull()
+  expect(renderShotId(render, 'scn_removed', saved)).toBeNull()
+  expect(renderShotId(render, undefined, [])).toBeNull()
+  expect(renderShotId(placeOf('/pieces/pc_1/design'), second.id, saved)).toBeNull()
 })

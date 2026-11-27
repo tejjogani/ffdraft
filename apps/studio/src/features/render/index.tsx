@@ -12,8 +12,8 @@ import { RenderStudio } from './RenderStudio'
 import { takeLabel } from './shots'
 import { TakeMedia } from './TakeMedia'
 
-export function PieceRender({ pieceId }: { pieceId: string }) {
-  return <RenderStudio pieceId={pieceId} />
+export function PieceRender({ pieceId, shotId }: { pieceId: string; shotId?: string }) {
+  return <RenderStudio pieceId={pieceId} shotId={shotId} />
 }
 
 /** Every finished take across the pieces, newest first; each opens its piece's Render tab. */
@@ -44,6 +44,7 @@ export function RendersPage() {
                 <Link
                   to="/pieces/$id/render"
                   params={{ id: t.pieceId }}
+                  search={t.sceneId ? { shot: t.sceneId } : undefined}
                   className="group block overflow-hidden rounded-lg bg-bg shadow-[0_0_0_1px_var(--line)]"
                 >
                   <div className="relative aspect-square bg-bg-muted">

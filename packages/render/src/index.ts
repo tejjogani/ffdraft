@@ -3,6 +3,7 @@
  * catalogue, the scene resolver and the numeric render critique. Renderer backends live in
  * `@pave/render/three` (viewport) and `@pave/render/node` (Blender worker).
  */
+export { circularBandLayout } from '@pave/kernel/circular-band'
 export { ease, loops, RACK_FOCUS_FSTOP, resolveAnimation, sampleTrack } from './animation'
 export {
   type AdjustablePath,
@@ -19,6 +20,7 @@ export {
   cameraBasis,
   cameraPose,
   framePoints,
+  importedStationDetail,
   MAX_ELEVATION,
   MIN_DISTANCE_SHARE,
   orbitOf,
@@ -66,7 +68,7 @@ export {
   sceneHash,
   type ViewPose,
 } from './framing'
-export { renderEvaluation, unassignedRhinoBody } from './import-preview'
+export { renderEvaluation, unassignedRhinoBody, withImportedBodyDefaults } from './import-preview'
 export {
   type Background,
   DEFAULT_GROUNDS,

@@ -327,11 +327,16 @@ export async function contextText(
           )
         : await getBoard(ctx, input.context.boardId)
       : null)
-  const [assets, refs] = await Promise.all([
+  const [assets, refs, shot] = await Promise.all([
     input.attachments.length
       ? ctx.repo.assets.many({ where: inArray(t.asset.id, input.attachments) })
       : [],
     selectedReferences(ctx, input, run.pieceId),
+    piece && input.context.sceneId
+      ? ctx.repo.scenes.first(
+          and(eq(t.renderScene.id, input.context.sceneId), eq(t.renderScene.pieceId, piece.id)),
+        )
+      : undefined,
   ])
   const text = renderContext({
     date: new Date().toISOString().slice(0, 10),
@@ -356,6 +361,7 @@ export async function contextText(
         }
       : null,
     selection: selection(piece, input.context.selection),
+    shot: shot ? { id: shot.id, title: shot.title } : null,
     board: board ? { id: board.id, title: board.title } : null,
     // In the order sent, matching the images in the message.
     attachments: input.attachments.flatMap((id) => {

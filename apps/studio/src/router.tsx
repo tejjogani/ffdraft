@@ -137,6 +137,22 @@ const designRoute = createRoute({
   },
 })
 
+const renderRoute = createRoute({
+  getParentRoute: () => pieceRoute,
+  path: 'render',
+  validateSearch: (s: Record<string, unknown>): { shot?: string } =>
+    typeof s.shot === 'string' && s.shot.length > 0 ? { shot: s.shot } : {},
+  component: function RenderTab() {
+    const { id } = renderRoute.useParams()
+    const { shot } = renderRoute.useSearch()
+    return (
+      <PieceTab bleed pieceId={id}>
+        <PieceRender key={id} pieceId={id} shotId={shot} />
+      </PieceTab>
+    )
+  },
+})
+
 const moodboardsRoute = route('/moodboards', () => <BoardsPage />)
 const boardRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -205,7 +221,7 @@ const routeTree = rootRoute.addChildren([
     pieceTab('/', PieceOverview),
     pieceTab('directions', PieceDirections, false, true),
     designRoute,
-    pieceTab('render', PieceRender, true),
+    renderRoute,
     pieceTab('on-model', PieceOnModel),
     pieceTab('sourcing', PieceSourcing),
     pieceTab('production', PieceProduction),

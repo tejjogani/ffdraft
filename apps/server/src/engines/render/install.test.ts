@@ -1,10 +1,11 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { isToolCommand, RenderInstallStatusSchema, RenderJobSchema } from '@pave/schema'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { assistantServer, text, tool } from '../../assistant/testing'
-import { engineServer, until } from '../../test/engines'
+import type { GeometryService } from '../../services'
+import { assetBytes, engineServer, until } from '../../test/engines'
 import {
   BOOT_TIMEOUT,
   client,
@@ -223,6 +224,47 @@ describe.skipIf(process.platform === 'win32')('managed Blender setup', () => {
     }
   })
 
+  it('keeps choosing configured and environment runtimes first when retrying discovery', async () => {
+    const isolated = await mkdtemp(join(tmpdir(), 'pave-engine-priority-'))
+    const managed = join(isolated, 'blender')
+    const configured = join(isolated, 'configured')
+    const python = join(isolated, 'user-python')
+    const configuredFile = join(isolated, 'configured.json')
+    const autoFile = join(isolated, 'auto.json')
+    const saved = {
+      available: true,
+      path: managed,
+      version: '5.3.0',
+      device: 'METAL',
+      reason: null,
+    }
+    await fakeBlender(managed, '4.5.0')
+    await writeFile(configuredFile, JSON.stringify({ blenderPath: configured, status: saved }))
+    await writeFile(autoFile, JSON.stringify({ blenderPath: null, status: saved }))
+    const opts = { dataDir: isolated, env: { PAVE_PYTHON: python } }
+    const manual = new BlenderSetup({ ...opts, file: configuredFile })
+    const fromEnv = new BlenderSetup({ ...opts, file: autoFile })
+    try {
+      await Promise.all([manual.probed, fromEnv.probed])
+      expect(manual.available).toBe(false)
+      expect(fromEnv.available).toBe(false)
+      expect((await fromEnv.prepareRender(false)).engine.available).toBe(false)
+      await Promise.all([
+        fakeBlender(managed, '5.3.0'),
+        fakeBlender(configured, '5.3.1'),
+        fakeBlender(python, '5.3.2'),
+      ])
+      const [a, b] = await Promise.all([manual.prepareRender(false), fromEnv.prepareRender(false)])
+      expect(a.engine).toMatchObject({ available: true, path: configured, device: null })
+      expect(manual.runtime()).toEqual({ blenderPath: configured })
+      expect(b.engine).toMatchObject({ available: true, path: python, device: null })
+      expect(fromEnv.runtime()).toEqual({ pythonPath: python })
+    } finally {
+      await Promise.all([manual.dispose(), fromEnv.dispose()])
+      await rm(isolated, { recursive: true, force: true })
+    }
+  })
+
   it('finds a compatible Blender already installed in a standard location', async () => {
     const compatible = join(dir, 'installed-blender')
     await fakeBlender(compatible, '5.3.1')
@@ -306,6 +348,116 @@ it('refuses installation to an accounts owner or designer', async () => {
     await server.dispose()
   }
 })
+
+it.skipIf(process.platform === 'win32')(
+  'rechecks the confirmed managed engine after a failed boot probe and reuses rendered assets',
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'pave-render-reprobe-'))
+    const executable = join(dir, 'blender')
+    const engineFile = join(dir, 'engine.json')
+    const installAttempts = packageInstall.run.mock.calls.length
+    const render = vi
+      .spyOn(takeEngine, 'renderTake')
+      .mockImplementation(async ({ scene, store }) => ({
+        scene,
+        assetIds: [await store(join(dir, 'render.png'), 'take')],
+        critique: { passes: [] },
+        seconds: 1,
+        device: 'METAL',
+        sceneHash: 'test-render',
+      }))
+    // Rendering is mocked here. Keep real kernel startup off the path to the cached take.
+    const renderInput = vi.fn<GeometryService['renderInput']>().mockResolvedValue({
+      glb: { bytes: new Uint8Array(), name: 'render.glb', mime: 'model/gltf-binary' },
+      subject: {
+        bounds: { min: [0, 0, 0], max: [1, 1, 1] },
+        parts: [
+          {
+            id: 'part',
+            nodeId: 'part',
+            material: 'pt950',
+            finish: 'polished',
+            plating: 'none',
+            bounds: { min: [0, 0, 0], max: [1, 1, 1] },
+          },
+        ],
+        stones: [],
+      },
+    })
+    const boot = async () => {
+      const instance = await engineServer({
+        config: { dataDir: dir, blobDir: join(dir, 'blobs') },
+        engines: { engineFile, blenderEnv: {} },
+      })
+      vi.spyOn(instance.runtime.services.get('geometry'), 'renderInput').mockImplementation(
+        renderInput,
+      )
+      return instance
+    }
+    let server: TestServer | undefined
+    try {
+      await writeFile(join(dir, 'render.png'), 'test render')
+      await fakeBlender(executable, '5.3.0')
+      server = await boot()
+      const firstApi = client(server)
+      const piece = await firstApi.call('pieces.create', { templateId: 'solitaire' })
+      const shot = { pieceId: piece.id, scene: {} }
+      const wait = (api: ReturnType<typeof client>, id: string) =>
+        until(
+          () => api.call('renders.get', { id }),
+          (job) => job.status === 'done' || job.status === 'failed',
+          { timeoutMs: 3000 },
+        )
+      const first = await wait(firstApi, (await firstApi.call('renders.create', shot)).id)
+      expect(first).toMatchObject({ status: 'done', device: 'METAL', seconds: 1 })
+      expect(first.assetIds).toHaveLength(1)
+      await server.dispose()
+      server = undefined
+      const configBefore = await readFile(engineFile, 'utf8')
+
+      // A child can exist and still fail to launch during discovery.
+      await writeFile(executable, '#!/bin/sh\nprintf "Blender launch failed\\n" >&2\nexit 1\n')
+      server = await boot()
+      const api = client(server)
+      expect((await api.call('renders.engine', {})).available).toBe(false)
+      expect(
+        (await post(server, 'renders.installEngine', { headers: { origin: '' } })).status,
+      ).toBe(403)
+      const broken = await api.call('renders.create', { ...shot, engine: 'blender' })
+      expect(await wait(api, broken.id)).toMatchObject({
+        status: 'failed',
+        error: expect.stringContaining('Retry the render'),
+      })
+
+      await fakeBlender(executable, '5.3.0')
+      const [auto, explicit] = await Promise.all([
+        api.call('renders.create', shot),
+        api.call('renders.create', { ...shot, engine: 'blender' }),
+      ])
+      expect(auto.engine).toBe('blender')
+      const jobs = await Promise.all([wait(api, auto.id), wait(api, explicit.id)])
+      for (const job of jobs)
+        expect(job).toMatchObject({ status: 'done', assetIds: first.assetIds, seconds: 0 })
+      expect(render).toHaveBeenCalledTimes(1)
+      expect(renderInput).toHaveBeenCalledTimes(1)
+      expect(packageInstall.run).toHaveBeenCalledTimes(installAttempts)
+      expect(await api.call('renders.engine', {})).toMatchObject({
+        available: true,
+        path: executable,
+        version: '5.3.0',
+        device: 'METAL',
+      })
+      expect(await readFile(engineFile, 'utf8')).toBe(configBefore)
+      const bytes = await assetBytes(api, { url: `/api/assets/${first.assetIds[0]}` })
+      expect(Buffer.from(bytes).toString()).toBe('test render')
+    } finally {
+      render.mockRestore()
+      await server?.dispose()
+      await rm(dir, { recursive: true, force: true })
+    }
+  },
+  BOOT_TIMEOUT,
+)
 
 it.skipIf(process.platform === 'win32')(
   'automatically installs from an owner render, sharing one attempt across waiting takes',

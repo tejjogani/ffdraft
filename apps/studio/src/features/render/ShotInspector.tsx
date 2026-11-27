@@ -41,6 +41,15 @@ const BACKDROPS = [
   { value: 'transparent', label: 'Transparent' },
 ] as const
 
+const GROUNDS = [
+  { value: 'look', label: 'As the look' },
+  { value: 'none', label: 'None' },
+  { value: 'shadow', label: 'Contact shadow' },
+  { value: 'sweep', label: 'Seamless paper' },
+  { value: 'reflective', label: 'Black acrylic' },
+  { value: 'white-gloss', label: 'White gloss' },
+] as const satisfies ReadonlyArray<{ value: RenderScene['ground']; label: string }>
+
 /** A slider that shows its value while dragged and reports once on release. */
 function LiveSlider({
   value,
@@ -85,8 +94,6 @@ export function ShotInspector({
   estimate,
   engine,
   disabled,
-  showImportPreview,
-  importPreviewDisabled,
 }: {
   scene: RenderScene
   onChange: (patch: Patch) => void
@@ -94,8 +101,6 @@ export function ShotInspector({
   estimate: { seconds: number; basis: string } | null
   engine: 'blender' | 'browser' | null
   disabled?: boolean
-  showImportPreview?: boolean
-  importPreviewDisabled?: boolean
 }) {
   const lead = LOOK_CHOICES.slice(0, 3)
   const more = LOOK_CHOICES.slice(3)
@@ -132,17 +137,6 @@ export function ShotInspector({
           placeholder="More looks…"
           options={more.map((l) => ({ value: l.look, label: l.label, hint: l.hint }))}
         />
-        {showImportPreview && (
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs">Show unassigned bodies in clay</span>
-            <Switch
-              aria-label="Show unassigned bodies in clay"
-              checked={scene.includeUnassignedRhino === true}
-              disabled={importPreviewDisabled}
-              onChange={(on) => onChange({ includeUnassignedRhino: on ? true : null })}
-            />
-          </div>
-        )}
       </Section>
 
       <Section title="Angle">
@@ -238,6 +232,12 @@ export function ShotInspector({
           value={scene.environment.background === 'color' ? 'look' : scene.environment.background}
           onChange={(background) => onChange({ environment: { background } })}
           options={BACKDROPS.map((b) => ({ value: b.value, label: `Backdrop: ${b.label}` }))}
+        />
+        <Select
+          aria-label="Ground"
+          value={scene.ground}
+          onChange={(ground) => onChange({ ground })}
+          options={GROUNDS.map((g) => ({ value: g.value, label: `Ground: ${g.label}` }))}
         />
       </Section>
 

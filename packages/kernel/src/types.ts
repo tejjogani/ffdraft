@@ -17,6 +17,7 @@ import type {
   Op,
   PlatingId,
   ProngNumber,
+  SourceRenderAppearance,
 } from '@pave/schema'
 
 /** Indexed triangle mesh in mm, Z up. Normals are per-vertex; hard edges split vertices. */
@@ -53,6 +54,8 @@ export interface Part {
   mesh: MeshData
   /** Role of an imported source shown in the draft viewport. */
   importRole?: ImportRole
+  /** Look bound to an unassigned imported body, independent of casting data. */
+  sourceAppearance?: SourceRenderAppearance
   /** Feature edges as line segments (x0,y0,z0,x1,y1,z1,…) for crisp CAD display and drawings. */
   edges: Float32Array
   volumeMm3: number
