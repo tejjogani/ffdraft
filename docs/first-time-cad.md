@@ -10,23 +10,31 @@ On a smaller screen, use the Features and Inspector buttons above the model to o
 
 ## Bring in an existing Rhino model
 
-Open the destination project’s CAD builder and choose Import model. Pick a .3dm and check its layers and selected dimensions in millimetres. Leave out display stands and lighting geometry. For a metal-only casting, leave out gemstone layers too. If stones and metal share a layer, separate them in Rhino first. Pavé treats each included part as a mesh body.
+Open the destination project’s CAD builder and choose Import model. Pick a .3dm and check its layers and selected dimensions in millimetres. Leave out display stands and lighting geometry. For a metal-only casting, leave out gemstone layers too. If stones and metal share a layer, separate them in Rhino first.
 
-Select **Include editable curves** to bring in Rhino curves from the selected layers. Pavé keeps NURBS control points, knots and weights. Lines, arcs and connected joined curves convert to NURBS with the same shape and domain. A converted arc or joined curve can use a different parameterization within that domain. Select an imported curve in Features to edit its control points and weights in Inspector. Export as .3dm to keep the curve geometry editable in Rhino.
+Turn on Include editable curves to import supported curves as NURBS from the selected layers. Pavé keeps the original NURBS degree, knots and weights and places the control points in world millimetres. Converted lines, arcs and connected joined curves preserve their shape and parameter domain. Converted arcs and joined curves can use different parameter spacing along the same shape.
 
-Review the skipped objects before choosing Import. You can select the new parts in Features and change their material, finish or transform. Undo removes the import in one edit. After reopening the project, use History and choose Revert on the import. Keep the original .3dm for editable surfaces and Rhino design history.
+Supported closed Rhino B-reps and extrusions with complete saved render meshes retain a native solid alongside the display mesh. Look for Rhino surface retained in the Inspector. Rhino export can write that solid back to .3dm when the part still represents the original shape. For a project that used the earlier mesh-only importer, re-import the original .3dm to bring in native solids or editable curves. Keep the original for Rhino construction history and plug-in data.
+
+Review the skipped objects before choosing Import. Select the new parts in Features to change their material, finish or transform. Undo removes the batch import in one edit. From a reopened project, use History and choose Revert on the import.
 
 ## Edit a Rhino curve
 
-For a curve imported as NURBS, select its name in Features and choose Edit control points. Click a point on the dashed control polygon or enter its point number, then drag it in the selected view or type X, Y and Z in millimetres. The solid line previews the curve. Adjust Weight to change how strongly a point attracts the curve. Save points records one edit.
+For a curve imported as NURBS, select its name in Features and choose Edit control points. Click a point on the dashed control polygon or enter its point number, then drag it in the selected view or type X, Y and Z in millimetres. The solid line previews the curve. Adjust Weight to change how strongly a point attracts the curve. Save points records one edit. Export as Rhino .3dm to bring the edited curve back into Rhino.
 
 ## Export a mesh from Rhino
 
-If a solid has no saved display mesh, select it in Rhino and run Mesh. Preview the result, select the generated mesh objects, then choose File → Export Selected and save as .3dm to carry separate parts and the document units. You can also choose STL. In Pavé, set the STL source units to the same units used for the export and check a known measurement before importing. A single STL comes into Features as one part.
+If a solid has no saved render mesh, save the original with its render meshes in Rhino and try the import again. To bring it in as a mesh, select it in Rhino and run Mesh. Preview the result, select the generated mesh objects, then choose File → Export Selected and save as .3dm to carry separate parts and the document units. You can also choose STL. In Pavé, set the STL source units to the same units used for the export and check a known measurement before importing. A single STL comes into Features as one part.
 
 ## Edit an imported mesh
 
 Select a Rhino or STL part brought in with Import model and choose Edit mesh in the Inspector. Choose Vertex, Edge or Face, then click a visible component. Orbit the part or choose a view such as Bottom to reach the other side. For an exact vertex, enter its zero-based ID. Type the X, Y and Z displacement in source millimetres to preview the move. Choose Save mesh edit to record one change, or Cancel to discard the preview. Undo reverses the change.
+
+A saved mesh shape edit makes that part export as a mesh in .3dm. Undo the edit to make its retained solid eligible for native Rhino export again.
+
+## Save a portable Pavé file
+
+Choose Pavé file in the export menu. Open the saved .pave on another Pavé installation to keep working with its imported meshes, mesh edits, editable NURBS curves and retained Rhino solids. Review any STEP output in the receiving CAD tool. STEP parity for imported Rhino solids remains unverified.
 
 ## Make a ring band thicker or thinner
 
@@ -44,7 +52,7 @@ The band and head can use different metals. To change the whole piece at once, r
 
 Select Head in Features. Under Style, try Basket. Set Gallery rails to 2, choose Claw under Tip, and adjust Prong wire. Fine-tune gives you Prong rotation and Taper. For an open-sided setting, choose Half bezel and adjust Half-bezel arcs and Bezel wall. The head keeps its link to the centre stone.
 
-On a prong or basket head, pick Prong 1. Use the locate button to see which tip it is. Enter 0.25 mm in Tip offset to move it outward, then press Enter. A negative value moves it inward. Editing its individual mesh vertices and faces is outside the current editor. For an additional custom solid, use Draw profile, then select the solid and choose Edit profile to change its outline.
+On a prong or basket head, pick Prong 1. Use the locate button to see which tip it is. Enter 0.25 mm in Tip offset to move it outward, then press Enter. A negative value moves it inward. For an additional custom solid, use Draw profile, then select the solid and choose Edit profile to change its outline.
 
 ## Change the centre stone
 

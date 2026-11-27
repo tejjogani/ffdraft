@@ -51,12 +51,14 @@ jobs:
       # process when the step that created it exits.
       - name: Verify Windows installation, CAD, Python and Blender
         run: |
+          $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           node -e 'if (process.platform !== "win32" || process.arch !== "x64") process.exit(1); console.log(process.platform, process.arch, process.version)'
           $env:HOST = '127.0.0.1'
           $env:PORT = '18976'
           $env:PAVE_AUTH = 'local'
           $env:PAVE_SEED = 'false'
+          $env:PAVE_TEST_BROWSER = 'chromium'
           $env:PAVE_DATA_DIR = Join-Path $env:RUNNER_TEMP 'Pave Windows data'
           $env:PAVE_TEST_URL = "http://127.0.0.1:$env:PORT"
           $logs = Join-Path $env:RUNNER_TEMP 'pave-windows-logs'
@@ -111,6 +113,15 @@ jobs:
             }
             Test-PaveStage 'Verify Rhino and STL migration in Chromium' {
               pnpm exec tsx apps/studio/e2e/model-import.ts $env:PAVE_TEST_URL
+            }
+            Test-PaveStage 'Verify Rhino curve import and export in Chromium' {
+              pnpm exec tsx apps/studio/e2e/rhino-curve-io.ts $env:PAVE_TEST_URL
+            }
+            Test-PaveStage 'Verify weighted NURBS point editing in Chromium' {
+              pnpm exec tsx apps/studio/e2e/nurbs-controls.ts $env:PAVE_TEST_URL
+            }
+            Test-PaveStage 'Verify imported mesh editing in Chromium' {
+              pnpm exec tsx apps/studio/e2e/mesh-edit.ts $env:PAVE_TEST_URL
             }
             Test-PaveStage 'Install and verify managed Blender through Studio' {
               pnpm exec tsx apps/studio/e2e/render-engine-setup.ts $env:PAVE_TEST_URL $logs
