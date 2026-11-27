@@ -262,7 +262,14 @@ export async function bootSmoke(opts: Pick<SmokeOptions, 'env' | 'model'>): Prom
 export async function follow(
   api: Client,
   runId: string,
-  opts: { timeoutMs: number; log: (line: string) => void },
+  opts: {
+    timeoutMs: number
+    log: (line: string) => void
+    decide?: (step: Step) => {
+      decision: 'approve' | 'deny'
+      answers?: Record<string, string[]>
+    }
+  },
 ): Promise<Detail> {
   const deadline = Date.now() + opts.timeoutMs
   const printed = new Set<string>()
@@ -281,6 +288,12 @@ export async function follow(
         if (s.status !== 'awaiting-approval' || !s.toolCallId || approved.has(s.toolCallId))
           continue
         approved.add(s.toolCallId)
+        if (opts.decide) {
+          const approval = opts.decide(s)
+          opts.log(`    · ${approval.decision === 'approve' ? 'approved' : 'declined'} ${s.name}`)
+          await api.call('runs.decide', { runId, toolCallId: s.toolCallId, ...approval })
+          continue
+        }
         if (s.name === 'chat.ask') {
           // The questions every AI job asks first wait like an approval; Go answers them.
           const { answers, line } = smokeAnswers(s.input)
