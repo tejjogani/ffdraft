@@ -519,6 +519,7 @@ export const commands = {
     kind: 'mutation',
     tool: true,
     input: z.object({
+      requestId: z.string().min(8).max(64).optional(),
       title: z.string().max(120).optional(),
       kind: z.enum(PIECE_KINDS).optional(),
       collectionId: id.nullable().optional(),
@@ -535,6 +536,8 @@ export const commands = {
     kind: 'mutation',
     input: z.object({
       requestId: z.string().min(8).max(64),
+      title: z.string().trim().min(1).max(120).optional(),
+      collectionId: id.nullable().optional(),
       brief: z.string().trim().min(1).max(20_000),
       assetIds: z.array(id).max(8).default([]),
     }),

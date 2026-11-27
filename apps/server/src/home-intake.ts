@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { type CommandParsedInput, chainFromBrief, emptyDesign, type PieceKind } from '@pave/schema'
 import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { type Ctx, publish } from './context'
@@ -6,6 +5,8 @@ import * as t from './db/schema'
 import { forbidden, notFound } from './errors'
 import { insertReferences, referenceFromItem, toReference } from './handlers/ideate'
 import { designBoardFor } from './ideas'
+import { requestedPieceId } from './ids'
+import { getCollection } from './lookups'
 
 function kindFromBrief(brief: string): PieceKind {
   if (/\b(pendants?|medallions?|charms?)\b/i.test(brief)) return 'pendant'
@@ -23,20 +24,22 @@ function initialDetails(kind: PieceKind, brief: string) {
 
 export async function startIntake(
   ctx: Ctx,
-  { requestId, brief, assetIds }: CommandParsedInput<'pieces.startIntake'>,
+  { requestId, title, collectionId, brief, assetIds }: CommandParsedInput<'pieces.startIntake'>,
 ) {
-  const pieceId = `pc_${createHash('sha256')
-    .update(JSON.stringify([ctx.orgId, ctx.user.id, requestId]))
-    .digest('hex')
-    .slice(0, 24)}`
+  const pieceId = requestedPieceId(ctx.orgId, ctx.user.id, requestId, 'intake')
   const ids = [...new Set(assetIds)]
   const kind = kindFromBrief(brief)
   const board = await ctx.repo.transaction(async (repo) => {
     const tx = { ...ctx, repo }
+    // A retry returns the saved project even if its original folder has since been removed.
+    if (collectionId && !(await repo.pieces.first(eq(t.piece.id, pieceId)))) {
+      await getCollection(tx, collectionId)
+    }
     const created = await repo.pieces.insertIfAbsent({
       id: pieceId,
       createdBy: ctx.user.id,
-      title: brief.split(/\r?\n/, 1)[0]!.slice(0, 80),
+      collectionId: collectionId ?? null,
+      title: title ?? brief.split(/\r?\n/, 1)[0]!.slice(0, 80),
       kind,
       stage: 'idea',
       brief,
