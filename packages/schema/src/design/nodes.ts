@@ -15,6 +15,7 @@ import { FINISH_IDS, METAL_IDS, PLATING_IDS } from '../domain/metals'
 import { RING_SIZE_SYSTEMS } from '../domain/sizes'
 import { CurveDefinition } from './curve'
 import { choice, deg, follows, int, mm, ratio, ref, text, toggle, vec3 } from './fields'
+import { MeshEdits } from './mesh-edit'
 import { DrawnProfile } from './profile'
 
 /** Kinds that produce a solid another feature can attach to, cut into or cover with stones. */
@@ -475,6 +476,7 @@ export const MeshBody = z
       advanced: true,
       description: 'Use the coordinates in the mesh asset, in millimetres.',
     }),
+    meshEdits: MeshEdits.optional(),
     height: mm('Height', 3, 200, 40, {
       description: 'The mesh is scaled to this overall height.',
       when: { keepSourcePlacement: [false] },
@@ -491,6 +493,18 @@ export const MeshBody = z
       description: 'Mesh simplification.',
     }),
   })
+  .refine(
+    (node) =>
+      !node.meshEdits ||
+      (node.keepSourcePlacement &&
+        node.source.type === 'asset' &&
+        node.meshEdits.assetId === node.source.assetId),
+    {
+      path: ['meshEdits'],
+      message:
+        'Mesh edits require the same source asset and its original placement. Clear the edits to change either.',
+    },
+  )
   .meta({
     title: 'Sculpted body',
     description:

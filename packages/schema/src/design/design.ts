@@ -114,7 +114,16 @@ export function mergePatch(target: unknown, patch: unknown): unknown {
   const out: Record<string, unknown> = isObject(target) ? { ...target } : {}
   for (const [k, v] of Object.entries(patch)) {
     if (v === null) delete out[k]
-    else out[k] = mergePatch(out[k], v)
+    else {
+      const previous = Object.hasOwn(out, k) ? out[k] : undefined
+      // Preserve every JSON key for schema validation, including keys with object setters.
+      Object.defineProperty(out, k, {
+        value: mergePatch(previous, v),
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      })
+    }
   }
   return out
 }
