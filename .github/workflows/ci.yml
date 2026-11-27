@@ -5,6 +5,18 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+
   check:
     strategy:
       fail-fast: false
@@ -18,8 +30,10 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
+      - id: install
+        run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm test
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm build
