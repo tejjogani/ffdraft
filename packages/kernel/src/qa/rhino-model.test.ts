@@ -4,9 +4,11 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { InstanceReference, Mesh, MeshType, Transform } from 'rhino3dm'
+import type { Brep, InstanceReference, Mesh, MeshType, Transform } from 'rhino3dm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { makeCappedPrismFixture } from '../../test-fixtures/capped-prism'
 import { freeRhino, loadRhino3dm } from '../runtime/rhino'
+import { archive, handles } from './rhino-archive'
 
 let directory: string
 const cli = fileURLToPath(new URL('./rhino-model-cli.ts', import.meta.url))
@@ -35,7 +37,7 @@ function check(...files: string[]) {
   }
 }
 
-async function writeModel(name: string, contents: 'mixed' | 'point') {
+async function writeModel(name: string, contents: 'mixed' | 'point' | 'curve' | 'mesh') {
   const rhino = await loadRhino3dm()
   const doc = new rhino.File3dm()
   const settings = doc.settings()
@@ -49,6 +51,23 @@ async function writeModel(name: string, contents: 'mixed' | 'point') {
   }
   try {
     objects.addPoint([0, 0, 0], attributes)
+    if (contents === 'curve') {
+      objects.addCurve(hold(new rhino.LineCurve([0, 0, 0], [1, 2, 3])), attributes)
+    }
+    if (contents === 'mesh') {
+      const mesh = hold(new rhino.Mesh())
+      const vertices = hold(mesh.vertices())
+      vertices.add(0, 0, 0)
+      vertices.add(1, 0, 0)
+      vertices.add(0, 1, 0)
+      vertices.add(0, 0, 1)
+      const faces = hold(mesh.faces())
+      faces.addTriFace(0, 2, 1)
+      faces.addTriFace(0, 1, 3)
+      faces.addTriFace(1, 2, 3)
+      faces.addTriFace(2, 0, 3)
+      objects.addMesh(mesh, attributes)
+    }
     if (contents === 'mixed') {
       const layers = hold(doc.layers())
       const layer = hold(new rhino.Layer())
@@ -117,6 +136,66 @@ async function writeModel(name: string, contents: 'mixed' | 'point') {
 }
 
 describe('local Rhino model check', () => {
+  it('checks archived edges and trimmed cap motion on a placed sleeve in centimetres', async () => {
+    const rhino = await loadRhino3dm()
+    const fixture = await makeCappedPrismFixture()
+    const bytes = archive(rhino, fixture, (source, keep) => {
+      const solid = keep(keep(keep(source.objects()).get(0)).geometry()) as Brep
+      return handles((hold) => {
+        const doc = hold(new rhino.File3dm())
+        hold(doc.settings()).modelUnitSystem = rhino.UnitSystem.Centimeters
+        const attributes = hold(new rhino.ObjectAttributes())
+        const definitions = hold(doc.instanceDefinitions())
+        const index = definitions.add('Test block', '', '', '', [0, 0, 0], [solid], [attributes])
+        const block = hold(definitions.get(index))
+        const transform = hold(rhino.Transform.translationXYZ(5, -3, 2))
+        transform.m00 = 0
+        transform.m02 = 1
+        transform.m20 = -1
+        transform.m22 = 0
+        const Reference = rhino.InstanceReference as unknown as new (
+          id: string,
+          transform: Transform,
+        ) => InstanceReference
+        hold(doc.objects()).addInstanceObject(hold(new Reference(block.id, transform)), attributes)
+        return doc.toByteArray()
+      })
+    })
+    const file = join(directory, 'placed test sleeve.3dm')
+    await writeFile(file, bytes)
+    const digest = sha256(bytes)
+    const { status, reports } = check(file)
+    expect(reports).toMatchObject([
+      {
+        result: 'passed',
+        sha256: { before: digest, after: digest },
+        nativeEdges: {
+          status: 'passed',
+          partsChecked: 1,
+          placedPartsChecked: 1,
+          linearEdges: 1,
+          nonlinearEdges: 1,
+          rationalEdges: 1,
+          samples: expect.any(Number),
+          maxErrorMm: expect.any(Number),
+        },
+        nativeCaps: {
+          status: 'passed',
+          candidatesChecked: 1,
+          beforeSpanMm: 20,
+          afterSpanMm: 20.25,
+          innerLoops: 1,
+        },
+      },
+    ])
+    expect(reports[0].nativeEdges.samples).toBeGreaterThan(4)
+    expect(reports[0].nativeEdges.maxErrorMm).toBeLessThan(1e-6)
+    expect(reports[0].nativeCaps.fixedEndMaxErrorMm).toBeLessThan(1e-6)
+    expect(reports[0].nativeCaps.movedEndMaxErrorMm).toBeLessThan(1e-6)
+    expect(status).toBe(0)
+    expect(sha256(await readFile(file))).toBe(digest)
+  })
+
   it('checks exact curves, skips, placements and a native-to-mesh edit followed by undo', async () => {
     const file = await writeModel('public test fixture.3dm', 'mixed')
     const digest = sha256(await readFile(file))
@@ -142,6 +221,7 @@ describe('local Rhino model check', () => {
         },
         curves: { roundTripped: 1, sourceCompared: 1, editedAndUndone: true },
         bodies: { baseline: 'BRep', edited: 'mesh', undone: 'BRep', untouched: 'BRep' },
+        nativeCaps: { status: 'not run: no eligible end caps', candidatesChecked: 1 },
       },
     ])
     expect(status).toBe(0)
@@ -159,5 +239,21 @@ describe('local Rhino model check', () => {
       { result: 'failed', failure: { stage: 'usable geometry' }, imported: { skipped: 1 } },
     ])
     for (const report of reports) expect(report.sha256.before).toBe(report.sha256.after)
+  })
+
+  it('reports absent native tools while accepting mesh-only and curve-only geometry', async () => {
+    const mesh = await writeModel('mesh.3dm', 'mesh')
+    const curve = await writeModel('curve.3dm', 'curve')
+    const { status, reports } = check(mesh, curve)
+    expect(status).toBe(0)
+    expect(reports).toMatchObject([
+      { result: 'passed', bodies: { baseline: 'mesh', edited: 'mesh', undone: 'mesh' } },
+      { result: 'passed', curves: { roundTripped: 1, editedAndUndone: true } },
+    ])
+    for (const report of reports) {
+      expect(report.nativeEdges.status).toBe('not run: no retained native solid')
+      expect(report.nativeCaps.status).toBe('not run: no retained native solid')
+      expect(report.sha256.before).toBe(report.sha256.after)
+    }
   })
 })
