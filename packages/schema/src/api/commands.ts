@@ -20,6 +20,7 @@ import {
   PIECE_KINDS,
 } from '../design/design'
 import { DirectionSchema, MIX_PARTS } from '../design/directions'
+import { ImportedRoleChoiceSchema } from '../design/import-roles'
 import {
   IntakeDetailsSchema,
   IntakeSelectionInputSchema,
@@ -837,6 +838,17 @@ export const commands = {
       changeId: id.optional(),
     }),
     output: z.object({ version: componentId, change: StoredChangeSchema }),
+  }),
+  'design.planImportRoles': def({
+    description:
+      'Preview the jeweler’s confirmed roles for individual Rhino part IDs. The source mesh and native surfaces are retained. For stones supply measured dimensions, world girdle XYZ (mm) and Euler XYZ rotation (degrees), plus an optional original setting and rebuild style. Display names and colors are hints. Review these choices with the user, then pass the returned ops and version to design.apply.',
+    kind: 'query',
+    tool: true,
+    input: z.object({
+      pieceId: id,
+      choices: z.array(ImportedRoleChoiceSchema).min(1).max(MAX_DESIGN_CHANGE_OPS),
+    }),
+    output: z.object({ version: z.number().int(), ops: z.array(OpSchema) }),
   }),
   'design.meshComponents': def({
     description:

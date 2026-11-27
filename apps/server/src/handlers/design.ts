@@ -10,6 +10,7 @@ import {
   type Op,
   OpError,
   replaceStone,
+  reviewRhinoRoles,
   type StoredChange,
 } from '@pave/schema'
 import { and, desc, eq, lt, sql } from 'drizzle-orm'
@@ -200,6 +201,16 @@ export const design: HandlerGroup<'design'> = {
   'design.rhinoFaceBorders': rhinoFaceBorders,
   'design.rhinoCapFaces': rhinoCapFaces,
   'design.offsetRhinoCap': offsetRhinoCapFace,
+  'design.planImportRoles': async (ctx, { pieceId, choices }) => {
+    const piece = await getPiece(ctx, pieceId)
+    try {
+      return { version: piece.version, ops: reviewRhinoRoles(piece.design, choices) }
+    } catch (error) {
+      throw badRequest(
+        error instanceof Error ? error.message : 'The role choices could not be applied.',
+      )
+    }
+  },
   'design.meshComponents': async (ctx, { pieceId, nodeId, offset, limit, vertexIds, faceIds }) => {
     const piece = await getPiece(ctx, pieceId)
     if (!Object.hasOwn(piece.design.nodes, nodeId)) throw notFound('Feature', nodeId)

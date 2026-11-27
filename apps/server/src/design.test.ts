@@ -25,6 +25,40 @@ const gem = (id: string, x: number) => ({
 })
 
 describe('design document', () => {
+  it('previews an imported role decision in the current project and applies it with normal guarded undo', async () => {
+    const { id } = await api.call('pieces.create', { title: 'Practice assembly', kind: 'ring' })
+    const imported = await api.call('design.apply', {
+      pieceId: id,
+      label: 'Import part',
+      ops: [
+        {
+          t: 'add',
+          node: {
+            id: 'raw',
+            kind: 'meshBody',
+            source: { type: 'asset', assetId: 'sample', rhinoLayer: 'Parts' },
+            keepSourcePlacement: true,
+          },
+        },
+      ],
+    })
+    const plan = await api.call('design.planImportRoles', {
+      pieceId: id,
+      choices: [{ sourceId: 'raw', role: 'reference' }],
+    })
+    expect(plan.version).toBe(imported.version)
+    expect(plan.ops).toEqual([{ t: 'update', id: 'raw', patch: { importRole: 'reference' } }])
+    const applied = await api.call('design.apply', {
+      pieceId: id,
+      baseVersion: plan.version,
+      label: 'Confirm reference',
+      ops: plan.ops,
+    })
+    await api.call('design.revert', { pieceId: id, seq: applied.version })
+    const before = await api.call('pieces.get', { id })
+    expect(before.design.nodes.raw).not.toHaveProperty('importRole')
+  })
+
   it('reads mesh components in the active piece and validates a measured vertex change before committing it', async () => {
     const ctx = await server.runtime.context(server.runtime.local!)
     const asset = await putAsset(ctx, {

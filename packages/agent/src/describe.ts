@@ -96,6 +96,11 @@ export const TOOL_CHIPS = {
     done: 'Read Rhino end faces',
   },
   'design.offsetRhinoCap': { running: 'Moving the end face', done: 'Moved the Rhino end face' },
+  'design.planImportRoles': {
+    quiet: true,
+    running: 'Reviewing imported parts',
+    done: 'Reviewed imported parts',
+  },
   'design.meshComponents': {
     quiet: true,
     running: 'Reading mesh points and faces',

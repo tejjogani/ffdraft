@@ -97,6 +97,7 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
           'design.history',
           'design.describe',
           'design.rhinoCapFaces',
+          'design.planImportRoles',
           'design.meshComponents',
           'match.traceOutline',
           'freeform.analyze',
