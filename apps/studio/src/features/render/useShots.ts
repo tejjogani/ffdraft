@@ -12,13 +12,17 @@ import {
   type SavedScene,
 } from '@pave/schema'
 import { toast } from '@pave/ui'
+import { useRef } from 'react'
 import { queryClient, rpcKey, useRpc } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { reportPlanLimit } from '../plans/plan-limit'
 import { ensureShotsSaved } from './shot-actions'
 import { type Shot, shotForTake, shotList, takeMedia } from './shots'
 
-export function useShots(pieceId: string) {
+export function useShots(pieceId: string, canRender: boolean) {
+  // A plan-limit toast can keep a preview action after the design changes.
+  const renderAllowed = useRef(canRender)
+  renderAllowed.current = canRender
   const piece = useRpc('pieces.get', { id: pieceId })
   const saved = useRpc('scenes.list', { pieceId })
   const takes = useRpc('renders.list', { pieceId, limit: 200 })
@@ -68,10 +72,12 @@ export function useShots(pieceId: string) {
     list: Shot[],
     extra: { retryOf?: string; note?: string; engine?: 'browser' } = {},
   ): Promise<void> => {
+    if (!renderAllowed.current) return
     let done = 0
     try {
       for (const shot of list) {
         const row = await savedFor(shot)
+        if (!renderAllowed.current) return
         await rpc.call('renders.create', {
           pieceId,
           sceneId: row.id,
@@ -96,6 +102,7 @@ export function useShots(pieceId: string) {
 
   /** Renders a take again with what it was asked for: its shot as it is now, else its own scene. */
   const rerender = async (take: RenderJob) => {
+    if (!renderAllowed.current) return
     try {
       await rpc.call('renders.create', {
         pieceId,

@@ -201,7 +201,13 @@ function useToastOffset(px: number) {
   }, [px])
 }
 
-export function PieceDesign({ pieceId }: { pieceId: string }) {
+export function PieceDesign({
+  pieceId,
+  openRoleReview = false,
+}: {
+  pieceId: string
+  openRoleReview?: boolean
+}) {
   const piece = useRpc('pieces.get', { id: pieceId })
   if (piece.isPending)
     return (
@@ -221,10 +227,10 @@ export function PieceDesign({ pieceId }: { pieceId: string }) {
       </div>
     )
   if (!piece.data) return null
-  return <Workspace key={piece.data.id} piece={piece.data} />
+  return <Workspace key={piece.data.id} piece={piece.data} openRoleReview={openRoleReview} />
 }
 
-function Workspace({ piece }: { piece: Piece }) {
+function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: boolean }) {
   const pieceId = piece.id
   const session = useDesignSession(piece)
   const auth = useSession()
@@ -476,21 +482,49 @@ function Workspace({ piece }: { piece: Piece }) {
     ws().select(nodes.map((node) => node.id))
   }
 
-  const openRhinoRoleReview = (id?: string) => {
-    if (!session || readOnly) return
-    const design = session.get().view
-    const selected = id
-      ? design.nodes[id]
-      : selection.length === 1
-        ? design.nodes[selection[0]!]
-        : undefined
-    const initialId =
-      selected?.kind === 'gem' || selected?.kind === 'setting'
-        ? selected.importSourceId
-        : selected?.id
-    setSheet(null)
-    setRhinoReview({ pieceId, orgId: org?.id, design, initialId })
-  }
+  const openRhinoRoleReview = useCallback(
+    (id?: string) => {
+      if (!session || readOnly) return
+      const design = session.get().view
+      const { selection } = ws()
+      const selected = id
+        ? design.nodes[id]
+        : selection.length === 1
+          ? design.nodes[selection[0]!]
+          : undefined
+      const initialId =
+        selected?.kind === 'gem' || selected?.kind === 'setting'
+          ? selected.importSourceId
+          : selected?.id
+      setSheet(null)
+      setRhinoReview({ pieceId, orgId: org?.id, design, initialId })
+    },
+    [org?.id, pieceId, readOnly, session],
+  )
+
+  useEffect(() => {
+    if (!openRoleReview || !session || readOnly || !hasRhinoBodies) return
+    const firstUnassigned = view.order.find((id) => {
+      const node = view.nodes[id]
+      return isRhinoRoleBody(node) && node.visible !== false && importRoleOf(node) === 'unassigned'
+    })
+    openRhinoRoleReview(firstUnassigned)
+    void navigate({
+      to: '/pieces/$id/design',
+      params: { id: pieceId },
+      search: ({ board }: { board?: string }) => ({ board }),
+      replace: true,
+    })
+  }, [
+    hasRhinoBodies,
+    navigate,
+    openRhinoRoleReview,
+    openRoleReview,
+    pieceId,
+    readOnly,
+    session,
+    view,
+  ])
 
   const selectRhinoRoleBody = (id: string, design: Design) => {
     const body = design.nodes[id]

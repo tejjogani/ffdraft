@@ -26,7 +26,7 @@ export interface TakeActions {
   cover(take: RenderJob): void
   pick(take: RenderJob): void
   compare(take: RenderJob): void
-  rerender(take: RenderJob): void
+  rerender?(take: RenderJob): void
   cancel(take: RenderJob): void
   open(take: RenderJob): void
   /** Ask the assistant to look at this take and improve its shot. */
@@ -179,7 +179,11 @@ export function TakeTile({
                 </MenuItem>
               )}
               <MenuSeparator />
-              <MenuItem icon={RefreshCw} onClick={() => actions.rerender(take)}>
+              <MenuItem
+                icon={RefreshCw}
+                disabled={!actions.rerender}
+                onClick={() => actions.rerender?.(take)}
+              >
                 {take.status === 'failed' ? 'Retry' : 'Re-render'}
               </MenuItem>
             </Menu>
@@ -200,8 +204,9 @@ export function TakeTile({
       {take.stale && done && (
         <button
           type="button"
-          onClick={() => actions.rerender(take)}
-          className="border-t border-line px-2 py-1 text-left text-2xs text-warn hover:bg-bg-hover"
+          disabled={!actions.rerender}
+          onClick={() => actions.rerender?.(take)}
+          className="border-t border-line px-2 py-1 text-left text-2xs text-warn enabled:hover:bg-bg-hover disabled:opacity-45"
         >
           Re-render with the current design
         </button>

@@ -13,6 +13,7 @@ import type { RenderJob } from '@pave/schema'
 import {
   AiMark,
   Button,
+  buttonClass,
   cn,
   EmptyState,
   IconButton,
@@ -23,6 +24,7 @@ import {
   Skeleton,
   toast,
 } from '@pave/ui'
+import { Link } from '@tanstack/react-router'
 import { Camera, Columns2, Copy, House, Play, Plus, Redo2, Settings2, Undo2, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { assetUrl } from '../../lib/assets'
@@ -31,8 +33,10 @@ import { usePieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
 import { useRpc } from '../../lib/query'
 import { assistant, openAssistant } from '../../stores/assistant'
 import { useUI } from '../../stores/ui'
+import { useReadOnly } from '../assistant/AskAiSection'
 import { jobState } from '../assistant/jobs/status'
 import { useStageJob } from '../assistant/jobs/useJob'
+import { renderAvailability } from './availability'
 import { engineLabel } from './EngineDialog'
 import { ShotInspector } from './ShotInspector'
 import { addShot, saveHouseShot, takeShotIntent } from './shot-actions'
@@ -43,11 +47,18 @@ import { useShots } from './useShots'
 import { Viewfinder } from './Viewfinder'
 
 export function RenderStudio({ pieceId }: { pieceId: string }) {
-  const s = useShots(pieceId)
+  // Production detail, as Blender takes use: the viewfinder frames and fingerprints the take.
+  const geometry = usePieceEvaluation(pieceId, 'production')
+  const { evaluation } = geometry
+  const availability = renderAvailability(geometry)
+  const canRender = availability === 'ready'
+  const s = useShots(pieceId, canRender)
+  const readOnly = useReadOnly()
   const renderJob = useStageJob(pieceId, 'render').run
   const jobInReview = renderJob ? jobState(renderJob) === 'review' : false
-  // Production detail, as Blender takes use: the viewfinder frames and fingerprints the take.
-  const { evaluation } = usePieceEvaluation(pieceId, 'production')
+  const hasPreview = !!(evaluation?.parts.length || evaluation?.stones.length)
+  const emptyView =
+    availability === 'review-roles' || availability === 'references' || availability === 'empty'
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   // A shot made elsewhere ("Render this view") is selected once the list has it.
   const [wanted, setWanted] = useState<string | null>(() => takeShotIntent(pieceId))
@@ -83,14 +94,14 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
   const estimate = useRpc(
     'renders.estimate',
     { pieceId, takes: shot ? [{ scene: shot.scene }] : [{ scene: {} as never }] },
-    { enabled: !!shot && !!s.piece },
+    { enabled: canRender && !!shot && !!s.piece },
   )
   const all = useRpc(
     'renders.estimate',
     { pieceId, takes: s.shots.map((x) => ({ scene: x.scene })) },
-    { enabled: s.shots.length > 0 },
+    { enabled: canRender && s.shots.length > 0 },
   )
-  const perTake = estimate.data?.takes[0] ?? null
+  const perTake = canRender ? (estimate.data?.takes[0] ?? null) : null
   const view = viewing ? s.takes.find((t) => t.id === viewing && t.assetIds[0]) : null
   const pair = comparing
     ? (comparing.map((id) => s.takes.find((t) => t.id === id)).filter(Boolean) as RenderJob[])
@@ -122,6 +133,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
           group: 'Piece',
           icon: Play,
           shortcut: 'mod+enter',
+          when: () => canRender,
           run: () => void s.render([shot]),
         },
         {
@@ -129,6 +141,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
           title: 'Render all shots',
           group: 'Piece',
           shortcut: 'mod+shift+enter',
+          when: () => canRender,
           run: () => void s.render(s.shots),
         },
       ]
@@ -147,7 +160,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
     star: s.star,
     cover: s.cover,
     pick: s.pick,
-    rerender: (t: RenderJob) => void s.rerender(t),
+    rerender: canRender ? (t: RenderJob) => void s.rerender(t) : undefined,
     cancel: s.cancel,
     open: (t: RenderJob) => {
       setComparing(null)
@@ -156,7 +169,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
     improve: (t: RenderJob) =>
       openAssistant({
         pieceId,
-        draft: `Improve the "${t.title}" shot: look at its latest take, change the framing or light where it falls short, and render it again.`,
+        draft: `Improve the "${t.title}" shot: look at its latest take and change the framing or light where it falls short.${canRender ? ' Render it again after the changes.' : ''}`,
       }),
     compare: (t: RenderJob) => {
       const base = viewing ?? (shot ? pickOf(shot, takes)?.id : null)
@@ -301,11 +314,11 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               <Button
                 size="sm"
                 variant="secondary"
-                disabled={!shot}
+                disabled={!shot || !canRender}
                 onClick={() => void s.render(s.shots)}
               >
                 Render all
-                {all.data && !browser && (
+                {canRender && all.data && !browser && (
                   <span className="hidden font-mono text-2xs text-fg-subtle @lg:inline">
                     {machineTime(all.data.seconds)}
                   </span>
@@ -316,7 +329,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                 // While a Render job waits for review, its Accept is the one ink action here.
                 variant={jobInReview ? 'secondary' : 'primary'}
                 icon={Camera}
-                disabled={!shot}
+                disabled={!shot || !canRender}
                 onClick={() => shot && void s.render([shot])}
               >
                 {browser ? 'Render preview' : 'Render'}
@@ -354,9 +367,50 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                   </Button>
                 </figcaption>
               </figure>
+            ) : emptyView ? (
+              <EmptyState
+                className="stage cad-studio-backdrop absolute inset-4 justify-center rounded-lg [--fg:var(--cad-ink)] [--fg-muted:var(--cad-ink)]"
+                title={
+                  availability === 'review-roles'
+                    ? 'Review materials before rendering'
+                    : 'No geometry to render'
+                }
+                description={
+                  availability === 'review-roles'
+                    ? 'Assign a metal or stone role to each imported body you want to render.'
+                    : availability === 'references'
+                      ? 'The imported reference bodies are available in CAD. Renders use the piece’s metal and stones.'
+                      : 'The viewfinder shows metal and stones from the design.'
+                }
+                action={
+                  availability === 'review-roles' && !readOnly ? (
+                    <Link
+                      to="/pieces/$id/design"
+                      params={{ id: pieceId }}
+                      search={{ review: 'rhino-roles' }}
+                      className={cn(
+                        buttonClass({ variant: 'primary' }),
+                        '[--ink:var(--cad-ink)] [--ink-fg:var(--cad-paper)]',
+                      )}
+                    >
+                      Review Rhino roles
+                    </Link>
+                  ) : undefined
+                }
+              />
+            ) : availability === 'failed' && !hasPreview ? (
+              <EmptyState
+                className="absolute inset-4 justify-center"
+                title="Couldn’t prepare the viewfinder"
+                action={
+                  geometry.status === 'error' ? (
+                    <Button onClick={geometry.retry}>Retry</Button>
+                  ) : undefined
+                }
+              />
             ) : shot ? (
               <Viewfinder
-                evaluation={evaluation}
+                evaluation={hasPreview ? evaluation : null}
                 scene={shot.scene}
                 design={{ pieceId, version: s.piece.version }}
                 label={`Live preview of the ${shot.title} shot`}
@@ -378,12 +432,17 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               />
             ) : null}
             {/* An animated shot's scrubber sits where this caption would. */}
-            {!view && !pair && shot && !shot.scene.animation && (
-              <span className="glass absolute bottom-3 left-3 rounded-md px-2 py-1 text-2xs whitespace-nowrap text-fg-muted">
-                Viewfinder ·{' '}
-                {browser ? 'takes draw in the browser' : 'takes render exactly this in Blender'}
-              </span>
-            )}
+            {!view &&
+              !pair &&
+              shot &&
+              !shot.scene.animation &&
+              !emptyView &&
+              availability !== 'failed' && (
+                <span className="glass absolute bottom-3 left-3 rounded-md px-2 py-1 text-2xs whitespace-nowrap text-fg-muted">
+                  Viewfinder ·{' '}
+                  {browser ? 'takes draw in the browser' : 'takes render exactly this in Blender'}
+                </span>
+              )}
           </div>
 
           <section aria-label="Takes" className="border-t border-line bg-bg">
@@ -397,9 +456,11 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                 className="py-6"
                 title="No takes yet"
                 description={
-                  browser
-                    ? 'Render draws a preview here in seconds. For photoreal takes, set up Blender.'
-                    : 'Render this shot, or the whole set; takes land here.'
+                  !canRender
+                    ? 'Finished takes appear here.'
+                    : browser
+                      ? 'Render draws a preview here in seconds. For photoreal takes, set up Blender.'
+                      : 'Render this shot, or the whole set; takes land here.'
                 }
               />
             ) : (
@@ -413,7 +474,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                       isCover={!!takeMedia(t).still && s.piece!.coverAssetId === takeMedia(t).still}
                       selected={viewing === t.id}
                       actions={actions}
-                      liveHash={liveHash}
+                      liveHash={canRender ? liveHash : null}
                     />
                   </li>
                 ))}
@@ -459,7 +520,9 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               scene={shot.scene}
               engine={s.engine ? (s.engine.available ? 'blender' : 'browser') : null}
               estimate={
-                estimate.data ? { seconds: perTake ?? 0, basis: estimate.data.basis } : null
+                canRender && estimate.data
+                  ? { seconds: perTake ?? 0, basis: estimate.data.basis }
+                  : null
               }
               onChange={(patch) =>
                 void s.adjust(shot, patch).then((next) => next && setSelectedKey(next.key))
