@@ -134,3 +134,38 @@ export async function renderThisView(
   selectShotNext(pieceId, row.id)
   return row
 }
+
+interface ShotActionQueue {
+  tail: Promise<void>
+  pendingEdits: Set<Promise<boolean>>
+}
+
+const actionQueues = new Map<string, ShotActionQueue>()
+
+/** A render reads saved scenes, so it must follow the edits requested before it on this piece. */
+export function queueShotAction<T>(
+  pieceId: string,
+  kind: 'edit' | 'render',
+  work: () => Promise<T>,
+): Promise<T> {
+  const queue = actionQueues.get(pieceId) ?? { tail: Promise.resolve(), pendingEdits: new Set() }
+  const requiredEdits = kind === 'render' ? [...queue.pendingEdits] : []
+  const result = queue.tail.then(async () => {
+    const saved = await Promise.all(requiredEdits)
+    if (saved.includes(false))
+      throw new Error('A pending shot change could not be saved. Try rendering again.')
+    return work()
+  })
+  const settled = result.then(
+    () => true,
+    () => false,
+  )
+  if (kind === 'edit') queue.pendingEdits.add(settled)
+  const tail = settled.then(() => {
+    queue.pendingEdits.delete(settled)
+    if (queue.tail === tail) actionQueues.delete(pieceId)
+  })
+  queue.tail = tail
+  actionQueues.set(pieceId, queue)
+  return result
+}
