@@ -24,8 +24,8 @@ import {
 } from 'lucide-react'
 import { useOpenPaveFile } from '../features/pavefile'
 import { PROJECT_AREAS } from '../features/projects/areas'
+import { useOpenNewProject } from '../features/projects/new-project'
 import { type Command, useRegisterCommands } from '../lib/commands'
-import { useCreatePiece } from '../lib/pieces'
 import { useRpcMutation } from '../lib/query'
 import { useCurrentView } from '../lib/use-current-view'
 import { assistant } from '../stores/assistant'
@@ -35,8 +35,9 @@ import { useUI } from '../stores/ui'
 export function useGlobalCommands(): void {
   const navigate = useNavigate()
   const pieceId = useMatch({ from: '/pieces/$id', shouldThrow: false })?.params.id
+  const collectionId = useMatch({ from: '/collections/$id', shouldThrow: false })?.params.id
   const isCurrent = useCurrentView()
-  const createPiece = useCreatePiece()
+  const openNewProject = useOpenNewProject()
   const createBoard = useRpcMutation('boards.create', {
     onMutate: () => isCurrent,
     onSuccess: (board, _input, stillHere) => {
@@ -87,12 +88,12 @@ export function useGlobalCommands(): void {
     },
     {
       id: 'piece.new',
-      title: 'New piece',
+      title: 'New project',
       group: 'Create',
       icon: Plus,
       shortcut: 'mod+n',
-      keywords: ['create', 'ring', 'pendant'],
-      run: () => createPiece.mutate({}),
+      keywords: ['create', 'new piece', 'ring', 'pendant'],
+      run: () => openNewProject({ collectionId }),
     },
     {
       id: 'board.new',
@@ -119,7 +120,7 @@ export function useGlobalCommands(): void {
       run: () => createCollection.mutate({ name: 'New collection' }),
     },
     { id: 'nav.home', title: 'Home', group: 'Navigate', icon: Home, run: go('/') },
-    { id: 'nav.pieces', title: 'Pieces', group: 'Navigate', icon: Gem, run: go('/pieces') },
+    { id: 'nav.pieces', title: 'Projects', group: 'Navigate', icon: Gem, run: go('/pieces') },
     ...(pieceId
       ? PROJECT_AREAS.map(({ to, icon, title }) => ({
           id: 'project.tool.' + title,

@@ -1,10 +1,10 @@
 import { buildDesign, METALS, TEMPLATES } from '@pave/schema'
 import { Button, Chip, Swatch } from '@pave/ui'
 import { KindGlyph } from '../../components/KindGlyph'
-import { useCreatePiece } from '../../lib/pieces'
+import { useOpenNewProject } from '../../features/projects/new-project'
 
 export function TemplatesSection() {
-  const create = useCreatePiece()
+  const openNewProject = useOpenNewProject()
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {TEMPLATES.map((t) => {
@@ -28,11 +28,7 @@ export function TemplatesSection() {
                   <Swatch color={metal.swatch} kind="metal" size="sm" />
                   {metal.label}
                 </span>
-                <Button
-                  size="sm"
-                  disabled={create.isPending}
-                  onClick={() => create.mutate({ templateId: t.id })}
-                >
+                <Button size="sm" onClick={() => openNewProject({ templateId: t.id })}>
                   Use template
                 </Button>
               </div>

@@ -48,17 +48,6 @@ export function useUpdatePiece() {
   })
 }
 
-/** Create a piece and open it. */
-export function useCreatePiece() {
-  const navigate = useNavigate()
-  const isCurrent = useCurrentView()
-  return useRpcMutation('pieces.create', {
-    onMutate: () => isCurrent,
-    onSuccess: (piece, _input, stillHere) =>
-      stillHere?.() && void navigate({ to: '/pieces/$id', params: { id: piece.id } }),
-  })
-}
-
 export function useCanDeleteProject() {
   const org = activeOrg(useSession())
   return !!org && roleAllows(org.role, minimumRole('pieces.delete'))
