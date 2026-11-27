@@ -228,10 +228,17 @@ export function align(
             norm(ra[xi]!) === norm(la[yi]!) &&
             ra[xi]!.length > 2
           ) {
+            // A short shared token may precede the anchor. Keep it out of the reported drift.
+            let recordedEnd = xi
+            let liveEnd = yi
+            while (recordedEnd > x && liveEnd > y && ra[recordedEnd - 1] === la[liveEnd - 1]) {
+              recordedEnd--
+              liveEnd--
+            }
             out.drift.push({
               at: `messages.${i}`,
-              recorded: ra.slice(x, xi).join(' '),
-              live: la.slice(y, yi).join(' '),
+              recorded: ra.slice(x, recordedEnd).join(' '),
+              live: la.slice(y, liveEnd).join(' '),
               after: ra.slice(Math.max(0, x - 6), x).join(' '),
             })
             x = xi

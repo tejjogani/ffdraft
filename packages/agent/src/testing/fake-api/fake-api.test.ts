@@ -34,6 +34,7 @@ import {
   startFakeApi,
   validateMessages,
 } from './index'
+import { align } from './recording'
 import { FAKE_MODELS } from './spec'
 
 const H = { 'x-api-key': DEFAULT_FAKE_KEY, 'anthropic-version': '2026-10-21' }
@@ -601,6 +602,35 @@ describe('the fake through the real SDK', () => {
 })
 
 describe('recording and replay', () => {
+  it('reports just the changed decimal when the next tool operation tag is unchanged', () => {
+    const result = (width: number) => [
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'tool_result',
+            content: JSON.stringify({
+              ops: [
+                { t: 'update', id: 'center', patch: { width } },
+                { t: 'update', id: 'band', patch: { widthTop: 2.8 } },
+              ],
+            }),
+          },
+        ],
+      },
+    ]
+    const report = align(result(7.753760000000001), result(7.676480000000001))
+    expect(report.structural).toEqual([])
+    expect(report.drift).toEqual([
+      {
+        at: 'messages.0',
+        recorded: '753760000000001',
+        live: '676480000000001',
+        after: 'update id center patch width 7',
+      },
+    ])
+  })
+
   it('replays a recording with the live ids swapped in', async () => {
     const rec = new Recorder()
     const recordApi = await startFakeApi({
