@@ -12,6 +12,17 @@ export const RhinoStullerMaterial = z.union([
 ])
 export type RhinoStullerMaterial = z.infer<typeof RhinoStullerMaterial>
 
+export const RhinoMaterialAppearance = z.strictObject({
+  /** Diffuse color in sRGB, as stored in the source material. */
+  color: z
+    .string()
+    .regex(/^#[\da-f]{6}$/i)
+    .optional(),
+  /** Source material opacity, where 1 is opaque. */
+  opacity: z.number().min(0).max(1).optional(),
+})
+export type RhinoMaterialAppearance = z.infer<typeof RhinoMaterialAppearance>
+
 const RhinoGroup = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -22,6 +33,7 @@ const RhinoPlacement = z.object({
   definitionId: z.string().min(1),
   layer: z.string().optional(),
   material: z.string().optional(),
+  materialAppearance: RhinoMaterialAppearance.optional(),
   materialFromParent: z.literal(true).optional(),
 })
 
@@ -38,6 +50,7 @@ export const RhinoContext = z.object({
   stullerMaterial: RhinoStullerMaterial.optional(),
   /** Name of the member's Rhino display material, independent of its Pavé alloy. */
   material: z.string().optional(),
+  materialAppearance: RhinoMaterialAppearance.optional(),
   materialFromParent: z.literal(true).optional(),
 })
 
