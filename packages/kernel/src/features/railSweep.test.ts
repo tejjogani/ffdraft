@@ -191,9 +191,17 @@ describe('rail sweep', () => {
       centre,
       side,
       open,
-      sweep(['centre', 'side'].slice(0, count), ['open']),
+      sweep(['centre', 'side'].slice(0, count), ['open'], false),
     ])
-    const result = (await kernel.scene(design)).nodes.get('sweep')
+    // The edit API also rejects open caps. Exercise the kernel's guard at its document boundary.
+    const node = design.nodes.sweep!
+    if (node.kind !== 'railSweep') throw new Error('Missing sweep node')
+    const result = (
+      await kernel.scene({
+        ...design,
+        nodes: { ...design.nodes, sweep: { ...node, capped: true } },
+      })
+    ).nodes.get('sweep')
     expect(result?.bodies).toHaveLength(0)
     expect(result?.sheets ?? []).toHaveLength(0)
     expect(
