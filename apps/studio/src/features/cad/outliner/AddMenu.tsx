@@ -38,14 +38,10 @@ export function AddMenu({ design, kinds, target, onAdd, open, onOpenChange }: Ad
               key={o.sectionTool?.id ?? o.kind}
               icon={KIND_ICON[o.kind]}
               disabled={!!o.disabled}
+              description={o.disabled ?? undefined}
               onClick={() => onAdd(o.kind, o.sectionTool)}
             >
-              <span className="flex min-w-0 items-baseline justify-between gap-3">
-                <span className="truncate">{o.title}</span>
-                {o.disabled && (
-                  <span className="truncate text-xs text-fg-subtle">{o.disabled}</span>
-                )}
-              </span>
+              {o.title}
             </MenuItem>
           ))}
         </MenuGroup>
