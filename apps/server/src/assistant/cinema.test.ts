@@ -356,6 +356,116 @@ describe('the Render job looks, asks, places and checks', () => {
   )
 })
 
+it(
+  'uses each saved jewelry pose when the assistant lists and captures the same CAD piece',
+  async () => {
+    const { id: pieceId } = await api.call('pieces.create', { kind: 'bracelet' })
+    await api.call('design.apply', {
+      pieceId,
+      label: 'Lay out separate links in a row',
+      ops: Array.from({ length: 8 }, (_, i) => ({
+        t: 'add',
+        node: {
+          id: `link${i}`,
+          kind: 'primitive',
+          shape: 'box',
+          size: [3, 2, 2],
+          transform: { position: [5 * i, 0, 0] },
+        },
+      })),
+    })
+    const piece = await api.call('pieces.get', { id: pieceId })
+    const asDesigned = await api.call('scenes.suggest', { pieceId })
+    expect(asDesigned.circularBandDiameterMm).toBeCloseTo(38 / Math.PI)
+    const suggestion = await api.call('scenes.suggest', { pieceId, pose: 'circular-band' })
+    expect(suggestion.sceneOptions).toMatchObject({ pose: 'circular-band' })
+    expect(suggestion.shots[0]?.camera).not.toEqual(asDesigned.shots[0]?.camera)
+    const create = (title: string, pose: 'as-designed' | 'circular-band') =>
+      api.call('scenes.create', { pieceId, title, scene: { pose, camera: { preset: 'top' } } })
+    const straight = await create('Straight links', 'as-designed')
+    const circular = await create('Curved links', 'circular-band')
+    let assetIds: string[] = []
+    s.model.push(
+      {
+        content: [
+          tool('scenes_suggest', { pieceId, pose: 'circular-band' }, 'toolu_pose_suggest'),
+          tool('scenes_list', { pieceId }, 'toolu_pose_list'),
+        ],
+        stop_reason: 'tool_use',
+      },
+      ({ params }) => {
+        const suggestion = result(params, 'toolu_pose_suggest')
+        expect(suggestion.isError).toBe(false)
+        const options = JSON.parse(suggestion.text.split('\n')[0]!)
+        expect(options.sceneOptions).toMatchObject({
+          pose: 'circular-band',
+        })
+        expect(options.circularBandDiameterMm).toBeCloseTo(38 / Math.PI)
+        const listed = result(params, 'toolu_pose_list')
+        const lines = listed.text.split('\n')
+        const straightCamera = lines.find((line) => line.startsWith('- "Straight links"'))
+        const circularCamera = lines.find((line) => line.startsWith('- "Curved links"'))
+        expect(straightCamera).toBeDefined()
+        expect(circularCamera).toBeDefined()
+        expect(straightCamera?.split('): ')[1]).not.toEqual(circularCamera?.split('): ')[1])
+        return {
+          content: [
+            tool(
+              'scenes_capture',
+              { ids: [straight.id, circular.id], size: 192 },
+              'toolu_pose_capture',
+            ),
+          ],
+          stop_reason: 'tool_use',
+        }
+      },
+      ({ params }) => {
+        const captured = result(params, 'toolu_pose_capture')
+        expect(captured.isError).toBe(false)
+        expect(captured.images).toBe(2)
+        const measured = JSON.parse(captured.text.split('\n')[0]!) as {
+          version: number
+          shots: { id: string; assetId: string }[]
+        }
+        expect(measured.version).toBe(piece.version)
+        expect(measured.shots.map(({ id }) => id)).toEqual([straight.id, circular.id])
+        assetIds = measured.shots.map(({ assetId }) => assetId)
+        return { content: [text('Both compositions are ready.')], stop_reason: 'end_turn' }
+      },
+    )
+    const { run } = await api.call('threads.send', {
+      text: 'Check both shots through their saved cameras.',
+      clientId: 'w1',
+      clientMessageId: cm(),
+      context: { pieceId },
+    })
+    await until(run.id, 'done')
+    const ctx = await s.server.runtime.context(s.server.runtime.local!)
+    const [straightImage, circularImage] = await Promise.all(
+      assetIds.map((id) => readAsset(ctx, id)),
+    )
+    expect(straightImage?.bytes).toBeDefined()
+    expect(circularImage?.bytes).toBeDefined()
+    expect(straightImage?.bytes).not.toEqual(circularImage?.bytes)
+    expect(await api.call('pieces.get', { id: pieceId })).toMatchObject({
+      design: piece.design,
+      version: piece.version,
+    })
+  },
+  SLOW,
+)
+
+it(
+  'tells the assistant to use the as-designed pose when circular band does not fit',
+  async () => {
+    const { id: pieceId } = await api.call('pieces.create', { templateId: 'solitaire' })
+    const refused = await api.fail('scenes.suggest', { pieceId, pose: 'circular-band' })
+    expect(refused.status).toBe(400)
+    expect(refused.error.message).toContain('as-designed')
+  },
+  SLOW,
+)
+
 describe('what a person does after the assistant is recorded on its run', () => {
   it(
     'stars, keeps, swaps, reframes, restyles, re-renders and deletes',

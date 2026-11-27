@@ -13,7 +13,6 @@ import {
   pieceFeatures,
   placeShot,
   resolveScene,
-  type SceneSubject,
   shotFraming,
   shotVocabulary,
   withImportedBodyDefaults,
@@ -24,6 +23,7 @@ import {
   isRhinoRoleBody,
   type Piece,
   type RenderScene,
+  RenderSceneSchema,
 } from '@pave/schema'
 import { inArray } from 'drizzle-orm'
 import { putAsset } from './assets/assets'
@@ -34,21 +34,28 @@ import { getPiece, getScene } from './lookups'
 import { pngOf } from './photos'
 import { assertSendable } from './references/rights'
 import { serviceContext } from './service-context'
+import type { RenderSubject } from './services'
+
+type SubjectMode = Pick<RenderScene, 'includeUnassignedRhino' | 'pose'>
 
 /** The kernel's subject for a piece (bounds, support points, stones), or null without one. */
 export async function subjectOf(
   ctx: Ctx,
   piece: Pick<Piece, 'id' | 'design'>,
   signal?: AbortSignal,
-  includeUnassignedRhino?: boolean,
-): Promise<SceneSubject | null> {
+  { includeUnassignedRhino, pose }: SubjectMode = {},
+  asDesignedImports?: RenderSubject | null,
+): Promise<RenderSubject | null> {
+  if (includeUnassignedRhino && pose !== 'circular-band' && asDesignedImports)
+    return asDesignedImports
   const geometry = ctx.services.optional('geometry')
   if (!geometry?.subject) return null
-  return (await geometry.subject(piece.design, serviceContext(ctx), {
+  return geometry.subject(piece.design, serviceContext(ctx), {
     pieceId: piece.id,
     ...(signal ? { signal } : {}),
     ...(includeUnassignedRhino && { includeUnassignedRhino }),
-  })) as SceneSubject
+    ...(pose === 'circular-band' && { pose }),
+  })
 }
 
 /** Includes every eligible imported body so defaults and render eligibility use the same geometry. */
@@ -56,14 +63,14 @@ export async function importedShotSubject(
   ctx: Ctx,
   piece: Pick<Piece, 'id' | 'design'>,
   signal = ctx.signal,
-): Promise<SceneSubject | null> {
+): Promise<RenderSubject | null> {
   if (!Object.values(piece.design.nodes).some(isRhinoRoleBody)) return null
-  return subjectOf(ctx, piece, signal, true).catch(() => null)
+  return subjectOf(ctx, piece, signal, { includeUnassignedRhino: true }).catch(() => null)
 }
 
 export function completeImportedShot(
   scene: RenderScene,
-  subject: SceneSubject | null,
+  subject: RenderSubject | null,
 ): RenderScene {
   const importOnly =
     !!subject &&
@@ -73,19 +80,25 @@ export function completeImportedShot(
   return withImportedBodyDefaults(scene, importOnly)
 }
 
-/** A set can contain shots with and without imported previews. Evaluate each setting once. */
+/** Evaluate each combination of jewelry pose and imported-body visibility once. */
 export async function subjectsOf(
   ctx: Ctx,
   piece: Pick<Piece, 'id' | 'design'>,
   scenes: readonly RenderScene[],
   signal?: AbortSignal,
+  asDesignedImports?: RenderSubject | null,
 ) {
-  const modes = new Set(scenes.map((scene) => scene.includeUnassignedRhino === true))
+  const keyOf = (scene: SubjectMode) =>
+    `${scene.includeUnassignedRhino === true}:${scene.pose ?? 'as-designed'}`
+  const modes = new Map(scenes.map((scene) => [keyOf(scene), scene]))
   const entries = await Promise.all(
-    [...modes].map(async (mode) => [mode, await subjectOf(ctx, piece, signal, mode)] as const),
+    [...modes].map(
+      async ([key, scene]) =>
+        [key, await subjectOf(ctx, piece, signal, scene, asDesignedImports)] as const,
+    ),
   )
   const subjects = new Map(entries)
-  return (scene: RenderScene) => subjects.get(scene.includeUnassignedRhino === true) ?? null
+  return (scene: RenderScene) => subjects.get(keyOf(scene)) ?? null
 }
 
 export async function suggestShots(
@@ -94,15 +107,22 @@ export async function suggestShots(
   signal?: AbortSignal,
 ): Promise<CommandOutput<'scenes.suggest'>> {
   const piece = await getPiece(ctx, input.pieceId)
-  const sceneOptions = input.includeUnassignedRhino
-    ? ({
-        includeUnassignedRhino: true,
-        importedBodyLook: input.importedBodyLook ?? 'clay',
-      } as const)
-    : undefined
-  const subject = await subjectOf(ctx, piece, signal, sceneOptions?.includeUnassignedRhino).catch(
+  const asDesignedImports = await importedShotSubject(ctx, piece, signal)
+  const requested = completeImportedShot(RenderSceneSchema.parse(input), asDesignedImports)
+  const { pose, includeUnassignedRhino, importedBodyLook } = requested
+  const sceneOptions = {
+    ...(pose && { pose }),
+    ...(includeUnassignedRhino !== undefined && { includeUnassignedRhino }),
+    ...(includeUnassignedRhino && { importedBodyLook: importedBodyLook ?? 'clay' }),
+  } as const
+  const subject = await subjectOf(ctx, piece, signal, requested, asDesignedImports).catch(
     () => null,
   )
+  const circularBandDiameterMm = subject?.circularBandDiameterMm
+  if (pose === 'circular-band' && subject && circularBandDiameterMm === undefined)
+    throw badRequest(
+      'Circular band needs a straight row of separate jewelry links. Choose the as-designed pose for this piece.',
+    )
   const features = pieceFeatures(piece.design, subject ?? undefined)
   const ratio = ASPECTS[input.aspect as AspectKey].ratio
   const settingDetail =
@@ -141,7 +161,8 @@ export async function suggestShots(
     kind: piece.design.kind,
     features: features.lines,
     centreStoneNodeId: features.centreStoneNodeId,
-    ...(sceneOptions && { sceneOptions }),
+    ...(Object.keys(sceneOptions).length > 0 && { sceneOptions }),
+    ...(circularBandDiameterMm !== undefined && { circularBandDiameterMm }),
     shots,
     questions: cinemaQuestions(features),
   }
@@ -201,6 +222,7 @@ export async function captureShots(
     piece,
     effective.map(({ scene }) => scene),
     signal,
+    imported,
   )
   const shots = effective.map((s) => {
     const subject = subjectFor(s.scene)
@@ -229,6 +251,7 @@ export async function captureShots(
           camera: rasterCamera(s.resolved!.camera),
           ...s.size,
           includeUnassignedRhino: s.saved.scene.includeUnassignedRhino,
+          pose: s.saved.scene.pose,
         })),
         pieceId: piece.id,
         ...(signal ? { signal } : {}),
@@ -303,9 +326,7 @@ export async function framingRefusal(
   const piece = await getPiece(ctx, input.pieceId)
   const imported = await importedShotSubject(ctx, piece, signal)
   const scene = completeImportedShot(requested, imported)
-  const subject =
-    (scene.includeUnassignedRhino && imported) ||
-    (await subjectOf(ctx, piece, signal, scene.includeUnassignedRhino).catch(() => null))
+  const subject = await subjectOf(ctx, piece, signal, scene, imported).catch(() => null)
   if (!subject) return null
   const check = shotFraming(scene, subject)
   if (check.ok) return null
