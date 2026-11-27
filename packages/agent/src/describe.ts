@@ -80,6 +80,11 @@ export const TOOL_CHIPS = {
     running: 'Inspecting the CAD feature',
     done: 'Inspected the CAD feature',
   },
+  'design.meshComponents': {
+    quiet: true,
+    running: 'Reading mesh points and faces',
+    done: 'Read mesh points and faces',
+  },
   'design.history': { quiet: true, running: 'Reading the history', done: 'Read the history' },
   'design.revert': {
     running: 'Undoing',

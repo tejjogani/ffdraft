@@ -67,3 +67,16 @@ project.make_wire(
     "rail", wire_id="custom-wire", width_mm=1.5, thickness_mm=1.0, section="halfRound"
 )
 ```
+
+## Edit a point on an imported part
+
+Read the part's mesh to get source-space coordinates and stable vertex IDs. A face contains three vertex IDs. To move a complete face, pass new coordinates for all three in the same edit. The asset ID and project version bind the edit to the geometry you inspected.
+
+```python
+mesh = project.mesh_components("mount", vertex_ids=[12], face_ids=[])
+x, y, z = mesh["vertices"][0]["xyz"]
+edit = project.set_mesh_vertices(
+    "mount", mesh["assetId"], {12: (x, y, z + 0.25)}, base_version=mesh["version"]
+)
+project.undo(edit["version"])
+```

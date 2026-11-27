@@ -130,6 +130,31 @@ class Project:
         self._record_write(result)
         return result
 
+    def mesh_components(
+        self, feature_id: str, *, offset: int = 0, limit: int = 30,
+        vertex_ids: Iterable[int] | None = None, face_ids: Iterable[int] | None = None,
+    ) -> JsonObject:
+        """Read indexed points and triangles in the imported part's source millimetres."""
+        args: JsonObject = {"nodeId": feature_id, "offset": offset, "limit": limit}
+        if vertex_ids is not None:
+            args["vertexIds"] = list(vertex_ids)
+        if face_ids is not None:
+            args["faceIds"] = list(face_ids)
+        return self._cad_rpc("design.meshComponents", **args)
+
+    def set_mesh_vertices(
+        self, feature_id: str, asset_id: str, vertices: dict[int, tuple[float, float, float]],
+        *, base_version: int, change_id: str | None = None,
+    ) -> JsonObject:
+        """Set selected vertices to absolute XYZ in source mm using the version from mesh_components."""
+        patch = {"meshEdits": {"assetId": asset_id, "vertices": {
+            str(vertex): list(point) for vertex, point in vertices.items()
+        }}}
+        return self.apply(
+            [{"t": "update", "id": feature_id, "patch": patch}], "Edit mesh points",
+            base_version=base_version, change_id=change_id,
+        )
+
     def revolve_curve(
         self,
         curve_id: str,

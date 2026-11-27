@@ -17,6 +17,7 @@ import * as t from '../db/schema'
 import { commitChange, FACTS_DETAIL, storeFacts, toStoredChange } from '../design'
 import { AppError, badRequest, conflict, notFound } from '../errors'
 import { getPiece } from '../lookups'
+import { editableMesh } from '../mesh-components'
 import { exportClaim, withClaim } from '../plans'
 import { serviceContext } from '../service-context'
 import { assertAttested } from './pieces'
@@ -188,6 +189,43 @@ export const design: HandlerGroup<'design'> = {
       kind: node.kind,
       values: node,
       schema: z.toJSONSchema(NODE_SCHEMAS[node.kind], { io: 'input' }),
+    }
+  },
+  'design.meshComponents': async (ctx, { pieceId, nodeId, offset, limit, vertexIds, faceIds }) => {
+    const piece = await getPiece(ctx, pieceId)
+    if (!Object.hasOwn(piece.design.nodes, nodeId)) throw notFound('Feature', nodeId)
+    const node = piece.design.nodes[nodeId]!
+    if (node.kind !== 'meshBody' || node.source.type !== 'asset' || !node.keepSourcePlacement)
+      throw badRequest('Choose an imported mesh part that keeps its source size and position.')
+    const { positions, indices } = await editableMesh(
+      ctx,
+      node.source.assetId,
+      node.meshEdits?.vertices,
+    )
+    const vertexCount = positions.length / 3
+    const faceCount = indices.length / 3
+    const requested = (ids: number[] | undefined, count: number) => {
+      if (ids?.some((i) => i >= count))
+        throw badRequest('A requested component ID is outside this mesh.')
+      return (
+        ids ??
+        Array.from({ length: Math.max(0, Math.min(limit, count - offset)) }, (_, i) => offset + i)
+      )
+    }
+    const triple = (values: ArrayLike<number>, id: number): [number, number, number] => [
+      values[3 * id]!,
+      values[3 * id + 1]!,
+      values[3 * id + 2]!,
+    ]
+    return {
+      pieceId,
+      nodeId,
+      version: piece.version,
+      assetId: node.source.assetId,
+      vertexCount,
+      faceCount,
+      vertices: requested(vertexIds, vertexCount).map((id) => ({ id, xyz: triple(positions, id) })),
+      faces: requested(faceIds, faceCount).map((id) => ({ id, vertexIds: triple(indices, id) })),
     }
   },
   'design.apply': async (ctx, input) =>

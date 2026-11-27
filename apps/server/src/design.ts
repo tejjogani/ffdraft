@@ -20,6 +20,7 @@ import * as t from './db/schema'
 import { AppError, badRequest, conflict } from './errors'
 import { createId } from './ids'
 import { getPiece } from './lookups'
+import { validateMeshEdits } from './mesh-components'
 import { serviceContext } from './service-context'
 
 type ChangeRow = typeof t.designChange.$inferSelect
@@ -125,6 +126,8 @@ async function commitOnce(ctx: Ctx, tx: Ctx['repo'], planned: CommitInput | Plan
     if (!(err instanceof OpError)) throw err
     throw new AppError(input.invalidAs ?? 'bad_request', err.message, { op: err.op })
   }
+
+  await validateMeshEdits({ ...ctx, repo: tx }, piece.design, applied.design, input.ops)
 
   const seq = piece.version + 1
   const at = new Date()
