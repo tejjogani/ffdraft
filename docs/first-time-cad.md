@@ -24,6 +24,10 @@ Select a retained Rhino solid in Features and choose Move end face in the Inspec
 
 Choose the moving face by its direction or centre in project coordinates. The opposite face stays fixed. Enter a positive offset in millimetres to add thickness or a negative offset to remove it. The dialog shows the resulting thickness before you choose Move face. Through-holes keep their cross-section, and the edited part stays eligible for native Rhino export. Use Undo or Redo in CAD to compare the two shapes.
 
+## Copy an edge as a design curve
+
+In Features, select an imported part with a retained Rhino solid. Choose Copy edge as curve, then click its outline in the drawing or enter the edge number. Use Top, Front or Right to separate edges that overlap on screen. Choose Copy curve. The new curve appears in Features and has its own Edit control points tool. Editing the curve leaves the original part in place.
+
 ## Edit a Rhino curve
 
 For a curve imported as NURBS, select its name in Features and choose Edit control points. Click a point on the dashed control polygon or enter its point number, then drag it in the selected view or type X, Y and Z in millimetres. The solid line previews the curve. Adjust Weight to change how strongly a point attracts the curve. Save points records one edit. Export as Rhino .3dm to bring the edited curve back into Rhino.
