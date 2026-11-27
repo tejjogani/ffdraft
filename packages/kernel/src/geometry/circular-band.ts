@@ -4,6 +4,7 @@ import type { Bounds, Evaluation, Part, StoneInstance } from '../types'
 import { type Mat4, multiply, transformPoint, type Vec3 } from './vec'
 
 type Subject = Pick<Evaluation, 'parts' | 'stones'>
+type Interval = { min: number; max: number; minSide: number; maxSide: number }
 const center = (b: Bounds, i: number) => (b.min[i]! + b.max[i]!) / 2
 
 function stoneBox(s: StoneInstance): Bounds {
@@ -42,11 +43,13 @@ export function circularBandLayout({ parts, stones }: Subject) {
   let minAlong = Infinity
   let maxAlong = -Infinity
   let longestBody = 0
-  const intervals = new Map<string, { min: number; max: number }>()
+  const intervals = new Map<string, Interval>()
   for (const part of parts) {
     const positions = part.mesh.positions
     let min = Infinity
     let max = -Infinity
+    let sideMin = Infinity
+    let sideMax = -Infinity
     for (let i = 0; i < positions.length; i += 3) {
       const vx = positions[i]!,
         vy = positions[i + 1]!
@@ -54,11 +57,13 @@ export function circularBandLayout({ parts, stones }: Subject) {
       const side = -y * vx + x * vy
       min = Math.min(min, along)
       max = Math.max(max, along)
-      minSide = Math.min(minSide, side)
-      maxSide = Math.max(maxSide, side)
+      sideMin = Math.min(sideMin, side)
+      sideMax = Math.max(sideMax, side)
     }
     if (!Number.isFinite(min) || !Number.isFinite(max)) return null
-    intervals.set(part.id, { min, max })
+    intervals.set(part.id, { min, max, minSide: sideMin, maxSide: sideMax })
+    minSide = Math.min(minSide, sideMin)
+    maxSide = Math.max(maxSide, sideMax)
     minAlong = Math.min(minAlong, min)
     maxAlong = Math.max(maxAlong, max)
     longestBody = Math.max(longestBody, max - min)
@@ -115,10 +120,13 @@ function frame(layout: Layout, anchor: number): Mat4 {
   return [...x, 0, ...y, 0, ...outward, 0, ...translation, 1]
 }
 
-function sourceGroup(p: Part, design: Design | null) {
+function sourceContext(p: Part, design: Design | null) {
   const node = design?.nodes[p.nodeId]
   if (node?.kind !== 'meshBody' || node.source.type !== 'asset') return
-  const ctx = node.source.rhinoContext
+  return node.source.rhinoContext
+}
+
+function sourceGroup(ctx: ReturnType<typeof sourceContext>) {
   if (!ctx) return
   const group = ctx.groups.at(-1)?.id
   // Source groups often bind the stone, claws and basket across separate block occurrences.
@@ -127,12 +135,48 @@ function sourceGroup(p: Part, design: Design | null) {
   if (occurrence) return JSON.stringify([ctx.archiveId, 'block', occurrence])
 }
 
+type ImportedStation = { interval: Interval; bounds: Bounds; anchor: number }
+
+/** Fallback for loose claws and seats within a stone's footprint. Long bars and side-mounted
+ * clasp parts need their own hinge placement. Source groups always take precedence. */
+function stationAnchor(p: Part, interval: Interval, stations: readonly ImportedStation[]) {
+  const along = (interval.min + interval.max) / 2
+  const side = (interval.minSide + interval.maxSide) / 2
+  const height = center(p.bounds, 2)
+  let closest = Infinity
+  let anchor: number | undefined
+  for (const { interval: gem, bounds, anchor: station } of stations) {
+    const width = gem.max - gem.min
+    if (
+      width <= 0 ||
+      interval.max - interval.min > 1.07 * width ||
+      along < gem.min ||
+      along > gem.max ||
+      side < gem.minSide ||
+      side > gem.maxSide ||
+      height < bounds.min[2] - width / 2 ||
+      height > bounds.max[2] + width / 2
+    )
+      continue
+    const distance = Math.hypot(
+      along - (gem.min + gem.max) / 2,
+      side - (gem.minSide + gem.maxSide) / 2,
+    )
+    if (distance < closest) {
+      closest = distance
+      anchor = station
+    }
+  }
+  return anchor
+}
+
 /** Pose a fresh render evaluation. The modeling graph, manufacturing facts, and cached meshes remain independent. */
 export function poseCircularBand(evaluation: Evaluation, design: Design | null): Evaluation {
   const layout = circularBandLayout(evaluation)
   if (!layout) return evaluation
   const groups = new Map<string, { min: number; max: number; gemSum: number; gems: number }>()
-  const keys = evaluation.parts.map((p) => sourceGroup(p, design))
+  const contexts = evaluation.parts.map((p) => sourceContext(p, design))
+  const keys = contexts.map(sourceGroup)
   for (const [i, p] of evaluation.parts.entries()) {
     const key = keys[i]
     if (!key) continue
@@ -146,15 +190,29 @@ export function poseCircularBand(evaluation: Evaluation, design: Design | null):
     }
     groups.set(key, g)
   }
-  const parts = evaluation.parts.map((p, i) => {
+  const anchors = evaluation.parts.map((p, i) => {
     const group = groups.get(keys[i] ?? '')
     const interval = layout.intervals.get(p.id)!
-    const anchor =
-      group && group.max - group.min <= layout.length / 3
-        ? group.gems
-          ? group.gemSum / group.gems
-          : (group.min + group.max) / 2
-        : (interval.min + interval.max) / 2
+    if (!group || group.max - group.min > layout.length / 3)
+      return (interval.min + interval.max) / 2
+    return group.gems ? group.gemSum / group.gems : (group.min + group.max) / 2
+  })
+  const stations = new Map<string, ImportedStation[]>()
+  for (const [i, p] of evaluation.parts.entries()) {
+    const archive = contexts[i]?.archiveId
+    if (!archive || p.importRole !== 'unassigned' || p.sourceAppearance?.kind !== 'gem') continue
+    const imported = stations.get(archive) ?? []
+    imported.push({ interval: layout.intervals.get(p.id)!, bounds: p.bounds, anchor: anchors[i]! })
+    stations.set(archive, imported)
+  }
+  const parts = evaluation.parts.map((p, i) => {
+    const archive = contexts[i]?.archiveId
+    const nearby = archive && stations.get(archive)
+    const inferred =
+      nearby && !keys[i] && p.importRole === 'unassigned' && p.sourceAppearance?.kind === 'metal'
+        ? stationAnchor(p, layout.intervals.get(p.id)!, nearby)
+        : undefined
+    const anchor = inferred ?? anchors[i]!
     const transform = frame(layout, anchor)
     const posed = transformTessellation(transform, p)
     return {
