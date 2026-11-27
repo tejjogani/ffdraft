@@ -140,6 +140,26 @@ describe('component visibility', () => {
     ws().exitIsolation()
     expect(ws()).toMatchObject({ hidden: ['pave'], hiddenStones: ['pave:1'] })
   })
+  it('drops obsolete metal shell identities when a feature is rebuilt', () => {
+    const shell = { nodeId: 'links', partId: 'links#shell:2' }
+    ws().toggleTarget(shell)
+    ws().pick(shell)
+    ws().isolateTargets([shell])
+    ws().setHover(shell)
+    ws().retain(
+      () => true,
+      new Set(),
+      (partId) => partId !== shell.partId,
+    )
+    expect(ws()).toMatchObject({
+      selection: ['links'],
+      part: null,
+      hiddenParts: [],
+      hover: null,
+      isolated: [],
+    })
+  })
+
   it('forgets hidden and isolated parts when their node leaves or a project changes', () => {
     const physical = { nodeId: 'pair', partId: 'pair#1' }
     ws().pick(physical)

@@ -291,10 +291,26 @@ function Workspace({ piece }: { piece: Piece }) {
   // selected: commands and the inspector would otherwise act on something that is not there.
   useEffect(() => ws().retain((id) => Object.hasOwn(view.nodes, id)), [view])
   const { evaluation, status, stale, error: failure, retry } = usePieceEvaluation(pieceId)
+  const partRevisions = useRef(new Map<string, string>())
   useEffect(() => {
     if (!evaluation || stale) return
     const stones = new Set(evaluation.stones.map((s) => s.id))
-    ws().retain((id) => Object.hasOwn(view.nodes, id), stones)
+    const parts = [...evaluation.parts, ...(evaluation.referenceParts ?? [])]
+    const revisions = new Map(parts.map((part) => [part.id, part.rev]))
+    const previous = partRevisions.current
+    partRevisions.current = revisions
+    ws().retain(
+      (id) => Object.hasOwn(view.nodes, id),
+      stones,
+      (id) => {
+        const shell = metalShellOf(id)
+        if (!shell) return revisions.has(id)
+        // Remeshing can assign a shell's former ordinal to a different physical component.
+        return (
+          revisions.has(shell.partId) && revisions.get(shell.partId) === previous.get(shell.partId)
+        )
+      },
+    )
   }, [view, evaluation, stale])
   const check = useProductionCheck(
     pieceId,

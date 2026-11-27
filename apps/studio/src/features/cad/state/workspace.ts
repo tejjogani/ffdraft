@@ -82,6 +82,7 @@ function retainedMask(
   mask: ViewMask,
   exists: (id: string) => boolean,
   live?: ReadonlySet<string>,
+  partExists?: (partId: string) => boolean,
 ): ViewMask {
   const keep = (id: string) => exists(mask.owners.get(id) ?? id)
   const removed: NodePick[] = [
@@ -90,7 +91,7 @@ function retainedMask(
       .filter((id) => !keep(id) || (live && !live.has(id)))
       .map((stoneId) => ({ nodeId: mask.owners.get(stoneId)!, stoneId })),
     ...mask.hiddenParts
-      .filter((id) => !keep(id))
+      .filter((id) => !keep(id) || (partExists && !partExists(id)))
       .map((partId) => ({ nodeId: mask.owners.get(partId)!, partId })),
   ]
   return removed.length ? updateMask(mask, removed, false) : mask
@@ -132,7 +133,11 @@ interface WorkspaceState extends ViewMask {
    * Forgets features that are no longer in the design (an undo took back an addition, a teammate
    * or the assistant deleted one): they leave the selection, the hover and a rename in progress.
    */
-  retain(exists: (nodeId: string) => boolean, liveComponents?: ReadonlySet<string>): void
+  retain(
+    exists: (nodeId: string) => boolean,
+    liveStones?: ReadonlySet<string>,
+    partExists?: (partId: string) => boolean,
+  ): void
   setHover(p: NodePick | null): void
   toggleHidden(id: string): void
   toggleTarget(target: NodePick): void
@@ -231,18 +236,23 @@ export const useWorkspace = create<WorkspaceState>()(
         else s.select(ids)
         return get().selection
       },
-      retain: (exists, live) => {
+      retain: (exists, live, partExists) => {
         const s = get()
         const selection = s.selection.filter(exists)
         const next: Partial<WorkspaceState> = {}
         // A picked stone belongs to the one selected feature.
         if (selection.length !== s.selection.length) Object.assign(next, { selection, stone: null })
-        if (s.hover && !exists(s.hover.nodeId)) next.hover = null
         if (s.renaming && !exists(s.renaming)) next.renaming = null
         const valid = (p: NodePick) =>
-          exists(p.nodeId) && (!live || !p.stoneId || live.has(p.stoneId))
+          exists(p.nodeId) &&
+          (!live || !p.stoneId || live.has(p.stoneId)) &&
+          (!partExists || !p.partId || partExists(p.partId))
         if (s.hover && !valid(s.hover)) next.hover = null
-        if ((!selection.length && (s.stone || s.part)) || (s.stone && live && !live.has(s.stone)))
+        if (
+          (!selection.length && (s.stone || s.part)) ||
+          (s.stone && live && !live.has(s.stone)) ||
+          (s.part && partExists && !partExists(s.part))
+        )
           Object.assign(next, { stone: null, part: null })
         const isolated = s.isolated.filter(valid)
         let mask: ViewMask = s
@@ -253,10 +263,10 @@ export const useWorkspace = create<WorkspaceState>()(
             next.beforeIsolation = null
           }
         }
-        const cleaned = retainedMask(mask, exists, live)
+        const cleaned = retainedMask(mask, exists, live, partExists)
         if (cleaned !== s) Object.assign(next, maskOf(cleaned))
         if (s.beforeIsolation && next.beforeIsolation !== null) {
-          const prior = retainedMask(s.beforeIsolation, exists, live)
+          const prior = retainedMask(s.beforeIsolation, exists, live, partExists)
           if (prior !== s.beforeIsolation) next.beforeIsolation = prior
         }
         if (Object.keys(next).length) set(next)
