@@ -87,30 +87,66 @@ describe('saved shots and takes', () => {
     expect((await api.fail('scenes.list', { pieceId: 'pc_nope' })).status).toBe(404)
   })
 
-  it('saves ordered defaults and their first edit once even when initialization is retried concurrently', async () => {
-    const piece = await api.call('pieces.create', { kind: 'pendant' })
-    const input = {
-      pieceId: piece.id,
-      edit: { key: 'hero', patch: { look: 'catalog-white', includeUnassignedRhino: true } },
-    }
-    const initialize = () => api.call('scenes.ensureDefaults', input)
-    const [first, concurrent, retry] = await Promise.all([initialize(), initialize(), initialize()])
-    expect(concurrent.shots).toEqual(first.shots)
-    expect(retry.shots).toEqual(first.shots)
-    expect(first.shots.map(({ title, position }) => [title, position])).toEqual([
-      ['Hero', 1],
-      ['Front', 2],
-      ['Profile', 3],
-      ['Macro', 4],
-    ])
-    const [hero, ...rest] = first.shots
-    expect(hero?.scene).toMatchObject(input.edit.patch)
-    expect(rest.some(({ scene }) => scene.includeUnassignedRhino)).toBe(false)
-    const history = await api.call('scenes.history', { id: hero!.id })
-    expect(history).toHaveLength(1)
-    expect(history[0]?.before.includeUnassignedRhino).toBeUndefined()
-    expect(history[0]?.after.includeUnassignedRhino).toBe(true)
-    expect((await api.call('pieces.get', { id: piece.id })).version).toBe(piece.version)
+  it.each(['source', 'clay'] as const)(
+    'saves %s on the selected default shot even when initialization is retried concurrently',
+    async (importedBodyLook) => {
+      const piece = await api.call('pieces.create', { kind: 'pendant' })
+      const input = {
+        pieceId: piece.id,
+        edit: {
+          key: 'hero',
+          patch: { look: 'catalog-white', includeUnassignedRhino: true, importedBodyLook },
+        },
+      }
+      const initialize = () => api.call('scenes.ensureDefaults', input)
+      const [first, concurrent, retry] = await Promise.all([
+        initialize(),
+        initialize(),
+        initialize(),
+      ])
+      expect(concurrent.shots).toEqual(first.shots)
+      expect(retry.shots).toEqual(first.shots)
+      expect(first.shots.map(({ title, position }) => [title, position])).toEqual([
+        ['Hero', 1],
+        ['Front', 2],
+        ['Profile', 3],
+        ['Macro', 4],
+      ])
+      const [hero, ...rest] = first.shots
+      expect(hero?.scene).toMatchObject(input.edit.patch)
+      expect(rest.some(({ scene }) => scene.includeUnassignedRhino)).toBe(false)
+      const history = await api.call('scenes.history', { id: hero!.id })
+      expect(history).toHaveLength(1)
+      expect(history[0]?.before.includeUnassignedRhino).toBeUndefined()
+      expect(history[0]?.after).toMatchObject({ includeUnassignedRhino: true, importedBodyLook })
+      expect((await api.call('pieces.get', { id: piece.id })).version).toBe(piece.version)
+    },
+  )
+
+  it('returns the imported preview settings with camera suggestions, including without a kernel', async () => {
+    const { id: pieceId } = await api.call('pieces.create', { kind: 'ring' })
+    const query = { pieceId, includeUnassignedRhino: true }
+    const source = await api.call('scenes.suggest', { ...query, importedBodyLook: 'source' })
+    const clay = await api.call('scenes.suggest', { ...query, importedBodyLook: 'clay' })
+    const legacy = await api.call('scenes.suggest', query)
+    const off = await api.call('scenes.suggest', { pieceId, importedBodyLook: 'source' })
+    expect(source.sceneOptions).toEqual({
+      includeUnassignedRhino: true,
+      importedBodyLook: 'source',
+    })
+    expect(clay.sceneOptions).toEqual({ includeUnassignedRhino: true, importedBodyLook: 'clay' })
+    expect(legacy).toEqual(clay)
+    expect(off.sceneOptions).toBeUndefined()
+    expect(source.shots).toEqual(clay.shots)
+    const saved = await api.call('scenes.create', {
+      pieceId,
+      title: 'Imported hero',
+      scene: { camera: source.shots[0]!.camera, ...source.sceneOptions },
+    })
+    expect(saved.scene).toMatchObject({ includeUnassignedRhino: true, importedBodyLook: 'source' })
+    expect((await api.fail('scenes.suggest', { ...query, importedBodyLook: 'gloss' })).status).toBe(
+      400,
+    )
   })
 
   it('leaves an empty set untouched on an invalid first edit and preserves a customized partial set', async () => {

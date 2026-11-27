@@ -64,7 +64,13 @@ export async function suggestShots(
   signal?: AbortSignal,
 ): Promise<CommandOutput<'scenes.suggest'>> {
   const piece = await getPiece(ctx, input.pieceId)
-  const subject = await subjectOf(ctx, piece, signal, input.includeUnassignedRhino).catch(
+  const sceneOptions = input.includeUnassignedRhino
+    ? ({
+        includeUnassignedRhino: true,
+        importedBodyLook: input.importedBodyLook ?? 'clay',
+      } as const)
+    : undefined
+  const subject = await subjectOf(ctx, piece, signal, sceneOptions?.includeUnassignedRhino).catch(
     () => null,
   )
   const features = pieceFeatures(piece.design, subject ?? undefined)
@@ -94,6 +100,7 @@ export async function suggestShots(
     kind: piece.design.kind,
     features: features.lines,
     centreStoneNodeId: features.centreStoneNodeId,
+    ...(sceneOptions && { sceneOptions }),
     shots,
     questions: cinemaQuestions(features),
   }
