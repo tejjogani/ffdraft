@@ -562,8 +562,8 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                 className="absolute inset-4"
                 onHash={onHash}
                 onCommit={(patch) => void s.adjust(shot, patch)}
-                onLock={(locked) =>
-                  void s.adjust(shot, { camera: { locked: locked ? true : null } })
+                onLock={(locked, camera) =>
+                  void s.adjust(shot, { camera: { ...camera, locked: locked ? true : null } })
                 }
                 onReset={() => void s.adjust(shot, resetCameraPatch(shot.scene.camera))}
               />

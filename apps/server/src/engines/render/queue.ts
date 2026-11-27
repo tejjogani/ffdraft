@@ -81,6 +81,7 @@ export function cacheKeyOf(job: RenderJob, blenderVersion: string | null): strin
     // Invalidate prior renders when the Cycles lighting or material recipes change.
     'jewelry-lighting-v3',
     blenderVersion,
+    ...(includeUnassignedRhino ? ['imported-camera-v1'] : []),
   ])
   return `sha256:${createHash('sha256').update(key).digest('hex')}`
 }

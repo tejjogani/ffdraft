@@ -9,6 +9,7 @@ import {
   applyAdjustments,
   assessRender,
   draftOf,
+  importedStationDetail,
   resolveScene,
   type SceneAdjustment,
   sceneHash,
@@ -136,7 +137,11 @@ export async function renderTake(o: TakeOptions): Promise<TakeResult> {
     const draftScene = draftOf(scene)
     const draftIsTake = sameScene(draftScene, scene)
     const draft = await blend(draftScene, 0, draftIsTake ? 0.95 : 0.35)
-    const issues = assessRender(draft.metrics, draftScene)
+    const issues = assessRender(
+      draft.metrics,
+      draftScene,
+      !!importedStationDetail(draftScene.camera, o.subject),
+    )
     const fixes = autoFixes(issues)
     const tuned = fixes.length ? RenderSceneSchema.safeParse(applyAdjustments(scene, fixes)) : null
     if (!tuned?.success && draftIsTake) {
@@ -157,7 +162,11 @@ export async function renderTake(o: TakeOptions): Promise<TakeResult> {
   }
 
   const take = await blend(scene, o.autoTune ? 0.35 : 0, 0.95)
-  passes.push({ adjustments: [], issues: assessRender(take.metrics, scene), draftAssetId: null })
+  passes.push({
+    adjustments: [],
+    issues: assessRender(take.metrics, scene, !!importedStationDetail(scene.camera, o.subject)),
+    draftAssetId: null,
+  })
   const frames = take.files.frames ?? []
   // An animation: the video, its first frame as a poster, and a small GIF when it comes cheap.
   const outputs = take.files.image

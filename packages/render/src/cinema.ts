@@ -23,7 +23,7 @@ import {
   type RenderScene,
 } from '@pave/schema'
 import { CHECKS } from './assess'
-import { cameraPose, corners, framePoints, resolveCamera } from './camera'
+import { cameraPose, corners, framePoints, importedStationDetail, resolveCamera } from './camera'
 import { type Framing, predictFraming, projectPoint } from './framing'
 import { add, type Vec3 } from './math'
 import { boundsCenter, boundsRadius, type SceneSubject, stoneCenter, stoneWidth } from './subject'
@@ -305,8 +305,17 @@ const VOCABULARY: Record<PieceKind, ShotRecipe[]> = {
 }
 
 /** The shots for a kind of piece; a macro only when there is a stone to look at. */
-export function shotVocabulary(kind: PieceKind, hasStone = true): ShotRecipe[] {
-  return VOCABULARY[kind].filter((s) => s.frame === 'piece' || hasStone || kind === 'chain')
+export function shotVocabulary(
+  kind: PieceKind,
+  hasStone = true,
+  settingDetail = false,
+): ShotRecipe[] {
+  const recipes = VOCABULARY[kind].filter(
+    (s) => s.frame === 'piece' || hasStone || kind === 'chain',
+  )
+  return settingDetail && !recipes.some((recipe) => recipe.basePreset === 'hero')
+    ? [HERO, ...recipes]
+    : recipes
 }
 
 /**
@@ -345,6 +354,8 @@ export function placeShot(
   aspect: number,
   centreStoneNodeId?: string | null,
 ): RenderScene['camera'] {
+  const preset = { preset: recipe.basePreset, focalLength: recipe.focalLength }
+  if (importedStationDetail(preset, subject)) return preset
   const stone = recipe.frame === 'stone' ? stonePoints(subject, centreStoneNodeId) : null
   const pts = stone ?? piecePoints(subject)
   const { target, distance } = framePoints(
@@ -381,7 +392,7 @@ export function placeShot(
 // ── The framing check ────────────────────────────────────────────────────────────────────────
 
 export interface ShotFraming {
-  subject: 'piece' | 'centre stone'
+  subject: 'piece' | 'centre stone' | 'setting detail'
   framing: Framing
   ok: boolean
   /** What is wrong and how to fix it, in plain words; null when the shot can be rendered. */
@@ -427,9 +438,10 @@ export function shotFraming(scene: RenderScene, subject: SceneSubject): ShotFram
   const camera = resolveCamera(scene.camera, subject, aspect)
   const macro = isMacro(scene.camera)
   const stone = macro ? stonePoints(subject, scene.camera.focusNodeId) : null
-  const pts = stone ?? piecePoints(subject)
+  const detail = importedStationDetail(scene.camera, subject)
+  const pts = detail?.points ?? stone ?? piecePoints(subject)
   const framing = predictFraming(camera, aspect, pts)
-  const name = stone ? 'centre stone' : 'piece'
+  const name = detail ? 'setting detail' : stone ? 'centre stone' : 'piece'
   const fartherBy = (fill: number) =>
     `move the camera about ${Math.max(5, Math.round((fill / CHECKS.fillTarget - 1) * 100))}% farther back (or widen the lens)`
   let problem: string | null = null
@@ -444,11 +456,11 @@ export function shotFraming(scene: RenderScene, subject: SceneSubject): ShotFram
       problem = `The ${name} fills only ${pct(framing.fill)} of the frame: move about ${Math.round((1 - framing.fill / CHECKS.fillTarget) * 100)}% closer (or use a longer lens).`
       break
     case 'large':
-      if (!stone)
+      if (!stone && !detail)
         problem = `The ${name} fills ${pct(framing.fill)}, with no room around it: ${fartherBy(framing.fill)}.`
       break
     case 'tight':
-      if (!stone)
+      if (!stone && !detail)
         problem = `The ${name} touches the frame-safe margin: ${fartherBy(framing.fill + 0.1)}, or re-centre it.`
       break
     case 'off-centre':

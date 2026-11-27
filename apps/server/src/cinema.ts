@@ -9,6 +9,7 @@ import {
   ASPECTS,
   type AspectKey,
   cinemaQuestions,
+  importedStationDetail,
   pieceFeatures,
   placeShot,
   resolveScene,
@@ -104,8 +105,11 @@ export async function suggestShots(
   )
   const features = pieceFeatures(piece.design, subject ?? undefined)
   const ratio = ASPECTS[input.aspect as AspectKey].ratio
-  const hasStone = features.centreStoneNodeId !== null || (subject?.stones.length ?? 0) > 0
-  const shots = shotVocabulary(piece.design.kind, hasStone).map((recipe) => {
+  const settingDetail =
+    subject && importedStationDetail({ preset: 'hero', focalLength: 90 }, subject)
+  const hasStone =
+    features.centreStoneNodeId !== null || (subject?.stones.length ?? 0) > 0 || !!settingDetail
+  const shots = shotVocabulary(piece.design.kind, hasStone, !!settingDetail).map((recipe) => {
     if (!subject)
       // Without a kernel the camera cannot be solved; the preset frames the piece when rendered.
       return {
@@ -119,10 +123,18 @@ export async function suggestShots(
     const check = shotFraming(sceneFor(camera, ratio), subject)
     return {
       key: recipe.key,
-      title: recipe.title,
-      why: recipe.why,
+      title:
+        check.subject === 'setting detail'
+          ? camera.preset === 'macro'
+            ? 'Macro on the settings'
+            : 'Hero setting detail'
+          : recipe.title,
+      why:
+        check.subject === 'setting detail'
+          ? 'Show the middle stones and the metalwork that holds them.'
+          : recipe.why,
       camera,
-      framing: `${check.framing.label}${check.subject === 'centre stone' ? ' (centre stone)' : ''}`,
+      framing: `${check.framing.label}${check.subject === 'piece' ? '' : ` (${check.subject})`}`,
     }
   })
   return {
