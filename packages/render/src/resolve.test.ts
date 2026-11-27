@@ -68,6 +68,42 @@ describe('resolveScene', () => {
     expect(JSON.parse(JSON.stringify(a))).toEqual(a)
   })
 
+  it('restyles original imported meshes for one shot while keeping clay and unrelated parts intact', () => {
+    const subject = subjectOf(ring)
+    const template = subject.parts[0]!
+    subject.parts = ['setting', 'gem', 'unnamed', 'other'].map((id) => ({
+      ...template,
+      id,
+      nodeId: id,
+      importRole: 'unassigned',
+      sourceAppearance:
+        id === 'setting'
+          ? { kind: 'metal', metal: 'pt950' }
+          : id === 'gem'
+            ? { kind: 'gem', stone: 'emerald' }
+            : undefined,
+    }))
+    const input = scene({
+      includeUnassignedRhino: true,
+      importedBodyLook: 'source',
+      overrides: {
+        '*': { material: 'au18k-rose' },
+        gem: { stone: 'ruby' },
+        unnamed: { stone: 'diamond' },
+      },
+    })
+    const shot = resolveScene(input, subject)
+    expect(shot.materials[shot.assignments.setting!]).toEqual(
+      metalMaterial('au18k-rose', 'polished', 'none'),
+    )
+    expect(shot.materials[shot.assignments.gem!]).toEqual(gemMaterial('ruby'))
+    expect(shot.materials[shot.assignments.unnamed!]).toEqual(gemMaterial('diamond'))
+    expect(shot.assignments.other).toBe('surface:imported-clay')
+    expect(resolveScene({ ...input, importedBodyLook: 'clay' }, subject).assignments.gem).toBe(
+      'surface:imported-clay',
+    )
+  })
+
   it('resolves every look', () => {
     for (const look of LOOK_IDS) {
       const r = resolveScene(scene({ look }), ring)

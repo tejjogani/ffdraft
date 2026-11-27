@@ -1,4 +1,4 @@
-import type { SourceRenderAppearance } from '@pave/schema'
+import type { RenderScene, SourceRenderAppearance } from '@pave/schema'
 import { hexToRgb, type Rgb, srgbToLinear } from '../color'
 import { gemMaterial, metalMaterial, type ResolvedMaterial } from './index'
 
@@ -26,4 +26,35 @@ export function importedRenderMaterial(source: SourceRenderAppearance): Resolved
     subsurfaceMm: 0,
     opacity: source.opacity,
   }
+}
+
+/** A per-part choice can supply missing source information. Whole-piece variants respect the bound family. */
+export function importedShotMaterial(
+  source: SourceRenderAppearance | undefined,
+  part: RenderScene['overrides'][string] | undefined,
+  all: RenderScene['overrides'][string] | undefined,
+): ResolvedMaterial | undefined {
+  const explicitKind =
+    part?.stone && !part.material ? 'gem' : part?.material && !part.stone ? 'metal' : undefined
+  const kind = explicitKind ?? source?.kind
+  if (kind === 'gem') {
+    const stone = part?.stone ?? all?.stone
+    if (stone) return gemMaterial(stone)
+  }
+  if (kind === 'metal') {
+    const alloy = part?.material ?? all?.material
+    const finish = part?.finish ?? all?.finish
+    const plating = part?.plating ?? all?.plating
+    if (alloy || finish || plating) {
+      const metal = alloy ?? (source?.kind === 'metal' ? source.metal : undefined)
+      if (metal) {
+        const material = metalMaterial(metal, finish ?? 'polished', plating ?? 'none')
+        if (!alloy && (!plating || plating === 'none') && source?.color) {
+          material.color = hexToRgb(source.color).map(srgbToLinear) as Rgb
+        }
+        return material
+      }
+    }
+  }
+  return source && importedRenderMaterial(source)
 }
