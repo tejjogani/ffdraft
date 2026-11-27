@@ -42,3 +42,20 @@ it('measures an individually tilted and translated stone in its table plane', ()
   expect(overridden.width).toBeCloseTo(2, 4)
   expect(overridden.girdle).toEqual(expect.any(Array))
 })
+
+it('flags an isolated copy alongside a ring of measured occurrences without changing any selection', async () => {
+  const { isolatedStoneIds } = await import('./role-measurements')
+  const circle = Array.from({ length: 12 }, (_, i) => ({
+    id: String(i),
+    girdle: [10 * Math.cos((i * Math.PI) / 6), 0, 10 * Math.sin((i * Math.PI) / 6)] as [
+      number,
+      number,
+      number,
+    ],
+  }))
+  expect([...isolatedStoneIds(circle)]).toEqual([])
+  expect([...isolatedStoneIds([...circle, { id: 'loose', girdle: [-8, -18, -8] }])]).toEqual([
+    'loose',
+  ])
+  expect([...isolatedStoneIds(circle.slice(0, 2))]).toEqual([])
+})
