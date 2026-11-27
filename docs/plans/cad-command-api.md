@@ -47,6 +47,21 @@ The project import accepts up to 500 selected parts and curves per edit. The Rhi
 
 A `.pave` carries editable curve definitions, mesh edits and retained native sources. Native retention for earlier mesh-only imports requires re-importing the original `.3dm`. Imported Rhino solids have native `.3dm` readback coverage. STEP parity for imported B-reps remains unverified.
 
+## Local Rhino regression check
+
+From an installed workspace, pass one or more local archives.
+
+```bash
+pnpm --silent cad:check-rhino "path/to/first.3dm" "path/to/second.3dm"
+```
+
+The check uses the production Rhino reader, design operations and kernel exporter with in-memory assets. It opens the original and exported archives directly through OpenNURBS and prints one JSON line per argument. Each line reports source units, layer and geometry counts, block usage, supported and skipped geometry, and the SHA-256 before and after processing. It exits nonzero if any archive fails a check or has too little supported geometry to exercise either editing path.
+
+- Every imported curve is exported and reopened to check its degree, knots, parameter domain, weighted control points, layer, source ID and sampled positions. The check also compares unambiguous top-level curves to the source in millimetres, centimetres, metres, inches or feet. It edits one curve in memory and verifies the original and any probed neighbour after applying the inverse.
+- The body probe picks one small solid preview, preferring a native part from a repeated block definition. When a disjoint neighbour is available, both are evaluated together. The check verifies the moved vertex in a mesh export, restoration after undo and the geometry of the untouched body. It reads native BReps and any exact affine instances directly from the export. Unsupported or absent geometry is visible in the report.
+
+Both probes write exports in memory and use controlled selections for the edits. The [Studio import checks](../../apps/studio/e2e/model-import.ts) and [server archive tests](../../apps/server/src/pavefile/pavefile-engines.test.ts) exercise the browser workflow and persisted `.pave` exchange.
+
 ## Trace quality
 
 Project history answers what changed, who changed it, and how to reverse it. An assistant run also has ordered tool inputs, results, errors, and a link to the resulting changes. A useful regression replays a request on a disposable project and verifies the observed shape, bounds, mass or other task-specific result. A tool returning success alone is insufficient. The project-scoping regression includes a refused cross-project read and ensures that the other project keeps its original version.

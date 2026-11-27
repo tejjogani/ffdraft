@@ -24,7 +24,8 @@
     "setup:render": "node workers/render/setup.mjs",
     "match:bench": "pnpm --filter @pave/match bench",
     "agent:smoke": "tsx apps/server/src/smoke-cli.ts",
-    "cad:examples": "tsx apps/server/src/cad-examples-cli.ts"
+    "cad:examples": "tsx apps/server/src/cad-examples-cli.ts",
+    "cad:check-rhino": "tsx packages/kernel/src/qa/rhino-model-cli.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.6.8",
