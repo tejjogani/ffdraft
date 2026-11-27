@@ -5,8 +5,8 @@
  * renders exactly that (fixed seed, no automatic adjustment unless asked). Every change to a
  * shot can be undone (mod+z) and redone (mod+shift+z); a framed shot can be saved as a house
  * shot and reused on any piece. Render renders the selected shot, Render all the whole set
- * (mod+enter, mod+shift+enter). Without Blender, takes are drawn by this window and say
- * "Preview quality". On a phone the columns stack.
+ * (mod+enter, mod+shift+enter). The first Blender take can install
+ * the engine. Browser takes are marked "Preview quality". On a phone the columns stack.
  */
 import { machineTime, redoTarget, resetCameraPatch, undoTarget } from '@pave/render'
 import type { RenderJob } from '@pave/schema'
@@ -37,7 +37,7 @@ import { useReadOnly } from '../assistant/AskAiSection'
 import { jobState } from '../assistant/jobs/status'
 import { useStageJob } from '../assistant/jobs/useJob'
 import { renderAvailability } from './availability'
-import { engineLabel } from './EngineDialog'
+import { engineLabel, useRenderInstallStatus } from './EngineDialog'
 import { ShotInspector } from './ShotInspector'
 import { addShot, saveHouseShot, takeShotIntent } from './shot-actions'
 import { isLive, pickOf, type Shot, shotList, takeLabel, takeMedia, takesOf } from './shots'
@@ -99,7 +99,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
     () => s.takes.filter((t) => !s.shots.some((x) => x.saved && x.saved.id === t.sceneId)),
     [s.takes, s.shots],
   )
-  const browser = s.engine ? !s.engine.available : false
+  const { status: setup } = useRenderInstallStatus()
   const estimate = useRpc(
     'renders.estimate',
     { pieceId, takes: shot ? [{ scene: shot.scene }] : [{ scene: {} as never }] },
@@ -110,16 +110,20 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
     { pieceId, takes: s.shots.map((x) => ({ scene: x.scene })) },
     { enabled: canRender && s.shots.length > 0 },
   )
+  const predictedEngine =
+    estimate.data?.engine ??
+    (s.engine ? (s.engine.available || setup.data?.supported ? 'blender' : 'browser') : null)
+  const browser = predictedEngine === 'browser'
   const perTake = canRender ? (estimate.data?.takes[0] ?? null) : null
   const view = viewing ? s.takes.find((t) => t.id === viewing && t.assetIds[0]) : null
   const pair = comparing
     ? (comparing.map((id) => s.takes.find((t) => t.id === id)).filter(Boolean) as RenderJob[])
     : null
 
-  const renderShots = (shots: Shot[]) => {
+  const renderShots = (shots: Shot[], engine?: 'browser') => {
     if (!canRender) return
     viewfinder.current?.commitPending()
-    void s.render(shots)
+    void s.render(shots, { engine })
   }
   const rerenderTake = (take: RenderJob) => {
     if (!canRender) return
@@ -155,6 +159,13 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
           shortcut: 'mod+enter',
           when: () => canRender,
           run: () => renderShots([shot]),
+        },
+        {
+          id: 'render.browserPreview',
+          title: 'Render browser preview',
+          group: 'Piece',
+          when: () => canRender && !browser,
+          run: () => renderShots([shot], 'browser'),
         },
         {
           id: 'render.all',
@@ -299,7 +310,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               )}
             >
               <Settings2 className="size-3.5" aria-hidden />
-              {engineLabel(s.engine)}
+              {engineLabel(s.engine, setup.data)}
             </button>
             <span className="flex items-center gap-0.5">
               <IconButton
@@ -320,6 +331,16 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               />
             </span>
             <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+              {!browser && shot && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={!canRender}
+                  onClick={() => renderShots([shot], 'browser')}
+                >
+                  Browser preview
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="ghost"
@@ -532,7 +553,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
           {shot && (
             <ShotInspector
               scene={shot.scene}
-              engine={s.engine ? (s.engine.available ? 'blender' : 'browser') : null}
+              engine={predictedEngine}
               estimate={
                 canRender && estimate.data
                   ? { seconds: perTake ?? 0, basis: estimate.data.basis }

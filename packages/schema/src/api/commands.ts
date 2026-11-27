@@ -1706,7 +1706,7 @@ export const commands = {
   }),
   'renders.estimate': def({
     description:
-      'How long takes would keep this computer busy, before rendering them: one entry per take (a saved `sceneId` or a `scene`). Renders cost machine time on this computer, not money. Says which engine would render them and whether the time is measured on this machine or a typical figure.',
+      'How long takes would keep this computer busy, before rendering them: one entry per take (a saved `sceneId` or a `scene`). Renders cost machine time on this computer, not money. Says which engine would render them and whether the time is measured on this machine or a typical figure. First-use Blender setup time is separate.',
     kind: 'query',
     tool: true,
     input: z.object({
@@ -1728,7 +1728,7 @@ export const commands = {
   }),
   'renders.create': def({
     description:
-      'Queue a photoreal render (still or animation) of a piece from a saved shot (`sceneId`) or a declarative scene: look, camera, environment, overrides, animation, output. `engine: auto` uses Blender when available, else the browser (preview quality, labelled so). Each finished Blender take counts against the plan’s monthly render allowance (plan_limit, 402, once it is used up; a failed or canceled take is not counted); browser takes never count. It costs machine time on this computer, not money; outside a Render job the designer approves it, and every call in one turn is approved together. For variants ("in rose gold and platinum"), make one call per variant in the same turn, with a shared `groupId`, a `variantLabel` and the metal in `scene.overrides["*"]`. A take renders exactly the scene asked for (fixed seed: the same scene gives the same pixels); `autoTune: true` lets numeric checks adjust framing and exposure in a draft first, for inside a Render job or when the designer asks you to improve a shot. To re-render after a critique, pass `retryOf` (the take it replaces) and a short `note` saying what changed. In a conversation you do not poll: the result arrives when the take is finished, with the image.',
+      'Queue a photoreal render (still or animation) of a piece from a saved shot (`sceneId`) or a declarative scene: look, camera, environment, overrides, animation, output. `engine: auto` uses Blender when available. An eligible first render from the local owner’s Studio starts managed Blender setup and waits for it; other installs without Blender use browser preview. Use `engine: browser` for an explicit preview. Each finished Blender take counts against the plan’s monthly render allowance (plan_limit, 402, once it is used up; a failed or canceled take is not counted); browser takes never count. It costs machine time on this computer, not money; outside a Render job the designer approves it, and every call in one turn is approved together. For variants ("in rose gold and platinum"), make one call per variant in the same turn, with a shared `groupId`, a `variantLabel` and the metal in `scene.overrides["*"]`. A take renders exactly the scene asked for (fixed seed: the same scene gives the same pixels); `autoTune: true` lets numeric checks adjust framing and exposure in a draft first, for inside a Render job or when the designer asks you to improve a shot. To re-render after a critique, pass `retryOf` (the take it replaces) and a short `note` saying what changed. In a conversation you do not poll: the result arrives when the take is finished, with the image.',
     kind: 'mutation',
     tool: { confirm: true },
     input: z

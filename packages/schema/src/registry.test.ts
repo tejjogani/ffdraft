@@ -250,6 +250,7 @@ describe('events', () => {
       'piece.updated',
       'board.updated',
       'scene.updated',
+      'render.installRequested',
       'job.updated',
       'run.updated',
       'client.request',

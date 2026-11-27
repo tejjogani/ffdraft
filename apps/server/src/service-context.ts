@@ -33,6 +33,7 @@ export function serviceContext(ctx: Ctx): ServiceContext {
     orgId: ctx.orgId,
     userId: ctx.user.id,
     actor: ctx.actor,
+    localRenderInstall: ctx.localRenderInstall,
     recordUsage: async (event) => {
       await recordUsage(ctx, event)
     },

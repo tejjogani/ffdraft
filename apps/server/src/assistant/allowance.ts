@@ -15,7 +15,11 @@ export function allowanceOf(ctx: Ctx, command: string, input: unknown): Allowanc
   const i = (input ?? {}) as Record<string, unknown>
   switch (command) {
     case 'renders.create':
-      return engineFor(ctx, (i.engine as 'auto' | 'blender' | 'browser') ?? 'auto') === 'blender'
+      return engineFor(
+        ctx,
+        (i.engine as 'auto' | 'blender' | 'browser') ?? 'auto',
+        i.purpose === 'reference' ? 'reference' : 'take',
+      ) === 'blender'
         ? 'render'
         : null
     case 'design.export':

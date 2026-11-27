@@ -62,6 +62,7 @@ interface Entry {
   handle: JobHandle<RenderJobPatch>
   sctx: ServiceContext
   controller: AbortController
+  engineReady?: ReturnType<BlenderSetup['prepareRender']>
   done?: Promise<void>
   /** Set once the job has a folder to work in. */
   workDir?: string
@@ -172,13 +173,30 @@ export function createRenderQueue(o: RenderQueueOptions) {
     const { job, piece, handle, sctx } = entry
     const { signal } = entry.controller
     try {
-      await o.blender.probed
-      const engine = o.blender.status()
-      if (!engine.available)
-        throw new AppError('not_configured', `Blender is not available: ${engine.reason}`)
       // A job resumed after a restart must render the version it was queued for.
       if (piece.version !== job.sourceVersion)
         throw new AppError('conflict', 'The piece changed since this render was queued.')
+
+      // Canceling a take releases its slot immediately. Other takes can still use the install.
+      signal.throwIfAborted()
+      let off: (() => void) | undefined
+      const interrupted = new Promise<never>((_, reject) => {
+        const abort = () => reject(signal.reason)
+        signal.addEventListener('abort', abort, { once: true })
+        off = () => signal.removeEventListener('abort', abort)
+      })
+      const { engine, setupCanceled } = await Promise.race([
+        entry.engineReady ??
+          o.blender.probed.then(() => ({ engine: o.blender.status(), setupCanceled: false })),
+        interrupted,
+      ]).finally(() => off?.())
+      signal.throwIfAborted()
+      if (setupCanceled) {
+        await handle.update({ status: 'canceled', error: 'Blender setup was canceled.' })
+        return
+      }
+      if (!engine.available)
+        throw new AppError('not_configured', `Blender is not available: ${engine.reason}`)
 
       const cacheKey = cacheKeyOf(job, engine.version)
       const cached = job.retryOf ? null : await sctx.cachedRender(cacheKey)
@@ -269,10 +287,13 @@ export function createRenderQueue(o: RenderQueueOptions) {
     }
   }
 
-  const accept: RenderQueue['submit'] = async (job, piece, handle, sctx) => {
+  const accept: RenderQueue['submit'] = async (job, piece, handle, sctx, setupBlender) => {
     if (closing) throw new AppError('internal', 'The server is shutting down; try again shortly.')
     const queue = waiting.get(sctx.orgId) ?? []
-    queue.push({ job, piece, handle, sctx, controller: new AbortController() })
+    // Attach every take to this installation at submission, including takes behind a busy slot.
+    // If setup fails, the whole batch sees that failure and a later explicit retry can start it again.
+    const engineReady = setupBlender ? o.blender.prepareRender() : undefined
+    queue.push({ job, piece, handle, sctx, engineReady, controller: new AbortController() })
     waiting.set(sctx.orgId, queue)
     pump()
   }

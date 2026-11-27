@@ -30,9 +30,16 @@ const renderInstall = (name: CommandName) =>
   name === 'renders.installEngine' ||
   name === 'renders.cancelInstall'
 
+const canRequestRenderInstall = (name: CommandName) =>
+  name === 'renders.create' ||
+  name === 'renders.estimate' ||
+  name === 'threads.send' ||
+  name === 'runs.decide' ||
+  name === 'runs.resume'
+
 /** An installation changes this computer. The generic local guard also permits LAN and dev
  * origins, so require a loopback bind and the browser's exact loopback request origin here. */
-function localInstallRequest(c: HttpContext, runtime: Runtime): boolean {
+function localInstallRequest(c: HttpContext, runtime: Runtime, strict: boolean): boolean {
   const { auth, host } = runtime.config
   if (auth !== 'local' || !['localhost', '127.0.0.1', '::1'].includes(host.toLowerCase()))
     return false
@@ -44,9 +51,12 @@ function localInstallRequest(c: HttpContext, runtime: Runtime): boolean {
     !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) ||
     (hostHeader !== undefined && hostHeader.toLowerCase() !== url.host) ||
     c.req.header('origin') !== url.origin ||
+    c.req.header('authorization') !== undefined ||
     (fetchSite !== undefined && fetchSite !== 'same-origin')
-  )
-    throw forbidden('Open Pavé on this computer to manage the Blender installation.')
+  ) {
+    if (strict) throw forbidden('Open Pavé on this computer to manage the Blender installation.')
+    return false
+  }
   return true
 }
 
@@ -73,9 +83,14 @@ export function mountRpc(app: App, runtime: Runtime) {
       const name = c.req.param('name')
       if (!isCommand(name)) throw notFound('Command', name)
       const install = renderInstall(name)
-      const ctx = install
-        ? { ...c.var.ctx, localRenderInstall: localInstallRequest(c, runtime) }
-        : c.var.ctx
+      const ctx =
+        install || canRequestRenderInstall(name)
+          ? {
+              ...c.var.ctx,
+              localRenderInstall:
+                c.var.ctx.role === 'owner' && localInstallRequest(c, runtime, install),
+            }
+          : c.var.ctx
       const output = await runtime.execute(name, await readJson(c, install), ctx)
       return c.json(output as object)
     },

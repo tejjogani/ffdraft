@@ -95,6 +95,9 @@ function refresh(event: ServerEvent): void {
     case 'scene.updated':
       invalidateFor(queryClient, 'renders')
       return
+    case 'render.installRequested':
+      invalidate(['renders.installStatus'])
+      return
     case 'job.updated':
       // A take's progress ticks every second: patch the ring in place rather than refetch.
       if (event.kind === 'render' && event.status === 'running' && patchTake(event)) return
