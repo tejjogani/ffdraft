@@ -20,14 +20,57 @@ try {
   for (const scheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme: scheme })
     await page.waitForFunction((theme) => document.documentElement.dataset.theme === theme, scheme)
-    const painted = await tools.getByRole('link').evaluateAll((links) => {
+    const appearance = await tools.getByRole('link').evaluateAll((links) => {
       const pageColor = getComputedStyle(document.body).backgroundColor
-      return links.every((link) => {
-        const color = getComputedStyle(link).backgroundColor
-        return color !== 'rgba(0, 0, 0, 0)' && color !== pageColor
+      const transparent = 'rgba(0, 0, 0, 0)'
+      return links.map((link) => {
+        const style = getComputedStyle(link)
+        const icon = link.firstElementChild
+        return {
+          surface: style.backgroundColor,
+          border: style.borderTopColor,
+          painted: style.backgroundColor !== transparent && style.backgroundColor !== pageColor,
+          bordered: style.borderTopWidth === '1px' && style.borderTopColor !== transparent,
+          bareIcon:
+            icon?.tagName === 'svg' && getComputedStyle(icon).backgroundColor === transparent,
+        }
       })
     })
-    assert.ok(painted, `Every tool needs a full card surface in ${scheme} mode`)
+    assert.ok(
+      appearance.every((link) => link.painted),
+      `Tool surfaces must show in ${scheme} mode`,
+    )
+    assert.equal(
+      new Set(appearance.map((link) => link.surface)).size,
+      1,
+      `Tool surfaces must match in ${scheme} mode`,
+    )
+    assert.ok(
+      appearance.every((link) => link.bordered),
+      `Tool borders must show in ${scheme} mode`,
+    )
+    assert.equal(
+      new Set(appearance.map((link) => link.border)).size,
+      1,
+      `Tool borders must match in ${scheme} mode`,
+    )
+    assert.ok(
+      appearance.every((link) => link.bareIcon),
+      `Tool icons must have no tiles in ${scheme} mode`,
+    )
+    await page.keyboard.press('Tab')
+    await entry.focus()
+    assert.ok(
+      await entry.evaluate((link) => {
+        const style = getComputedStyle(link)
+        return (
+          link.matches(':focus-visible') &&
+          style.outlineStyle === 'solid' &&
+          style.outlineWidth === '2px'
+        )
+      }),
+      `Keyboard focus must show in ${scheme} mode`,
+    )
   }
   const dimensions = await tools.getByRole('link').evaluateAll((links) =>
     links.map((link) => {

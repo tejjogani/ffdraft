@@ -3,43 +3,38 @@ import { JOB_STAGES, type Piece, type PieceSummary, type ProjectCost } from '@pa
 import { AiMark, Button, cn } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
 import { ChevronRight } from 'lucide-react'
-import { CutIcon } from '../../components/CutIcon'
-import { KindGlyph } from '../../components/KindGlyph'
-import { assetUrl } from '../../lib/assets'
+import { useId } from 'react'
 import { useRpc } from '../../lib/query'
 import { useSession } from '../../lib/session'
 import { openAssistant } from '../../stores/assistant'
 import { StartJob } from '../assistant/jobs/StartJob'
 import { BuildCadWithClaude } from '../ideate/BuildCadWithClaude'
-import { takeMedia } from '../render/shots'
 import { PROJECT_AREAS, type ProjectArea } from './areas'
 import { costLines, STAGE_TITLE, stageStates, stageUsd, usd } from './cost'
 
 const toolCopy = {
-  Designs: ['Design board & spec', 'Gather references and edit the spec.'],
-  CAD: ['CAD builder', 'Shape the piece and adjust its settings.'],
-  Renders: ['Render studio', 'Set the camera, lighting and backdrop.'],
-  Sourcing: ['Stone sourcing', 'Compare diamonds and refit a setting.'],
-  'On model': ['On model', 'Choose a model and prepare a shoot.'],
+  Designs: ['Design board & spec', 'Collect references and edit the spec.'],
+  CAD: ['CAD builder', 'Shape and size the piece.'],
+  Renders: ['Render studio', 'Set camera, lighting and backdrop.'],
+  Sourcing: ['Stone sourcing', 'Compare stones and refit settings.'],
+  'On model': ['On model', 'Choose a model and plan a shoot.'],
   Production: ['Production', 'Production packages are planned.'],
-  History: ['Project history', 'Review or undo a design change.'],
+  History: ['Project history', 'Review and undo changes.'],
 } satisfies Record<ProjectArea['title'], [string, string]>
 
 export function ProjectSections({ piece }: { piece: Piece }) {
   const summary = useRpc('projects.summary', { pieceIds: [piece.id] })
-  const boards = useRpc('boards.list', { pieceId: piece.id })
-  const renders = useRpc('renders.list', { pieceId: piece.id, limit: 8 })
-  const cover = boards.data?.find((b) => b.coverAssetIds.length)?.coverAssetIds[0]
-  const take = renders.data?.find((r) => r.status === 'done' && takeMedia(r).still)
-  const render = take && takeMedia(take).still
+  const toolId = useId()
   const cost = summary.data?.projects.find((p) => p.pieceId === piece.id)
   return (
     <section aria-label="Project">
       <ProjectAssistant piece={piece} />
       <h2 className="studio-heading">Project tools</h2>
-      <nav aria-label="Project tools" className="mt-3 grid grid-cols-2 gap-2 sm:gap-2.5">
-        {PROJECT_AREAS.map((area) => {
+      <nav aria-label="Project tools" className="mt-3 grid grid-cols-2 gap-2">
+        {PROJECT_AREAS.map((area, index) => {
           const [name, description] = toolCopy[area.title]
+          const descriptionId = `${toolId}-${index}`
+          const Icon = area.icon
 
           return (
             <Link
@@ -47,29 +42,22 @@ export function ProjectSections({ piece }: { piece: Piece }) {
               to={area.to}
               params={{ id: piece.id }}
               aria-label={name}
+              aria-describedby={descriptionId}
               data-tool={area.title}
               data-stage-section={'stage' in area ? area.stage : undefined}
-              className="project-tool-card group relative flex min-w-0 flex-col items-start gap-2 rounded-lg border p-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-select sm:min-h-[66px] sm:flex-row sm:items-center sm:gap-3 sm:px-3.5"
+              className="flex min-h-16 min-w-0 items-center gap-2 rounded-md border border-line-strong bg-bg-muted px-3 py-2 text-left hover:bg-bg-inset focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-select active:border-fg-subtle sm:gap-3"
             >
-              <ToolPreview
-                area={area}
-                piece={piece}
-                image={
-                  area.title === 'Designs' ? cover : area.title === 'Renders' ? render : undefined
-                }
-              />
+              <Icon className="size-4 shrink-0 text-fg-muted" aria-hidden />
               <span className="min-w-0 flex-1">
-                <span className="block studio-option">
-                  {name}
-                </span>
-                <span className="mt-0.5 block text-[13px] leading-[18px] text-[color-mix(in_srgb,var(--fg)_76%,var(--bg))]">
+                <span className="studio-option block">{name}</span>
+                <span
+                  id={descriptionId}
+                  className="sr-only sm:not-sr-only sm:mt-0.5 sm:block sm:text-sm sm:leading-4 sm:text-fg-muted"
+                >
                   {description}
                 </span>
               </span>
-              <ChevronRight
-                className="absolute top-4 right-3 size-3.5 shrink-0 text-fg-muted sm:static sm:size-4"
-                aria-hidden
-              />
+              <ChevronRight className="hidden size-4 shrink-0 text-fg-muted sm:block" aria-hidden />
             </Link>
           )
         })}
@@ -142,56 +130,6 @@ function ProjectAssistant({ piece }: { piece: Piece }) {
         </details>
       )}
     </section>
-  )
-}
-
-function ToolPreview({
-  area,
-  piece,
-  image,
-}: {
-  area: ProjectArea
-  piece: Piece
-  image?: string | null
-}) {
-  const tones = {
-    Designs: 'bg-[#f2e8da] text-[#73573c]',
-    CAD: 'bg-[#dfe8e7] text-[#22504f]',
-    Renders: 'bg-[#333936] text-[#faf7ef]',
-    Sourcing: 'bg-[#e4e9f2] text-[#3a5273]',
-    History: 'bg-bg-muted text-fg-muted',
-    Production: 'bg-bg-muted text-fg-muted',
-    'On model': 'bg-bg-muted text-fg-muted',
-  }
-  const Icon = area.icon
-  const gem = piece.design.order.map((id) => piece.design.nodes[id]).find((n) => n?.kind === 'gem')
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        'relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md ring-1 ring-black/10 sm:size-9',
-        tones[area.title],
-      )}
-    >
-      {image ? (
-        <img className="size-full object-cover" src={assetUrl(image, 160)} alt="" />
-      ) : area.title === 'CAD' ? (
-        <span className="flex size-full items-center justify-center bg-[linear-gradient(to_right,#22504f12_1px,transparent_1px),linear-gradient(to_bottom,#22504f12_1px,transparent_1px)] bg-[size:9px_9px]">
-          <KindGlyph kind={piece.kind} className="w-12" />
-        </span>
-      ) : area.title === 'Designs' ? (
-        <>
-          <span className="absolute h-7 w-6 -translate-x-2 rotate-[-13deg] border border-[#bfaa8c] bg-[#fbf6ea]" />
-          <span className="relative translate-x-1 rotate-[7deg] border border-[#c8b699] bg-[#fffaf0] shadow-sm">
-            <KindGlyph kind={piece.kind} className="w-7" />
-          </span>
-        </>
-      ) : area.title === 'Sourcing' && gem ? (
-        <CutIcon cut={gem.cut} className="size-7" />
-      ) : (
-        <Icon className="size-6" strokeWidth={1.5} />
-      )}
-    </span>
   )
 }
 

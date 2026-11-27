@@ -31,28 +31,6 @@
   animation: cad-sweep 1.4s var(--ease-in-out) forwards;
 }
 
-/* Material tones keep related project tools recognizable in either theme. */
-.project-tool-card {
-  --card-surface: light-dark(#e9e7e3, #333230);
-  background-color: var(--card-surface);
-  border-color: color-mix(in srgb, var(--card-surface), var(--fg) 12%);
-}
-.project-tool-card[data-tool="Designs"],
-.project-tool-card[data-tool="On model"] {
-  --card-surface: light-dark(#ede4d8, #3b342d);
-}
-.project-tool-card[data-tool="CAD"] {
-  --card-surface: light-dark(#dde7e2, #2c3934);
-}
-.project-tool-card[data-tool="Renders"],
-.project-tool-card[data-tool="Sourcing"] {
-  --card-surface: light-dark(#e1e5ec, #303740);
-}
-.project-tool-card:hover {
-  background-color: color-mix(in srgb, var(--card-surface), var(--fg) 5%);
-  border-color: color-mix(in srgb, var(--card-surface), var(--fg) 34%);
-}
-
 /* Keep metal edges readable in the workbench even when the surrounding app is in dark mode. */
 .cad-studio-backdrop {
   --stage-a: #ecece8;
