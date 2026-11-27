@@ -59,7 +59,10 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
   const jobInReview = renderJob ? jobState(renderJob) === 'review' : false
   const hasPreview = !!(evaluation?.parts.length || evaluation?.stones.length)
   const emptyView =
-    availability === 'review-roles' || availability === 'references' || availability === 'empty'
+    availability === 'review-roles' ||
+    availability === 'references' ||
+    availability === 'sheets' ||
+    availability === 'empty'
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   // A shot made elsewhere ("Render this view") is selected once the list has it.
   const [wanted, setWanted] = useState<string | null>(() => takeShotIntent(pieceId))
@@ -415,14 +418,18 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                 title={
                   availability === 'review-roles'
                     ? 'Review materials before rendering'
-                    : 'No geometry to render'
+                    : availability === 'sheets'
+                      ? 'Give the surface a thickness'
+                      : 'No geometry to render'
                 }
                 description={
                   availability === 'review-roles'
                     ? 'Assign a metal or stone role to each imported body you want to render.'
-                    : availability === 'references'
-                      ? 'The imported reference bodies are available in CAD. Renders use the piece’s metal and stones.'
-                      : 'The viewfinder shows metal and stones from the design.'
+                    : availability === 'sheets'
+                      ? 'In CAD, select the sheet and choose Add feature → Thicken surface to make a renderable solid.'
+                      : availability === 'references'
+                        ? 'The imported reference bodies are available in CAD. Renders use the piece’s metal and stones.'
+                        : 'The viewfinder shows metal and stones from the design.'
                 }
                 action={
                   availability === 'review-roles' && !readOnly ? (
@@ -436,6 +443,14 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                       )}
                     >
                       Review Rhino roles
+                    </Link>
+                  ) : availability === 'sheets' ? (
+                    <Link
+                      to="/pieces/$id/design"
+                      params={{ id: pieceId }}
+                      className={buttonClass({ variant: 'secondary' })}
+                    >
+                      Open CAD
                     </Link>
                   ) : undefined
                 }

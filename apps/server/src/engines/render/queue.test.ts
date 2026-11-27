@@ -3,16 +3,18 @@
  * empty pieces refused, and what a failed take tells a tenant. Blender itself is in render.test.
  */
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { canonicalJson } from '@pave/render'
 import { RenderSceneSchema } from '@pave/schema'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { GeometryService, RenderJobPatch, RenderSubject, ServiceContext } from '../../services'
 import { until } from '../../test/engines'
 import type { BlenderSetup } from './blender'
-import { createRenderQueue } from './queue'
+import { cacheKeyOf, createRenderQueue } from './queue'
 
 const PART = {
   id: 'p',
@@ -60,6 +62,21 @@ const job = (id: string) =>
       output: { quality: 'preview', width: 256, height: 256 },
     }),
   }) as Parameters<ReturnType<typeof createRenderQueue>['submit']>[0]
+
+it('renders new studio lighting instead of reusing an image cached by the earlier worker', () => {
+  const take = job('take')
+  const old = canonicalJson([
+    take.pieceId,
+    take.sourceVersion,
+    take.requestedScene,
+    'blender',
+    take.autoTune,
+    2,
+    '5.3.0',
+  ])
+  const priorKey = 'sha256:' + createHash('sha256').update(old).digest('hex')
+  expect(cacheKeyOf(take, '5.3.0')).not.toBe(priorKey)
+})
 
 const piece = { id: 'pce', version: 1, design: {} } as Parameters<
   ReturnType<typeof createRenderQueue>['submit']

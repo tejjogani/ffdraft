@@ -343,7 +343,7 @@ In accounts mode the plan belongs to each organisation instead, and `PAVE_PLAN` 
 Pavé's own 3D view and the Render tab's browser previews need nothing extra. Photoreal takes use
 Blender's Cycles renderer, which is a separate, optional install.
 
-Open a project's **Render Studio**, pick a shot, and press **Render**. Pavé uses a compatible Blender 5.3 installation if it finds one. Otherwise the first render on a supported local install downloads the pinned release, verifies it and installs it in Pavé's data folder. The requested shot starts automatically. **View progress** shows the download and installation stages. You can keep working during setup. A render requested through the local project assistant follows the same path. **Browser preview** gives you a quick image without installing Blender.
+Press **Render** beside **Export** in CAD to render the saved design. To choose a different shot, open **Render Studio**, pick a shot and press **Render**. Pavé uses a compatible Blender 5.3 installation if it finds one. Otherwise the first render on a supported local install downloads the pinned release, verifies it and installs it in Pavé's data folder. The requested shot starts automatically. **View progress** shows the download and installation stages. You can keep working during setup. A render requested through the local project assistant follows the same path. **Browser preview** gives you a quick image without installing Blender.
 
 The built-in installer is available on Apple silicon Macs, Linux x64, and Windows x64 and Arm64
 when Pavé is running locally and listening only on loopback. On other setups, you can install

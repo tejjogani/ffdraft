@@ -321,6 +321,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
             failed: 'Retry the geometry engine before rendering.',
             'review-roles': 'Assign metal or stone roles to the imported geometry.',
             references: 'Add a solid body or stone to render.',
+            sheets: 'Use Thicken surface in Add feature to give the sheet a wall.',
             empty: 'Add a solid body or stone to render.',
           }[availability]
   const partRevisions = useRef(new Map<string, string>())
