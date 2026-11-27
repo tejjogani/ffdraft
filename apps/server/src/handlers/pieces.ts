@@ -3,6 +3,7 @@ import {
   type Design,
   emptyBuildReason,
   emptyDesign,
+  isRhinoRoleBody,
   originNeedsAttestation,
   PAVE_MIME,
   type Piece,
@@ -21,7 +22,7 @@ import type { z } from 'zod'
 import { assetBytes, getAssetRow, putAsset } from '../assets/assets'
 import { type Ctx, invoke, publish } from '../context'
 import * as t from '../db/schema'
-import { commitChange, refreshFacts, replaceDesignOps } from '../design'
+import { commitChange, refreshFacts, refreshMissingFacts, replaceDesignOps } from '../design'
 import { chooseDirection, proposeDirections, removeDirection, toDirection } from '../directions'
 import { AppError, badRequest, conflict, forbidden } from '../errors'
 import { addIntakeAssets, confirmIntake, startIntake } from '../home-intake'
@@ -229,7 +230,12 @@ export const pieces: HandlerGroup<'pieces'> = {
     return rows.map(toPieceSummary)
   },
 
-  'pieces.get': async (ctx, { id }) => toPiece(ctx, await getPiece(ctx, id)),
+  'pieces.get': async (ctx, { id }) => {
+    const row = await getPiece(ctx, id)
+    if (row.facts === null && Object.values(row.design.nodes).some(isRhinoRoleBody))
+      refreshMissingFacts(ctx, row.id, row.version, row.design)
+    return toPiece(ctx, row)
+  },
 
   'pieces.create': async (ctx, input) => {
     await ensure(getCollection, ctx, input.collectionId)

@@ -263,6 +263,12 @@ interface FactsRefresh {
 /** Pending refreshes per server (its service registry) and piece. */
 const refreshes = new WeakMap<Ctx['services'], Map<string, FactsRefresh>>()
 
+/** Reading an old project must not reset a pending edit's timer or duplicate a running evaluation. */
+export function refreshMissingFacts(ctx: Ctx, pieceId: string, version: number, design: Design) {
+  if (!refreshes.get(ctx.services)?.has(`${ctx.orgId}:${pieceId}`))
+    refreshFacts(ctx, pieceId, version, design)
+}
+
 /**
  * Re-evaluates in the background after a change when a geometry engine is registered; without
  * one, `facts` stays null rather than guessed. Debounced per piece: a slider drag commits many

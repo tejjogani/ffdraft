@@ -10,13 +10,25 @@ On a smaller screen, use the Features and Inspector buttons above the model to o
 
 ## Bring in an existing Rhino model
 
-Open the destination project’s CAD builder and choose Import model. Pick a .3dm and check its layers and selected dimensions in millimetres. Leave out display stands and lighting geometry. Imported solids start as Sculpted body features with 18k yellow gold assigned. You can measure a stone-shaped body here. Stone counts and Diaex sourcing use Pavé stone features. For a metal-only casting, leave out gemstone layers too. If stones and metal share a layer, separate them in Rhino first.
+Open the destination project’s CAD builder and choose Import model. Pick a .3dm and check its layers and dimensions in millimetres. New Rhino solids open at their saved positions with the role Unassigned. You can see and measure them immediately. Confirm their roles before using the casting weight and stone count.
 
 Turn on Include editable curves to import supported curves as NURBS from the selected layers. Pavé keeps the original NURBS degree, knots and weights and places the control points in world millimetres. Converted lines, arcs and connected joined curves preserve their shape and parameter domain. Converted arcs and joined curves can use different parameter spacing along the same shape.
 
 Supported closed Rhino B-reps and extrusions with complete saved render meshes retain a native solid alongside the display mesh. Look for Rhino surface retained in the Inspector. Rhino export can write that solid back to .3dm after supported native edits. For a project that used the earlier mesh-only importer, re-import the original .3dm to bring in native solids or editable curves. Keep the original for Rhino construction history and plug-in data.
 
 Review the skipped objects before choosing Import. Select the new parts in Features to change their material, finish or transform. Undo removes the batch import in one edit. From a reopened project, use History and choose Revert on the import.
+
+## Tell Pavé which parts are metal or stones
+
+Choose Review Rhino roles in CAD. Select a part and check its source layer, group and appearance. Choose Metal and an alloy for anything the caster should weigh. Choose Reference for a display stand, an unused copy or a guide solid. Use the eye in Features to hide a reference while working.
+
+Choose Stone for a gemstone. Confirm the species, cut, width, length, depth and girdle position. Check the orientation on a tilted or asymmetric stone. For repeated stones, expand the matches and tick only the ones used in the piece. A matching loose copy can sit beside a finished ring. Choose Confirm role to record one undoable decision.
+
+## Fit a sourced stone to an imported setting
+
+In Review Rhino roles, select the stone and choose the separate solid that forms its complete setting. Pick its alloy and a replacement style. Check each proposed pairing if you apply the choice to matching parts. Multiple solids that together form one handmade mounting need individual CAD work.
+
+Open Stone sourcing in the same project. Find the confirmed stone, preview a measured alternative and choose Fit this stone. The selected stone and linked head use the new measurements. A changed fit rebuilds that head in the chosen style. Use Undo to return to the source geometry.
 
 ## Move a Rhino end face
 
