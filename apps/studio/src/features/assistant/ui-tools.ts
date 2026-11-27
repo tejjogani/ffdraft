@@ -4,20 +4,31 @@
  * signed-in window for as long as the shell is mounted, unlike the viewport tools, which only a
  * piece's open CAD tab can serve.
  */
-import type { Piece } from '@pave/schema'
+import type { Piece, SavedScene } from '@pave/schema'
 import { useRouter } from '@tanstack/react-router'
 import { useEffect } from 'react'
 import { registerClientTool } from '../../lib/client-tools'
 import { getDesignSession } from '../../lib/design-session/store'
 import { queryClient, rpcKey } from '../../lib/query'
 import { useWorkspace } from '../cad/state/workspace'
-import { placeOf, tabPath } from './place'
+import { placeOf, renderShotId, tabPath } from './place'
+
+export function currentRenderShot(
+  location: { pathname: string; search: Record<string, unknown> },
+  pieceId: string | null | undefined,
+): string | null {
+  const place = placeOf(location.pathname)
+  if (!pieceId || place.pieceId !== pieceId || place.tab !== 'render') return null
+  const saved = queryClient.getQueryData<SavedScene[]>(rpcKey('scenes.list', { pieceId })) ?? []
+  return renderShotId(place, location.search.shot, saved)
+}
 
 export function useUiTools(): void {
   const router = useRouter()
   useEffect(() => {
     const offContext = registerClientTool('ui.context', async () => {
-      const route = router.state.location.pathname
+      const location = router.state.location
+      const route = location.pathname
       const { pieceId, tab, boardId } = placeOf(route)
       const ws = useWorkspace.getState()
       const version = pieceId
@@ -30,7 +41,7 @@ export function useUiTools(): void {
         pieceId,
         tab,
         boardId,
-        sceneId: null,
+        sceneId: currentRenderShot(location, pieceId),
         selection: pieceId && ws.pieceId === pieceId ? ws.selection : [],
         version,
       }

@@ -427,12 +427,17 @@ export function RenderStudio({ pieceId, shotId }: { pieceId: string; shotId?: st
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() =>
+                  onClick={() => {
+                    viewfinder.current?.commitPending()
                     assistant.open({
                       context: { pieceId },
-                      prompt: shot ? `For the ${shot.title} shot: ` : undefined,
+                      prompt: shot?.saved
+                        ? 'For this shot, '
+                        : shot
+                          ? `For the ${shot.title} view, `
+                          : undefined,
                     })
-                  }
+                  }}
                 >
                   <AiMark className="size-3" /> Direct it…
                 </Button>

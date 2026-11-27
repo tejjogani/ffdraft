@@ -142,7 +142,11 @@ export const assistant: HandlerGroup<
     }
     await ensure(getPiece, ctx, input.context.pieceId)
     await ensure(getBoard, ctx, input.context.boardId)
-    await ensure(getScene, ctx, input.context.sceneId)
+    if (input.context.sceneId) {
+      const shot = await getScene(ctx, input.context.sceneId)
+      if (shot.pieceId !== (input.context.pieceId ?? thread?.pieceId ?? null))
+        throw badRequest('Choose a shot from this project')
+    }
     await ensureAll(
       input.attachments,
       (ids) => ctx.repo.assets.many({ where: inArray(t.asset.id, ids) }),

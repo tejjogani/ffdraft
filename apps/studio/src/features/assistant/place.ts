@@ -1,5 +1,5 @@
 /** Where a studio path is, in the terms `ui.context` and `ui.navigate` use. Pure, for tests. */
-import { PIECE_TABS } from '@pave/schema'
+import { PIECE_TABS, type SavedScene } from '@pave/schema'
 
 export type PieceTab = (typeof PIECE_TABS)[number]
 
@@ -20,4 +20,18 @@ export function placeOf(pathname: string): {
   }
   const board = /^\/moodboards\/([^/]+)\/?$/.exec(pathname)
   return { pieceId: null, tab: null, boardId: board ? decodeURIComponent(board[1]!) : null }
+}
+
+/** The Render tab selects the first saved view unless it links directly to another one. */
+export function renderShotId(
+  { pieceId, tab }: ReturnType<typeof placeOf>,
+  requested: unknown,
+  saved: readonly Pick<SavedScene, 'id' | 'pieceId'>[],
+): string | null {
+  if (!pieceId || tab !== 'render') return null
+  const selected = typeof requested === 'string' && requested.length > 0 ? requested : null
+  return (
+    saved.find((shot) => shot.pieceId === pieceId && (!selected || shot.id === selected))?.id ??
+    null
+  )
 }

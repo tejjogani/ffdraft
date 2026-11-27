@@ -4,6 +4,7 @@
  * dock, the home composer, the stage buttons and Ask AI all send the same way.
  */
 import type { AssistantTier, CommandInput, JobStage } from '@pave/schema'
+import { useRouter } from '@tanstack/react-router'
 import { useState } from 'react'
 import { clientId } from '../../lib/events'
 import { invalidateFor, queryClient, useRpcMutation } from '../../lib/query'
@@ -11,6 +12,7 @@ import { type RpcError, rpc } from '../../lib/rpc'
 import { useCurrentView } from '../../lib/use-current-view'
 import { type AssistantContext, useAssistant } from '../../stores/assistant'
 import { resolveProjectThread } from './project-thread'
+import { currentRenderShot } from './ui-tools'
 
 /** A fresh id for a message, so a retried send stores it once. */
 export const newMessageId = (): string =>
@@ -36,6 +38,7 @@ export interface SendOptions {
 
 /** Sends from the dock's state: its conversation, chips, photos and tier. */
 export function useSend(page: AssistantContext) {
+  const router = useRouter()
   const isCurrent = useCurrentView()
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<RpcError | null>(null)
@@ -44,6 +47,7 @@ export function useSend(page: AssistantContext) {
     const usePage = !s.dropPageContext
     const pieceId =
       opts.pieceId ?? page.pieceId ?? (opts.bare ? undefined : s.selection?.pieceId) ?? undefined
+    const sceneId = usePage ? currentRenderShot(router.state.location, pieceId) : null
     const photos = opts.attachments ?? (opts.bare ? [] : s.attachments.map((a) => a.id))
     setPending(true)
     setError(null)
@@ -65,6 +69,7 @@ export function useSend(page: AssistantContext) {
         context: {
           ...(pieceId ? { pieceId } : {}),
           ...(boardId ? { boardId } : {}),
+          ...(sceneId ? { sceneId } : {}),
           selection:
             !opts.bare && s.selection && s.selection.pieceId === pieceId ? s.selection.nodeIds : [],
           ...(pieceId && page.stage ? { stage: page.stage } : {}),
