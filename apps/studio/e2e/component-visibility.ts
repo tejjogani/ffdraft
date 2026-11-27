@@ -7,10 +7,13 @@ import type { Piece } from '@pave/schema'
 
 const [flag, base] = process.argv.slice(2)
 if (flag !== '--disposable' || !base) throw new Error('Supply --disposable and a test server URL.')
-const { chromium } = createRequire(import.meta.url)('playwright') as typeof import('playwright')
-const browser = await chromium.launch({
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
-})
+const { chromium, webkit } = createRequire(import.meta.url)(
+  'playwright',
+) as typeof import('playwright')
+const testWebkit = process.env.PAVE_TEST_BROWSER === 'webkit'
+const browser = testWebkit
+  ? await webkit.launch()
+  : await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
 
 try {
   const page = await browser.newPage({
@@ -20,8 +23,16 @@ try {
     colorScheme: 'light',
   })
   page.setDefaultTimeout(10_000)
-  await page.addInitScript(() =>
-    Object.defineProperty(window, 'showSaveFilePicker', { value: undefined, configurable: true }),
+  // WebKit cannot automate the OS save picker. Capture the file handed to that boundary.
+  await page.addInitScript(
+    testWebkit
+      ? `window.showSaveFilePicker = async () => ({
+        createWritable: async () => ({
+          write: async (blob) => { window.savedAssembly = blob },
+          close: async () => {},
+        }),
+      })`
+      : 'window.showSaveFilePicker = undefined',
   )
   const rpc = async (name: string, data: object) => {
     const res = await page.request.post(`${base}/api/rpc/${name}`, { data })
@@ -63,7 +74,22 @@ try {
           source: { type: 'asset', assetId: asset.id, rhinoLayer: 'Workshop metal' },
         },
       },
-      ...[0, 0.25].map((y, index) => ({
+      ...[
+        // The measured table centres of this template's right shoulder, in millimetres.
+        [
+          [6.361, 0, 11.217],
+          [7.418, 0, 9.749],
+          [8.009, 0, 8.015],
+          [8.37, 0, 6.379],
+          [8.811, 0, 5.005],
+          [9.359, 0, 3.76],
+        ],
+        // The endpoint is inside the separate 1 mm test claw.
+        [
+          [0, 0, 0],
+          [0.25, 0.25, 0.25],
+        ],
+      ].map((points, index) => ({
         t: 'add',
         node: {
           id: `guide-${index + 1}`,
@@ -72,21 +98,19 @@ try {
           sourceObjectId: `synthetic-guide-${index + 1}`,
           rhinoLayer: 'Workshop references',
           degree: 1,
-          knots: [0, 1, 2, 3, 4, 5],
-          controlPoints: [
-            [6.361, 11.217],
-            [7.418, 9.749],
-            [8.009, 8.015],
-            [8.37, 6.379],
-            [8.811, 5.005],
-            [9.359, 3.76],
-          ].map(([x, z]) => [x, y, z, 1]),
+          knots: points.map((_, i) => i),
+          controlPoints: points.map((p) => [...p, 1]),
         },
       })),
     ],
   })
   const saved = (): Promise<Piece> => rpc('pieces.get', { id: ring.id })
   const before = await saved()
+  await rpc('design.apply', {
+    pieceId: other.id,
+    label: 'Add a shoulder reference',
+    ops: [{ t: 'add', node: before.design.nodes['guide-1'] }],
+  })
   await page.goto(`${base}/pieces/${ring.id}/design`)
   const canvas = page.locator('canvas[role=application]')
   await canvas.waitFor()
@@ -103,14 +127,45 @@ try {
   await page.keyboard.press('ArrowLeft')
   await guide.waitFor({ state: 'hidden' })
 
-  // Export through the same menu as a jeweler. GLB includes each gem instance and its metal.
+  // Chromium reads the downloaded GLB, including all gem instances. WebKit exercises
+  // native project export and checks the archived design, excluding the zip timestamp.
   async function exportAssembly() {
     await page.getByRole('button', { name: /^Export/ }).click()
-    const file = page.waitForEvent('download', { timeout: 60_000 })
-    await page.getByRole('menuitem', { name: /For the web and AR/ }).click()
-    const path = await (await file).path()
-    assert.ok(path)
-    const bytes = await readFile(path)
+    const pending = testWebkit
+      ? page
+          .waitForFunction(
+            () => (window as Window & { savedAssembly?: Blob }).savedAssembly ?? null,
+            null,
+            { timeout: 60000 },
+          )
+          .then(async (handle) => {
+            const bytes = await handle.evaluate(async (blob) => [
+              ...new Uint8Array(await blob.arrayBuffer()),
+            ])
+            await page.evaluate(
+              () => delete (window as Window & { savedAssembly?: Blob }).savedAssembly,
+            )
+            return Buffer.from(bytes)
+          })
+      : page.waitForEvent('download', { timeout: 60_000 }).then(async (file) => {
+          const path = await file.path()
+          assert.ok(path)
+          return readFile(path)
+        })
+    await page
+      .getByRole('menuitem', { name: testWebkit ? /Pavé file/ : /For the web and AR/ })
+      .click()
+    const bytes = await pending
+    if (testWebkit) {
+      const { unzipSync } = createRequire(new URL('../../server/package.json', import.meta.url))(
+        'fflate',
+      ) as typeof import('fflate')
+      const record = unzipSync(bytes)['piece.json']
+      assert.ok(record)
+      const design = JSON.parse(Buffer.from(record).toString('utf8')).design
+      assert.deepEqual(design, before.design)
+      return record
+    }
     const json = JSON.parse(bytes.toString('utf8', 20, 20 + bytes.readUInt32LE(12)))
     assert.equal(
       json.nodes.filter((n: { extras?: { role?: string } }) => n.extras?.role === 'gem').length,
@@ -122,15 +177,11 @@ try {
   const box = await canvas.boundingBox()
   assert.ok(box)
   type Point = { x: number; y: number }
-  // Known table centres and metal in the default hero view of this deterministic fixture,
-  // relative to the canvas. Right-clicks below verify these landmarks still pick real geometry.
+  // Relative HUD-free space for a background click and the centre of a solo frame.
   const landmark = (x: number, y: number): Point => ({
     x: Math.round(box.x + box.width * x),
     y: Math.round(box.y + box.height * y),
   })
-  const stone = landmark(0.723, 0.454)
-  const neighbor = landmark(0.748, 0.525)
-  const band = landmark(0.243, 0.53)
   const blank = landmark(0.12, 0.33)
   const menu = page.getByRole('menu', { name: '', exact: true })
   const command = (name: string) => menu.getByRole('menuitem', { name: new RegExp(`^${name}\\b`) })
@@ -163,7 +214,7 @@ try {
     const bytes = await page.screenshot({ clip: { x: p.x - 3, y: p.y - 3, width: 7, height: 7 } })
     return page.evaluate(async (base64) => {
       const image = new Image()
-      image.src = 'data:image/png;base64,' + base64
+      image.src = `data:image/png;base64,${base64}`
       await image.decode()
       const ctx = document.createElement('canvas').getContext('2d')!
       ctx.drawImage(image, 0, 0)
@@ -176,22 +227,37 @@ try {
   await curves.getByRole('button', { name: 'Show construction curves in view' }).click()
   const path = page.locator('[data-construction-curve="guide-1"] path').first()
   await path.waitFor({ state: 'attached' })
-  // Read the projected guide, then use a real mouse click directly on its third vertex.
-  const crossing = await path.evaluate((p) => {
-    const coords = p
-      .getAttribute('d')!
-      .match(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/gi)!
-      .map(Number)
-    const svg = p.closest('svg')!.getBoundingClientRect()
-    return { x: svg.left + coords[6]!, y: svg.top + coords[7]! }
-  })
-  await page.mouse.click(crossing.x, crossing.y)
+  // Read endpoints of the SVG's projected M/L segments at the current viewport size.
+  async function guideVertices(id: string) {
+    return page
+      .locator(`[data-construction-curve="${id}"] path`)
+      .first()
+      .evaluate((p) => {
+        const coords = p
+          .getAttribute('d')!
+          .match(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/gi)!
+          .map(Number)
+        const rect = p.closest('svg')!.getBoundingClientRect()
+        return coords
+          .filter((_, i) => i % 4 === 2)
+          .map((x, n) => ({
+            x: Math.round(rect.left + x),
+            y: Math.round(rect.top + coords[n * 4 + 3]!),
+          }))
+      })
+  }
+  const rowPoints = await guideVertices('guide-1')
+  const stone = rowPoints[1]!
+  const neighbor = rowPoints[3]!
+  const [claw] = await guideVertices('guide-2')
+  assert.ok(claw)
+  await page.mouse.click(stone.x, stone.y)
   const selectedInstance = tree.getByRole('treeitem', {
     name: /^Stone \d+ of Shoulder stones$/,
     selected: true,
   })
   await selectedInstance.waitFor()
-  await assertHit(crossing, 'Hide stone', true)
+  await assertHit(stone, 'Hide stone', true)
   await curves.getByRole('button', { name: 'Hide construction curves in view' }).click()
   await path.waitFor({ state: 'detached' })
   await page.mouse.click(stone.x, stone.y)
@@ -202,7 +268,7 @@ try {
   assert.notEqual(await selectedInstance.getAttribute('aria-label'), stoneName)
   await assertHit(stone, 'Hide stone', true)
   await assertHit(neighbor, 'Hide stone', true)
-  await assertHit(band, 'Hide part', true)
+  await assertHit(claw, 'Hide part', true)
   const visible = await colors(stone)
   const neighborVisible = await colors(neighbor)
   await actAt(stone, 'Hide stone')
@@ -235,16 +301,16 @@ try {
     'Restoring the stone must bring back its facets at the original location',
   )
 
-  const metalVisible = await colors(band)
-  await actAt(band, 'Hide part')
-  assert.ok(delta(metalVisible, await colors(band)) > 4, 'The clicked metal must disappear')
-  await assertHit(band, 'Hide part', false)
+  const metalVisible = await colors(claw)
+  await actAt(claw, 'Hide part')
+  assert.ok(delta(metalVisible, await colors(claw)) > 4, 'The clicked metal must disappear')
+  await assertHit(claw, 'Hide part', false)
   await assertHit(stone, 'Hide stone', true)
   await actAt(blank, 'Show all hidden features')
-  await actAt(band, 'Isolate part')
+  await actAt(claw, 'Isolate part')
   await assertHit(neighbor, 'Hide stone', false)
   await actAt(blank, 'Exit isolation')
-  await assertHit(band, 'Hide part', true)
+  await assertHit(claw, 'Hide part', true)
   await actAt(stone, 'Hide stone')
 
   // Client-side navigation retains the JS runtime, so this exercises project-switch cleanup.
@@ -252,13 +318,14 @@ try {
   await page.getByRole('dialog').getByRole('link', { name: other.title }).click()
   await page.waitForURL(`**/pieces/${other.id}/design`)
   await tree.getByText('Shoulder stones', { exact: true }).waitFor()
-  await assertHit(stone, 'Hide stone', true)
+  const otherPoints = await guideVertices('guide-1')
+  await assertHit(otherPoints[1]!, 'Hide stone', true)
   await assertHit(blank, 'Show all hidden features', false)
   const after = await saved()
   assert.deepEqual(after.design, before.design)
   assert.equal(after.version, before.version)
   console.log(
-    'Passed canvas picking, stone and part visibility, curve disclosure, project switching, unchanged design and byte-identical assembly export.',
+    'Passed canvas picking, stone and part visibility, curve disclosure, project switching, unchanged design and unchanged exported assembly.',
   )
 } finally {
   await browser.close()
