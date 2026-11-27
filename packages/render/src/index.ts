@@ -66,7 +66,7 @@ export {
   sceneHash,
   type ViewPose,
 } from './framing'
-export { renderEvaluation, unassignedRhinoBody } from './import-preview'
+export { renderEvaluation, unassignedRhinoBody, withImportedBodyDefaults } from './import-preview'
 export {
   type Background,
   DEFAULT_GROUNDS,
