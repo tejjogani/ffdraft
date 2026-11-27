@@ -8,10 +8,15 @@ import type { RenderInstallStatus, RenderJob } from '@pave/schema'
 
 const [base, file] = process.argv.slice(2)
 assert.ok(base && file, 'Pass the disposable local URL and output PNG path.')
-const { chromium } = createRequire(import.meta.url)('playwright') as typeof import('playwright')
-const browser = await chromium.launch({
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
-})
+const { chromium, webkit } = createRequire(import.meta.url)(
+  'playwright',
+) as typeof import('playwright')
+const browser =
+  process.env.PAVE_TEST_BROWSER === 'webkit'
+    ? await webkit.launch()
+    : await chromium.launch({
+        args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+      })
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
   const rpc = async <T>(name: string, data: object): Promise<T> => {

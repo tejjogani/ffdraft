@@ -6,10 +6,15 @@ import type { EvaluationSummary, NodeInput, Piece } from '@pave/schema'
 
 const base = process.argv[2]
 assert.ok(base, 'Pass the URL of a disposable local server.')
-const { chromium } = createRequire(import.meta.url)('playwright') as typeof import('playwright')
-const browser = await chromium.launch({
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
-})
+const { chromium, webkit } = createRequire(import.meta.url)(
+  'playwright',
+) as typeof import('playwright')
+const browser =
+  process.env.PAVE_TEST_BROWSER === 'webkit'
+    ? await webkit.launch()
+    : await chromium.launch({
+        args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+      })
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 960 } })
   page.setDefaultTimeout(30_000)

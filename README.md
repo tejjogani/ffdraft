@@ -343,12 +343,7 @@ In accounts mode the plan belongs to each organisation instead, and `PAVE_PLAN` 
 Pavé's own 3D view and the Render tab's browser previews need nothing extra. Photoreal takes use
 Blender's Cycles renderer, which is a separate, optional install.
 
-On a supported local installation, choose **Set up Blender** when you open Pavé, or open the
-engine status in a project's **Render** tab. If Pavé finds a compatible Blender 5.3 installation,
-it uses that automatically. Otherwise, **Install render engine** confirms the download shown
-in the dialog. Pavé verifies Blender and stores it in its own data folder. You can close the
-dialog and keep working, or reopen it to see progress or cancel. Photoreal rendering turns on
-as soon as Blender has passed its startup check.
+Open a project's **Render Studio**, pick a shot, and press **Render**. Pavé uses a compatible Blender 5.3 installation if it finds one. Otherwise the first render on a supported local install downloads the pinned release, verifies it and installs it in Pavé's data folder. The requested shot starts automatically. **View progress** shows the download and installation stages. You can keep working during setup. A render requested through the local project assistant follows the same path. **Browser preview** gives you a quick image without installing Blender.
 
 The built-in installer is available on Apple silicon Macs, Linux x64, and Windows x64 and Arm64
 when Pavé is running locally and listening only on loopback. On other setups, you can install
@@ -594,7 +589,7 @@ Back the folder up first if the work in it matters.
 | `--render` fails with "CPython 3.13 not found" | Install Python 3.13, or install Blender 5.3 and set `PAVE_BLENDER` |
 | PowerShell: "running scripts is disabled on this system" | `powershell -ExecutionPolicy Bypass -File .\install.ps1` |
 | The assistant answers with an error | See [When something goes wrong](#when-something-goes-wrong) |
-| The Render tab says Blender was not found | Open the engine status and choose **Install render engine** if offered, or point Pavé at an existing Blender 5.3 executable. Browser previews still work while you set up Blender |
+| The Render tab says Blender was not found | Press **Render** to install Blender on a supported local workstation. **Setup details** shows progress and lets you select an existing Blender 5.3 executable |
 | Something is wrong and you want a clean start | Stop Pavé, rename `.data`, start again. Your old work stays in the renamed folder |
 
 `pnpm check:install` checks the installation without changing anything.

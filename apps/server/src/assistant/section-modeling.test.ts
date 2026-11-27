@@ -11,7 +11,7 @@ it('builds an editable loft and a sheet through the project assistant and measur
     const api = client(s.server)
     const piece = await api.call('pieces.create', { title: 'Section modeling study' })
     const other = await api.call('pieces.create', { title: 'Separate project' })
-    const rails = [0, 3].map((planeOffset, i) => ({
+    const profiles = [0, 3].map((planeOffset, i) => ({
       kind: 'curve',
       id: 'profile' + i,
       plane: 'top',
@@ -25,7 +25,7 @@ it('builds an editable loft and a sheet through the project assistant and measur
       ].map(([u, v], n) => ({ id: String(n), u, v })),
     }))
     const ops = [
-      ...rails,
+      ...profiles,
       { kind: 'loft', id: 'shoulder', sections: ['profile0', 'profile1'], ruled: true },
       { kind: 'loft', id: 'skin', sections: ['profile0', 'profile1'], capped: false },
     ].map((node) => ({ t: 'add', node }))

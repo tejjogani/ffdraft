@@ -131,3 +131,17 @@ Select the result and use Edit profile or Edit points to revise it. Undo reverse
 To make a metal wire, draw a construction curve, select it and choose Make wire. Set Wire width and Wire thickness in the inspector. Edit points on the original curve to reshape the wire.
 
 To turn a cross-section into a bezel or band, draw a closed curve on the Front plane. For a practice bezel, enter (3, 0), (5, 0), (5, 4), and (3, 4) in mm. Select the curve and choose Revolve. A vertical axis at 0 mm and a 360° sweep make a 10 mm outer diameter, 6 mm bore and 4 mm height. Choose Create solid. You can change the sweep or axis in the inspector, or choose Edit points on the curve to reshape the bezel.
+
+## Shape a part with a loft
+
+Draw two closed outlines on the Top plane. Give the first a Z plane position of 0 mm and the second 3 mm. For a measured example, use the same 4 mm by 4 mm square for both. In Add feature, choose Loft, pick the lower and upper sections in order, choose Solid and press Create feature. This example encloses 48 mm³. Use Edit points on the upper curve to move its plane to 5 mm. The body grows to 80 mm³.
+
+Choose Surface to leave the ends open. A surface has measurable area, appears in CAD and can be exported to STEP. To turn a sheet into metal, select the sheet, choose Add feature and Thicken surface, and set the thickness in millimetres. Reverse side changes which way the wall grows. The original sections still control its shape.
+
+## Follow a rail
+
+Use Sweep 1 rail for a shoulder that follows one guide. Place the cross section at the start of the rail in its intended orientation. Use Sweep 2 rails when a second guide should control the opposite side. For two rails, use open guide curves and place the profiles so each touches both rails. Choose rails first, then profiles in order. Edit sweep changes the linked curves. Edit points changes the shape of a source.
+
+## Render your CAD
+
+Open Render Studio, select a shot and press Render. For a catalog image choose Studio white. Black acrylic gives a dark reflective surface. The first render on a supported local workstation installs Blender automatically. You can follow the download in View progress and continue designing. The finished image appears in the project's takes. In the project chat, asking for a Blender render uses the same CAD and render queue.

@@ -123,10 +123,11 @@ jobs:
           pnpm exec tsx apps/studio/e2e/handmade-mount.ts "$PAVE_TEST_URL"
           pnpm exec tsx apps/studio/e2e/component-visibility.ts --disposable "$PAVE_TEST_URL"
           pnpm exec tsx apps/studio/e2e/nurbs-controls.ts "$PAVE_TEST_URL"
+          pnpm exec tsx apps/studio/e2e/section-modeling.ts "$PAVE_TEST_URL"
           pnpm exec tsx apps/studio/e2e/mesh-edit.ts "$PAVE_TEST_URL"
 
           if [[ "$INSTALL_BLENDER" == true ]]; then
-            pnpm exec tsx apps/studio/e2e/render-engine-setup.ts "$PAVE_TEST_URL" "$logs"
+            pnpm exec tsx apps/studio/e2e/first-render-install.ts "$PAVE_TEST_URL" "$logs/first-render.png"
             node --input-type=module <<'NODE'
           import assert from 'node:assert/strict'
           import { execFileSync } from 'node:child_process'

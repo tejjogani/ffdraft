@@ -206,3 +206,12 @@ project.apply(
     base_version=rail["version"],
 )
 ```
+
+Use ordered curve IDs from the open project. Editing any input rebuilds its dependent CAD.
+
+```python
+project.loft(["base", "middle", "rim"], feature_id="head", ruled=False)
+project.rail_sweep(["inner", "outer"], ["shoulder-section"], feature_id="shoulder")
+```
+
+Set `capped=False` to work with a sheet. `project.evaluate()` reports each visible modeling surface's area and dimensions in millimetres alongside the casting metrics.
