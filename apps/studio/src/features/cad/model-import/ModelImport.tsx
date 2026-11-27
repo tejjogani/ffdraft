@@ -1,6 +1,6 @@
 import { unionBounds } from '@pave/kernel/mesh-import'
 import type { Bounds } from '@pave/kernel/types'
-import { MAX_DESIGN_CHANGE_OPS, type NodeInput, newId, PAVE_LIMITS } from '@pave/schema'
+import { MAX_MODEL_IMPORT_OPS, type NodeInput, newId, PAVE_LIMITS } from '@pave/schema'
 import { Button, Checkbox, Dialog, Select, Spinner } from '@pave/ui'
 import { FileUp } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
@@ -116,8 +116,8 @@ export function ModelImport({
   const selectedLabel = importCount(meshCount, selectedCurves.length)
   // A mesh or a curve each adds one operation to the same import edit.
   const limit =
-    count > MAX_DESIGN_CHANGE_OPS
-      ? `Select layers with up to ${MAX_DESIGN_CHANGE_OPS} items, or export smaller Rhino files.`
+    count > MAX_MODEL_IMPORT_OPS
+      ? `Select layers with up to ${MAX_MODEL_IMPORT_OPS} items, or export smaller Rhino files.`
       : selected.some((part) => part.bytes.byteLength > PAVE_LIMITS.entryBytes)
         ? 'A mesh part is too large to save in a Pavé file. Export a coarser mesh.'
         : null

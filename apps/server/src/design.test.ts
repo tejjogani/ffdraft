@@ -87,6 +87,70 @@ describe('design document', () => {
     ).toEqual([{ id: 3, xyz: [0, 0, 4] }])
   })
 
+  it('undoes and restores a large model import as one change and refuses an unrelated removal batch', async () => {
+    const piece = await api.call('pieces.create', { kind: 'other', title: 'Large import' })
+    const curve = (id: string) => ({
+      t: 'add' as const,
+      node: {
+        id,
+        kind: 'nurbsCurve',
+        degree: 1,
+        knots: [2, 7],
+        controlPoints: [
+          [0, 0, 0, 1],
+          [2, 1, 0, 1],
+        ],
+      },
+    })
+    const other = await api.call('design.apply', {
+      pieceId: piece.id,
+      label: 'Separate edit',
+      ops: [curve('separate')],
+    })
+    const importChange = {
+      pieceId: piece.id,
+      label: 'Import',
+      baseVersion: 1,
+      changeId: 'large-model-test',
+      ops: Array.from({ length: 501 }, (_, i) => curve(`curve-${i}`)),
+    }
+    const imported = await api.call('design.apply', importChange)
+    expect(imported.version).toBe(2)
+    expect(await api.call('design.apply', importChange)).toEqual(imported)
+    const original = (await api.call('pieces.get', { id: piece.id })).design
+    const undo = {
+      pieceId: piece.id,
+      label: 'Undo import',
+      baseVersion: 2,
+      ops: imported.change.inverse,
+    }
+    expect((await api.fail('design.apply', { ...undo, reverts: [other.change.id] })).status).toBe(
+      400,
+    )
+    expect(
+      (await api.fail('design.apply', { ...undo, baseVersion: 1, reverts: [imported.change.id] }))
+        .status,
+    ).toBe(409)
+    const wrongNode = [{ t: 'remove', id: 'separate' }, ...undo.ops.slice(1)]
+    expect(
+      (await api.fail('design.apply', { ...undo, ops: wrongNode, reverts: [imported.change.id] }))
+        .status,
+    ).toBe(400)
+    expect((await api.call('pieces.get', { id: piece.id })).version).toBe(2)
+    const undone = await api.call('design.apply', { ...undo, reverts: [imported.change.id] })
+    expect(undone.version).toBe(3)
+    expect((await api.call('pieces.get', { id: piece.id })).design.order).toEqual(['separate'])
+    const redone = await api.call('design.apply', {
+      pieceId: piece.id,
+      label: 'Redo import',
+      baseVersion: 3,
+      reverts: [undone.change.id],
+      ops: undone.change.inverse,
+    })
+    expect(redone.version).toBe(4)
+    expect((await api.call('pieces.get', { id: piece.id })).design).toEqual(original)
+  })
+
   it('describes the selected project feature with the field names and units used to edit it', async () => {
     const piece = await api.call('pieces.create', { templateId: 'wedding-band' })
     const input = { pieceId: piece.id, nodeId: 'band' }

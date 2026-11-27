@@ -114,6 +114,9 @@ jobs:
             Test-PaveStage 'Verify Rhino and STL migration in Chromium' {
               pnpm exec tsx apps/studio/e2e/model-import.ts $env:PAVE_TEST_URL
             }
+            Test-PaveStage 'Verify atomic large Rhino import in Chromium' {
+              pnpm exec tsx apps/studio/e2e/large-model-import.ts $env:PAVE_TEST_URL
+            }
             Test-PaveStage 'Verify Rhino curve import and export in Chromium' {
               pnpm exec tsx apps/studio/e2e/rhino-curve-io.ts $env:PAVE_TEST_URL
             }

@@ -4,6 +4,8 @@ import {
   type EvaluationSummary,
   IntentError,
   type IntentResult,
+  isModelImportAdd,
+  MAX_DESIGN_CHANGE_OPS,
   NODE_SCHEMAS,
   type Op,
   OpError,
@@ -20,8 +22,8 @@ import { getPiece } from '../lookups'
 import { editableMesh } from '../mesh-components'
 import { exportClaim, withClaim } from '../plans'
 import { serviceContext } from '../service-context'
-import { rhinoCapFaces, offsetRhinoCapFace } from './rhino-caps'
 import { assertAttested } from './pieces'
+import { offsetRhinoCapFace, rhinoCapFaces } from './rhino-caps'
 import type { HandlerGroup } from './types'
 
 type ChangeRow = typeof t.designChange.$inferSelect
@@ -231,16 +233,40 @@ export const design: HandlerGroup<'design'> = {
       faces: requested(faceIds, faceCount).map((id) => ({ id, vertexIds: triple(indices, id) })),
     }
   },
-  'design.apply': async (ctx, input) =>
-    commitChange(ctx, {
-      pieceId: input.pieceId,
-      // The wire schema types `add.node` loosely; applyOps validates each node against NodeSchema.
-      ops: input.ops as Op[],
-      label: input.label,
-      baseVersion: input.baseVersion,
-      changeId: input.changeId,
-      reverts: input.reverts,
-    }),
+  'design.apply': async (ctx, input) => {
+    const { pieceId, label, baseVersion, changeId, reverts } = input
+    // The wire schema types `add.node` loosely; applyOps validates each node against NodeSchema.
+    const ops = input.ops as Op[]
+    const target = { pieceId, baseVersion, changeId }
+    if (ops.length <= MAX_DESIGN_CHANGE_OPS || ops[0]?.t !== 'remove')
+      return commitChange(ctx, { ...target, ops, label, reverts })
+
+    // The wire can check the shape of an undo. Match its IDs to the recorded inverse in the
+    // same transaction as the write, so a caller cannot use it for a larger unrelated deletion.
+    return commitChange(ctx, {
+      ...target,
+      plan: async (tx) => {
+        const importId = reverts?.[0]
+        if (!importId) throw badRequest('Choose the recorded import to undo.')
+        const original = await tx.changes.first(
+          and(eq(t.designChange.pieceId, pieceId), eq(t.designChange.id, importId)),
+        )
+        const removals = new Set(
+          original?.inverse.flatMap((op) => (op.t === 'remove' ? [op.id] : [])),
+        )
+        if (
+          !original ||
+          original.ops.length <= MAX_DESIGN_CHANGE_OPS ||
+          !original.ops.every(isModelImportAdd) ||
+          !ops.every((op) => op.t === 'remove' && removals.has(op.id))
+        )
+          throw badRequest(
+            'A large undo can only remove parts and curves from its recorded model import.',
+          )
+        return { ops, label, reverts }
+      },
+    })
+  },
 
   'design.history': async (ctx, input) => {
     await getPiece(ctx, input.pieceId)

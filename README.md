@@ -306,6 +306,8 @@ Open **Projects**, choose a piece, then open **CAD builder**. Select **CAD guide
 
 The walkthrough covers selecting a part, changing metal and finish, editing stones, fitting a measured diamond and drawing a first solid. **Export** in CAD saves a manufacturing or exchange file. **Save as Pavé file** in the project menu saves a native file you can reopen with **Open Pavé file** in Projects. **Design board & spec** holds references and measurements. **Render studio** holds the project’s shots.
 
+**Import model** adds Rhino parts and, when enabled, editable curves. Select up to 1,000 items in one import. Undo and Redo act on the selection as one change.
+
 For current freeform modeling capabilities and the order of upcoming Rhino-style tools, see the [CAD roadmap](docs/plans/freeform-cad.md).
 
 ## Plans: Free and Pro
