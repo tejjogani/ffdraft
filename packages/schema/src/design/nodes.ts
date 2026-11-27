@@ -18,6 +18,7 @@ import { choice, deg, follows, int, mm, ratio, ref, text, toggle, vec3 } from '.
 import { MeshEdits } from './mesh-edit'
 import { NurbsDefinition } from './nurbs'
 import { DrawnProfile } from './profile'
+import { RhinoContext } from './rhino-context'
 
 /** Kinds that produce a solid another feature can attach to, cut into or cover with stones. */
 export const BODY_KINDS = [
@@ -484,6 +485,7 @@ export const MeshBody = z
           type: z.literal('asset'),
           assetId: z.string().meta({ title: 'Mesh', widget: 'asset' }),
           rhinoLayer: z.string().optional(),
+          rhinoContext: RhinoContext.optional(),
           nativeAssetId: z.string().optional(),
           /** The paired mesh id keeps a replacement mesh from exporting an older surface. */
           nativeMeshAssetId: z.string().optional(),
@@ -799,6 +801,7 @@ export const NurbsCurve = NurbsDefinition.safeExtend({
   kind: z.literal('nurbsCurve'),
   transform: z.never().optional(),
   rhinoLayer: z.string().optional().meta({ title: 'Rhino layer' }),
+  rhinoContext: RhinoContext.optional(),
   sourceObjectId: z.string().optional().meta({ title: 'Source Rhino object' }),
 }).meta({
   title: 'NURBS curve',

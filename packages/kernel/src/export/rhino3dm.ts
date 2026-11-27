@@ -7,10 +7,12 @@ import { METALS, type NodeOf } from '@pave/schema'
 import { defineExporter, type Scene } from '../core'
 import type { ChainData } from '../features/chain'
 import { fromFrame } from '../geometry/vec'
+import { inheritedMaterial } from '../import/rhino-context'
 import { CURVE_SOURCE_ID_KEY } from '../import/rhino-curve'
 import { freeRhino as free, loadRhino3dm } from '../runtime/rhino'
 import type { ExportOptions } from '../types'
 import { type MeshObject, objectColor, sceneObjects } from './meshes'
+import { rhinoContextWriter } from './rhino-context'
 import { writeRhinoNurbsCurve } from './rhino-curve'
 import { nativeSolidWriter } from './rhino-native'
 
@@ -53,10 +55,11 @@ function importedObject(scene: Scene, o: MeshObject) {
   const node = scene.nodes.get(o.part.sources[0]!.nodeId)?.node
   if (node?.kind !== 'meshBody' || node.source.type !== 'asset' || !node.keepSourcePlacement)
     return null
-  const { rhinoLayer, rhinoObjectId, rhinoInstancePath } = node.source
+  const { rhinoLayer, rhinoObjectId, rhinoInstancePath, rhinoContext } = node.source
   return {
     name: node.name?.trim() || o.name,
     path: rhinoLayer?.split('::').filter(Boolean),
+    context: rhinoContext,
     hasNativeSource: Boolean(node.source.nativeAssetId),
     strings: {
       ...(rhinoObjectId && { rhinoObjectId }),
@@ -104,6 +107,7 @@ async function write3dm(
   }
   const objectTable = hold(doc.objects())
   const native = nativeSolidWriter(rhino, doc, objectTable, scene, options)
+  const context = rhinoContextWriter(rhino, doc)
   try {
     const settings = hold(doc.settings())
     const layerTable = hold(doc.layers())
@@ -151,7 +155,20 @@ async function write3dm(
         ...userStrings(o),
         ...imported?.strings,
       })
-      if (o.kind === 'metal' && (await native.write(o.part, attrs))) {
+      const source = imported?.context
+      if (source) context.write(attrs, source)
+      const affineContext =
+        source &&
+        (() => {
+          const path = source.placements[0]?.layer?.split('::').filter(Boolean)
+          return {
+            placementLayerIndex: path?.length ? layerFor(path, objectColor(o)) : layer,
+            placementMaterialIndex: context.materialIndex(inheritedMaterial(source.placements)),
+            memberMaterialIndex: context.materialIndex(source.material),
+            memberMaterialFromParent: source.materialFromParent,
+          }
+        })
+      if (o.kind === 'metal' && (await native.write(o.part, attrs, affineContext))) {
         free(attrs)
         continue
       }
@@ -202,6 +219,7 @@ async function write3dm(
         },
       )
       try {
+        if (curve.rhinoContext) context.write(attrs, curve.rhinoContext)
         writeRhinoNurbsCurve(rhino, objectTable, curve, attrs)
       } finally {
         free(attrs)
@@ -239,6 +257,7 @@ async function write3dm(
     }
   } finally {
     native.dispose()
+    context.dispose()
     for (const table of held) free(table)
     free(doc)
   }

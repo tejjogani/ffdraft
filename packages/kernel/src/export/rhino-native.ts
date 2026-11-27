@@ -61,6 +61,13 @@ function readBrep(rhino: RhinoModule, bytes: Uint8Array): Brep | null {
   }
 }
 
+interface AffineContext {
+  placementLayerIndex: number
+  placementMaterialIndex?: number
+  memberMaterialIndex?: number
+  memberMaterialFromParent?: boolean
+}
+
 /** Native solid geometry shared by placements is read once. Each export object owns its placement. */
 export function nativeSolidWriter(
   rhino: RhinoModule,
@@ -93,17 +100,29 @@ export function nativeSolidWriter(
     original: Brep,
     transform: Transform,
     attrs: ObjectAttributes,
+    context?: AffineContext,
   ): boolean => {
     // Some analytic Rhino surfaces cannot be baked through shear or nonuniform scale.
     // A new single-leaf block keeps the original exact surface and applies the affine
     // placement without bringing its siblings or any original definition into the file.
-    const key = `${assetId}:${attrs.layerIndex}`
+    const key = JSON.stringify([
+      assetId,
+      attrs.layerIndex,
+      context?.memberMaterialIndex,
+      context?.memberMaterialFromParent,
+    ])
     let id = definitionIds.get(key)
     if (!id) {
       definitions ??= doc.instanceDefinitions()
       const leaf = new rhino.ObjectAttributes()
       leaf.name = 'Solid'
       leaf.layerIndex = attrs.layerIndex
+      if (context?.memberMaterialFromParent) {
+        leaf.materialSource = rhino.ObjectMaterialSource.MaterialFromParent
+      } else if (context?.memberMaterialIndex !== undefined) {
+        leaf.materialSource = rhino.ObjectMaterialSource.MaterialFromObject
+        leaf.materialIndex = context.memberMaterialIndex
+      }
       const index = definitions.add(
         `Pavé Rhino solid ${definitionIds.size + 1}`,
         '',
@@ -127,16 +146,31 @@ export function nativeSolidWriter(
     ) => InstanceReference
     const instance = new Ref(id, transform)
     const count = objects.count
+    const layer = attrs.layerIndex
+    const materialIndex = attrs.materialIndex
+    const materialSource = attrs.materialSource
     try {
+      if (context) {
+        attrs.layerIndex = context.placementLayerIndex
+        attrs.materialSource = rhino.ObjectMaterialSource.MaterialFromObject
+        attrs.materialIndex = context.placementMaterialIndex ?? -1
+      }
       objects.addInstanceObject(instance, attrs)
       return objects.count === count + 1
     } finally {
+      attrs.layerIndex = layer
+      attrs.materialSource = materialSource
+      attrs.materialIndex = materialIndex
       freeRhino(instance)
     }
   }
 
   return {
-    async write(part: ScenePart, attrs: ObjectAttributes): Promise<boolean> {
+    async write(
+      part: ScenePart,
+      attrs: ObjectAttributes,
+      affineContext?: () => AffineContext,
+    ): Promise<boolean> {
       const result = scene.nodes.get(part.sources[0]?.nodeId ?? '')
       const node = result?.node
       if (
@@ -168,7 +202,15 @@ export function nativeSolidWriter(
             transform.similarityType === rhino.TransformSimilarityType.NotSimilarity &&
             !placed.makeDeformable()
           ) {
-            if (!addAffineInstance(source.nativeAssetId!, original, transform, attrs))
+            if (
+              !addAffineInstance(
+                source.nativeAssetId!,
+                original,
+                transform,
+                attrs,
+                affineContext?.(),
+              )
+            )
               return useMesh()
             retained++
             return true
