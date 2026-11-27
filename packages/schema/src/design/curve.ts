@@ -18,6 +18,10 @@ export type CurvePoint = z.infer<typeof CurvePoint>
 export const CurveDefinition = z
   .object({
     plane: z.enum(PROFILE_PLANES).meta({ title: 'Drawing plane' }),
+    planeOffset: coordinate.optional().meta({
+      title: 'Plane position (mm)',
+      description: 'World Y on Front, Z on Top or X on Right. Defaults to 0 mm.',
+    }),
     points: z.array(CurvePoint).min(2).max(CURVE_POINT_LIMIT).meta({
       title: 'Curve points',
       description:
@@ -52,10 +56,11 @@ export function sectionIsClosed(curve: NodeOf<'curve'> | NodeOf<'nurbsCurve'>): 
 export function pointFromCurvePlane(
   plane: CurvePlane,
   [u, v]: CurveCoordinates,
+  offset = 0,
 ): [number, number, number] {
-  if (plane === 'front') return [u, 0, v]
-  if (plane === 'right') return [0, u, v]
-  return [u, v, 0]
+  if (plane === 'front') return [u, offset, v]
+  if (plane === 'right') return [offset, u, v]
+  return [u, v, offset]
 }
 
 export function pointOnCurvePlane(
@@ -76,7 +81,9 @@ export function pipePath(
     return pipe.points ? { points: pipe.points, closed: pipe.closed } : null
   if (source?.kind !== 'curve' || source.id !== pipe.curve) return null
   return {
-    points: source.points.map(({ u, v }) => pointFromCurvePlane(source.plane, [u, v])),
+    points: source.points.map(({ u, v }) =>
+      pointFromCurvePlane(source.plane, [u, v], source.planeOffset),
+    ),
     closed: source.closed,
     plane: source.plane,
   }

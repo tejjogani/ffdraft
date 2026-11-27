@@ -145,6 +145,7 @@ export type Detail = 'draft' | 'production'
 export interface EvaluatedCurve {
   nodeId: string
   plane?: CurvePlane
+  planeOffset?: number
   points: [number, number, number][]
   closed: boolean
 }

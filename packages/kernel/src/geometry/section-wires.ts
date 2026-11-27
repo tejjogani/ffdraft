@@ -49,7 +49,7 @@ export function curveWire(
   try {
     if (node.kind === 'curve') {
       const points = node.points.map(({ u, v }) =>
-        transformPoint(matrix, pointFromCurvePlane(node.plane, [u, v])),
+        transformPoint(matrix, pointFromCurvePlane(node.plane, [u, v], node.planeOffset)),
       )
       const edges = points
         .slice(0, node.closed ? points.length : -1)

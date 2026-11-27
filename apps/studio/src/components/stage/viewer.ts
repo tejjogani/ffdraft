@@ -394,7 +394,12 @@ export class Viewer {
   }
 
   /** Converts canvas pixels into millimetres on a construction plane through the origin. */
-  pointOnConstructionPlane(plane: CurvePlane, x: number, y: number): [number, number] | null {
+  pointOnConstructionPlane(
+    plane: CurvePlane,
+    x: number,
+    y: number,
+    offset = 0,
+  ): [number, number] | null {
     const normal =
       plane === 'front'
         ? new Vector3(0, 0, 1)
@@ -402,7 +407,10 @@ export class Viewer {
           ? new Vector3(1, 0, 0)
           : new Vector3(0, 1, 0)
     this.raycaster.setFromCamera(this.ndc(x, y), this.camera)
-    const hit = this.raycaster.ray.intersectPlane(new Plane(normal, 0), new Vector3())
+    const hit = this.raycaster.ray.intersectPlane(
+      new Plane(normal, plane === 'front' ? offset : -offset),
+      new Vector3(),
+    )
     return hit ? pointOnCurvePlane(plane, [hit.x, -hit.z, hit.y]) : null
   }
 

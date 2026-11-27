@@ -88,11 +88,17 @@ export const revolve = defineFeature('revolve', (node, ctx) => {
   if (node.curve !== undefined) {
     const source = ctx.input(node.curve).node
     if (source.kind !== 'curve') throw new Error('Revolve needs a construction curve.')
-    const points = source.points.map(({ u, v }) => pointFromCurvePlane(source.plane, [u, v]))
+    const points = source.points.map(({ u, v }) =>
+      pointFromCurvePlane(source.plane, [u, v], source.planeOffset),
+    )
     const edges = points.map((p, i) => ctx.track(makeLine(p, points[(i + 1) % points.length]!)))
     const vertical = node.axis !== 'horizontal'
     const offset = node.axisOffset ?? 0
-    const origin = pointFromCurvePlane(source.plane, vertical ? [offset, 0] : [0, offset])
+    const origin = pointFromCurvePlane(
+      source.plane,
+      vertical ? [offset, 0] : [0, offset],
+      source.planeOffset,
+    )
     const direction = pointFromCurvePlane(source.plane, vertical ? [0, 1] : [1, 0])
     return { bodies: [turn(edges, origin, direction)] }
   }

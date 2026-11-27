@@ -63,7 +63,7 @@ const MAX_STATIONS = 384
 function originalProfile({ source: { node, matrix }, closed }: SweepCurve): OriginalProfile {
   if (node.kind === 'curve') {
     const points = node.points.map(({ u, v }) =>
-      transformPoint(matrix, pointFromCurvePlane(node.plane, [u, v])),
+      transformPoint(matrix, pointFromCurvePlane(node.plane, [u, v], node.planeOffset)),
     )
     return { points, weights: points.map(() => 1) }
   }

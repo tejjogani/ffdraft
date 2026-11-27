@@ -154,3 +154,18 @@ it('rejects a self-crossing cap outline', async () => {
   expect(scene.nodes.get('loft')?.status).toBe('failed')
   expect(scene.nodes.get('loft')?.diagnostics[0]?.code).toBe('feature.failed')
 })
+
+it('lofts two drawn outlines at the specified heights and rebuilds after moving the sketch plane', async () => {
+  const profile = square('base')
+  const design = designFrom('other', [
+    profile,
+    { ...profile, id: 'rim', planeOffset: 3 },
+    { kind: 'loft', id: 'shoulder', sections: ['base', 'rim'], ruled: true },
+  ])
+  const first = await kernel.scene(design)
+  expect(first.nodes.get('shoulder')?.bodies[0]?.solid.volume()).toBeCloseTo(48)
+  const next = applyOps(design, [{ t: 'update', id: 'rim', patch: { planeOffset: 5 } }]).design
+  const scene = await kernel.scene(next)
+  expect(scene.evaluation.curves?.find((c) => c.nodeId === 'rim')?.points[0]?.[2]).toBe(5)
+  expect(scene.nodes.get('shoulder')?.bodies[0]?.solid.volume()).toBeCloseTo(80)
+})

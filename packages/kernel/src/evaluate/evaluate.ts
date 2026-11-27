@@ -317,8 +317,11 @@ export class Evaluator {
           {
             nodeId: id,
             plane: node.plane,
+            ...(node.planeOffset && { planeOffset: node.planeOffset }),
             closed: node.closed,
-            points: node.points.map(({ u, v }) => pointFromCurvePlane(node.plane, [u, v])),
+            points: node.points.map(({ u, v }) =>
+              pointFromCurvePlane(node.plane, [u, v], node.planeOffset),
+            ),
           },
         ]
       if (node.kind === 'nurbsCurve' && data)

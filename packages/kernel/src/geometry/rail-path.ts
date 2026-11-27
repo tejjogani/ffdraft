@@ -27,7 +27,9 @@ export function railPath({ node, matrix }: CurveInput): RailPath {
       (k) => (k - first) / (last - first),
     )
   } else if (node.kind === 'curve') {
-    const points = node.points.map(({ u, v }) => pointFromCurvePlane(node.plane, [u, v]))
+    const points = node.points.map(({ u, v }) =>
+      pointFromCurvePlane(node.plane, [u, v], node.planeOffset),
+    )
     if (node.closed) points.push(points[0]!)
     const last = points.length - 1
     breaks = points.map((_, i) => i / last)

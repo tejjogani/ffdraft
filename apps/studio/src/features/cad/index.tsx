@@ -681,7 +681,9 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
     add('pipe', id)
     if (!dockInspector) setSheet('inspector')
   }
-  const saveCurve = (definition: Pick<NodeOf<'curve'>, 'plane' | 'points' | 'closed'>) => {
+  const saveCurve = (
+    definition: Pick<NodeOf<'curve'>, 'plane' | 'planeOffset' | 'points' | 'closed'>,
+  ) => {
     if (!session || readOnly) throw new Error('This design is read-only.')
     const original = curve?.original
     if (!original) {
@@ -695,6 +697,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
       if (
         current?.kind !== 'curve' ||
         current.plane !== original.plane ||
+        (current.planeOffset ?? 0) !== (original.planeOffset ?? 0) ||
         current.closed !== original.closed ||
         !sameJson(current.points, original.points)
       )
@@ -703,6 +706,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
         )
       if (
         current.plane !== definition.plane ||
+        (current.planeOffset ?? 0) !== (definition.planeOffset ?? 0) ||
         current.closed !== definition.closed ||
         !sameJson(current.points, definition.points)
       )

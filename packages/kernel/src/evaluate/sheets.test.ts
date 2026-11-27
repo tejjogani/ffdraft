@@ -1,32 +1,32 @@
 import { designFrom } from '@pave/schema'
-import { makePolygon } from 'replicad'
 import { expect, it } from 'vitest'
-import { defineFeature, metalOf, solidFromBrep } from '../core'
+import { curve } from '../features/curve'
+import { loft } from '../features/loft'
 import { step } from '../export/step'
 import { loadRuntime } from '../runtime/index'
 import { Evaluator } from './evaluate'
 
 it('displays an editable exact sheet at both details, excludes it from casting and writes it to STEP', async () => {
-  const feature = defineFeature('primitive', (node) => ({
-    sheets: [
-      {
-        ...metalOf(node),
-        solid: solidFromBrep(
-          makePolygon([
-            [0, 0, 0],
-            [4, 0, 0],
-            [4, 3, 0],
-            [0, 3, 0],
-          ]),
-        ),
-      },
-    ],
-  }))
   await loadRuntime()
-  const evaluator = new Evaluator([feature])
+  const evaluator = new Evaluator([curve, loft])
   try {
     const document = designFrom('other', [
-      { id: 'patch', kind: 'primitive', transform: { position: [2, 1, 5] } },
+      ...[0, 3].map((v) => ({
+        kind: 'curve' as const,
+        id: 'edge' + v,
+        plane: 'top' as const,
+        points: [
+          { id: 'a', u: 0, v },
+          { id: 'b', u: 4, v },
+        ],
+      })),
+      {
+        id: 'patch',
+        kind: 'loft',
+        sections: ['edge0', 'edge3'],
+        capped: false,
+        transform: { position: [2, 1, 5] },
+      },
     ])
     for (const detail of ['draft', 'production'] as const) {
       const scene = await evaluator.scene(document, { detail })
