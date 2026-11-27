@@ -11,7 +11,10 @@ import {
   applyOps,
   type Design,
   type DrawnProfile,
+  type ImportedRoleChoice,
+  importRoleOf,
   isBodyKind,
+  isRhinoRoleBody,
   labelForOps,
   type NodeInput,
   type NodeKind,
@@ -20,6 +23,8 @@ import {
   nodeTitle,
   type Piece,
   type PieceSpecInput,
+  reviewRhinoRoles,
+  rhinoRoleLinks,
   sameJson,
 } from '@pave/schema'
 import {
@@ -93,6 +98,7 @@ import { PiecePanel } from './PiecePanel'
 import { ProfileEditor } from './profiles/ProfileEditor'
 import { isProfileNode, type ProfileNode, profileNode } from './profiles/profile'
 import { useQuickIntentCommands } from './quick-commands'
+import { RhinoRoleReview } from './rhino/RhinoRoleReview'
 import { useWorkspace } from './state/workspace'
 import { Dimensions } from './viewport/Dimensions'
 import { dockArea } from './viewport/dock-area'
@@ -217,12 +223,21 @@ function Workspace({ piece }: { piece: Piece }) {
   const pieceId = piece.id
   const session = useDesignSession(piece)
   const auth = useSession()
-  const role = activeOrg(auth)?.role ?? 'viewer'
+  const org = activeOrg(auth)
+  const role = org?.role ?? 'viewer'
   const readOnly = role === 'viewer' || role === 'guest'
   const [modelImport, setModelImport] = useState<{ pieceId: string; file: File | null } | null>(
     null,
   )
   const openModelImport = (file: File | null = null) => setModelImport({ pieceId, file })
+  const [rhinoReview, setRhinoReview] = useState<{
+    pieceId: string
+    orgId?: string
+    design: Design
+    initialId?: string
+  } | null>(null)
+  // biome-ignore lint/correctness/useExhaustiveDependencies: drop a review draft after leaving its project or access level
+  useEffect(() => setRhinoReview(null), [pieceId, org?.id, readOnly])
   const [meshEditor, setMeshEditor] = useState<{
     pieceId: string
     node: ImportedMesh
@@ -283,6 +298,7 @@ function Workspace({ piece }: { piece: Piece }) {
   const [sheet, setSheet] = useState<'outliner' | 'inspector' | null>(null)
   const [marker, setMarker] = useState<MarkerSpot | null>(null)
   const [stepping, setStepping] = useState<string | null>(null)
+  const hasRhinoBodies = view.order.some((id) => isRhinoRoleBody(view.nodes[id]))
   const hasBodyFeature = view.order.some(
     (id) => !['curve', 'nurbsCurve'].includes(view.nodes[id]?.kind ?? ''),
   )
@@ -405,6 +421,51 @@ function Workspace({ piece }: { piece: Piece }) {
       { label },
     )
     ws().select(nodes.map((node) => node.id))
+  }
+
+  const openRhinoRoleReview = (id?: string) => {
+    if (!session || readOnly) return
+    const design = session.get().view
+    const selected = id
+      ? design.nodes[id]
+      : selection.length === 1
+        ? design.nodes[selection[0]!]
+        : undefined
+    const initialId =
+      selected?.kind === 'gem' || selected?.kind === 'setting'
+        ? selected.importSourceId
+        : selected?.id
+    setSheet(null)
+    setRhinoReview({ pieceId, orgId: org?.id, design, initialId })
+  }
+
+  const selectRhinoRoleBody = (id: string, design: Design) => {
+    const body = design.nodes[id]
+    if (!isRhinoRoleBody(body) || ws().pieceId !== pieceId) return
+    const links = rhinoRoleLinks(design, id)
+    const linked = importRoleOf(body) === 'setting' ? links.setting : links.gem
+    ws().select([linked?.id ?? id])
+  }
+
+  const confirmRhinoRoles = (choices: ImportedRoleChoice[]) => {
+    if (
+      !session ||
+      readOnly ||
+      !isCurrent() ||
+      rhinoReview?.pieceId !== pieceId ||
+      rhinoReview.orgId !== org?.id
+    )
+      throw new Error('Open the review in the current design.')
+    const latest = session.get()
+    if (latest.pieceId !== pieceId || hasGap(latest) || !sameJson(rhinoReview.design, latest.view))
+      throw new Error(
+        'The design changed during review. Reopen the review to see the current bodies.',
+      )
+    const ops = reviewRhinoRoles(latest.view, choices)
+    session.commit(ops, { label: 'Confirmed Rhino roles' })
+    if (choices[0]) selectRhinoRoleBody(choices[0].sourceId, session.get().view)
+    setRhinoReview(null)
+    if (ops.length) toast({ title: 'Rhino roles confirmed' })
   }
 
   const editMesh = (node: ImportedMesh) => {
@@ -718,6 +779,7 @@ function Workspace({ piece }: { piece: Piece }) {
       readOnly={readOnly}
       onDelete={requestDelete}
       onEditMesh={editMesh}
+      onReviewRhinoRole={openRhinoRoleReview}
       onEditProfile={(original) => setProfile({ original })}
       onLocateProng={(at) => {
         setSheet(null)
@@ -856,6 +918,9 @@ function Workspace({ piece }: { piece: Piece }) {
                   simplified={simplified}
                   compact={compact}
                   onImportModel={readOnly ? undefined : () => openModelImport()}
+                  onReviewRhinoRoles={
+                    !readOnly && session && hasRhinoBodies ? () => openRhinoRoleReview() : undefined
+                  }
                 />
                 {!dockInspector && (
                   <Button
@@ -1045,6 +1110,19 @@ function Workspace({ piece }: { piece: Piece }) {
           onSave={saveMesh}
         />
       )}
+      {!readOnly &&
+        session &&
+        rhinoReview?.pieceId === pieceId &&
+        rhinoReview.orgId === org?.id && (
+          <RhinoRoleReview
+            key={pieceId}
+            design={rhinoReview.design}
+            initialId={rhinoReview.initialId}
+            onClose={() => setRhinoReview(null)}
+            onSelect={(body) => selectRhinoRoleBody(body.id, session.get().view)}
+            onSave={confirmRhinoRoles}
+          />
+        )}
       {!readOnly && session && modelImport?.pieceId === pieceId && (
         <ModelImport
           key={pieceId}
