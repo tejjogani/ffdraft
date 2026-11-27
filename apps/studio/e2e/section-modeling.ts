@@ -103,8 +103,19 @@ try {
     await page.getByRole('menuitem', { name: title, exact: true }).click()
     const dialog = page.getByRole('dialog', { name: title })
     for (const [field, option] of inputs) {
-      await dialog.getByRole('combobox', { name: field, exact: true }).click()
-      await page.getByRole('option', { name: new RegExp('^' + option + '(?: |$)') }).click()
+      const control = dialog.getByRole('combobox', { name: field, exact: true })
+      await control.click()
+      // The previous picker can still render its closing animation when this one opens.
+      const listId = await control
+        .and(page.locator('[aria-expanded="true"][aria-controls]'))
+        .getAttribute('aria-controls')
+      assert.ok(listId, `${field} must identify its open list`)
+      await page
+        .getByRole('listbox')
+        .and(page.locator(`[id=${JSON.stringify(listId)}]`))
+        .getByRole('option', { name: new RegExp(`^${option}(?: |$)`) })
+        .click()
+      assert.equal(await control.textContent(), option)
     }
     await dialog.getByRole('button', { name: 'Create feature' }).click()
     await dialog.waitFor({ state: 'hidden' })
