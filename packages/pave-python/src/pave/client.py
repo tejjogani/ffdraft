@@ -130,6 +130,41 @@ class Project:
         self._record_write(result)
         return result
 
+    def rhino_edges(
+        self, feature_id: str, *, offset: int = 0, limit: int = 30,
+        edge_index: int | None = None,
+    ) -> JsonObject:
+        """Read a page of placed Rhino edges or one exact NURBS edge."""
+        if edge_index is not None:
+            return self._cad_rpc("design.rhinoEdges", nodeId=feature_id, edgeIndex=edge_index)
+        return self._cad_rpc("design.rhinoEdges", nodeId=feature_id, offset=offset, limit=limit)
+
+    def duplicate_rhino_edge(
+        self, feature_id: str, edge_index: int, new_node_id: str,
+        *, at: int | None = None, change_id: str | None = None,
+    ) -> JsonObject:
+        """Add one independent NURBS curve at the selected project version."""
+        selected = self.rhino_edges(feature_id, edge_index=edge_index)
+        version = selected["version"]
+        if at is not None and at != version:
+            raise RpcError(
+                409, "conflict",
+                f"The piece is at version {version}, not {at}. Select its Rhino edge again.",
+                {"currentVersion": version},
+            )
+        curve = selected.get("curve")
+        if curve is None:
+            raise ValueError(selected.get("reason") or "This Rhino edge cannot be duplicated.")
+        node = {
+            "id": new_node_id, "kind": "nurbsCurve",
+            "degree": curve["degree"], "knots": curve["knots"],
+            "controlPoints": curve["controlPoints"],
+        }
+        return self.apply(
+            [{"t": "add", "node": node}], "Duplicate Rhino edge",
+            base_version=version, change_id=change_id,
+        )
+
     def rhino_cap_faces(self, feature_id: str) -> JsonObject:
         """Read native end-face IDs, project-space normals, thickness, and source version."""
         return self._cad_rpc("design.rhinoCapFaces", nodeId=feature_id)

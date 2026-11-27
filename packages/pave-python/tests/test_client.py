@@ -120,6 +120,42 @@ class StudioTest(unittest.TestCase):
         })
         self.assertEqual(project.version, 4)
 
+    def test_duplicates_an_exact_rhino_edge_as_one_independent_curve(self):
+        project = self.project()
+        curve = {"degree": 1, "knots": [0, 2], "controlPoints": [[1, 0, 0, 1], [1, 0, 2, 1]]}
+        self.reply({"version": 3, "nativeAssetId": "source", "edgeCount": 6, "edges": []})
+        page = project.rhino_edges("sleeve", offset=2, limit=1)
+        self.assertEqual(self.request("design.rhinoEdges"), {
+            "pieceId": "ring", "nodeId": "sleeve", "offset": 2, "limit": 1,
+        })
+        self.reply({"version": 3, "nativeAssetId": "source", "curve": curve})
+        self.reply({"version": 4, "change": {"id": "duplicate", "seq": 4}})
+        result = project.duplicate_rhino_edge(
+            "sleeve", 1, "rail", at=page["version"], change_id="duplicate",
+        )
+        self.assertEqual(self.request("design.rhinoEdges"), {
+            "pieceId": "ring", "nodeId": "sleeve", "edgeIndex": 1,
+        })
+        self.assertEqual(self.request("design.apply"), {
+            "pieceId": "ring", "baseVersion": 3, "changeId": "duplicate",
+            "label": "Duplicate Rhino edge",
+            "ops": [{"t": "add", "node": {"id": "rail", "kind": "nurbsCurve", **curve}}],
+        })
+        self.assertEqual(result["version"], 4)
+        self.assertEqual(project.version, 4)
+
+    def test_rhino_edge_duplication_refuses_an_outdated_selection(self):
+        project = self.project()
+        self.reply({"version": 4, "nativeAssetId": "new-source", "curve": {
+            "degree": 1, "knots": [0, 2], "controlPoints": [[1, 0, 0, 1], [1, 0, 2, 1]],
+        }})
+        with self.assertRaises(RpcError) as error:
+            project.duplicate_rhino_edge("sleeve", 1, "rail", at=3)
+        self.assertEqual(error.exception.status, 409)
+        self.assertEqual(error.exception.details["currentVersion"], 4)
+        self.request("design.rhinoEdges")
+        self.assertTrue(self.server.requests.empty())
+
     def test_conflict_keeps_guard_until_explicit_refresh(self):
         project = self.project()
         self.reply(
