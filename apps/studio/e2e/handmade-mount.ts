@@ -55,7 +55,14 @@ try {
   })
   assert.ok(upload.ok(), await upload.text())
   const assetId = (await upload.json()).id
-  const part = (id: string, name: string, x: number, importRole: string) => ({
+  const part = (
+    id: string,
+    name: string,
+    x: number,
+    importRole: string,
+    layer = 'Workshop mount',
+    group?: string,
+  ) => ({
     t: 'add',
     node: {
       id,
@@ -64,7 +71,12 @@ try {
       importRole,
       keepSourcePlacement: true,
       transform: { position: [x, 0, 0] },
-      source: { type: 'asset', assetId, rhinoLayer: 'Workshop mount' },
+      source: {
+        type: 'asset',
+        assetId,
+        rhinoLayer: layer,
+        rhinoContext: group && { groups: [{ id: group, name: group }], placements: [] },
+      },
     },
   })
   const transform = { position: [4, 2, 2.5], rotation: [0, 0, 0], scale: 1 }
@@ -76,6 +88,11 @@ try {
       part('right', 'Workshop right claw', 6, 'metal'),
       part('other', 'Separate metal shank', 12, 'metal'),
       part('stone', 'Crown source', 3, 'stone'),
+      part('member-a', 'First gallery bar', 16, 'metal', 'Gallery rails', 'Group100'),
+      part('member-b', 'Second gallery bar', 20, 'metal', 'Head bars', 'Group100'),
+      ...Array.from({ length: 12 }, (_, i) =>
+        part(`spare-${i}`, `Spare metal ${i + 1}`, 24 + 4 * i, 'metal'),
+      ),
       {
         t: 'add',
         node: {
@@ -127,6 +144,30 @@ try {
   await viewport.waitFor()
   assert.equal(await dialog.getByRole('checkbox', { name: /^Workshop .* claw$/ }).count(), 2)
   for (const name of selected) assert.ok(await dialog.getByRole('checkbox', { name }).isChecked())
+  const search = dialog.getByRole('searchbox', { name: 'Search mount bodies' })
+  await search.fill('Group100')
+  await dialog.getByRole('status').filter({ hasText: '2 matching bodies' }).waitFor()
+  const matches = dialog.getByRole('checkbox')
+  assert.equal(await matches.count(), 2)
+  assert.deepEqual(await dialog.getByText(/^(First|Second) gallery bar$/).allTextContents(), [
+    'First gallery bar',
+    'Second gallery bar',
+  ])
+  for (const checkbox of await matches.all()) assert.ok(!(await checkbox.isChecked()))
+  const onlySelected = button('Selected only')
+  await onlySelected.focus()
+  await onlySelected.press('Space')
+  assert.equal(await onlySelected.getAttribute('aria-pressed'), 'true')
+  assert.equal(await matches.count(), 2)
+  for (const name of selected) assert.ok(await dialog.getByRole('checkbox', { name }).isChecked())
+  await onlySelected.press('Space')
+  assert.equal(await search.inputValue(), 'Group100')
+  await search.fill('Gallery rails')
+  await dialog.getByRole('status').filter({ hasText: '1 matching body' }).waitFor()
+  assert.equal(await matches.count(), 1)
+  await search.fill('no such layer')
+  await dialog.getByRole('status').filter({ hasText: 'No matching bodies' }).waitFor()
+  await search.fill('')
   await dialog.getByRole('checkbox', { name: 'Separate metal shank' }).check()
   await dialog.getByText('14 × 4 × 3 mm', { exact: true }).waitFor()
   await dialog.getByRole('checkbox', { name: 'Separate metal shank' }).uncheck()
@@ -219,7 +260,7 @@ try {
   await button('Cancel').click()
   assert.equal((await getPiece()).version, before.version + 5)
   console.log(
-    'Passed multi-body mount picking, cage drag, millimetre offsets, refit, restore, Undo, version guard and mobile controls.',
+    'Passed multi-body mount search and picking, cage drag, millimetre offsets, refit, restore, Undo, version guard and mobile controls.',
   )
 } finally {
   await browser.close()

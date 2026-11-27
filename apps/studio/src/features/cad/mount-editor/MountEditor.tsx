@@ -40,6 +40,7 @@ import {
   moveHandles,
   zeroOffsets,
 } from './handles'
+import { MountBodies } from './MountBodies'
 import { MountPreview } from './MountPreview'
 import type { PreviewCages, PreviewGirdle, PreviewPart } from './preview-model'
 
@@ -133,7 +134,11 @@ export function MountEditor({
   onClose(): void
 }) {
   const parts = useMemo(
-    () => design.order.filter((id) => !customMountPartIssue(design, id)),
+    () =>
+      design.order.flatMap((id) => {
+        const node = design.nodes[id]
+        return isImportedMesh(node) && !customMountPartIssue(design, id) ? [node] : []
+      }),
     [design],
   )
   const stones = useMemo(
@@ -433,44 +438,21 @@ export function MountEditor({
         onKeyDown={onKeyDown}
       >
         <div className="min-w-0">
-          <fieldset disabled={locked || frozen} className="mb-4 min-w-0 border-b border-line pb-3">
-            <legend className="text-sm font-medium">
-              Mount bodies{' '}
-              <span className="ml-1 text-xs font-normal text-fg-muted">{ids.length} selected</span>
-            </legend>
-            <div className="mt-1 grid max-h-28 gap-1.5 overflow-auto py-1 sm:grid-cols-2">
-              {parts.map((id) => (
-                <label key={id} className="flex min-w-0 items-start gap-2 text-xs text-fg-muted">
-                  <input
-                    type="checkbox"
-                    checked={ids.includes(id)}
-                    disabled={ids.length === 1 && ids[0] === id}
-                    onChange={() => {
-                      if (!locked) {
-                        setIds((current) =>
-                          current.includes(id)
-                            ? current.filter((item) => item !== id)
-                            : [...current, id],
-                        )
-                        setFitted(false)
-                        setHandle(ALL)
-                        setError(undefined)
-                      }
-                    }}
-                    className="mt-0.5 accent-select"
-                  />
-                  <span className="truncate" title={nodeTitle(design.nodes[id]!)}>
-                    {nodeTitle(design.nodes[id]!)}
-                  </span>
-                </label>
-              ))}
-            </div>
-            {locked && !frozen && (
-              <p className="mt-1 text-xs text-fg-muted">
-                Reset this draft to change which bodies share the cage.
-              </p>
-            )}
-          </fieldset>
+          <MountBodies
+            parts={parts}
+            ids={ids}
+            disabled={locked || frozen}
+            resetToChange={locked && !frozen}
+            onToggle={(id) => {
+              if (locked || frozen) return
+              setIds((current) =>
+                current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
+              )
+              setFitted(false)
+              setHandle(ALL)
+              setError(undefined)
+            }}
+          />
           {!result && (
             <p role="status" className="flex items-center gap-2 text-sm text-fg-muted">
               <Spinner /> Measuring the selected bodies…
