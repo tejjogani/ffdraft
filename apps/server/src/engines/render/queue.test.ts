@@ -72,6 +72,7 @@ it('renders new studio lighting instead of reusing an image cached by the earlie
     'blender',
     take.autoTune,
     2,
+    'jewelry-lighting-v2',
     '5.3.0',
   ])
   const priorKey = 'sha256:' + createHash('sha256').update(old).digest('hex')

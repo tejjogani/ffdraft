@@ -79,7 +79,7 @@ export function cacheKeyOf(job: RenderJob, blenderVersion: string | null): strin
     job.autoTune,
     RESOLVED_SCENE_VERSION,
     // Invalidate prior renders when the Cycles lighting or material recipes change.
-    'jewelry-lighting-v2',
+    'jewelry-lighting-v3',
     blenderVersion,
   ])
   return `sha256:${createHash('sha256').update(key).digest('hex')}`
