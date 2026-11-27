@@ -214,14 +214,29 @@ try {
   const previewCount = page.getByText('2 unassigned bodies appear in neutral clay.', {
     exact: true,
   })
+  const initialization = '**/api/rpc/scenes.ensureDefaults'
+  let replyAborted = false
+  await page.route(initialization, async (route) => {
+    const saved = await route.fetch()
+    assert.ok(saved.ok(), await saved.text())
+    await route.abort('connectionaborted')
+    replyAborted = true
+  })
   await preview.click()
-  await previewCount.waitFor()
-  await until(async () =>
-    (await rpc('scenes.list', { pieceId })).some(
-      (shot: CommandOutput<'scenes.list'>[number]) =>
-        shot.scene.look === 'catalog-white' && shot.scene.includeUnassignedRhino === true,
-    ),
+  await until(async () => replyAborted)
+  await page.unroute(initialization)
+  const initialized: CommandOutput<'scenes.list'> = await rpc('scenes.list', { pieceId })
+  assert.deepEqual(
+    initialized.map(({ title, position }) => [title, position]),
+    [
+      ['Hero', 1],
+      ['Front', 2],
+      ['Profile', 3],
+      ['Macro', 4],
+    ],
   )
+  assert.equal(initialized[0]?.scene.look, 'catalog-white')
+  assert.equal(initialized[0]?.scene.includeUnassignedRhino, true)
   await page.reload()
   await previewCount.waitFor()
   assert.equal(await include.getAttribute('aria-checked'), 'true')

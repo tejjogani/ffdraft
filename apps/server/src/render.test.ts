@@ -87,6 +87,55 @@ describe('saved shots and takes', () => {
     expect((await api.fail('scenes.list', { pieceId: 'pc_nope' })).status).toBe(404)
   })
 
+  it('saves ordered defaults and their first edit once even when initialization is retried concurrently', async () => {
+    const piece = await api.call('pieces.create', { kind: 'pendant' })
+    const input = {
+      pieceId: piece.id,
+      edit: { key: 'hero', patch: { look: 'catalog-white', includeUnassignedRhino: true } },
+    }
+    const initialize = () => api.call('scenes.ensureDefaults', input)
+    const [first, concurrent, retry] = await Promise.all([initialize(), initialize(), initialize()])
+    expect(concurrent.shots).toEqual(first.shots)
+    expect(retry.shots).toEqual(first.shots)
+    expect(first.shots.map(({ title, position }) => [title, position])).toEqual([
+      ['Hero', 1],
+      ['Front', 2],
+      ['Profile', 3],
+      ['Macro', 4],
+    ])
+    const [hero, ...rest] = first.shots
+    expect(hero?.scene).toMatchObject(input.edit.patch)
+    expect(rest.some(({ scene }) => scene.includeUnassignedRhino)).toBe(false)
+    const history = await api.call('scenes.history', { id: hero!.id })
+    expect(history).toHaveLength(1)
+    expect(history[0]?.before.includeUnassignedRhino).toBeUndefined()
+    expect(history[0]?.after.includeUnassignedRhino).toBe(true)
+    expect((await api.call('pieces.get', { id: piece.id })).version).toBe(piece.version)
+  })
+
+  it('leaves an empty set untouched on an invalid first edit and preserves a customized partial set', async () => {
+    const piece = await api.call('pieces.create', { kind: 'ring' })
+    const invalid = await api.fail('scenes.ensureDefaults', {
+      pieceId: piece.id,
+      edit: { key: 'hero', patch: { camera: { focalLength: 9000 } } },
+    })
+    expect(invalid.status).toBe(400)
+    expect(await api.call('scenes.list', { pieceId: piece.id })).toEqual([])
+    const handFramed = await api.call('scenes.create', {
+      pieceId: piece.id,
+      title: 'Hero',
+      position: 1,
+      scene: { look: 'black-acrylic' },
+    })
+    const first = await api.call('scenes.ensureDefaults', {
+      pieceId: piece.id,
+      edit: { key: 'hero', patch: { includeUnassignedRhino: true } },
+    })
+    expect(first.shots).toEqual([handFramed])
+    expect(first.editedId).toBeNull()
+    expect(await api.call('scenes.history', { id: handFramed.id })).toEqual([])
+  })
+
   it('queues browser takes from shots, completes them once, and flags them stale', async () => {
     const piece = await api.call('pieces.create', { templateId: 'halo' })
     const shot = await api.call('scenes.create', {

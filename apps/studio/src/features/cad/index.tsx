@@ -874,7 +874,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
     const sourceVersion = version
     setQueuingRender(true)
     try {
-      const shot = await queueCadRender(pieceId, view.kind, sourceVersion, () => {
+      const shot = await queueCadRender(pieceId, sourceVersion, () => {
         if (!isCurrent()) return false
         const current = session.get()
         if (current.version !== sourceVersion || current.save.status !== 'saved' || hasGap(current))
@@ -925,7 +925,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
     renderThisView: () => {
       const camera = viewer.current?.shotCamera()
       if (!camera) return
-      void renderThisView(piece.id, view.kind, camera)
+      void renderThisView(piece.id, camera)
         .then(() => {
           if (isCurrent()) void navigate({ to: '/pieces/$id/render', params: { id: piece.id } })
         })
