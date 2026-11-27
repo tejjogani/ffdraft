@@ -189,8 +189,7 @@ export function createRenderQueue(o: RenderQueueOptions) {
         off = () => signal.removeEventListener('abort', abort)
       })
       const { engine, setupCanceled } = await Promise.race([
-        entry.engineReady ??
-          o.blender.probed.then(() => ({ engine: o.blender.status(), setupCanceled: false })),
+        entry.engineReady ?? o.blender.prepareRender(false),
         interrupted,
       ]).finally(() => off?.())
       signal.throwIfAborted()
@@ -295,9 +294,12 @@ export function createRenderQueue(o: RenderQueueOptions) {
   const accept: RenderQueue['submit'] = async (job, piece, handle, sctx, setupBlender) => {
     if (closing) throw new AppError('internal', 'The server is shutting down; try again shortly.')
     const queue = waiting.get(sctx.orgId) ?? []
-    // Attach every take to this installation at submission, including takes behind a busy slot.
-    // If setup fails, the whole batch sees that failure and a later explicit retry can start it again.
-    const engineReady = setupBlender ? o.blender.prepareRender() : undefined
+    // Attach the whole batch to pending engine setup, including takes behind a busy slot.
+    // A later render can retry a failed setup.
+    const engineReady =
+      setupBlender || (!o.blender.available && o.blender.hasKnownManagedBlender())
+        ? o.blender.prepareRender(setupBlender ?? false)
+        : undefined
     queue.push({ job, piece, handle, sctx, engineReady, controller: new AbortController() })
     waiting.set(sctx.orgId, queue)
     pump()

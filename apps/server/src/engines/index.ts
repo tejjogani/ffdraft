@@ -79,6 +79,7 @@ export function createEngines(
       await blender.ready
       return blender.status()
     },
+    hasKnownManagedBlender: () => blender.hasKnownManagedBlender(),
     configure: (blenderPath) => blender.configure(blenderPath),
     installStatus: () => blender.installStatus(),
     install: () => blender.install(),

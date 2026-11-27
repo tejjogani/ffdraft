@@ -350,6 +350,8 @@ export interface RenderQueue extends Service {
 /** Finds and configures Blender on this machine. */
 export interface RenderEngineService extends Service {
   status(sctx: ServiceContext): Promise<RenderEngineStatus>
+  /** Whether discovery can safely retry an already confirmed managed engine on render. */
+  hasKnownManagedBlender?(): boolean
   /** Probes `blenderPath` (null = discover again) and saves it only if it works. */
   configure(blenderPath: string | null, sctx: ServiceContext): Promise<RenderEngineStatus>
   installStatus?(): RenderInstallStatus
