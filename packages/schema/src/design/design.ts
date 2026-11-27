@@ -8,7 +8,16 @@
 import { z } from 'zod'
 import { revolveProfileError } from './curve'
 import { DESIGN_VERSION, migrateDesign, prongLayout } from './mount'
-import { isBodyKind, type Node, type NodeInput, NodeSchema, nodeRefs } from './nodes'
+import {
+  importRoleOf,
+  importSourceRole,
+  isBodyKind,
+  type Node,
+  type NodeInput,
+  NodeSchema,
+  nodeRefs,
+} from './nodes'
+import { RhinoContext } from './rhino-context'
 
 export const PIECE_KINDS = [
   'ring',
@@ -81,6 +90,21 @@ export function isModelImportAdd(op: z.infer<typeof OpSchema>): boolean {
       isObject(source) &&
       source.type === 'asset')
   )
+}
+
+const RhinoLabelUpdate = z.union([
+  z.strictObject({ rhinoContext: RhinoContext.strict().nullable() }),
+  z.strictObject({ source: z.strictObject({ rhinoContext: RhinoContext.strict().nullable() }) }),
+])
+
+/** Identifies an update consisting only of a Rhino metadata field or its removal. */
+export function readRhinoLabelUpdate(op: z.infer<typeof OpSchema>) {
+  if (op.t !== 'update') return undefined
+  const parsed = RhinoLabelUpdate.safeParse(op.patch)
+  if (!parsed.success) return undefined
+  if ('source' in parsed.data)
+    return { kind: 'part' as const, context: parsed.data.source.rhinoContext }
+  return { kind: 'curve' as const, context: parsed.data.rhinoContext }
 }
 
 export const ActorSchema = z.discriminatedUnion('type', [
@@ -242,7 +266,29 @@ export function applyOps(input: Design, ops: readonly Op[]): { design: Design; i
         if (!prev) throw new OpError(`No node "${op.id}"`, op)
         if ('id' in op.patch || 'kind' in op.patch)
           throw new OpError('id and kind cannot be changed; add a new node instead', op)
-        const updated = parseNode(mergePatch(prev, op.patch), op)
+        const parsed = parseNode(mergePatch(prev, op.patch), op)
+        const updated =
+          parsed.kind === 'setting' &&
+          parsed.importSourceId &&
+          prev.kind === 'setting' &&
+          !Object.hasOwn(op.patch, 'importSourceRegenerated') &&
+          (
+            [
+              'gem',
+              'style',
+              'prongCount',
+              'prongDiameter',
+              'prongTip',
+              'prongTipOffsetsMm',
+              'prongSpin',
+              'taper',
+              'rails',
+              'arcs',
+              'wall',
+            ] as const
+          ).some((key) => !sameJson(prev[key], parsed[key]))
+            ? { ...parsed, importSourceRegenerated: true as const }
+            : parsed
         if (updated.kind === 'setting' && isObject(op.patch.prongTipOffsetsMm)) {
           const set = prongsSet.get(op.id) ?? new Set()
           for (const number of Object.keys(op.patch.prongTipOffsetsMm)) set.add(number)
@@ -405,6 +451,7 @@ export function validateDesign(design: Design): DesignIssue[] {
   // Own properties only: an id such as "constructor" must not find Object.prototype's.
   const nodeOf = (id: string) => (Object.hasOwn(design.nodes, id) ? design.nodes[id] : undefined)
   const seen = new Set<string>()
+  const confirmed = new Map<string, string>()
   for (const id of design.order) {
     if (seen.has(id)) {
       issues.push({ level: 'error', nodeId: id, message: `Order lists "${id}" more than once` })
@@ -415,6 +462,29 @@ export function validateDesign(design: Design): DesignIssue[] {
     if (!n) {
       issues.push({ level: 'error', nodeId: id, message: `Order lists missing node "${id}"` })
       continue
+    }
+    const role = importSourceRole(n)
+    if (role && (n.kind === 'gem' || n.kind === 'setting') && n.importSourceId) {
+      const source = nodeOf(n.importSourceId)
+      const existing = confirmed.get(n.importSourceId)
+      if (
+        source?.kind !== 'meshBody' ||
+        source.source.type !== 'asset' ||
+        !source.keepSourcePlacement ||
+        importRoleOf(source) !== role
+      )
+        issues.push({
+          level: 'error',
+          nodeId: id,
+          message: `"${id}" needs "${n.importSourceId}" to be an imported ${role} source.`,
+        })
+      else if (existing)
+        issues.push({
+          level: 'error',
+          nodeId: id,
+          message: `"${id}" and "${existing}" both confirm "${n.importSourceId}".`,
+        })
+      else confirmed.set(n.importSourceId, id)
     }
     for (const r of nodeRefs(n)) {
       const target = nodeOf(r)

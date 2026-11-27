@@ -40,6 +40,7 @@ interface Js {
   unit?: string
   refKinds?: string[]
   when?: Record<string, unknown[]>
+  internal?: boolean
 }
 
 /** Value lists printed once at the top instead of under every node that uses them. */
@@ -130,7 +131,7 @@ function fieldLines(js: Js, indent: string, skip: ReadonlySet<string>): string[]
   const required = new Set(js.required ?? [])
   const lines: string[] = []
   for (const [key, prop] of Object.entries(js.properties ?? {})) {
-    if (skip.has(key)) continue
+    if (skip.has(key) || prop.internal) continue
     const mark = required.has(key) && prop.default === undefined ? ' (required)' : ''
     const variants = prop.oneOf ?? prop.anyOf
     const sharedObject = indent === '' ? SHARED_OBJECTS[key] : undefined

@@ -18,8 +18,10 @@ import {
   MAX_MODEL_IMPORT_OPS,
   OpSchema,
   PIECE_KINDS,
+  readRhinoLabelUpdate,
 } from '../design/design'
 import { DirectionSchema, MIX_PARTS } from '../design/directions'
+import { ImportedRoleChoiceSchema } from '../design/import-roles'
 import {
   IntakeDetailsSchema,
   IntakeSelectionInputSchema,
@@ -838,6 +840,17 @@ export const commands = {
     }),
     output: z.object({ version: componentId, change: StoredChangeSchema }),
   }),
+  'design.planImportRoles': def({
+    description:
+      'Preview the jeweler’s confirmed roles for individual Rhino part IDs. The source mesh and native surfaces are retained. For stones supply measured dimensions, world girdle XYZ (mm) and Euler XYZ rotation (degrees), plus an optional original setting and rebuild style. Display names and colors are hints. Review these choices with the user, then pass the returned ops and version to design.apply.',
+    kind: 'query',
+    tool: true,
+    input: z.object({
+      pieceId: id,
+      choices: z.array(ImportedRoleChoiceSchema).min(1).max(MAX_DESIGN_CHANGE_OPS),
+    }),
+    output: z.object({ version: z.number().int(), ops: z.array(OpSchema) }),
+  }),
   'design.meshComponents': def({
     description:
       'Read the editable vertices and triangular faces of an imported mesh body in this project. IDs remain stable for the same source asset. Coordinates are absolute XYZ millimetres in the source frame before part transforms. Each face contains three vertex IDs. Page through both lists with offset and limit, or request specific IDs to inspect the endpoints of a face. Pass assetId and version back when writing meshEdits with design.apply.',
@@ -865,7 +878,7 @@ export const commands = {
     }),
   }),
   'design.apply': def({
-    description: `Edit a piece’s CAD by adding, updating, removing or moving features. Updates are JSON merge patches. Each call is one undoable change with a short human label. General edits allow up to ${MAX_DESIGN_CHANGE_OPS} operations. Model imports and their undo can include up to ${MAX_MODEL_IMPORT_OPS} parts and curves. Fails atomically with a precise message if an operation is invalid.`,
+    description: `Edit a piece’s CAD by adding, updating, removing or moving features. Updates are JSON merge patches. Each call is one undoable change with a short human label. General edits allow up to ${MAX_DESIGN_CHANGE_OPS} operations. Model imports, recovery of Rhino source labels and their undo can include up to ${MAX_MODEL_IMPORT_OPS} parts and curves. Fails atomically with a precise message if an operation is invalid.`,
     kind: 'mutation',
     tool: true,
     input: z
@@ -884,10 +897,14 @@ export const commands = {
         ({ ops, reverts }) =>
           ops.length <= MAX_DESIGN_CHANGE_OPS ||
           ops.every(isModelImportAdd) ||
+          ops.every((op) => {
+            const update = readRhinoLabelUpdate(op)
+            return update !== undefined && (update.context !== null || reverts?.length === 1)
+          }) ||
           (reverts?.length === 1 && ops.every((op) => op.t === 'remove' && !op.cascade)),
         {
           path: ['ops'],
-          message: `Edits over ${MAX_DESIGN_CHANGE_OPS} operations must import measured model parts or NURBS curves, or undo one recorded model import. No operation may cascade.`,
+          message: `Edits over ${MAX_DESIGN_CHANGE_OPS} operations must import measured model parts or NURBS curves, recover Rhino source labels, or undo one recorded import or recovery. No operation may cascade.`,
         },
       ),
     output: z.object({ version: z.number().int(), change: StoredChangeSchema }),

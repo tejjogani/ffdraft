@@ -4,11 +4,11 @@ exports[`the frozen system prompt > has a stable hash (snapshot) that covers the
 {
   "chars": [
     7082,
-    41996,
+    42326,
     10638,
-    17208,
+    17654,
   ],
-  "hash": "prompt-16a82dbd5d4b7d",
+  "hash": "prompt-01cd1d5f6f6d09",
 }
 `;
 
@@ -178,6 +178,13 @@ Shared value lists:
   - type "asset":
     - assetId (required): string
     - rhinoLayer: string
+    - rhinoContext: object
+      - archiveId: string
+      - groups (required): list of object
+      - placements (required): list of object (0–32 items)
+      - topology: string
+      - material: string
+      - materialFromParent: true
     - nativeAssetId: string
     - nativeMeshAssetId: string
     - nativeTransform: list of number (16–16 items)
@@ -297,5 +304,12 @@ Shared value lists:
 - knots (required): list of number (2–4110 items). Rhino knot vector, omitting the two exterior knots.
 - controlPoints (required): list of list of any (4–4 items) (2–4096 items). Ordered [x, y, z, weight]. XYZ are Euclidean world coordinates in mm. Keep positive rational weights when reshaping the curve.
 - rhinoLayer: string
+- rhinoContext: object
+  - archiveId: string
+  - groups (required): list of object
+  - placements (required): list of object (0–32 items)
+  - topology: string
+  - material: string
+  - materialFromParent: true
 - sourceObjectId: string"
 `;

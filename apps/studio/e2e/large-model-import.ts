@@ -77,6 +77,7 @@ const bodyNodes = (design: Design) =>
 function checkCounts(design: Design) {
   assert.equal(design.order.length, parts + curves)
   assert.equal(bodyNodes(design).length, parts)
+  assert.ok(bodyNodes(design).every(({ importRole }) => importRole === 'unassigned'))
   assert.equal(
     Object.values(design.nodes).filter(({ kind }) => kind === 'nurbsCurve').length,
     curves,

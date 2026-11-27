@@ -61,6 +61,13 @@ function readBrep(rhino: RhinoModule, bytes: Uint8Array): Brep | null {
   }
 }
 
+interface AffineContext {
+  placementLayerIndex: number
+  placementMaterialIndex?: number
+  memberMaterialIndex?: number
+  memberMaterialFromParent?: boolean
+}
+
 /** Native solid geometry shared by placements is read once. Each export object owns its placement. */
 export function nativeSolidWriter(
   rhino: RhinoModule,
@@ -93,17 +100,29 @@ export function nativeSolidWriter(
     original: Brep,
     transform: Transform,
     attrs: ObjectAttributes,
+    context?: AffineContext,
   ): boolean => {
     // Some analytic Rhino surfaces cannot be baked through shear or nonuniform scale.
     // A new single-leaf block keeps the original exact surface and applies the affine
     // placement without bringing its siblings or any original definition into the file.
-    const key = `${assetId}:${attrs.layerIndex}`
+    const key = JSON.stringify([
+      assetId,
+      attrs.layerIndex,
+      context?.memberMaterialIndex,
+      context?.memberMaterialFromParent,
+    ])
     let id = definitionIds.get(key)
     if (!id) {
       definitions ??= doc.instanceDefinitions()
       const leaf = new rhino.ObjectAttributes()
       leaf.name = 'Solid'
       leaf.layerIndex = attrs.layerIndex
+      if (context?.memberMaterialFromParent) {
+        leaf.materialSource = rhino.ObjectMaterialSource.MaterialFromParent
+      } else if (context?.memberMaterialIndex !== undefined) {
+        leaf.materialSource = rhino.ObjectMaterialSource.MaterialFromObject
+        leaf.materialIndex = context.memberMaterialIndex
+      }
       const index = definitions.add(
         `Pavé Rhino solid ${definitionIds.size + 1}`,
         '',
@@ -127,67 +146,99 @@ export function nativeSolidWriter(
     ) => InstanceReference
     const instance = new Ref(id, transform)
     const count = objects.count
+    const layer = attrs.layerIndex
+    const materialIndex = attrs.materialIndex
+    const materialSource = attrs.materialSource
     try {
+      if (context) {
+        attrs.layerIndex = context.placementLayerIndex
+        attrs.materialSource = rhino.ObjectMaterialSource.MaterialFromObject
+        attrs.materialIndex = context.placementMaterialIndex ?? -1
+      }
       objects.addInstanceObject(instance, attrs)
       return objects.count === count + 1
     } finally {
+      attrs.layerIndex = layer
+      attrs.materialSource = materialSource
+      attrs.materialIndex = materialIndex
       freeRhino(instance)
     }
   }
 
-  return {
-    async write(part: ScenePart, attrs: ObjectAttributes): Promise<boolean> {
-      const result = scene.nodes.get(part.sources[0]?.nodeId ?? '')
-      const node = result?.node
-      if (
-        !result ||
-        node?.kind !== 'meshBody' ||
-        node.source.type !== 'asset' ||
-        !node.source.nativeAssetId ||
-        !part.preservesNativeSurface
-      )
-        return false
-      const source = node.source
-      const original = await load(source.nativeAssetId!)
-      const useMesh = () => {
-        unavailable.push(attrs.name)
-        return false
-      }
-      if (!original) return useMesh()
-      const placed = original.duplicate() as Brep
-      const matrix = source.nativeTransform
-        ? multiply(result.matrix, source.nativeTransform)
-        : result.matrix
-      const transform = matrix === IDENTITY ? null : rhinoTransform(rhino, matrix)
-      try {
-        if (transform) {
-          const determinant = transform.determinant()
-          if (!transform.isAffine || determinant === 0 || !Number.isFinite(determinant))
-            return useMesh()
+  const writeSource = async (
+    nodeId: string,
+    matrix: Mat4,
+    attrs: ObjectAttributes,
+    affineContext?: () => AffineContext,
+  ): Promise<boolean> => {
+    const result = scene.nodes.get(nodeId)
+    const node = result?.node
+    if (
+      !result ||
+      node?.kind !== 'meshBody' ||
+      node.source.type !== 'asset' ||
+      !node.source.nativeAssetId
+    )
+      return false
+    const source = node.source
+    const original = await load(source.nativeAssetId!)
+    const useMesh = () => {
+      unavailable.push(attrs.name)
+      return false
+    }
+    if (!original) return useMesh()
+    const placed = original.duplicate() as Brep
+    const placement = source.nativeTransform ? multiply(matrix, source.nativeTransform) : matrix
+    const transform = placement === IDENTITY ? null : rhinoTransform(rhino, placement)
+    try {
+      if (transform) {
+        const determinant = transform.determinant()
+        if (!transform.isAffine || determinant === 0 || !Number.isFinite(determinant))
+          return useMesh()
+        if (
+          transform.similarityType === rhino.TransformSimilarityType.NotSimilarity &&
+          !placed.makeDeformable()
+        ) {
           if (
-            transform.similarityType === rhino.TransformSimilarityType.NotSimilarity &&
-            !placed.makeDeformable()
-          ) {
-            if (!addAffineInstance(source.nativeAssetId!, original, transform, attrs))
-              return useMesh()
-            retained++
-            return true
-          }
-          if (!placed.transform(transform)) return useMesh()
-          if (determinant < 0) placed.flip()
-          if (!placed.isSolid || !placed.isValid) return useMesh()
+            !addAffineInstance(source.nativeAssetId!, original, transform, attrs, affineContext?.())
+          )
+            return useMesh()
+          retained++
+          return true
         }
-
-        const count = objects.count
-        objects.addBrep(placed, attrs)
-        if (objects.count !== count + 1) return useMesh()
-        retained++
-        return true
-      } finally {
-        if (transform) freeRhino(transform)
-        freeRhino(placed)
+        if (!placed.transform(transform)) return useMesh()
+        if (determinant < 0) placed.flip()
+        if (!placed.isSolid || !placed.isValid) return useMesh()
       }
+
+      const count = objects.count
+      objects.addBrep(placed, attrs)
+      if (objects.count !== count + 1) return useMesh()
+      retained++
+      return true
+    } finally {
+      if (transform) freeRhino(transform)
+      freeRhino(placed)
+    }
+  }
+
+  return {
+    write(
+      part: ScenePart,
+      attrs: ObjectAttributes,
+      affineContext?: () => AffineContext,
+    ): Promise<boolean> {
+      const source = part.sources[0]
+      if (!part.preservesNativeSurface || !source) return Promise.resolve(false)
+      const original = source.body.nativeImport
+      return writeSource(
+        original?.nodeId ?? source.nodeId,
+        original?.matrix ?? scene.nodes.get(source.nodeId)?.matrix ?? IDENTITY,
+        attrs,
+        affineContext,
+      )
     },
+    writeSource,
     get count() {
       return retained
     },

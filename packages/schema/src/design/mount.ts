@@ -87,12 +87,29 @@ export function fittedCarat(
   return gemCarat(cut, dims, material)
 }
 
+type GemSizing = Pick<
+  Gem,
+  'cut' | 'width' | 'lw' | 'sourcing' | 'importSourceId' | 'importSourceFit'
+>
+
+export function originalGemFit(g: GemSizing): Gem['importSourceFit'] {
+  const fit = g.importSourceFit
+  if (
+    g.importSourceId &&
+    fit?.cut === g.cut &&
+    !measuredUsable(g.sourcing?.measured) &&
+    Math.abs(g.width - fit.width) < 0.0005 &&
+    (g.cut === 'round' || Math.abs((g.lw ?? lwFor(g.cut)) - fit.length / fit.width) < 0.0005)
+  )
+    return fit
+}
+
 /**
  * A stone's real size: the measured stone when one has been sourced (and its record is
  * usable), else the cut's nominal size for its width and length : width.
  */
-export function stoneDims(g: Pick<Gem, 'cut' | 'width' | 'lw' | 'sourcing'>): GemDims {
-  const m = g.sourcing?.measured
+export function stoneDims(g: GemSizing): GemDims {
+  const m = originalGemFit(g) ?? g.sourcing?.measured
   if (m && measuredUsable(m))
     // Length ≥ width by convention, whichever way round the lab reported them.
     return {

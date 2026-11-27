@@ -9,7 +9,9 @@ import {
   NODE_SCHEMAS,
   type Op,
   OpError,
+  readRhinoLabelUpdate,
   replaceStone,
+  reviewRhinoRoles,
   type StoredChange,
 } from '@pave/schema'
 import { and, desc, eq, lt, sql } from 'drizzle-orm'
@@ -57,6 +59,39 @@ function deepEqual(a: unknown, b: unknown): boolean {
   if (!isObject(a) || !isObject(b)) return false
   const keys = Object.keys(a)
   return keys.length === Object.keys(b).length && keys.every((k) => deepEqual(a[k], b[k]))
+}
+
+function validateRhinoLabelBatch(design: Design, ops: Op[], original?: ChangeRow) {
+  const byId = (changes: Op[] | undefined) =>
+    new Map(changes?.flatMap((op) => (op.t === 'update' ? [[op.id, op]] : [])))
+  const inverse = byId(original?.inverse)
+  const forward = byId(original?.ops)
+  const seen = new Set<string>()
+  for (const op of ops) {
+    if (op.t !== 'update' || seen.has(op.id))
+      throw badRequest('A Rhino label recovery must update distinct imported parts or curves.')
+    seen.add(op.id)
+    const update = readRhinoLabelUpdate(op)
+    const node = Object.hasOwn(design.nodes, op.id) ? design.nodes[op.id] : undefined
+    const part =
+      node?.kind === 'meshBody' && node.keepSourcePlacement && node.source.type === 'asset'
+        ? node.source
+        : undefined
+    const curve = node?.kind === 'nurbsCurve' && node.sourceObjectId ? node : undefined
+    if (!update || (update.kind === 'part' ? !part?.rhinoObjectId : !curve))
+      throw badRequest('A Rhino label recovery can only label a Rhino source part or curve.')
+    const current = update.kind === 'part' ? part?.rhinoContext : curve?.rhinoContext
+    if (original) {
+      const originalOp = forward.get(op.id)
+      const written = originalOp && readRhinoLabelUpdate(originalOp)
+      if (!written || !deepEqual(op, inverse.get(op.id)))
+        throw badRequest('A large undo must use the recorded Rhino label recovery.')
+      if (!deepEqual(current ?? null, written.context))
+        throw conflict('The Rhino source labels changed after this recovery.')
+    } else if (current || update.context === null) {
+      throw badRequest('A Rhino label recovery can only fill in missing source labels.')
+    }
+  }
 }
 
 interface Written {
@@ -200,6 +235,16 @@ export const design: HandlerGroup<'design'> = {
   'design.rhinoFaceBorders': rhinoFaceBorders,
   'design.rhinoCapFaces': rhinoCapFaces,
   'design.offsetRhinoCap': offsetRhinoCapFace,
+  'design.planImportRoles': async (ctx, { pieceId, choices }) => {
+    const piece = await getPiece(ctx, pieceId)
+    try {
+      return { version: piece.version, ops: reviewRhinoRoles(piece.design, choices) }
+    } catch (error) {
+      throw badRequest(
+        error instanceof Error ? error.message : 'The role choices could not be applied.',
+      )
+    }
+  },
   'design.meshComponents': async (ctx, { pieceId, nodeId, offset, limit, vertexIds, faceIds }) => {
     const piece = await getPiece(ctx, pieceId)
     if (!Object.hasOwn(piece.design.nodes, nodeId)) throw notFound('Feature', nodeId)
@@ -242,19 +287,27 @@ export const design: HandlerGroup<'design'> = {
     // The wire schema types `add.node` loosely; applyOps validates each node against NodeSchema.
     const ops = input.ops as Op[]
     const target = { pieceId, baseVersion, changeId }
-    if (ops.length <= MAX_DESIGN_CHANGE_OPS || ops[0]?.t !== 'remove')
+    if (ops.length <= MAX_DESIGN_CHANGE_OPS || ops[0]?.t === 'add')
       return commitChange(ctx, { ...target, ops, label, reverts })
 
-    // The wire can check the shape of an undo. Match its IDs to the recorded inverse in the
-    // same transaction as the write, so a caller cannot use it for a larger unrelated deletion.
+    // Large recovery batches and undoes are validated in the same transaction as the write.
+    // The wire shape alone cannot establish targets and recorded inverses.
     return commitChange(ctx, {
       ...target,
-      plan: async (tx) => {
-        const importId = reverts?.[0]
-        if (!importId) throw badRequest('Choose the recorded import to undo.')
-        const original = await tx.changes.first(
-          and(eq(t.designChange.pieceId, pieceId), eq(t.designChange.id, importId)),
-        )
+      plan: async (tx, design) => {
+        const undoId = reverts?.[0]
+        const original = undoId
+          ? await tx.changes.first(
+              and(eq(t.designChange.pieceId, pieceId), eq(t.designChange.id, undoId)),
+            )
+          : undefined
+        if (ops[0]?.t === 'update') {
+          if (reverts && (reverts.length !== 1 || !original))
+            throw badRequest('Choose the recorded Rhino label recovery to undo.')
+          validateRhinoLabelBatch(design, ops, original)
+          return { ops, label, reverts }
+        }
+        if (!undoId) throw badRequest('Choose the recorded import to undo.')
         const removals = new Set(
           original?.inverse.flatMap((op) => (op.t === 'remove' ? [op.id] : [])),
         )

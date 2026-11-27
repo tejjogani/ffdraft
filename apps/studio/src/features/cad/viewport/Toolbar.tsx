@@ -20,6 +20,7 @@ import {
   FileUp,
   Focus,
   Gauge,
+  ListChecks,
   PencilRuler,
   Redo2,
   ScanEye,
@@ -156,6 +157,7 @@ export function FileToolbar({
   simplified,
   compact,
   onImportModel,
+  onReviewRhinoRoles,
 }: {
   save: SaveState | null
   formats: readonly ExportFormat[]
@@ -163,6 +165,7 @@ export function FileToolbar({
   simplified: boolean
   compact: boolean
   onImportModel?: (() => void) | undefined
+  onReviewRhinoRoles?: (() => void) | undefined
 }) {
   // Rhino and STEP count against the plan; the menu says what is left before anyone asks.
   const plan = useRpc('plan.get', {})
@@ -190,6 +193,14 @@ export function FileToolbar({
           ) : (
             <Button size="sm" variant="ghost" icon={FileUp} onClick={onImportModel}>
               Import model
+            </Button>
+          ))}
+        {onReviewRhinoRoles &&
+          (compact ? (
+            <IconButton icon={ListChecks} label="Review Rhino roles" onClick={onReviewRhinoRoles} />
+          ) : (
+            <Button size="sm" variant="ghost" icon={ListChecks} onClick={onReviewRhinoRoles}>
+              Review Rhino roles
             </Button>
           ))}
         {canSaveFile && (

@@ -12,6 +12,7 @@ import type {
   GemCutId,
   GemDims,
   GemMaterialId,
+  ImportRole,
   MetalId,
   Op,
   PlatingId,
@@ -48,6 +49,8 @@ export interface Part {
   finish: FinishId
   plating: PlatingId
   mesh: MeshData
+  /** Role of an imported source shown in the draft viewport. */
+  importRole?: ImportRole
   /** Feature edges as line segments (x0,y0,z0,x1,y1,z1,…) for crisp CAD display and drawings. */
   edges: Float32Array
   volumeMm3: number
@@ -153,6 +156,8 @@ export interface EvaluatedProngTip {
 export interface Evaluation {
   detail: Detail
   parts: Part[]
+  /** Imported geometry available to modeling views, outside the production assembly. */
+  referenceParts?: Part[]
   stones: StoneInstance[]
   gemMeshes: Record<string, MeshData>
   curves?: EvaluatedCurve[]

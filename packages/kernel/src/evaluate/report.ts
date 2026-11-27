@@ -2,13 +2,30 @@
 import { type Design, type MetalId, metalMassG, ringInnerDiameter } from '@pave/schema'
 import type { ScenePart, SceneStone } from '../core'
 import { gemUnit } from '../gems/index'
-import { fromFrame } from '../geometry/vec'
+import { fromFrame, transformPoint } from '../geometry/vec'
 import { unionBounds } from '../solid/meshing'
 import type { Bounds, Report } from '../types'
 import { stoneLots } from './stones'
 
 /** A box around a stone: girdle rectangle swept from culet to table. */
-function stoneBounds({ stone }: SceneStone): Bounds {
+function stoneBounds({ instance, stone }: SceneStone): Bounds {
+  if (stone.imported) {
+    const { positions } = stone.imported.mesh
+    const min: Bounds['min'] = [Infinity, Infinity, Infinity]
+    const max: Bounds['max'] = [-Infinity, -Infinity, -Infinity]
+    for (let i = 0; i < positions.length; i += 3) {
+      const point = transformPoint(instance.matrix, [
+        positions[i]!,
+        positions[i + 1]!,
+        positions[i + 2]!,
+      ])
+      for (let axis = 0; axis < 3; axis++) {
+        min[axis] = Math.min(min[axis]!, point[axis]!)
+        max[axis] = Math.max(max[axis]!, point[axis]!)
+      }
+    }
+    return { min, max }
+  }
   const unit = gemUnit(stone.cut, stone.dims.length / stone.dims.width)
   const top = (unit.top / unit.depth) * stone.dims.depth
   const bottom = (unit.bottom / unit.depth) * stone.dims.depth

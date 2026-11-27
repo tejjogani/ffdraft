@@ -5,7 +5,7 @@
  * production  per alloy: bodies + additions fused, seats and engravings cut, late additions
  *             (beads) fused back, then split into connected, watertight shells.
  */
-import { type Design, METALS, type MetalId } from '@pave/schema'
+import { type Design, importRoleOf, isImportReference, METALS, type MetalId } from '@pave/schema'
 import type { Manifold } from 'manifold-3d'
 import {
   type Addition,
@@ -21,6 +21,7 @@ import {
   type Solid,
   solidFromManifold,
 } from '../core'
+import { keepsNativeSurface } from '../features/imported-source'
 import { TriangleBvh } from '../mesh/bvh'
 import {
   boundsOfPositions,
@@ -35,6 +36,7 @@ import { manifoldFromTriangles, trianglesFromManifold } from '../solid/solid'
 import type { Bounds, Part, PartRegion } from '../types'
 import { labelOf } from './build'
 import { hashString } from './hash'
+import { cutTargets, importSeatMatches, isCopiedSeat, settingsByGem } from './import-seats'
 
 export interface Assembly {
   parts: ScenePart[]
@@ -52,9 +54,21 @@ export function activeResults(
   results: ReadonlyMap<string, NodeResult>,
 ): NodeResult[] {
   const consumed = consumedBy(results)
-  return [...results.values()].filter(
-    (r) => r.status === 'ok' && r.node.visible && !consumed.has(r.id) && design.nodes[r.id],
+  const visible = [...results.values()].filter(
+    (r) => r.status === 'ok' && r.node.visible && design.nodes[r.id],
   )
+  const replaced = new Set<string>()
+  for (const { node, stones, bodies } of visible) {
+    if (
+      (node.kind === 'gem' && stones.length > 0) ||
+      (node.kind === 'setting' && bodies.length > 0)
+    ) {
+      const source = node.importSourceId && design.nodes[node.importSourceId]
+      const carrier = results.get(carrierId(node.id, consumed))
+      if (source && isImportReference(source) && carrier?.node.visible) replaced.add(source.id)
+    }
+  }
+  return visible.filter((r) => !consumed.has(r.id) && !replaced.has(r.id))
 }
 
 function consumedBy(results: ReadonlyMap<string, NodeResult>): Map<string, string> {
@@ -65,15 +79,24 @@ function consumedBy(results: ReadonlyMap<string, NodeResult>): Map<string, strin
 }
 
 /** Follows `consumes` links to the node that currently carries a target's metal. */
+function carrierId(id: string, consumed: ReadonlyMap<string, string>): string {
+  let current = id
+  for (let hops = 0; consumed.has(current) && hops < 64; hops++) current = consumed.get(current)!
+  return current
+}
+
 function resolveTarget(
   id: string,
   consumed: ReadonlyMap<string, string>,
   results: ReadonlyMap<string, NodeResult>,
 ): NodeResult | null {
-  let current = id
-  for (let hops = 0; consumed.has(current) && hops < 64; hops++) current = consumed.get(current)!
-  const result = results.get(current)
-  return result?.status === 'ok' && result.node.visible && result.bodies.length > 0 ? result : null
+  const result = results.get(carrierId(id, consumed))
+  return result?.status === 'ok' &&
+    result.node.visible &&
+    !isImportReference(result.node) &&
+    result.bodies.length > 0
+    ? result
+    : null
 }
 
 const specOf = (b: MetalSpec): MetalSpec => ({
@@ -315,6 +338,8 @@ export function assembleDraft(
   for (const result of activeResults(design, results)) {
     // A node's own bodies, then metal it adds to other nodes (shown in the host's alloy).
     const sources: Source[] = result.bodies.map((body) => ({ nodeId: result.id, body }))
+    const role = result.node.kind === 'meshBody' ? importRoleOf(result.node) : undefined
+    const reference = isImportReference(result.node)
     for (const addition of result.additions) {
       const host = resolveTarget(addition.target, consumed, results)
       if (host)
@@ -338,16 +363,19 @@ export function assembleDraft(
         parts: [...groups.values()].map((group, i) => {
           const solids = group.map((s) => s.body.solid)
           return {
-            part: partOf(
-              i === 0 ? result.id : `${result.id}#${i}`,
-              result.id,
-              hashString(key),
-              labelOf(result.node),
-              specOf(group[0]!.body),
-              solids,
-              quality,
-              fusedVolume(solids, quality),
-            ),
+            part: {
+              ...partOf(
+                i === 0 ? result.id : `${result.id}#${i}`,
+                result.id,
+                hashString(key),
+                labelOf(result.node),
+                specOf(group[0]!.body),
+                solids,
+                quality,
+                reference ? 0 : fusedVolume(solids, quality),
+              ),
+              ...(role && { importRole: role }),
+            },
             fused: null,
             sources: group,
             namedAfter: result.id,
@@ -488,6 +516,7 @@ interface HostedAddition {
 function independentImports(
   active: readonly NodeResult[],
   targeted: ReadonlyMap<string, readonly Solid[]>,
+  scoped: ReadonlyMap<Solid, readonly Solid[]>,
   everywhere: readonly Solid[],
   additions: readonly HostedAddition[],
 ): Set<string> {
@@ -504,11 +533,11 @@ function independentImports(
   const independent = new Set<string>()
   for (const { id, node, bodies } of active) {
     if (
-      node.kind !== 'meshBody' ||
-      node.source.type !== 'asset' ||
-      !node.keepSourcePlacement ||
       bodies.length !== 1 ||
+      (!bodies[0]!.importSourceId &&
+        (node.kind !== 'meshBody' || node.source.type !== 'asset' || !node.keepSourcePlacement)) ||
       targeted.has(id) ||
+      scoped.has(bodies[0]!.solid) ||
       hosts.has(id)
     )
       continue
@@ -537,14 +566,10 @@ export function assembleProduction(
 ): Assembly {
   const { manifold: mf } = runtime()
   const consumed = consumedBy(results)
-  const active = activeResults(design, results)
+  const active = activeResults(design, results).filter((result) => !isImportReference(result.node))
   const nativeCandidates = new Set(
     active
-      .filter(
-        (result) =>
-          result.node.kind === 'meshBody' &&
-          (result.data as { nativeMeshUnmodified?: boolean })?.nativeMeshUnmodified,
-      )
+      .filter((result) => keepsNativeSurface(result) || result.bodies.some((b) => b.nativeImport))
       .map((result) => result.id),
   )
   const temporaries: Manifold[] = []
@@ -558,12 +583,23 @@ export function assembleProduction(
   try {
     // Cutters: those aimed at specific nodes, and those that cut whatever metal they touch.
     const targeted = new Map<string, Solid[]>()
+    const scoped = new Map<Solid, Solid[]>()
     const everywhere: Solid[] = []
+    const settings = settingsByGem(results.values())
     for (const result of active)
       for (const cut of result.cuts) {
-        if (cut.targets === 'all') everywhere.push(cut.solid)
-        else
-          for (const id of cut.targets) {
+        const targets = cutTargets(cut, design, settings)
+        if (targets === 'all') everywhere.push(cut.solid)
+        else if (cut.importSeatGem) {
+          const hosts = isCopiedSeat(result)
+            ? [result]
+            : [...new Set(targets.map((id) => resolveTarget(id, consumed, results)))]
+          for (const host of hosts)
+            for (const body of host?.bodies ?? [])
+              if (host && importSeatMatches(result, host.id, body, targets))
+                scoped.set(body.solid, [...(scoped.get(body.solid) ?? []), cut.solid])
+        } else
+          for (const id of targets) {
             const host = resolveTarget(id, consumed, results)
             if (host) targeted.set(host.id, [...(targeted.get(host.id) ?? []), cut.solid])
           }
@@ -577,7 +613,7 @@ export function assembleProduction(
       }
 
     const independent = separateImportedBodies
-      ? independentImports(active, targeted, everywhere, additions)
+      ? independentImports(active, targeted, scoped, everywhere, additions)
       : new Set<string>()
     const parts: ScenePart[] = []
     const chains = new Set(
@@ -626,7 +662,11 @@ export function assembleProduction(
       const tool = cutters && fuse(batch(cutters, quality, temp))
       for (const body of result.bodies) {
         const group = groupFor(specOf(body))
-        if (tool) group.precut.push(temp(body.solid.manifold(quality).subtract(tool)))
+        const specific = scoped.get(body.solid)
+        const bodyTool = specific
+          ? fuse(batch([...(cutters ?? []), ...specific], quality, temp))
+          : tool
+        if (bodyTool) group.precut.push(temp(body.solid.manifold(quality).subtract(bodyTool)))
         else {
           group.solids.push(body.solid)
           group.prioritySolids?.push(body.solid)
@@ -658,7 +698,11 @@ export function assembleProduction(
     // Where a seat or engraving lies wholly inside the metal it cuts. That void is a buried
     // stone, which the stone checks report as an error (stone.inMetal) by finding it in metal,
     // so it stays filled: kept, it would read as a bare cavity and the stone as held by nothing.
-    const sealedCuts = [...everywhere, ...[...targeted.values()].flat()].map((c) => c.bounds())
+    const sealedCuts = [
+      ...everywhere,
+      ...[...targeted.values()].flat(),
+      ...new Set([...scoped.values()].flat()),
+    ].map((c) => c.bounds())
     /** Every alloy fused so far: a later alloy gives up the metal it shares with an earlier one. */
     const castSoFar: { metal: Manifold; box: Bounds }[] = []
     // Smallest alloy first, so where castings of two alloys share metal the smaller one (a head,
@@ -936,6 +980,35 @@ export function assembleProduction(
   } finally {
     for (const m of temporaries) m.delete()
   }
+}
+
+/** Source parts of a Rhino modeling archive never enter the casting assembly. */
+export function assembleReferences(active: readonly NodeResult[], quality: Quality): ScenePart[] {
+  return active.flatMap((result) => {
+    const { id, node, bodies } = result
+    if (!isImportReference(node) || bodies.length === 0) return []
+    const role = importRoleOf(node)
+    return [
+      {
+        part: {
+          ...partOf(
+            id,
+            id,
+            result.hash,
+            labelOf(node),
+            specOf(bodies[0]!),
+            bodies.map((b) => b.solid),
+            quality,
+            0,
+          ),
+          importRole: role,
+        },
+        fused: null,
+        sources: bodies.map((body) => ({ nodeId: id, body })),
+        preservesNativeSurface: keepsNativeSurface(result),
+      },
+    ]
+  })
 }
 
 /**

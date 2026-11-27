@@ -225,6 +225,10 @@ class Project:
         self._record_write(result)
         return result
 
+    def plan_import_roles(self, choices: list[dict]) -> dict:
+        """Preview confirmed Rhino part roles. Use the returned ops and version with apply."""
+        return self._cad_rpc("design.planImportRoles", choices=choices)
+
     def mesh_components(
         self, feature_id: str, *, offset: int = 0, limit: int = 30,
         vertex_ids: Iterable[int] | None = None, face_ids: Iterable[int] | None = None,

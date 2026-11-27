@@ -181,10 +181,12 @@ export function ModelImport({
             id: newId('meshBody'),
             name: importName(part.name),
             kind: 'meshBody',
+            ...(!stl && { importRole: 'unassigned' as const }),
             source: {
               type: 'asset',
               assetId,
               ...(part.layer && { rhinoLayer: part.layer }),
+              ...(part.rhinoContext && { rhinoContext: part.rhinoContext }),
               ...(native &&
                 nativeAssetId && {
                   nativeAssetId,
@@ -207,6 +209,7 @@ export function ModelImport({
           knots: curve.knots,
           controlPoints: curve.controlPoints,
           ...(curve.layer && { rhinoLayer: curve.layer }),
+          ...(curve.rhinoContext && { rhinoContext: curve.rhinoContext }),
           ...(curve.sourceObjectId && { sourceObjectId: curve.sourceObjectId }),
         })
       }

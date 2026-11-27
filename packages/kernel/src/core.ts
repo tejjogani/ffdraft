@@ -188,6 +188,10 @@ export const metalOf = (node: MetalSpec): MetalSpec => ({
 /** One piece of metal. A node may return several overlapping bodies; they fuse at production. */
 export interface Body extends MetalSpec {
   solid: Solid
+  /** Modeling identity of a retained original, including a mesh without a native sidecar. */
+  importSourceId?: string
+  /** An unchanged native source and its placement underneath this body's mesh. */
+  nativeImport?: { nodeId: string; matrix: Mat4 }
   /**
    * For a copy (a pattern or mirror of another node): the node whose body this is a copy of,
    * with its finish and plating. A casting's regions name that node, which the designer
@@ -204,6 +208,14 @@ export interface Stone {
   dims: GemDims
   /** Girdle centre; +z out of the table, +y along the stone's length. */
   frame: Frame
+  /** A confirmed original gem mesh in its girdle frame, at its original scale. */
+  imported?: {
+    mesh: import('./types').MeshData
+    sourceId: string
+    width: number
+    key: string
+    native?: Body['nativeImport']
+  }
   role: StoneInstance['role']
   /** How the stone is held, for the stone report. A `setting` node holding a gem overrides it. */
   setting: string
@@ -214,6 +226,8 @@ export interface Cut {
   solid: Solid
   /** Node ids whose bodies are cut, or every metal body the cutter touches. */
   targets: 'all' | readonly string[]
+  /** An imported stone may only cut its own regenerated setting or explicit host. */
+  importSeatGem?: string
 }
 
 /** Metal added to another node's body, in that body's alloy. */
@@ -350,6 +364,8 @@ export interface Scene {
   /** Every node's result in evaluation order (hidden and consumed nodes included). */
   nodes: ReadonlyMap<string, NodeResult>
   parts: readonly ScenePart[]
+  /** Source-only geometry for the viewport or the modeling archive. */
+  referenceParts?: readonly ScenePart[]
   stones: readonly SceneStone[]
   evaluation: Evaluation
 }

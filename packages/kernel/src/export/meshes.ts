@@ -3,7 +3,7 @@
  * production part, and optionally one per stone, with the names and facts a recipient needs.
  */
 import { GEM_MATERIALS, METALS } from '@pave/schema'
-import type { IndexedTriangles, MetalSpec, Scene, ScenePart } from '../core'
+import type { IndexedTriangles, MetalSpec, Scene, ScenePart, Stone } from '../core'
 import { mergeTriangles } from '../features/chain/instances'
 import { edgeTopology, triangleComponents } from '../mesh/topology'
 import { weld } from '../solid/meshing'
@@ -22,6 +22,8 @@ export interface StoneObject extends IndexedTriangles {
   kind: 'stone'
   name: string
   stone: StoneInstance
+  importSourceId?: string
+  native?: NonNullable<Stone['imported']>['native']
 }
 
 export type MeshObject = MetalObject | StoneObject
@@ -31,6 +33,8 @@ export interface MeshSelection {
   stones: boolean
   /** Only parts made from (and stones placed by) these nodes. */
   only?: readonly string[]
+  /** Keep source-only bodies in a modeling archive. */
+  referenceBodies?: boolean
   /** The caller writes a non-mesh object even if no parts or stones are present. */
   allowEmpty?: boolean
 }
@@ -101,7 +105,10 @@ function placedGem(mesh: MeshData, m: readonly number[]): IndexedTriangles {
 /** Each mesh export gets one object per part, and per stone when asked. */
 export function sceneObjects(scene: Scene, selection: MeshSelection): MeshObject[] {
   const only = selection.only && new Set(selection.only)
-  const metal: MetalObject[] = scene.parts
+  const parts = selection.referenceBodies
+    ? [...scene.parts, ...(scene.referenceParts ?? [])]
+    : scene.parts
+  const metal: MetalObject[] = parts
     .filter((p) => !only || p.sources.some((s) => only.has(s.nodeId)))
     .map((p) => ({
       kind: 'metal',
@@ -117,10 +124,14 @@ export function sceneObjects(scene: Scene, selection: MeshSelection): MeshObject
   const stones: StoneObject[] = selection.stones
     ? scene.stones
         .filter((s) => !only || only.has(s.instance.nodeId))
-        .map(({ instance }) => ({
+        .map(({ instance, stone }) => ({
           kind: 'stone',
           name: `${GEM_MATERIALS[instance.stone].label} ${instance.id}`,
           stone: instance,
+          ...(stone.imported && {
+            importSourceId: stone.imported.sourceId,
+            native: stone.imported.native,
+          }),
           ...placedGem(scene.evaluation.gemMeshes[instance.meshKey]!, instance.matrix),
         }))
     : []

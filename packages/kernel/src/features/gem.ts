@@ -6,9 +6,11 @@ import {
   type GemDims,
   measuredUsable,
   type NodeOf,
+  originalGemFit,
   stoneDims as schemaStoneDims,
 } from '@pave/schema'
 import { type BuildContext, defineFeature, type NodeResult, type Stone } from '../core'
+import { hashString } from '../evaluate/hash'
 import { seatCutter } from '../gems/cutter'
 import { gemRatio, gemUnit } from '../gems/index'
 import { ringSurfaceFrame } from '../geometry/ring'
@@ -20,7 +22,9 @@ import {
   dot,
   type Frame,
   frameFromZ,
+  frameMatrix,
   fromFrame,
+  multiply,
   normalize,
   scale,
   spinFrame,
@@ -30,6 +34,7 @@ import {
   WORLD,
 } from '../geometry/vec'
 import { RULES } from '../rules'
+import { keepsNativeSurface, sourceOf, sourceToGirdle } from './imported-source'
 import { type ShankData, shankData } from './ringShank'
 
 type GemNode = NodeOf<'gem'>
@@ -38,8 +43,7 @@ type GemNode = NodeOf<'gem'>
  * The stone's real size: the measured stone when one has been sourced, else the cut's nominal.
  * One definition, in @pave/schema, which the mount rules size heads and side stones from too.
  */
-export const stoneDims = (node: Pick<GemNode, 'cut' | 'width' | 'lw' | 'sourcing'>): GemDims =>
-  schemaStoneDims(node)
+export const stoneDims = schemaStoneDims
 
 /** Distance from the girdle plane down to the culet for a stone of these dimensions. */
 export function culetDepth(cut: GemNode['cut'], dims: GemDims): number {
@@ -190,6 +194,8 @@ function surfaceFrame(node: GemNode, ctx: BuildContext): Frame {
 }
 
 export const gem = defineFeature('gem', (node, ctx) => {
+  const source = sourceOf(node, ctx)
+  const fit = node.placement.type === 'free' ? originalGemFit(node) : undefined
   const dims = stoneDims(node)
   const cut: GemCut = GEM_CUTS[node.cut]
   const onRing = node.placement.type === 'ringTop' ? ringTopFrame(node, dims, ctx) : null
@@ -206,6 +212,23 @@ export const gem = defineFeature('gem', (node, ctx) => {
     role: 'center',
     setting: node.placement.type === 'surface' ? 'flush' : 'loose',
   }
+  if (fit && source?.bodies[0]) {
+    const scale = 1 / dims.width
+    const local = multiply(
+      frameMatrix(WORLD, [scale, scale, scale]),
+      sourceToGirdle(fit.transform ?? node.transform),
+    )
+    const mesh = source.bodies[0].solid.transformed(local).tessellate(ctx.quality).mesh
+    stone.imported = {
+      mesh,
+      sourceId: source.id,
+      width: dims.width,
+      key: `import-${source.hash}-${hashString(local.join(','))}`,
+      ...(keepsNativeSurface(source) && {
+        native: { nodeId: source.id, matrix: multiply(local, source.matrix) },
+      }),
+    }
+  }
   const measured = node.sourcing?.measured
   if (measured && !measuredUsable(measured))
     ctx.report({
@@ -216,7 +239,8 @@ export const gem = defineFeature('gem', (node, ctx) => {
   if (
     node.lw !== undefined &&
     Math.abs(node.lw - gemRatio(node.cut, node.lw)) > 1e-6 &&
-    !measuredUsable(measured)
+    !measuredUsable(measured) &&
+    !fit
   )
     ctx.report({
       level: 'info',
@@ -235,7 +259,7 @@ export const gem = defineFeature('gem', (node, ctx) => {
     // A stone sunk into a surface needs the opening above its girdle cleared; a stone in a head
     // only needs its own shape removed, which leaves claws and bezel lips over the crown.
     cuts:
-      ctx.detail === 'production'
+      ctx.detail === 'production' && !stone.imported
         ? [
             {
               solid: seatCutter(
@@ -243,6 +267,7 @@ export const gem = defineFeature('gem', (node, ctx) => {
                 node.placement.type === 'surface' ? { open: dims.depth } : {},
               ),
               targets: 'all',
+              ...(node.importSourceId && { importSeatGem: node.id }),
             },
           ]
         : [],

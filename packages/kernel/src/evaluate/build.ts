@@ -1,5 +1,11 @@
 /** Builds one node: runs its feature, applies the node transform, and never lets it throw. */
-import { type Node, nodeRefs } from '@pave/schema'
+import {
+  importRoleOf,
+  importSourceRole,
+  isImportReference,
+  type Node,
+  nodeRefs,
+} from '@pave/schema'
 import {
   type AnyFeature,
   BlockedError,
@@ -15,6 +21,7 @@ import {
   composeTransform,
   IDENTITY,
   type Mat4,
+  multiply,
   transformFrame,
   uniformScaleOf,
 } from '../geometry/vec'
@@ -47,7 +54,14 @@ function place(out: FeatureOutput, matrix: Mat4): Placed {
   const move = (solid: Solid) => (still ? solid : solid.transformed(matrix))
   const s = uniformScaleOf(matrix)
   return {
-    bodies: (out.bodies ?? []).map((b) => ({ ...b, solid: move(b.solid) })),
+    bodies: (out.bodies ?? []).map((b) => ({
+      ...b,
+      solid: move(b.solid),
+      ...(b.nativeImport &&
+        !still && {
+          nativeImport: { ...b.nativeImport, matrix: multiply(matrix, b.nativeImport.matrix) },
+        }),
+    })),
     stones: (out.stones ?? []).map((st) =>
       still
         ? st
@@ -203,11 +217,24 @@ export async function buildNode(
         throw error
       }
     })
+  const importProblem = (id: string, source: Node): string | undefined => {
+    if ((node.kind === 'gem' || node.kind === 'setting') && node.importSourceId === id) {
+      const role = importSourceRole(node)
+      if (
+        source.kind !== 'meshBody' ||
+        source.source.type !== 'asset' ||
+        !source.keepSourcePlacement ||
+        importRoleOf(source) !== role
+      )
+        return `“${labelOf(source)}” is not an imported ${role} source`
+    } else if (isImportReference(source))
+      return `“${labelOf(source)}” needs a confirmed metal role to supply metal`
+  }
   const tryInput = (id: string): NodeResult | null => {
     if (!refs.has(id))
       throw new Error(`${node.kind} read node “${id}”, which is not one of its references`)
     const result = env.results.get(id)
-    return result?.status === 'ok' ? result : null
+    return result?.status === 'ok' && !importProblem(id, result.node) ? result : null
   }
   const ctx: BuildContext = {
     detail: env.detail,
@@ -225,7 +252,8 @@ export async function buildNode(
       throw new BlockedError(
         id,
         missing
-          ? `“${labelOf(missing)}” (${missing.kind}) could not be built`
+          ? (importProblem(id, missing) ??
+              `“${labelOf(missing)}” (${missing.kind}) could not be built`)
           : `node “${id}” does not exist`,
       )
     },

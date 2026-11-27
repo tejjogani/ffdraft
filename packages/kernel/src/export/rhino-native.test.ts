@@ -1,4 +1,5 @@
-import { applyOps, designFrom, type NodeInput } from '@pave/schema'
+import { applyOps, designFrom, type NodeInput, replaceStone } from '@pave/schema'
+import { importSTEP, measureVolume, type Shape3D } from 'replicad'
 import type { InstanceReference, Mesh, MeshType, RhinoModule, Transform } from 'rhino3dm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { type RhinoMeshObject, readRhino3dm } from '../import/rhino'
@@ -145,6 +146,7 @@ function fixture(parts: readonly RhinoMeshObject[]) {
         rhinoInstancePath: native?.instancePath && [...native.instancePath],
       },
       keepSourcePlacement: true,
+      importRole: 'metal',
     }
   })
   const assets = async (id: string) => {
@@ -514,5 +516,195 @@ describe('native Rhino solid export', () => {
       { nodeIds: 'part-1', native: true },
     ])
     expect(result.notes.some((n) => n.includes('source archive'))).toBe(true)
+  })
+})
+
+describe('Rhino import roles', () => {
+  it('keeps source and reference geometry out of both reports and casting, while preserving BReps in 3dm', async () => {
+    const { design, assets } = fixture(await importedBoxes(3))
+    const classified = applyOps(design, [
+      { t: 'update', id: 'part-0', patch: { importRole: null } },
+      { t: 'update', id: 'part-1', patch: { importRole: 'reference' } },
+      { t: 'update', id: 'part-2', patch: { importRole: 'metal' } },
+    ]).design
+    const draft = await kernel.evaluate(classified, { assets })
+    expect(draft.referenceParts?.map((p) => [p.nodeId, p.importRole])).toEqual([
+      ['part-0', 'unassigned'],
+      ['part-1', 'reference'],
+    ])
+    expect(draft.parts.map((p) => p.nodeId)).toEqual(['part-2'])
+    expect(draft.report.metals).toMatchObject([{ volumeMm3: 8 }])
+    expect(draft.report.bounds.min[0]).toBe(4)
+    const production = await kernel.evaluate(classified, { assets, detail: 'production' })
+    expect(production.report.metals).toMatchObject([{ volumeMm3: 8 }])
+    expect(production.parts).toHaveLength(1)
+    const cast = await kernel.export(classified, 'stl', { assets })
+    const castMetal = await kernel.export(classified, 'stl', { assets, only: ['part-2'] })
+    expect(cast.bytes).toEqual(castMetal.bytes)
+    const archive = await kernel.export(classified, '3dm', { assets })
+    expect(
+      readRhinoExport(archive.bytes)
+        .map((o) => [o.nodeIds, o.native])
+        .sort(),
+    ).toEqual([
+      ['part-0', true],
+      ['part-1', true],
+      ['part-2', true],
+    ])
+  })
+
+  it('keeps an unassigned source out of grouped and patterned metal', async () => {
+    const { design, assets } = fixture(await importedBoxes())
+    const model = applyOps(design, [
+      { t: 'update', id: 'part-0', patch: { importRole: 'unassigned' } },
+      { t: 'add', node: { kind: 'group', id: 'group', children: ['part-0', 'part-1'] } },
+      { t: 'add', node: { kind: 'pattern', id: 'copies', sources: ['part-0'] } },
+    ]).design
+    const evaluation = await kernel.evaluate(model, { assets, detail: 'production' })
+    expect(evaluation.report.metals).toHaveLength(1)
+    expect(evaluation.report.metals[0]?.volumeMm3).toBeCloseTo(8, 10)
+    expect(evaluation.referenceParts?.map((p) => p.nodeId)).toEqual(['part-0'])
+    expect(evaluation.diagnostics).toContainEqual(
+      expect.objectContaining({
+        nodeId: 'copies',
+        code: 'feature.blocked',
+      }),
+    )
+  })
+
+  it('preserves a confirmed source gem and head and uses the measured stone to refit only its head', async () => {
+    const { design, assets } = fixture(await importedBoxes())
+    const transform = { position: [1, 1, 1.2] as [number, number, number] }
+    const model = applyOps(design, [
+      { t: 'update', id: 'part-0', patch: { importRole: 'stone' } },
+      { t: 'update', id: 'part-1', patch: { importRole: 'setting' } },
+      {
+        t: 'add',
+        node: {
+          id: 'gem',
+          kind: 'gem',
+          importSourceId: 'part-0',
+          importSourceFit: { cut: 'round', width: 2, length: 2, depth: 2, transform },
+          width: 2,
+          transform,
+        },
+      },
+      {
+        t: 'add',
+        node: {
+          id: 'head',
+          kind: 'setting',
+          gem: 'gem',
+          importSourceId: 'part-1',
+          style: 'bezel',
+        },
+      },
+      {
+        t: 'add',
+        node: {
+          id: 'neighbor',
+          kind: 'primitive',
+          shape: 'box',
+          size: [0.3, 0.3, 0.3],
+          transform: { position: [1.8, 1, 0.65] },
+        },
+      },
+    ]).design
+    const draft = await kernel.evaluate(model, { assets })
+    expect(draft.parts.map((p) => p.nodeId)).toEqual(['head', 'neighbor'])
+    expect(draft.parts[0]?.bounds).toEqual({ min: [2, 0, 0], max: [4, 2, 2] })
+    expect(draft.report.stoneCount).toBe(1)
+    expect(draft.stones[0]?.dims).toEqual({ length: 2, width: 2, depth: 2 })
+    const original = await kernel.export(model, '3dm', { assets, only: ['gem', 'head'] })
+    const native = (await readRhino3dm(original.bytes)).objects.filter((o) => o.native)
+    expect(native.map((o) => o.bounds)).toEqual(
+      expect.arrayContaining([
+        { min: [0, 0, 0], max: [2, 2, 2] },
+        { min: [2, 0, 0], max: [4, 2, 2] },
+      ]),
+    )
+    expect(native).toHaveLength(2)
+
+    const meshOnly = applyOps(model, [
+      { t: 'update', id: 'part-0', patch: { source: { nativeMeshAssetId: null } } },
+      { t: 'update', id: 'part-1', patch: { source: { nativeMeshAssetId: null } } },
+    ]).design
+    const meshArchive = await kernel.export(meshOnly, '3dm', { assets, only: ['gem', 'head'] })
+    const meshObjects = (await readRhino3dm(meshArchive.bytes)).objects
+    expect(meshObjects.map((o) => [o.name, o.layer]).sort()).toEqual([
+      ['Stock 1', 'Workshop::Stock'],
+      ['Stock 2', 'Workshop::Stock'],
+    ])
+    expect(meshObjects.every((o) => !o.native)).toBe(true)
+
+    const moved = applyOps(model, [
+      { t: 'update', id: 'gem', patch: { transform: { position: [7, 1, 1.2] } } },
+    ]).design
+    const movedArchive = await kernel.export(moved, '3dm', { assets, only: ['gem', 'head'] })
+    const movedNative = (await readRhino3dm(movedArchive.bytes)).objects
+      .filter((o) => o.native)
+      .map((o) => o.bounds)
+    expect(movedNative).toEqual(
+      expect.arrayContaining([
+        { min: [6, 0, 0], max: [8, 2, 2] },
+        { min: [8, 0, 0], max: [10, 2, 2] },
+      ]),
+    )
+
+    const change = replaceStone(
+      model,
+      { nodeId: 'gem' },
+      {
+        fit: {
+          provider: 'lab',
+          sku: 'new-round',
+          measured: { length: 3.1, width: 2.9, depth: 2.2 },
+          listedCarat: 0.41,
+        },
+      },
+    )
+    const refit = applyOps(model, change.ops).design
+    const updated = await kernel.evaluate(refit, { assets })
+    expect(updated.parts[0]?.bounds).not.toEqual(draft.parts[0]?.bounds)
+    expect(updated.stones[0]?.dims).toEqual({ length: 3.1, width: 2.9, depth: 2.2 })
+    expect(updated.report.caratTotal).toBe(0.41)
+    const metal = await kernel.export(refit, '3dm', { assets, only: ['neighbor'] })
+    expect(readRhinoExport(metal.bytes)).toMatchObject([{ nodeIds: 'neighbor', volume: 0.03 }])
+    const exact = await kernel.export(refit, 'step', { assets, only: ['neighbor'] })
+    const solid = (await importSTEP(new Blob([exact.bytes.slice()]))) as Shape3D
+    try {
+      expect(measureVolume(solid)).toBeCloseTo(0.027, 8)
+    } finally {
+      solid.delete()
+    }
+
+    const copied = applyOps(refit, [
+      { t: 'add', node: { id: 'group', kind: 'group', children: ['gem', 'head'] } },
+    ]).design
+    const copiedMetal = await kernel.export(copied, '3dm', { assets, only: ['neighbor'] })
+    expect(readRhinoExport(copiedMetal.bytes)).toMatchObject([
+      { nodeIds: 'neighbor', volume: 0.03 },
+    ])
+  })
+
+  it('keeps the original geometry when a replacement is hidden or absent', async () => {
+    const { design, assets } = fixture(await importedBoxes(1))
+    const hidden = applyOps(design, [
+      { t: 'update', id: 'part-0', patch: { importRole: 'stone' } },
+      {
+        t: 'add',
+        node: { id: 'gem', kind: 'gem', importSourceId: 'part-0', visible: false },
+      },
+    ]).design
+    const removed = applyOps(hidden, [{ t: 'remove', id: 'gem' }]).design
+    for (const model of [hidden, removed]) {
+      const draft = await kernel.evaluate(model, { assets })
+      expect(draft.parts).toEqual([])
+      expect(draft.referenceParts?.map((p) => p.nodeId)).toEqual(['part-0'])
+      expect(draft.report.metals).toEqual([])
+      expect(draft.report.stoneCount).toBe(0)
+      const archive = await kernel.export(model, '3dm', { assets })
+      expect(readRhinoExport(archive.bytes)).toMatchObject([{ nodeIds: 'part-0', native: true }])
+    }
   })
 })

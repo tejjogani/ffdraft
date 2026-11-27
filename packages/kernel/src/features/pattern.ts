@@ -74,6 +74,9 @@ export function copyOutput(
       ...b,
       from: b.from ?? result.id,
       solid: b.solid.transformed(m),
+      ...(b.nativeImport && {
+        nativeImport: { ...b.nativeImport, matrix: multiply(m, b.nativeImport.matrix) },
+      }),
     })),
     stones: result.stones.map((stone) => ({
       ...stone,
@@ -86,6 +89,7 @@ export function copyOutput(
       ...(setting && { setting }),
     })),
     cuts: result.cuts.map((c) => ({
+      ...c,
       solid: c.solid.transformed(m),
       targets: c.targets === 'all' ? 'all' : c.targets.map(retarget),
     })),

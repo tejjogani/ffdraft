@@ -1,3 +1,4 @@
+import type { RhinoContext } from '@pave/schema'
 import type {
   Brep,
   File3dm,
@@ -15,12 +16,19 @@ import { writeStl } from '../mesh/stl'
 import { freeRhino, loadRhino3dm } from '../runtime/rhino'
 import type { IndexedTriangles } from '../solid/meshing'
 import type { Bounds } from '../types'
+import { inheritedMaterial, RHINO_INHERITED_MATERIAL, rhinoContextReader } from './rhino-context'
 import {
   CURVE_SOURCE_ID_KEY,
   type PlacedRhinoCurve,
   RhinoCurveReadError,
   readPlacedCurve,
 } from './rhino-curve'
+
+export {
+  hasRecoverableRhinoLabels,
+  type RhinoLabelRecovery,
+  recoverRhinoLabels,
+} from './recover-rhino-labels'
 
 const MAX_FILE_MIB = 64
 export const MAX_RHINO_FILE_BYTES = MAX_FILE_MIB * 1024 * 1024
@@ -41,7 +49,11 @@ interface RhinoObjectLabel {
   layer: string | null
 }
 
-export interface RhinoMeshObject extends RhinoObjectLabel {
+interface RhinoSourceObject extends RhinoObjectLabel {
+  rhinoContext?: RhinoContext
+}
+
+export interface RhinoMeshObject extends RhinoSourceObject {
   /** Binary STL in Rhino's world coordinates, converted to millimetres with Z up. */
   bytes: Uint8Array<ArrayBuffer>
   bounds: Bounds
@@ -58,7 +70,7 @@ export interface RhinoNativePart {
   transform?: Mat4
 }
 
-export interface RhinoCurveObject extends RhinoObjectLabel, PlacedRhinoCurve {
+export interface RhinoCurveObject extends RhinoSourceObject, PlacedRhinoCurve {
   sourceObjectId?: string
 }
 
@@ -88,6 +100,8 @@ interface BlockPlacement extends RhinoObjectLabel {
   world: Transform
   meshPlacement: MeshPlacement
   instancePath: readonly string[]
+  groups: RhinoContext['groups']
+  placements: RhinoContext['placements']
 }
 
 class SkippedGeometry extends Error {}
@@ -331,7 +345,7 @@ function readLayer(
   layers: File3dmLayerTable,
   index: number,
   visibleById: Map<string, boolean>,
-): { path: string | null; visible: boolean } {
+): { path: string | null; visible: boolean; materialIndex: number | undefined } {
   return withHandles((hold) => {
     const layer = hold(layers.findIndex(index))
     const visited = new Set<string>()
@@ -355,7 +369,11 @@ function readLayer(
         parent === '00000000-0000-0000-0000-000000000000' ? null : hold(layers.findId(parent))
     }
     for (const id of visited) visibleById.set(id, visible)
-    return { path: layer?.fullPath?.trim() || layer?.name?.trim() || null, visible }
+    return {
+      path: layer?.fullPath?.trim() || layer?.name?.trim() || null,
+      visible,
+      materialIndex: layer?.renderMaterialIndex,
+    }
   })
 }
 
@@ -380,11 +398,16 @@ function blockMatrix(t: Transform, mm: number): Mat4 {
   ]
 }
 
+interface NativeArchive {
+  bytes: Uint8Array<ArrayBuffer>
+  topology: string
+}
+
 function writeNativePart(
   rhino: RhinoModule,
   geometry: GeometryBase,
   millimetres: number,
-): Uint8Array<ArrayBuffer> | null {
+): NativeArchive | null {
   if (!(geometry instanceof rhino.Brep || geometry instanceof rhino.Extrusion) || !geometry.isSolid)
     return null
   return withHandles((hold) => {
@@ -404,7 +427,9 @@ function writeNativePart(
     if (objects.count !== 1) return null
     const opts = hold(new rhino.File3dmWriteOptions())
     opts.saveUserData = false
-    return doc.toByteArrayOptions(opts).slice()
+    const kind = geometry instanceof rhino.Extrusion ? 'Extrusion' : 'Brep'
+    const counts = [hold(brep.faces()).count, hold(brep.edges()).count, hold(brep.vertices()).count]
+    return { bytes: doc.toByteArrayOptions(opts).slice(), topology: [kind, ...counts].join(':') }
   })
 }
 
@@ -435,7 +460,7 @@ export async function readRhino3dm(
     const skipped: RhinoSkippedObject[] = []
     const layerInfo = new Map<number, ReturnType<typeof readLayer>>()
     const visibleById = new Map<string, boolean>()
-    const nativeById = new Map<string, Uint8Array<ArrayBuffer> | null>()
+    const nativeById = new Map<string, NativeArchive | null>()
     let nativeBytes = 0
     const budget: RemainingGeometry = {
       vertices: MAX_VERTICES,
@@ -485,6 +510,10 @@ export async function readRhino3dm(
             throw new SkippedGeometry('Rhino layout object outside model space.')
           const geometry = object && holdObject(object.geometry())
           if (!geometry) throw new SkippedGeometry('The object has no readable geometry.')
+          const groups = context.groups(attrs, parent?.groups)
+          const parentPlacements = parent?.placements ?? []
+          const savedPlacements = context.savedPlacements(attrs, parentPlacements)
+          const material = context.material(attrs, info.materialIndex)
           if (geometry instanceof rhino.InstanceReference) {
             const definitionId = geometry.parentIdefId
             const definition = holdObject(definitions.findId(definitionId))
@@ -514,6 +543,16 @@ export async function readRhino3dm(
               layer,
               meshPlacement: blockPlacement(units.mm, world),
               instancePath: [...(parent?.instancePath ?? []), attrs?.id ?? ''],
+              groups,
+              placements:
+                savedPlacements ??
+                context.placement(
+                  attrs?.id ?? '',
+                  definitionId,
+                  info.path,
+                  material,
+                  parentPlacements,
+                ),
             }
             activeDefinitions.add(definitionId)
             try {
@@ -525,6 +564,21 @@ export async function readRhino3dm(
             }
             return
           }
+          const placements = savedPlacements ?? parentPlacements
+          // The material on a baked member may have been projected from its archived occurrence.
+          const inherited =
+            savedPlacements &&
+            attrs?.getUserString(RHINO_INHERITED_MATERIAL) === '1' &&
+            material.material === inheritedMaterial(savedPlacements)
+          const rhinoContext: RhinoContext | undefined =
+            groups.length || placements.length || material.material || material.materialFromParent
+              ? {
+                  archiveId: context.archiveId,
+                  groups,
+                  placements,
+                  ...(inherited ? { materialFromParent: true } : material),
+                }
+              : undefined
           const placement = parent?.meshPlacement ?? filePlacement
           if (includeCurves && geometry instanceof rhino.Curve) {
             const curve = readPlacedCurve(rhino, geometry, placement.pointInMillimetres)
@@ -540,23 +594,26 @@ export async function readRhino3dm(
               name: objectName || inContext(`Curve ${ordinal}`),
               layer,
               ...(sourceObjectId && { sourceObjectId }),
+              ...(rhinoContext && { rhinoContext }),
             })
             return
           }
           const meshes = objectMeshes(rhino, geometry, placement, budget)
           const objectId = attrs?.id
           let native: RhinoNativePart | undefined
+          let topology: string | undefined
           if (objectId) {
             let archived = nativeById.get(objectId)
             if (archived === undefined) {
               archived = writeNativePart(rhino, geometry, units.mm)
               nativeById.set(objectId, archived)
-              nativeBytes += archived?.byteLength ?? 0
+              nativeBytes += archived?.bytes.byteLength ?? 0
               if (nativeBytes > MAX_RHINO_FILE_BYTES) throw new Error(TOO_COMPLEX)
             }
             if (archived) {
+              topology = archived.topology
               native = {
-                bytes: archived,
+                bytes: archived.bytes,
                 objectId,
                 instancePath: parent?.instancePath ?? [],
                 ...(parent && { transform: blockMatrix(parent.world, units.mm) }),
@@ -576,6 +633,17 @@ export async function readRhino3dm(
             bytes: writeStl(meshes, 'Pave STL from Rhino .3dm, millimetres'),
             bounds: meshBounds(meshes),
             ...(native && { native }),
+            ...(topology
+              ? {
+                  rhinoContext: {
+                    ...rhinoContext,
+                    archiveId: context.archiveId,
+                    groups,
+                    placements,
+                    topology,
+                  },
+                }
+              : rhinoContext && { rhinoContext }),
           })
         } catch (error) {
           if (!(error instanceof SkippedGeometry || error instanceof RhinoCurveReadError))
@@ -585,7 +653,12 @@ export async function readRhino3dm(
       })
     }
 
-    for (let i = 0; i < count; i++) readObject(() => objects.get(i), i + 1)
+    const context = rhinoContextReader(rhino, doc)
+    try {
+      for (let i = 0; i < count; i++) readObject(() => objects.get(i), i + 1)
+    } finally {
+      context.dispose()
+    }
     return { units: units.name, objects: result, curves, skipped }
   })
 }

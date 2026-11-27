@@ -3,13 +3,20 @@
  * "Fine-tune" reveals the `advanced` fields. With nothing selected it shows the piece itself.
  */
 import type { Evaluation } from '@pave/kernel'
-import { type Design, type NodeOf, nodeTitle } from '@pave/schema'
+import {
+  type Design,
+  isImportReference,
+  isRhinoRoleBody,
+  type NodeOf,
+  nodeTitle,
+} from '@pave/schema'
 import { Button, Chip, cn, ScrollArea, Switch } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowUpRight,
   BoxSelect,
   Cable,
+  ListChecks,
   PencilRuler,
   RotateCw,
   Scale,
@@ -27,6 +34,7 @@ import { RhinoFaceBorders } from '../curves/RhinoFaceBorders'
 import { type ImportedMesh, isImportedMesh } from '../mesh-edit/model'
 import { isProfileNode, type ProfileNode, profileSize } from '../profiles/profile'
 import { RhinoEndFaceTool } from '../rhino/RhinoEndFaceTool'
+import { rhinoRoleLabel } from '../rhino/RhinoRoleReview'
 import { useWorkspace } from '../state/workspace'
 import { FieldEditContext, useNodeEdit } from './edit'
 import { FieldControl } from './FieldControl'
@@ -43,6 +51,7 @@ export interface InspectorProps {
   onDelete(ids: string[]): void
   onEditProfile(node: ProfileNode): void
   onEditMesh(node: ImportedMesh): void
+  onReviewRhinoRole(id: string): void
   onEditCurve(node: NodeOf<'curve'>): void
   onRevolve(curve: string): void
   onMakeWire(curve: string): void
@@ -60,6 +69,7 @@ export function Inspector({
   onDelete,
   onEditProfile,
   onEditMesh,
+  onReviewRhinoRole,
   onEditCurve,
   onRevolve,
   onMakeWire,
@@ -95,7 +105,12 @@ export function Inspector({
     node.source.type === 'asset' &&
     node.source.nativeMeshAssetId === node.source.assetId &&
     node.source.nativeAssetId
+  const roleSource =
+    node.kind === 'gem' || node.kind === 'setting' ? design.nodes[node.importSourceId ?? ''] : node
   const included = node.visible !== false
+  const includeLabel = isImportReference(node)
+    ? 'Include source in Rhino export'
+    : 'Count in weight and export'
   const picked = stone ? evaluation?.stones.find((s) => s.id === stone) : undefined
   const prongTips = evaluation?.prongTips?.filter((tip) => tip.nodeId === node.id)
   return (
@@ -179,6 +194,22 @@ export function Inspector({
                 pieceId={pieceId}
                 readOnly={readOnly || selection.length !== 1}
               />
+            )}
+            {isRhinoRoleBody(roleSource) && selection.length === 1 && (
+              <section className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-3">
+                <span className="text-xs text-fg-muted">
+                  Rhino role · {rhinoRoleLabel(roleSource)}
+                </span>
+                {!edit.readOnly && session && (
+                  <Button
+                    size="sm"
+                    icon={ListChecks}
+                    onClick={() => onReviewRhinoRole(roleSource.id)}
+                  >
+                    Review role
+                  </Button>
+                )}
+              </section>
             )}
             {isImportedMesh(node) && !edit.readOnly && selection.length === 1 && (
               <section className="flex flex-wrap gap-2 border-b border-line px-4 py-3">
@@ -289,19 +320,21 @@ export function Inspector({
               <div className="flex items-center justify-between gap-3 py-1 text-sm text-fg-muted">
                 <span className="flex items-center gap-2">
                   <Scale className="size-4 text-fg-subtle" aria-hidden />
-                  Count in weight and export
+                  {includeLabel}
                 </span>
                 <Switch
                   checked={included}
                   disabled={edit.readOnly}
-                  aria-label="Count in weight and export"
+                  aria-label={includeLabel}
                   onChange={() => runCommand('design.excludeSelected')}
                 />
               </div>
               {!included && (
                 <p className="-mt-1 text-xs text-fg-subtle">
-                  Left out: not weighed, not exported. The eye in the list only hides a feature from
-                  view.
+                  {isImportReference(node)
+                    ? 'Source left out of Rhino export.'
+                    : 'Left out of weight totals and export.'}{' '}
+                  The eye in the list only hides a feature from view.
                 </p>
               )}
               {!edit.readOnly && (

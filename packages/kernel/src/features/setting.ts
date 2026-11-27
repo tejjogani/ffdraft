@@ -49,8 +49,10 @@ import {
   addScaled,
   clamp,
   DEG,
+  frameMatrix,
   lerp,
   lerp3,
+  multiply,
   normalize,
   scale,
   sub,
@@ -61,6 +63,7 @@ import {
 import { RULES } from '../rules'
 import { QUALITY } from '../solid/solid'
 import { gemData, type StoneHost } from './gem'
+import { keepsNativeSurface, sourceOf, sourceToGirdle } from './imported-source'
 
 type SettingNode = NodeOf<'setting'>
 
@@ -754,6 +757,31 @@ export const setting = defineFeature('setting', (node, ctx) => {
   const stone = gem.stones[0]
   if (!stone) throw new Error('the stone it holds was not built')
   const shape = stoneShape(stone)
+  const source = sourceOf(node, ctx)
+  if (
+    source?.bodies.length &&
+    stone.imported &&
+    gem.node.kind === 'gem' &&
+    !node.importSourceRegenerated
+  ) {
+    const s = stone.dims.width / stone.imported.width
+    const placement = multiply(
+      frameMatrix(stone.frame, [s, s, s]),
+      sourceToGirdle(gem.node.importSourceFit?.transform ?? gem.node.transform),
+    )
+    return {
+      bodies: source.bodies.map(({ solid }) => ({
+        solid: solid.transformed(placement),
+        ...metalOf(node),
+        importSourceId: source.id,
+        ...(keepsNativeSurface(source) && {
+          nativeImport: { nodeId: source.id, matrix: multiply(placement, source.matrix) },
+        }),
+      })),
+      frames: backFrame(shape),
+      data: { kind: 'head', style: node.style, claws: [], wall: 0 } satisfies HeadData,
+    }
+  }
   const placed = gemData(gem)
   const head: Head = {
     shape,
@@ -853,17 +881,30 @@ export const setting = defineFeature('setting', (node, ctx) => {
       cuts.push({
         solid: seatCutter(stone, { open: stone.dims.depth, scale: 0.94 }),
         targets: 'all',
+        ...((node.importSourceId || (gem.node.kind === 'gem' && gem.node.importSourceId)) && {
+          importSeatGem: node.gem,
+        }),
       })
   }
 
   const bodies: Body[] = solids.map((solid) => ({ solid, ...metalOf(node) }))
-  const back = shape.toWorld([shape.centre[0], shape.centre[1], shape.culet])
-  const down = scale(stone.frame.z, -1)
   return {
     bodies,
     cuts,
-    // Where a post, a bail or a peg would attach: under the culet, pointing away from the stone.
-    frames: { back: { origin: back, x: stone.frame.x, y: scale(stone.frame.y, -1), z: down } },
+    frames: backFrame(shape),
     data: { kind: 'head', style: node.style, claws: places, wall: wallReach } satisfies HeadData,
   }
 })
+
+/** Where a post, bail or peg attaches: under the culet, pointing away from the stone. */
+function backFrame(shape: StoneShape) {
+  const { frame } = shape.stone
+  return {
+    back: {
+      origin: shape.toWorld([shape.centre[0], shape.centre[1], shape.culet]),
+      x: frame.x,
+      y: scale(frame.y, -1),
+      z: scale(frame.z, -1),
+    },
+  }
+}

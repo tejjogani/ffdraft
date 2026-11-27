@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { setTimeout } from 'node:timers/promises'
-import type { Piece } from '@pave/schema'
+import type { CommandOutput, Piece } from '@pave/schema'
 import type { Page } from 'playwright'
 import { archive, handles, readCurve } from '../../../packages/kernel/src/qa/rhino-archive'
 import { loadRhino3dm } from '../../../packages/kernel/src/runtime/rhino'
@@ -131,7 +131,10 @@ async function checkRhinoFile(bytes: Uint8Array, imported: Piece) {
       (id) => imported.design.nodes[id]?.kind === 'meshBody',
     )
     assert.deepEqual(native.map(({ nodeId }) => nodeId).sort(), bodyIds.sort())
-    assert.ok(native[0]!.alloy && native[0]!.alloy === native[1]!.alloy)
+    assert.deepEqual(
+      native.map(({ alloy }) => alloy),
+      ['au18k-yellow', 'au18k-yellow'],
+    )
     const curve = curves[0]!
     assert.equal(curve.degree, 2)
     assert.deepEqual(curve.domain, [2, 7])
@@ -165,8 +168,33 @@ export async function checkNativeAssemblyExport(
   const parts = Object.values(imported.design.nodes).filter((node) => node.kind === 'meshBody')
   assert.equal(parts.length, 2)
   assert.ok(parts.every(({ source }) => source.type === 'asset' && source.nativeAssetId))
-  assert.equal(parts[0]!.material, parts[1]!.material)
+  assert.ok(parts.every(({ importRole }) => importRole === 'unassigned'))
   assert.equal(imported.design.order.length, 3)
+  const facts = async () =>
+    (await rpc('design.evaluate', {
+      pieceId: id,
+      detail: 'production',
+    })) as CommandOutput<'design.evaluate'>
+  assert.equal((await facts()).metalMassG, 0)
+
+  const planned = (await rpc('design.planImportRoles', {
+    pieceId: id,
+    choices: parts.map(({ id: sourceId }) => ({
+      sourceId,
+      role: 'metal',
+      material: 'au18k-yellow',
+    })),
+  })) as CommandOutput<'design.planImportRoles'>
+  assert.equal(planned.version, imported.version)
+  const confirmed = (await rpc('design.apply', {
+    pieceId: id,
+    baseVersion: planned.version,
+    label: 'Confirm both Rhino sleeves as casting metal',
+    ops: planned.ops,
+  })) as CommandOutput<'design.apply'>
+  assert.equal(confirmed.version, imported.version + 1)
+  assert.ok((await facts()).metalMassG > 0)
+  await page.reload()
 
   await page.getByRole('button', { name: 'Export', exact: true }).click()
   const [download] = await Promise.all([

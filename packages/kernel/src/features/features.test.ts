@@ -20,12 +20,16 @@ function fields(kind: string): Field[] {
   const schema = z.toJSONSchema(NODE_SCHEMAS[kind as NodeKind], { io: 'input' }) as {
     properties: Record<
       string,
-      { type?: string; minimum?: number; maximum?: number; enum?: unknown[] }
+      { type?: string; minimum?: number; maximum?: number; enum?: unknown[]; internal?: boolean }
     >
   }
   const out: Field[] = []
   for (const [name, p] of Object.entries(schema.properties)) {
-    if (['id', 'kind', 'name', 'material', 'finish', 'plating', 'stone'].includes(name)) continue
+    if (
+      p.internal ||
+      ['id', 'kind', 'name', 'material', 'finish', 'plating', 'stone'].includes(name)
+    )
+      continue
     if (p.enum) out.push({ name, values: p.enum })
     else if (
       (p.type === 'number' || p.type === 'integer') &&
