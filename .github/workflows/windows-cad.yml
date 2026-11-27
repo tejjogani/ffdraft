@@ -109,6 +109,9 @@ jobs:
             Test-PaveStage 'Verify manual CAD editing in Chromium' {
               pnpm exec tsx apps/studio/e2e/manual-cad.ts $env:PAVE_TEST_URL
             }
+            Test-PaveStage 'Verify Rhino and STL migration in Chromium' {
+              pnpm exec tsx apps/studio/e2e/model-import.ts $env:PAVE_TEST_URL
+            }
             Test-PaveStage 'Install and verify managed Blender through Studio' {
               pnpm exec tsx apps/studio/e2e/render-engine-setup.ts $env:PAVE_TEST_URL $logs
               $engine = Invoke-RestMethod -Method Post -Uri "$env:PAVE_TEST_URL/api/rpc/renders.engine" -ContentType 'application/json' -Body '{}'
