@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { isToolCommand, RenderInstallStatusSchema, RenderJobSchema } from '@pave/schema'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { assistantServer, text, tool } from '../../assistant/testing'
+import type { GeometryService } from '../../services'
 import { assetBytes, engineServer, until } from '../../test/engines'
 import {
   BOOT_TIMEOUT,
@@ -365,11 +366,34 @@ it.skipIf(process.platform === 'win32')(
         device: 'METAL',
         sceneHash: 'test-render',
       }))
-    const boot = () =>
-      engineServer({
+    // Rendering is mocked here. Keep real kernel startup off the path to the cached take.
+    const renderInput = vi.fn<GeometryService['renderInput']>().mockResolvedValue({
+      glb: { bytes: new Uint8Array(), name: 'render.glb', mime: 'model/gltf-binary' },
+      subject: {
+        bounds: { min: [0, 0, 0], max: [1, 1, 1] },
+        parts: [
+          {
+            id: 'part',
+            nodeId: 'part',
+            material: 'pt950',
+            finish: 'polished',
+            plating: 'none',
+            bounds: { min: [0, 0, 0], max: [1, 1, 1] },
+          },
+        ],
+        stones: [],
+      },
+    })
+    const boot = async () => {
+      const instance = await engineServer({
         config: { dataDir: dir, blobDir: join(dir, 'blobs') },
         engines: { engineFile, blenderEnv: {} },
       })
+      vi.spyOn(instance.runtime.services.get('geometry'), 'renderInput').mockImplementation(
+        renderInput,
+      )
+      return instance
+    }
     let server: TestServer | undefined
     try {
       await writeFile(join(dir, 'render.png'), 'test render')
@@ -415,6 +439,7 @@ it.skipIf(process.platform === 'win32')(
       for (const job of jobs)
         expect(job).toMatchObject({ status: 'done', assetIds: first.assetIds, seconds: 0 })
       expect(render).toHaveBeenCalledTimes(1)
+      expect(renderInput).toHaveBeenCalledTimes(1)
       expect(packageInstall.run).toHaveBeenCalledTimes(installAttempts)
       expect(await api.call('renders.engine', {})).toMatchObject({
         available: true,
