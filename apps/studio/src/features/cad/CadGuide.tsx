@@ -1,5 +1,5 @@
 import { Button, Dialog, DialogClose } from '@pave/ui'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import guide from '../../../../../docs/first-time-cad.md?raw'
 
 // Each level-two heading starts a step. The introduction is only for the standalone guide.
@@ -18,19 +18,25 @@ const steps = guide
 export function CadGuide() {
   const [open, setOpen] = useState(false)
   const [index, setIndex] = useState(0)
+  const heading = useRef<HTMLDivElement>(null)
   const step = steps[index]
   if (!step) return null
   const last = index === steps.length - 1
+  const showStep = (stepIndex: number) => {
+    heading.current?.scrollIntoView({ block: 'nearest' })
+    setIndex(stepIndex)
+  }
 
   return (
     <Dialog
       title="CAD guide"
       open={open}
       onOpenChange={(nextOpen) => {
-        if (nextOpen) setIndex(0)
+        if (nextOpen) showStep(0)
         setOpen(nextOpen)
       }}
       trigger={<Button size="sm">CAD guide</Button>}
+      className="h-[36rem]"
       footer={
         <>
           <DialogClose
@@ -40,14 +46,14 @@ export function CadGuide() {
               </Button>
             }
           />
-          <Button disabled={index === 0} onClick={() => setIndex(index - 1)}>
+          <Button disabled={index === 0} onClick={() => showStep(index - 1)}>
             Back
           </Button>
           <Button
             variant="primary"
             onClick={() => {
               if (last) setOpen(false)
-              else setIndex(index + 1)
+              else showStep(index + 1)
             }}
           >
             {last ? 'Done' : 'Next'}
@@ -55,7 +61,7 @@ export function CadGuide() {
         </>
       }
     >
-      <div aria-live="polite" aria-atomic="true">
+      <div ref={heading} aria-live="polite" aria-atomic="true">
         <p className="text-xs text-fg-muted">
           Step {index + 1} of {steps.length}
         </p>
