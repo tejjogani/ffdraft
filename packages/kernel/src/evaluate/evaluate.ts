@@ -22,6 +22,7 @@ import {
   assembleDraft,
   assembleProduction,
   assembleReferences,
+  assembleSheets,
   type DraftCache,
   draftVolumes,
   withCurrentNames,
@@ -298,6 +299,7 @@ export class Evaluator {
             return role !== undefined && role !== 'metal'
           })
         : assembleReferences(active, quality)
+    referenceParts.push(...assembleSheets(active, quality))
     const { stones, gemMeshes } = instanceStones(design, active)
     const diagnostics: Diagnostic[] = [
       ...documentIssues,

@@ -1017,6 +1017,29 @@ export function assembleProduction(
   }
 }
 
+/** Keep modeling sheets visible and exactly exportable without sending them to casting. */
+export function assembleSheets(active: readonly NodeResult[], quality: Quality): ScenePart[] {
+  return active.flatMap(({ id, node, hash, sheets }) =>
+    (sheets ?? []).map((body, index) => ({
+      part: {
+        ...partOf(
+          index ? `${id}#${index}` : id,
+          id,
+          hash,
+          labelOf(node),
+          specOf(body),
+          [body.solid],
+          quality,
+          0,
+        ),
+        modelingSheet: true,
+      },
+      fused: null,
+      sources: [{ nodeId: id, body }],
+    })),
+  )
+}
+
 /** Source parts of a Rhino modeling archive never enter the casting assembly. */
 export function assembleReferences(active: readonly NodeResult[], quality: Quality): ScenePart[] {
   return active.flatMap((result) => {

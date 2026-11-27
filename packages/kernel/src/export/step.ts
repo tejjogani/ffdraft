@@ -423,7 +423,19 @@ export const step = defineExporter({
         color: METALS[body.material].swatch,
       })
     }
-    const metal = shapes.length
+    for (const part of scene.referenceParts ?? []) {
+      if (!part.part.modelingSheet || (only && !only.has(part.part.nodeId))) continue
+      for (const { body } of part.sources) {
+        const face = body.solid.brep()
+        if (face)
+          shapes.push({
+            shape: face.clone(),
+            name: part.part.name,
+            color: METALS[body.material].swatch,
+          })
+      }
+    }
+    const modelShapes = shapes.length
     const stones = options.stones ?? false
     if (stones)
       shapes.push(
@@ -435,7 +447,8 @@ export const step = defineExporter({
     const uncutNames = [...uncutNodes]
     try {
       // Stones alone are no hand-off: a STEP without metal would only mislead.
-      if (metal === 0) throw new Error('Nothing in this design has an exact B-rep to write to STEP')
+      if (modelShapes === 0)
+        throw new Error('Nothing in this design has an exact B-rep to write to STEP')
       // OpenCascade stores colours as linear RGB and writes them gamma-encoded, so a swatch
       // handed over as it is comes out pale; names are numbered where they repeat.
       const seen = new Map<string, number>()
@@ -446,7 +459,7 @@ export const step = defineExporter({
       })
       const file = writeStep(written)
       const notes = [
-        'STEP AP242, millimetres: exact B-rep solids, one per metal body, named and coloured by alloy.',
+        'STEP AP242, millimetres: exact B-rep metal bodies and modeling surfaces, named and coloured by alloy.',
       ]
       if (omitted.size > 0)
         notes.push(

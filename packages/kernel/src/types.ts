@@ -37,6 +37,8 @@ export interface Bounds {
  * separate shells that touch nothing else (the links of a chain).
  */
 export interface Part {
+  /** Open CAD surface with area but no casting volume. */
+  modelingSheet?: true
   id: string
   nodeId: string
   /**
