@@ -12,25 +12,26 @@ beforeAll(async () => {
 })
 afterAll(() => kernel.dispose())
 
-async function importedSpheres(blockScale = -1, shear = 0) {
+async function importedSpheres(blockScale = -1, shear = 0, denseSeam = false) {
   const doc = new rhino.File3dm()
   doc.settings().modelUnitSystem = rhino.UnitSystem.Centimeters
   const sphere = rhino.Brep.createFromSphere(new rhino.Sphere([0, 0, 0], 1))
   const mesh = new rhino.Mesh()
   const vertices = mesh.vertices()
-  for (const p of [
-    [1, 0, 0],
-    [0, 1, 0],
-    [-1, 0, 0],
-    [0, -1, 0],
-    [0, 0, 1],
-    [0, 0, -1],
-  ])
-    vertices.add(p[0]!, p[1]!, p[2]!)
+  const equator: [number, number][] = [
+    [1, 0],
+    [0, 1],
+    [-1, 0],
+    [0, -1],
+  ]
+  if (denseSeam) equator.splice(1, 0, [Math.cos(0.00002), Math.sin(0.00002)])
+  for (const [x, y] of equator) vertices.add(x, y, 0)
+  vertices.add(0, 0, 1)
+  vertices.add(0, 0, -1)
   const faces = mesh.faces()
-  for (let i = 0; i < 4; i++) {
-    faces.addTriFace(i, (i + 1) % 4, 4)
-    faces.addTriFace((i + 1) % 4, i, 5)
+  for (let i = 0; i < equator.length; i++) {
+    faces.addTriFace(i, (i + 1) % equator.length, equator.length)
+    faces.addTriFace((i + 1) % equator.length, i, equator.length + 1)
   }
   const face = sphere.faces().get(0)
   const setMesh = face.setMesh as unknown as (mesh: Mesh, type: MeshType) => boolean
@@ -164,6 +165,35 @@ function readRhinoExport(bytes: Uint8Array) {
 }
 
 describe('native Rhino solid export', () => {
+  it('retains the original BRep when casting cleanup collapses a short cache edge', async () => {
+    const { design, assets } = fixture((await importedSpheres(-1, 0, true)).slice(0, 1))
+    const native = await kernel.export(design, '3dm', { assets, stones: false })
+    expect(readRhinoExport(native.bytes)).toMatchObject([{ nodeIds: 'part-0', native: true }])
+  })
+
+  it('keeps the mesh where production removes metal for another alloy', async () => {
+    const { design, assets } = fixture((await importedSpheres(-1, 0, true)).slice(0, 1))
+    const assembled = applyOps(design, [
+      {
+        t: 'add',
+        node: {
+          id: 'inset',
+          kind: 'primitive',
+          shape: 'box',
+          size: [4, 4, 8],
+          material: 'au18k-white',
+          transform: { position: [6, 0, 0] },
+        },
+      },
+    ]).design
+    const exported = await kernel.export(assembled, '3dm', {
+      assets,
+      stones: false,
+      only: ['part-0'],
+    })
+    expect(readRhinoExport(exported.bytes)).toMatchObject([{ nodeIds: 'part-0', native: false }])
+  })
+
   it('writes real trimmed BReps with mm conversion, block identity and current placement', async () => {
     const parts = await importedSpheres()
     expect(parts[1]!.native?.bytes).toBe(parts[2]!.native?.bytes)

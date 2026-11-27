@@ -323,6 +323,8 @@ export interface ScenePart {
   fused: Solid | null
   /** The node bodies that make up this part — exact wherever the design is parametric. */
   sources: readonly { nodeId: string; body: Body }[]
+  /** Production kept the complete native Rhino source before tidying mesh slivers. */
+  preservesNativeSurface?: boolean
   /** The node whose name the part carries, if it is named after one (not after its alloy). */
   namedAfter?: string
   /** Sealed voids inside the casting (production): metal a mould cannot reach. */
