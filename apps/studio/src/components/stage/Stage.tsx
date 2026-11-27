@@ -26,6 +26,8 @@ export interface StageProps {
   /** Nodes the default views frame (e.g. a pendant without its chain); omitted = everything. */
   frameNodeIds?: readonly string[]
   onPick?: (pick: ViewerPick | null, opts: { additive: boolean }) => void
+  /** Two consecutive clicks that independently picked the same exact object. */
+  onDoublePick?: () => void
   onHover?: (pick: ViewerPick | null) => void
   /**
    * The context menu, at client coordinates: a right-click (Control-click on macOS) or a long
@@ -51,6 +53,7 @@ export function Stage({
   state,
   frameNodeIds,
   onPick,
+  onDoublePick,
   onHover,
   onContextMenu,
   onViewer,
@@ -64,8 +67,24 @@ export function Stage({
   const canvas = useRef<HTMLCanvasElement>(null)
   const viewer = useRef<Viewer | null>(null)
   const [failed, setFailed] = useState(false)
-  const callbacks = useRef({ onPick, onHover, onContextMenu, onViewer, onBeforeDispose, wheel })
-  callbacks.current = { onPick, onHover, onContextMenu, onViewer, onBeforeDispose, wheel }
+  const callbacks = useRef({
+    onPick,
+    onDoublePick,
+    onHover,
+    onContextMenu,
+    onViewer,
+    onBeforeDispose,
+    wheel,
+  })
+  callbacks.current = {
+    onPick,
+    onDoublePick,
+    onHover,
+    onContextMenu,
+    onViewer,
+    onBeforeDispose,
+    wheel,
+  }
 
   useEffect(() => {
     const el = host.current!
@@ -103,6 +122,8 @@ export function Stage({
     let longPress: ReturnType<typeof setTimeout> | undefined
     /** A long press opened the menu; the release that ends it is not a pick. */
     let longPressed = false
+    let lastClick: ViewerPick | null = null
+    let sameClick = false
     let hoverFrame = 0
     const wheels = createWheelClassifier()
     const at = (e: { clientX: number; clientY: number }): Point => ({ x: e.clientX, y: e.clientY })
@@ -139,6 +160,9 @@ export function Stage({
       }
     }
     const onPointerUp = (e: PointerEvent) => {
+      const previous = lastClick
+      lastClick = null
+      sameClick = false
       cancelLongPress()
       if (secondary && isSecondary(e, isMac)) {
         const start = secondary
@@ -155,12 +179,28 @@ export function Stage({
       }
       if (!isClick(start, at(e))) return
       const [x, y] = local(e)
-      callbacks.current.onPick?.(v.pick(x, y), { additive: e.shiftKey || e.metaKey || e.ctrlKey })
+      const pick = v.pick(x, y)
+      const additive = e.shiftKey || e.metaKey || e.ctrlKey
+      if (pick && !additive && callbacks.current.onDoublePick) {
+        lastClick = pick
+        sameClick =
+          previous?.nodeId === pick.nodeId &&
+          previous.stoneId === pick.stoneId &&
+          previous.partId === pick.partId
+      }
+      callbacks.current.onPick?.(pick, { additive })
     }
     const onPointerCancel = () => {
       cancelLongPress()
       down = null
       secondary = null
+      lastClick = null
+      sameClick = false
+    }
+    const onDoubleClick = () => {
+      if (sameClick) callbacks.current.onDoublePick?.()
+      lastClick = null
+      sameClick = false
     }
     const onPointerMove = (e: PointerEvent) => {
       if (longPress && down && !isClick(down, at(e), LONG_PRESS_SLOP_PX)) cancelLongPress()
@@ -229,6 +269,7 @@ export function Stage({
     cv.addEventListener('pointerdown', onPointerDown)
     cv.addEventListener('pointerup', onPointerUp)
     cv.addEventListener('pointercancel', onPointerCancel)
+    cv.addEventListener('dblclick', onDoubleClick)
     cv.addEventListener('pointermove', onPointerMove)
     cv.addEventListener('contextmenu', onNativeMenu)
     cv.addEventListener('keydown', onKeyDown)
@@ -247,6 +288,7 @@ export function Stage({
       cv.removeEventListener('pointerdown', onPointerDown)
       cv.removeEventListener('pointerup', onPointerUp)
       cv.removeEventListener('pointercancel', onPointerCancel)
+      cv.removeEventListener('dblclick', onDoubleClick)
       cv.removeEventListener('pointermove', onPointerMove)
       cv.removeEventListener('contextmenu', onNativeMenu)
       cv.removeEventListener('keydown', onKeyDown)
