@@ -25,6 +25,8 @@ Forty local worktrees were present. The two local branch tips outside integratio
 
 Next for native geometry, extract seam-separated physical rims and handle singular trims on periodic faces. For construction, build an associative sweep with a separately selected profile and rail. For exchange, read back a STEP export of an imported solid and verify the actual surface types, trims, units and placement. Native 3DM retention and matching mesh volume alone leave the STEP question open. [Acceptance cases](../plans/cad-command-api.md#implementation-order) · [Feature evidence](../research/cad-feature-evidence.md)
 
+For new reference models, record which design decisions survive import and which need a jeweler’s input. The comparison of the two trial assemblies identified original groups, per-placement material and layer hints, and stone-to-setting links as the next priorities for jewelry reuse. [What to load from a jewelry model](../research/cad-feature-evidence.md#what-to-load-from-a-jewelry-model)
+
 ### Work to dispatch first
 
 | Workstream | What the audit found | Acceptance before the next dependent feature |

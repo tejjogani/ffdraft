@@ -158,7 +158,193 @@ async function writeModel(
   }
 }
 
+async function writeDesignContextModel() {
+  const rhino = await loadRhino3dm()
+  const bytes = handles((hold) => {
+    const doc = hold(new rhino.File3dm())
+    hold(doc.settings()).modelUnitSystem = rhino.UnitSystem.Millimeters
+    const materials = hold(doc.materials())
+    for (const name of [
+      'Sample finish A',
+      'Sample finish A',
+      'Sample finish B',
+      '',
+      'Unused finish',
+    ]) {
+      const material = hold(new rhino.Material())
+      material.name = name
+      materials.add(material)
+    }
+    const layers = hold(doc.layers())
+    const left = hold(new rhino.Layer())
+    left.name = 'Sample left'
+    left.renderMaterialIndex = 0
+    const leftIndex = layers.add(left)
+    const right = hold(new rhino.Layer())
+    right.name = 'Sample right'
+    right.renderMaterialIndex = 2
+    const rightIndex = layers.add(right)
+    const off = hold(new rhino.Layer())
+    off.name = 'Sample hidden parent'
+    off.visible = false
+    const offIndex = layers.add(off)
+    const child = hold(new rhino.Layer())
+    child.name = 'Sample child'
+    child.parentLayerId = hold(layers.findIndex(offIndex)).id
+    child.renderMaterialIndex = 2
+    const childIndex = layers.add(child)
+
+    const groups = hold(doc.groups())
+    for (const name of [
+      'Sample instance group',
+      'Sample body group',
+      'Sample curve group',
+      'Unused group',
+    ]) {
+      const group = hold(new rhino.Group())
+      group.name = name
+      groups.add(group)
+    }
+
+    const attrs = (layerIndex = leftIndex) => {
+      const attributes = hold(new rhino.ObjectAttributes())
+      attributes.layerIndex = layerIndex
+      return attributes
+    }
+    const byObject = (materialIndex: number, layerIndex = leftIndex) => {
+      const attributes = attrs(layerIndex)
+      attributes.materialSource = rhino.ObjectMaterialSource.MaterialFromObject
+      attributes.materialIndex = materialIndex
+      return attributes
+    }
+    const objects = hold(doc.objects())
+    const open = hold(new rhino.LineCurve([0, 0, 0], [1, 2, 0]))
+    const closed = hold(
+      new rhino.PolylineCurve([
+        [0, 0, 0],
+        [2, 0, 0],
+        [2, 2, 0],
+        [0, 0, 0],
+      ]),
+    )
+    const namedCurve = attrs()
+    namedCurve.name = 'Sample named curve'
+    namedCurve.addToGroup(0)
+    objects.addCurve(open, namedCurve)
+    const closedCurve = attrs(rightIndex)
+    closedCurve.addToGroup(1)
+    objects.addCurve(closed, closedCurve)
+    const openCurve = attrs()
+    openCurve.addToGroup(2)
+    objects.addCurve(open, openCurve)
+    const sphere = hold(rhino.Brep.createFromSphere(hold(new rhino.Sphere([0, 0, 0], 1))))
+    const body = attrs()
+    body.addToGroup(1)
+    objects.addBrep(sphere, body)
+    const hiddenBody = attrs(childIndex)
+    hiddenBody.name = 'Sample hidden body'
+    hiddenBody.addToGroup(2)
+    objects.addBrep(sphere, hiddenBody)
+    const paperCurve = attrs(rightIndex)
+    paperCurve.activeSpace = rhino.ActiveSpace.PageSpace
+    paperCurve.viewportId = body.id
+    paperCurve.name = 'Sample paper curve'
+    objects.addCurve(closed, paperCurve)
+
+    const definitions = hold(doc.instanceDefinitions())
+    const Reference = rhino.InstanceReference as unknown as new (
+      id: string,
+      transform: Transform,
+    ) => InstanceReference
+    const namedPlacement = attrs()
+    namedPlacement.name = 'Sample named placement'
+    namedPlacement.addToGroup(0)
+    const byParent = attrs()
+    byParent.materialSource = rhino.ObjectMaterialSource.MaterialFromParent
+    byParent.materialIndex = 2
+    const byLayer = attrs()
+    byLayer.materialIndex = 2
+    const hiddenPlacement = attrs(rightIndex)
+    hiddenPlacement.mode = rhino.ObjectMode.Hidden
+    hiddenPlacement.name = 'Sample hidden placement'
+    const paperPlacement = attrs(rightIndex)
+    paperPlacement.activeSpace = rhino.ActiveSpace.PageSpace
+    paperPlacement.viewportId = paperCurve.viewportId
+    const placements = [
+      [namedPlacement, attrs(rightIndex)],
+      [attrs(), byObject(1, rightIndex)],
+      [attrs(), byObject(2)],
+      [byLayer, byObject(1), byObject(999), byObject(3), byParent, hiddenPlacement, paperPlacement],
+    ]
+    const member = attrs(rightIndex)
+    member.name = 'Sample definition member'
+    for (const [index, records] of placements.entries()) {
+      const definitionIndex = definitions.add(
+        `Sample definition ${index}`,
+        '',
+        '',
+        '',
+        [0, 0, 0],
+        [open],
+        [member],
+      )
+      const definition = hold(definitions.get(definitionIndex))
+      for (const [position, attributes] of records.entries()) {
+        const transform = hold(rhino.Transform.translationXYZ(5 * (position + 1), index, 0))
+        objects.addInstanceObject(hold(new Reference(definition.id, transform)), attributes)
+      }
+    }
+    return doc.toByteArray()
+  })
+  const file = join(directory, 'synthetic context.3dm')
+  await writeFile(file, bytes)
+  return file
+}
+
 describe('local Rhino model check', () => {
+  it('counts design metadata on visible model-space records and counts each placement once', async () => {
+    const file = await writeDesignContextModel()
+    const digest = sha256(await readFile(file))
+    const { status, reports } = check(file)
+    expect(reports[0].failure).toBeUndefined()
+    expect(status).toBe(0)
+    expect(reports[0].source.designContext).toEqual({
+      visibleModelSpaceTopLevelObjects: 15,
+      namedObjects: 2,
+      referencedGroups: 3,
+      groupsWithCurvesAndBodiesOrInstances: 2,
+      materialTableRecords: 5,
+      objectsWithNamedMaterial: 12,
+      repeatedDefinitionsOnMultipleLayers: 2,
+      repeatedDefinitionsWithMultipleNamedMaterials: 2,
+      openCurves: 2,
+      closedCurves: 1,
+    })
+    expect(reports[0].sha256).toEqual({ before: digest, after: digest })
+    expect(sha256(await readFile(file))).toBe(digest)
+  })
+
+  it('reports zero names, groups and materials for an unnamed point and curve', async () => {
+    const file = await writeModel('sparse synthetic context.3dm', 'curve')
+    const digest = sha256(await readFile(file))
+    const { status, reports } = check(file)
+    expect(reports[0].failure).toBeUndefined()
+    expect(status).toBe(0)
+    expect(reports[0].source.designContext).toEqual({
+      visibleModelSpaceTopLevelObjects: 2,
+      namedObjects: 0,
+      referencedGroups: 0,
+      groupsWithCurvesAndBodiesOrInstances: 0,
+      materialTableRecords: 0,
+      objectsWithNamedMaterial: 0,
+      repeatedDefinitionsOnMultipleLayers: 0,
+      repeatedDefinitionsWithMultipleNamedMaterials: 0,
+      openCurves: 1,
+      closedCurves: 0,
+    })
+    expect(reports[0].sha256).toEqual({ before: digest, after: digest })
+  })
+
   it('preserves both overlapping same-alloy native parts and a weighted curve in one full export', async () => {
     const file = await writeModel('overlapping synthetic assembly.3dm', 'overlap')
     const digest = sha256(await readFile(file))

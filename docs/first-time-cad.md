@@ -10,7 +10,7 @@ On a smaller screen, use the Features and Inspector buttons above the model to o
 
 ## Bring in an existing Rhino model
 
-Open the destination project’s CAD builder and choose Import model. Pick a .3dm and check its layers and selected dimensions in millimetres. Leave out display stands and lighting geometry. For a metal-only casting, leave out gemstone layers too. If stones and metal share a layer, separate them in Rhino first.
+Open the destination project’s CAD builder and choose Import model. Pick a .3dm and check its layers and selected dimensions in millimetres. Leave out display stands and lighting geometry. Imported solids start as Sculpted body features with 18k yellow gold assigned. You can measure a stone-shaped body here. Stone counts and Diaex sourcing use Pavé stone features. For a metal-only casting, leave out gemstone layers too. If stones and metal share a layer, separate them in Rhino first.
 
 Turn on Include editable curves to import supported curves as NURBS from the selected layers. Pavé keeps the original NURBS degree, knots and weights and places the control points in world millimetres. Converted lines, arcs and connected joined curves preserve their shape and parameter domain. Converted arcs and joined curves can use different parameter spacing along the same shape.
 
