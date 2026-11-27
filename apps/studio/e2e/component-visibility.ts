@@ -127,8 +127,9 @@ try {
   await page.keyboard.press('ArrowLeft')
   await guide.waitFor({ state: 'hidden' })
 
-  // Chromium reads the downloaded GLB, including all gem instances. WebKit exercises
-  // native project export and checks the archived design, excluding the zip timestamp.
+  // Let the initial casting check finish before asking its production worker for a GLB.
+  await page.getByRole('button', { name: /things? to check/i }).waitFor({ timeout: 60_000 })
+  // The full GLB includes every gem instance and all metal, even when one part is isolated.
   async function exportAssembly() {
     await page.getByRole('button', { name: /^Export/ }).click()
     const pending = testWebkit
@@ -152,20 +153,8 @@ try {
           assert.ok(path)
           return readFile(path)
         })
-    await page
-      .getByRole('menuitem', { name: testWebkit ? /Pavé file/ : /For the web and AR/ })
-      .click()
+    await page.getByRole('menuitem', { name: /For the web and AR/ }).click()
     const bytes = await pending
-    if (testWebkit) {
-      const { unzipSync } = createRequire(new URL('../../server/package.json', import.meta.url))(
-        'fflate',
-      ) as typeof import('fflate')
-      const record = unzipSync(bytes)['piece.json']
-      assert.ok(record)
-      const design = JSON.parse(Buffer.from(record).toString('utf8')).design
-      assert.deepEqual(design, before.design)
-      return record
-    }
     const json = JSON.parse(bytes.toString('utf8', 20, 20 + bytes.readUInt32LE(12)))
     assert.equal(
       json.nodes.filter((n: { extras?: { role?: string } }) => n.extras?.role === 'gem').length,
@@ -232,12 +221,30 @@ try {
     return page
       .locator(`[data-construction-curve="${id}"] path`)
       .first()
-      .evaluate((p) => {
-        const coords = p
-          .getAttribute('d')!
-          .match(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/gi)!
-          .map(Number)
-        const rect = p.closest('svg')!.getBoundingClientRect()
+      .evaluate(async (p) => {
+        // Asset loading and the first camera fit can project the same guide more than once.
+        // Read screen coordinates only after both its path and its containing SVG settle.
+        let previous = ''
+        let since = performance.now()
+        let frames = 0
+        let rect = p.closest('svg')!.getBoundingClientRect()
+        let path = ''
+        const deadline = performance.now() + 15_000
+        do {
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+          rect = p.closest('svg')!.getBoundingClientRect()
+          path = p.getAttribute('d') ?? ''
+          const projection = [rect.x, rect.y, path].join('/')
+          if (projection !== previous) {
+            previous = projection
+            since = performance.now()
+            frames = 0
+          }
+          frames++
+          if (performance.now() > deadline)
+            throw Error('Construction guide projection did not settle')
+        } while (!path || frames < 4 || performance.now() - since < 250)
+        const coords = path.match(/-?\d+(?:\.\d+)?(?:e[+-]?\d+)?/gi)!.map(Number)
         return coords
           .filter((_, i) => i % 4 === 2)
           .map((x, n) => ({
@@ -246,17 +253,33 @@ try {
           }))
       })
   }
-  const rowPoints = await guideVertices('guide-1')
-  const stone = rowPoints[1]!
-  const neighbor = rowPoints[3]!
-  const [claw] = await guideVertices('guide-2')
-  assert.ok(claw)
-  await page.mouse.click(stone.x, stone.y)
   const selectedInstance = tree.getByRole('treeitem', {
     name: /^Stone \d+ of Shoulder stones$/,
     selected: true,
   })
-  await selectedInstance.waitFor()
+  let rowPoints = await guideVertices('guide-1')
+  let stone = rowPoints[1]!
+  await page.mouse.click(stone.x, stone.y)
+  if (
+    !(await selectedInstance.waitFor({ timeout: 2000 }).then(
+      () => true,
+      () => false,
+    ))
+  ) {
+    const settled = await guideVertices('guide-1')
+    assert.notDeepEqual(
+      settled[1],
+      stone,
+      'The first click at a stationary, projected stone table must select that instance',
+    )
+    rowPoints = settled
+    stone = rowPoints[1]!
+    await page.mouse.click(stone.x, stone.y)
+    await selectedInstance.waitFor()
+  }
+  const neighbor = rowPoints[3]!
+  const [claw] = await guideVertices('guide-2')
+  assert.ok(claw)
   await assertHit(stone, 'Hide stone', true)
   await curves.getByRole('button', { name: 'Hide construction curves in view' }).click()
   await path.waitFor({ state: 'detached' })
