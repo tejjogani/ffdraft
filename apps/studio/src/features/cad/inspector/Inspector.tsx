@@ -11,6 +11,7 @@ import {
   type NodeOf,
   nodeTitle,
   ringBandProfileError,
+  sourceMaterialLabel,
 } from '@pave/schema'
 import { Button, Chip, cn, ScrollArea, Switch } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
@@ -29,7 +30,6 @@ import { useEffect, useMemo } from 'react'
 import { runCommand } from '../../../lib/commands'
 import type { DesignSession } from '../../../lib/design-session/store'
 import { stoneMeasure } from '../../../lib/format'
-import { sourceMaterialLabel } from '../../../lib/source-material'
 import { diaexBrowseLink } from '../../sourcing/links'
 import { NurbsControls } from '../curves/NurbsControls'
 import { RhinoEdgeCopy } from '../curves/RhinoEdgeCopy'

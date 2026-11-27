@@ -30,6 +30,7 @@ import {
   rhinoRoleLinks,
   ringBandProfileError,
   sameJson,
+  sourceMaterialLabel,
 } from '@pave/schema'
 import {
   AiMark,
@@ -69,7 +70,6 @@ import { usePieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { activeOrg, useSession } from '../../lib/session'
-import { sourceMaterialLabel } from '../../lib/source-material'
 import { useCurrentView } from '../../lib/use-current-view'
 import { useAssistant } from '../../stores/assistant'
 import { useUI } from '../../stores/ui'
