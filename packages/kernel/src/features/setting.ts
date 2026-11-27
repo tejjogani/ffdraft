@@ -773,6 +773,7 @@ export const setting = defineFeature('setting', (node, ctx) => {
       bodies: source.bodies.map(({ solid }) => ({
         solid: solid.transformed(placement),
         ...metalOf(node),
+        importSourceId: source.id,
         ...(keepsNativeSurface(source) && {
           nativeImport: { nodeId: source.id, matrix: multiply(placement, source.matrix) },
         }),

@@ -534,7 +534,7 @@ function independentImports(
   for (const { id, node, bodies } of active) {
     if (
       bodies.length !== 1 ||
-      (!bodies[0]!.nativeImport &&
+      (!bodies[0]!.importSourceId &&
         (node.kind !== 'meshBody' || node.source.type !== 'asset' || !node.keepSourcePlacement)) ||
       targeted.has(id) ||
       scoped.has(bodies[0]!.solid) ||

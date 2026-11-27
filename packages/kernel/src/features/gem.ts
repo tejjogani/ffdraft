@@ -221,6 +221,7 @@ export const gem = defineFeature('gem', (node, ctx) => {
     const mesh = source.bodies[0].solid.transformed(local).tessellate(ctx.quality).mesh
     stone.imported = {
       mesh,
+      sourceId: source.id,
       width: dims.width,
       key: `import-${source.hash}-${hashString(local.join(','))}`,
       ...(keepsNativeSurface(source) && {

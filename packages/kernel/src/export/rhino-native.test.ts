@@ -625,6 +625,18 @@ describe('Rhino import roles', () => {
     )
     expect(native).toHaveLength(2)
 
+    const meshOnly = applyOps(model, [
+      { t: 'update', id: 'part-0', patch: { source: { nativeMeshAssetId: null } } },
+      { t: 'update', id: 'part-1', patch: { source: { nativeMeshAssetId: null } } },
+    ]).design
+    const meshArchive = await kernel.export(meshOnly, '3dm', { assets, only: ['gem', 'head'] })
+    const meshObjects = (await readRhino3dm(meshArchive.bytes)).objects
+    expect(meshObjects.map((o) => [o.name, o.layer]).sort()).toEqual([
+      ['Stock 1', 'Workshop::Stock'],
+      ['Stock 2', 'Workshop::Stock'],
+    ])
+    expect(meshObjects.every((o) => !o.native)).toBe(true)
+
     const moved = applyOps(model, [
       { t: 'update', id: 'gem', patch: { transform: { position: [7, 1, 1.2] } } },
     ]).design

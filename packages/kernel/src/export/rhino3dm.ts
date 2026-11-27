@@ -57,7 +57,7 @@ function importedObject(scene: Scene, o: MeshObject) {
   if (o.kind === 'metal' && o.part.sources.length !== 1) return null
   const source = o.kind === 'metal' ? o.part.sources[0] : undefined
   const nodeId =
-    o.kind === 'stone' ? o.native?.nodeId : (source?.body.nativeImport?.nodeId ?? source?.nodeId)
+    o.kind === 'stone' ? o.importSourceId : (source?.body.importSourceId ?? source?.nodeId)
   const node = nodeId === undefined ? undefined : scene.nodes.get(nodeId)?.node
   if (node?.kind !== 'meshBody' || node.source.type !== 'asset' || !node.keepSourcePlacement)
     return null

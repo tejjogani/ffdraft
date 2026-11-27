@@ -22,6 +22,7 @@ export interface StoneObject extends IndexedTriangles {
   kind: 'stone'
   name: string
   stone: StoneInstance
+  importSourceId?: string
   native?: NonNullable<Stone['imported']>['native']
 }
 
@@ -127,7 +128,10 @@ export function sceneObjects(scene: Scene, selection: MeshSelection): MeshObject
           kind: 'stone',
           name: `${GEM_MATERIALS[instance.stone].label} ${instance.id}`,
           stone: instance,
-          ...(stone.imported?.native && { native: stone.imported.native }),
+          ...(stone.imported && {
+            importSourceId: stone.imported.sourceId,
+            native: stone.imported.native,
+          }),
           ...placedGem(scene.evaluation.gemMeshes[instance.meshKey]!, instance.matrix),
         }))
     : []

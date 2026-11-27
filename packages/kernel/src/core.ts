@@ -188,6 +188,8 @@ export const metalOf = (node: MetalSpec): MetalSpec => ({
 /** One piece of metal. A node may return several overlapping bodies; they fuse at production. */
 export interface Body extends MetalSpec {
   solid: Solid
+  /** Modeling identity of a retained original, including a mesh without a native sidecar. */
+  importSourceId?: string
   /** An unchanged native source and its placement underneath this body's mesh. */
   nativeImport?: { nodeId: string; matrix: Mat4 }
   /**
@@ -209,6 +211,7 @@ export interface Stone {
   /** A confirmed original gem mesh in its girdle frame, at its original scale. */
   imported?: {
     mesh: import('./types').MeshData
+    sourceId: string
     width: number
     key: string
     native?: Body['nativeImport']
