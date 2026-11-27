@@ -537,12 +537,35 @@ export function validateDesign(design: Design): DesignIssue[] {
         })
       else if (
         (n.kind === 'pave' || n.kind === 'engraving' || n.kind === 'boolean') &&
-        !isBodyKind(target.kind)
+        (!isBodyKind(target.kind) ||
+          ((target.kind === 'loft' || target.kind === 'railSweep') && !target.capped))
       )
         issues.push({
           level: 'error',
           nodeId: id,
           message: `"${id}" needs a solid body but "${r}" is a ${target.kind}`,
+        })
+      else if (
+        (n.kind === 'loft' || n.kind === 'railSweep') &&
+        target.kind !== 'curve' &&
+        target.kind !== 'nurbsCurve'
+      )
+        issues.push({
+          level: 'error',
+          nodeId: id,
+          message: `"${id}" needs a construction or NURBS curve for "${r}".`,
+        })
+      else if (
+        (n.kind === 'loft' || n.kind === 'railSweep') &&
+        n.capped &&
+        n.sections.includes(r) &&
+        target.kind === 'curve' &&
+        !target.closed
+      )
+        issues.push({
+          level: 'error',
+          nodeId: id,
+          message: `Close section "${r}" to cap "${id}", or choose a surface.`,
         })
       else if ((n.kind === 'pipe' || n.kind === 'revolve') && target.kind !== 'curve')
         issues.push({
