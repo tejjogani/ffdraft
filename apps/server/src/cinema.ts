@@ -34,38 +34,130 @@ import { getPiece, getScene } from './lookups'
 import { pngOf } from './photos'
 import { assertSendable } from './references/rights'
 import { serviceContext } from './service-context'
-import type { RenderSubject } from './services'
+import type { GeometryService, RenderSubject } from './services'
 
 type SubjectMode = Pick<RenderScene, 'includeUnassignedRhino' | 'pose'>
+type SavedPiece = Pick<Piece, 'id' | 'version' | 'design'>
+const modeKey = ({ includeUnassignedRhino, pose }: SubjectMode) =>
+  `${includeUnassignedRhino === true}:${pose === 'circular-band'}`
+
+type PendingSubject = {
+  controller: AbortController
+  request: Promise<RenderSubject>
+  readers: number
+}
+type SubjectEntry = PendingSubject | { subject: RenderSubject }
+const SUBJECT_CACHE_SIZE = 32
+const subjectsByEngine = new WeakMap<GeometryService, Map<string, SubjectEntry>>()
+
+/** A caller may leave a shared measurement without canceling other callers. */
+function waitForSubject(
+  cache: Map<string, SubjectEntry>,
+  key: string,
+  pending: PendingSubject,
+  signal?: AbortSignal,
+): Promise<RenderSubject> {
+  pending.readers++
+  return new Promise((resolve, reject) => {
+    let waiting = true
+    const finish = (settle: () => void) => {
+      if (!waiting) return
+      waiting = false
+      signal?.removeEventListener('abort', cancel)
+      if (--pending.readers === 0 && cache.get(key) === pending) {
+        cache.delete(key)
+        pending.controller.abort()
+      }
+      settle()
+    }
+    const cancel = () => finish(() => reject(signal?.reason))
+    signal?.addEventListener('abort', cancel, { once: true })
+    if (signal?.aborted) cancel()
+    pending.request.then(
+      (subject) => finish(() => resolve(subject)),
+      (err: unknown) => finish(() => reject(err)),
+    )
+  })
+}
 
 /** The kernel's subject for a piece (bounds, support points, stones), or null without one. */
 export async function subjectOf(
   ctx: Ctx,
-  piece: Pick<Piece, 'id' | 'design'>,
-  signal?: AbortSignal,
-  { includeUnassignedRhino, pose }: SubjectMode = {},
-  asDesignedImports?: RenderSubject | null,
+  piece: SavedPiece,
+  signal = ctx.signal,
+  mode: SubjectMode = {},
 ): Promise<RenderSubject | null> {
-  if (includeUnassignedRhino && pose !== 'circular-band' && asDesignedImports)
-    return asDesignedImports
+  signal?.throwIfAborted()
   const geometry = ctx.services.optional('geometry')
   if (!geometry?.subject) return null
-  return geometry.subject(piece.design, serviceContext(ctx), {
-    pieceId: piece.id,
-    ...(signal ? { signal } : {}),
-    ...(includeUnassignedRhino && { includeUnassignedRhino }),
-    ...(pose === 'circular-band' && { pose }),
-  })
+  const key = JSON.stringify([ctx.orgId, piece.id, piece.version, modeKey(mode)])
+  const cache = subjectsByEngine.get(geometry) ?? new Map<string, SubjectEntry>()
+  subjectsByEngine.set(geometry, cache)
+  const cached = cache.get(key)
+  if (cached && 'subject' in cached) {
+    cache.delete(key)
+    cache.set(key, cached)
+    return cached.subject
+  }
+  if (cached) return waitForSubject(cache, key, cached, signal)
+
+  const { includeUnassignedRhino, pose } = mode
+  const measure = (signal?: AbortSignal) =>
+    geometry.subject!(piece.design, serviceContext(ctx), {
+      pieceId: piece.id,
+      ...(signal ? { signal } : {}),
+      ...(includeUnassignedRhino && { includeUnassignedRhino }),
+      ...(pose === 'circular-band' && { pose }),
+    })
+  if (cache.size >= SUBJECT_CACHE_SIZE) {
+    for (const [oldKey, entry] of cache) {
+      if ('subject' in entry) {
+        cache.delete(oldKey)
+        break
+      }
+    }
+    // All slots can be busy. Leave those readers attached and run this request uncached.
+    if (cache.size >= SUBJECT_CACHE_SIZE) return measure(signal)
+  }
+
+  const controller = new AbortController()
+  const pending: PendingSubject = {
+    controller,
+    readers: 0,
+    request: Promise.resolve()
+      .then(() => measure(controller.signal))
+      .then(
+        (subject) => {
+          if (cache.get(key) === pending) {
+            cache.delete(key)
+            cache.set(key, { subject })
+          }
+          return subject
+        },
+        (err: unknown) => {
+          if (cache.get(key) === pending) cache.delete(key)
+          throw err
+        },
+      ),
+  }
+  cache.set(key, pending)
+  return waitForSubject(cache, key, pending, signal)
 }
 
 /** Includes every eligible imported body so defaults and render eligibility use the same geometry. */
 export async function importedShotSubject(
   ctx: Ctx,
-  piece: Pick<Piece, 'id' | 'design'>,
+  piece: SavedPiece,
   signal = ctx.signal,
 ): Promise<RenderSubject | null> {
   if (!Object.values(piece.design.nodes).some(isRhinoRoleBody)) return null
   return subjectOf(ctx, piece, signal, { includeUnassignedRhino: true }).catch(() => null)
+}
+
+/** Fully specified looks and an explicit omission need no import-only eligibility check. */
+export function needsImportedShotDefaults(scene: RenderScene): boolean {
+  const { includeUnassignedRhino, importedBodyLook } = scene
+  return includeUnassignedRhino === undefined || (includeUnassignedRhino && !importedBodyLook)
 }
 
 export function completeImportedShot(
@@ -83,22 +175,18 @@ export function completeImportedShot(
 /** Evaluate each combination of jewelry pose and imported-body visibility once. */
 export async function subjectsOf(
   ctx: Ctx,
-  piece: Pick<Piece, 'id' | 'design'>,
+  piece: SavedPiece,
   scenes: readonly RenderScene[],
   signal?: AbortSignal,
-  asDesignedImports?: RenderSubject | null,
 ) {
-  const keyOf = (scene: SubjectMode) =>
-    `${scene.includeUnassignedRhino === true}:${scene.pose ?? 'as-designed'}`
-  const modes = new Map(scenes.map((scene) => [keyOf(scene), scene]))
+  const modes = new Map(scenes.map((scene) => [modeKey(scene), scene]))
   const entries = await Promise.all(
     [...modes].map(
-      async ([key, scene]) =>
-        [key, await subjectOf(ctx, piece, signal, scene, asDesignedImports)] as const,
+      async ([key, scene]) => [key, await subjectOf(ctx, piece, signal, scene)] as const,
     ),
   )
   const subjects = new Map(entries)
-  return (scene: RenderScene) => subjects.get(keyOf(scene)) ?? null
+  return (scene: RenderScene) => subjects.get(modeKey(scene)) ?? null
 }
 
 export async function suggestShots(
@@ -107,17 +195,18 @@ export async function suggestShots(
   signal?: AbortSignal,
 ): Promise<CommandOutput<'scenes.suggest'>> {
   const piece = await getPiece(ctx, input.pieceId)
-  const asDesignedImports = await importedShotSubject(ctx, piece, signal)
-  const requested = completeImportedShot(RenderSceneSchema.parse(input), asDesignedImports)
+  const scene = RenderSceneSchema.parse(input)
+  const imported = needsImportedShotDefaults(scene)
+    ? await importedShotSubject(ctx, piece, signal)
+    : null
+  const requested = completeImportedShot(scene, imported)
   const { pose, includeUnassignedRhino, importedBodyLook } = requested
   const sceneOptions = {
     ...(pose && { pose }),
     ...(includeUnassignedRhino !== undefined && { includeUnassignedRhino }),
     ...(includeUnassignedRhino && { importedBodyLook: importedBodyLook ?? 'clay' }),
   } as const
-  const subject = await subjectOf(ctx, piece, signal, requested, asDesignedImports).catch(
-    () => null,
-  )
+  const subject = await subjectOf(ctx, piece, signal, requested).catch(() => null)
   const circularBandDiameterMm = subject?.circularBandDiameterMm
   if (pose === 'circular-band' && subject && circularBandDiameterMm === undefined)
     throw badRequest(
@@ -211,7 +300,9 @@ export async function captureShots(
       'Capture shots of one piece at a time (house shots need a piece: copy one first)',
     )
   const piece = await getPiece(ctx, pieceId)
-  const imported = await importedShotSubject(ctx, piece, signal)
+  const imported = saved.some(({ scene }) => needsImportedShotDefaults(scene))
+    ? await importedShotSubject(ctx, piece, signal)
+    : null
   const effective = saved.map((shot) => ({
     ...shot,
     scene: completeImportedShot(shot.scene, imported),
@@ -222,7 +313,6 @@ export async function captureShots(
     piece,
     effective.map(({ scene }) => scene),
     signal,
-    imported,
   )
   const shots = effective.map((s) => {
     const subject = subjectFor(s.scene)
@@ -324,9 +414,11 @@ export async function framingRefusal(
   const requested = input.scene ?? saved?.scene
   if (!requested) return null
   const piece = await getPiece(ctx, input.pieceId)
-  const imported = await importedShotSubject(ctx, piece, signal)
+  const imported = needsImportedShotDefaults(requested)
+    ? await importedShotSubject(ctx, piece, signal)
+    : null
   const scene = completeImportedShot(requested, imported)
-  const subject = await subjectOf(ctx, piece, signal, scene, imported).catch(() => null)
+  const subject = await subjectOf(ctx, piece, signal, scene).catch(() => null)
   if (!subject) return null
   const check = shotFraming(scene, subject)
   if (check.ok) return null

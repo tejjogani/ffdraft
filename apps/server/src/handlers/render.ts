@@ -14,7 +14,13 @@ import {
   type SavedScene,
 } from '@pave/schema'
 import { and, asc, desc, eq, gt, inArray, isNull, lt, max, type SQL } from 'drizzle-orm'
-import { captureShots, completeImportedShot, importedShotSubject, suggestShots } from '../cinema'
+import {
+  captureShots,
+  completeImportedShot,
+  importedShotSubject,
+  needsImportedShotDefaults,
+  suggestShots,
+} from '../cinema'
 import { type Ctx, publish } from '../context'
 import * as t from '../db/schema'
 import { BLENDER_INSTALL_UNAVAILABLE } from '../engines/render/blender'
@@ -100,9 +106,10 @@ const toSavedScene = (r: SceneRow, imported: SceneSubject | null): SavedScene =>
 })
 
 async function savedSceneForPiece(ctx: Ctx, row: SceneRow): Promise<SavedScene> {
-  const imported = row.pieceId
-    ? await importedShotSubject(ctx, await getPiece(ctx, row.pieceId))
-    : null
+  const imported =
+    row.pieceId && needsImportedShotDefaults(row.scene)
+      ? await importedShotSubject(ctx, await getPiece(ctx, row.pieceId))
+      : null
   return toSavedScene(row, imported)
 }
 
@@ -242,7 +249,10 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
   'scenes.list': async (ctx, { pieceId }) => {
     const piece = pieceId ? await getPiece(ctx, pieceId) : null
     const rows = await savedScenes(ctx, pieceId)
-    const imported = piece && rows.length ? await importedShotSubject(ctx, piece) : null
+    const imported =
+      piece && rows.some(({ scene }) => needsImportedShotDefaults(scene))
+        ? await importedShotSubject(ctx, piece)
+        : null
     return rows.map((row) => toSavedScene(row, imported))
   },
 
@@ -297,7 +307,9 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
       return { rows, created: true, editedId: rows[index]?.id ?? null }
     })
     if (result.created) for (const row of result.rows) announceScene(ctx, row)
-    const imported = await importedShotSubject(ctx, await getPiece(ctx, pieceId))
+    const imported = result.rows.some(({ scene }) => needsImportedShotDefaults(scene))
+      ? await importedShotSubject(ctx, await getPiece(ctx, pieceId))
+      : null
     return {
       shots: result.rows.map((row) => toSavedScene(row, imported)),
       editedId: result.editedId,
@@ -397,9 +409,8 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
     const device =
       (await ctx.services.optional('renderEngine')?.status(serviceContext(ctx)))?.device ?? null
     const rate = rateFrom(await renderHistory(ctx), device)
-    const imported = await importedShotSubject(ctx, piece)
-    const scenes = requested.map((scene) => completeImportedShot(scene, imported))
-    const takes = scenes.map((s) => Math.round(estimateTakeSeconds(s, input.autoTune, rate)))
+    // Work is estimated from output size, motion and quality before resolving imported appearance.
+    const takes = requested.map((s) => Math.round(estimateTakeSeconds(s, input.autoTune, rate)))
     return {
       engine,
       seconds: takes.reduce((a, b) => a + b, 0),
