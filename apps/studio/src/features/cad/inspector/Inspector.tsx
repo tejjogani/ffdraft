@@ -23,6 +23,7 @@ import { carats, mm } from '../../../lib/format'
 import { diaexBrowseLink } from '../../sourcing/links'
 import { NurbsControls } from '../curves/NurbsControls'
 import { RhinoEdgeCopy } from '../curves/RhinoEdgeCopy'
+import { RhinoFaceBorders } from '../curves/RhinoFaceBorders'
 import { type ImportedMesh, isImportedMesh } from '../mesh-edit/model'
 import { isProfileNode, type ProfileNode, profileSize } from '../profiles/profile'
 import { RhinoEndFaceTool } from '../rhino/RhinoEndFaceTool'
@@ -197,6 +198,15 @@ export function Inspector({
                   <RhinoEdgeCopy
                     key={`edge/${pieceId}/${node.id}`}
                     node={node}
+                    pieceId={pieceId}
+                    session={session}
+                  />
+                )}
+                {retainedRhinoAsset && session && (
+                  <RhinoFaceBorders
+                    key={`borders/${pieceId}/${node.id}`}
+                    node={node}
+                    nativeAssetId={retainedRhinoAsset}
                     pieceId={pieceId}
                     session={session}
                   />
