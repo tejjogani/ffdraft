@@ -92,6 +92,7 @@ export const QUERY_NAMES = [
   'pieces.estimate',
   'projects.summary',
   'design.describe',
+  'design.meshComponents',
   'design.history',
   'design.evaluate',
   'sourcing.search',
