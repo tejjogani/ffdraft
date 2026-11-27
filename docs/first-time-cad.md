@@ -14,6 +14,10 @@ Open the destination project’s CAD builder and choose Import model. Pick a .3d
 
 Review the skipped objects before choosing Import. You can select the new parts in Features and change their material, finish or transform. Undo removes the import in one edit. After reopening the project, use History and choose Revert on the import. Keep the original .3dm for Rhino curves, editable surfaces, and design history.
 
+## Edit a Rhino curve
+
+For a curve imported as NURBS, select its name in Features and choose Edit control points. Click a point on the dashed control polygon or enter its point number, then drag it in the selected view or type X, Y and Z in millimetres. The solid line previews the curve. Adjust Weight to change how strongly a point attracts the curve. Save points records one edit.
+
 ## Export a mesh from Rhino
 
 If a solid has no saved display mesh, select it in Rhino and run Mesh. Preview the result, select the generated mesh objects, then choose File → Export Selected and save as .3dm to carry separate parts and the document units. You can also choose STL. In Pavé, set the STL source units to the same units used for the export and check a known measurement before importing. A single STL comes into Features as one part.

@@ -267,9 +267,14 @@ function Workspace({ piece }: { piece: Piece }) {
   const [sheet, setSheet] = useState<'outliner' | 'inspector' | null>(null)
   const [marker, setMarker] = useState<MarkerSpot | null>(null)
   const [stepping, setStepping] = useState<string | null>(null)
-  const formats = view.order.some((id) => view.nodes[id]?.kind !== 'curve')
-    ? exportFormats(kernel.formats)
-    : []
+  const hasBodyFeature = view.order.some(
+    (id) => !['curve', 'nurbsCurve'].includes(view.nodes[id]?.kind ?? ''),
+  )
+  const formats = exportFormats(kernel.formats).filter(
+    (f) =>
+      hasBodyFeature ||
+      (f === '3dm' && view.order.some((id) => view.nodes[id]?.kind === 'nurbsCurve')),
+  )
   const curves = useMemo(
     () =>
       (evaluation?.curves ?? []).filter(
