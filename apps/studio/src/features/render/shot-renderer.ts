@@ -165,6 +165,8 @@ export class ShotRenderer {
     const resolved = resolveScene(scene, evaluation)
     this.#size = { width: Math.max(1, Math.round(width)), height: Math.max(1, Math.round(height)) }
     this.renderer.setSize(this.#size.width, this.#size.height, false)
+    // The stage fits the shot's frame to this camera aspect when it places the camera.
+    this.#camera.aspect = this.#size.width / this.#size.height
     configureRenderer(this.renderer, resolved)
     const still = this.#adaptive?.still().effects ?? 'full'
     const environment = createEnvironment(this.renderer, resolved, still === 'full' ? 256 : 128)
