@@ -4,7 +4,7 @@ import { BoxGeometry, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three'
 import { acceleratedRaycast, MeshBVH } from 'three-mesh-bvh'
 import { describe, expect, it } from 'vitest'
 import { geometryOf, MetalBatch } from './metal-shells'
-import { createViewVisibility } from './visibility'
+import { createViewVisibility, metalShellOf } from './visibility'
 
 /** BoxGeometry duplicates positions across the face seams, as crease-normal CAD meshes do. */
 function boxes(specs: readonly { size: number; z: number; inverted?: boolean }[]): Part {
@@ -114,6 +114,71 @@ describe('disconnected metal shells', () => {
     batch.setVisibility(createViewVisibility({ hidden: [] }), false)
     expect(mesh.geometry).toBe(original)
     expect(pick()).toEqual(first)
+  })
+
+  it('keeps all shells hidden when their parent part is hidden', () => {
+    const { batch, mesh, pick } = pickBatch(
+      boxes([
+        { size: 1, z: 3 },
+        { size: 1, z: 0 },
+      ]),
+    )
+    const front = pick()
+    const parent = metalShellOf(front.partId)
+    expect(parent).toEqual({ partId: 'links', index: 0 })
+    const isolateFront = { hidden: [], isolated: [front] }
+    batch.setVisibility(
+      createViewVisibility({ ...isolateFront, hiddenParts: [parent!.partId] }),
+      true,
+    )
+    expect(mesh.visible).toBe(false)
+    expect(batch.matchingGeometry(() => true)).toBeNull()
+
+    batch.setVisibility(createViewVisibility(isolateFront), true)
+    expect(mesh.visible).toBe(true)
+    expect(mesh.geometry.getIndex()?.count).toBe(36)
+    expect(pick()).toEqual(front)
+  })
+
+  it('does not outline a hidden shell or include its visible sibling in an exact outline', () => {
+    const { batch, mesh, pick } = pickBatch(
+      boxes([
+        { size: 1, z: 3 },
+        { size: 1, z: 0 },
+      ]),
+    )
+    const front = pick()
+    const matchesFront = ({ partId }: { partId?: string }) => partId === front.partId
+    const outline = batch.matchingGeometry(matchesFront)
+    expect(outline?.getIndex()?.count).toBe(36)
+    expect(outline).not.toBe(mesh.geometry)
+    outline?.dispose()
+
+    batch.setVisibility(createViewVisibility({ hidden: [], hiddenParts: [front.partId!] }), true)
+    expect(batch.matchingGeometry(matchesFront)).toBeNull()
+  })
+
+  it('disposes filtered geometry when restoring the full part for capture or release', () => {
+    const { batch, mesh, pick } = pickBatch(
+      boxes([
+        { size: 1, z: 3 },
+        { size: 1, z: 0 },
+      ]),
+    )
+    const original = mesh.geometry
+    const isolated = { hidden: [], isolated: [pick()] }
+    batch.setVisibility(createViewVisibility(isolated), true)
+    const filtered = mesh.geometry
+    let disposed = false
+    filtered.addEventListener('dispose', () => {
+      disposed = true
+    })
+    batch.setVisibility(createViewVisibility({ hidden: [] }), false)
+    expect(mesh.geometry).toBe(original)
+    expect(disposed).toBe(true)
+    batch.setVisibility(createViewVisibility(isolated), true)
+    expect(mesh.geometry).not.toBe(filtered)
+    expect(pick()).toEqual(isolated.isolated[0])
   })
 
   it('keeps a closed inward cavity together with the metal that surrounds it', () => {
