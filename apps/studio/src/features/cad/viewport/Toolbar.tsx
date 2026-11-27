@@ -17,6 +17,7 @@ import {
   ChevronDown,
   Crosshair,
   Download,
+  FileUp,
   Focus,
   Gauge,
   PencilRuler,
@@ -154,12 +155,14 @@ export function FileToolbar({
   canSaveFile,
   simplified,
   compact,
+  onImportModel,
 }: {
   save: SaveState | null
   formats: readonly ExportFormat[]
   canSaveFile: boolean
   simplified: boolean
   compact: boolean
+  onImportModel?: (() => void) | undefined
 }) {
   // Rhino and STEP count against the plan; the menu says what is left before anyone asks.
   const plan = useRpc('plan.get', {})
@@ -181,6 +184,14 @@ export function FileToolbar({
       )}
       <Cluster className="pr-1 pl-0.5">
         {save && <SavePill save={save} compact={compact} />}
+        {onImportModel &&
+          (compact ? (
+            <IconButton icon={FileUp} label="Import model" onClick={onImportModel} />
+          ) : (
+            <Button size="sm" variant="ghost" icon={FileUp} onClick={onImportModel}>
+              Import model
+            </Button>
+          ))}
         {canSaveFile && (
           <Menu
             align="end"

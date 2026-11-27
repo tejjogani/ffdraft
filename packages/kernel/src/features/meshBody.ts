@@ -1,8 +1,8 @@
 /**
  * A sculpted body from an imported, scanned or AI-generated mesh (or a built-in model), made
  * castable: repaired to a closed manifold, scaled to height, simplified, smoothed, flat-backed
- * and hollowed (docs/research/06-freeform.md §4). The result stands in the XZ plane facing −Y
- * with its back on y = 0, so bails, pavé and chains treat it like any other flat piece.
+ * and hollowed (docs/research/06-freeform.md §4). By default it stands in the XZ plane facing −Y
+ * with its back on y = 0. Measured imports keep the asset's millimetre scale and placement.
  */
 import type { NodeOf } from '@pave/schema'
 import type { Manifold } from 'manifold-3d'
@@ -70,23 +70,28 @@ export const meshBody = defineFeature('meshBody', async (node, ctx) => {
     return m
   }
   let m = keep(await sourceManifold(node, ctx))
-  // Scale first so every later tolerance is in millimetres.
-  m = keep(scaleToHeight(m, node.height))
-  m = keep(simplifyToDetail(m, node.detail, node.height))
-  if (node.smooth > 0)
-    m = keep(
-      scaleToHeight(keep(smoothManifold(m, node.smooth, node.height * SMOOTH_EDGE)), node.height),
-    )
+  // Measured meshes are already in mm. Fit the others before applying millimetre tolerances.
+  const sourceBounds = m.boundingBox()
+  const height = node.keepSourcePlacement ? sourceBounds.max[2] - sourceBounds.min[2] : node.height
+  if (!node.keepSourcePlacement) m = keep(scaleToHeight(m, height))
+  m = keep(simplifyToDetail(m, node.detail, height))
+  if (node.smooth > 0) {
+    m = keep(smoothManifold(m, node.smooth, height * SMOOTH_EDGE))
+    if (!node.keepSourcePlacement) m = keep(scaleToHeight(m, height))
+  }
   const trimmed = keep(flatBack(m, node.flatBack))
-  const offset = flatPlacement(trimmed)
-  let body = keep(trimmed.translate(offset))
-  // Faces pavé must leave alone: the flat back (on y = 0 after placement) and any cavity.
-  const hidden: HiddenSurfaces = { within: 0, ...(trimmed !== m && { back: 0 }) }
+  const offset = node.keepSourcePlacement ? undefined : flatPlacement(trimmed)
+  let body = offset ? keep(trimmed.translate(offset)) : trimmed
+  // Faces pavé must leave alone: the flat back and any cavity.
+  const hidden: HiddenSurfaces = {
+    within: 0,
+    ...(trimmed !== m && { back: offset ? 0 : trimmed.boundingBox().max[1] }),
+  }
 
   if (node.hollow > 0) {
     // The cavity is offset from the body as it was before its back was sliced off, so a
     // flat-backed piece gets an open scoop instead of a sealed void.
-    const envelope = trimmed === m ? body : keep(m.translate(offset))
+    const envelope = trimmed === m ? body : offset ? keep(m.translate(offset)) : m
     const hollowed = hollowBody(body, envelope, node.hollow)
     if (!hollowed)
       ctx.report({

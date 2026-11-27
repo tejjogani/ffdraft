@@ -6,9 +6,9 @@ exports[`the frozen system prompt > has a stable hash (snapshot) that covers the
     7082,
     41253,
     10638,
-    15979,
+    16139,
   ],
-  "hash": "prompt-03cc58f627def1",
+  "hash": "prompt-0ae25574c58d44",
 }
 `;
 
@@ -177,9 +177,11 @@ Shared value lists:
 - source (required): one of
   - type "asset":
     - assetId (required): string
+    - rhinoLayer: string
   - type "builtin":
     - name: trophy | crown | dice = "trophy"
-- height: number 3–200 mm = 40. The mesh is scaled to this overall height.
+- keepSourcePlacement: boolean = false. Use the coordinates in the mesh asset, in millimetres.
+- height: number 3–200 mm = 40. only when keepSourcePlacement is false. The mesh is scaled to this overall height.
 - flatBack: number 0–0.9 = 0. Slices this fraction off the back so the piece lies flat.
 - hollow: number 0–5 mm = 0. 0 keeps the body solid.
 - smooth: integer 0–8 = 0

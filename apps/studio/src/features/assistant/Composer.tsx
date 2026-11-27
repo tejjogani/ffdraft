@@ -84,7 +84,9 @@ export function Composer({
     if (room <= 0) return toast.error('Up to 8 photos per message')
     setUploading((n) => n + 1)
     try {
-      const uploaded = await Promise.allSettled(supported.slice(0, room).map(uploadAsset))
+      const uploaded = await Promise.allSettled(
+        supported.slice(0, room).map((file) => uploadAsset(file)),
+      )
       onAttach(
         uploaded.flatMap((r) =>
           r.status === 'fulfilled' ? [{ id: r.value.id, name: r.value.name }] : [],

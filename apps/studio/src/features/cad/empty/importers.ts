@@ -5,9 +5,10 @@
  */
 import { type NodeInput, newId } from '@pave/schema'
 
-export type ImportKind = 'mesh' | 'svg' | 'image'
+export type ImportKind = 'model' | 'mesh' | 'svg' | 'image'
 
 const BY_EXTENSION: Record<string, ImportKind> = {
+  '3dm': 'model',
   stl: 'mesh',
   obj: 'mesh',
   glb: 'mesh',
