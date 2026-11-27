@@ -410,7 +410,7 @@ try {
   const newView = page.getByRole('dialog', { name: 'Add view' })
   await newView.getByRole('textbox', { name: 'View name' }).fill('Catalogue top')
   await newView.getByRole('button', { name: 'Add view' }).click()
-  await page.getByLabel('Live preview of the Catalogue top shot').waitFor()
+  await page.getByLabel('Live preview of the Catalogue top shot', { exact: true }).waitFor()
   const freshShots = (await rpc('scenes.list', {
     pieceId: fresh.id,
   })) as CommandOutput<'scenes.list'>
@@ -421,7 +421,7 @@ try {
   assert.equal(freshShots.at(-1)?.scene.camera.preset, 'top')
   await page.waitForURL((url) => url.searchParams.get('shot') === freshShots.at(-1)!.id)
   await page.reload()
-  await page.getByLabel('Live preview of the Catalogue top shot').waitFor()
+  await page.getByLabel('Live preview of the Catalogue top shot', { exact: true }).waitFor()
   await rpc('scenes.update', { id: freshShots.at(-1)!.id, patch: { pose: 'circular-band' } })
   await page.reload()
   await renderActions
@@ -434,7 +434,7 @@ try {
     return views.at(-1)?.scene.pose === 'as-designed' && views.at(-1)?.scene.camera.preset === 'top'
   })
   await page.goto(`${base}/pieces/${fresh.id}/render?shot=${initialized[0]!.id}`)
-  await page.getByLabel('Live preview of the Hero shot').waitFor()
+  await page.getByLabel('Live preview of the Hero shot', { exact: true }).waitFor()
   await page.waitForURL((url) => !url.searchParams.has('shot'))
   console.log(
     'Passed Rhino and STL import preview, cancel, named assembly, reopen, role confirmation, STL readback and grouped undo.',
