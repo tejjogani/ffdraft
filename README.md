@@ -193,7 +193,7 @@ saved in the app), refuses to start without one, and never prints it.
 | `--only=design,edit` | Only some of the journeys: `design`, `photo`, `edit`, `render` |
 | `--tiers` | Also a quick check of each tier's model (a few cents to about a dollar more) |
 
-For a measured **reference → CAD → render** run, use the reference replication benchmark:
+### Reference replication benchmark
 
 ```bash
 pnpm agent:reference-replication --blender --out=/tmp/pave-reference-scripted
