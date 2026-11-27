@@ -122,6 +122,8 @@ describe('readRhino3dm', () => {
   })
 
   it('reads BReps with saved render meshes and reports only complete objects', async () => {
+    let sourceId: string
+    let instanceId: string
     const bytes = writeFile((doc) => {
       const sphere = rhino.Brep.createFromSphere(new rhino.Sphere([0, 0, 0], 1))
       const mesh = new rhino.Mesh()
@@ -148,11 +150,11 @@ describe('readRhino3dm', () => {
         )
       expect(cache(sphere.faces().get(0), mesh)).toBe(true)
       expect(cache(partialBox.faces().get(0), quad())).toBe(true)
-      doc.objects().addBrep(sphere, named('Cached sphere'))
+      sourceId = doc.objects().addBrep(sphere, named('Cached sphere'))
       doc.objects().addBrep(partialBox, named('Incomplete box'))
       const definitions = doc.instanceDefinitions()
       const id = definitions.add('Sphere', '', '', '', [0, 0, 0], [sphere], [named('Cache')])
-      doc
+      instanceId = doc
         .objects()
         .addInstanceObject(
           blockReference(definitions.get(id).id, rhino.Transform.translationXYZ(5, 0, 0)),
@@ -175,10 +177,49 @@ describe('readRhino3dm', () => {
     for (const { bytes } of result.objects) {
       expect(parseMesh(bytes).mesh.indices).toHaveLength(24)
     }
+    expect(result.objects[0]!.native).toMatchObject({ objectId: sourceId!, instancePath: [] })
+    expect(result.objects[1]!.native).toMatchObject({
+      instancePath: [instanceId!],
+      transform: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5, 0, 0, 1],
+    })
+    for (const part of result.objects) {
+      const native = rhino.File3dm.fromByteArray(part.native!.bytes)
+      expect(native.objects().count).toBe(1)
+      expect(native.instanceDefinitions().count).toBe(0)
+      expect(native.settings().modelUnitSystem).toBe(rhino.UnitSystem.Millimeters)
+      const geom = native.objects().get(0).geometry()
+      expect(geom).toBeInstanceOf(rhino.Brep)
+      expect(geom.getBoundingBox(true).min).toEqual([-1, -1, -1])
+    }
     expect(result.skipped).toMatchObject([
       { name: 'Incomplete box', reason: expect.stringMatching(/render mesh.*Mesh/) },
       { name: 'Construction', reason: expect.stringMatching(/curve/i) },
     ])
+  })
+
+  it('excludes hidden objects and objects on hidden parent layers from the import', async () => {
+    const bytes = writeFile((doc) => {
+      const layers = doc.layers()
+      const parent = new rhino.Layer()
+      parent.name = 'Hidden container'
+      parent.visible = false
+      const parentIndex = layers.add(parent)
+      const child = new rhino.Layer()
+      child.name = 'Hidden with parent'
+      child.parentLayerId = layers.findIndex(parentIndex).id
+      const childIndex = layers.add(child)
+      const visible = new rhino.Layer()
+      visible.name = 'Visible parts'
+      const visibleIndex = layers.add(visible)
+      const hiddenObject = named('Hidden object', visibleIndex)
+      hiddenObject.mode = rhino.ObjectMode.Hidden
+      const objects = doc.objects()
+      objects.addMesh(quad(), hiddenObject)
+      objects.addMesh(quad(3), named('Hidden layer member', childIndex))
+      objects.addMesh(quad(6), named('Visible part', visibleIndex))
+    })
+    const result = await readRhino3dm(bytes)
+    expect(result.objects.map((object) => object.name)).toEqual(['Visible part'])
   })
 
   it('imports a Rhino block at the instance placement and excludes its definition geometry', async () => {

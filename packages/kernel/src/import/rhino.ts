@@ -4,11 +4,13 @@ import type {
   File3dmLayerTable,
   File3dmObject,
   GeometryBase,
+  Layer,
   Mesh,
   RhinoModule,
   Transform,
   UnitSystem,
 } from 'rhino3dm'
+import type { Mat4 } from '../geometry/vec'
 import { writeStl } from '../mesh/stl'
 import { freeRhino, loadRhino3dm } from '../runtime/rhino'
 import type { IndexedTriangles } from '../solid/meshing'
@@ -37,6 +39,17 @@ export interface RhinoMeshObject extends RhinoObjectLabel {
   /** Binary STL in Rhino's world coordinates, converted to millimetres with Z up. */
   bytes: Uint8Array<ArrayBuffer>
   bounds: Bounds
+  native?: RhinoNativePart
+}
+
+export interface RhinoNativePart {
+  /** One solid BRep in millimetres, without the original document or block definition. */
+  bytes: Uint8Array<ArrayBuffer>
+  objectId: string
+  /** The original Rhino instance object IDs, outside in. */
+  instancePath: readonly string[]
+  /** A block placement in millimetres, column-major. */
+  transform?: Mat4
 }
 
 export interface RhinoSkippedObject extends RhinoObjectLabel {
@@ -63,6 +76,7 @@ interface MeshPlacement {
 interface BlockPlacement extends RhinoObjectLabel {
   world: Transform
   meshPlacement: MeshPlacement
+  instancePath: readonly string[]
 }
 
 class SkippedGeometry extends Error {}
@@ -302,10 +316,84 @@ function meshBounds(meshes: readonly IndexedTriangles[]): Bounds {
   return { min, max }
 }
 
-function layerPath(layers: File3dmLayerTable, index: number): string | null {
+function readLayer(
+  layers: File3dmLayerTable,
+  index: number,
+  visibleById: Map<string, boolean>,
+): { path: string | null; visible: boolean } {
   return withHandles((hold) => {
     const layer = hold(layers.findIndex(index))
-    return layer?.fullPath?.trim() || layer?.name?.trim() || null
+    const visited = new Set<string>()
+    let current: Layer | null = layer
+    let visible = true
+    while (current) {
+      const id = current.id
+      const cached = visibleById.get(id)
+      if (cached !== undefined) {
+        visible = cached
+        break
+      }
+      if (!current.visible || visited.has(id)) {
+        visible = false
+        visibleById.set(id, visible)
+        break
+      }
+      visited.add(id)
+      const parent: string = current.parentLayerId
+      current =
+        parent === '00000000-0000-0000-0000-000000000000' ? null : hold(layers.findId(parent))
+    }
+    for (const id of visited) visibleById.set(id, visible)
+    return { path: layer?.fullPath?.trim() || layer?.name?.trim() || null, visible }
+  })
+}
+
+function blockMatrix(t: Transform, mm: number): Mat4 {
+  return [
+    t.m00,
+    t.m10,
+    t.m20,
+    0,
+    t.m01,
+    t.m11,
+    t.m21,
+    0,
+    t.m02,
+    t.m12,
+    t.m22,
+    0,
+    t.m03 * mm,
+    t.m13 * mm,
+    t.m23 * mm,
+    1,
+  ]
+}
+
+function writeNativePart(
+  rhino: RhinoModule,
+  geometry: GeometryBase,
+  millimetres: number,
+): Uint8Array<ArrayBuffer> | null {
+  if (!(geometry instanceof rhino.Brep || geometry instanceof rhino.Extrusion) || !geometry.isSolid)
+    return null
+  return withHandles((hold) => {
+    const brep = hold(
+      geometry instanceof rhino.Extrusion ? geometry.toBrep(true) : (geometry.duplicate() as Brep),
+    )
+    if (!brep?.isSolid) return null
+    if (millimetres !== 1 && !brep.transform(hold(rhino.Transform.scale([0, 0, 0], millimetres))))
+      return null
+    if (!brep.isValid) return null
+
+    const doc = hold(new rhino.File3dm())
+    hold(doc.settings()).modelUnitSystem = rhino.UnitSystem.Millimeters
+    const objects = hold(doc.objects())
+    const attrs = hold(new rhino.ObjectAttributes())
+    objects.addBrep(brep, attrs)
+    if (objects.count !== 1) return null
+    const opts = hold(new rhino.File3dmWriteOptions())
+    opts.saveUserData = false
+    return doc.toByteArrayOptions(opts).slice()
   })
 }
 
@@ -330,7 +418,10 @@ export async function readRhino3dm(bytes: Uint8Array): Promise<RhinoImport> {
     const units = fileUnits(rhino, settings.modelUnitSystem)
     const result: RhinoMeshObject[] = []
     const skipped: RhinoSkippedObject[] = []
-    const layerNames = new Map<number, string | null>()
+    const layerInfo = new Map<number, ReturnType<typeof readLayer>>()
+    const visibleById = new Map<string, boolean>()
+    const nativeById = new Map<string, Uint8Array<ArrayBuffer> | null>()
+    let nativeBytes = 0
     const budget: RemainingGeometry = {
       vertices: MAX_VERTICES,
       triangles: MAX_TRIANGLES,
@@ -358,8 +449,13 @@ export async function readRhino3dm(bytes: Uint8Array): Promise<RhinoImport> {
         if (++visitedObjects > MAX_OBJECTS) throw new Error(TOO_COMPLEX)
 
         const layerIndex = attrs?.layerIndex ?? -1
-        if (!layerNames.has(layerIndex)) layerNames.set(layerIndex, layerPath(layers, layerIndex))
-        const layer = layerNames.get(layerIndex) ?? parent?.layer ?? null
+        let info = layerInfo.get(layerIndex)
+        if (!info) {
+          info = readLayer(layers, layerIndex, visibleById)
+          layerInfo.set(layerIndex, info)
+        }
+        if (attrs?.mode === rhino.ObjectMode.Hidden || !info.visible) return
+        const layer = info.path ?? parent?.layer ?? null
         const objectName = attrs?.name?.trim()
         const layerName = layer?.split('::').at(-1)
         const fallbackName = layerName || `Rhino object ${ordinal}`
@@ -402,6 +498,7 @@ export async function readRhino3dm(bytes: Uint8Array): Promise<RhinoImport> {
               name,
               layer,
               meshPlacement: blockPlacement(units.mm, world),
+              instancePath: [...(parent?.instancePath ?? []), attrs?.id ?? ''],
             }
             activeDefinitions.add(definitionId)
             try {
@@ -419,6 +516,25 @@ export async function readRhino3dm(bytes: Uint8Array): Promise<RhinoImport> {
             parent?.meshPlacement ?? filePlacement,
             budget,
           )
+          const objectId = attrs?.id
+          let native: RhinoNativePart | undefined
+          if (objectId) {
+            let archived = nativeById.get(objectId)
+            if (archived === undefined) {
+              archived = writeNativePart(rhino, geometry, units.mm)
+              nativeById.set(objectId, archived)
+              nativeBytes += archived?.byteLength ?? 0
+              if (nativeBytes > MAX_RHINO_FILE_BYTES) throw new Error(TOO_COMPLEX)
+            }
+            if (archived) {
+              native = {
+                bytes: archived,
+                objectId,
+                instancePath: parent?.instancePath ?? [],
+                ...(parent && { transform: blockMatrix(parent.world, units.mm) }),
+              }
+            }
+          }
           if (!objectName) {
             const partNumber = (unnamedPartsByLayer.get(layer) ?? 0) + 1
             unnamedPartsByLayer.set(layer, partNumber)
@@ -431,6 +547,7 @@ export async function readRhino3dm(bytes: Uint8Array): Promise<RhinoImport> {
             layer,
             bytes: writeStl(meshes, 'Pave STL from Rhino .3dm, millimetres'),
             bounds: meshBounds(meshes),
+            ...(native && { native }),
           })
         } catch (error) {
           if (!(error instanceof SkippedGeometry)) throw error
