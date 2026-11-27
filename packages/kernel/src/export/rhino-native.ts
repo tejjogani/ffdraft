@@ -8,39 +8,11 @@ import type {
   RhinoModule,
   Transform,
 } from 'rhino3dm'
-import type { Quality, Scene, ScenePart } from '../core'
+import type { Scene, ScenePart } from '../core'
 import { IDENTITY, type Mat4, multiply } from '../geometry/vec'
 import { MAX_RHINO_FILE_BYTES } from '../import/rhino'
 import { freeRhino } from '../runtime/rhino'
 import type { ExportOptions } from '../types'
-
-/** A cut, union or separated shell can have the original node as its only named source. */
-function isWholeSource(part: ScenePart, quality: Quality): boolean {
-  const source = part.sources[0]
-  if (!source || part.sources.length !== 1 || !part.fused) return false
-
-  const original = source.body.solid.manifold(quality)
-  const final = part.fused.manifold(quality)
-  if (original === final) return true
-  const volume = original.volume()
-  if (Math.abs(final.volume() - volume) > volume * 1e-6) return false
-
-  // Re-triangulated coplanar faces can differ while their solid is identical. Verify both
-  // directions, allowing only the roundoff from tessellation and boolean arithmetic.
-  const roundoff = volume * 1e-12
-  const removed = original.subtract(final)
-  try {
-    if (!removed.isEmpty() && Math.abs(removed.volume()) > roundoff) return false
-  } finally {
-    removed.delete()
-  }
-  const added = final.subtract(original)
-  try {
-    return added.isEmpty() || Math.abs(added.volume()) <= roundoff
-  } finally {
-    added.delete()
-  }
-}
 
 function rhinoTransform(rhino: RhinoModule, m: Mat4): Transform {
   // The kernel stores matrices column-major, while Rhino's member names are row, column.
@@ -172,8 +144,7 @@ export function nativeSolidWriter(
         node?.kind !== 'meshBody' ||
         node.source.type !== 'asset' ||
         !node.source.nativeAssetId ||
-        !(result.data as { nativeMeshUnmodified?: boolean })?.nativeMeshUnmodified ||
-        !isWholeSource(part, scene.quality)
+        !part.preservesNativeSurface
       )
         return false
       const source = node.source

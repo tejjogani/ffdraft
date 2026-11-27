@@ -448,6 +448,29 @@ const GENERAL_POSITION: [number, number, number] = [1.3e-4, 0.7e-4, 0.9e-4]
 /** Edges shorter than this are collapsed in the fused body (mm) — a tenth of the chord tolerance. */
 const SLIVER = 5e-4
 
+/** A cut, union or separated shell can still have the original node as its only named source. */
+function matchesSourceMesh(original: Manifold, assembled: Manifold): boolean {
+  if (original === assembled) return true
+  const volume = original.volume()
+  if (Math.abs(assembled.volume() - volume) > volume * 1e-6) return false
+
+  // Re-triangulated coplanar faces can differ while their solid is identical. Verify both
+  // directions, allowing only the roundoff from tessellation and boolean arithmetic.
+  const roundoff = volume * 1e-12
+  const removed = original.subtract(assembled)
+  try {
+    if (!removed.isEmpty() && Math.abs(removed.volume()) > roundoff) return false
+  } finally {
+    removed.delete()
+  }
+  const added = assembled.subtract(original)
+  try {
+    return added.isEmpty() || Math.abs(added.volume()) <= roundoff
+  } finally {
+    added.delete()
+  }
+}
+
 export function assembleProduction(
   design: Design,
   results: ReadonlyMap<string, NodeResult>,
@@ -458,6 +481,15 @@ export function assembleProduction(
   const { manifold: mf } = runtime()
   const consumed = consumedBy(results)
   const active = activeResults(design, results)
+  const nativeCandidates = new Set(
+    active
+      .filter(
+        (result) =>
+          result.node.kind === 'meshBody' &&
+          (result.data as { nativeMeshUnmodified?: boolean })?.nativeMeshUnmodified,
+      )
+      .map((result) => result.id),
+  )
   const temporaries: Manifold[] = []
   const temp = (m: Manifold): Manifold => {
     temporaries.push(m)
@@ -537,6 +569,7 @@ export function assembleProduction(
     const bySize =
       groups.size > 1 ? [...groups].sort(([, a], [, b]) => metalOf(a) - metalOf(b)) : [...groups]
     for (const [material, group] of bySize) {
+      const hasNativeCandidates = group.sources.some(({ nodeId }) => nativeCandidates.has(nodeId))
       // A mesh body can hold many separate shells (the links of a chain). Shells that touch
       // nothing outside their own body need no boolean at all — and fusing a thousand links
       // with a pendant they never touch would take most of a minute — so they are set aside
@@ -606,7 +639,12 @@ export function assembleProduction(
         ...group.precut,
         ...busyShells.map((b) => b.manifold),
       ]
-      const shells: { shell: Manifold; volume: number; cavities: Cavity[] }[] = []
+      const shells: {
+        shell: Manifold
+        volume: number
+        cavities: Cavity[]
+        beforeCleanup?: Manifold
+      }[] = []
       if (busy.length > 0) {
         let fused = fuse(busy)
         if (seats) fused = temp(fused.subtract(seats))
@@ -662,9 +700,12 @@ export function assembleProduction(
               : raw
           const found = cavities.map((c) => ({ box: boundsOfManifold(c), volume: -c.volume() }))
           if (whole !== raw) for (const m of [raw, ...cavities]) m.delete()
+          // Volume and coordinates can change slightly during castable(), even if all
+          // material operations left a rendered Rhino part intact. Compare before cleanup.
+          const beforeCleanup = hasNativeCandidates ? temp(whole.translate([0, 0, 0])) : undefined
           const shell = castable(whole)
           const volume = shell.volume()
-          if (volume > DUST_MM3) shells.push({ shell, volume, cavities: found })
+          if (volume > DUST_MM3) shells.push({ shell, volume, cavities: found, beforeCleanup })
           else shell.delete()
         }
         shells.sort((a, b) => b.volume - a.volume)
@@ -716,7 +757,7 @@ export function assembleProduction(
           (sum, s) => sum + s.body.solid.volume() - meshVolume(s.body.solid.triangles(quality)),
           0,
         )
-      kept.forEach(({ shell, volume, cavities }, i) => {
+      kept.forEach(({ shell, volume, cavities, beforeCleanup }, i) => {
         const sources = fusedSources.filter((_, k) => owner[k] === i)
         const solid = solidFromManifold(shell)
         // A shell that no body's centre fell into is still named after the body nearest to it.
@@ -736,10 +777,18 @@ export function assembleProduction(
         part.exact = sources.length > 0 && sources.every((s) => s.body.solid.exact)
         const regions = regionsOf(part, sources, results)
         if (regions) part.regions = regions
+        const source = sources[0]
+        const preservesNativeSurface =
+          beforeCleanup &&
+          source &&
+          sources.length === 1 &&
+          nativeCandidates.has(source.nodeId) &&
+          matchesSourceMesh(source.body.solid.manifold(quality), beforeCleanup)
         parts.push({
           part,
           fused: solid,
           sources,
+          ...(preservesNativeSurface && { preservesNativeSurface }),
           ...(kept.length > 1 && first ? { namedAfter: first.id } : {}),
           ...(cavities.length > 0 ? { cavities } : {}),
         })
@@ -763,7 +812,15 @@ export function assembleProduction(
           volume,
         )
         part.exact = whole && home.exact
-        parts.push({ part, fused: solid, sources, namedAfter: node.id })
+        parts.push({
+          part,
+          fused: solid,
+          sources,
+          namedAfter: node.id,
+          ...(whole &&
+            sources.length === 1 &&
+            nativeCandidates.has(node.id) && { preservesNativeSurface: true }),
+        })
       }
     }
     parts.sort(
