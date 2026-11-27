@@ -521,6 +521,8 @@ database) is not documented yet.
 
 The [Python CAD client](packages/pave-python/README.md) can inspect a feature, edit its dimensions, evaluate the result and undo it. The [CAD command roadmap](docs/plans/cad-command-api.md) tracks the Rhino-style tools and their geometry checks.
 
+Run the [local Rhino regression check](docs/plans/cad-command-api.md#local-rhino-regression-check) against your own `.3dm` files with `pnpm --silent cad:check-rhino "path/to/model.3dm"`.
+
 Everything the application does goes through one list of commands, and each is reachable at
 `POST /api/rpc/<command>` with a JSON body. On your own computer no key is needed.
 
