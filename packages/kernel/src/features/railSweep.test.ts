@@ -170,6 +170,39 @@ describe('rail sweep', () => {
     expect(edgeTopology(sheet!.solid.triangles()).open).toBeGreaterThan(0)
   })
 
+  it('sweeps an open section as a sheet between two guides with opposite directions', async () => {
+    const reversed = rail('reversed', [4, 0, 10, 1], [4, 0, 0, 1])
+    const open = rail('open', [0, 0, 0, 1], [4, 0, 0, 1])
+    const design = designFrom('other', [
+      centre,
+      reversed,
+      open,
+      sweep(['centre', 'reversed'], ['open'], false),
+    ])
+    const result = await swept(design)
+    expect(result.bodies).toHaveLength(0)
+    expect(result.sheets).toHaveLength(1)
+    expect(result.sheets?.[0]?.solid.area()).toBeCloseTo(40, 4)
+  })
+
+  it.each([1, 2])('rejects capping an open section on %i rail(s)', async (count) => {
+    const open = rail('open', [0, 0, 0, 1], [4, 0, 0, 1])
+    const design = designFrom('other', [
+      centre,
+      side,
+      open,
+      sweep(['centre', 'side'].slice(0, count), ['open']),
+    ])
+    const result = (await kernel.scene(design)).nodes.get('sweep')
+    expect(result?.bodies).toHaveLength(0)
+    expect(result?.sheets ?? []).toHaveLength(0)
+    expect(
+      result?.diagnostics.some(
+        (d) => d.code === 'feature.failed' && /close the sections/i.test(d.message),
+      ),
+    ).toBe(true)
+  })
+
   it('rejects a second rail that misses a section', async () => {
     const off = rail('off', [8, 0, 0, 1], [8, 0, 10, 1])
     const design = designFrom('other', [centre, off, base, sweep(['centre', 'off'], ['base'])])
