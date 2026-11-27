@@ -1066,8 +1066,10 @@ describe('outline bodies: what the engine pass found', () => {
 
   // Polish, Czech, Hungarian and Turkish names once failed in every bundled font, which hold
   // only Latin-1: their letters are composed from the base letter and the font's own marks.
-  it('composes Latin Extended-A letters the fonts lack, and flags what it cannot draw', async () => {
-    for (const font of ['sans', 'serif', 'script', 'block'] as const) {
+  // A full CAD build of each font gets its own timeout on slower runners.
+  it.each(['sans', 'serif', 'script', 'block'] as const)(
+    'composes Latin Extended-A in %s and reports an unsupported glyph',
+    async (font) => {
       const scene = await kernel.scene(
         pendant({
           id: 'v',
@@ -1086,7 +1088,11 @@ describe('outline bodies: what the engine pass found', () => {
         font,
       ).toBeUndefined()
       expect(d.find((x) => x.code === 'text.missingGlyph')?.level, font).toBe('error')
-    }
+    },
+    180_000,
+  )
+
+  it('sets the base letter and reports an error when its mark has no donor', async () => {
     // A mark with no donor in the font (a dot below) still sets the base letter, as an error.
     const scene = await kernel.scene(
       pendant({ id: 'v', kind: 'vectorBody', source: { type: 'text', text: 'Ṃa', font: 'sans' } }),
@@ -1094,7 +1100,7 @@ describe('outline bodies: what the engine pass found', () => {
     const accent = scene.evaluation.diagnostics.find((x) => x.code === 'text.accentDropped')
     expect(accent?.message).toMatch(/“Ṃ” was set as “M”/)
     expect(accent?.level).toBe('error')
-  }, 180_000)
+  })
 
   // The rule that sets an i's dot down onto its stem was applied to every mark: umlauts and
   // acutes were pushed into their letters, and the name came out up to 0.8 mm short.
