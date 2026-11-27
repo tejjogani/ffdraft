@@ -167,6 +167,7 @@ class Job(TypedDict):
     scene: Scene
     glb: str
     outDir: str
+    device: NotRequired[Literal["cpu"]]
 
 
 SUPPORTED_VERSION = 2

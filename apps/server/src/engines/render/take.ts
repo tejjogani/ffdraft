@@ -114,6 +114,7 @@ export async function renderTake(o: TakeOptions): Promise<TakeResult> {
     const result = await renderWithBlender({
       ...o.runtime,
       resolved,
+      device: o.scene.output.device,
       glb: o.glb,
       outDir: join(o.workDir, `pass-${pass}`),
       signal: o.signal,

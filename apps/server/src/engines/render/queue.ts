@@ -71,10 +71,12 @@ interface Entry {
 /** Same piece version, request, engine and runner → the same pixels. */
 export function cacheKeyOf(job: RenderJob, blenderVersion: string | null): string {
   const { includeUnassignedRhino, ...ordinary } = job.requestedScene
+  const { device, ...output } = ordinary.output
+  const scene = includeUnassignedRhino ? job.requestedScene : ordinary
   const key = canonicalJson([
     job.pieceId,
     job.sourceVersion,
-    includeUnassignedRhino ? job.requestedScene : ordinary,
+    device === 'auto' ? { ...scene, output } : scene,
     'blender',
     job.autoTune,
     RESOLVED_SCENE_VERSION,
@@ -204,11 +206,13 @@ export function createRenderQueue(o: RenderQueueOptions) {
       const cacheKey = cacheKeyOf(job, engine.version)
       const cached = job.retryOf ? null : await sctx.cachedRender(cacheKey)
       if (cached && cached.id !== job.id && cached.assetIds.length > 0) {
+        const { device: _cachedDevice, ...output } = cached.scene.output
+        const { device } = job.requestedScene.output
         await handle.update({
           status: 'done',
           progress: 1,
           assetIds: cached.assetIds,
-          scene: cached.scene,
+          scene: { ...cached.scene, output: { ...output, ...(device && { device }) } },
           critique: cached.critique,
           seconds: 0,
           device: cached.device,
