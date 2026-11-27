@@ -55,7 +55,17 @@ export function isRhinoRoleBody(node: Node | undefined): node is RhinoBody {
   )
 }
 
-export function rhinoRoleFrameIssue(node: Mesh): string | undefined {
+export function rhinoRoleFrameIssue(node: Mesh, design?: Design): string | undefined {
+  if (
+    design &&
+    Object.values(design.nodes).some(
+      (n) =>
+        (n.kind === 'group' && n.children.includes(node.id)) ||
+        (n.kind === 'pattern' && n.sources.includes(node.id)) ||
+        (n.kind === 'boolean' && (n.target === node.id || n.tools.includes(node.id))),
+    )
+  )
+    return 'This source is used in a group, pattern or boolean. Review a separate placed part to confirm its stone or setting at the correct location.'
   const t = node.transform
   if (
     !node.keepSourcePlacement ||
@@ -114,8 +124,8 @@ function sourceBody(design: Design, id: string) {
   return node
 }
 
-function requireOriginal(node: Mesh) {
-  const issue = rhinoRoleFrameIssue(node)
+function requireOriginal(node: Mesh, design: Design) {
+  const issue = rhinoRoleFrameIssue(node, design)
   if (issue) throw new Error(issue)
 }
 
@@ -159,7 +169,7 @@ export function reviewRhinoRoles(design: Design, choices: readonly ImportedRoleC
       throw new Error('Detach this source part from its current setting first.')
     const s = choice.stone
     if (!s) throw new Error('Confirm the cut, species, dimensions and girdle for this stone.')
-    requireOriginal(source)
+    requireOriginal(source, design)
     if (
       ![s.width, s.length, s.depth, ...s.girdle, ...s.rotation].every(Number.isFinite) ||
       s.length < s.width ||
@@ -228,7 +238,7 @@ export function reviewRhinoRoles(design: Design, choices: readonly ImportedRoleC
     if (!head) continue
     claim(head.sourceId)
     const metal = sourceBody(design, head.sourceId)
-    requireOriginal(metal)
+    requireOriginal(metal, design)
     const occupied = rhinoRoleLinks(design, metal.id)
     if (occupied.gem && occupied.gem.id !== gemId)
       throw new Error('This part is already assigned to another stone.')

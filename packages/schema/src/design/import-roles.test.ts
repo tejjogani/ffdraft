@@ -79,6 +79,15 @@ describe('review imported jewelry parts', () => {
     expect(rhinoRoleLinks(detached, 'a').gem?.id).toBe(gem!.id)
     expect(detached.nodes[setting!.id]).toBeUndefined()
   })
+  it('keeps a transformed group or pattern from producing an extra gem at the source coordinates', () => {
+    const before = applyOps(design(), [
+      {
+        t: 'add',
+        node: { id: 'group', kind: 'group', children: ['a'], transform: { position: [5, 0, 0] } },
+      },
+    ]).design
+    expect(() => reviewRhinoRoles(before, [choice()])).toThrow(/group/i)
+  })
   it('rejects ambiguous reuse of a physical head and changes that would silently lose a supplier fit', () => {
     const before = design()
     expect(() => reviewRhinoRoles(before, [choice(), { ...choice(), sourceId: 'b' }])).toThrow(
