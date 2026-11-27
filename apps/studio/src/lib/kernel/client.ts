@@ -189,9 +189,14 @@ export function exportDesign(
   format: ExportFormat,
   options: Omit<ExportOptions, 'assets'> = {},
 ): Promise<ExportResult> {
-  return onProduction(() =>
-    boot(production, false).export(design, format, { ...options, assets: resolveAsset }),
-  )
+  return onProduction(async () => {
+    options.signal?.throwIfAborted()
+    const client = boot(production, false)
+    // Match evaluation's startup handshake. WebKit can drop the reply to a cold export if
+    // it is sent before the worker reports ready.
+    await client.ready()
+    return client.export(design, format, { ...options, assets: resolveAsset })
+  })
 }
 
 /** Starts the draft worker early (e.g. when a Design tab opens) so WASM loads while the page renders. */

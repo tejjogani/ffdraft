@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * Fake kernel clients: each behaves like the real one when its Worker dies (everything pending
  * rejects with WorkerCrashedError, then onCrash is called once) whenever the test says so.
  */
-const made: { onCrash?: (e: Error) => void; die(): void }[] = []
+const made: { exportCalls: number; onCrash?: (e: Error) => void; die(): void }[] = []
+let ready: Promise<void> | undefined
 vi.mock('@pave/kernel/client', async (importOriginal) => {
   const real = await importOriginal<typeof import('@pave/kernel/client')>()
   return {
@@ -15,6 +16,7 @@ vi.mock('@pave/kernel/client', async (importOriginal) => {
       let dead: Error | null = null
       const fake = {
         onCrash: options.onCrash,
+        exportCalls: 0,
         die() {
           dead = new real.WorkerCrashedError('The geometry engine stopped: killed')
           for (const reject of pending.splice(0)) reject(dead)
@@ -25,7 +27,7 @@ vi.mock('@pave/kernel/client', async (importOriginal) => {
       return {
         kinds: ['primitive'],
         formats: [],
-        ready: () => (dead ? Promise.reject(dead) : Promise.resolve()),
+        ready: () => (dead ? Promise.reject(dead) : (ready ?? Promise.resolve())),
         evaluate: () =>
           dead
             ? Promise.reject(dead)
@@ -34,7 +36,10 @@ vi.mock('@pave/kernel/client', async (importOriginal) => {
                 // A live Worker answers; the test kills the first one before it does.
                 setTimeout(() => resolve({ ms: 1, timings: {}, parts: [] }), 20)
               }),
-        export: () => Promise.reject(new Error('unused')),
+        export: () => {
+          fake.exportCalls++
+          return Promise.resolve({ extension: 'glb' })
+        },
         terminate() {},
       }
     },
@@ -47,6 +52,7 @@ const design = buildDesign(TEMPLATES[0]!.spec)
 describe('studio kernel', () => {
   beforeEach(() => {
     made.length = 0
+    ready = undefined
     vi.resetModules()
   })
 
@@ -59,6 +65,21 @@ describe('studio kernel', () => {
     made[0]!.die()
     expect(await result).toMatchObject({ ms: 1 })
     expect(made).toHaveLength(2)
+  })
+
+  it('waits for a newly started production Worker before sending an export', async () => {
+    const { exportDesign } = await import('./client')
+    let release!: () => void
+    ready = new Promise<void>((resolve) => {
+      release = resolve
+    })
+
+    const result = exportDesign(design, 'glb')
+    expect(made[0]!.exportCalls).toBe(0)
+
+    release()
+    await expect(result).resolves.toMatchObject({ extension: 'glb' })
+    expect(made[0]!.exportCalls).toBe(1)
   })
 
   it('reports crashed after the replacement dies too', async () => {
