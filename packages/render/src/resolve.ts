@@ -44,7 +44,9 @@ export function resolveScene(scene: RenderScene, input: Evaluation | SceneSubjec
   const radius = boundsRadius(subject.bounds)
   const output = resolveOutput(scene.output, scene.animation !== undefined)
 
-  const camera = resolveCamera(scene.camera, subject, output.width / output.height)
+  const frameReflection =
+    scene.look === 'black-acrylic' && (scene.ground === 'look' || scene.ground === 'reflective')
+  const camera = resolveCamera(scene.camera, subject, output.width / output.height, frameReflection)
   if (scene.animation?.type === 'rack-focus') camera.fStop ??= RACK_FOCUS_FSTOP
 
   const rig = resolveRig(look, scene.environment, scene.sparkle, camera.target, radius, camera)

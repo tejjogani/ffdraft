@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { RenderSceneSchema } from '@pave/schema'
 import { afterAll, describe, expect, it } from 'vitest'
 import { writeGlb } from '../../../kernel/src/export/glb'
+import { decodePng } from '../../../kernel/src/mesh/image/png'
 import { solitaireRing } from '../../fixtures'
 import { assessRender } from '../assess'
 import { resolveScene } from '../resolve'
@@ -65,6 +66,27 @@ describe.skipIf(!capability.available)('renderWithBlender', () => {
     expect(result.metrics.width).toBe(256)
     expect(result.metrics.subjectBox).not.toBeNull()
     expect(assessRender(result.metrics, scene).filter((i) => i.severity === 'error')).toEqual([])
+  }, 300_000)
+
+  it('keeps the softbox out of the black acrylic floor at a high angle', async () => {
+    const evaluation = solitaireRing()
+    const scene = RenderSceneSchema.parse({
+      look: 'black-acrylic',
+      camera: { preset: 'three-quarter' },
+      output: { quality: 'preview', width: 256, height: 256 },
+    })
+    const outDir = await mkdtemp(join(tmpdir(), 'pave-render-acrylic-'))
+    dirs.push(outDir)
+    const result = await renderWithBlender({
+      resolved: resolveScene(scene, evaluation),
+      glb: writeGlb(evaluation),
+      outDir,
+    })
+    const image = decodePng(await readFile(result.files.image!))
+    // The floor next to the ring should be dark at both heights, without a bright band.
+    for (const y of [198, 230])
+      for (const x of [196, 205, 214])
+        expect(image.rgba[(y * image.width + x) * 4]).toBeLessThan(0.14)
   }, 300_000)
 
   it('rejects when aborted', async () => {

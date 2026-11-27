@@ -238,6 +238,7 @@ export function resolveCamera(
   camera: RenderScene['camera'],
   subject: SceneSubject,
   aspect: number,
+  frameReflection = false,
 ): ResolvedCamera {
   const radius = boundsRadius(subject.bounds)
   let target: Vec3
@@ -255,9 +256,21 @@ export function resolveCamera(
     const stones = spec.frame === 'stones' ? stoneBounds(subject) : null
     const pts = stones ? corners(stones) : (subject.silhouette ?? corners(subject.bounds))
     ;({ azimuth, elevation } = spec)
+    if (frameReflection && !camera.target && !stones && elevation < 16) {
+      elevation = 16
+      if (Math.abs(azimuth) < 15) azimuth = 15
+    }
     const framed = framePoints(pts, azimuth, elevation, camera.focalLength, aspect, spec.fill)
     target = camera.target ?? framed.target
     distance = framed.distance
+    if (frameReflection && !camera.target && !stones) {
+      // A standing piece's reflection needs more space below the contact point.
+      const { up } = cameraBasis(azimuth, elevation)
+      target = add(
+        target,
+        scale(up, -0.15 * viewTangents(camera.focalLength, aspect)[1] * distance * up[2]),
+      )
+    }
   }
 
   const { position } = cameraPose({ target, azimuth, elevation, distance })
