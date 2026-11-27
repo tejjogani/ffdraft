@@ -138,7 +138,7 @@ function canSetupBlender(ctx: Ctx): boolean {
   )
 }
 
-/** Auto uses Blender when available or when this local owner can install it. */
+/** Auto uses Blender when available, when a known installation can be rechecked, or for setup. */
 export function engineFor(
   ctx: Ctx,
   asked: 'auto' | 'blender' | 'browser',
@@ -146,7 +146,9 @@ export function engineFor(
 ): 'blender' | 'browser' {
   if (asked !== 'auto') return asked
   return ctx.services.isConfigured('renderQueue') &&
-    (ctx.services.capabilities().blender || (purpose === 'take' && canSetupBlender(ctx)))
+    (ctx.services.capabilities().blender ||
+      ctx.services.optional('renderEngine')?.hasKnownManagedBlender?.() ||
+      (purpose === 'take' && canSetupBlender(ctx)))
     ? 'blender'
     : 'browser'
 }
@@ -408,6 +410,7 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
       engine === 'blender' &&
       input.purpose === 'take' &&
       !ctx.services.capabilities().blender &&
+      !ctx.services.optional('renderEngine')?.hasKnownManagedBlender?.() &&
       canSetupBlender(ctx)
     const scene = input.scene ?? saved!.scene
     // A locked shot is rendered as it is framed: the assistant cannot re-frame it in passing.
