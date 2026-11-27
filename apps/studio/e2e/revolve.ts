@@ -54,6 +54,7 @@ try {
   }
   await page.goto(`${base}/pieces/${id}/design`)
   const open = async () => {
+    await page.getByRole('treeitem', { name: /^Construction curves/ }).press('ArrowRight')
     await page.getByRole('treeitem', { name: /Bezel section/ }).click()
     await page.getByRole('button', { name: 'Revolve', exact: true }).click()
   }

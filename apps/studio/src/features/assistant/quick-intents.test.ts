@@ -52,6 +52,14 @@ const caratOf = (design: Design, id: string) => {
 describe('what a click is about', () => {
   const halo = template('halo')
 
+  it('addresses the metal on a halo when the click hit its metal part', () => {
+    expect(subjectFor('p1', halo, { nodeId: 'halo', partId: 'halo#0' })).toMatchObject({
+      type: 'part',
+      nodeId: 'halo',
+      pieceId: 'p1',
+    })
+  })
+
   it('a stone of a halo addresses the whole halo, remembering which stone and where', () => {
     const s = subjectFor('p1', halo, { nodeId: 'halo', stoneId: 'halo:3' }, stonesOf('halo', 24))
     expect(s).toEqual({

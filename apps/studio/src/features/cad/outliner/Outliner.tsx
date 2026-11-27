@@ -4,7 +4,7 @@
  * F2 renames; Shift+F10 or the Menu key opens a row's menu; the eye hides a feature from view
  * only; diagnostics show as a dot.
  */
-import type { Diagnostic } from '@pave/kernel'
+import type { Diagnostic, Evaluation } from '@pave/kernel'
 import { type Design, nodeTitle } from '@pave/schema'
 import {
   AiMark,
@@ -22,36 +22,50 @@ import {
   ChevronRight,
   Eye,
   EyeOff,
+  Gem,
+  type LucideIcon,
   PencilLine,
   Scale,
+  Scan,
   Trash2,
 } from 'lucide-react'
-import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Fragment,
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { createViewVisibility } from '../../../components/stage/visibility'
 import { runCommand } from '../../../lib/commands'
 import type { DesignSession } from '../../../lib/design-session/store'
 import { AskAiSection } from '../../assistant/AskAiSection'
 import type { Subject } from '../../assistant/quick-intents'
 import { KIND_ICON } from '../kindIcon'
 import { rename } from '../ops'
-import { useWorkspace } from '../state/workspace'
-import { diagnosticLevels, treeRows } from './tree'
+import { type NodePick, useWorkspace } from '../state/workspace'
+import { diagnosticLevels, featureRowKey, featureTree, stoneRowKey, type TreeRow } from './tree'
 
 export interface OutlinerProps {
   design: Design
   diagnostics: readonly Diagnostic[]
+  stones: readonly Evaluation['stones'][number][]
   session: DesignSession | null
   /** Nodes the assistant's latest run touched. */
   aiTouched: ReadonlySet<string>
   readOnly: boolean
   onDelete(ids: string[]): void
-  /** What a row's menu is about: a stone (a gem, or a whole row, halo or pavé) or a part. */
-  subjectOf(nodeId: string): Subject
+  /** What the menu is about: the piece, a feature, or an individual stone. */
+  subjectOf(nodeId: string | null, stoneId?: string): Subject
   header: React.ReactNode
 }
 
 export function Outliner({
   design,
   diagnostics,
+  stones,
   session,
   aiTouched,
   readOnly,
@@ -60,78 +74,125 @@ export function Outliner({
   header,
 }: OutlinerProps) {
   const selection = useWorkspace((s) => s.selection)
+  const stone = useWorkspace((s) => s.stone)
   const hidden = useWorkspace((s) => s.hidden)
+  const hiddenStones = useWorkspace((s) => s.hiddenStones)
+  const hiddenParts = useWorkspace((s) => s.hiddenParts)
+  const isolated = useWorkspace((s) => s.isolated)
   const hover = useWorkspace((s) => s.hover)
   const renaming = useWorkspace((s) => s.renaming)
   const ws = useWorkspace.getState
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
+  const [flipped, setFlipped] = useState<ReadonlySet<string>>(new Set())
   const [focusId, setFocusId] = useState<string | null>(null)
-  const rows = useMemo(() => treeRows(design, collapsed), [design, collapsed])
+  const tree = useMemo(() => featureTree(design, stones), [design, stones])
+  const rows = useMemo(() => tree.rows(flipped), [tree, flipped])
   const levels = useMemo(() => diagnosticLevels(diagnostics), [diagnostics])
+  const visible = useMemo(
+    () => createViewVisibility({ hidden, hiddenStones, hiddenParts, isolated }),
+    [hidden, hiddenStones, hiddenParts, isolated],
+  )
+  const visibleComponentOwners = new Set(
+    isolated
+      .filter((target) => (target.stoneId || target.partId) && visible(target))
+      .map((target) => target.nodeId),
+  )
   const list = useRef<HTMLDivElement>(null)
+  const revealed = useRef<string | null>(null)
+  const selectedNode = selection.at(-1)
+  const selectedStone = selectedNode && stone && tree.ancestors(selectedNode, stone) ? stone : null
+  const selectedKey = selectedStone
+    ? stoneRowKey(selectedStone)
+    : selectedNode
+      ? featureRowKey(selectedNode)
+      : null
+  const selectedVisible = rows.some((row) => row.key === selectedKey) ? selectedKey : null
   const active =
-    focusId && rows.some((r) => r.id === focusId) ? focusId : (selection[0] ?? rows[0]?.id)
+    focusId && rows.some((row) => row.key === focusId) ? focusId : (selectedVisible ?? rows[0]?.key)
+  const elementFor = useCallback(
+    (key: string) =>
+      list.current?.querySelector<HTMLElement>(`[data-tree-row="${CSS.escape(key)}"]`),
+    [],
+  )
 
-  // Keep the selected row in view when the selection comes from the viewport.
+  // A new viewport selection may sit inside a folded disclosure. Reveal its path once so a
+  // deliberate collapse stays closed even when the viewport reevaluates.
   useEffect(() => {
-    const id = selection.at(-1)
-    if (id)
-      list.current
-        ?.querySelector(`[data-node="${CSS.escape(id)}"]`)
-        ?.scrollIntoView({ block: 'nearest' })
-  }, [selection])
-
-  const focusRow = (id: string | undefined) => {
-    if (!id) return
-    setFocusId(id)
-    requestAnimationFrame(() =>
-      list.current?.querySelector<HTMLElement>(`[data-node="${CSS.escape(id)}"]`)?.focus(),
-    )
-  }
-  const toggle = (id: string, open?: boolean) =>
-    setCollapsed((c) => {
-      const next = new Set(c)
-      const isOpen = !c.has(id)
-      if (open ?? !isOpen) next.delete(id)
-      else next.add(id)
+    if (revealed.current === selectedKey) return
+    revealed.current = selectedKey
+    const ancestors = selectedNode && tree.ancestors(selectedNode, selectedStone ?? undefined)
+    if (!ancestors?.length) return
+    setFlipped((previous) => {
+      const next = new Set(previous)
+      for (const key of ancestors) {
+        if (tree.defaultsOpen(key)) next.delete(key)
+        else next.add(key)
+      }
       return next
     })
+  }, [selectedKey, selectedNode, selectedStone, tree])
+
+  useEffect(() => {
+    if (selectedVisible) elementFor(selectedVisible)?.scrollIntoView({ block: 'nearest' })
+  }, [elementFor, selectedVisible])
+
+  const focusRow = (key: string | undefined) => {
+    if (!key) return
+    setFocusId(key)
+    requestAnimationFrame(() => elementFor(key)?.focus())
+  }
+  const toggle = (row: TreeRow, open = !row.expanded) =>
+    setFlipped((previous) => {
+      const next = new Set(previous)
+      if (open === tree.defaultsOpen(row.key)) next.delete(row.key)
+      else next.add(row.key)
+      return next
+    })
+
+  const activate = (row: TreeRow, additive = false) => {
+    if (row.kind === 'stone') ws().select([row.nodeId], row.id)
+    else if (row.kind === 'feature') ws().pick({ nodeId: row.id }, additive)
+    else toggle(row)
+  }
 
   const onKeyDown = (e: KeyboardEvent, index: number) => {
     const row = rows[index]!
     switch (e.key) {
       case 'ArrowDown':
-        focusRow(rows[index + 1]?.id)
+        focusRow(rows[index + 1]?.key)
         break
       case 'ArrowUp':
-        focusRow(rows[index - 1]?.id)
+        focusRow(rows[index - 1]?.key)
         break
       case 'Home':
-        focusRow(rows[0]?.id)
+        focusRow(rows[0]?.key)
         break
       case 'End':
-        focusRow(rows.at(-1)?.id)
+        focusRow(rows.at(-1)?.key)
         break
       case 'ArrowRight':
-        if (row.hasChildren && !row.expanded) toggle(row.id, true)
-        else if (row.expanded) focusRow(rows[index + 1]?.id)
+        if (row.hasChildren && !row.expanded) toggle(row, true)
+        else if (row.expanded) focusRow(rows[index + 1]?.key)
         break
       case 'ArrowLeft':
-        if (row.expanded) toggle(row.id, false)
+        if (row.expanded) toggle(row, false)
         else focusRow(row.parent ?? undefined)
         break
       case 'Enter':
       case ' ':
-        ws().pick({ nodeId: row.id }, e.shiftKey)
+        activate(row, e.shiftKey || e.metaKey || e.ctrlKey)
         break
       case 'F2':
-        if (!readOnly) ws().setRenaming(row.id)
+        if (!readOnly && row.kind === 'feature') ws().setRenaming(row.id)
         break
       default:
         return
     }
     e.preventDefault()
   }
+
+  const constructionTargets = tree.constructionIds.map((nodeId) => ({ nodeId }))
+  const constructionHidden = constructionTargets.every(({ nodeId }) => hidden.includes(nodeId))
+  const toggleConstruction = () => ws().setTargetsHidden(constructionTargets, !constructionHidden)
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -145,10 +206,163 @@ export function Outliner({
           className="flex flex-col px-2 pb-4"
         >
           {rows.map((row, index) => {
+            const rowProps = {
+              'data-tree-row': row.key,
+              'aria-level': row.depth + 1,
+              'aria-posinset': row.position,
+              'aria-setsize': row.siblings,
+              'aria-expanded': row.hasChildren ? row.expanded : undefined,
+              onFocus: () => setFocusId(row.key),
+              style: { paddingLeft: 6 + Math.min(row.depth, 6) * 12 },
+            }
+            const onRowKey = (e: KeyboardEvent) =>
+              e.target === e.currentTarget && onKeyDown(e, index)
+            const chevron = row.hasChildren ? (
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-hidden
+                onClick={(e) => {
+                  e.stopPropagation()
+                  toggle(row)
+                  focusRow(row.key)
+                }}
+                className="flex size-4 shrink-0 items-center justify-center text-fg-subtle"
+              >
+                <ChevronRight
+                  className={cn(
+                    'size-3 transition-transform duration-120',
+                    row.expanded && 'rotate-90',
+                  )}
+                />
+              </button>
+            ) : (
+              <span aria-hidden className="size-4 shrink-0" />
+            )
+
+            if (row.kind === 'construction' || row.kind === 'stones') {
+              const construction = row.kind === 'construction'
+              const Icon = construction ? KIND_ICON.curve : Gem
+              const label = constructionHidden
+                ? 'Show construction curves in view'
+                : 'Hide construction curves in view'
+              const EyeIcon = constructionHidden ? EyeOff : Eye
+              const item = (
+                <div
+                  {...rowProps}
+                  role="treeitem"
+                  tabIndex={row.key === active ? 0 : -1}
+                  onKeyDown={onRowKey}
+                  aria-label={
+                    construction ? `Construction curves, ${row.count}` : `Stones, ${row.count}`
+                  }
+                  className={itemClass(false, false)}
+                  onClick={() => toggle(row)}
+                >
+                  {chevron}
+                  <Icon aria-hidden className="size-3.5 shrink-0 text-fg-subtle" />
+                  <span className="min-w-0 truncate">
+                    {construction ? 'Construction curves' : 'Stones'}
+                  </span>
+                  <span className="flex-1 text-xs text-fg-subtle tabular-nums">{row.count}</span>
+                  {construction && (
+                    <RowAction icon={EyeIcon} label={label} onAction={toggleConstruction} />
+                  )}
+                </div>
+              )
+              if (!construction) return <Fragment key={row.key}>{item}</Fragment>
+              return (
+                <ContextMenu
+                  key={row.key}
+                  content={
+                    <>
+                      <MenuItem icon={EyeIcon} onClick={toggleConstruction}>
+                        {label}
+                      </MenuItem>
+                      <AskAiSection subject={subjectOf(null)} />
+                    </>
+                  }
+                >
+                  {item}
+                </ContextMenu>
+              )
+            }
+
+            if (row.kind === 'stone') {
+              const target: NodePick = { nodeId: row.nodeId, stoneId: row.id }
+              const selected = row.id === selectedStone
+              const isHidden = hidden.includes(row.nodeId) || hiddenStones.includes(row.id)
+              const isIsolated = isolated.length === 1 && isolated[0]?.stoneId === row.id
+              const name = `Stone ${row.number}`
+              const isolateLabel = isIsolated ? 'Exit isolation' : `Isolate ${name.toLowerCase()}`
+              const hideLabel = `${isHidden ? 'Show' : 'Hide'} ${name.toLowerCase()} in view`
+              const toggleHidden = () => ws().toggleTarget(target)
+              const toggleIsolation = () =>
+                isIsolated ? ws().exitIsolation() : ws().isolateTargets([target])
+              return (
+                <ContextMenu
+                  key={row.key}
+                  onOpenChange={(open) => open && ws().selectForMenu(row.nodeId, row.id)}
+                  content={
+                    <>
+                      <MenuItem icon={isHidden ? Eye : EyeOff} onClick={toggleHidden}>
+                        {hideLabel}
+                      </MenuItem>
+                      <MenuItem icon={Scan} onClick={toggleIsolation}>
+                        {isolateLabel}
+                      </MenuItem>
+                      {selected && <AskAiSection subject={subjectOf(row.nodeId, row.id)} />}
+                    </>
+                  }
+                >
+                  <div
+                    {...rowProps}
+                    role="treeitem"
+                    tabIndex={row.key === active ? 0 : -1}
+                    onKeyDown={onRowKey}
+                    data-stone={row.id}
+                    aria-label={`${name} of ${nodeTitle(design.nodes[row.nodeId]!)}`}
+                    aria-selected={selected}
+                    className={itemClass(selected, hover?.stoneId === row.id)}
+                    onClick={() => activate(row)}
+                    onPointerEnter={() => ws().setHover(target)}
+                    onPointerLeave={() => ws().setHover(null)}
+                  >
+                    {chevron}
+                    <Gem
+                      aria-hidden
+                      className={cn(
+                        'size-3.5 shrink-0',
+                        selected ? 'text-select' : 'text-fg-subtle',
+                      )}
+                    />
+                    <span
+                      className={cn('min-w-0 flex-1 truncate', !visible(target) && 'opacity-45')}
+                    >
+                      {name}
+                    </span>
+                    <RowAction
+                      icon={Scan}
+                      label={isolateLabel}
+                      active={isIsolated}
+                      onAction={toggleIsolation}
+                    />
+                    <RowAction
+                      icon={isHidden ? EyeOff : Eye}
+                      label={hideLabel}
+                      onAction={toggleHidden}
+                    />
+                  </div>
+                </ContextMenu>
+              )
+            }
+
             const node = design.nodes[row.id]!
             const Icon = KIND_ICON[node.kind]
             const selected = selection.includes(row.id)
+            const featureSelected = selected && selectedStone === null
             const isHidden = hidden.includes(row.id)
+            const inView = visible({ nodeId: row.id }) || visibleComponentOwners.has(row.id)
             const excluded = node.visible === false
             const level = levels.get(row.id)
             const order = design.order.indexOf(row.id)
@@ -161,51 +375,24 @@ export function Outliner({
             const menuIds = selected ? selection : [row.id]
             const item = (
               <div
-                data-node={row.id}
+                {...rowProps}
                 role="treeitem"
-                aria-level={row.depth + 1}
-                aria-selected={selected}
-                aria-expanded={row.hasChildren ? row.expanded : undefined}
-                tabIndex={row.id === active ? 0 : -1}
-                onFocus={() => setFocusId(row.id)}
-                onKeyDown={(e) => e.target === e.currentTarget && onKeyDown(e, index)}
-                onClick={(e) => ws().pick({ nodeId: row.id }, e.shiftKey || e.metaKey || e.ctrlKey)}
+                tabIndex={row.key === active ? 0 : -1}
+                onKeyDown={onRowKey}
+                data-node={row.id}
+                aria-selected={featureSelected}
+                onClick={(e) => activate(row, e.shiftKey || e.metaKey || e.ctrlKey)}
                 onDoubleClick={() => !readOnly && ws().setRenaming(row.id)}
                 onPointerEnter={() => ws().setHover({ nodeId: row.id })}
                 onPointerLeave={() => ws().setHover(null)}
-                style={{ paddingLeft: 6 + row.depth * 14 }}
-                className={cn(
-                  'group flex h-7 shrink-0 items-center gap-1.5 rounded-sm pr-1 text-sm outline-none select-none',
-                  'focus-visible:shadow-[inset_0_0_0_1px_var(--select)]',
-                  selected
-                    ? 'bg-select-soft text-fg'
-                    : hover?.nodeId === row.id
-                      ? 'bg-bg-hover text-fg'
-                      : 'text-fg-muted hover:bg-bg-hover hover:text-fg',
-                )}
+                className={itemClass(featureSelected, hover?.nodeId === row.id && !hover.stoneId)}
               >
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  aria-hidden
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    toggle(row.id)
-                  }}
-                  className={cn(
-                    'flex size-4 shrink-0 items-center justify-center text-fg-subtle',
-                    !row.hasChildren && 'invisible',
-                  )}
-                >
-                  <ChevronRight
-                    className={cn(
-                      'size-3 transition-transform duration-120',
-                      row.expanded && 'rotate-90',
-                    )}
-                  />
-                </button>
+                {chevron}
                 <Icon
-                  className={cn('size-3.5 shrink-0', selected ? 'text-select' : 'text-fg-subtle')}
+                  className={cn(
+                    'size-3.5 shrink-0',
+                    featureSelected ? 'text-select' : 'text-fg-subtle',
+                  )}
                   aria-hidden
                 />
                 {renaming === row.id ? (
@@ -216,14 +403,14 @@ export function Outliner({
                       ws().setRenaming(null)
                       if (name !== null && name !== (node.name ?? ''))
                         session?.commit([rename(row.id, name)])
-                      focusRow(row.id)
+                      focusRow(row.key)
                     }}
                   />
                 ) : (
                   <span
                     className={cn(
                       'min-w-0 flex-1 truncate',
-                      (isHidden || excluded) && 'opacity-45',
+                      (!inView || excluded) && 'opacity-45',
                       excluded && 'line-through',
                     )}
                   >
@@ -241,23 +428,17 @@ export function Outliner({
                     )}
                   />
                 )}
-                <IconButton
+                <RowAction
                   icon={isHidden ? EyeOff : Eye}
                   label={isHidden ? 'Show in view' : 'Hide in view'}
-                  size="sm"
-                  tabIndex={-1}
-                  tooltip={false}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    ws().toggleHidden(row.id)
-                  }}
-                  className={cn('size-5 [&_svg]:size-3.5', !isHidden && 'hover-reveal')}
+                  onAction={() => ws().toggleTarget({ nodeId: row.id })}
+                  className={!isHidden ? 'hover-reveal' : undefined}
                 />
               </div>
             )
             return (
               <ContextMenu
-                key={row.id}
+                key={row.key}
                 content={
                   <>
                     <MenuItem
@@ -277,6 +458,9 @@ export function Outliner({
                       shortcut="h"
                     >
                       {isHidden ? 'Show in view' : 'Hide in view'}
+                    </MenuItem>
+                    <MenuItem icon={Scan} onClick={onRow('view.isolateSelected')}>
+                      Isolate
                     </MenuItem>
                     <MenuItem
                       icon={Scale}
@@ -324,6 +508,49 @@ export function Outliner({
         </div>
       </ScrollArea>
     </div>
+  )
+}
+
+function RowAction({
+  icon,
+  label,
+  onAction,
+  active,
+  className,
+}: {
+  icon: LucideIcon
+  label: string
+  onAction(): void
+  active?: boolean
+  className?: string
+}) {
+  return (
+    <IconButton
+      icon={icon}
+      label={label}
+      title={label}
+      size="sm"
+      tabIndex={-1}
+      tooltip={false}
+      active={active}
+      onClick={(e) => {
+        e.stopPropagation()
+        onAction()
+      }}
+      className={cn('size-5 [&_svg]:size-3.5', className)}
+    />
+  )
+}
+
+function itemClass(selected: boolean, hovered: boolean) {
+  return cn(
+    'group flex h-7 shrink-0 items-center gap-1.5 rounded-sm pr-1 text-sm outline-none select-none',
+    'focus-visible:shadow-[inset_0_0_0_1px_var(--select)]',
+    selected
+      ? 'bg-select-soft text-fg'
+      : hovered
+        ? 'bg-bg-hover text-fg'
+        : 'text-fg-muted hover:bg-bg-hover hover:text-fg',
   )
 }
 

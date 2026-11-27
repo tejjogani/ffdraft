@@ -121,6 +121,22 @@ const pieceTab = (
     },
   })
 
+const designRoute = createRoute({
+  getParentRoute: () => pieceRoute,
+  path: 'design',
+  validateSearch: (s: Record<string, unknown>): { review?: 'rhino-roles' } =>
+    s.review === 'rhino-roles' ? { review: s.review } : {},
+  component: function DesignTab() {
+    const { id } = designRoute.useParams()
+    const { review } = designRoute.useSearch()
+    return (
+      <PieceTab bleed pieceId={id}>
+        <PieceDesign pieceId={id} openRoleReview={review === 'rhino-roles'} />
+      </PieceTab>
+    )
+  },
+})
+
 const moodboardsRoute = route('/moodboards', () => <BoardsPage />)
 const boardRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -188,7 +204,7 @@ const routeTree = rootRoute.addChildren([
   pieceRoute.addChildren([
     pieceTab('/', PieceOverview),
     pieceTab('directions', PieceDirections, false, true),
-    pieceTab('design', PieceDesign, true),
+    designRoute,
     pieceTab('render', PieceRender, true),
     pieceTab('on-model', PieceOnModel),
     pieceTab('sourcing', PieceSourcing),

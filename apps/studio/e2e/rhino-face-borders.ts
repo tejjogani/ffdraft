@@ -99,6 +99,7 @@ try {
   await button('Redo').click()
   assert.deepEqual((await version(4)).design, added.design)
   await page.reload()
+  await page.getByRole('treeitem', { name: /^Construction curves/ }).press('ArrowRight')
   await selectNode(curves[1]!.id)
   await button('Edit control points').click()
   const edit = page.getByRole('dialog', { name: 'Edit control points' })

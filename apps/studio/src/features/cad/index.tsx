@@ -54,6 +54,7 @@ import { displayBounds } from '../../components/stage/display-evaluation'
 import { QualityIndicator } from '../../components/stage/QualityIndicator'
 import { Stage } from '../../components/stage/Stage'
 import type { Viewer, ViewerState } from '../../components/stage/viewer'
+import { createViewVisibility, metalShellOf } from '../../components/stage/visibility'
 import { runCommand } from '../../lib/commands'
 import { canRedo, canUndo, hasGap } from '../../lib/design-session/core'
 import { useDesignSession, useSessionState } from '../../lib/design-session/store'
@@ -103,7 +104,7 @@ import { ProfileEditor } from './profiles/ProfileEditor'
 import { isProfileNode, type ProfileNode, profileNode } from './profiles/profile'
 import { useQuickIntentCommands } from './quick-commands'
 import { RhinoRoleReview } from './rhino/RhinoRoleReview'
-import { useWorkspace } from './state/workspace'
+import { type NodePick, selectedTargets, targetHidden, useWorkspace } from './state/workspace'
 import { Dimensions } from './viewport/Dimensions'
 import { dockArea } from './viewport/dock-area'
 import { Marker, type MarkerSpot } from './viewport/Marker'
@@ -200,7 +201,13 @@ function useToastOffset(px: number) {
   }, [px])
 }
 
-export function PieceDesign({ pieceId }: { pieceId: string }) {
+export function PieceDesign({
+  pieceId,
+  openRoleReview = false,
+}: {
+  pieceId: string
+  openRoleReview?: boolean
+}) {
   const piece = useRpc('pieces.get', { id: pieceId })
   if (piece.isPending)
     return (
@@ -220,10 +227,10 @@ export function PieceDesign({ pieceId }: { pieceId: string }) {
       </div>
     )
   if (!piece.data) return null
-  return <Workspace piece={piece.data} />
+  return <Workspace key={piece.data.id} piece={piece.data} openRoleReview={openRoleReview} />
 }
 
-function Workspace({ piece }: { piece: Piece }) {
+function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: boolean }) {
   const pieceId = piece.id
   const session = useDesignSession(piece)
   const auth = useSession()
@@ -266,6 +273,11 @@ function Workspace({ piece }: { piece: Piece }) {
   const stone = useWorkspace((s) => s.stone)
   const hover = useWorkspace((s) => s.hover)
   const hidden = useWorkspace((s) => s.hidden)
+  const hiddenStones = useWorkspace((s) => s.hiddenStones)
+  const hiddenParts = useWorkspace((s) => s.hiddenParts)
+  const isolated = useWorkspace((s) => s.isolated)
+  const part = useWorkspace((s) => s.part)
+  const backdrop = useWorkspace((s) => s.backdrop)
   const display = useWorkspace((s) => s.display)
   const xray = useWorkspace((s) => s.xray)
   const simplified = useWorkspace((s) => s.simplified)
@@ -284,7 +296,28 @@ function Workspace({ piece }: { piece: Piece }) {
   // A feature that left the design (an undo, a teammate's or the assistant's delete) is no longer
   // selected: commands and the inspector would otherwise act on something that is not there.
   useEffect(() => ws().retain((id) => Object.hasOwn(view.nodes, id)), [view])
-  const { evaluation, status, error: failure, retry } = usePieceEvaluation(pieceId)
+  const { evaluation, status, stale, error: failure, retry } = usePieceEvaluation(pieceId)
+  const partRevisions = useRef(new Map<string, string>())
+  useEffect(() => {
+    if (!evaluation || stale) return
+    const stones = new Set(evaluation.stones.map((s) => s.id))
+    const parts = [...evaluation.parts, ...(evaluation.referenceParts ?? [])]
+    const revisions = new Map(parts.map((part) => [part.id, part.rev]))
+    const previous = partRevisions.current
+    partRevisions.current = revisions
+    ws().retain(
+      (id) => Object.hasOwn(view.nodes, id),
+      stones,
+      (id) => {
+        const shell = metalShellOf(id)
+        if (!shell) return revisions.has(id)
+        // Remeshing can assign a shell's former ordinal to a different physical component.
+        return (
+          revisions.has(shell.partId) && revisions.get(shell.partId) === previous.get(shell.partId)
+        )
+      },
+    )
+  }, [view, evaluation, stale])
   const check = useProductionCheck(
     pieceId,
     settled,
@@ -312,6 +345,15 @@ function Workspace({ piece }: { piece: Piece }) {
   const [marker, setMarker] = useState<MarkerSpot | null>(null)
   const [stepping, setStepping] = useState<string | null>(null)
   const hasRhinoBodies = view.order.some((id) => isRhinoRoleBody(view.nodes[id]))
+  useEffect(() => {
+    if (!hasRhinoBodies) return
+    ws().startCurveVisibility(
+      view.order.filter((id) => {
+        const n = view.nodes[id]
+        return n?.kind === 'nurbsCurve' && !!(n.sourceObjectId || n.rhinoLayer || n.rhinoContext)
+      }),
+    )
+  }, [hasRhinoBodies, view])
   const hasBodyFeature = view.order.some(
     (id) => !['curve', 'nurbsCurve'].includes(view.nodes[id]?.kind ?? ''),
   )
@@ -320,15 +362,19 @@ function Workspace({ piece }: { piece: Piece }) {
       hasBodyFeature ||
       (f === '3dm' && view.order.some((id) => view.nodes[id]?.kind === 'nurbsCurve')),
   )
+  const visible = useMemo(
+    () => createViewVisibility({ hidden, hiddenStones, hiddenParts, isolated }),
+    [hidden, hiddenStones, hiddenParts, isolated],
+  )
   const curves = useMemo(
     () =>
       (evaluation?.curves ?? []).filter(
         (c) =>
           c.nodeId !== curve?.original?.id &&
           view.nodes[c.nodeId]?.visible &&
-          !hidden.includes(c.nodeId),
+          visible({ nodeId: c.nodeId }),
       ),
-    [evaluation?.curves, view, hidden, curve],
+    [evaluation?.curves, view, visible, curve],
   )
   const mountedVersion = useRef(version)
 
@@ -436,21 +482,49 @@ function Workspace({ piece }: { piece: Piece }) {
     ws().select(nodes.map((node) => node.id))
   }
 
-  const openRhinoRoleReview = (id?: string) => {
-    if (!session || readOnly) return
-    const design = session.get().view
-    const selected = id
-      ? design.nodes[id]
-      : selection.length === 1
-        ? design.nodes[selection[0]!]
-        : undefined
-    const initialId =
-      selected?.kind === 'gem' || selected?.kind === 'setting'
-        ? selected.importSourceId
-        : selected?.id
-    setSheet(null)
-    setRhinoReview({ pieceId, orgId: org?.id, design, initialId })
-  }
+  const openRhinoRoleReview = useCallback(
+    (id?: string) => {
+      if (!session || readOnly) return
+      const design = session.get().view
+      const { selection } = ws()
+      const selected = id
+        ? design.nodes[id]
+        : selection.length === 1
+          ? design.nodes[selection[0]!]
+          : undefined
+      const initialId =
+        selected?.kind === 'gem' || selected?.kind === 'setting'
+          ? selected.importSourceId
+          : selected?.id
+      setSheet(null)
+      setRhinoReview({ pieceId, orgId: org?.id, design, initialId })
+    },
+    [org?.id, pieceId, readOnly, session],
+  )
+
+  useEffect(() => {
+    if (!openRoleReview || !session || readOnly || !hasRhinoBodies) return
+    const firstUnassigned = view.order.find((id) => {
+      const node = view.nodes[id]
+      return isRhinoRoleBody(node) && node.visible !== false && importRoleOf(node) === 'unassigned'
+    })
+    openRhinoRoleReview(firstUnassigned)
+    void navigate({
+      to: '/pieces/$id/design',
+      params: { id: pieceId },
+      search: ({ board }: { board?: string }) => ({ board }),
+      replace: true,
+    })
+  }, [
+    hasRhinoBodies,
+    navigate,
+    openRhinoRoleReview,
+    openRoleReview,
+    pieceId,
+    readOnly,
+    session,
+    view,
+  ])
 
   const selectRhinoRoleBody = (id: string, design: Design) => {
     const body = design.nodes[id]
@@ -739,7 +813,13 @@ function Workspace({ piece }: { piece: Piece }) {
 
   useQuickIntentCommands(pieceId, view, evaluation, readOnly)
 
-  const subjectOf = (nodeId: string) => subjectFor(pieceId, view, { nodeId }, evaluation)
+  const subjectOf = (nodeId: string | null, stoneId?: string) =>
+    subjectFor(
+      pieceId,
+      view,
+      nodeId === null ? null : { nodeId, ...(stoneId && { stoneId }) },
+      evaluation,
+    )
 
   /**
    * The view's context menu. A right-click selects what it is on, as in every CAD tool, so the
@@ -747,28 +827,58 @@ function Workspace({ piece }: { piece: Piece }) {
    * the selection is on screen.
    */
   const openViewportMenu = (
-    p: { nodeId: string; stoneId?: string } | null,
+    p: NodePick | null,
     at: { x: number; y: number },
     source: 'pointer' | 'keyboard',
   ) => {
     let pick = p
     let anchor = at
     if (source === 'keyboard') {
-      const { selection: ids, stone: picked } = ws()
+      const { selection: ids, stone: picked, part: pickedPart } = ws()
       const id = ids.length === 1 ? ids[0]! : null
-      pick = id ? { nodeId: id, ...(picked ? { stoneId: picked } : {}) } : null
+      pick = id
+        ? {
+            nodeId: id,
+            ...(picked ? { stoneId: picked } : {}),
+            ...(pickedPart ? { partId: pickedPart } : {}),
+          }
+        : null
       const box = id ? viewer.current?.screenBounds([id]) : null
       const rect = viewport.current?.getBoundingClientRect()
       if (box && rect)
         anchor = { x: rect.left + (box.x0 + box.x1) / 2, y: rect.top + (box.y0 + box.y1) / 2 }
-    } else ws().selectForMenu(p?.nodeId ?? null)
+    } else ws().selectForMenu(p?.nodeId ?? null, p?.stoneId, p?.partId)
     setMenuSubject(subjectFor(pieceId, view, pick, evaluation))
     menu.current?.openAt(anchor.x, anchor.y)
   }
 
   const viewerState = useMemo<ViewerState>(
-    () => ({ display, selection, stone, hover, hidden, xray, aiTint }),
-    [display, selection, stone, hover, hidden, xray, aiTint],
+    () => ({
+      display,
+      selection,
+      stone,
+      part,
+      hover,
+      hidden,
+      hiddenStones,
+      hiddenParts,
+      isolated,
+      xray,
+      aiTint,
+    }),
+    [
+      display,
+      selection,
+      stone,
+      part,
+      hover,
+      hidden,
+      hiddenStones,
+      hiddenParts,
+      isolated,
+      xray,
+      aiTint,
+    ],
   )
 
   const empty = view.order.length === 0
@@ -786,13 +896,40 @@ function Workspace({ piece }: { piece: Piece }) {
   )
   const [viewerHandle, setViewerHandle] = useState<Viewer | null>(null)
   useReplaceDock(pieceId, root, viewport, dockInspector, viewerHandle)
-  const selectedTitle = selection.length
-    ? selection.map((id) => (view.nodes[id] ? nodeTitle(view.nodes[id]!) : id)).join(', ')
-    : 'Nothing'
+  const owner = selection.length === 1 ? view.nodes[selection[0]!] : undefined
+  const ownerStones =
+    stone && owner ? evaluation?.stones.filter((s) => s.nodeId === owner.id) : undefined
+  const selectedOrdinal = ownerStones?.findIndex((s) => s.id === stone)
+  useEffect(() => {
+    if (backdrop) viewerHandle?.refreshTheme()
+  }, [viewerHandle, backdrop])
+  const shell = metalShellOf(part)
+  const selectedTitle =
+    owner && typeof selectedOrdinal === 'number' && selectedOrdinal >= 0 && owner.kind !== 'gem'
+      ? `Stone ${selectedOrdinal + 1} of ${ownerStones?.length} · ${nodeTitle(owner)}`
+      : owner && shell
+        ? `Part ${shell.index + 1} · ${nodeTitle(owner)}`
+        : selection.length
+          ? selection.map((id) => (view.nodes[id] ? nodeTitle(view.nodes[id]!) : id)).join(', ')
+          : 'Nothing'
 
+  const targets = selectedTargets({ selection, stone, part })
+  const allHidden =
+    targets.length > 0 &&
+    targets.every((t) => targetHidden({ hidden, hiddenStones, hiddenParts }, t))
+  const hasHidden = Boolean(hidden.length || hiddenStones.length || hiddenParts.length)
+  const kindLabel =
+    selection.length > 1
+      ? 'selection'
+      : stone || owner?.kind === 'gem'
+        ? 'stone'
+        : owner?.kind === 'curve' || owner?.kind === 'nurbsCurve'
+          ? 'curve'
+          : 'part'
   const outliner = (
     <Outliner
       design={view}
+      stones={evaluation?.stones ?? []}
       diagnostics={evaluation?.diagnostics ?? []}
       session={session}
       aiTouched={aiTouched}
@@ -854,7 +991,7 @@ function Workspace({ piece }: { piece: Piece }) {
   )
 
   return (
-    <div ref={root} className="absolute inset-0 flex min-h-[520px]">
+    <div ref={root} className="absolute inset-0 flex min-h-0">
       {dockOutliner && (
         <aside
           data-region="outliner"
@@ -871,6 +1008,7 @@ function Workspace({ piece }: { piece: Piece }) {
         className="relative min-w-0 flex-1 overflow-clip"
       >
         <Stage
+          className={backdrop === 'studio' ? 'cad-studio-backdrop' : 'cad-dark-backdrop'}
           evaluation={evaluation}
           state={viewerState}
           frameNodeIds={frameNodeIds}
@@ -891,12 +1029,7 @@ function Workspace({ piece }: { piece: Piece }) {
           onHover={(p) => ws().setHover(p)}
           onContextMenu={openViewportMenu}
         >
-          <CurveOverlay
-            viewer={viewerHandle}
-            curves={curves}
-            selected={selection}
-            onPick={(nodeId, additive) => ws().pick({ nodeId }, additive)}
-          />
+          <CurveOverlay viewer={viewerHandle} curves={curves} selected={selection} />
           {curve && !readOnly && (
             <CurveEditor
               viewer={viewerHandle}
@@ -1046,8 +1179,58 @@ function Workspace({ piece }: { piece: Piece }) {
           ) : null}
           {!empty && !curve && (
             <div className="pointer-events-none absolute inset-x-3 bottom-3 z-20 flex items-end justify-between gap-3 [&>*]:pointer-events-auto">
-              <div className="flex min-w-0 flex-wrap gap-1.5">
+              <div className="flex min-w-0 flex-wrap items-end gap-1.5">
+                {(targets.length > 0 || isolated.length > 0 || hasHidden) && (
+                  <fieldset
+                    aria-label="Selection visibility"
+                    className="glass flex max-w-full flex-wrap items-center gap-1 rounded-lg p-1 shadow-sm"
+                  >
+                    {targets.length > 0 && (
+                      <>
+                        <span
+                          className="max-w-36 truncate px-1.5 text-xs font-medium"
+                          title={selectedTitle}
+                        >
+                          {selectedTitle}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => runCommand('design.hideSelected')}
+                        >
+                          {allHidden ? 'Show' : 'Hide'} {kindLabel}
+                        </Button>
+                        {!isolated.length && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => runCommand('view.isolateSelected')}
+                          >
+                            Isolate {kindLabel}
+                          </Button>
+                        )}
+                      </>
+                    )}
+                    {isolated.length > 0 && (
+                      <Button size="sm" onClick={() => runCommand('view.exitIsolation')}>
+                        Exit isolation
+                      </Button>
+                    )}
+                    {hasHidden && !isolated.length && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label="Show all hidden features"
+                        onClick={() => runCommand('view.showAll')}
+                      >
+                        Show all
+                      </Button>
+                    )}
+                  </fieldset>
+                )}
                 {!compact &&
+                  !targets.length &&
+                  !isolated.length &&
                   steps.map((s, i) => (
                     <Button
                       key={s.label}

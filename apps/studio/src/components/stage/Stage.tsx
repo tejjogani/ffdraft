@@ -168,7 +168,7 @@ export function Stage({
         hoverFrame = 0
         if (v.isMoving) return
         const [x, y] = local(e)
-        callbacks.current.onHover?.(v.pick(x, y))
+        callbacks.current.onHover?.(v.pick(x, y, false))
       })
     }
     const onPointerLeave = () => callbacks.current.onHover?.(null)
