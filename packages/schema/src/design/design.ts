@@ -495,6 +495,19 @@ export function validateDesign(design: Design): DesignIssue[] {
           message: `"${id}" references missing node "${r}"`,
         })
       else if (
+        n.kind === 'meshBody' &&
+        n.mountFit?.gem === r &&
+        (target.kind !== 'gem' ||
+          !target.importSourceId ||
+          !target.importSourceFit ||
+          target.placement.type !== 'free')
+      )
+        issues.push({
+          level: 'error',
+          nodeId: id,
+          message: `“${id}” needs “${r}” to be a confirmed imported stone to fit its custom mount.`,
+        })
+      else if (
         (n.kind === 'pave' || n.kind === 'engraving' || n.kind === 'boolean') &&
         !isBodyKind(target.kind)
       )
