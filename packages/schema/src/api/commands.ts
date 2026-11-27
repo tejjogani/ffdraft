@@ -18,6 +18,7 @@ import {
   MAX_MODEL_IMPORT_OPS,
   OpSchema,
   PIECE_KINDS,
+  readRhinoLabelUpdate,
 } from '../design/design'
 import { DirectionSchema, MIX_PARTS } from '../design/directions'
 import { ImportedRoleChoiceSchema } from '../design/import-roles'
@@ -877,7 +878,7 @@ export const commands = {
     }),
   }),
   'design.apply': def({
-    description: `Edit a piece’s CAD by adding, updating, removing or moving features. Updates are JSON merge patches. Each call is one undoable change with a short human label. General edits allow up to ${MAX_DESIGN_CHANGE_OPS} operations. Model imports and their undo can include up to ${MAX_MODEL_IMPORT_OPS} parts and curves. Fails atomically with a precise message if an operation is invalid.`,
+    description: `Edit a piece’s CAD by adding, updating, removing or moving features. Updates are JSON merge patches. Each call is one undoable change with a short human label. General edits allow up to ${MAX_DESIGN_CHANGE_OPS} operations. Model imports, recovery of Rhino source labels and their undo can include up to ${MAX_MODEL_IMPORT_OPS} parts and curves. Fails atomically with a precise message if an operation is invalid.`,
     kind: 'mutation',
     tool: true,
     input: z
@@ -896,10 +897,14 @@ export const commands = {
         ({ ops, reverts }) =>
           ops.length <= MAX_DESIGN_CHANGE_OPS ||
           ops.every(isModelImportAdd) ||
+          ops.every((op) => {
+            const update = readRhinoLabelUpdate(op)
+            return update !== undefined && (update.context !== null || reverts?.length === 1)
+          }) ||
           (reverts?.length === 1 && ops.every((op) => op.t === 'remove' && !op.cascade)),
         {
           path: ['ops'],
-          message: `Edits over ${MAX_DESIGN_CHANGE_OPS} operations must import measured model parts or NURBS curves, or undo one recorded model import. No operation may cascade.`,
+          message: `Edits over ${MAX_DESIGN_CHANGE_OPS} operations must import measured model parts or NURBS curves, recover Rhino source labels, or undo one recorded import or recovery. No operation may cascade.`,
         },
       ),
     output: z.object({ version: z.number().int(), change: StoredChangeSchema }),

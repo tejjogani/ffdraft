@@ -24,6 +24,12 @@ import {
   readPlacedCurve,
 } from './rhino-curve'
 
+export {
+  hasRecoverableRhinoLabels,
+  type RhinoLabelRecovery,
+  recoverRhinoLabels,
+} from './recover-rhino-labels'
+
 const MAX_FILE_MIB = 64
 export const MAX_RHINO_FILE_BYTES = MAX_FILE_MIB * 1024 * 1024
 const MAX_OBJECTS = 5_000

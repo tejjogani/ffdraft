@@ -17,6 +17,7 @@ import {
   NodeSchema,
   nodeRefs,
 } from './nodes'
+import { RhinoContext } from './rhino-context'
 
 export const PIECE_KINDS = [
   'ring',
@@ -89,6 +90,21 @@ export function isModelImportAdd(op: z.infer<typeof OpSchema>): boolean {
       isObject(source) &&
       source.type === 'asset')
   )
+}
+
+const RhinoLabelUpdate = z.union([
+  z.strictObject({ rhinoContext: RhinoContext.strict().nullable() }),
+  z.strictObject({ source: z.strictObject({ rhinoContext: RhinoContext.strict().nullable() }) }),
+])
+
+/** Identifies an update consisting only of a Rhino metadata field or its removal. */
+export function readRhinoLabelUpdate(op: z.infer<typeof OpSchema>) {
+  if (op.t !== 'update') return undefined
+  const parsed = RhinoLabelUpdate.safeParse(op.patch)
+  if (!parsed.success) return undefined
+  if ('source' in parsed.data)
+    return { kind: 'part' as const, context: parsed.data.source.rhinoContext }
+  return { kind: 'curve' as const, context: parsed.data.rhinoContext }
 }
 
 export const ActorSchema = z.discriminatedUnion('type', [

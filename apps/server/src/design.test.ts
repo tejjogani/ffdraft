@@ -185,6 +185,95 @@ describe('design document', () => {
     expect((await api.call('pieces.get', { id: piece.id })).design).toEqual(original)
   })
 
+  it('recovers and undoes a large batch of Rhino labels as one metadata-only change', async () => {
+    const piece = await api.call('pieces.create', { kind: 'other', title: 'Legacy Rhino import' })
+    const ops = Array.from({ length: 501 }, (_, i) => ({
+      t: 'add' as const,
+      node: {
+        id: `curve-${i}`,
+        kind: 'nurbsCurve',
+        degree: 1,
+        knots: [0, 1],
+        controlPoints: [
+          [0, 0, 0, 1],
+          [1, 2, 3, 1],
+        ],
+        sourceObjectId: `fecdaffd-0000-0000-0000-${String(i).padStart(12, '0')}`,
+      },
+    }))
+    const importing = await api.call('design.apply', {
+      pieceId: piece.id,
+      label: 'Import curves',
+      ops,
+    })
+    const before = (await api.call('pieces.get', { id: piece.id })).design
+    const context = { groups: [{ id: 'source:1', name: 'Guide set' }], placements: [] }
+    const recovery = {
+      pieceId: piece.id,
+      baseVersion: importing.version,
+      label: 'Recover Rhino source labels',
+      ops: ops.map(({ node }) => ({
+        t: 'update' as const,
+        id: node.id,
+        patch: { rhinoContext: context },
+      })),
+    }
+    expect(
+      (
+        await api.fail('design.apply', {
+          ...recovery,
+          ops: [
+            { ...recovery.ops[0]!, patch: { rhinoContext: context, name: 'Changed' } },
+            ...recovery.ops.slice(1),
+          ],
+        })
+      ).status,
+    ).toBe(400)
+    expect(
+      (
+        await api.fail('design.apply', {
+          ...recovery,
+          ops: [{ ...recovery.ops[0]!, id: recovery.ops[1]!.id }, ...recovery.ops.slice(1)],
+        })
+      ).status,
+    ).toBe(400)
+    expect(
+      (
+        await api.fail('design.apply', {
+          ...recovery,
+          ops: [
+            { ...recovery.ops[0]!, patch: { source: { rhinoContext: context } } },
+            ...recovery.ops.slice(1),
+          ],
+        })
+      ).status,
+    ).toBe(400)
+
+    const saved = await api.call('design.apply', recovery)
+    const after = (await api.call('pieces.get', { id: piece.id })).design
+    expect(after.order).toEqual(before.order)
+    expect(after.nodes['curve-0']).toEqual({ ...before.nodes['curve-0'], rhinoContext: context })
+    const undo = {
+      pieceId: piece.id,
+      baseVersion: saved.version,
+      label: 'Undo Rhino labels',
+      ops: saved.change.inverse,
+    }
+    expect(
+      (await api.fail('design.apply', { ...undo, reverts: [importing.change.id] })).status,
+    ).toBe(400)
+    const undone = await api.call('design.apply', { ...undo, reverts: [saved.change.id] })
+    expect((await api.call('pieces.get', { id: piece.id })).design).toEqual(before)
+    await api.call('design.apply', {
+      pieceId: piece.id,
+      baseVersion: undone.version,
+      label: 'Redo Rhino labels',
+      ops: undone.change.inverse,
+      reverts: [undone.change.id],
+    })
+    expect((await api.call('pieces.get', { id: piece.id })).design).toEqual(after)
+  })
+
   it('describes the selected project feature with the field names and units used to edit it', async () => {
     const piece = await api.call('pieces.create', { templateId: 'wedding-band' })
     const input = { pieceId: piece.id, nodeId: 'band' }
