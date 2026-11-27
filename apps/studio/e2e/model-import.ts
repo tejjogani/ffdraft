@@ -54,6 +54,7 @@ for (const [name, x, size, layer] of [
   attrs.name = name
   attrs.materialSource = rhino.ObjectMaterialSource.MaterialFromObject
   attrs.materialIndex = 0
+  attrs.setUserString('paveSourceStullerMaterial', JSON.stringify({ metal: 'TEST-14K' }))
   attrs.layerIndex = layer
   assert.ok(objects.addMesh(mesh, attrs))
 }
@@ -211,6 +212,8 @@ try {
   await page.getByRole('link', { name: 'Review materials' }).click()
   const review = page.getByRole('dialog', { name: 'Review materials' })
   await review.getByRole('searchbox', { name: 'Filter Rhino bodies' }).fill('White Gold')
+  assert.equal(await review.getByRole('radio').count(), 2)
+  await review.getByRole('searchbox', { name: 'Filter Rhino bodies' }).fill('TEST-14K')
   assert.equal(await review.getByRole('radio').count(), 2)
   await review.getByRole('button', { name: 'Cancel', exact: true }).click()
   for (const [index, name] of ['Mount', 'Bail'].entries()) {

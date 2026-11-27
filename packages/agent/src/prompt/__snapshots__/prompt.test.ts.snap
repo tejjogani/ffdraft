@@ -6,9 +6,9 @@ exports[`the frozen system prompt > has a stable hash (snapshot) that covers the
     7082,
     44965,
     10638,
-    19410,
+    19464,
   ],
-  "hash": "prompt-18fac4fdc2c021",
+  "hash": "prompt-0d32637d26e89b",
 }
 `;
 
@@ -183,6 +183,7 @@ Shared value lists:
       - groups (required): list of object
       - placements (required): list of object (0–32 items)
       - topology: string
+      - stullerMaterial: any
       - material: string
       - materialFromParent: true
     - nativeAssetId: string
@@ -334,6 +335,7 @@ Shared value lists:
   - groups (required): list of object
   - placements (required): list of object (0–32 items)
   - topology: string
+  - stullerMaterial: any
   - material: string
   - materialFromParent: true
 - sourceObjectId: string"

@@ -16,6 +16,7 @@ import { writeStl } from '../mesh/stl'
 import { freeRhino, loadRhino3dm } from '../runtime/rhino'
 import type { IndexedTriangles } from '../solid/meshing'
 import type { Bounds } from '../types'
+import { readStullerMaterial } from './matrix-stuller'
 import { inheritedMaterial, RHINO_INHERITED_MATERIAL, rhinoContextReader } from './rhino-context'
 import {
   CURVE_SOURCE_ID_KEY,
@@ -97,6 +98,7 @@ interface MeshPlacement {
 }
 
 interface BlockPlacement extends RhinoObjectLabel {
+  stullerMaterial?: RhinoContext['stullerMaterial']
   world: Transform
   meshPlacement: MeshPlacement
   instancePath: readonly string[]
@@ -514,6 +516,9 @@ export async function readRhino3dm(
           const parentPlacements = parent?.placements ?? []
           const savedPlacements = context.savedPlacements(attrs, parentPlacements)
           const material = context.material(attrs, info.materialIndex)
+          const stullerMaterial =
+            readStullerMaterial(attrs) ??
+            (material.materialFromParent ? parent?.stullerMaterial : undefined)
           if (geometry instanceof rhino.InstanceReference) {
             const definitionId = geometry.parentIdefId
             const definition = holdObject(definitions.findId(definitionId))
@@ -538,6 +543,7 @@ export async function readRhino3dm(
               ? holdObject(rhino.Transform.multiply(parent.world, relative))
               : relative
             const childPlacement = {
+              stullerMaterial,
               world,
               name,
               layer,
@@ -571,11 +577,16 @@ export async function readRhino3dm(
             attrs?.getUserString(RHINO_INHERITED_MATERIAL) === '1' &&
             material.material === inheritedMaterial(savedPlacements)
           const rhinoContext: RhinoContext | undefined =
-            groups.length || placements.length || material.material || material.materialFromParent
+            groups.length ||
+            placements.length ||
+            material.material ||
+            material.materialFromParent ||
+            stullerMaterial
               ? {
                   archiveId: context.archiveId,
                   groups,
                   placements,
+                  ...(stullerMaterial && { stullerMaterial }),
                   ...(inherited ? { materialFromParent: true } : material),
                 }
               : undefined

@@ -73,9 +73,16 @@ function sourceHint(body: ImportedMesh, placeNumbers: ReadonlyMap<string, number
   const path = placementPath(body)
   const place = placements.at(-1)
   const material = sourceMaterialLabel(context)
+  const supplier = context?.stullerMaterial
+  const supplierLabel =
+    supplier &&
+    ('metal' in supplier
+      ? `Stuller metal · ${supplier.metal}`
+      : `Stuller stone family · ${supplier.stoneFamily}${supplier.stoneColor ? ` · ${supplier.stoneColor}` : ''}`)
   const groupNames = context?.groups.map((group) => group.name).filter(Boolean) ?? []
   return [
     material && `Source material · ${material}`,
+    supplierLabel,
     body.source.rhinoLayer,
     path.length > 0 && `Placement ${placeNumbers.get(JSON.stringify(path))}`,
     place?.layer && place.layer !== body.source.rhinoLayer && place.layer,
