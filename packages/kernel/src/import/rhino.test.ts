@@ -73,7 +73,7 @@ describe('readRhino3dm', () => {
       skipped: [],
       objects: [
         { name: 'Head', layer: 'Jewellery::Settings' },
-        { name: 'Jewellery', layer: 'Jewellery' },
+        { name: 'Part 1 (Jewellery)', layer: 'Jewellery' },
       ],
     })
     const [head, band] = result.objects
@@ -88,6 +88,37 @@ describe('readRhino3dm', () => {
     expect(
       Math.min(...parseMesh(band!.bytes).mesh.positions.filter((_, i) => i % 3 === 2)),
     ).toBeCloseTo(-76.2)
+  })
+
+  it('assigns stable per-layer labels to unnamed parts on every open', async () => {
+    const bytes = writeFile((doc) => {
+      const layers = doc.layers()
+      const parent = new rhino.Layer()
+      parent.name = 'Components'
+      const parentIndex = layers.add(parent)
+      const child = new rhino.Layer()
+      child.name = 'Mounts'
+      child.parentLayerId = layers.findIndex(parentIndex).id
+      const childIndex = layers.add(child)
+      const objects = doc.objects()
+      objects.addMesh(quad(), named('', childIndex))
+      objects.addMesh(quad(3), named('Centre', childIndex))
+      objects.addPoint([4, 0, 0], named('', childIndex))
+      objects.addMesh(quad(6), named('', childIndex))
+      objects.addMesh(quad(9), named('', parentIndex))
+    })
+    const readLabels = async () => {
+      const result = await readRhino3dm(bytes)
+      return result.objects.map(({ name, layer }) => ({ name, layer }))
+    }
+    const labels = await readLabels()
+    expect(labels).toEqual([
+      { name: 'Part 1 (Mounts)', layer: 'Components::Mounts' },
+      { name: 'Centre', layer: 'Components::Mounts' },
+      { name: 'Part 2 (Mounts)', layer: 'Components::Mounts' },
+      { name: 'Part 1 (Components)', layer: 'Components' },
+    ])
+    await expect(readLabels()).resolves.toEqual(labels)
   })
 
   it('reads BReps with saved render meshes and reports only complete objects', async () => {

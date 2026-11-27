@@ -342,6 +342,7 @@ export async function readRhino3dm(bytes: Uint8Array): Promise<RhinoImport> {
       mirrored: false,
     }
     const activeDefinitions = new Set<string>()
+    const unnamedPartsByLayer = new Map<string | null, number>()
     let visitedObjects = 0
 
     const readObject = (
@@ -360,7 +361,8 @@ export async function readRhino3dm(bytes: Uint8Array): Promise<RhinoImport> {
         if (!layerNames.has(layerIndex)) layerNames.set(layerIndex, layerPath(layers, layerIndex))
         const layer = layerNames.get(layerIndex) ?? parent?.layer ?? null
         const objectName = attrs?.name?.trim()
-        const fallbackName = layer?.split('::').at(-1) || `Rhino object ${ordinal}`
+        const layerName = layer?.split('::').at(-1)
+        const fallbackName = layerName || `Rhino object ${ordinal}`
         const inContext = (label: string) => (parent ? `${parent.name} / ${label}` : label)
         let name = inContext(objectName || fallbackName)
         try {
@@ -417,6 +419,13 @@ export async function readRhino3dm(bytes: Uint8Array): Promise<RhinoImport> {
             parent?.meshPlacement ?? filePlacement,
             budget,
           )
+          if (!objectName) {
+            const partNumber = (unnamedPartsByLayer.get(layer) ?? 0) + 1
+            unnamedPartsByLayer.set(layer, partNumber)
+            const context = layerName ? inContext(layerName) : parent?.name
+            // Keep the distinguishing number visible in a truncated outliner label.
+            name = context ? `Part ${partNumber} (${context})` : `Part ${partNumber}`
+          }
           result.push({
             name,
             layer,
