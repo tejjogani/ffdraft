@@ -2,9 +2,11 @@ import type {
   Brep,
   File3dm,
   File3dmLayerTable,
+  File3dmObject,
   GeometryBase,
   Mesh,
   RhinoModule,
+  Transform,
   UnitSystem,
 } from 'rhino3dm'
 import { writeStl } from '../mesh/stl'
@@ -18,6 +20,7 @@ const MAX_OBJECTS = 5_000
 const MAX_VERTICES = 3_000_000
 const MAX_TRIANGLES = 1_000_000
 const MAX_BREP_FACES = 20_000
+const MAX_BLOCK_DEPTH = 32
 
 const MESH_IN_RHINO =
   'In Rhino, run Mesh on the originals and use Export Selected to save the resulting meshes as a .3dm with model units.'
@@ -50,6 +53,16 @@ interface RemainingGeometry {
   vertices: number
   triangles: number
   brepFaces: number
+}
+
+interface MeshPlacement {
+  pointInMillimetres: (point: number[]) => number[]
+  mirrored: boolean
+}
+
+interface BlockPlacement extends RhinoObjectLabel {
+  world: Transform
+  meshPlacement: MeshPlacement
 }
 
 class SkippedGeometry extends Error {}
@@ -129,6 +142,21 @@ function fileUnits(rhino: RhinoModule, units: UnitSystem): { name: string; mm: n
   return { name: knownUnit[0], mm: knownUnit[1] }
 }
 
+function blockPlacement(mm: number, world: Transform): MeshPlacement {
+  const determinant = world.determinant()
+  if (!world.isAffine || !Number.isFinite(determinant) || determinant === 0)
+    throw new SkippedGeometry(`This Rhino block has an invalid placement. ${EXPLODE_IN_RHINO}`)
+  const { m00, m01, m02, m03, m10, m11, m12, m13, m20, m21, m22, m23 } = world
+  return {
+    pointInMillimetres: ([x, y, z]) => [
+      (m00 * x! + m01 * y! + m02 * z! + m03) * mm,
+      (m10 * x! + m11 * y! + m12 * z! + m13) * mm,
+      (m20 * x! + m21 * y! + m22 * z! + m23) * mm,
+    ],
+    mirrored: determinant < 0,
+  }
+}
+
 function addTriangle(
   indices: Uint32Array,
   at: number,
@@ -154,7 +182,11 @@ function addTriangle(
 }
 
 /** A triangle mesh is copied out of WASM before the document is freed. */
-function readMesh(mesh: Mesh, mm: number, budget: RemainingGeometry): IndexedTriangles {
+function readMesh(
+  mesh: Mesh,
+  placement: MeshPlacement,
+  budget: RemainingGeometry,
+): IndexedTriangles {
   return withHandles((hold) => {
     const vertices = hold(mesh.vertices())
     const faces = hold(mesh.faces())
@@ -185,9 +217,9 @@ function readMesh(mesh: Mesh, mm: number, budget: RemainingGeometry): IndexedTri
 
     const positions = new Float32Array(vertexCount * 3)
     for (let i = 0; i < vertexCount; i++) {
-      const point = vertices.point3dAt(i)
+      const point = placement.pointInMillimetres(vertices.point3dAt(i))
       for (let k = 0; k < 3; k++) {
-        const value = Math.fround(point[k]! * mm)
+        const value = Math.fround(point[k]!)
         if (!Number.isFinite(value))
           throw new SkippedGeometry('The mesh has invalid vertex coordinates.')
         positions[i * 3 + k] = value
@@ -196,7 +228,9 @@ function readMesh(mesh: Mesh, mm: number, budget: RemainingGeometry): IndexedTri
     const indices = new Uint32Array(triangleCount * 3)
     for (let i = 0; i < triangleCount; i++) {
       const [a, b, c] = faces.get(i)
-      addTriangle(indices, i * 3, positions, a!, b!, c!)
+      // Reflection changes orientation. The original winding still describes the same side.
+      if (placement.mirrored) addTriangle(indices, i * 3, positions, a!, c!, b!)
+      else addTriangle(indices, i * 3, positions, a!, b!, c!)
     }
     return { positions, indices }
   })
@@ -205,7 +239,7 @@ function readMesh(mesh: Mesh, mm: number, budget: RemainingGeometry): IndexedTri
 function readBrep(
   rhino: RhinoModule,
   brep: Brep,
-  mm: number,
+  placement: MeshPlacement,
   budget: RemainingGeometry,
 ): IndexedTriangles[] {
   return withHandles((hold) => {
@@ -223,7 +257,7 @@ function readBrep(
           const face = holdFace(faces.get(i))
           const mesh = holdFace(face.getMesh(rhino.MeshType.Render))
           if (!mesh) throw missing()
-          return readMesh(mesh, mm, budget)
+          return readMesh(mesh, placement, budget)
         }),
       )
     }
@@ -234,19 +268,17 @@ function readBrep(
 function objectMeshes(
   rhino: RhinoModule,
   geometry: GeometryBase,
-  mm: number,
+  placement: MeshPlacement,
   budget: RemainingGeometry,
 ): IndexedTriangles[] {
-  if (geometry instanceof rhino.Mesh) return [readMesh(geometry, mm, budget)]
-  if (geometry instanceof rhino.Brep) return readBrep(rhino, geometry, mm, budget)
+  if (geometry instanceof rhino.Mesh) return [readMesh(geometry, placement, budget)]
+  if (geometry instanceof rhino.Brep) return readBrep(rhino, geometry, placement, budget)
   if (geometry instanceof rhino.Extrusion)
     return withHandles((hold) => {
       const mesh = hold(geometry.getMesh(rhino.MeshType.Render))
-      if (mesh) return [readMesh(mesh, mm, budget)]
+      if (mesh) return [readMesh(mesh, placement, budget)]
       throw new SkippedGeometry(`The extrusion lacks a saved render mesh. ${MESH_IN_RHINO}`)
     })
-  if (geometry instanceof rhino.InstanceReference)
-    throw new SkippedGeometry(`Block instance. ${EXPLODE_IN_RHINO}`)
   if (geometry instanceof rhino.Curve) throw new SkippedGeometry('Rhino curve.')
   if (geometry instanceof rhino.Point || geometry instanceof rhino.PointCloud)
     throw new SkippedGeometry('Rhino point or point cloud.')
@@ -293,6 +325,7 @@ export async function readRhino3dm(bytes: Uint8Array): Promise<RhinoImport> {
     const count = objects.count
     if (count > MAX_OBJECTS) throw new Error(TOO_COMPLEX)
     const layers = hold(doc.layers())
+    const definitions = hold(doc.instanceDefinitions())
     const settings = hold(doc.settings())
     const units = fileUnits(rhino, settings.modelUnitSystem)
     const result: RhinoMeshObject[] = []
@@ -304,22 +337,86 @@ export async function readRhino3dm(bytes: Uint8Array): Promise<RhinoImport> {
       brepFaces: MAX_BREP_FACES,
     }
 
-    for (let i = 0; i < count; i++) {
+    const filePlacement: MeshPlacement = {
+      pointInMillimetres: (point) => point.map((coordinate) => coordinate * units.mm),
+      mirrored: false,
+    }
+    const activeDefinitions = new Set<string>()
+    let visitedObjects = 0
+
+    const readObject = (
+      getObject: () => File3dmObject,
+      ordinal: number,
+      parent?: BlockPlacement,
+    ): void => {
       withHandles((holdObject) => {
-        const object = holdObject(objects.get(i))
+        const object = holdObject(getObject())
         const attrs = object && holdObject(object.attributes())
+        // Definition members have local coordinates. They only belong to placed references.
+        if (!parent && attrs?.isInstanceDefinitionObject) return
+        if (++visitedObjects > MAX_OBJECTS) throw new Error(TOO_COMPLEX)
+
         const layerIndex = attrs?.layerIndex ?? -1
         if (!layerNames.has(layerIndex)) layerNames.set(layerIndex, layerPath(layers, layerIndex))
-        const layer = layerNames.get(layerIndex) ?? null
-        const name = attrs?.name?.trim() || layer?.split('::').at(-1) || `Rhino object ${i + 1}`
+        const layer = layerNames.get(layerIndex) ?? parent?.layer ?? null
+        const objectName = attrs?.name?.trim()
+        const fallbackName = layer?.split('::').at(-1) || `Rhino object ${ordinal}`
+        const inContext = (label: string) => (parent ? `${parent.name} / ${label}` : label)
+        let name = inContext(objectName || fallbackName)
         try {
-          if (attrs?.isInstanceDefinitionObject)
-            throw new SkippedGeometry(`Geometry inside a block definition. ${EXPLODE_IN_RHINO}`)
+          if (parent && !attrs?.isInstanceDefinitionObject)
+            throw new SkippedGeometry(
+              'The block references a missing or invalid definition member.',
+            )
           if (attrs?.activeSpace === rhino.ActiveSpace.PageSpace)
             throw new SkippedGeometry('Rhino layout object outside model space.')
           const geometry = object && holdObject(object.geometry())
           if (!geometry) throw new SkippedGeometry('The object has no readable geometry.')
-          const meshes = objectMeshes(rhino, geometry, units.mm, budget)
+          if (geometry instanceof rhino.InstanceReference) {
+            const definitionId = geometry.parentIdefId
+            const definition = holdObject(definitions.findId(definitionId))
+            const blockName = definition?.name?.trim()
+            name = inContext(
+              objectName || (blockName ? `${blockName} ${ordinal}` : `Block ${ordinal}`),
+            )
+            const ids = definition?.getObjectIds()
+            // Linked definitions may have no embedded geometry. Never follow their external path.
+            if (!Array.isArray(ids) || !ids.length)
+              throw new SkippedGeometry(
+                `This block has no embedded definition geometry. ${EXPLODE_IN_RHINO}`,
+              )
+            if (ids.length > MAX_OBJECTS) throw new Error(TOO_COMPLEX)
+            if (activeDefinitions.has(definitionId) || activeDefinitions.size >= MAX_BLOCK_DEPTH)
+              throw new SkippedGeometry(
+                `This block is circular or too deeply nested. ${EXPLODE_IN_RHINO}`,
+              )
+
+            const relative = holdObject(geometry.xform)
+            const world = parent
+              ? holdObject(rhino.Transform.multiply(parent.world, relative))
+              : relative
+            const childPlacement = {
+              world,
+              name,
+              layer,
+              meshPlacement: blockPlacement(units.mm, world),
+            }
+            activeDefinitions.add(definitionId)
+            try {
+              for (const [i, id] of ids.entries()) {
+                readObject(() => objects.findId(id), i + 1, childPlacement)
+              }
+            } finally {
+              activeDefinitions.delete(definitionId)
+            }
+            return
+          }
+          const meshes = objectMeshes(
+            rhino,
+            geometry,
+            parent?.meshPlacement ?? filePlacement,
+            budget,
+          )
           result.push({
             name,
             layer,
@@ -332,6 +429,8 @@ export async function readRhino3dm(bytes: Uint8Array): Promise<RhinoImport> {
         }
       })
     }
+
+    for (let i = 0; i < count; i++) readObject(() => objects.get(i), i + 1)
     return { units: units.name, objects: result, skipped }
   })
 }
