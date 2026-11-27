@@ -29,7 +29,7 @@ import {
 } from '@pave/ui'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Camera, Columns2, Play, Redo2, Settings2, Undo2, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { assetUrl } from '../../lib/assets'
 import { type Command, useRegisterCommands } from '../../lib/commands'
 import { usePieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
@@ -112,6 +112,7 @@ export function RenderStudio({ pieceId, shotId }: { pieceId: string; shotId?: st
   const canRenderShot = (scene: RenderScene) => canRenderGeometry(scene) && validPose(scene)
   const s = useShots(pieceId, canRenderShot, baseAvailability === 'review-roles')
   const viewfinder = useRef<ViewfinderHandle>(null)
+  const shotListElement = useRef<HTMLElement>(null)
   const readOnly = useReadOnly()
   const renderJob = useStageJob(pieceId, 'render').run
   const jobInReview = renderJob ? jobState(renderJob) === 'review' : false
@@ -169,6 +170,30 @@ export function RenderStudio({ pieceId, shotId }: { pieceId: string; shotId?: st
       linkShot(savedDefault.key)
     } else if (shotId && !linked) linkShot()
   }, [linkShot, linked, s.loading, s.shots, savedDefault, shotId, wanted])
+
+  const activeShotKey = shot?.key
+  useLayoutEffect(() => {
+    const list = shotListElement.current
+    const card = activeShotKey && !s.loading ? list?.querySelector('[aria-current="true"]') : null
+    if (!list || !card) return
+    const reveal = () => {
+      const frame = list.getBoundingClientRect()
+      const active = card.getBoundingClientRect()
+      const x = frame.left + list.clientLeft
+      const y = frame.top + list.clientTop
+      // Scroll the strip alone. Moving the outer page would also move the viewfinder.
+      const left =
+        active.left < x ? active.left - x : Math.max(0, active.right - x - list.clientWidth)
+      const top =
+        active.top < y ? active.top - y : Math.max(0, active.bottom - y - list.clientHeight)
+      if (left || top) list.scrollBy({ left, top, behavior: 'instant' })
+    }
+    reveal()
+    const resize = new ResizeObserver(reveal)
+    resize.observe(list)
+    resize.observe(card)
+    return () => resize.disconnect()
+  }, [activeShotKey, s.loading])
 
   const takes = useMemo(() => (shot ? takesOf(shot, s.takes) : []), [shot, s.takes])
   const activeTake = takes.find(isLive)
@@ -332,6 +357,7 @@ export function RenderStudio({ pieceId, shotId }: { pieceId: string; shotId?: st
       <div className="flex min-h-full flex-col @5xl:h-full @5xl:flex-row">
         {/* Shots */}
         <nav
+          ref={shotListElement}
           aria-label="Shots"
           className="flex shrink-0 gap-1.5 overflow-x-auto border-b border-line bg-bg p-2 @5xl:w-56 @5xl:flex-col @5xl:overflow-y-auto @5xl:border-r @5xl:border-b-0"
         >
@@ -788,7 +814,7 @@ function ShotRow({
       aria-current={active ? 'true' : undefined}
       onClick={onSelect}
       className={cn(
-        'flex shrink-0 items-center gap-2 rounded-md p-1.5 text-left text-sm hover:bg-bg-hover',
+        'flex max-w-full shrink-0 items-center gap-2 rounded-md p-1.5 text-left text-sm hover:bg-bg-hover',
         active && 'bg-bg-active',
       )}
     >

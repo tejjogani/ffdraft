@@ -420,8 +420,19 @@ try {
   )
   assert.equal(freshShots.at(-1)?.scene.camera.preset, 'top')
   await page.waitForURL((url) => url.searchParams.get('shot') === freshShots.at(-1)!.id)
+  const shotStrip = page.getByRole('navigation', { name: 'Shots' })
+  const activeShotIsVisible = () =>
+    shotStrip.evaluate((strip) => {
+      const active = strip.querySelector('[aria-current=true]')
+      if (!active) return false
+      const card = active.getBoundingClientRect()
+      const list = strip.getBoundingClientRect()
+      return strip.scrollLeft > 0 && card.left >= list.left - 1 && card.right <= list.right + 1
+    })
+  await until(activeShotIsVisible)
   await page.reload()
   await page.getByLabel('Live preview of the Catalogue top shot', { exact: true }).waitFor()
+  await until(activeShotIsVisible)
   await rpc('scenes.update', { id: freshShots.at(-1)!.id, patch: { pose: 'circular-band' } })
   await page.reload()
   await renderActions
