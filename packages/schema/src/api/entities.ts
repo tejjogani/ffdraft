@@ -416,14 +416,14 @@ export const RenderSceneSchema = z.object({
     description:
       'A render-only pose. Circular band arranges a straight row of separate links around a circle at their current scale. Each station stays rigid. As designed uses the saved CAD.',
   }),
-  /** Saved shots without a chosen look retain their original neutral appearance. */
+  /** Import-only shots use source materials when no look is chosen. */
   importedBodyLook: z.enum(['source', 'clay']).optional().meta({
     description:
       'Visual appearance of unassigned imported bodies for this shot. Source uses their original material information. Clay is neutral.',
   }),
   includeUnassignedRhino: z.boolean().optional().meta({
     description:
-      'Include visible unassigned Rhino bodies in this shot. Choose importedBodyLook for source colors or clay. Confirmed materials, CAD roles, casting facts and exports are unaffected. Defaults to off.',
+      'Include visible unassigned Rhino bodies in this shot. This defaults on for pieces with only unassigned Rhino bodies. Choose importedBodyLook for source colors or clay. Confirmed materials, CAD roles, casting facts and exports are unaffected.',
   }),
   /** Lighting + staging recipe; see @pave/render for the catalogue. */
   look: z

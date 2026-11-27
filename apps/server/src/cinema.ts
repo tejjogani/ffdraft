@@ -15,8 +15,15 @@ import {
   type SceneSubject,
   shotFraming,
   shotVocabulary,
+  withImportedBodyDefaults,
 } from '@pave/render'
-import type { CommandOutput, CommandParsedInput, Piece, RenderScene } from '@pave/schema'
+import {
+  type CommandOutput,
+  type CommandParsedInput,
+  isRhinoRoleBody,
+  type Piece,
+  type RenderScene,
+} from '@pave/schema'
 import { inArray } from 'drizzle-orm'
 import { putAsset } from './assets/assets'
 import type { Ctx } from './context'
@@ -41,6 +48,28 @@ export async function subjectOf(
     ...(signal ? { signal } : {}),
     ...(includeUnassignedRhino && { includeUnassignedRhino }),
   })) as SceneSubject
+}
+
+/** Includes every eligible imported body so defaults and render eligibility use the same geometry. */
+export async function importedShotSubject(
+  ctx: Ctx,
+  piece: Pick<Piece, 'id' | 'design'>,
+  signal = ctx.signal,
+): Promise<SceneSubject | null> {
+  if (!Object.values(piece.design.nodes).some(isRhinoRoleBody)) return null
+  return subjectOf(ctx, piece, signal, true).catch(() => null)
+}
+
+export function completeImportedShot(
+  scene: RenderScene,
+  subject: SceneSubject | null,
+): RenderScene {
+  const importOnly =
+    !!subject &&
+    subject.stones.length === 0 &&
+    subject.parts.length > 0 &&
+    subject.parts.every(({ importRole }) => importRole === 'unassigned')
+  return withImportedBodyDefaults(scene, importOnly)
 }
 
 /** A set can contain shots with and without imported previews. Evaluate each setting once. */
@@ -149,14 +178,19 @@ export async function captureShots(
       'Capture shots of one piece at a time (house shots need a piece: copy one first)',
     )
   const piece = await getPiece(ctx, pieceId)
+  const imported = await importedShotSubject(ctx, piece, signal)
+  const effective = saved.map((shot) => ({
+    ...shot,
+    scene: completeImportedShot(shot.scene, imported),
+  }))
   const geometry = ctx.services.get('geometry')
   const subjectFor = await subjectsOf(
     ctx,
     piece,
-    saved.map(({ scene }) => scene),
+    effective.map(({ scene }) => scene),
     signal,
   )
-  const shots = saved.map((s) => {
+  const shots = effective.map((s) => {
     const subject = subjectFor(s.scene)
     const resolved = subject ? resolveScene(s.scene, subject) : null
     const { width, height } = s.scene.output
@@ -252,12 +286,14 @@ export async function framingRefusal(
   signal?: AbortSignal,
 ): Promise<string | null> {
   const saved = input.sceneId ? await getScene(ctx, input.sceneId).catch(() => null) : null
-  const scene = input.scene ?? saved?.scene
-  if (!scene) return null
+  const requested = input.scene ?? saved?.scene
+  if (!requested) return null
   const piece = await getPiece(ctx, input.pieceId)
-  const subject = await subjectOf(ctx, piece, signal, scene.includeUnassignedRhino).catch(
-    () => null,
-  )
+  const imported = await importedShotSubject(ctx, piece, signal)
+  const scene = completeImportedShot(requested, imported)
+  const subject =
+    (scene.includeUnassignedRhino && imported) ||
+    (await subjectOf(ctx, piece, signal, scene.includeUnassignedRhino).catch(() => null))
   if (!subject) return null
   const check = shotFraming(scene, subject)
   if (check.ok) return null
