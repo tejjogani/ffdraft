@@ -84,6 +84,90 @@ export function readCurve(curve: NurbsCurve, scale = 1) {
   })
 }
 
+interface DesignContextRow {
+  named: boolean
+  groups: number[]
+  curve: 'open' | 'closed' | undefined
+  bodyOrInstance: boolean
+  materialIndex: number | undefined
+  layerId: string | undefined
+  definition: string | undefined
+}
+
+function designContext(
+  doc: File3dm,
+  hold: Hold,
+  rows: DesignContextRow[],
+  definitions: ReadonlyMap<string, string[]>,
+) {
+  const materialTable = hold(doc.materials())
+  const groupTable = hold(doc.groups())
+  const groups = new Map<number, { curve: boolean; bodyOrInstance: boolean }>()
+  const placements = new Map<
+    string,
+    { count: number; layers: Set<string>; materials: Set<string> }
+  >()
+  const materialNames = new Map<number, string>()
+  const materialName = (index: number | undefined) => {
+    if (index === undefined || index < 0) return ''
+    let name = materialNames.get(index)
+    if (name === undefined) {
+      name = handles((take) => take(materialTable.findIndex(index))?.name?.trim() ?? '')
+      materialNames.set(index, name)
+    }
+    return name
+  }
+
+  const report = {
+    visibleModelSpaceTopLevelObjects: rows.length,
+    namedObjects: 0,
+    referencedGroups: 0,
+    groupsWithCurvesAndBodiesOrInstances: 0,
+    materialTableRecords: materialTable.count,
+    objectsWithNamedMaterial: 0,
+    repeatedDefinitionsOnMultipleLayers: 0,
+    repeatedDefinitionsWithMultipleNamedMaterials: 0,
+    openCurves: 0,
+    closedCurves: 0,
+  }
+  for (const row of rows) {
+    if (row.named) report.namedObjects++
+    if (row.curve === 'open') report.openCurves++
+    if (row.curve === 'closed') report.closedCurves++
+    for (const index of row.groups) {
+      const group = groups.get(index) ?? { curve: false, bodyOrInstance: false }
+      group.curve ||= Boolean(row.curve)
+      group.bodyOrInstance ||= row.bodyOrInstance
+      groups.set(index, group)
+    }
+
+    const material = materialName(row.materialIndex)
+    if (material) report.objectsWithNamedMaterial++
+    if (row.definition && definitions.has(row.definition)) {
+      const placement = placements.get(row.definition) ?? {
+        count: 0,
+        layers: new Set<string>(),
+        materials: new Set<string>(),
+      }
+      placement.count++
+      if (row.layerId) placement.layers.add(row.layerId)
+      if (material) placement.materials.add(material)
+      placements.set(row.definition, placement)
+    }
+  }
+  for (const [index, group] of groups) {
+    if (!handles((take) => Boolean(take(groupTable.findIndex(index))))) continue
+    report.referencedGroups++
+    if (group.curve && group.bodyOrInstance) report.groupsWithCurvesAndBodiesOrInstances++
+  }
+  for (const { count, layers, materials } of placements.values()) {
+    if (count < 2) continue
+    if (layers.size > 1) report.repeatedDefinitionsOnMultipleLayers++
+    if (materials.size > 1) report.repeatedDefinitionsWithMultipleNamedMaterials++
+  }
+  return report
+}
+
 export function sourceArchive(rhino: RhinoModule, doc: File3dm, hold: Hold) {
   const objects = hold(doc.objects())
   const layers = hold(doc.layers())
@@ -115,16 +199,47 @@ export function sourceArchive(rhino: RhinoModule, doc: File3dm, hold: Hold) {
       const transform = reference && take(reference.xform)
       const determinant = transform?.determinant() ?? 0
       const placed = transform?.isAffine && Number.isFinite(determinant) && determinant !== 0
+      const member = props.isInstanceDefinitionObject
+      const hidden =
+        props.mode === rhino.ObjectMode.Hidden || layerVisibility.get(layer?.id) === false
+      const curve = geometry instanceof rhino.Curve
+      const definition = reference?.parentIdefId
+      let context: DesignContextRow | undefined
+      if (!member && !hidden && props.activeSpace === rhino.ActiveSpace.ModelSpace) {
+        const source = props.materialSource
+        let materialIndex: number | undefined
+        if (source === rhino.ObjectMaterialSource.MaterialFromObject) {
+          materialIndex = props.materialIndex
+        } else if (source === rhino.ObjectMaterialSource.MaterialFromLayer) {
+          materialIndex = layer?.renderMaterialIndex
+        }
+        context = {
+          named: Boolean(props.name?.trim()),
+          groups: props.getGroupList() ?? [],
+          curve: curve ? (geometry.isClosed ? 'closed' : 'open') : undefined,
+          bodyOrInstance:
+            Boolean(reference) ||
+            geometry instanceof rhino.Brep ||
+            geometry instanceof rhino.Extrusion ||
+            geometry instanceof rhino.Mesh ||
+            geometry instanceof rhino.Surface ||
+            geometry instanceof rhino.SubD,
+          materialIndex,
+          layerId: layer?.id,
+          definition,
+        }
+      }
       return {
         id: props.id,
         type: geometry?.constructor.name ?? 'Unreadable',
-        member: props.isInstanceDefinitionObject,
-        hidden: props.mode === rhino.ObjectMode.Hidden || layerVisibility.get(layer?.id) === false,
+        member,
+        hidden,
         paper: props.activeSpace === rhino.ActiveSpace.PageSpace,
-        definition: reference?.parentIdefId,
+        definition,
         placed,
-        curve: geometry instanceof rhino.Curve,
+        curve,
         provenanceId: props.getUserString('paveSourceObjectId') || props.id,
+        context,
       }
     }),
   )
@@ -175,6 +290,12 @@ export function sourceArchive(rhino: RhinoModule, doc: File3dm, hold: Hold) {
       placedBlockInstances: root.filter((row) => row.definition).length,
       repeatedDefinitions: Object.values(refs).filter((total) => total > 1).length,
       visibleEntries,
+      designContext: designContext(
+        doc,
+        hold,
+        rows.flatMap(({ context }) => (context ? [context] : [])),
+        members,
+      ),
     },
   }
 }
