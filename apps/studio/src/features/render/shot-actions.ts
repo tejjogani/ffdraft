@@ -3,9 +3,8 @@
  * (once, however many callers ask at the same moment), "Render this view" from the CAD
  * workspace, and house shots, the organisation's framed shots reused on any piece.
  */
-import { DEFAULT_SHOTS } from '@pave/render'
 import {
-  type PieceKind,
+  type CommandInput,
   type RenderSceneInput,
   RenderSceneSchema,
   type SavedScene,
@@ -13,31 +12,14 @@ import {
 import { queryClient, rpcKey } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 
-/** One save of the default set per piece at a time: two first edits must not save it twice. */
-const saving = new Map<string, Promise<SavedScene[]>>()
-
 /** The piece's saved shots; the default set for its kind is saved first if there are none. */
-export function ensureShotsSaved(pieceId: string, kind: PieceKind): Promise<SavedScene[]> {
-  const running = saving.get(pieceId)
-  if (running) return running
-  const work = (async () => {
-    const existing = await rpc.call('scenes.list', { pieceId })
-    if (existing.length) return existing
-    const rows: SavedScene[] = []
-    for (const [i, s] of DEFAULT_SHOTS(kind).entries())
-      rows.push(
-        await rpc.call('scenes.create', {
-          pieceId,
-          title: s.title,
-          scene: RenderSceneSchema.parse(s.scene),
-          position: i + 1,
-        }),
-      )
-    queryClient.setQueryData(rpcKey('scenes.list', { pieceId }), rows)
-    return rows
-  })().finally(() => saving.delete(pieceId))
-  saving.set(pieceId, work)
-  return work
+export async function ensureShotsSaved(
+  pieceId: string,
+  edit?: CommandInput<'scenes.ensureDefaults'>['edit'],
+) {
+  const result = await rpc.call('scenes.ensureDefaults', { pieceId, ...(edit && { edit }) })
+  queryClient.setQueryData(rpcKey('scenes.list', { pieceId }), result.shots)
+  return result
 }
 
 /** The shot the Render tab should select when it next opens for a piece. */
@@ -66,11 +48,10 @@ export function freshTitle(base: string, taken: readonly string[]): string {
  */
 export async function addShot(
   pieceId: string,
-  kind: PieceKind,
   title: string,
   scene: RenderSceneInput,
 ): Promise<SavedScene> {
-  const rows = await ensureShotsSaved(pieceId, kind)
+  const { shots: rows } = await ensureShotsSaved(pieceId)
   const row = await rpc.call('scenes.create', {
     pieceId,
     title: freshTitle(
@@ -111,7 +92,6 @@ export async function saveHouseShot(title: string, scene: RenderSceneInput): Pro
  */
 export async function renderThisView(
   pieceId: string,
-  kind: PieceKind,
   camera: {
     position: [number, number, number]
     target: [number, number, number]
@@ -121,7 +101,7 @@ export async function renderThisView(
 ): Promise<SavedScene> {
   const round = (v: [number, number, number]) =>
     v.map((n) => Math.round(n * 1000) / 1000) as [number, number, number]
-  const row = await addShot(pieceId, kind, 'CAD view', {
+  const row = await addShot(pieceId, 'CAD view', {
     camera: {
       preset: 'custom',
       position: round(camera.position),
@@ -175,7 +155,6 @@ const cadRenders = new Map<string, Promise<SavedScene | null>>()
 /** Queues the saved Hero shot, or the first saved shot if this set has no Hero. */
 export function queueCadRender(
   pieceId: string,
-  kind: PieceKind,
   baseVersion: number,
   canProceed: () => boolean,
 ): Promise<SavedScene | null> {
@@ -183,7 +162,7 @@ export function queueCadRender(
   if (pending) return pending
   const work = queueShotAction(pieceId, 'render', async () => {
     if (!canProceed()) return null
-    const shots = await ensureShotsSaved(pieceId, kind)
+    const { shots } = await ensureShotsSaved(pieceId)
     if (!canProceed()) return null
     const shot = shots.find((s) => s.title.toLowerCase() === 'hero') ?? shots[0]
     if (!shot) throw new Error('Add a shot in Render Studio, then try again.')

@@ -1,16 +1,23 @@
 import {
   BROWSER_TAKE_SECONDS,
+  DEFAULT_SHOTS,
   estimateTakeSeconds,
   rateFrom,
   shotChangeRefusal,
 } from '@pave/render'
-import { type RenderJob, renderCost, type SavedScene } from '@pave/schema'
+import {
+  type PieceKind,
+  type RenderJob,
+  RenderSceneSchema,
+  renderCost,
+  type SavedScene,
+} from '@pave/schema'
 import { and, asc, desc, eq, gt, inArray, isNull, lt, max, type SQL } from 'drizzle-orm'
 import { captureShots, suggestShots } from '../cinema'
 import { type Ctx, publish } from '../context'
 import * as t from '../db/schema'
 import { BLENDER_INSTALL_UNAVAILABLE } from '../engines/render/blender'
-import { badRequest, conflict, forbidden } from '../errors'
+import { badRequest, conflict, forbidden, notFound } from '../errors'
 import { createId } from '../ids'
 import { renderHandle, stopJob, submitJob, updateRender } from '../jobs'
 import { ensure, ensureAll, getPiece, getRender, getScene } from '../lookups'
@@ -96,6 +103,27 @@ const announce = (ctx: Ctx, row: RenderRow) =>
 
 const sceneScope = (pieceId: string | null): SQL =>
   pieceId === null ? isNull(t.renderScene.pieceId) : eq(t.renderScene.pieceId, pieceId)
+
+const savedScenes = (ctx: Ctx, pieceId: string | null) =>
+  ctx.repo.scenes.many({
+    where: sceneScope(pieceId),
+    orderBy: [asc(t.renderScene.position), asc(t.renderScene.createdAt)],
+  })
+
+/** First writes serialize at the piece, even before it has a shot row to lock. */
+function withShotList<R>(
+  ctx: Ctx,
+  pieceId: string,
+  work: (tx: Ctx, kind: PieceKind) => Promise<R>,
+) {
+  return ctx.repo.transaction(async (repo) => {
+    const [piece] = await repo.pieces
+      .select({ kind: t.piece.kind }, eq(t.piece.id, pieceId))
+      .for('update')
+    if (!piece) throw notFound('Piece', pieceId)
+    return work({ ...ctx, repo }, piece.kind)
+  })
+}
 
 const announceScene = (ctx: Ctx, row: SceneRow) =>
   publish(ctx, { type: 'scene.updated', sceneId: row.id, pieceId: row.pieceId })
@@ -203,30 +231,61 @@ async function noteRerender(ctx: Ctx, row: RenderRow, shot: SceneRow | null): Pr
 export const render: HandlerGroup<'renders' | 'scenes'> = {
   'scenes.list': async (ctx, { pieceId }) => {
     await ensure(getPiece, ctx, pieceId)
-    const rows = await ctx.repo.scenes.many({
-      where: sceneScope(pieceId),
-      orderBy: [asc(t.renderScene.position), asc(t.renderScene.createdAt)],
-    })
-    return rows.map(toSavedScene)
+    return (await savedScenes(ctx, pieceId)).map(toSavedScene)
   },
 
   'scenes.create': async (ctx, input) => {
-    await ensure(getPiece, ctx, input.pieceId)
-    const [last] = await ctx.repo.scenes.select(
-      { position: max(t.renderScene.position) },
-      sceneScope(input.pieceId),
-    )
-    const row = await ctx.repo.scenes.insert({
-      id: createId('scn'),
-      pieceId: input.pieceId,
-      title: input.title,
-      scene: input.scene,
-      position: input.position ?? (last?.position ?? 0) + 1,
-      createdBy: ctx.user.id,
-      actor: ctx.actor,
-    })
+    const create = async ({ repo }: Ctx) => {
+      const [last] = await repo.scenes.select(
+        { position: max(t.renderScene.position) },
+        sceneScope(input.pieceId),
+      )
+      return repo.scenes.insert({
+        id: createId('scn'),
+        pieceId: input.pieceId,
+        title: input.title,
+        scene: input.scene,
+        position: input.position ?? (last?.position ?? 0) + 1,
+        createdBy: ctx.user.id,
+        actor: ctx.actor,
+      })
+    }
+    const row =
+      input.pieceId === null ? await create(ctx) : await withShotList(ctx, input.pieceId, create)
     announceScene(ctx, row)
     return toSavedScene(row)
+  },
+
+  'scenes.ensureDefaults': async (ctx, { pieceId, edit }) => {
+    const result = await withShotList(ctx, pieceId, async (tx, kind) => {
+      const existing = await savedScenes(tx, pieceId)
+      if (existing.length) return { rows: existing, created: false, editedId: null }
+
+      const presets = DEFAULT_SHOTS(kind)
+      const index = edit ? presets.findIndex(({ key }) => key === edit.key) : -1
+      if (edit && index < 0) throw badRequest('That default shot is no longer available.')
+      const rows = await tx.repo.scenes.insertMany(
+        presets.map((preset, i) => ({
+          id: createId('scn'),
+          pieceId,
+          title: preset.title,
+          scene: RenderSceneSchema.parse(preset.scene),
+          position: i + 1,
+          createdBy: ctx.user.id,
+          actor: ctx.actor,
+        })),
+      )
+      rows.sort((a, b) => a.position - b.position)
+      if (edit) {
+        const { row } = await changeScene(tx, rows[index]!.id, async (current) => ({
+          scene: patchScene(current.scene, edit.patch),
+        }))
+        rows[index] = row
+      }
+      return { rows, created: true, editedId: rows[index]?.id ?? null }
+    })
+    if (result.created) for (const row of result.rows) announceScene(ctx, row)
+    return { shots: result.rows.map(toSavedScene), editedId: result.editedId }
   },
 
   'scenes.update': async (ctx, { id, patch, takeId, ...rest }) => {

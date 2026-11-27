@@ -5,6 +5,7 @@
  * cover. Every write goes through the same commands the assistant uses.
  */
 import {
+  diffPatch,
   mergePatch,
   type RenderJob,
   type RenderScene,
@@ -42,7 +43,22 @@ export function useShots(pieceId: string, canRender: (scene: RenderScene) => boo
   /** The shots as saved rows: the default set is saved (once, in order) the first time it is needed. */
   const ensureSaved = (): Promise<SavedScene[]> => {
     const latest = queryClient.getQueryData<SavedScene[]>(sceneListKey)
-    return latest?.length ? Promise.resolve(latest) : ensureShotsSaved(pieceId, pieceKind)
+    return latest?.length
+      ? Promise.resolve(latest)
+      : ensureShotsSaved(pieceId).then(({ shots }) => shots)
+  }
+
+  const fromSaved = (row: SavedScene): Shot => ({
+    key: row.id,
+    title: row.title,
+    scene: row.scene,
+    saved: row,
+  })
+
+  const savedPreset = (rows: SavedScene[], shot: Shot) => {
+    const position =
+      shotList(undefined, pieceKind).findIndex((preset) => preset.key === shot.key) + 1
+    return rows.find((scene) => scene.position === position && scene.title === shot.title)
   }
 
   const replaceCachedScene = (row: SavedScene) => {
@@ -61,10 +77,7 @@ export function useShots(pieceId: string, canRender: (scene: RenderScene) => boo
           ?.find((row) => row.id === shot.saved?.id) ?? shot.saved
       )
     }
-    const position =
-      shotList(undefined, pieceKind).findIndex((preset) => preset.key === shot.key) + 1
-    const rows = await ensureSaved()
-    const row = rows.find((scene) => scene.position === position && scene.title === shot.title)
+    const row = savedPreset(await ensureSaved(), shot)
     if (!row) throw new Error('That shot is no longer in the set.')
     return row
   }
@@ -73,14 +86,31 @@ export function useShots(pieceId: string, canRender: (scene: RenderScene) => boo
   const adjust = async (shot: Shot, patch: Record<string, unknown>): Promise<Shot | null> => {
     try {
       return await queueShotAction(pieceId, 'edit', async () => {
+        if (!shot.saved && !queryClient.getQueryData<SavedScene[]>(sceneListKey)?.length) {
+          const { shots, editedId } = await ensureShotsSaved(pieceId, { key: shot.key, patch })
+          const edited = shots.find(({ id }) => id === editedId)
+          if (edited) {
+            void queryClient.invalidateQueries({
+              queryKey: rpcKey('scenes.history', { id: edited.id }),
+            })
+            return fromSaved(edited)
+          }
+          const current = savedPreset(shots, shot)
+          const expected = RenderSceneSchema.parse(mergePatch(shot.scene, patch))
+          if (current && Object.keys(diffPatch(current.scene, expected)).length === 0)
+            return fromSaved(current)
+          throw new Error('The shot list has changed. Choose a saved shot and try again.')
+        }
         const row = await savedFor(shot)
+        if (!shot.saved && Object.keys(diffPatch(row.scene, shot.scene)).length)
+          throw new Error('The shot has changed. Review the saved shot and try again.')
         const next = RenderSceneSchema.parse(mergePatch(row.scene, patch))
         replaceCachedScene({ ...row, scene: next })
         try {
           const updated = await rpc.call('scenes.update', { id: row.id, patch })
           replaceCachedScene(updated)
           void queryClient.invalidateQueries({ queryKey: rpcKey('scenes.history', { id: row.id }) })
-          return { key: updated.id, title: updated.title, scene: updated.scene, saved: updated }
+          return fromSaved(updated)
         } catch (e) {
           replaceCachedScene(row)
           throw e
