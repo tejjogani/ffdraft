@@ -7,7 +7,7 @@ import { importRoleOf, METALS, type NodeOf } from '@pave/schema'
 import { defineExporter, type Scene } from '../core'
 import type { ChainData } from '../features/chain'
 import { fromFrame, multiply } from '../geometry/vec'
-import { inheritedMaterial } from '../import/rhino-context'
+import { inheritedMaterial, inheritedMaterialAppearance } from '../import/rhino-context'
 import { CURVE_SOURCE_ID_KEY } from '../import/rhino-curve'
 import { freeRhino as free, loadRhino3dm } from '../runtime/rhino'
 import type { ExportOptions } from '../types'
@@ -175,8 +175,11 @@ async function write3dm(
           const path = source.placements[0]?.layer?.split('::').filter(Boolean)
           return {
             placementLayerIndex: path?.length ? layerFor(path, objectColor(o)) : layer,
-            placementMaterialIndex: context.materialIndex(inheritedMaterial(source.placements)),
-            memberMaterialIndex: context.materialIndex(source.material),
+            placementMaterialIndex: context.materialIndex(
+              inheritedMaterial(source.placements),
+              inheritedMaterialAppearance(source.placements),
+            ),
+            memberMaterialIndex: context.materialIndex(source.material, source.materialAppearance),
             memberMaterialFromParent: source.materialFromParent,
           }
         })

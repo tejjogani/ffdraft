@@ -13,24 +13,31 @@ beforeAll(async () => {
 })
 afterAll(() => kernel.dispose())
 
-function contextArchive(affine = false) {
+function contextArchive(affine = false, appearances = false) {
   return handles((hold) => {
     const doc = hold(new rhino.File3dm())
     hold(doc.settings()).modelUnitSystem = rhino.UnitSystem.Millimeters
     const materials = hold(doc.materials())
-    const addMaterial = (name: string) => {
+    const addMaterial = (name: string, rgb: [number, number, number], transparency = 0) => {
       const material = hold(new rhino.Material())
       material.name = name
+      if (appearances) {
+        const [r, g, b] = rgb
+        material.diffuseColor = { r, g, b, a: 255 } as unknown as typeof material.diffuseColor
+        material.transparency = transparency
+      }
       return materials.add(material) as unknown as number
     }
-    const bronze = addMaterial('Display bronze')
-    const blue = addMaterial('Display blue')
-    const black = addMaterial('Display black')
+    const bronze = addMaterial('Display bronze', [80, 24, 10], 0.25)
+    const blue = addMaterial(appearances ? '' : 'Display blue', [12, 42, 206], 0.5)
+    const black = addMaterial('Display black', [0, 0, 0])
 
     const layers = hold(doc.layers())
     const addLayer = (name: string, material?: number) => {
       const layer = hold(new rhino.Layer())
       layer.name = name
+      if (appearances)
+        layer.color = { r: 243, g: 161, b: 15, a: 255 } as unknown as typeof layer.color
       if (material !== undefined) layer.renderMaterialIndex = material
       return layers.add(layer)
     }
@@ -78,6 +85,25 @@ function contextArchive(affine = false) {
       transform: Transform,
     ) => InstanceReference
     const objects = hold(doc.objects())
+    let selectedDefinition = definition
+    if (appearances && !affine) {
+      const nestedMember = hold(new rhino.ObjectAttributes())
+      nestedMember.name = 'Inner module'
+      nestedMember.layerIndex = memberLayer
+      nestedMember.materialSource = rhino.ObjectMaterialSource.MaterialFromParent
+      const instance = hold(new Ref(definition.id, hold(rhino.Transform.identity())))
+      const nested = definitions.add(
+        'Outer module',
+        '',
+        '',
+        '',
+        [0, 0, 0],
+        [instance],
+        [nestedMember],
+      )
+      expect(nested).toBeGreaterThanOrEqual(0)
+      selectedDefinition = hold(definitions.get(nested))
+    }
     const first = hold(new rhino.ObjectAttributes())
     first.name = 'First'
     first.setUserString('paveSourceStullerMaterial', JSON.stringify({ metal: 'TEST-14K' }))
@@ -95,8 +121,8 @@ function contextArchive(affine = false) {
     second.layerIndex = secondLayer
     second.addToGroup(otherGroup)
     const secondTransform = hold(rhino.Transform.translationXYZ(10, 0, 0))
-    objects.addInstanceObject(hold(new Ref(definition.id, firstTransform)), first)
-    objects.addInstanceObject(hold(new Ref(definition.id, secondTransform)), second)
+    objects.addInstanceObject(hold(new Ref(selectedDefinition.id, firstTransform)), first)
+    objects.addInstanceObject(hold(new Ref(selectedDefinition.id, secondTransform)), second)
 
     const curve = hold(new rhino.ObjectAttributes())
     curve.name = 'Guide'
@@ -166,6 +192,63 @@ function designFixture(previews: Awaited<ReturnType<typeof readRhino3dm>>[]) {
 }
 
 describe('Rhino source context', () => {
+  it.each([false, true])(
+    'preserves authored object, layer and inherited appearances in an exported Rhino file (affine: %s)',
+    async (affine) => {
+      const source = await readRhino3dm(contextArchive(affine, true), { includeCurves: true })
+      const bronze = { color: '#50180a', opacity: 0.75 }
+      const blue = { color: '#0c2ace', opacity: 0.5 }
+      const black = { color: '#000000', opacity: 1 }
+      expect(source.skipped).toEqual([])
+      expect(
+        source.objects.map(({ rhinoContext }) => rhinoContext?.placements[0]?.materialAppearance),
+      ).toEqual([bronze, blue])
+      expect(
+        source.objects.every(
+          ({ rhinoContext }) =>
+            rhinoContext?.materialFromParent && !rhinoContext.materialAppearance,
+        ),
+      ).toBe(true)
+      expect(source.objects[1]?.rhinoContext?.placements[0]?.material).toBeUndefined()
+      if (!affine)
+        expect(source.objects[0]?.rhinoContext?.placements[1]).toMatchObject({
+          materialFromParent: true,
+        })
+      expect(source.curves[0]?.rhinoContext?.materialAppearance).toEqual(black)
+      expect(source.curves[1]?.rhinoContext?.materialAppearance).toBeUndefined()
+
+      const { design, assets } = designFixture([source])
+      const exported = await kernel.export(design, '3dm', { assets, stones: false })
+      const reopened = await readRhino3dm(exported.bytes, { includeCurves: true })
+      expect(reopened.skipped).toEqual([])
+      expect(
+        reopened.objects.map(({ rhinoContext }) => rhinoContext?.placements[0]?.materialAppearance),
+      ).toEqual([bronze, blue])
+      expect(
+        reopened.objects.every(
+          ({ rhinoContext }) =>
+            rhinoContext?.materialFromParent && !rhinoContext.materialAppearance,
+        ),
+      ).toBe(true)
+      expect(reopened.curves[0]?.rhinoContext?.materialAppearance).toEqual(black)
+      handles((hold) => {
+        const doc = hold(rhino.File3dm.fromByteArray(exported.bytes))
+        const materials = hold(doc.materials())
+        const stored = Array.from({ length: materials.count }, (_, index) => {
+          const material = hold(materials.findIndex(index))
+          return [material.diffuseColor, material.transparency]
+        })
+        expect(stored).toEqual(
+          expect.arrayContaining([
+            [{ r: 80, g: 24, b: 10, a: 255 }, 0.25],
+            [{ r: 12, g: 42, b: 206, a: 255 }, 0.5],
+            [{ r: 0, g: 0, b: 0, a: 255 }, 0],
+          ]),
+        )
+      })
+    },
+  )
+
   it('keeps real mixed group memberships and separates member and occurrence attributes', async () => {
     const bytes = contextArchive()
     const read = () => readRhino3dm(bytes, { includeCurves: true })
@@ -197,6 +280,7 @@ describe('Rhino source context', () => {
     )
     expect(first?.rhinoContext?.placements[0]?.id).not.toBe(second?.rhinoContext?.placements[0]?.id)
     expect(guide?.rhinoContext?.material).toBe('Display black')
+    expect(guide?.rhinoContext?.materialAppearance).toBeUndefined()
     expect(guide?.rhinoContext?.groups).toEqual([
       first?.rhinoContext?.groups[0],
       second?.rhinoContext?.groups[0],

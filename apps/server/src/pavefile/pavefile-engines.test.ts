@@ -77,6 +77,16 @@ it('reopens a Rhino source on another server and restores exact geometry when a 
   expect(setMesh.call(face, mesh, rhino.MeshType.Render)).toBe(true)
   const attrs = new rhino.ObjectAttributes()
   attrs.name = 'Selected solid'
+  const material = new rhino.Material()
+  material.diffuseColor = {
+    r: 36,
+    g: 75,
+    b: 141,
+    a: 255,
+  } as unknown as typeof material.diffuseColor
+  material.transparency = 0.25
+  attrs.materialSource = rhino.ObjectMaterialSource.MaterialFromObject
+  attrs.materialIndex = doc.materials().add(material) as unknown as number
   const objects = doc.objects()
   objects.addBrep(brep, attrs)
   attrs.name = 'Unselected solid'
@@ -102,6 +112,7 @@ it('reopens a Rhino source on another server and restores exact geometry when a 
             nativeAssetId,
             nativeMeshAssetId: assetId,
             rhinoObjectId: selected!.native!.objectId,
+            rhinoContext: selected!.rhinoContext,
           },
           keepSourcePlacement: true,
         },
@@ -137,12 +148,20 @@ it('reopens a Rhino source on another server and restores exact geometry when a 
     expect(node.source.assetId).not.toBe(assetId)
     expect(node.source.nativeAssetId).not.toBe(nativeAssetId)
     expect(node.meshEdits?.assetId).toBe(node.source.assetId)
+    expect(node.source.rhinoContext?.materialAppearance).toEqual({
+      color: '#244b8d',
+      opacity: 0.75,
+    })
 
     const read = async () => {
       const { asset } = await other.call('design.export', { pieceId: opened.id, format: '3dm' })
       const file = rhino.File3dm.fromByteArray(await assetBytes(other, asset))
       expect(file.objects().count).toBe(1)
-      return file.objects().get(0).geometry()
+      const object = file.objects().get(0)
+      const appearance = file.materials().findIndex(object.attributes().materialIndex)
+      expect(appearance.diffuseColor).toEqual({ r: 36, g: 75, b: 141, a: 255 })
+      expect(appearance.transparency).toBe(0.25)
+      return object.geometry()
     }
     expect(await read()).toBeInstanceOf(rhino.Mesh)
     await other.call('design.revert', { pieceId: opened.id, seq: edited.version })

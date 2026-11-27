@@ -61,3 +61,52 @@ export type RhinoContext = z.infer<typeof RhinoContext>
 export function inheritedMaterial(placements: readonly RhinoContext['placements'][number][]) {
   return placements.findLast((placement) => !placement.materialFromParent)?.material
 }
+
+export function inheritedMaterialAppearance(
+  placements: readonly RhinoContext['placements'][number][],
+) {
+  return placements.findLast((placement) => !placement.materialFromParent)?.materialAppearance
+}
+
+/** Exact recovery may add missing metadata. Keep the project’s existing identities and bindings. */
+export function recoverRhinoContext(
+  current: RhinoContext | undefined,
+  source: RhinoContext | undefined,
+) {
+  if (!current || !source) return source
+  const stullerMaterial = !current.stullerMaterial ? source.stullerMaterial : undefined
+  const matchesBinding = (
+    a: Pick<RhinoContext, 'material' | 'materialFromParent'>,
+    b: Pick<RhinoContext, 'material' | 'materialFromParent'>,
+  ) => a.material === b.material && a.materialFromParent === b.materialFromParent
+  const materialAppearance =
+    !current.materialAppearance && matchesBinding(current, source)
+      ? source.materialAppearance
+      : undefined
+  const matchPlacements =
+    current.placements.length === source.placements.length &&
+    current.placements.every((placement, i) => {
+      const original = source.placements[i]!
+      return placement.layer === original.layer && matchesBinding(placement, original)
+    })
+  const placements = matchPlacements
+    ? current.placements.map((placement, i) => {
+        const appearance = source.placements[i]?.materialAppearance
+        return !placement.materialAppearance && appearance
+          ? { ...placement, materialAppearance: appearance }
+          : placement
+      })
+    : current.placements
+  if (
+    !stullerMaterial &&
+    !materialAppearance &&
+    placements.every((placement, i) => placement === current.placements[i])
+  )
+    return undefined
+  return {
+    ...current,
+    placements,
+    ...(stullerMaterial && { stullerMaterial }),
+    ...(materialAppearance && { materialAppearance }),
+  }
+}

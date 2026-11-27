@@ -1,4 +1,12 @@
-import type { Design, Node, NodeOf, Op, RhinoContext } from '@pave/schema'
+import {
+  type Design,
+  inheritedMaterialAppearance,
+  type Node,
+  type NodeOf,
+  type Op,
+  type RhinoContext,
+  recoverRhinoContext,
+} from '@pave/schema'
 import type { RhinoCurveObject, RhinoImport } from './rhino'
 
 export interface RhinoLabelRecovery {
@@ -50,7 +58,12 @@ function labelTarget(node: Node): LabelTarget | undefined {
 export function hasRecoverableRhinoLabels(design: Design): boolean {
   return Object.values(design.nodes).some((node) => {
     const target = labelTarget(node)
-    return Boolean(target?.key && !target.context?.stullerMaterial)
+    if (!target?.key) return false
+    const context = target.context
+    const appearance = context?.materialFromParent
+      ? inheritedMaterialAppearance(context.placements)
+      : context?.materialAppearance
+    return !context?.stullerMaterial || !appearance
   })
 }
 
@@ -121,7 +134,10 @@ export async function recoverRhinoLabels(
     const part = target.kind === 'part' ? parts.get(key) : undefined
     const curve = target.kind === 'curve' ? curves.get(key) : undefined
     const sourceContext = part?.rhinoContext ?? curve?.rhinoContext
-    if (target.context && (target.context.stullerMaterial || !sourceContext?.stullerMaterial)) {
+    // A reread generates new group and placement IDs. The original must add metadata without
+    // replacing the project's namespace or changing any previously saved binding.
+    const context = recoverRhinoContext(target.context, sourceContext)
+    if (target.context && !context) {
       counts.alreadyLabeled++
       return
     }
@@ -133,12 +149,6 @@ export async function recoverRhinoLabels(
       counts.unmatched++
       return
     }
-    // A reread generates new group and placement IDs. Keep the project's namespace and
-    // add only the supplier fields when the original labels were already saved.
-    const context =
-      target.context && sourceContext?.stullerMaterial
-        ? { ...target.context, stullerMaterial: sourceContext.stullerMaterial }
-        : sourceContext
     if (!context) {
       counts.unlabeled++
       return

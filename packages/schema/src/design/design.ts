@@ -20,7 +20,7 @@ import {
   NodeSchema,
   nodeRefs,
 } from './nodes'
-import { RhinoContext, RhinoStullerMaterial } from './rhino-context'
+import { RhinoContext, RhinoMaterialAppearance, RhinoStullerMaterial } from './rhino-context'
 
 export const PIECE_KINDS = [
   'ring',
@@ -95,11 +95,17 @@ export function isModelImportAdd(op: z.infer<typeof OpSchema>): boolean {
   )
 }
 
-// Undo of an additive supplier recovery records only the changed field in its merge patch.
+// Undo of an additive source recovery records only the changed fields in its merge patch.
 const recoveredContext = z
   .union([
     RhinoContext.strict(),
-    z.strictObject({ stullerMaterial: RhinoStullerMaterial.nullable() }),
+    z
+      .strictObject({
+        stullerMaterial: RhinoStullerMaterial.nullable().optional(),
+        materialAppearance: RhinoMaterialAppearance.nullable().optional(),
+        placements: RhinoContext.shape.placements.optional(),
+      })
+      .refine((context) => Object.keys(context).length > 0),
   ])
   .nullable()
 
