@@ -6,6 +6,7 @@ import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import type { Design, NodeOf, Piece } from '@pave/schema'
 import { MAX_MODEL_IMPORT_OPS } from '@pave/schema'
+import { checkNativeAssemblyExport } from './native-assembly-export'
 
 const [server, localPath, expectedParts, expectedCurves] = process.argv.slice(2)
 assert.ok(server, 'Pass the URL of a disposable local server.')
@@ -234,6 +235,7 @@ try {
       requestBytes: { import: requestBytes[0], undo: requestBytes[1], redo: requestBytes[2] },
     }),
   )
+  if (!localPath) await checkNativeAssemblyExport(page, base, rpc, choose)
 } finally {
   await browser.close()
 }
