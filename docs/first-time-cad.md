@@ -8,6 +8,16 @@ Click a part in the 3D view or choose its name in Features. On a solitaire, Band
 
 On a smaller screen, use the Features and Inspector buttons above the model to open those panels. If your project is empty, start with a template to try the material and stone controls.
 
+## Bring in an existing Rhino model
+
+Open the destination project’s CAD builder and choose Import model. Pick a .3dm and check its layers and selected dimensions in millimetres. Leave out display stands and lighting geometry. For a metal-only casting, leave out gemstone layers too. If stones and metal share a layer, separate them in Rhino first. Pavé treats each included part as a mesh body.
+
+Review the skipped objects before choosing Import. You can select the new parts in Features and change their material, finish or transform. Undo removes the import in one edit. After reopening the project, use History and choose Revert on the import. Keep the original .3dm for Rhino curves, editable surfaces, and design history.
+
+## Export a mesh from Rhino
+
+If a solid has no saved display mesh, select it in Rhino and run Mesh. Preview the result, select the generated mesh objects, then choose File → Export Selected and save as .3dm to carry separate parts and the document units. You can also choose STL. In Pavé, set the STL source units to the same units used for the export and check a known measurement before importing. A single STL comes into Features as one part.
+
 ## Make a ring band thicker or thinner
 
 Select Band. In the Band section of the Inspector, Thickness at top changes the wall near the setting. Thickness at base changes the wall on the palm side. Click a value, type the new measurement in millimetres and press Enter. For example, changing a 1.5 mm base to 1.8 mm adds 0.3 mm there.
@@ -46,4 +56,4 @@ Select the result and use Edit profile or Edit points to revise it. Undo reverse
 
 To make a metal wire, draw a construction curve, select it and choose Make wire. Set Wire width and Wire thickness in the inspector. Edit points on the original curve to reshape the wire.
 
-To turn a cross-section into a bezel or band, draw a closed curve on the Front plane. For a practice bezel, enter (3, 0), (5, 0), (5, 4), and (3, 4) in mm. Select the curve and choose **Revolve**. A vertical axis at 0 mm and a 360° sweep make a 10 mm outer diameter, 6 mm bore and 4 mm height. Choose **Create solid**. You can change the sweep or axis in the inspector, or choose **Edit points** on the curve to reshape the bezel.
+To turn a cross-section into a bezel or band, draw a closed curve on the Front plane. For a practice bezel, enter (3, 0), (5, 0), (5, 4), and (3, 4) in mm. Select the curve and choose Revolve. A vertical axis at 0 mm and a 360° sweep make a 10 mm outer diameter, 6 mm bore and 4 mm height. Choose Create solid. You can change the sweep or axis in the inspector, or choose Edit points on the curve to reshape the bezel.
