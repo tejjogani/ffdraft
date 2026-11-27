@@ -1734,6 +1734,8 @@ export const commands = {
     input: z
       .object({
         pieceId: id,
+        /** Require the saved design version the caller reviewed. */
+        baseVersion: z.number().int().nonnegative().optional(),
         title: z.string().max(120).optional(),
         sceneId: id.optional(),
         /** Overrides the saved shot’s scene when both are given. */

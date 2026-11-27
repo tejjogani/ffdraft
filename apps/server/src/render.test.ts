@@ -227,6 +227,37 @@ describe('saved shots and takes', () => {
     })
   })
 
+  it('queues only the explicitly requested saved design version', async () => {
+    const submit = vi.fn<Services['renderQueue']['submit']>(async () => {})
+    server.runtime.services.register('renderQueue', {
+      capabilities: { blender: true },
+      submit,
+      cancel: async () => {},
+    })
+    const piece = await api.call('pieces.create', { templateId: 'solitaire' })
+    const changed = await api.call('design.apply', {
+      pieceId: piece.id,
+      label: 'Another window added a body',
+      ops: [{ t: 'add', node: { id: 'newbody', kind: 'primitive', shape: 'sphere' } }],
+    })
+    const input = { pieceId: piece.id, scene: {}, engine: 'blender' as const }
+    const plan = await api.call('plan.get', {})
+    expect(
+      await api.fail('renders.create', { ...input, baseVersion: piece.version }),
+    ).toMatchObject({
+      status: 409,
+    })
+    expect(await api.call('plan.get', {})).toEqual(plan)
+    expect(await api.call('renders.list', { pieceId: piece.id })).toEqual([])
+    expect(submit).not.toHaveBeenCalled()
+
+    const job = await api.call('renders.create', { ...input, baseVersion: changed.version })
+    expect(job.sourceVersion).toBe(changed.version)
+    expect(submit).toHaveBeenCalledTimes(1)
+    expect(submit.mock.calls[0]![1].version).toBe(changed.version)
+    await api.call('renders.cancel', { id: job.id })
+  })
+
   it('hands Blender takes to the queue, whose late updates cannot reopen a settled job', async () => {
     const submit = vi.fn<Services['renderQueue']['submit']>(async () => {})
     server.runtime.services.register('renderQueue', {

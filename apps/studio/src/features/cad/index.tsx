@@ -827,7 +827,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
     const sourceVersion = version
     setQueuingRender(true)
     try {
-      const shot = await queueCadRender(pieceId, view.kind, () => {
+      const shot = await queueCadRender(pieceId, view.kind, sourceVersion, () => {
         if (!isCurrent()) return false
         const current = session.get()
         if (current.version !== sourceVersion || current.save.status !== 'saved' || hasGap(current))

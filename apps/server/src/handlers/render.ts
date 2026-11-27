@@ -336,6 +336,8 @@ export const render: HandlerGroup<'renders' | 'scenes'> = {
   // and deliver the result with renders.complete.
   'renders.create': async (ctx, input) => {
     const piece = await getPiece(ctx, input.pieceId)
+    if (input.baseVersion !== undefined && piece.version !== input.baseVersion)
+      throw conflict('The saved design changed. Review the latest version and render again.')
     const saved = input.sceneId ? await getScene(ctx, input.sceneId) : null
     if (saved && saved.pieceId !== null && saved.pieceId !== piece.id)
       throw badRequest('That shot belongs to another piece')

@@ -176,6 +176,7 @@ const cadRenders = new Map<string, Promise<SavedScene | null>>()
 export function queueCadRender(
   pieceId: string,
   kind: PieceKind,
+  baseVersion: number,
   canProceed: () => boolean,
 ): Promise<SavedScene | null> {
   const pending = cadRenders.get(pieceId)
@@ -188,6 +189,7 @@ export function queueCadRender(
     if (!shot) throw new Error('Add a shot in Render Studio, then try again.')
     await rpc.call('renders.create', {
       pieceId,
+      baseVersion,
       sceneId: shot.id,
       title: shot.title,
       engine: 'blender',
