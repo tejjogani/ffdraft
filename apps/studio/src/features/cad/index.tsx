@@ -77,6 +77,14 @@ import { captureCover } from './cover'
 import { CurveEditor } from './curves/CurveEditor'
 import { CurveOverlay } from './curves/CurveOverlay'
 import { RevolveDialog } from './curves/RevolveDialog'
+import { SectionFeatureDialog } from './curves/SectionFeatureDialog'
+import {
+  initialSectionDraft,
+  type SectionDraft,
+  type SectionFeature,
+  type SectionTool,
+  sectionToolFor,
+} from './curves/section-model'
 import { EmptyDesign } from './empty/EmptyDesign'
 import { exportFormats, runExport } from './export'
 import { ChangeChip } from './hud/ChangeChip'
@@ -95,7 +103,7 @@ import {
 } from './mesh-edit/model'
 import { ModelImport } from './model-import/ModelImport'
 import { MountEditor, mountSessionBusy } from './mount-editor/MountEditor'
-import { addNode, addPrepared, dependentsOf, remove, setField } from './ops'
+import { addNode, addPrepared, dependentsOf, remove, saveSectionFeature, setField } from './ops'
 import { AddMenu } from './outliner/AddMenu'
 import { Outliner } from './outliner/Outliner'
 import { type NextStep, nextSteps } from './outliner/suggestions'
@@ -333,6 +341,12 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
   const [addOpen, setAddOpen] = useState(false)
   const [profile, setProfile] = useState<{ original?: ProfileNode } | null>(null)
   const [revolveSource, setRevolveSource] = useState<{ pieceId: string; id: string } | null>(null)
+  const [sectionEditor, setSectionEditor] = useState<{
+    pieceId: string
+    tool: SectionTool
+    initial: SectionDraft
+    original?: SectionFeature
+  } | null>(null)
   const [curve, setCurve] = useState<{ original?: NodeOf<'curve'> } | null>(null)
   const [confirm, setConfirm] = useState<{ ids: string[]; dependents: string[] } | null>(null)
   const root = useRef<HTMLDivElement>(null)
@@ -451,6 +465,18 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
   // Without a selection, a new feature attaches to the piece's main body (a stone to the band).
   const defaultTarget = () =>
     selection[0] ?? view.order.toReversed().find((id) => isBodyKind(view.nodes[id]!.kind))
+
+  const openSectionTool = (tool: SectionTool, original?: SectionFeature) => {
+    if (!session || readOnly || curve || profile || !kernel.kinds.includes(tool.kind)) return
+    setAddOpen(false)
+    setSheet(null)
+    setSectionEditor({
+      pieceId,
+      tool,
+      initial: initialSectionDraft(session.get().view, tool, ws().selection, original),
+      original,
+    })
+  }
 
   const add = (kind: NodeKind, target = defaultTarget()) => {
     const { ops, id } = addNode(view, kind, { target })
@@ -782,6 +808,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
     canRedo: redoable,
     crashed: kernel.status === 'crashed',
     formats,
+    kinds: kernel.kinds,
     issues,
     steps,
     hasRun: !!run,
@@ -790,6 +817,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
     drawCurve,
     makeWire,
     revolveCurve,
+    openSectionTool,
     renderThisView: () => {
       const camera = viewer.current?.shotCamera()
       if (!camera) return
@@ -944,7 +972,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
               design={view}
               kinds={kernel.kinds}
               target={defaultTarget()}
-              onAdd={(k) => add(k)}
+              onAdd={(kind, tool) => (tool ? openSectionTool(tool) : add(kind))}
               open={addOpen}
               onOpenChange={setAddOpen}
             />
@@ -977,6 +1005,8 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
         }
       }}
       onRevolve={revolveCurve}
+      onEditSectionFeature={(node) => openSectionTool(sectionToolFor(node), node)}
+      canEditSectionFeature={(node) => kernel.kinds.includes(node.kind)}
       onMakeWire={makeWire}
       empty={
         <PiecePanel
@@ -1328,6 +1358,41 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
             )
             ws().select([id])
             setRevolveSource(null)
+            if (!dockInspector) setSheet('inspector')
+          }}
+        />
+      )}
+      {!readOnly && session && sectionEditor?.pieceId === pieceId && (
+        <SectionFeatureDialog
+          key={`${pieceId}/${sectionEditor.original?.id ?? sectionEditor.tool.id}`}
+          design={view}
+          tool={sectionEditor.tool}
+          initial={sectionEditor.initial}
+          editing={!!sectionEditor.original}
+          onClose={() => setSectionEditor(null)}
+          onSave={async (draft, signal) => {
+            const current = session.get().view
+            const { tool, original } = sectionEditor
+            const { id, ops } = saveSectionFeature(current, tool, draft, original)
+            if (ops.length) {
+              const candidate = applyOps(current, ops).design
+              const result = await evaluationScheduler('draft').request(
+                `${pieceId}:section-feature`,
+                candidate,
+              )
+              if (signal.aborted || !isCurrent()) return
+              if (!result) throw new Error('The geometry check was interrupted. Try again.')
+              const issue = result.diagnostics.find((d) => d.nodeId === id && d.level === 'error')
+              if (issue) throw new Error(issue.message)
+              const latest = session.get().view
+              if (latest !== current && !sameJson(latest, current))
+                throw new Error('The design changed during the geometry check. Try again.')
+              session.commit(ops, {
+                label: original ? `Edited ${tool.title.toLowerCase()}` : tool.title,
+              })
+            }
+            setSectionEditor(null)
+            ws().select([id])
             if (!dockInspector) setSheet('inspector')
           }}
         />

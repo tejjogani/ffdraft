@@ -42,8 +42,10 @@ import { type Command, useRegisterCommands } from '../../lib/commands'
 import type { DesignSession } from '../../lib/design-session/store'
 import { restartKernel } from '../../lib/kernel/client'
 import { planeHasFocus } from '../references/store'
+import { SECTION_TOOLS, type SectionTool } from './curves/section-model'
 import { EXPORT_PURPOSE } from './export'
 import type { Issue } from './hud/issues'
+import { KIND_ICON } from './kindIcon'
 import { move, setIncluded } from './ops'
 import type { NextStep } from './outliner/suggestions'
 import { type DisplayMode, selectedTargets, targetHidden, useWorkspace } from './state/workspace'
@@ -58,6 +60,7 @@ export interface CadCommandContext {
   canRedo: boolean
   crashed: boolean
   formats: readonly ExportFormat[]
+  kinds: readonly string[]
   /** The checks list, problems first. */
   issues: readonly Issue[]
   /** The next-step suggestions currently offered. */
@@ -68,6 +71,7 @@ export interface CadCommandContext {
   drawProfile(): void
   drawCurve(): void
   revolveCurve(curve: string): void
+  openSectionTool(tool: SectionTool): void
   makeWire(curve: string): void
   requestDelete(ids: string[]): void
   exportAs(format: ExportFormat): void
@@ -177,6 +181,17 @@ export function useCadCommands(c: CadCommandContext): void {
         if (id) c.revolveCurve(id)
       },
     },
+    ...SECTION_TOOLS.map(
+      (tool): Command => ({
+        id: `design.${tool.id}`,
+        title: tool.title,
+        group: 'Design',
+        icon: KIND_ICON[tool.kind],
+        keywords: ['curve', 'nurbs', 'section', 'surface', 'solid'],
+        when: () => editable() && c.kinds.includes(tool.kind),
+        run: () => c.openSectionTool(tool),
+      }),
+    ),
     {
       id: 'design.makeWire',
       title: 'Make wire from selected curve',

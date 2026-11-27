@@ -11,6 +11,7 @@ import {
   type NodeKind,
   nodeRefs,
 } from '@pave/schema'
+import { SECTION_TOOLS, type SectionTool, sectionCurveOptions } from '../curves/section-model'
 
 export interface AddOption {
   kind: NodeKind
@@ -18,6 +19,7 @@ export interface AddOption {
   description?: string
   /** Why it cannot be added yet ("Needs a Ring band"), or null. */
   disabled: string | null
+  sectionTool?: SectionTool
 }
 
 export interface AddGroup {
@@ -30,7 +32,17 @@ const GROUPS: { label: string; kinds: NodeKind[] }[] = [
   { label: 'Stones', kinds: ['gem', 'setting', 'halo', 'gemRow', 'pave'] },
   {
     label: 'Bodies',
-    kinds: ['ringShank', 'vectorBody', 'meshBody', 'relief', 'revolve', 'pipe', 'primitive'],
+    kinds: [
+      'ringShank',
+      'vectorBody',
+      'meshBody',
+      'relief',
+      'revolve',
+      'loft',
+      'railSweep',
+      'pipe',
+      'primitive',
+    ],
   },
   { label: 'Attach', kinds: ['bail', 'chain', 'finding', 'engraving'] },
   { label: 'Arrange', kinds: ['pattern', 'boolean', 'group'] },
@@ -61,10 +73,25 @@ export function addMenu(design: Design, kinds: readonly string[], target?: strin
   const supported = NODE_KINDS.filter((k) => k !== 'curve' && kinds.includes(k))
   const listed = new Set(GROUPS.flatMap((g) => g.kinds))
   const groups = [...GROUPS, { label: 'More', kinds: supported.filter((k) => !listed.has(k)) }]
+  const curveCount = sectionCurveOptions(design).length
   return groups
     .map((g) => ({
       label: g.label,
-      options: g.kinds.filter((k) => supported.includes(k)).map((k) => option(design, k, target)),
+      options: g.kinds
+        .filter((k) => supported.includes(k))
+        .flatMap((k): AddOption[] => {
+          const tools = SECTION_TOOLS.filter((tool) => tool.kind === k)
+          if (!tools.length) return [option(design, k, target)]
+          return tools.map((tool) => ({
+            kind: k,
+            title: tool.title,
+            sectionTool: tool,
+            disabled:
+              curveCount < tool.minSections + tool.rails
+                ? `Needs at least ${tool.minSections + tool.rails} curves`
+                : null,
+          }))
+        }),
     }))
     .filter((g) => g.options.length > 0)
 }

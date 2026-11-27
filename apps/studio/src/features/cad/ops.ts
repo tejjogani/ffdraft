@@ -14,8 +14,16 @@ import {
   type Op,
   type RingSize,
   ringInnerDiameter,
+  sameJson,
   variantPatch,
 } from '@pave/schema'
+import {
+  isSectionFeature,
+  type SectionDraft,
+  type SectionFeature,
+  type SectionTool,
+  sectionDraftProblem,
+} from './curves/section-model'
 
 /** `{ a: { b: value } }` for path `['a', 'b']`. */
 function nest(path: readonly string[], value: unknown): Record<string, unknown> {
@@ -139,6 +147,45 @@ export function addPrepared(design: Design, node: NodeInput, kind?: Design['kind
   if (kind && design.order.length === 0 && design.kind !== kind) ops.push({ t: 'setKind', kind })
   ops.push({ t: 'add', node })
   return ops
+}
+
+function sectionFeatureValues(node: SectionFeature) {
+  const { sections, capped } = node
+  return node.kind === 'loft'
+    ? { sections, capped, ruled: node.ruled }
+    : { sections, capped, rails: node.rails }
+}
+
+/** Assemble all curve roles in a single add or update so undo restores the whole feature. */
+export function saveSectionFeature(
+  design: Design,
+  tool: SectionTool,
+  draft: SectionDraft,
+  original?: SectionFeature,
+): { ops: Op[]; id: string } {
+  const problem = sectionDraftProblem(design, tool, draft)
+  if (problem) throw new Error(problem)
+  const { sections, capped, ruled, rails } = draft
+  const values = tool.kind === 'loft' ? { sections, capped, ruled } : { sections, capped, rails }
+  if (original) {
+    const current = design.nodes[original.id]
+    const previous = sectionFeatureValues(original)
+    if (
+      !isSectionFeature(current) ||
+      tool.kind !== current.kind ||
+      !sameJson(sectionFeatureValues(current), previous)
+    )
+      throw new Error(
+        'This feature changed while it was open. Reopen it to edit the latest version.',
+      )
+    return {
+      id: current.id,
+      ops: sameJson(previous, values) ? [] : [{ t: 'update', id: current.id, patch: values }],
+    }
+  }
+  const { ops, id } = addNode(design, tool.kind, { values })
+  if (!id) throw new Error('The feature needs more information.')
+  return { ops, id }
 }
 
 export const setPieceKind = (kind: Design['kind']): Op => ({ t: 'setKind', kind })
