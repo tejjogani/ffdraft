@@ -155,3 +155,46 @@ it('records native face inspection and the signed thickness change through the p
   await api.call('design.revert', { pieceId: ref.pieceId, runId: run.id })
   expect((await api.call('design.rhinoCapFaces', ref)).faces).toEqual(listed.faces)
 })
+
+it('scopes the exact-edge tool and records duplication as an undoable assistant edit', async () => {
+  const { createRhinoSleeve } = await import('../test/rhino-sleeve')
+  const ref = await createRhinoSleeve(server.server, api)
+  const inspect = { ...ref, edgeIndex: 0 }
+  const exact = await api.call('design.rhinoEdges', inspect)
+  const other = await createRhinoSleeve(server.server, api)
+  const edit = {
+    pieceId: ref.pieceId,
+    baseVersion: exact.version,
+    label: 'Duplicate the Rhino rim',
+    ops: [{ t: 'add', node: { kind: 'nurbsCurve', id: 'native-rim', ...exact.curve! } }],
+  }
+  server.model.push(
+    {
+      content: [tool('design_rhinoEdges', { ...inspect, pieceId: other.pieceId }, 'foreign')],
+      stop_reason: 'tool_use',
+    },
+    { content: [tool('design_rhinoEdges', inspect, 'readNative')], stop_reason: 'tool_use' },
+    { content: [tool('design_apply', edit, 'duplicateNative')], stop_reason: 'tool_use' },
+    { content: [text('Duplicated the rim to an editable curve.')], stop_reason: 'end_turn' },
+  )
+  const { run } = await api.call('threads.send', {
+    text: 'Duplicate the sleeve rim as an editable Rhino curve.',
+    clientId: 'test',
+    clientMessageId: 'native-edge-copy',
+    context: { pieceId: ref.pieceId, stage: 'cad' },
+  })
+  await settled(server.parts, run.id)
+  const { steps } = await api.call('traces.run', { id: run.id })
+  expect(
+    steps.filter((step) => step.name === 'design.rhinoEdges').map((step) => step.isError),
+  ).toEqual([true, false])
+  const [change] = await api.call('design.history', { pieceId: ref.pieceId })
+  expect(change?.actor).toMatchObject({ runId: run.id })
+  expect(
+    (await api.call('pieces.get', { id: ref.pieceId })).design.nodes['native-rim'],
+  ).toMatchObject(exact.curve!)
+  await api.call('design.revert', { pieceId: ref.pieceId, runId: run.id })
+  expect(
+    (await api.call('pieces.get', { id: ref.pieceId })).design.nodes['native-rim'],
+  ).toBeUndefined()
+})

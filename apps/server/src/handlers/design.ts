@@ -24,6 +24,7 @@ import { exportClaim, withClaim } from '../plans'
 import { serviceContext } from '../service-context'
 import { assertAttested } from './pieces'
 import { offsetRhinoCapFace, rhinoCapFaces } from './rhino-caps'
+import { rhinoEdges } from './rhino-edges'
 import type { HandlerGroup } from './types'
 
 type ChangeRow = typeof t.designChange.$inferSelect
@@ -194,6 +195,7 @@ export const design: HandlerGroup<'design'> = {
       schema: z.toJSONSchema(NODE_SCHEMAS[node.kind], { io: 'input' }),
     }
   },
+  'design.rhinoEdges': rhinoEdges,
   'design.rhinoCapFaces': rhinoCapFaces,
   'design.offsetRhinoCap': offsetRhinoCapFace,
   'design.meshComponents': async (ctx, { pieceId, nodeId, offset, limit, vertexIds, faceIds }) => {

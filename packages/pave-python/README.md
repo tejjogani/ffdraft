@@ -97,6 +97,20 @@ project.undo(change["version"])
 
 If the returned list is empty, read `reason` for the geometry requirement.
 
+### Duplicate a native Rhino edge
+
+Page through the native edges of an imported Rhino solid using `offset` and `limit`, with up to 100 edges per page. Choose a zero-based edge index from the previews. The duplicate becomes an independent, editable NURBS curve in project millimetres, with the original edge's trimmed shape and direction stored as exact knots and weighted control points.
+
+```python
+edges = project.rhino_edges("sleeve")
+change = project.duplicate_rhino_edge(
+    "sleeve", edges["edges"][0]["edgeIndex"], "sleeve-rim", at=edges["version"],
+)
+project.undo(change["version"])
+```
+
+Pass an `edge_index` to `rhino_edges` to inspect the exact definition before duplicating. The `at` argument guards the version from the edge selection.
+
 ## Edit a NURBS control point
 
 Use the project feature ID and the version returned by `describe`. Each control point stores Euclidean XYZ in millimetres and a rational weight. This example moves an interior point of an open curve 0.25 mm while preserving its weight, knots and degree.

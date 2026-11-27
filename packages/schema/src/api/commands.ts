@@ -27,6 +27,7 @@ import {
 } from '../design/intake'
 import { StoneChangeSchema, StoneTargetSchema } from '../design/intents'
 import { NODE_KINDS, StoneSourcing } from '../design/nodes'
+import { NurbsDefinition } from '../design/nurbs'
 import { PhotoReadSchema } from '../design/photo-read'
 import { PieceSpecSchema } from '../design/spec'
 import {
@@ -124,6 +125,7 @@ const def = <I extends z.ZodType, O extends z.ZodType, const T extends ToolFlag 
 ) => d as CommandDef<I, O> & { tool: T }
 
 const id = z.string()
+export const MAX_RHINO_EDGE_PAGE_SIZE = 100
 const meshPoint = z.tuple([z.number(), z.number(), z.number()])
 const componentId = z.number().int().nonnegative()
 /** Every format the CAD exports to; which of them count is in plans/plans.ts. */
@@ -717,6 +719,37 @@ export const commands = {
       kind: z.enum(NODE_KINDS),
       values: z.record(z.string(), z.unknown()),
       schema: z.record(z.string(), z.unknown()),
+    }),
+  }),
+  'design.rhinoEdges': def({
+    kind: 'query',
+    tool: true,
+    description:
+      'Read the selected retained Rhino solid’s edge wireframe in project XYZ millimetres. Page by offset and limit (maximum 100). For Duplicate Edge (DupEdge), pass the zero-based edgeIndex to receive one preview and the exact trimmed NURBS definition. Use design.apply at the returned version to add a new nurbsCurve node with a fresh ID, copying degree, knots and controlPoints.',
+    input: z.object({
+      pieceId: id,
+      nodeId: id,
+      offset: componentId.default(0),
+      limit: z.number().int().min(1).max(MAX_RHINO_EDGE_PAGE_SIZE).default(30),
+      edgeIndex: componentId.optional(),
+    }),
+    output: z.object({
+      pieceId: id,
+      nodeId: id,
+      version: componentId,
+      nativeAssetId: id.nullable(),
+      edgeCount: componentId,
+      edges: z
+        .array(
+          z.object({
+            edgeIndex: componentId,
+            closed: z.boolean(),
+            preview: z.array(meshPoint).min(2).max(33),
+          }),
+        )
+        .max(MAX_RHINO_EDGE_PAGE_SIZE),
+      curve: NurbsDefinition.optional(),
+      reason: z.string().nullable(),
     }),
   }),
   'design.rhinoCapFaces': def({
