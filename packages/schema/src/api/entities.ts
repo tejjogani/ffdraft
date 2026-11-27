@@ -412,13 +412,10 @@ export type AnimationType = (typeof ANIMATION_TYPES)[number]
 
 export const RenderSceneSchema = z.object({
   /** Saved shots without a chosen look retain their original neutral appearance. */
-  importedBodyLook: z
-    .enum(['source', 'clay'])
-    .optional()
-    .meta({
-      description:
-        'Visual appearance of unassigned imported bodies for this shot. Source uses their original material information. Clay is neutral.',
-    }),
+  importedBodyLook: z.enum(['source', 'clay']).optional().meta({
+    description:
+      'Visual appearance of unassigned imported bodies for this shot. Source uses their original material information. Clay is neutral.',
+  }),
   includeUnassignedRhino: z.boolean().optional().meta({
     description:
       'Include visible unassigned Rhino bodies in this shot. Choose importedBodyLook for source colors or clay. Confirmed materials, CAD roles, casting facts and exports are unaffected. Defaults to off.',

@@ -38,6 +38,8 @@ For a product image, open Renders and choose a shot. Under Look, choose Studio w
 
 If the Render view is empty after import, choose **Preview imported CAD**. Pavé opens a Studio white shot with the visible bodies in their source appearance. Use Source materials or Neutral clay under Look. When a shot already shows confirmed metal or stones, use **Look → Show unassigned bodies** to include the remaining bodies. Confirmed materials keep their appearance. Hidden bodies, parts set to Reference, and construction geometry stay out.
 
+To photograph a piece, save its angle in Renders, choose a lighting look, and press **Render**. On a supported local Mac or Windows installation the studio prepares Blender when the first render needs it. To direct the same shot with Project AI, ask “Keep this camera angle and turn the light so I can see the rim of each prong.” Save the still before adding a push-in or turntable. See the [worked public KeyShot comparison](research/keyshot-to-cycles.md).
+
 Choose a still or any of the shot’s motion options, then render with Blender. The preview setting is saved on that shot. Turn it off under **Look** to return to confirmed materials alone. Previewing leaves the CAD roles, casting weights, stone counts, and exports unchanged.
 
 To update the actual piece, select the part, edit its dimensions in the Inspector, or choose Edit handmade mount and Save mount edit. Undo reverses a saved design change. Export for Rhino to write a new .3dm.

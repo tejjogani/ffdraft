@@ -211,9 +211,12 @@ try {
   await page.getByText('White Gold (2)', { exact: true }).waitFor()
   const preview = page.getByRole('button', { name: 'Preview imported CAD', exact: true })
   const include = page.getByRole('switch', { name: 'Show unassigned bodies' })
-  const previewCount = page.getByText('2 unassigned bodies shown. Source materials where available.', {
-    exact: true,
-  })
+  const previewCount = page.getByText(
+    '2 unassigned bodies shown. Source materials where available.',
+    {
+      exact: true,
+    },
+  )
   const initialization = '**/api/rpc/scenes.ensureDefaults'
   let replyAborted = false
   await page.route(initialization, async (route) => {
@@ -237,9 +240,19 @@ try {
   )
   assert.equal(initialized[0]?.scene.look, 'catalog-white')
   assert.equal(initialized[0]?.scene.includeUnassignedRhino, true)
+  assert.equal(initialized[0]?.scene.importedBodyLook, 'source')
   await page.reload()
   await previewCount.waitFor()
   assert.equal(await include.getAttribute('aria-checked'), 'true')
+  await page.getByRole('button', { name: 'Neutral clay', exact: true }).click()
+  await page.getByText('2 unassigned bodies shown. Neutral clay.', { exact: true }).waitFor()
+  await until(
+    async () => (await rpc('scenes.list', { pieceId }))[0]?.scene.importedBodyLook === 'clay',
+  )
+  await page.reload()
+  await page.getByText('2 unassigned bodies shown. Neutral clay.', { exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Source materials', exact: true }).click()
+  await previewCount.waitFor()
   await include.click()
   await preview.waitFor()
   await until(async () =>
