@@ -84,11 +84,12 @@ export function rhinoRoleLinks(design: Design, sourceId: string) {
 
 /** Same block member or source topology with the same displayed finish. A suggestion requires review. */
 function matchKey(node: RhinoBody): string | undefined {
-  const { rhinoContext: ctx, rhinoObjectId, rhinoLayer, rhinoInstancePath } = node.source
+  const { rhinoContext: ctx, rhinoObjectId, rhinoLayer } = node.source
   const placed = ctx?.placements ?? []
-  const member = placed.length || rhinoInstancePath?.length ? rhinoObjectId : undefined
-  if (!member && !ctx?.topology) return
+  const member = placed.length ? rhinoObjectId : undefined
+  if (!member && !(ctx?.archiveId && ctx.topology)) return
   return JSON.stringify([
+    ctx?.archiveId,
     member ?? ctx?.topology,
     rhinoLayer,
     ctx?.material,

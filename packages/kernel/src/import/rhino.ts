@@ -566,7 +566,12 @@ export async function readRhino3dm(
             material.material === inheritedMaterial(savedPlacements)
           const rhinoContext: RhinoContext | undefined =
             groups.length || placements.length || material.material || material.materialFromParent
-              ? { groups, placements, ...(inherited ? { materialFromParent: true } : material) }
+              ? {
+                  archiveId: context.archiveId,
+                  groups,
+                  placements,
+                  ...(inherited ? { materialFromParent: true } : material),
+                }
               : undefined
           const placement = parent?.meshPlacement ?? filePlacement
           if (includeCurves && geometry instanceof rhino.Curve) {
@@ -623,7 +628,15 @@ export async function readRhino3dm(
             bounds: meshBounds(meshes),
             ...(native && { native }),
             ...(topology
-              ? { rhinoContext: { ...rhinoContext, groups, placements, topology } }
+              ? {
+                  rhinoContext: {
+                    ...rhinoContext,
+                    archiveId: context.archiveId,
+                    groups,
+                    placements,
+                    topology,
+                  },
+                }
               : rhinoContext && { rhinoContext }),
           })
         } catch (error) {

@@ -14,6 +14,8 @@ const RhinoPlacement = z.object({
 })
 
 export const RhinoContext = z.object({
+  /** Local namespace shared only by parts from the same import. */
+  archiveId: z.string().min(1).optional(),
   /** Source-file groups of the member and its containing placements. */
   groups: z.array(RhinoGroup),
   /** Occurrences from the outermost block towards the member. */

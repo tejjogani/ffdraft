@@ -43,6 +43,21 @@ describe('review imported jewelry parts', () => {
   it('keeps differently labelled occurrences outside the suggested selection', () => {
     expect(rhinoRoleCandidates(design(), 'a')).toEqual(['a', 'b'])
   })
+  it('keeps otherwise identical anonymous solids from two imported archives separate', () => {
+    const part = (id: string, archiveId: string): NodeInputOf<'meshBody'> => ({
+      id,
+      kind: 'meshBody',
+      keepSourcePlacement: true,
+      source: {
+        type: 'asset',
+        assetId: id,
+        rhinoLayer: 'Parts',
+        rhinoContext: { archiveId, topology: 'Brep 12/18/8', placements: [], groups: [] },
+      },
+    })
+    const d = designFrom('ring', [part('a', 'first'), part('b', 'first'), part('c', 'second')])
+    expect(rhinoRoleCandidates(d, 'a')).toEqual(['a', 'b'])
+  })
   it('makes a separately addressable gem and head, preserves assets, and undoes the full decision', () => {
     const before = design()
     const { design: after, inverse } = applyOps(before, reviewRhinoRoles(before, [choice()]))

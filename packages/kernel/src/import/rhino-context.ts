@@ -47,6 +47,7 @@ export function rhinoContextReader(rhino: RhinoModule, doc: File3dm) {
   }
 
   return {
+    archiveId: scope,
     groups(attrs: ObjectAttributes | undefined, parent: SourceGroup[] = []): SourceGroup[] {
       const indices = attrs?.getGroupList() ?? []
       if (!indices.length) return parent
