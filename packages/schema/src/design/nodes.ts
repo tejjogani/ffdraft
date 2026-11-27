@@ -466,6 +466,12 @@ export const MeshBody = z
           type: z.literal('asset'),
           assetId: z.string().meta({ title: 'Mesh', widget: 'asset' }),
           rhinoLayer: z.string().optional(),
+          nativeAssetId: z.string().optional(),
+          /** The paired mesh id keeps a replacement mesh from exporting an older surface. */
+          nativeMeshAssetId: z.string().optional(),
+          nativeTransform: z.array(z.number()).length(16).optional(),
+          rhinoObjectId: z.guid().optional(),
+          rhinoInstancePath: z.array(z.guid()).max(32).optional(),
         }),
         z.object({
           type: z.literal('builtin'),

@@ -122,6 +122,8 @@ describe('readRhino3dm', () => {
   })
 
   it('reads BReps with saved render meshes and reports only complete objects', async () => {
+    let sourceId: string
+    let instanceId: string
     const bytes = writeFile((doc) => {
       const sphere = rhino.Brep.createFromSphere(new rhino.Sphere([0, 0, 0], 1))
       const mesh = new rhino.Mesh()
@@ -148,11 +150,11 @@ describe('readRhino3dm', () => {
         )
       expect(cache(sphere.faces().get(0), mesh)).toBe(true)
       expect(cache(partialBox.faces().get(0), quad())).toBe(true)
-      doc.objects().addBrep(sphere, named('Cached sphere'))
+      sourceId = doc.objects().addBrep(sphere, named('Cached sphere'))
       doc.objects().addBrep(partialBox, named('Incomplete box'))
       const definitions = doc.instanceDefinitions()
       const id = definitions.add('Sphere', '', '', '', [0, 0, 0], [sphere], [named('Cache')])
-      doc
+      instanceId = doc
         .objects()
         .addInstanceObject(
           blockReference(definitions.get(id).id, rhino.Transform.translationXYZ(5, 0, 0)),
@@ -175,10 +177,88 @@ describe('readRhino3dm', () => {
     for (const { bytes } of result.objects) {
       expect(parseMesh(bytes).mesh.indices).toHaveLength(24)
     }
+    expect(result.objects[0]!.native).toMatchObject({ objectId: sourceId!, instancePath: [] })
+    expect(result.objects[1]!.native).toMatchObject({
+      instancePath: [instanceId!],
+      transform: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5, 0, 0, 1],
+    })
+    for (const part of result.objects) {
+      const native = rhino.File3dm.fromByteArray(part.native!.bytes)
+      expect(native.objects().count).toBe(1)
+      expect(native.instanceDefinitions().count).toBe(0)
+      expect(native.settings().modelUnitSystem).toBe(rhino.UnitSystem.Millimeters)
+      const geom = native.objects().get(0).geometry()
+      expect(geom).toBeInstanceOf(rhino.Brep)
+      expect(geom.getBoundingBox(true).min).toEqual([-1, -1, -1])
+    }
     expect(result.skipped).toMatchObject([
       { name: 'Incomplete box', reason: expect.stringMatching(/render mesh.*Mesh/) },
       { name: 'Construction', reason: expect.stringMatching(/curve/i) },
     ])
+  })
+
+  it('excludes hidden objects and objects on hidden parent layers from the import', async () => {
+    const bytes = writeFile((doc) => {
+      const layers = doc.layers()
+      const parent = new rhino.Layer()
+      parent.name = 'Hidden container'
+      parent.visible = false
+      const parentIndex = layers.add(parent)
+      const child = new rhino.Layer()
+      child.name = 'Hidden with parent'
+      child.parentLayerId = layers.findIndex(parentIndex).id
+      const childIndex = layers.add(child)
+      const visible = new rhino.Layer()
+      visible.name = 'Visible parts'
+      const visibleIndex = layers.add(visible)
+      const hiddenObject = named('Hidden object', visibleIndex)
+      hiddenObject.mode = rhino.ObjectMode.Hidden
+      const objects = doc.objects()
+      objects.addMesh(quad(), hiddenObject)
+      objects.addMesh(quad(3), named('Hidden layer member', childIndex))
+      objects.addMesh(quad(6), named('Visible part', visibleIndex))
+    })
+    const result = await readRhino3dm(bytes)
+    expect(result.objects.map((object) => object.name)).toEqual(['Visible part'])
+  })
+
+  it('preserves a capped Rhino extrusion as a native solid with its trimmed faces', async () => {
+    const r = 0.8
+    const h = 1.2
+    const circle = new rhino.Circle([0, 0, 0], r)
+    const cylinder = new rhino.Cylinder(circle, h)
+    const extrusion = rhino.Extrusion.createCylinderExtrusion(cylinder, true, true)
+    const render = new rhino.Mesh()
+    const vertices = render.vertices()
+    for (const z of [0, h]) {
+      vertices.add(r, 0, z)
+      vertices.add(0, r, z)
+      vertices.add(-r, 0, z)
+      vertices.add(0, -r, z)
+    }
+    const faces = render.faces()
+    faces.addQuadFace(3, 2, 1, 0)
+    faces.addQuadFace(4, 5, 6, 7)
+    for (let i = 0; i < 4; i++) {
+      const next = (i + 1) % 4
+      faces.addQuadFace(i, next, next + 4, i + 4)
+    }
+    expect(extrusion.setMesh(render, rhino.MeshType.Render)).toBe(true)
+    const bytes = writeFile((doc) => {
+      doc.objects().addExtrusion(extrusion, named('Capped extrusion'))
+    }, rhino.UnitSystem.Centimeters)
+
+    const result = await readRhino3dm(bytes)
+    const part = result.objects[0]!
+    expect(part.name).toBe('Capped extrusion')
+    expect(part.bounds).toEqual({ min: [-8, -8, 0], max: [8, 8, 12] })
+    expect(result.skipped).toEqual([])
+    const archive = rhino.File3dm.fromByteArray(part.native!.bytes)
+    const brep = archive.objects().get(0).geometry()
+    expect(brep).toBeInstanceOf(rhino.Brep)
+    if (!(brep instanceof rhino.Brep)) throw new Error('Missing native extrusion geometry')
+    expect(brep.isSolid).toBe(true)
+    expect(brep.faces().count).toBe(3)
   })
 
   it('imports a Rhino block at the instance placement and excludes its definition geometry', async () => {

@@ -45,6 +45,7 @@ export function ModelImport({
   const input = useRef<HTMLInputElement>(null)
   const upload = useRef<AbortController | null>(null)
   const uploaded = useRef(new Map<ModelPart, string>())
+  const nativeUploaded = useRef(new Map<ArrayBuffer, Promise<string>>())
   const [file, setFile] = useState(initialFile)
   const [stlUnit, setStlUnit] = useState<StlUnit>('mm')
   const [preview, setPreview] = useState<ModelPreview | null>(null)
@@ -74,6 +75,7 @@ export function ModelImport({
 
   const resetPreview = () => {
     uploaded.current.clear()
+    nativeUploaded.current.clear()
     setError(null)
     setPreview(null)
     setExcludedLayers(new Set())
@@ -98,6 +100,25 @@ export function ModelImport({
         ? 'A mesh part is too large to save in a Pavé file. Export a coarser mesh.'
         : null
 
+  const uploadNative = (part: ModelPart, signal: AbortSignal): Promise<string> | undefined => {
+    const native = part.native
+    if (!native) return
+    const key = native.bytes.buffer
+    const shared = nativeUploaded.current.get(key)
+    if (shared) return shared
+    const pending = uploadAsset(
+      new File([native.bytes], safeFileName(part.name, '3dm'), { type: 'model/vnd.3dm' }),
+      signal,
+    )
+      .then((asset) => asset.id)
+      .catch((error) => {
+        nativeUploaded.current.delete(key)
+        throw error
+      })
+    nativeUploaded.current.set(key, pending)
+    return pending
+  }
+
   const commit = async () => {
     if (!file || !count || limit || upload.current) return
     const controller = new AbortController()
@@ -109,13 +130,15 @@ export function ModelImport({
       for (let i = 0; i < count; i += UPLOAD_BATCH) {
         const batch = await Promise.allSettled(
           selected.slice(i, i + UPLOAD_BATCH).map(async (part) => {
-            if (uploaded.current.has(part)) return
             try {
-              const asset = await uploadAsset(
-                new File([part.bytes], safeFileName(part.name, 'stl'), { type: 'model/stl' }),
-                controller.signal,
-              )
-              uploaded.current.set(part, asset.id)
+              if (!uploaded.current.has(part)) {
+                const asset = await uploadAsset(
+                  new File([part.bytes], safeFileName(part.name, 'stl'), { type: 'model/stl' }),
+                  controller.signal,
+                )
+                uploaded.current.set(part, asset.id)
+              }
+              await uploadNative(part, controller.signal)
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error)
               throw new Error(`Couldn’t upload “${part.name}”. ${message}`)
@@ -127,17 +150,32 @@ export function ModelImport({
         if (failed) throw failed.reason
         setUploadedCount(Math.min(i + UPLOAD_BATCH, count))
       }
-      const nodes: NodeInput[] = selected.map((part) => ({
-        id: newId('meshBody'),
-        name: part.name.slice(0, 80).replace(/[\uD800-\uDBFF]$/, ''),
-        kind: 'meshBody',
-        source: {
-          type: 'asset',
-          assetId: uploaded.current.get(part)!,
-          ...(part.layer && { rhinoLayer: part.layer }),
-        },
-        keepSourcePlacement: true,
-      }))
+      const nodes = await Promise.all(
+        selected.map(async (part): Promise<NodeInput> => {
+          const assetId = uploaded.current.get(part)!
+          const native = part.native
+          const nativeAssetId = native && (await nativeUploaded.current.get(native.bytes.buffer))
+          return {
+            id: newId('meshBody'),
+            name: part.name.slice(0, 80).replace(/[\uD800-\uDBFF]$/, ''),
+            kind: 'meshBody',
+            source: {
+              type: 'asset',
+              assetId,
+              ...(part.layer && { rhinoLayer: part.layer }),
+              ...(native &&
+                nativeAssetId && {
+                  nativeAssetId,
+                  nativeMeshAssetId: assetId,
+                  ...(native.transform && { nativeTransform: [...native.transform] }),
+                  rhinoObjectId: native.objectId,
+                  rhinoInstancePath: [...native.instancePath],
+                }),
+            },
+            keepSourcePlacement: true,
+          }
+        }),
+      )
       onImport(nodes, `Imported ${file.name.slice(0, 150)}`)
       onClose()
     } catch (err) {
@@ -153,7 +191,7 @@ export function ModelImport({
       open
       onOpenChange={(open) => !open && cancel()}
       title="Import model"
-      description="Add mesh parts from Rhino (.3dm) or STL."
+      description="Add parts from Rhino (.3dm) or STL."
       footer={
         <>
           <Button onClick={cancel}>Cancel</Button>
@@ -229,7 +267,7 @@ export function ModelImport({
               <fieldset className="space-y-1">
                 <legend className="text-sm font-medium">Rhino layers</legend>
                 <p className="pb-1 text-xs text-fg-muted">
-                  Selected meshes import as metal. Exclude gemstone and setup layers for casting.
+                  Selected parts import as metal. Exclude gemstone and setup layers for casting.
                 </p>
                 {[...layers].map(([layer, layerCount], i) => (
                   <div key={layer ?? ''} className="flex items-center gap-2 text-sm">

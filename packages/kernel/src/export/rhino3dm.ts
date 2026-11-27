@@ -1,16 +1,16 @@
 /**
  * Rhino .3dm through rhino3dm (OpenNURBS compiled to WASM), loaded only when this format is
- * asked for. A .3dm written from JavaScript can hold meshes, curves, layers and metadata but
- * not a general B-rep (docs/research/01-cad.md §5), so this is the editable reference
- * companion: a layer per alloy and one for stones, named meshes with user strings, the chain
- * centre lines and stone girdles as curves, millimetre units. STEP is the exact B-rep route.
+ * asked for. Unchanged Rhino solids keep their imported BReps. The remaining bodies are
+ * written as meshes, with a layer per alloy and one for stones, in millimetres.
  */
 import { METALS } from '@pave/schema'
 import { defineExporter, type Scene } from '../core'
 import type { ChainData } from '../features/chain'
 import { fromFrame } from '../geometry/vec'
 import { freeRhino as free, loadRhino3dm } from '../runtime/rhino'
+import type { ExportOptions } from '../types'
 import { type MeshObject, metalNotes, objectColor, sceneObjects } from './meshes'
+import { nativeSolidWriter } from './rhino-native'
 
 const rgba = (hex: string) => ({
   r: Number.parseInt(hex.slice(1, 3), 16),
@@ -66,7 +66,7 @@ function girdle(stone: MeshObject & { kind: 'stone' }): number[][] {
   })
 }
 
-async function write3dm(scene: Scene, objects: readonly MeshObject[]): Promise<Uint8Array> {
+async function write3dm(scene: Scene, objects: readonly MeshObject[], options: ExportOptions) {
   const rhino = await loadRhino3dm()
   const doc = new rhino.File3dm()
   // The document's tables, fetched once and freed with it. Each call to `doc.objects()` (or
@@ -77,10 +77,11 @@ async function write3dm(scene: Scene, objects: readonly MeshObject[]): Promise<U
     held.push(o)
     return o
   }
+  const objectTable = hold(doc.objects())
+  const native = nativeSolidWriter(rhino, doc, objectTable, scene, options)
   try {
     const settings = hold(doc.settings())
     const layerTable = hold(doc.layers())
-    const objectTable = hold(doc.objects())
     settings.modelUnitSystem = rhino.UnitSystem.Millimeters
     const layers = new Map<string, number>()
     /** A layer by path (`['Metal', '18k Yellow Gold']`), created with its parents on first use. */
@@ -110,6 +111,16 @@ async function write3dm(scene: Scene, objects: readonly MeshObject[]): Promise<U
       return a
     }
     for (const o of objects) {
+      options.signal?.throwIfAborted()
+      const layer =
+        o.kind === 'metal'
+          ? layerFor(['Metal', METALS[o.material].label], objectColor(o))
+          : layerFor(['Stones'], '#9fd3ff')
+      const attrs = attributes(o.name, layer, userStrings(o))
+      if (o.kind === 'metal' && (await native.write(o.part, attrs))) {
+        free(attrs)
+        continue
+      }
       const mesh = new rhino.Mesh()
       const p = o.positions
       // One list object for the whole loop, freed after it: `mesh.vertices()` hands out a new
@@ -125,11 +136,6 @@ async function write3dm(scene: Scene, objects: readonly MeshObject[]): Promise<U
       normals.computeNormals()
       free(normals)
       mesh.compact()
-      const layer =
-        o.kind === 'metal'
-          ? layerFor(['Metal', METALS[o.material].label], objectColor(o))
-          : layerFor(['Stones'], '#9fd3ff')
-      const attrs = attributes(o.name, layer, userStrings(o))
       objectTable.addMesh(mesh, attrs)
       free(attrs)
       free(mesh)
@@ -159,8 +165,9 @@ async function write3dm(scene: Scene, objects: readonly MeshObject[]): Promise<U
         free(attrs)
       }
     hold(doc.strings()).set('generator', 'Pave')
-    return doc.toByteArray()
+    return { bytes: doc.toByteArray(), nativeNotes: native.notes() }
   } finally {
+    native.dispose()
     for (const table of held) free(table)
     free(doc)
   }
@@ -174,16 +181,16 @@ export const rhino3dm = defineExporter({
       stones: options.stones ?? true,
       ...(options.only && { only: options.only }),
     })
+    const { bytes, nativeNotes } = await write3dm(scene, objects, options)
     return {
-      bytes: await write3dm(scene, objects),
+      bytes,
       mime: 'application/x-3dm',
       extension: '3dm',
       notes: [
-        '3DM carries meshes and curves only — JavaScript cannot write general Rhino B-reps. For exact NURBS solids use the STEP export.',
+        ...nativeNotes,
         'Millimetres. Layers: one per alloy under Metal, Stones, and Curves (chain centre lines, stone girdles).',
         'Each object carries user strings: node ids, alloy, finish and plating for metal; stone, cut, carat and size for stones.',
         ...metalNotes(scene, objects),
-        'OpenNURBS stamps each file with fresh object ids and the time it was written (rhino3dm cannot set them), so two exports of the same design differ byte for byte; the geometry is identical.',
       ],
     }
   },

@@ -15,6 +15,7 @@ export interface MetalObject extends IndexedTriangles, MetalSpec {
   /** The design nodes whose metal makes up this part. */
   nodeIds: string[]
   volumeMm3: number
+  part: ScenePart
 }
 
 export interface StoneObject extends IndexedTriangles {
@@ -108,6 +109,7 @@ export function sceneObjects(scene: Scene, selection: MeshSelection): MeshObject
       plating: p.part.plating,
       nodeIds: [...new Set(p.sources.map((s) => s.nodeId))],
       volumeMm3: p.part.volumeMm3,
+      part: p,
       ...partTriangles(scene, p),
     }))
   const stones: StoneObject[] = selection.stones

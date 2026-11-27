@@ -1,3 +1,4 @@
+import type { RhinoNativePart } from '@pave/kernel/rhino-import'
 import type { Bounds } from '@pave/kernel/types'
 
 export const MODEL_ACCEPT = '.3dm,.stl'
@@ -19,6 +20,7 @@ export interface ModelPart {
   layer: string | null
   bounds: Bounds
   bytes: Uint8Array<ArrayBuffer>
+  native?: RhinoNativePart
 }
 
 export interface ModelPreview {

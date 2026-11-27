@@ -22,7 +22,7 @@ export const EXPORT_PURPOSE: Record<
 > = {
   stl: { label: 'For casting', hint: 'Watertight metal, per alloy', makes: true },
   step: { label: 'For another CAD', hint: 'Exact surfaces for Rhino, MatrixGold' },
-  '3dm': { label: 'For Rhino', hint: 'Layered meshes and curves' },
+  '3dm': { label: 'For Rhino', hint: 'Retains unchanged Rhino solids' },
   '3mf': { label: 'For 3D printing', hint: 'Mesh with units', makes: true },
   glb: { label: 'For the web and AR', hint: 'With stones and materials' },
   obj: { label: 'As a plain mesh', hint: 'For any 3D tool' },
