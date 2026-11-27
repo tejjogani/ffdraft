@@ -75,6 +75,12 @@ class FakeServer {
         const fail = this.failNext.shift()
         if (fail === 'offline') throw new OfflineError('offline')
         if (fail === 'conflict') throw new ConflictError('conflict')
+        if (
+          !this.log.some((change) => change.id === req.changeId) &&
+          req.baseVersion !== undefined &&
+          req.baseVersion !== this.version
+        )
+          throw new ConflictError('conflict')
         try {
           const change = this.commit(req.ops, {
             id: req.changeId,
@@ -538,4 +544,58 @@ describe('design session sync', () => {
       expect(new Set(ids).size).toBe(ids.length)
     }
   })
+})
+
+it('rejects a strict edit when a concurrent write reaches the server first', async () => {
+  const design = solitaire()
+  const server = new FakeServer(design)
+  const session = sessionOn(server)
+  await session.resync()
+  // The live event for this change has not arrived in the designer's window yet.
+  server.commit(setWidth(design, 3))
+  session.commit(setWidth(design, 4), { baseVersion: 0 })
+  await session.idle()
+  expect(width(server.design)).toBe(3)
+  expect(server.applyCalls).toBe(1)
+  expect(session.takeNotices()).toContainEqual(
+    expect.objectContaining({
+      type: 'dropped',
+      reason: expect.stringContaining('Reopen'),
+    }),
+  )
+  session.dispose()
+})
+
+it('undoes the first mesh edit without erasing vertices added by a collaborator', async () => {
+  const design = applyOps(solitaire(), [
+    {
+      t: 'add',
+      node: {
+        id: 'mesh',
+        kind: 'meshBody',
+        keepSourcePlacement: true,
+        source: { type: 'asset', assetId: 'source' },
+      },
+    },
+  ]).design
+  const server = new FakeServer(design)
+  const session = sessionOn(server)
+  const move = (id: number, xyz: number[]): Op[] => [
+    {
+      t: 'update',
+      id: 'mesh',
+      patch: { meshEdits: { assetId: 'source', vertices: { [id]: xyz } } },
+    },
+  ]
+
+  session.commit(move(12, [1, 2, 3]))
+  await session.idle()
+  session.receive(server.commit(move(27, [4, 5, 6])))
+  session.undo()
+  await session.idle()
+  expect(server.design.nodes.mesh).toMatchObject({
+    meshEdits: { assetId: 'source', vertices: { '27': [4, 5, 6] } },
+  })
+  expect(server.design.nodes.mesh).not.toHaveProperty('meshEdits.vertices.12')
+  session.dispose()
 })

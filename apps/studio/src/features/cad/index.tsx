@@ -47,7 +47,7 @@ import { QualityIndicator } from '../../components/stage/QualityIndicator'
 import { Stage } from '../../components/stage/Stage'
 import type { Viewer, ViewerState } from '../../components/stage/viewer'
 import { runCommand } from '../../lib/commands'
-import { canRedo, canUndo } from '../../lib/design-session/core'
+import { canRedo, canUndo, hasGap } from '../../lib/design-session/core'
 import { useDesignSession, useSessionState } from '../../lib/design-session/store'
 import { evaluationScheduler, useKernelInfo } from '../../lib/kernel/client'
 import { usePieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
@@ -77,6 +77,13 @@ import { toIssues } from './hud/issues'
 import { useProductionCheck } from './hud/useProductionCheck'
 import { useNodeEdit } from './inspector/edit'
 import { Inspector } from './inspector/Inspector'
+import { MeshEditor } from './mesh-edit/MeshEditor'
+import {
+  type ComponentKind,
+  type ImportedMesh,
+  isImportedMesh,
+  type VertexPositions,
+} from './mesh-edit/model'
 import { ModelImport } from './model-import/ModelImport'
 import { addNode, addPrepared, dependentsOf, remove, setField } from './ops'
 import { AddMenu } from './outliner/AddMenu'
@@ -216,6 +223,14 @@ function Workspace({ piece }: { piece: Piece }) {
     null,
   )
   const openModelImport = (file: File | null = null) => setModelImport({ pieceId, file })
+  const [meshEditor, setMeshEditor] = useState<{
+    pieceId: string
+    node: ImportedMesh
+    version: number
+  } | null>(null)
+  // A draft can only be used in the project and access level where it was opened.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each transition clears the editor
+  useEffect(() => setMeshEditor(null), [pieceId, readOnly])
   const navigate = useNavigate()
   const isCurrent = useCurrentView()
   const kernel = useKernelInfo()
@@ -236,6 +251,7 @@ function Workspace({ piece }: { piece: Piece }) {
   const runs = useSessionState(session, (s) => s.runs)
   const undoable = useSessionState(session, canUndo) ?? false
   const redoable = useSessionState(session, canRedo) ?? false
+  const syncing = useSessionState(session, hasGap) ?? false
   const version = useSessionState(session, (s) => s.version) ?? piece.version
   // A feature that left the design (an undo, a teammate's or the assistant's delete) is no longer
   // selected: commands and the inspector would otherwise act on something that is not there.
@@ -389,6 +405,54 @@ function Workspace({ piece }: { piece: Piece }) {
       { label },
     )
     ws().select(nodes.map((node) => node.id))
+  }
+
+  const editMesh = (node: ImportedMesh) => {
+    if (!session || readOnly || profile || curve) return
+    const state = session.get()
+    if (state.pending.length || state.gesture || hasGap(state)) {
+      toast({ title: 'Wait for the design to finish saving, then open Edit mesh.' })
+      return
+    }
+    const current = state.confirmed.nodes[node.id]
+    if (!isImportedMesh(current) || current.source.assetId !== node.source.assetId) {
+      toast({ title: 'The part changed. Select it again to edit its mesh.' })
+      return
+    }
+    setSheet(null)
+    setMeshEditor({ pieceId, node: current, version: state.version })
+  }
+
+  const saveMesh = (positions: VertexPositions, component: ComponentKind) => {
+    if (!session || readOnly || meshEditor?.pieceId !== pieceId)
+      throw new Error('This design is read-only.')
+    const latest = session.get()
+    const node = latest.view.nodes[meshEditor.node.id]
+    if (
+      latest.pieceId !== pieceId ||
+      latest.version !== meshEditor.version ||
+      latest.pending.length ||
+      latest.gesture ||
+      hasGap(latest) ||
+      !isImportedMesh(node) ||
+      node.source.assetId !== meshEditor.node.source.assetId ||
+      !sameJson(node.meshEdits, meshEditor.node.meshEdits)
+    )
+      throw new Error('The design changed. Close this editor and reopen to edit the saved mesh.')
+    session.commit(
+      [
+        {
+          t: 'update',
+          id: node.id,
+          patch: { meshEdits: { assetId: node.source.assetId, vertices: positions } },
+        },
+      ],
+      {
+        label: `Moved a mesh ${component.toLowerCase()}`,
+        baseVersion: latest.version,
+      },
+    )
+    setMeshEditor(null)
   }
 
   const drawProfile = () => {
@@ -653,6 +717,7 @@ function Workspace({ piece }: { piece: Piece }) {
       prior={run?.prior ?? null}
       readOnly={readOnly}
       onDelete={requestDelete}
+      onEditMesh={editMesh}
       onEditProfile={(original) => setProfile({ original })}
       onLocateProng={(at) => {
         setSheet(null)
@@ -969,6 +1034,15 @@ function Workspace({ piece }: { piece: Piece }) {
             setRevolveSource(null)
             if (!dockInspector) setSheet('inspector')
           }}
+        />
+      )}
+      {!readOnly && session && meshEditor?.pieceId === pieceId && (
+        <MeshEditor
+          key={`${pieceId}/${meshEditor.node.id}`}
+          node={meshEditor.node}
+          stale={version !== meshEditor.version || save?.status !== 'saved' || syncing}
+          onClose={() => setMeshEditor(null)}
+          onSave={saveMesh}
         />
       )}
       {!readOnly && session && modelImport?.pieceId === pieceId && (

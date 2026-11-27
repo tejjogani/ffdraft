@@ -8,6 +8,7 @@ import { Button, Chip, cn, ScrollArea, Switch } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
 import {
   ArrowUpRight,
+  BoxSelect,
   Cable,
   PencilRuler,
   RotateCw,
@@ -21,6 +22,7 @@ import type { DesignSession } from '../../../lib/design-session/store'
 import { carats, mm } from '../../../lib/format'
 import { diaexBrowseLink } from '../../sourcing/links'
 import { NurbsControls } from '../curves/NurbsControls'
+import { type ImportedMesh, isImportedMesh } from '../mesh-edit/model'
 import { isProfileNode, type ProfileNode, profileSize } from '../profiles/profile'
 import { useWorkspace } from '../state/workspace'
 import { FieldEditContext, useNodeEdit } from './edit'
@@ -37,6 +39,7 @@ export interface InspectorProps {
   readOnly: boolean
   onDelete(ids: string[]): void
   onEditProfile(node: ProfileNode): void
+  onEditMesh(node: ImportedMesh): void
   onEditCurve(node: NodeOf<'curve'>): void
   onRevolve(curve: string): void
   onMakeWire(curve: string): void
@@ -53,6 +56,7 @@ export function Inspector({
   readOnly,
   onDelete,
   onEditProfile,
+  onEditMesh,
   onEditCurve,
   onRevolve,
   onMakeWire,
@@ -172,6 +176,13 @@ export function Inspector({
                 pieceId={pieceId}
                 readOnly={readOnly || selection.length !== 1}
               />
+            )}
+            {isImportedMesh(node) && !edit.readOnly && selection.length === 1 && (
+              <section className="border-b border-line px-4 py-3">
+                <Button size="sm" icon={BoxSelect} onClick={() => onEditMesh(node)}>
+                  Edit mesh
+                </Button>
+              </section>
             )}
             {node.kind === 'curve' && (
               <section
