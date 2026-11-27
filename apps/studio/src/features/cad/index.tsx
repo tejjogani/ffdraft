@@ -35,17 +35,19 @@ import {
   Button,
   type ContextMenuHandle,
   Dialog,
+  IconButton,
   Sheet,
   Skeleton,
   Spinner,
   toast,
 } from '@pave/ui'
 import { useNavigate } from '@tanstack/react-router'
-import { PanelLeft, PanelRight, Plus } from 'lucide-react'
+import { PanelLeft, PanelLeftClose, PanelLeftOpen, PanelRight, Plus } from 'lucide-react'
 import {
   type RefObject,
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -67,6 +69,7 @@ import { rpc } from '../../lib/rpc'
 import { activeOrg, useSession } from '../../lib/session'
 import { useCurrentView } from '../../lib/use-current-view'
 import { useAssistant } from '../../stores/assistant'
+import { useUI } from '../../stores/ui'
 import { planProgress } from '../assistant/jobs/status'
 import { useLiveRun } from '../assistant/jobs/useJob'
 import { useQuickIntent } from '../assistant/quick-intent-store'
@@ -372,11 +375,34 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
   const [confirm, setConfirm] = useState<{ ids: string[]; dependents: string[] } | null>(null)
   const root = useRef<HTMLDivElement>(null)
   const width = useWidth(root)
-  const dockOutliner = width >= DOCK_OUTLINER_PX
+  const canDockOutliner = width >= DOCK_OUTLINER_PX
+  const cadFeaturesCollapsed = useUI((s) => s.cadFeaturesCollapsed)
+  const setCadFeaturesCollapsed = useUI((s) => s.setCadFeaturesCollapsed)
+  const dockOutliner = canDockOutliner && !cadFeaturesCollapsed
   const dockInspector = width >= DOCK_INSPECTOR_PX
   const compact =
     width - (dockOutliner ? OUTLINER_PX : 0) - (dockInspector ? INSPECTOR_PX : 0) < COMPACT_VIEW_PX
   const [sheet, setSheet] = useState<'outliner' | 'inspector' | null>(null)
+  const featuresId = useId()
+  const showFeatures = useRef<HTMLButtonElement>(null)
+  const hideFeatures = useRef<HTMLButtonElement>(null)
+  const moveFeaturesFocus = useRef(false)
+  useLayoutEffect(() => {
+    const sheetDocked = canDockOutliner && sheet === 'outliner'
+    if (sheetDocked) {
+      setSheet(null)
+      setAddOpen(false)
+    }
+    if (!sheetDocked && !moveFeaturesFocus.current) return
+    moveFeaturesFocus.current = false
+    const destination = dockOutliner ? hideFeatures : showFeatures
+    destination.current?.focus({ preventScroll: true })
+  }, [canDockOutliner, dockOutliner, sheet])
+  const toggleFeatures = () => {
+    moveFeaturesFocus.current = true
+    setAddOpen(false)
+    setCadFeaturesCollapsed(dockOutliner)
+  }
   const [marker, setMarker] = useState<MarkerSpot | null>(null)
   const [stepping, setStepping] = useState<string | null>(null)
   const hasRhinoBodies = view.order.some((id) => isRhinoRoleBody(view.nodes[id]))
@@ -883,7 +909,11 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
     issues,
     steps,
     hasRun: !!run,
-    openAddMenu: () => setAddOpen(true),
+    openAddMenu: () => {
+      if (canDockOutliner) setCadFeaturesCollapsed(false)
+      else setSheet('outliner')
+      setAddOpen(true)
+    },
     drawProfile,
     drawCurve,
     makeWire,
@@ -1041,19 +1071,46 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
       header={
         <div className="flex h-11 shrink-0 items-center justify-between pr-2 pl-4">
           <h2 className="text-xs font-medium text-fg-muted">Features</h2>
-          {!readOnly && (
-            <AddMenu
-              design={view}
-              kinds={kernel.kinds}
-              target={defaultTarget()}
-              onAdd={(kind, tool) => (tool ? openSectionTool(tool) : add(kind))}
-              open={addOpen}
-              onOpenChange={setAddOpen}
-            />
-          )}
+          <div className="flex items-center gap-1">
+            {!readOnly && (
+              <AddMenu
+                design={view}
+                kinds={kernel.kinds}
+                target={defaultTarget()}
+                onAdd={(kind, tool) => (tool ? openSectionTool(tool) : add(kind))}
+                open={addOpen}
+                onOpenChange={setAddOpen}
+              />
+            )}
+            {dockOutliner && !curve && (
+              <IconButton
+                ref={hideFeatures}
+                icon={PanelLeftClose}
+                label="Hide Features"
+                aria-controls={featuresId}
+                aria-expanded={true}
+                onClick={toggleFeatures}
+              />
+            )}
+          </div>
         </div>
       }
     />
+  )
+  const featuresLabel = canDockOutliner ? 'Show Features' : 'Features'
+  const featuresButton = (
+    <Button
+      ref={showFeatures}
+      icon={canDockOutliner ? PanelLeftOpen : PanelLeft}
+      aria-label={featuresLabel}
+      title={featuresLabel}
+      aria-controls={canDockOutliner ? featuresId : undefined}
+      aria-expanded={canDockOutliner ? false : undefined}
+      onClick={canDockOutliner ? toggleFeatures : undefined}
+      className="glass h-9 shrink-0 rounded-lg px-2.5 shadow-sm"
+    >
+      <span className="hidden sm:inline">Features</span>
+    </Button>
   )
   const inspector = (
     <Inspector
@@ -1097,9 +1154,11 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
 
   return (
     <div ref={root} className="absolute inset-0 flex min-h-0">
-      {dockOutliner && (
+      {canDockOutliner && (
         <aside
-          data-region="outliner"
+          id={featuresId}
+          hidden={!dockOutliner}
+          data-region={dockOutliner ? 'outliner' : undefined}
           aria-label="Feature list"
           className="w-[248px] shrink-0 border-r border-line bg-bg"
         >
@@ -1176,16 +1235,23 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
           {!curve && (
             <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex flex-wrap items-start justify-between gap-2 [&>*]:pointer-events-auto">
               <div className="flex min-w-0 items-center gap-2">
-                {!dockOutliner && (
-                  <Button
-                    icon={PanelLeft}
-                    aria-label="Features"
+                {canDockOutliner ? (
+                  !dockOutliner && featuresButton
+                ) : (
+                  <Sheet
+                    trigger={featuresButton}
+                    open={sheet === 'outliner'}
+                    onOpenChange={(o) => {
+                      if (!o) setAddOpen(false)
+                      setSheet(o ? 'outliner' : null)
+                    }}
                     title="Features"
-                    onClick={() => setSheet('outliner')}
-                    className="glass h-9 shrink-0 rounded-lg px-2.5 shadow-sm"
+                    side="left"
                   >
-                    <span className="hidden sm:inline">Features</span>
-                  </Button>
+                    <div data-region="outliner" className="h-full">
+                      {outliner}
+                    </div>
+                  </Sheet>
                 )}
                 <ViewToolbar
                   canUndo={undoable}
@@ -1379,18 +1445,6 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
         >
           {inspector}
         </aside>
-      )}
-      {!dockOutliner && (
-        <Sheet
-          open={sheet === 'outliner'}
-          onOpenChange={(o) => setSheet(o ? 'outliner' : null)}
-          title="Features"
-          side="left"
-        >
-          <div data-region="outliner" className="h-full">
-            {outliner}
-          </div>
-        </Sheet>
       )}
       {!dockInspector && (
         <Sheet

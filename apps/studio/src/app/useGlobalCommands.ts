@@ -84,7 +84,11 @@ export function useGlobalCommands(): void {
       group: 'View',
       icon: PanelLeft,
       shortcut: 'mod+\\',
-      run: () => useUI.getState().toggleSidebar(),
+      run: () => {
+        if (document.activeElement?.closest('#app-sidebar'))
+          document.getElementById('app-sidebar-toggle')?.focus({ preventScroll: true })
+        useUI.getState().toggleSidebar()
+      },
     },
     {
       id: 'piece.new',

@@ -4,6 +4,8 @@ import { isNarrow } from '../lib/narrow'
 
 interface UIState {
   sidebarCollapsed: boolean
+  cadFeaturesCollapsed: boolean
+  setCadFeaturesCollapsed: (collapsed: boolean) => void
   /** Phone-narrow windows: the sidebar is a drawer over the page, closed by default. */
   mobileNavOpen: boolean
   engineSetupOpen: boolean
@@ -25,6 +27,8 @@ export const useUI = create<UIState>()(
   persist(
     (set) => ({
       sidebarCollapsed: false,
+      cadFeaturesCollapsed: false,
+      setCadFeaturesCollapsed: (cadFeaturesCollapsed) => set({ cadFeaturesCollapsed }),
       mobileNavOpen: false,
       engineSetupOpen: false,
       setEngineSetupOpen: (engineSetupOpen) => set({ engineSetupOpen }),
@@ -51,6 +55,7 @@ export const useUI = create<UIState>()(
       name: 'pave:ui',
       partialize: (s) => ({
         sidebarCollapsed: s.sidebarCollapsed,
+        cadFeaturesCollapsed: s.cadFeaturesCollapsed,
         dismissedEngineVersion: s.dismissedEngineVersion,
         expandedCollections: s.expandedCollections,
       }),
