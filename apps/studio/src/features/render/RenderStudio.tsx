@@ -301,7 +301,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               <MenuItem
                 icon={Copy}
                 onClick={() =>
-                  void addShot(pieceId, s.piece!.kind, `${shot.title} copy`, shot.scene)
+                  void addShot(pieceId, `${shot.title} copy`, shot.scene)
                     .then((row) => setSelectedKey(row.id))
                     .catch((e: Error) => toast.error('Couldn’t add the shot', e.message))
                 }
@@ -329,7 +329,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                     <MenuItem
                       key={h.id}
                       onClick={() =>
-                        void addShot(pieceId, s.piece!.kind, h.title, h.scene)
+                        void addShot(pieceId, h.title, h.scene)
                           .then((row) => setSelectedKey(row.id))
                           .catch((e: Error) => toast.error('Couldn’t add the shot', e.message))
                       }
