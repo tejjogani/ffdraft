@@ -58,9 +58,9 @@ describe('picking on the model', () => {
     ws().open('p1')
   })
 
-  it('selects the feature first and a stone of it on the second click', () => {
+  it('selects the exact stone on the first click', () => {
     ws().pick({ nodeId: 'row', stoneId: 'row:3' })
-    expect(ws()).toMatchObject({ selection: ['row'], stone: null })
+    expect(ws()).toMatchObject({ selection: ['row'], stone: 'row:3' })
     ws().pick({ nodeId: 'row', stoneId: 'row:3' })
     expect(ws().stone).toBe('row:3')
     ws().pick({ nodeId: 'band' })
@@ -94,4 +94,64 @@ describe('picking on the model', () => {
     ws().setDisplay('clay', false)
     expect(ws().displayChosen).toBe(true)
   })
+})
+
+describe('component visibility', () => {
+  const ws = useWorkspace.getState
+  const a = { nodeId: 'pave', stoneId: 'pave:1' }
+  const b = { nodeId: 'pave', stoneId: 'pave:2' }
+  beforeEach(() => {
+    useWorkspace.setState({ pieceId: null })
+    ws().open('one')
+  })
+  it('updates the exact target when right-clicking a sibling or the parent row', () => {
+    ws().pick(a)
+    ws().selectForMenu('pave', 'pave:2')
+    expect(ws().stone).toBe(b.stoneId)
+    ws().selectForMenu('pave')
+    expect(ws().stone).toBeNull()
+  })
+  it('hides just one stone and restores earlier hides after isolating its neighbor', () => {
+    ws().toggleTarget(a)
+    ws().toggleTarget({ nodeId: 'rail' })
+    ws().isolateTargets([b])
+    expect(ws()).toMatchObject({ hidden: ['rail'], hiddenStones: ['pave:1'], isolated: [b] })
+    ws().exitIsolation()
+    expect(ws()).toMatchObject({ hidden: ['rail'], hiddenStones: ['pave:1'], isolated: [] })
+    ws().showAll()
+    expect(ws()).toMatchObject({ hidden: [], hiddenStones: [], isolated: [] })
+  })
+  it('isolates an explicitly hidden selection and restores the prior view', () => {
+    ws().setTargetsHidden([{ nodeId: 'pave' }, a], true)
+    ws().isolateTargets([a])
+    expect(ws()).toMatchObject({ hidden: [], hiddenStones: [], isolated: [a] })
+    ws().exitIsolation()
+    expect(ws()).toMatchObject({ hidden: ['pave'], hiddenStones: ['pave:1'] })
+  })
+  it('forgets hidden and isolated parts when their node leaves or a project changes', () => {
+    const physical = { nodeId: 'pair', partId: 'pair#1' }
+    ws().pick(physical)
+    expect(ws().part).toBe('pair#1')
+    ws().toggleTarget(physical)
+    ws().toggleTarget(a)
+    ws().isolateTargets([b])
+    ws().retain((id) => id !== 'pave')
+    expect(ws()).toMatchObject({ isolated: [], hiddenStones: [], hiddenParts: ['pair#1'] })
+    ws().open('two')
+    expect(ws()).toMatchObject({ hiddenParts: [], isolated: [], part: null })
+  })
+})
+
+it('opens a mixed Rhino drawing with guides tucked away, and respects showing them for that visit', () => {
+  const ws = useWorkspace.getState
+  ws().open('import-visit')
+  ws().startCurveVisibility(['guide'])
+  expect(ws().hidden).toContain('guide')
+  ws().toggleHidden('guide')
+  ws().startCurveVisibility(['guide'])
+  expect(ws().hidden).toEqual([])
+  ws().open('other-view')
+  expect(ws().hidden).toEqual([])
+  ws().startCurveVisibility([])
+  expect(ws().hidden).toEqual([])
 })

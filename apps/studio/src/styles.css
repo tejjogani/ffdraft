@@ -52,3 +52,25 @@
   background-color: color-mix(in srgb, var(--card-surface), var(--fg) 5%);
   border-color: color-mix(in srgb, var(--card-surface), var(--fg) 34%);
 }
+
+/* Keep metal edges readable in the workbench even when the surrounding app is in dark mode. */
+.cad-studio-backdrop {
+  --stage-a: #ecece8;
+  --stage-b: #c6cac9;
+  --cad-ink: #303937;
+  --cad-paper: #f6f6f2;
+  --cad-metal: #8c938e;
+  --cad-guide: #667773;
+}
+.cad-dark-backdrop {
+  --stage-a: #343a3c;
+  --stage-b: #232829;
+  --cad-ink: #e8eae6;
+  --cad-paper: #434b4e;
+  --cad-metal: #b9bab4;
+  --cad-guide: #a5aaa7;
+}
+.cad-construction-guide {
+  stroke: var(--cad-guide, var(--fg-muted));
+  opacity: 0.72;
+}

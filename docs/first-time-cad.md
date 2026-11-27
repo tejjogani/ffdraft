@@ -18,6 +18,14 @@ Supported closed Rhino B-reps and extrusions with complete saved render meshes r
 
 Review the skipped objects before choosing Import. Select the new parts in Features to change their material, finish or transform. Undo removes the batch import in one edit. From a reopened project, use History and choose Revert on the import.
 
+## Inspect a stone or part
+
+Click a stone on the ring, even a single diamond in a pavé row. Choose Hide stone to see its seat or Isolate stone to zoom in on it. The same actions work on a metal part. Exit isolation returns to your earlier view. Show all brings back hidden items. The saved piece, metal weight and exports keep their geometry.
+
+Open Construction curves in Features to browse the guides. On an imported Rhino assembly, the eye beside the group shows or hides them together. Use Views to switch between the studio and dark backdrops.
+
+To update the actual piece, select the part, edit its dimensions in the Inspector, or choose Edit handmade mount and Save mount edit. Undo reverses a saved design change. Export for Rhino to write a new .3dm.
+
 ## Tell Pavé which parts are metal or stones
 
 Choose Review Rhino roles in CAD. If an older import is missing labels, choose Recover Rhino source labels and select the original .3dm. Check the exact matches before applying them.

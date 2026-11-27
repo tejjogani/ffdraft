@@ -12,7 +12,7 @@ import type { Ref } from 'react'
 import { runCommand } from '../../../lib/commands'
 import { AskAiSection } from '../../assistant/AskAiSection'
 import type { Subject } from '../../assistant/quick-intents'
-import { useWorkspace } from '../state/workspace'
+import { selectedTargets, targetHidden, useWorkspace } from '../state/workspace'
 
 export interface ViewportMenuProps {
   handle: Ref<ContextMenuHandle>
@@ -26,7 +26,23 @@ export function ViewportMenu({ handle, subject, design, readOnly, onDelete }: Vi
   const hidden = useWorkspace((s) => s.hidden)
   const selection = useWorkspace((s) => s.selection)
   const node = subject.type === 'piece' ? undefined : design.nodes[subject.nodeId]
-  const isHidden = !!node && hidden.includes(node.id)
+  const stone = useWorkspace((s) => s.stone),
+    part = useWorkspace((s) => s.part)
+  const hiddenStones = useWorkspace((s) => s.hiddenStones),
+    hiddenParts = useWorkspace((s) => s.hiddenParts)
+  const isolated = useWorkspace((s) => s.isolated)
+  const targets = selectedTargets({ selection, stone, part })
+  const isHidden =
+    targets.length > 0 &&
+    targets.every((t) => targetHidden({ hidden, hiddenStones, hiddenParts }, t))
+  const noun =
+    selection.length > 1
+      ? 'selection'
+      : stone || node?.kind === 'gem'
+        ? 'stone'
+        : node?.kind === 'curve' || node?.kind === 'nurbsCurve'
+          ? 'curve'
+          : 'part'
   // A right-click on part of a selection leaves it whole: Hide and Delete act on all of it.
   const ids = node && selection.includes(node.id) ? selection : node ? [node.id] : []
   return (
@@ -44,13 +60,16 @@ export function ViewportMenu({ handle, subject, design, readOnly, onDelete }: Vi
                 onClick={() => runCommand('design.hideSelected')}
                 shortcut="h"
               >
-                {isHidden ? 'Show in view' : 'Hide in view'}
+                {isHidden ? 'Show' : 'Hide'} {noun}
+              </MenuItem>
+              <MenuItem icon={Focus} onClick={() => runCommand('view.isolateSelected')}>
+                Isolate {noun}
               </MenuItem>
               <MenuSeparator />
               <MenuItem
                 icon={Trash2}
                 danger
-                disabled={readOnly}
+                disabled={readOnly || !!part || (!!stone && node.kind !== 'gem')}
                 onClick={() => onDelete(ids)}
                 shortcut="delete"
               >
@@ -62,7 +81,7 @@ export function ViewportMenu({ handle, subject, design, readOnly, onDelete }: Vi
               <MenuItem icon={Focus} onClick={() => runCommand('view.fit')} shortcut="f">
                 Fit to view
               </MenuItem>
-              {hidden.length > 0 && (
+              {hidden.length + hiddenStones.length + hiddenParts.length > 0 && (
                 <MenuItem icon={Eye} onClick={() => runCommand('view.showAll')}>
                   Show all hidden features
                 </MenuItem>
@@ -80,6 +99,11 @@ export function ViewportMenu({ handle, subject, design, readOnly, onDelete }: Vi
                 Render this view
               </MenuItem>
             </>
+          )}
+          {isolated.length > 0 && (
+            <MenuItem icon={Eye} onClick={() => runCommand('view.exitIsolation')}>
+              Exit isolation
+            </MenuItem>
           )}
           <AskAiSection subject={subject} />
         </>

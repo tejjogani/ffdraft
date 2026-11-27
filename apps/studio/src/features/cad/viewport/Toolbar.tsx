@@ -62,6 +62,7 @@ export function ViewToolbar({
 }) {
   const display = useWorkspace((s) => s.display)
   const xray = useWorkspace((s) => s.xray)
+  const backdrop = useWorkspace((s) => s.backdrop)
   return (
     <Cluster>
       {onDrawCurve &&
@@ -122,6 +123,14 @@ export function ViewToolbar({
             {v === 'hero' ? 'Hero' : v[0]!.toUpperCase() + v.slice(1)}
           </MenuItem>
         ))}
+        <MenuSeparator />
+        <MenuItem
+          onClick={() =>
+            useWorkspace.getState().setBackdrop(backdrop === 'studio' ? 'dark' : 'studio')
+          }
+        >
+          {backdrop === 'studio' ? 'Use dark backdrop' : 'Use studio backdrop'}
+        </MenuItem>
         {compact && (
           <>
             <MenuSeparator />

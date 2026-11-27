@@ -93,14 +93,14 @@ export function readPalette(el: Element): ViewportPalette {
   const v = (name: string, fallback: string) => css.getPropertyValue(name).trim() || fallback
   const dark = document.documentElement.dataset.theme === 'dark'
   return {
-    ink: v('--fg', '#1c1b1a'),
+    ink: v('--cad-ink', v('--fg', '#1c1b1a')),
     select: v('--select', '#2b6ce6'),
     ai: v('--ai-a', '#c8a45a'),
     danger: v('--danger', '#cf4436'),
-    clayMetal: dark ? '#b9b4ab' : '#d9d4cb',
+    clayMetal: v('--cad-metal', dark ? '#b9b4ab' : '#d9d4cb'),
     clayStone: dark ? '#c9d0db' : '#dfe5ee',
     xrayMetal: dark ? '#d6d1c8' : '#8f8a81',
-    paper: dark ? v('--bg-inset', '#2a2a28') : v('--bg', '#ffffff'),
+    paper: v('--cad-paper', dark ? v('--bg-inset', '#2a2a28') : v('--bg', '#ffffff')),
   }
 }
 

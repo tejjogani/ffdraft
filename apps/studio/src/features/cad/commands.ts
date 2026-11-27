@@ -46,7 +46,7 @@ import { EXPORT_PURPOSE } from './export'
 import type { Issue } from './hud/issues'
 import { move, setIncluded } from './ops'
 import type { NextStep } from './outliner/suggestions'
-import { type DisplayMode, useWorkspace } from './state/workspace'
+import { type DisplayMode, selectedTargets, targetHidden, useWorkspace } from './state/workspace'
 
 export interface CadCommandContext {
   session: DesignSession | null
@@ -146,7 +146,10 @@ export function useCadCommands(c: CadCommandContext): void {
     const ids = selected()
     return ids.length === 1 ? c.design.order.indexOf(ids[0]!) : -1
   }
-  const allHidden = () => selected().every((id) => ws().hidden.includes(id))
+  const targets = () => selectedTargets(ws()).filter((t) => Object.hasOwn(c.design.nodes, t.nodeId))
+  const allHidden = () => targets().every((t) => targetHidden(ws(), t))
+  const wholeFeatures = () =>
+    !ws().part && (!ws().stone || c.design.nodes[ws().selection[0] ?? '']?.kind === 'gem')
   const allExcluded = () => selected().every((id) => c.design.nodes[id]!.visible === false)
   const firstFix = () => c.issues.find((i) => i.d.fix)?.d
   const commands: Command[] = [
@@ -241,7 +244,7 @@ export function useCadCommands(c: CadCommandContext): void {
       group: 'Design',
       icon: Trash2,
       shortcut: 'delete',
-      when: () => !c.readOnly && hasSelection(),
+      when: () => !c.readOnly && hasSelection() && wholeFeatures(),
       run: () => c.requestDelete(ws().selection),
     },
     {
@@ -250,7 +253,7 @@ export function useCadCommands(c: CadCommandContext): void {
       group: 'Design',
       shortcut: 'backspace',
       hidden: true,
-      when: () => !c.readOnly && hasSelection(),
+      when: () => !c.readOnly && hasSelection() && wholeFeatures(),
       run: () => c.requestDelete(ws().selection),
     },
     {
@@ -270,12 +273,24 @@ export function useCadCommands(c: CadCommandContext): void {
       shortcut: 'h',
       keywords: ['visibility'],
       when: hasSelection,
-      run: () => {
-        const show = allHidden()
-        const hidden = new Set(ws().hidden)
-        for (const id of selected()) show ? hidden.delete(id) : hidden.add(id)
-        useWorkspace.setState({ hidden: [...hidden] })
-      },
+      run: () => ws().setTargetsHidden(targets(), !allHidden()),
+    },
+    {
+      id: 'view.isolateSelected',
+      title: 'Isolate selection',
+      group: 'View',
+      icon: Focus,
+      keywords: ['solo', 'show only', 'stone', 'part'],
+      when: hasSelection,
+      run: () => ws().isolateTargets(targets()),
+    },
+    {
+      id: 'view.exitIsolation',
+      title: 'Exit isolation',
+      group: 'View',
+      icon: Eye,
+      when: () => ws().isolated.length > 0,
+      run: () => ws().exitIsolation(),
     },
     {
       id: 'design.excludeSelected',
@@ -286,7 +301,7 @@ export function useCadCommands(c: CadCommandContext): void {
       group: 'Design',
       icon: Scale,
       keywords: ['exclude', 'include', 'part of the piece'],
-      when: () => editable() && hasSelection(),
+      when: () => editable() && hasSelection() && wholeFeatures(),
       run: () => {
         const include = allExcluded()
         c.session?.commit(selected().map((id) => setIncluded(id, include)))
@@ -432,8 +447,14 @@ export function useCadCommands(c: CadCommandContext): void {
       title: 'Show all hidden features',
       group: 'View',
       icon: Eye,
-      when: () => ws().hidden.length > 0,
-      run: () => useWorkspace.setState({ hidden: [] }),
+      when: () =>
+        Boolean(
+          ws().hidden.length ||
+            ws().hiddenStones.length ||
+            ws().hiddenParts.length ||
+            ws().isolated.length,
+        ),
+      run: () => ws().showAll(),
     },
     {
       id: 'view.regions',
