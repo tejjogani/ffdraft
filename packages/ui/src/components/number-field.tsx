@@ -1,5 +1,5 @@
 import { NumberField as Base } from '@base-ui/react/number-field'
-import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
+import { type ComponentProps, type ReactNode, useEffect, useId, useRef, useState } from 'react'
 import { cn } from '../cn'
 
 export interface NumberFieldProps {
@@ -23,6 +23,8 @@ export interface NumberFieldProps {
    */
   onCommit?: (value: number | null) => void
   unit?: string
+  /** Override the virtual keyboard when signed decimal input requires the full keyboard. */
+  inputMode?: ComponentProps<'input'>['inputMode']
   min?: number
   max?: number
   step?: number
@@ -56,6 +58,7 @@ export function NumberField({
   onChange,
   onCommit,
   unit,
+  inputMode,
   min,
   max,
   step = 1,
@@ -122,6 +125,7 @@ export function NumberField({
       )}
       <Base.Input
         ref={input}
+        {...(inputMode ? { inputMode } : {})}
         aria-label={aria['aria-label'] ?? label}
         onFocus={() => {
           atFocus.current = current.current

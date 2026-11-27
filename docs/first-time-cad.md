@@ -14,9 +14,15 @@ Open the destination project’s CAD builder and choose Import model. Pick a .3d
 
 Turn on Include editable curves to import supported curves as NURBS from the selected layers. Pavé keeps the original NURBS degree, knots and weights and places the control points in world millimetres. Converted lines, arcs and connected joined curves preserve their shape and parameter domain. Converted arcs and joined curves can use different parameter spacing along the same shape.
 
-Supported closed Rhino B-reps and extrusions with complete saved render meshes retain a native solid alongside the display mesh. Look for Rhino surface retained in the Inspector. Rhino export can write that solid back to .3dm when the part still represents the original shape. For a project that used the earlier mesh-only importer, re-import the original .3dm to bring in native solids or editable curves. Keep the original for Rhino construction history and plug-in data.
+Supported closed Rhino B-reps and extrusions with complete saved render meshes retain a native solid alongside the display mesh. Look for Rhino surface retained in the Inspector. Rhino export can write that solid back to .3dm after supported native edits. For a project that used the earlier mesh-only importer, re-import the original .3dm to bring in native solids or editable curves. Keep the original for Rhino construction history and plug-in data.
 
 Review the skipped objects before choosing Import. Select the new parts in Features to change their material, finish or transform. Undo removes the batch import in one edit. From a reopened project, use History and choose Revert on the import.
+
+## Move a Rhino end face
+
+Select a retained Rhino solid in Features and choose Move end face in the Inspector. This works on parts with two matching planar ends and straight walls between them, such as a straight sleeve. The editor explains when it cannot offer a face pair.
+
+Choose the moving face by its direction or centre in project coordinates. The opposite face stays fixed. Enter a positive offset in millimetres to add thickness or a negative offset to remove it. The dialog shows the resulting thickness before you choose Move face. Through-holes keep their cross-section, and the edited part stays eligible for native Rhino export. Use Undo or Redo in CAD to compare the two shapes.
 
 ## Edit a Rhino curve
 
