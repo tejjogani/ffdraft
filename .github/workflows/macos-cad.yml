@@ -115,6 +115,9 @@ jobs:
           python -m unittest discover -s packages/pave-python/tests -v
           pnpm exec tsx apps/studio/e2e/manual-cad.ts "$PAVE_TEST_URL"
           pnpm exec tsx apps/studio/e2e/model-import.ts "$PAVE_TEST_URL"
+          pnpm exec tsx apps/studio/e2e/rhino-curve-io.ts "$PAVE_TEST_URL"
+          pnpm exec tsx apps/studio/e2e/nurbs-controls.ts "$PAVE_TEST_URL"
+          pnpm exec tsx apps/studio/e2e/mesh-edit.ts "$PAVE_TEST_URL"
 
           if [[ "$INSTALL_BLENDER" == true ]]; then
             pnpm exec tsx apps/studio/e2e/render-engine-setup.ts "$PAVE_TEST_URL" "$logs"
