@@ -1,5 +1,14 @@
-import { MeshVertexEdits } from '@pave/schema'
-import { cross, dot, length, lerp3, sub, type Vec3 } from '../geometry/vec'
+import { MeshVertexEdits, type NodeOf } from '@pave/schema'
+import {
+  composeTransform,
+  cross,
+  dot,
+  length,
+  lerp3,
+  sub,
+  transformPoint,
+  type Vec3,
+} from '../geometry/vec'
 import type { IndexedTriangles } from '../solid/meshing'
 import { parseMesh } from './parse/index'
 
@@ -12,6 +21,30 @@ const point = (p: Float32Array, id: number): Vec3 => [p[id * 3]!, p[id * 3 + 1]!
  */
 export function readEditableMesh(bytes: Uint8Array, edits?: MeshVertexEdits): IndexedTriangles {
   return applyMeshVertexEdits(parseMesh(bytes).mesh, edits)
+}
+
+/** Bounds of measured source triangles in project axes, before any handmade-mount deformation. */
+export function placedMeshBounds(
+  bytes: Uint8Array,
+  edits?: MeshVertexEdits,
+  transform?: NodeOf<'meshBody'>['transform'],
+) {
+  const { positions, indices } = edits ? readEditableMesh(bytes, edits) : parseMesh(bytes).mesh
+  const matrix =
+    transform && composeTransform(transform.position, transform.rotation, transform.scale)
+  const min: [number, number, number] = [Infinity, Infinity, Infinity],
+    max: [number, number, number] = [-Infinity, -Infinity, -Infinity]
+  for (const i of indices) {
+    const p = point(positions, i)
+    const placed = matrix ? transformPoint(matrix, p) : p
+    for (const k of [0, 1, 2] as const) {
+      min[k] = Math.min(min[k], placed[k])
+      max[k] = Math.max(max[k], placed[k])
+    }
+  }
+  if (!min.every((v, i) => Number.isFinite(v) && Number.isFinite(max[i]) && v < max[i]!))
+    throw new Error('The selected part must have finite three-dimensional bounds.')
+  return { min, max }
 }
 
 export function applyMeshVertexEdits(

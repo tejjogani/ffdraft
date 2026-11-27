@@ -19,6 +19,12 @@ export const rhinoCapFaces: Handler<'design.rhinoCapFaces'> = async (ctx, { piec
     version: piece.version,
     nativeAssetId: part?.nativeAssetId ?? null,
   }
+  if (part && (part.node.mountCage || part.node.mountFit))
+    return {
+      ...base,
+      faces: [],
+      reason: 'Clear the handmade mount shape and stone link to move an original end face.',
+    }
   if (!part || meshWasReshaped(part.node))
     return { ...base, faces: [], reason: part ? needsSource : needsRhino }
   const { bytes } = await readAsset(ctx, part.nativeAssetId)
@@ -39,6 +45,10 @@ export const offsetRhinoCapFace: Handler<'design.offsetRhinoCap'> = async (ctx, 
     plan: async (tx, design) => {
       const part = retainedRhinoPart(design, input.nodeId)
       if (!part) throw badRequest(needsRhino)
+      if (part.node.mountCage || part.node.mountFit)
+        throw badRequest(
+          'Clear the handmade mount shape and stone link to move an original end face.',
+        )
       if (meshWasReshaped(part.node)) throw badRequest(needsSource)
       if (input.nativeAssetId !== part.nativeAssetId)
         throw conflict('This Rhino solid has changed. Select its face again.')

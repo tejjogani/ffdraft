@@ -8,6 +8,7 @@
     "./client": "./src/client.ts",
     "./types": "./src/types.ts",
     "./mesh-edit": "./src/mesh/edit.ts",
+    "./mount-placement": "./src/geometry/mount-source-placement.ts",
     "./mesh-import": "./src/mesh/import-stl.ts",
     "./mesh-stl": "./src/mesh/stl.ts",
     "./rhino-cap": "./src/import/rhino-cap.ts",

@@ -145,6 +145,7 @@ function relatedTo(design: Design, ids: ReadonlySet<string>): Set<string> {
   }
   for (const n of Object.values(design.nodes)) {
     if (n.kind === 'setting' && ids.has(n.gem)) out.add(n.id)
+    if (n.kind === 'meshBody' && n.mountFit && ids.has(n.mountFit.gem)) out.add(n.id)
     if (n.kind === 'halo' && ids.has(n.around)) out.add(n.id)
     if (bands.has(n.id)) out.add(n.id)
     if (n.kind === 'gemRow' && bands.has(n.host)) out.add(n.id)
@@ -195,11 +196,28 @@ function followNotes(before: Design, after: Design, related: ReadonlySet<string>
   const a = resolveDesign(before)
   const b = resolveDesign(after)
   const notes: string[] = []
+  let refittedMembers = 0
   for (const id of after.order) {
     if (!related.has(id)) continue
     const was = a.nodes[id]
     const now = b.nodes[id]
     if (!was || !now) continue
+    if (now.kind === 'meshBody' && now.mountFit) {
+      const earlier = a.nodes[now.mountFit.gem]
+      const current = b.nodes[now.mountFit.gem]
+      if (earlier?.kind === 'gem' && current?.kind === 'gem') {
+        const from = stoneDims(earlier),
+          to = stoneDims(current)
+        if (
+          Math.max(
+            Math.abs(to.width - from.width),
+            Math.abs(to.length - from.length),
+            Math.abs(to.depth - from.depth),
+          ) > 1e-6
+        )
+          refittedMembers++
+      }
+    }
     for (const f of FOLLOWED) {
       if (now.kind !== f.kind) continue
       // A plain band has no arches to rise.
@@ -213,6 +231,10 @@ function followNotes(before: Design, after: Design, related: ReadonlySet<string>
     if (now.kind === 'halo' && related.has(now.around) && now.around !== id)
       notes.push(`${nodeTitle(now)} follows the new outline and recounts its stones`)
   }
+  if (refittedMembers)
+    notes.push(
+      `${refittedMembers} handmade mount ${refittedMembers === 1 ? 'part follows' : 'parts follow'} the new stone measurements. Check joint contact and metal thickness after fitting.`,
+    )
   return [...new Set(notes)]
 }
 

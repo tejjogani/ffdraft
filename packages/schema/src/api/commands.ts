@@ -28,10 +28,11 @@ import {
   PieceIntakeSchema,
 } from '../design/intake'
 import { StoneChangeSchema, StoneTargetSchema } from '../design/intents'
-import { NODE_KINDS, StoneSourcing } from '../design/nodes'
+import { MountCage, NODE_KINDS, StoneSourcing } from '../design/nodes'
 import { NurbsDefinition } from '../design/nurbs'
 import { PhotoReadSchema } from '../design/photo-read'
 import { PieceSpecSchema } from '../design/spec'
+import { METAL_IDS } from '../domain/metals'
 import {
   BRIEF_MODES,
   GENERATION_COUNT,
@@ -130,6 +131,12 @@ const id = z.string()
 export const MAX_RHINO_EDGE_PAGE_SIZE = 100
 export const MAX_RHINO_FACE_BORDER_PAGE_SIZE = 30
 const meshPoint = z.tuple([z.number(), z.number(), z.number()])
+const mountBounds = z.object({ min: meshPoint, max: meshPoint })
+const mountMemberIds = z
+  .array(z.string().min(1))
+  .min(1)
+  .max(MAX_DESIGN_CHANGE_OPS)
+  .refine((ids) => new Set(ids).size === ids.length, 'Each mount member must be selected once.')
 const componentId = z.number().int().nonnegative()
 /** Every format the CAD exports to; which of them count is in plans/plans.ts. */
 export const EXPORT_FORMATS = ['stl', 'step', '3dm', 'glb', 'obj', '3mf'] as const
@@ -838,6 +845,41 @@ export const commands = {
       baseVersion: componentId,
       changeId: id.optional(),
     }),
+    output: z.object({ version: componentId, change: StoredChangeSchema }),
+  }),
+  'design.inspectMount': def({
+    kind: 'query',
+    tool: true,
+    description:
+      'Measure selected independent imported mount parts in original project millimetres, before cage shaping or a stone fit. Returns each source asset, bounding box, native surface availability, combined bounds and the edit version.',
+    input: z.object({ pieceId: id, nodeIds: mountMemberIds }),
+    output: z.object({
+      version: componentId,
+      bounds: mountBounds,
+      parts: z.array(
+        z.object({ nodeId: id, assetId: id, bounds: mountBounds, native: z.boolean() }),
+      ),
+    }),
+  }),
+  'design.editMount': def({
+    kind: 'mutation',
+    tool: true,
+    description:
+      'Edit original members of a handmade jewelry setting together. Use the version and bounding box from design.inspectMount. Offsets are eight project XYZ millimetre displacements in x + 2*y + 4*z corner order (0 = min corner). byPart applies an affine transformation to each original trimmed solid at its own center. freeform bends across the complete box and can export evaluated meshes. Set fitGemId to link to a confirmed imported stone and follow its measured size from the original girdle. Give an explicit casting alloy for any unassigned members. Omit a property to keep its current value, or pass null for cage or fitGemId to clear it.',
+    input: z
+      .object({
+        pieceId: id,
+        nodeIds: mountMemberIds,
+        baseVersion: componentId,
+        changeId: id.optional(),
+        cage: MountCage.nullable().optional(),
+        fitGemId: id.nullable().optional(),
+        material: z.enum(METAL_IDS).optional(),
+      })
+      .refine(
+        (v) => v.cage !== undefined || v.fitGemId !== undefined || v.material !== undefined,
+        'Choose a shape, stone link or alloy to change.',
+      ),
     output: z.object({ version: componentId, change: StoredChangeSchema }),
   }),
   'design.planImportRoles': def({

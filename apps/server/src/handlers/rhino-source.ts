@@ -1,5 +1,7 @@
-import type { Design, NodeOf } from '@pave/schema'
-import { getAssetRow } from '../assets/assets'
+import { placedMeshBounds } from '@pave/kernel/mesh-edit'
+import { mountSourcePlacement } from '@pave/kernel/mount-placement'
+import type { Design, MountMember, NodeOf } from '@pave/schema'
+import { getAssetRow, readAsset } from '../assets/assets'
 import type { Ctx } from '../context'
 import { AppError, notFound } from '../errors'
 
@@ -33,4 +35,23 @@ export async function retainedRhinoBytes(ctx: Ctx, assetId: string) {
     throw error
   })
   return source && (await ctx.blobs.get(source.sha256))
+}
+
+/** Placed source for exact edge and trim reads. A continuous nonlinear bend has no single matrix. */
+export async function currentNativePlacement(
+  ctx: Ctx,
+  design: Design,
+  part: NonNullable<ReturnType<typeof retainedRhinoPart>>,
+) {
+  const { node, source } = part
+  if (!node.mountCage && !node.mountFit)
+    return { nativeTransform: source.nativeTransform, projectTransform: node.transform }
+  let center: [number, number, number] = [0, 0, 0]
+  if (node.mountCage?.mode === 'byPart') {
+    const { bytes } = await readAsset(ctx, source.assetId)
+    const bounds = placedMeshBounds(bytes, node.meshEdits?.vertices, node.transform)
+    center = [0, 1, 2].map((i) => (bounds.min[i]! + bounds.max[i]!) / 2) as [number, number, number]
+  }
+  const nativeTransform = mountSourcePlacement(design, node as MountMember, center)
+  return nativeTransform ? { nativeTransform } : null
 }

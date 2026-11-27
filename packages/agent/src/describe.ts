@@ -96,6 +96,12 @@ export const TOOL_CHIPS = {
     done: 'Read Rhino end faces',
   },
   'design.offsetRhinoCap': { running: 'Moving the end face', done: 'Moved the Rhino end face' },
+  'design.inspectMount': {
+    quiet: true,
+    running: 'Measuring mount parts',
+    done: 'Measured mount parts',
+  },
+  'design.editMount': { running: 'Editing the handmade mount', done: 'Edited the handmade mount' },
   'design.planImportRoles': {
     quiet: true,
     running: 'Reviewing imported parts',

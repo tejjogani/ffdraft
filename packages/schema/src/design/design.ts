@@ -7,6 +7,7 @@
  */
 import { z } from 'zod'
 import { revolveProfileError } from './curve'
+import { customMountFitForStone, customMountPartIssue } from './custom-mount'
 import { DESIGN_VERSION, migrateDesign, prongLayout } from './mount'
 import {
   importRoleOf,
@@ -452,6 +453,7 @@ export function validateDesign(design: Design): DesignIssue[] {
   const nodeOf = (id: string) => (Object.hasOwn(design.nodes, id) ? design.nodes[id] : undefined)
   const seen = new Set<string>()
   const confirmed = new Map<string, string>()
+  const mountBaselines = new Map<string, ReturnType<typeof customMountFitForStone> | string>()
   for (const id of design.order) {
     if (seen.has(id)) {
       issues.push({ level: 'error', nodeId: id, message: `Order lists "${id}" more than once` })
@@ -462,6 +464,32 @@ export function validateDesign(design: Design): DesignIssue[] {
     if (!n) {
       issues.push({ level: 'error', nodeId: id, message: `Order lists missing node "${id}"` })
       continue
+    }
+    if (n.kind === 'meshBody' && (n.mountFit || n.mountCage)) {
+      const issue = customMountPartIssue(design, id)
+      if (issue) issues.push({ level: 'error', nodeId: id, message: issue })
+      if (n.mountFit) {
+        const gem = n.mountFit.gem
+        let baseline = mountBaselines.get(gem)
+        if (!baseline) {
+          try {
+            baseline = customMountFitForStone(design, gem)
+          } catch (error) {
+            baseline = error instanceof Error ? error.message : 'Invalid custom mount stone.'
+          }
+          mountBaselines.set(gem, baseline)
+        }
+        if (typeof baseline === 'string' || !sameJson(n.mountFit, baseline)) {
+          issues.push({
+            level: 'error',
+            nodeId: id,
+            message:
+              typeof baseline === 'string'
+                ? baseline
+                : 'The handmade mount must use the confirmed original stone measurements. Unlink it before remeasuring the original stone.',
+          })
+        }
+      }
     }
     const role = importSourceRole(n)
     if (role && (n.kind === 'gem' || n.kind === 'setting') && n.importSourceId) {
