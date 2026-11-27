@@ -20,9 +20,9 @@ export interface PackageBuild {
 export type KernelTask =
   | { kind: 'evaluate'; design: Design; detail: 'draft' | 'production' }
   | { kind: 'export'; design: Design; format: ExportFormat; stones: boolean }
-  | { kind: 'renderInput'; design: Design }
+  | { kind: 'renderInput'; design: Design; includeUnassignedRhino?: boolean }
   /** The subject summary alone (bounds, support points), for framing without a render. */
-  | { kind: 'subject'; design: Design }
+  | { kind: 'subject'; design: Design; includeUnassignedRhino?: boolean }
   | { kind: 'package'; design: Design; build: PackageBuild }
   /** Shaded clay pictures (RGBA, `size`×`size`) from the software rasteriser. */
   | {
@@ -44,6 +44,7 @@ export interface PictureShot {
   camera: MatchCamera
   width: number
   height: number
+  includeUnassignedRhino?: boolean
 }
 
 export interface PhotoFitTask {

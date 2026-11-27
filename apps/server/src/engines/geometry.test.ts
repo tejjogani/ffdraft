@@ -1,8 +1,12 @@
 /** The kernel through the server: evaluation, cached facts, exports and tenancy. */
-import type { EvaluationSummary } from '@pave/schema'
+import { readRhino3dm } from '@pave/kernel/rhino-import'
+import { resolveScene, sceneHash } from '@pave/render'
+import { type EvaluationSummary, RenderSceneSchema } from '@pave/schema'
 import rhino3dm from 'rhino3dm'
 import sharp from 'sharp'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { freeRhino } from '../../../../packages/kernel/src/runtime/rhino'
+import { serviceContext } from '../service-context'
 import { assetBytes, engineServer, until } from '../test/engines'
 import { BOOT_TIMEOUT, type Client, client, signUp, type TestServer } from '../test/harness'
 
@@ -130,6 +134,164 @@ describe('geometry engine', () => {
     expect((await api.fail('production.create', { pieceId: empty.id })).status).toBe(409)
     expect(await api.call('production.list', { pieceId: empty.id })).toEqual([])
   })
+
+  it.each([false, true])(
+    'frames a preview of unassigned Rhino bodies with cast metal present: %s',
+    async (mixed) => {
+      const rhino = await rhino3dm()
+      const doc = new rhino.File3dm()
+      const mesh = new rhino.Mesh()
+      const settings = doc.settings()
+      const objects = doc.objects()
+      const vertices = mesh.vertices()
+      const faces = mesh.faces()
+      const attrs = new rhino.ObjectAttributes()
+      settings.modelUnitSystem = rhino.UnitSystem.Millimeters
+      for (const [x, y, z] of [
+        [8, 0, 0],
+        [12, 0, 0],
+        [8, 4, 0],
+        [8, 0, 4],
+      ] as const)
+        vertices.add(x, y, z)
+      for (const [a, b, c] of [
+        [0, 2, 1],
+        [0, 1, 3],
+        [0, 3, 2],
+        [1, 2, 3],
+      ] as const)
+        faces.addTriFace(a, b, c)
+      objects.addMesh(mesh, attrs)
+      const bytes = doc.toByteArray().slice()
+      for (const handle of [attrs, faces, vertices, objects, settings, mesh, doc]) freeRhino(handle)
+      const {
+        objects: [source],
+      } = await readRhino3dm(bytes)
+      const form = new FormData()
+      form.set('file', new File([new Uint8Array(source!.bytes)], 'rhino-solid.stl'))
+      const uploaded = await api.request('/api/assets', { method: 'POST', body: form })
+      expect(uploaded.status).toBe(201)
+      const { id: assetId } = (await uploaded.json()) as { id: string }
+      const piece = await api.call('pieces.create', {
+        title: 'Imported Rhino render',
+        kind: 'other',
+      })
+      const input = {
+        kind: 'meshBody',
+        source: { type: 'asset', assetId, rhinoLayer: 'Fixture' },
+        keepSourcePlacement: true,
+      } as const
+      await api.call('design.apply', {
+        pieceId: piece.id,
+        label: 'Import fixture bodies',
+        ops: [
+          { t: 'add', node: { ...input, id: 'unassigned' } },
+          {
+            t: 'add',
+            node: { ...input, id: 'hidden', visible: false, transform: { position: [40, 0, 0] } },
+          },
+          {
+            t: 'add',
+            node: {
+              ...input,
+              id: 'reference',
+              importRole: 'reference',
+              transform: { position: [80, 0, 0] },
+            },
+          },
+          ...(mixed
+            ? [
+                {
+                  t: 'add',
+                  node: {
+                    ...input,
+                    id: 'cast-metal',
+                    importRole: 'metal',
+                    material: 'au18k-yellow',
+                    transform: { position: [-8, 0, 0] },
+                  },
+                } as const,
+              ]
+            : []),
+        ],
+      })
+      const savedPiece = await api.call('pieces.get', { id: piece.id })
+      const evaluate = () =>
+        api.call('design.evaluate', { pieceId: piece.id, detail: 'production' })
+      const before = await evaluate()
+      const ctx = await server.runtime.context(server.runtime.local!)
+      const geometry = ctx.services.get('geometry')
+      const casting = () =>
+        geometry.export(savedPiece.design, { format: 'stl', stones: false }, serviceContext(ctx))
+      const originalCasting = mixed ? (await casting()).file.bytes : null
+      const saved = await api.call('scenes.create', {
+        pieceId: piece.id,
+        title: 'Catalog',
+        scene: { look: 'catalog-white' },
+      })
+      const scene = (
+        await api.call('scenes.update', { id: saved.id, patch: { includeUnassignedRhino: true } })
+      ).scene
+      expect((await api.call('scenes.list', { pieceId: piece.id }))[0]?.scene).toEqual(scene)
+
+      const { glb, subject } = await geometry.renderInput(savedPiece.design, serviceContext(ctx), {
+        pieceId: piece.id,
+        includeUnassignedRhino: true,
+      })
+      expect(subject.parts.map((part) => part.nodeId).sort()).toEqual(
+        mixed ? ['cast-metal', 'unassigned'] : ['unassigned'],
+      )
+      expect(subject.bounds).toEqual({ min: [mixed ? 0 : 8, 0, 0], max: [12, 4, 4] })
+      const data = glb.bytes
+      const length = new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(12, true)
+      const exported = JSON.parse(new TextDecoder().decode(data.subarray(20, 20 + length))) as {
+        nodes: { name: string; mesh?: number }[]
+      }
+      expect(
+        exported.nodes
+          .filter((node) => node.mesh !== undefined)
+          .map((node) => node.name)
+          .sort(),
+      ).toEqual(subject.parts.map((part) => part.id).sort())
+      const resolved = resolveScene(scene, subject)
+      expect(resolved.materials[resolved.assignments.unassigned!]).toMatchObject({
+        kind: 'surface',
+      })
+      const assigned = subject.parts.find(({ nodeId }) => nodeId === 'cast-metal')
+      if (assigned) expect(resolved.assignments[assigned.id]).toContain('au18k-yellow')
+
+      const capture = await api.call('scenes.capture', { ids: [saved.id], size: 192 })
+      expect(capture.version).toBe(savedPiece.version)
+      expect(capture.shots[0]).toMatchObject({ ok: true, assetId: expect.any(String) })
+      const pixels = await assetBytes(api, { url: `/api/assets/${capture.shots[0]!.assetId}` })
+      const stats = await sharp(pixels).stats()
+      expect(stats.channels[0]!.stdev).toBeGreaterThan(12)
+      const take = await api.call('renders.create', {
+        pieceId: piece.id,
+        sceneId: saved.id,
+        engine: 'browser',
+      })
+      expect(take.sourceVersion).toBe(savedPiece.version)
+      expect(take.scene).toEqual(scene)
+      expect(take.requestedScene).toEqual(scene)
+      const cameraDesign = { pieceId: piece.id, version: savedPiece.version }
+      const off = RenderSceneSchema.parse({ ...scene, includeUnassignedRhino: false })
+      const original = await geometry.subject!(savedPiece.design, serviceContext(ctx))
+      expect(original.parts.map(({ nodeId }) => nodeId)).toEqual(mixed ? ['cast-metal'] : [])
+      expect(sceneHash(resolved, cameraDesign)).not.toBe(
+        sceneHash(resolveScene(off, original), cameraDesign),
+      )
+      expect(await evaluate()).toEqual(before)
+      expect(before.metalMassG > 0).toBe(mixed)
+      expect(before.stoneCount).toBe(0)
+      expect((await api.call('pieces.get', { id: piece.id })).version).toBe(savedPiece.version)
+      if (mixed) expect((await casting()).file.bytes).toEqual(originalCasting)
+      else
+        expect((await api.fail('design.export', { pieceId: piece.id, format: 'stl' })).status).toBe(
+          409,
+        )
+    },
+  )
 
   it('exports STL, STEP, 3DM and GLB files that parse', async () => {
     const piece = await api.call('pieces.create', { templateId: 'solitaire' })

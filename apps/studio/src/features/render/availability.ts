@@ -1,5 +1,5 @@
 import type { Evaluation } from '@pave/kernel'
-import { importRoleOf, isRhinoRoleBody, type Node } from '@pave/schema'
+import { unassignedRhinoBody } from '@pave/render'
 import type { PieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
 
 import { sourceMaterialLabel } from '../../lib/source-material'
@@ -9,21 +9,17 @@ type RenderEvaluation = Pick<PieceEvaluation, 'design' | 'status' | 'stale'> & {
   evaluation: RenderGeometry | null
 }
 
-function unassignedBody(node: Node | undefined) {
-  return isRhinoRoleBody(node) && node.visible !== false && importRoleOf(node) === 'unassigned'
-    ? node
-    : undefined
-}
-
 export function sourceMaterialSummary(
   design: RenderEvaluation['design'],
   references: RenderGeometry['referenceParts'],
 ) {
   let count = 0
   const counts = new Map<string, number>()
-  for (const id of new Set(references?.map(({ nodeId }) => nodeId))) {
-    const body = unassignedBody(design?.nodes[id])
-    if (!body) continue
+  const seen = new Set<string>()
+  for (const part of references ?? []) {
+    const body = unassignedRhinoBody(design, part)
+    if (!body || seen.has(body.id)) continue
+    seen.add(body.id)
     count++
     const label = sourceMaterialLabel(body.source.rhinoContext)
     if (label) counts.set(label, (counts.get(label) ?? 0) + 1)
@@ -39,7 +35,7 @@ export function renderAvailability({ design, evaluation, status, stale }: Render
   if (status !== 'ready' || stale || !evaluation) return 'pending'
   if (evaluation.parts.length || evaluation.stones.length) return 'ready'
   const references = evaluation.referenceParts ?? []
-  const needsReview = references.some(({ nodeId }) => unassignedBody(design?.nodes[nodeId]))
+  const needsReview = references.some((part) => unassignedRhinoBody(design, part))
   if (needsReview) return 'review-roles'
   if (references.some((p) => p.modelingSheet)) return 'sheets'
   return references.length ? 'references' : 'empty'

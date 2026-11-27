@@ -143,6 +143,7 @@ export interface RenderSubject {
     finish: FinishId
     plating: PlatingId
     bounds: Box
+    importRole?: 'unassigned'
   }[]
   stones: {
     id: string
@@ -165,6 +166,11 @@ export interface GeometryCall {
   background?: boolean
 }
 
+export interface RenderGeometryCall extends GeometryCall {
+  /** A shot's opt-in to show unassigned Rhino geometry. */
+  includeUnassignedRhino?: boolean
+}
+
 export interface GeometryService extends Service {
   /** Facts of a design: masses, stones, bounds and manufacturability diagnostics. */
   evaluate(
@@ -181,14 +187,14 @@ export interface GeometryService extends Service {
   renderInput(
     design: Design,
     sctx: ServiceContext,
-    opts?: GeometryCall,
+    opts?: RenderGeometryCall,
   ): Promise<{ glb: FileData; subject: RenderSubject }>
   /**
    * The subject summary renders are framed by (bounds and support points of the production
    * evaluation), without writing a GLB. Optional: without it the assistant is told the camera
    * but not how much of the frame the piece fills.
    */
-  subject?(design: Design, sctx: ServiceContext, opts?: GeometryCall): Promise<RenderSubject>
+  subject?(design: Design, sctx: ServiceContext, opts?: RenderGeometryCall): Promise<RenderSubject>
   /**
    * Shaded clay pictures of the design (RGBA bytes, `size`×`size`, one per view) from the
    * software rasteriser, for when no studio window can draw it. Optional: engines without it

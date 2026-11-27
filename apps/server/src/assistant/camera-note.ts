@@ -6,9 +6,9 @@
  */
 import { describePose, predictFraming, resolveScene } from '@pave/render'
 import type { SavedScene } from '@pave/schema'
+import { subjectsOf } from '../cinema'
 import type { Ctx } from '../context'
 import { getPiece } from '../lookups'
-import { serviceContext } from '../service-context'
 
 /** More shots than this are listed without their cameras: the note stays short. */
 const MAX_SHOTS = 8
@@ -20,17 +20,23 @@ export async function cameraNote(
   signal?: AbortSignal,
 ): Promise<string | null> {
   if (!pieceId || shots.length === 0) return null
-  const geometry = ctx.services.optional('geometry')
-  if (!geometry?.subject) return null
-  let subject: Awaited<ReturnType<NonNullable<typeof geometry.subject>>>
+  const shown = shots.slice(0, MAX_SHOTS)
+  let subjectFor: Awaited<ReturnType<typeof subjectsOf>>
   try {
     const piece = await getPiece(ctx, pieceId)
-    subject = await geometry.subject(piece.design, serviceContext(ctx), { pieceId, signal })
+    subjectFor = await subjectsOf(
+      ctx,
+      piece,
+      shown.map(({ scene }) => scene),
+      signal,
+    )
   } catch {
     // Framing is a courtesy; a piece the kernel cannot evaluate still has its shots.
     return null
   }
-  const lines = shots.slice(0, MAX_SHOTS).map((shot) => {
+  const lines = shown.flatMap((shot) => {
+    const subject = subjectFor(shot.scene)
+    if (!subject) return []
     const resolved = resolveScene(shot.scene, subject)
     const c = resolved.camera
     const framing = predictFraming(
@@ -43,5 +49,5 @@ export async function cameraNote(
     const lock = shot.scene.camera.locked ? ', locked' : ''
     return `- "${shot.title}" (${shot.id}, ${kind}${lock}): ${describePose(c)}; framing ${framing.label}.`
   })
-  return ['Shot cameras (mm, Z up, front faces −Y):', ...lines].join('\n')
+  return lines.length ? ['Shot cameras (mm, Z up, front faces −Y):', ...lines].join('\n') : null
 }
