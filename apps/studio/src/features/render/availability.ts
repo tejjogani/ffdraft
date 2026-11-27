@@ -19,16 +19,19 @@ export function sourceMaterialSummary(
   design: RenderEvaluation['design'],
   references: RenderGeometry['referenceParts'],
 ) {
+  let count = 0
   const counts = new Map<string, number>()
   for (const id of new Set(references?.map(({ nodeId }) => nodeId))) {
     const body = unassignedBody(design?.nodes[id])
-    const label = sourceMaterialLabel(body?.source.rhinoContext)
+    if (!body) continue
+    count++
+    const label = sourceMaterialLabel(body.source.rhinoContext)
     if (label) counts.set(label, (counts.get(label) ?? 0) + 1)
   }
   const labels = [...counts].sort((a, b) => b[1] - a[1])
   const shown = labels.slice(0, 4).map(([label, count]) => `${label} (${count})`)
   if (labels.length > shown.length) shown.push(`+${labels.length - shown.length} more`)
-  return shown.join(', ')
+  return { count, labels: shown.join(', ') }
 }
 
 export function renderAvailability({ design, evaluation, status, stale }: RenderEvaluation) {

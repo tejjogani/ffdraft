@@ -230,6 +230,14 @@ try {
     await page.getByRole('option', { name: '18k Yellow Gold', exact: true }).click()
     await confirm.click()
     await review.waitFor({ state: 'hidden' })
+    if (index === 0) {
+      await page.goto(`${base}/pieces/${pieceId}/render`)
+      await page
+        .getByText('1 unassigned body is excluded from this render.', { exact: true })
+        .waitFor()
+      await page.getByRole('link', { name: 'Review materials' }).click()
+      await review.getByRole('button', { name: 'Cancel', exact: true }).click()
+    }
     await until(async () => roles((await readReopened()).design)[index] === 'metal')
   }
   const classified = await readReopened()

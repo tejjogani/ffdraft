@@ -158,7 +158,8 @@ it('counts source display labels on distinct visible unassigned bodies in the re
     'hidden',
     'literal',
   ].map((nodeId) => ({ nodeId }) as Part)
-  expect(sourceMaterialSummary(design, referenceParts)).toBe(
-    'White Gold (2), Emerald (1), /Library/Stone-2024 (1)',
-  )
+  expect(sourceMaterialSummary(design, referenceParts)).toEqual({
+    count: 5,
+    labels: 'White Gold (2), Emerald (1), /Library/Stone-2024 (1)',
+  })
 })
