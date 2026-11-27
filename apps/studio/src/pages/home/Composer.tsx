@@ -5,6 +5,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useRef, useState } from 'react'
 import { Composer as SharedComposer } from '../../features/assistant/Composer'
 import { TierPicker } from '../../features/assistant/TierPicker'
+import type { ProjectIntakeDraft } from '../../features/projects/new-project'
 import { invalidateFor, queryClient } from '../../lib/query'
 import { rpc } from '../../lib/rpc'
 import { useSession } from '../../lib/session'
@@ -18,7 +19,7 @@ const SUGGESTIONS = [
   'Men’s signet with family crest',
 ]
 
-export function Composer() {
+export function Composer({ draft }: { draft?: ProjectIntakeDraft }) {
   const { capabilities } = useSession()
   const navigate = useNavigate()
   const isCurrent = useCurrentView()
@@ -26,22 +27,25 @@ export function Composer() {
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [tier, setTier] = useState<AssistantTier | null>(null)
   const [busy, setBusy] = useState(false)
+  const submitting = useRef(false)
   const retry = useRef<{ key: string; requestId: string } | null>(null)
 
   const submit = async (text: string) => {
-    if (busy) return
+    if (submitting.current) return
     const models = attachments.filter((a) => intakeFiles.model(a.name))
     const brief = text.trim() || (models.length ? `Open ${models[0]!.name} as CAD` : '')
     if (!brief) return
     const assetIds = attachments.map((a) => a.id)
     const key = JSON.stringify([brief, assetIds])
     if (retry.current?.key !== key) retry.current = { key, requestId: crypto.randomUUID() }
+    submitting.current = true
     setBusy(true)
     try {
       const project = await rpc.call('pieces.startIntake', {
         requestId: retry.current.requestId,
         brief,
         assetIds,
+        ...draft,
       })
       invalidateFor(queryClient, 'pieces')
       invalidateFor(queryClient, 'boards')
@@ -66,10 +70,12 @@ export function Composer() {
       setPrompt('')
       setAttachments([])
       retry.current = null
-      if (isCurrent()) await navigate({ to: '/', search: { intake: project.pieceId, thread } })
+      if (isCurrent())
+        await navigate({ to: '/', search: { intake: project.pieceId, thread }, replace: !!draft })
     } catch (e) {
       toast.error('Couldn’t save the project', e instanceof Error ? e.message : undefined)
     } finally {
+      submitting.current = false
       setBusy(false)
     }
   }
@@ -89,7 +95,8 @@ export function Composer() {
         files={intakeFiles}
         allowAttachmentOnly={attachments.some((a) => intakeFiles.model(a.name))}
         placeholder="Describe a piece, attach a reference, or bring finished CAD."
-        label="Describe a piece for the assistant"
+        label={draft ? 'Design brief' : 'Describe a piece for the assistant'}
+        focusNonce={draft ? 1 : undefined}
         submitLabel="Start design intake"
         tools={capabilities.assistant ? <TierPicker value={tier} onChange={setTier} /> : undefined}
       />

@@ -6,6 +6,7 @@ import { QuickIntentHost } from '../features/assistant/QuickIntentHost'
 import { useUiTools } from '../features/assistant/ui-tools'
 import { usePaveFileDrop } from '../features/pavefile'
 import { PlanLimitCard } from '../features/plans/PlanLimitCard'
+import { NewProjectHost } from '../features/projects/NewProjectDialog'
 import { useBrowserTakes } from '../features/render/browser-takes'
 import { RenderEngineSetup } from '../features/render/EngineDialog'
 import { useClientToolRelay } from '../lib/client-tools'
@@ -69,7 +70,9 @@ function Shell() {
   const inIntake = useRouterState({
     select: (s) =>
       s.location.pathname === '/' &&
-      ('intake' in s.location.search || 'brainstorm' in s.location.search),
+      ('intake' in s.location.search ||
+        'brainstorm' in s.location.search ||
+        !!s.location.state.projectIntake),
   })
   return (
     // The muted backdrop is what the frosted sidebar sits on (on desktop, the window vibrancy).
@@ -101,6 +104,7 @@ function Shell() {
       {/* Floating or folded to a pill: over the work, not a column of it. */}
       {!inIntake && <AssistantWindow />}
       <Palette />
+      <NewProjectHost />
       <QuickIntentHost />
       <PlanLimitCard />
     </div>

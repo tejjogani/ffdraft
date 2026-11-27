@@ -1,12 +1,11 @@
-import { buildDesign, TEMPLATES, type Template } from '@pave/schema'
 import { Button, buttonClass, InlineError } from '@pave/ui'
-import { Link, useNavigate } from '@tanstack/react-router'
-import { ArrowRight } from 'lucide-react'
+import { Link, useLocation, useNavigate, useRouter } from '@tanstack/react-router'
+import { ArrowRight, Plus } from 'lucide-react'
 import { useEffect, useMemo } from 'react'
-import { KindGlyph } from '../../components/KindGlyph'
-import { Column, PageHeader, SectionTitle } from '../../components/Page'
+import { Column, PageHeader, PageTitle, SectionTitle } from '../../components/Page'
 import { PieceCard, PieceCardSkeleton } from '../../components/PieceCard'
-import { useCreatePiece } from '../../lib/pieces'
+import { projectFolder } from '../../features/projects/folder'
+import { type ProjectIntakeDraft, useOpenNewProject } from '../../features/projects/new-project'
 import { useRpc } from '../../lib/query'
 import { useSession } from '../../lib/session'
 import { useAssistant } from '../../stores/assistant'
@@ -19,7 +18,8 @@ const greeting = (h: number) =>
   h < 5 ? 'Working late' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
 
 export function HomePage({ search }: { search: IntakeSearch }) {
-  const drafting = !!(search.intake || search.brainstorm)
+  const projectIntake = useLocation({ select: (location) => location.state.projectIntake })
+  const drafting = !!(search.intake || search.brainstorm || projectIntake)
   useEffect(() => {
     if (drafting) useAssistant.getState().close()
   }, [drafting])
@@ -29,12 +29,38 @@ export function HomePage({ search }: { search: IntakeSearch }) {
     return (
       <BrainstormPage key={search.brainstorm} id={search.brainstorm} threadId={search.thread} />
     )
+  if (projectIntake) return <ProjectIntakeComposer draft={projectIntake} />
   return <HomeDashboard />
+}
+
+function ProjectIntakeComposer({ draft }: { draft: ProjectIntakeDraft }) {
+  const router = useRouter()
+  const collections = useRpc('collections.list', {})
+  return (
+    <>
+      <PageHeader
+        crumbs={[{ label: 'Design intake' }]}
+        actions={
+          <Button variant="ghost" onClick={() => router.history.back()}>
+            Cancel
+          </Button>
+        }
+      />
+      <Column>
+        <PageTitle
+          title={draft.title}
+          description={projectFolder(draft.collectionId, collections.data)}
+        />
+        <Composer draft={draft} />
+      </Column>
+    </>
+  )
 }
 
 function HomeDashboard() {
   const session = useSession()
   const navigate = useNavigate()
+  const openNewProject = useOpenNewProject()
   const firstName = session.user.name.split(' ')[0]
   const now = new Date()
   return (
@@ -54,18 +80,21 @@ function HomeDashboard() {
             )}
           </h1>
           <Composer />
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="mt-4"
-            onClick={() => void navigate({ to: '/', search: { brainstorm: crypto.randomUUID() } })}
-          >
-            Brainstorm <ArrowRight aria-hidden />
-          </Button>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Button icon={Plus} onClick={() => openNewProject()}>
+              New project
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() =>
+                void navigate({ to: '/', search: { brainstorm: crypto.randomUUID() } })
+              }
+            >
+              Brainstorm <ArrowRight aria-hidden />
+            </Button>
+          </div>
         </section>
         <RecentPieces />
-        <Templates />
       </Column>
     </>
   )
@@ -84,7 +113,7 @@ function RecentPieces() {
       <SectionTitle
         actions={
           <Link to="/pieces" className={buttonClass({ variant: 'ghost', size: 'sm' })}>
-            All pieces <ArrowRight aria-hidden />
+            All projects <ArrowRight aria-hidden />
           </Link>
         }
       >
@@ -99,48 +128,6 @@ function RecentPieces() {
             : recent.map((p) => <PieceCard key={p.id} piece={p} />)}
         </div>
       )}
-    </section>
-  )
-}
-
-function Templates() {
-  const create = useCreatePiece()
-  const families = useMemo(() => {
-    const map = new Map<Template['family'], Template[]>()
-    for (const t of TEMPLATES) map.set(t.family, [...(map.get(t.family) ?? []), t])
-    return [...map]
-  }, [])
-  return (
-    <section>
-      <SectionTitle>Start from a template</SectionTitle>
-      <div className="flex flex-col gap-6">
-        {families.map(([family, templates]) => (
-          <div key={family}>
-            <h3 className="mb-2 text-xs text-fg-subtle">{family}</h3>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {templates.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  disabled={create.isPending}
-                  onClick={() => create.mutate({ templateId: t.id })}
-                  className="group flex items-center gap-3 rounded-lg p-1.5 pr-3 text-left transition-colors duration-120 hover:bg-bg-hover disabled:opacity-60"
-                >
-                  <span className="stage flex size-12 shrink-0 items-center justify-center rounded-md shadow-[0_0_0_1px_var(--line)]">
-                    <KindGlyph kind={buildDesign(t.spec).kind} className="w-11 text-fg-muted" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-fg">
-                      {t.spec.title}
-                    </span>
-                    <span className="block truncate text-xs text-fg-subtle">{t.spec.summary}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
     </section>
   )
 }

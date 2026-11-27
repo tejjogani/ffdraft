@@ -136,7 +136,7 @@ export function Sidebar({ drawer = false }: { drawer?: boolean }) {
           Assistant
         </ActionRow>
         <ActionRow icon={SquarePen} shortcut="mod+n" onClick={() => runCommand('piece.new')}>
-          New piece
+          New project
         </ActionRow>
       </div>
 

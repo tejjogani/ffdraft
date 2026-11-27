@@ -21,10 +21,11 @@ import { StageIcon } from '../../components/StageChip'
 import { useOpenPaveFile } from '../../features/pavefile'
 import { usd } from '../../features/projects/cost'
 import { projectFolder } from '../../features/projects/folder'
+import { useOpenNewProject } from '../../features/projects/new-project'
 import { StageProgress } from '../../features/projects/ProjectSections'
 import { KIND_LABEL, STAGE_LABEL } from '../../lib/domain'
 import { plural } from '../../lib/format'
-import { useCanDeleteProject, useCreatePiece } from '../../lib/pieces'
+import { useCanDeleteProject } from '../../lib/pieces'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { PieceTable } from './PieceTable'
 
@@ -90,7 +91,7 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
   const parent = collections.data?.find((c) => c.id === collection?.parentId)
   const folderTotal = summary.data?.folders.find((f) => f.collectionId === collectionId)
   const allTotal = (summary.data?.projects ?? []).reduce((n, p) => n + p.totalUsd, 0)
-  const create = useCreatePiece()
+  const openNewProject = useOpenNewProject()
   const openPaveFile = useOpenPaveFile()
 
   const visible = useMemo(
@@ -144,9 +145,9 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
               variant="primary"
               size="sm"
               icon={Plus}
-              onClick={() => create.mutate({ collectionId: collectionId ?? null })}
+              onClick={() => openNewProject({ collectionId })}
             >
-              New piece
+              New project
             </Button>
           </>
         }
@@ -268,7 +269,7 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
             description={
               filtered
                 ? 'Try another stage or kind.'
-                : 'Start from a template, or describe a piece to the assistant.'
+                : 'Create a blank project, choose a template, or start with a design brief.'
             }
             action={
               filtered ? (
@@ -279,9 +280,9 @@ export function PiecesPage({ collectionId }: { collectionId?: string }) {
                 <Button
                   variant="primary"
                   icon={Plus}
-                  onClick={() => create.mutate({ collectionId: collectionId ?? null })}
+                  onClick={() => openNewProject({ collectionId })}
                 >
-                  New piece
+                  New project
                 </Button>
               )
             }

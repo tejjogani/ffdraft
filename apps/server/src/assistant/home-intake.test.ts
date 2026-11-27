@@ -48,6 +48,40 @@ it('creates one blank project and keeps the original logo on its own board acros
   ).toMatchObject({ status: 404 })
 })
 
+it('saves the chosen name and folder with the initial brief and preserves them on retry', async () => {
+  const folder = await api.call('collections.create', { name: 'Client commissions' })
+  const input = {
+    requestId: 'named-intake-fixture',
+    brief,
+    title: '  Calder pendant  ',
+    collectionId: folder.id,
+  }
+  const [created, duplicate] = await Promise.all([
+    api.call('pieces.startIntake', input),
+    api.call('pieces.startIntake', input),
+  ])
+  expect(duplicate).toEqual(created)
+  await api.call('pieces.startIntake', { ...input, title: 'Different', collectionId: null })
+  expect(await api.call('pieces.get', { id: created.pieceId })).toMatchObject({
+    title: 'Calder pendant',
+    collectionId: folder.id,
+    brief,
+  })
+  const count = (await api.call('pieces.list', {})).length
+  const rejected = await api.fail('pieces.startIntake', {
+    ...input,
+    requestId: 'missing-intake-folder',
+    collectionId: 'col_missing',
+  })
+  expect(rejected.status).toBe(404)
+  expect(await api.call('pieces.list', {})).toHaveLength(count)
+  const plain = await start('untitled-default-intake')
+  expect(await api.call('pieces.get', { id: plain.pieceId })).toMatchObject({
+    title: brief,
+    collectionId: null,
+  })
+})
+
 it('keeps an intake run in Design and stores the concepts on that project', async () => {
   const p = await start('intake-concepts-fixture')
   const spec = {
