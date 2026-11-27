@@ -26,7 +26,7 @@ import {
 } from '@pave/ui'
 import { Link } from '@tanstack/react-router'
 import { Camera, Columns2, Copy, House, Play, Plus, Redo2, Settings2, Undo2, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { assetUrl } from '../../lib/assets'
 import { type Command, useRegisterCommands } from '../../lib/commands'
 import { usePieceEvaluation } from '../../lib/kernel/usePieceEvaluation'
@@ -40,11 +40,11 @@ import { renderAvailability } from './availability'
 import { engineLabel } from './EngineDialog'
 import { ShotInspector } from './ShotInspector'
 import { addShot, saveHouseShot, takeShotIntent } from './shot-actions'
-import { isLive, pickOf, type Shot, takeLabel, takeMedia, takesOf } from './shots'
+import { isLive, pickOf, type Shot, shotList, takeLabel, takeMedia, takesOf } from './shots'
 import { TakeMedia } from './TakeMedia'
 import { TakeTile } from './TakeTile'
 import { useShots } from './useShots'
-import { Viewfinder } from './Viewfinder'
+import { Viewfinder, type ViewfinderHandle } from './Viewfinder'
 
 export function RenderStudio({ pieceId }: { pieceId: string }) {
   // Production detail, as Blender takes use: the viewfinder frames and fingerprints the take.
@@ -53,6 +53,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
   const availability = renderAvailability(geometry)
   const canRender = availability === 'ready'
   const s = useShots(pieceId, canRender)
+  const viewfinder = useRef<ViewfinderHandle>(null)
   const readOnly = useReadOnly()
   const renderJob = useStageJob(pieceId, 'render').run
   const jobInReview = renderJob ? jobState(renderJob) === 'review' : false
@@ -69,14 +70,22 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
   const [comparing, setComparing] = useState<[string, string] | null>(null)
   const setEngineOpen = useUI((s) => s.setEngineSetupOpen)
 
-  const shot = s.shots.find((x) => x.key === selectedKey) ?? s.shots[0] ?? null
+  const defaults = s.piece ? shotList(undefined, s.piece.kind) : []
+  const defaultIndex = defaults.findIndex((preset) => preset.key === selectedKey)
+  const savedDefault = s.shots.find(
+    (candidate) =>
+      candidate.saved?.position === defaultIndex + 1 &&
+      candidate.title === defaults[defaultIndex]?.title,
+  )
+  const shot = s.shots.find((x) => x.key === selectedKey) ?? savedDefault ?? s.shots[0] ?? null
   // A default shot becomes a saved one on the first edit: follow it by position.
   useEffect(() => {
     if (wanted && s.shots.some((x) => x.key === wanted)) {
       setSelectedKey(wanted)
       setWanted(null)
-    } else if (selectedKey && !s.shots.some((x) => x.key === selectedKey)) setSelectedKey(null)
-  }, [selectedKey, wanted, s.shots])
+    } else if (selectedKey && !s.shots.some((x) => x.key === selectedKey))
+      setSelectedKey(savedDefault?.key ?? null)
+  }, [selectedKey, wanted, s.shots, savedDefault?.key])
 
   const takes = useMemo(() => (shot ? takesOf(shot, s.takes) : []), [shot, s.takes])
   const history = useRpc(
@@ -107,6 +116,17 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
     ? (comparing.map((id) => s.takes.find((t) => t.id === id)).filter(Boolean) as RenderJob[])
     : null
 
+  const renderShots = (shots: Shot[]) => {
+    if (!canRender) return
+    viewfinder.current?.commitPending()
+    void s.render(shots)
+  }
+  const rerenderTake = (take: RenderJob) => {
+    if (!canRender) return
+    viewfinder.current?.commitPending()
+    void s.rerender(take)
+  }
+
   const commands: Command[] = shot
     ? [
         {
@@ -134,7 +154,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
           icon: Play,
           shortcut: 'mod+enter',
           when: () => canRender,
-          run: () => void s.render([shot]),
+          run: () => renderShots([shot]),
         },
         {
           id: 'render.all',
@@ -142,7 +162,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
           group: 'Piece',
           shortcut: 'mod+shift+enter',
           when: () => canRender,
-          run: () => void s.render(s.shots),
+          run: () => renderShots(s.shots),
         },
       ]
     : []
@@ -160,7 +180,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
     star: s.star,
     cover: s.cover,
     pick: s.pick,
-    rerender: canRender ? (t: RenderJob) => void s.rerender(t) : undefined,
+    rerender: canRender ? rerenderTake : undefined,
     cancel: s.cancel,
     open: (t: RenderJob) => {
       setComparing(null)
@@ -199,6 +219,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               pick={pickOf(x, takesOf(x, s.takes))}
               live={takesOf(x, s.takes).some(isLive)}
               onSelect={() => {
+                viewfinder.current?.commitPending()
                 setSelectedKey(x.key)
                 setViewing(null)
                 setComparing(null)
@@ -315,7 +336,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                 size="sm"
                 variant="secondary"
                 disabled={!shot || !canRender}
-                onClick={() => void s.render(s.shots)}
+                onClick={() => renderShots(s.shots)}
               >
                 Render all
                 {canRender && all.data && !browser && (
@@ -330,7 +351,7 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                 variant={jobInReview ? 'secondary' : 'primary'}
                 icon={Camera}
                 disabled={!shot || !canRender}
-                onClick={() => shot && void s.render([shot])}
+                onClick={() => shot && renderShots([shot])}
               >
                 {browser ? 'Render preview' : 'Render'}
               </Button>
@@ -410,25 +431,18 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
               />
             ) : shot ? (
               <Viewfinder
+                ref={viewfinder}
                 evaluation={hasPreview ? evaluation : null}
                 scene={shot.scene}
                 design={{ pieceId, version: s.piece.version }}
                 label={`Live preview of the ${shot.title} shot`}
                 className="absolute inset-4"
                 onHash={onHash}
-                onCommit={(patch) =>
-                  void s.adjust(shot, patch).then((next) => next && setSelectedKey(next.key))
-                }
+                onCommit={(patch) => void s.adjust(shot, patch)}
                 onLock={(locked) =>
-                  void s
-                    .adjust(shot, { camera: { locked: locked ? true : null } })
-                    .then((next) => next && setSelectedKey(next.key))
+                  void s.adjust(shot, { camera: { locked: locked ? true : null } })
                 }
-                onReset={() =>
-                  void s
-                    .adjust(shot, resetCameraPatch(shot.scene.camera))
-                    .then((next) => next && setSelectedKey(next.key))
-                }
+                onReset={() => void s.adjust(shot, resetCameraPatch(shot.scene.camera))}
               />
             ) : null}
             {/* An animated shot's scrubber sits where this caption would. */}
@@ -524,9 +538,10 @@ export function RenderStudio({ pieceId }: { pieceId: string }) {
                   ? { seconds: perTake ?? 0, basis: estimate.data.basis }
                   : null
               }
-              onChange={(patch) =>
-                void s.adjust(shot, patch).then((next) => next && setSelectedKey(next.key))
-              }
+              onChange={(patch) => {
+                viewfinder.current?.commitPending()
+                void s.adjust(shot, patch)
+              }}
             />
           )}
         </aside>

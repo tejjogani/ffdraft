@@ -22,7 +22,15 @@ import {
 import type { RenderScene } from '@pave/schema'
 import { Chip, cn, IconButton } from '@pave/ui'
 import { Grid3x3, Lock, LockOpen, Pause, Play, RotateCcw } from 'lucide-react'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  type Ref,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { QualityIndicator, useQuality } from '../../components/stage/QualityIndicator'
 import { createWheelClassifier } from '../../components/stage/wheel'
 import { ShotRenderer } from './shot-renderer'
@@ -65,7 +73,12 @@ function cameraOf(base: ResolvedCamera, p: ViewPose, radius: number): ResolvedCa
   }
 }
 
+export interface ViewfinderHandle {
+  commitPending(): void
+}
+
 export function Viewfinder({
+  ref,
   evaluation,
   scene,
   design,
@@ -76,6 +89,7 @@ export function Viewfinder({
   onReset,
   onHash,
 }: {
+  ref?: Ref<ViewfinderHandle>
   evaluation: Evaluation | null
   scene: RenderScene
   /** The piece and version the picture is of: part of the scene fingerprint. */
@@ -234,19 +248,34 @@ export function Viewfinder({
     if (!r) return null
     return poseRef.current ?? poseOf(r.camera, rad)
   }
-  const commit = () => {
+  const prepareCommit = (): (() => void) | undefined => {
     const { resolved: r, scene: s, onCommit: save } = latest.current
     const p = poseRef.current
     if (!r || !p) return
     const base = s.camera.preset === 'custom' ? s.camera.basePreset : s.camera.preset
-    save(customCameraPatch(p, r.subject, base))
+    const patch = customCameraPatch(p, r.subject, base)
+    // A later render can change the selected shot before this wheel burst settles.
+    return () => save(patch)
   }
-  const settle = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const pending = useRef<{ apply: () => void; timer: ReturnType<typeof setTimeout> } | null>(null)
+  const takePending = () => {
+    const gesture = pending.current
+    pending.current = null
+    clearTimeout(gesture?.timer)
+    return gesture?.apply
+  }
+  const commitPending = () => takePending()?.()
+  useImperativeHandle(ref, () => ({ commitPending }))
+  const commit = () => {
+    takePending()
+    prepareCommit()?.()
+  }
   const commitSoon = () => {
-    clearTimeout(settle.current)
-    settle.current = setTimeout(commit, SETTLE_MS)
+    takePending()
+    const apply = prepareCommit()
+    if (apply) pending.current = { apply, timer: setTimeout(commitPending, SETTLE_MS) }
   }
-  useEffect(() => () => clearTimeout(settle.current), [])
+  useEffect(() => () => clearTimeout(pending.current?.timer), [])
   useEffect(() => {
     if (!hint) return
     const t = setTimeout(() => setHint(null), 2500)
@@ -419,14 +448,20 @@ export function Viewfinder({
                   size="sm"
                   label={locked ? 'Unlock camera' : 'Lock camera'}
                   active={locked}
-                  onClick={() => onLock(!locked)}
+                  onClick={() => {
+                    commitPending()
+                    onLock(!locked)
+                  }}
                 />
                 <IconButton
                   icon={RotateCcw}
                   size="sm"
                   label="Reset to the preset"
                   disabled={!custom || locked}
-                  onClick={onReset}
+                  onClick={() => {
+                    takePending()
+                    onReset()
+                  }}
                 />
               </div>
             </div>
