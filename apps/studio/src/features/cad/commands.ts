@@ -5,7 +5,7 @@
  */
 import type { Diagnostic, ExportFormat } from '@pave/kernel'
 import type { CameraPreset } from '@pave/render'
-import type { Design } from '@pave/schema'
+import { type Design, ringBandProfileError } from '@pave/schema'
 import {
   ArrowDown,
   ArrowUp,
@@ -71,6 +71,7 @@ export interface CadCommandContext {
   drawProfile(): void
   drawCurve(): void
   revolveCurve(curve: string): void
+  makeRingBand(curve: string): void
   openSectionTool(tool: SectionTool): void
   makeWire(curve: string): void
   requestDelete(ids: string[]): void
@@ -181,6 +182,21 @@ export function useCadCommands(c: CadCommandContext): void {
       run: () => {
         const id = selectedCurve()
         if (id) c.revolveCurve(id)
+      },
+    },
+    {
+      id: 'design.makeRingBand',
+      title: 'Make ring band',
+      group: 'Design',
+      icon: KIND_ICON.ringShank,
+      keywords: ['custom profile', 'finger size', 'revolve', 'band'],
+      when: () => {
+        const n = c.design.nodes[selectedCurve() ?? '']
+        return editable() && n?.kind === 'curve' && !ringBandProfileError(n)
+      },
+      run: () => {
+        const id = selectedCurve()
+        if (id) c.makeRingBand(id)
       },
     },
     ...SECTION_TOOLS.map(

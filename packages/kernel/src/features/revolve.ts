@@ -1,5 +1,5 @@
 /** Lathe forms: an SVG profile in the (radius, height) half-plane turned about the Z axis. */
-import { pointFromCurvePlane } from '@pave/schema'
+import { pointFromCurvePlane, ringBandProfileError, ringInnerDiameter } from '@pave/schema'
 import { assembleWire, type Edge, makeBezierCurve, makeFace, makeLine, revolution } from 'replicad'
 import { defineFeature, metalOf, solidFromBrep } from '../core'
 import { parsePathData, type SubPath } from '../geometry/svgPath'
@@ -85,13 +85,26 @@ export const revolve = defineFeature('revolve', (node, ctx) => {
       ...metalOf(node),
     }
   }
+  const turnProfile = (points: Point[], origin: Point, direction: Point) => {
+    const edges = points.map((p, i) => ctx.track(makeLine(p, points[(i + 1) % points.length]!)))
+    return { bodies: [turn(edges, origin, direction)] }
+  }
   if (node.curve !== undefined) {
     const source = ctx.input(node.curve).node
     if (source.kind !== 'curve') throw new Error('Revolve needs a construction curve.')
+    if (node.size) {
+      const error = ringBandProfileError(source)
+      if (error) throw new Error(error)
+      const radial = source.plane === 'top' ? 'u' : 'v'
+      const axial = source.plane === 'top' ? 'v' : 'u'
+      const low = Math.min(...source.points.map((p) => p[radial]))
+      const boreRadius = ringInnerDiameter(node.size) / 2
+      const points = source.points.map((p): Point => [p[radial] - low + boreRadius, p[axial], 0])
+      return turnProfile(points, [0, 0, 0], [0, 1, 0])
+    }
     const points = source.points.map(({ u, v }) =>
       pointFromCurvePlane(source.plane, [u, v], source.planeOffset),
     )
-    const edges = points.map((p, i) => ctx.track(makeLine(p, points[(i + 1) % points.length]!)))
     const vertical = node.axis !== 'horizontal'
     const offset = node.axisOffset ?? 0
     const origin = pointFromCurvePlane(
@@ -100,7 +113,7 @@ export const revolve = defineFeature('revolve', (node, ctx) => {
       source.planeOffset,
     )
     const direction = pointFromCurvePlane(source.plane, vertical ? [0, 1] : [1, 0])
-    return { bodies: [turn(edges, origin, direction)] }
+    return turnProfile(points, origin, direction)
   }
   const paths = parsePathData(node.profile ?? '')
   if (!paths.length) throw new Error('the profile is empty')

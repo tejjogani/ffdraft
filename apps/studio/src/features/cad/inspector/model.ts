@@ -68,6 +68,7 @@ const countRows = (rows: readonly InspectorRow[]): number =>
 
 export function inspectorModel(node: Node, opts: { advanced?: boolean } = {}): InspectorModel {
   const d = describeNode(node.kind)
+  const sizedRevolve = node.kind === 'revolve' && node.size !== undefined
   const value: Record<string, unknown> =
     node.kind === 'revolve' && node.curve !== undefined
       ? { axis: 'vertical', axisOffset: 0, ...node }
@@ -83,11 +84,19 @@ export function inspectorModel(node: Node, opts: { advanced?: boolean } = {}): I
             node.curve === undefined ? f.key !== 'curve' : !['points', 'closed'].includes(f.key),
           )
         : node.kind === 'revolve'
-          ? d.fields.filter((f) =>
-              node.curve === undefined
-                ? !['curve', 'axis', 'axisOffset'].includes(f.key)
-                : f.key !== 'profile',
-            )
+          ? d.fields
+              .filter((f) =>
+                sizedRevolve
+                  ? !['profile', 'axis', 'axisOffset', 'angle'].includes(f.key)
+                  : node.curve === undefined
+                    ? !['curve', 'axis', 'axisOffset', 'size'].includes(f.key)
+                    : !['profile', 'size'].includes(f.key),
+              )
+              .map((f) =>
+                sizedRevolve && f.key === 'transform'
+                  ? { ...f, fields: f.fields?.filter((child) => child.key !== 'scale') }
+                  : f,
+              )
           : isImportReference(node)
             ? d.fields.filter((f) => f.meta.group !== 'Material')
             : d.fields
@@ -130,8 +139,12 @@ export function inspectorModel(node: Node, opts: { advanced?: boolean } = {}): I
   const filled = sections.filter((s) => s.rows.length > 0)
   return {
     kind: node.kind,
-    title: d.title,
-    ...(d.description ? { description: d.description } : {}),
+    title: sizedRevolve ? 'Custom ring band' : d.title,
+    ...(sizedRevolve
+      ? { description: 'A circular band shaped by an editable profile curve.' }
+      : d.description
+        ? { description: d.description }
+        : {}),
     sections: [...filled.filter((s) => !onlyAdvanced(s)), ...filled.filter(onlyAdvanced)],
     advanced,
   }

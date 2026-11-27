@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import unittest
 from urllib.request import Request, urlopen
@@ -132,6 +133,40 @@ class LiveCadTest(unittest.TestCase):
         self.assertEqual(current.features["bezel"]["curve"], "bezel-section")
         current.undo(result["change"]["seq"])
         self.assertAlmostEqual(current.evaluate()["metalMassG"], before, places=4)
+
+    def test_custom_ring_band_resizes_and_rebuilds_from_its_source(self):
+        studio = Studio(os.environ["PAVE_TEST_URL"])
+        piece = studio._rpc("pieces.create", {"title": "Sized custom band", "kind": "ring"})
+        project = studio.project(piece["id"])
+        points = [{"id": str(i), "u": u, "v": v}
+                  for i, (u, v) in enumerate([(-2, -1), (2, -1), (2, 1), (-2, 1)])]
+        project.apply([{"t": "add", "node": {
+            "id": "section", "kind": "curve", "plane": "right", "closed": True, "points": points,
+        }}], "Draw a 4 by 2 mm section")
+        project.make_ring_band("section", solid_id="band", size={"system": "us", "value": 6})
+
+        def check_band(current, bore, thickness):
+            facts = current.evaluate(detail="production")
+            self.assertEqual([d for d in facts["diagnostics"] if d["level"] == "error"], [])
+            self.assertAlmostEqual(facts["boundsMm"]["y"], 4, places=4)
+            self.assertAlmostEqual(facts["boundsMm"]["x"], bore + 2 * thickness, delta=0.01)
+            self.assertAlmostEqual(facts["metals"][0]["volumeMm3"],
+                                   4 * math.pi * thickness * (bore + thickness), places=3)
+
+        check_band(project, 16.5068, 2)
+        project.apply([{"t": "update", "id": "band", "patch": {
+            "size": {"system": "us", "value": 7},
+        }}], "Resize to US 7")
+        check_band(project, 17.3196, 2)
+        points[2]["v"] = points[3]["v"] = 2
+        edited = project.apply([{"t": "update", "id": "section", "patch": {"points": points}}],
+                               "Thicken the source profile by 1 mm")
+        reopened = studio.project(piece["id"])
+        self.assertEqual(reopened.features["band"]["curve"], "section")
+        self.assertEqual(reopened.features["band"]["size"], {"system": "us", "value": 7})
+        check_band(reopened, 17.3196, 3)
+        reopened.undo(edited["change"]["seq"])
+        check_band(studio.project(piece["id"]), 17.3196, 2)
 
     def test_customer_revision_of_a_halo_ring(self):
         studio = Studio(os.environ["PAVE_TEST_URL"])

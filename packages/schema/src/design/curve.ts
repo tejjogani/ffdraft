@@ -89,6 +89,19 @@ export function pipePath(
   }
 }
 
+function profileOutlineError(curve: NodeOf<'curve'>): string | undefined {
+  const points = DrawnProfile.shape.points.safeParse(curve.points.map(({ u, v }) => [u, v]))
+  if (!points.success) return points.error.issues[0]?.message ?? 'Invalid profile.'
+}
+
+/** A band section lies in a plane through the native finger axis (world Y). */
+export function ringBandProfileError(curve: NodeOf<'curve'>): string | undefined {
+  if (!curve.closed) return 'A ring band needs a closed construction curve.'
+  if (curve.plane === 'front') return 'Draw the band profile on the Top or Right plane.'
+  if ((curve.planeOffset ?? 0) !== 0) return 'Set the band profile’s plane position to 0 mm.'
+  return profileOutlineError(curve)
+}
+
 /** A profile must bound one face entirely on one side of the in-plane rotation axis. */
 export function revolveProfileError(
   curve: NodeOf<'curve'>,
@@ -96,8 +109,8 @@ export function revolveProfileError(
   offset = 0,
 ): string | undefined {
   if (!curve.closed) return 'Revolve needs a closed construction curve.'
-  const points = DrawnProfile.shape.points.safeParse(curve.points.map(({ u, v }) => [u, v]))
-  if (!points.success) return points.error.issues[0]?.message ?? 'Invalid profile.'
+  const error = profileOutlineError(curve)
+  if (error) return error
   const coordinates = curve.points.map((p) => (axis === 'vertical' ? p.u : p.v))
   if (Math.min(...coordinates) < offset && Math.max(...coordinates) > offset)
     return 'The rotation axis crosses the profile. Move the axis to an edge or outside the outline.'

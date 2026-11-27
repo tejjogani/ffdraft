@@ -27,6 +27,7 @@ import {
   type PieceSpecInput,
   reviewRhinoRoles,
   rhinoRoleLinks,
+  ringBandProfileError,
   sameJson,
 } from '@pave/schema'
 import {
@@ -694,6 +695,25 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
   const selectedProfile =
     revolveSource?.pieceId === pieceId ? view.nodes[revolveSource.id] : undefined
 
+  const makeRingBand = (curveId: string) => {
+    if (!session || readOnly || curve || profile) return
+    const current = session.get().view
+    const source = current.nodes[curveId]
+    if (source?.kind !== 'curve' || ringBandProfileError(source)) return
+    const id = newId('revolve')
+    session.commit(
+      addPrepared(current, {
+        kind: 'revolve',
+        id,
+        curve: curveId,
+        size: { system: 'us', value: 6 },
+      }),
+      { label: 'Made a custom ring band' },
+    )
+    ws().select([id])
+    if (!dockInspector) setSheet('inspector')
+  }
+
   const makeWire = (id: string) => {
     if (!session || readOnly || profile || curve || session.get().view.nodes[id]?.kind !== 'curve')
       return
@@ -866,6 +886,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
     drawProfile,
     drawCurve,
     makeWire,
+    makeRingBand,
     revolveCurve,
     openSectionTool,
     canRenderSavedDesign: !readOnly && renderBlocked === null,
@@ -1057,6 +1078,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
         }
       }}
       onRevolve={revolveCurve}
+      onMakeRingBand={makeRingBand}
       onEditSectionFeature={(node) => openSectionTool(sectionToolFor(node), node)}
       canEditSectionFeature={(node) => kernel.kinds.includes(node.kind)}
       onMakeWire={makeWire}
