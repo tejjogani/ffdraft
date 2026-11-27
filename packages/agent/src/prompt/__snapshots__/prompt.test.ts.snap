@@ -6,9 +6,9 @@ exports[`the frozen system prompt > has a stable hash (snapshot) that covers the
     7082,
     41656,
     10638,
-    17015,
+    17208,
   ],
-  "hash": "prompt-045869be2d8143",
+  "hash": "prompt-1beb5bbca374ce",
 }
 `;
 
@@ -178,6 +178,11 @@ Shared value lists:
   - type "asset":
     - assetId (required): string
     - rhinoLayer: string
+    - nativeAssetId: string
+    - nativeMeshAssetId: string
+    - nativeTransform: list of number (16–16 items)
+    - rhinoObjectId: string
+    - rhinoInstancePath: list of string (0–32 items)
   - type "builtin":
     - name: trophy | crown | dice = "trophy"
 - keepSourcePlacement: boolean = false. Use the coordinates in the mesh asset, in millimetres.
