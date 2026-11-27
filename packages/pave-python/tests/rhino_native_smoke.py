@@ -32,7 +32,23 @@ def check(url: str, piece_id: str, node_id: str) -> None:
     project.undo(curve["version"])
     project.undo(cap["version"])
     assert project.features[node_id] == source and "python-rim" not in project.features
-    print("Python client verified measured native face offset, copied rim and both undos.")
+    before = project.features
+    border = project.rhino_face_borders(node_id, face_index=face["faceIndex"])
+    assert [loop["kind"] for loop in border["curves"]] == ["outer", "inner"]
+    curve_ids = ["python-outer-border", "python-inner-border"]
+    border_change = project.duplicate_rhino_face_border(
+        node_id, face["faceIndex"], curve_ids, at=border["version"],
+    )
+    features = project.features
+    for curve_id, loop in zip(curve_ids, border["curves"]):
+        assert features[curve_id]["kind"] == "nurbsCurve"
+        assert "sourceObjectId" not in features[curve_id]
+        for key in ("degree", "knots", "controlPoints"):
+            assert features[curve_id][key] == loop[key]
+    assert features[node_id] == source
+    project.undo(border_change["version"])
+    assert project.features == before
+    print("Python client verified native face offset, exact edge and both face borders, including undo.")
 
 
 if __name__ == "__main__":

@@ -198,3 +198,64 @@ it('scopes the exact-edge tool and records duplication as an undoable assistant 
     (await api.call('pieces.get', { id: ref.pieceId })).design.nodes['native-rim'],
   ).toBeUndefined()
 })
+
+it('copies the outside rim and hole as a single scoped assistant change', async () => {
+  const { createRhinoSleeve } = await import('../test/rhino-sleeve')
+  const current = await createRhinoSleeve(server.server, api)
+  const other = await createRhinoSleeve(server.server, api)
+  const before = await api.call('pieces.get', { id: current.pieceId })
+  const unrelated = await api.call('pieces.get', { id: other.pieceId })
+  const cap = (await api.call('design.rhinoCapFaces', current)).faces.find(
+    (f) => f.innerLoops === 1,
+  )!
+  const inspect = { ...current, faceIndex: cap.faceIndex }
+  const border = await api.call('design.rhinoFaceBorders', inspect)
+  expect(border.curves?.map((c) => c.kind)).toEqual(['outer', 'inner'])
+  const ops = border.curves!.map(({ kind, degree, knots, controlPoints }) => ({
+    t: 'add',
+    node: { id: kind + '-rim', kind: 'nurbsCurve', degree, knots, controlPoints },
+  }))
+  server.model.push(
+    {
+      content: [tool('design_rhinoFaceBorders', { ...other, faceIndex: cap.faceIndex }, 'foreign')],
+      stop_reason: 'tool_use',
+    },
+    { content: [tool('design_rhinoFaceBorders', inspect, 'readBorders')], stop_reason: 'tool_use' },
+    {
+      content: [
+        tool(
+          'design_apply',
+          {
+            pieceId: current.pieceId,
+            baseVersion: border.version,
+            ops,
+            label: 'Copy the outside of the sleeve and its hole',
+          },
+          'copyBorders',
+        ),
+      ],
+      stop_reason: 'tool_use',
+    },
+    { content: [text('Copied the two rims as editable curves.')], stop_reason: 'end_turn' },
+  )
+  const { run } = await api.call('threads.send', {
+    text: 'Trace the top of this sleeve, including its hole, as separate editable curves.',
+    clientId: 'test',
+    clientMessageId: 'native-face-borders',
+    context: { pieceId: current.pieceId, stage: 'cad' },
+  })
+  await settled(server.parts, run.id)
+  const { steps } = await api.call('traces.run', { id: run.id })
+  expect(steps.filter((s) => s.name === 'design.rhinoFaceBorders').map((s) => s.isError)).toEqual([
+    true,
+    false,
+  ])
+  const after = await api.call('pieces.get', { id: current.pieceId })
+  expect(after.version).toBe(before.version + 1)
+  for (const op of ops) expect(after.design.nodes[op.node.id]).toMatchObject(op.node)
+  const [change] = await api.call('design.history', { pieceId: current.pieceId })
+  expect(change?.actor).toMatchObject({ runId: run.id })
+  await api.call('design.revert', { pieceId: current.pieceId, runId: run.id })
+  expect((await api.call('pieces.get', { id: current.pieceId })).design).toEqual(before.design)
+  expect((await api.call('pieces.get', { id: other.pieceId })).version).toBe(unrelated.version)
+})
