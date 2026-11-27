@@ -113,6 +113,8 @@ function Checks({
         {evaluating ? 'Updating…' : 'Checking…'}
       </span>
     )
+  if (issues.length === 0 && check.state === 'done' && check.report.metalMassG <= 0)
+    return <span className="px-1.5 text-fg-muted">No casting metal</span>
   if (issues.length === 0)
     return (
       <span className="flex h-7 items-center gap-1.5 px-1.5 font-medium text-ok">

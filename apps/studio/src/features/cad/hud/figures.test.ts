@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { PiecePanel } from '../PiecePanel'
 import { pieceFigures } from './figures'
+import { Hud } from './Hud'
 import type { ProductionCheck } from './useProductionCheck'
 
 const report = (metalMassG: number): Report => ({
@@ -63,4 +64,23 @@ describe('the Facts panel', () => {
     expect(html).toContain('3.6 g')
     expect(html).toContain('≈')
   })
+})
+
+it('shows when a checked assembly contains no metal to cast', () => {
+  const design = buildDesign(TEMPLATES.find((t) => t.id === 'halo')!.spec)
+  const check = { state: 'done' as const, diagnostics: [], report: report(0) }
+  const html = renderToStaticMarkup(
+    createElement(Hud, {
+      design,
+      check,
+      figures: { exact: true, report: check.report },
+      issues: [],
+      evaluating: false,
+      readOnly: false,
+      onFix() {},
+      onShow() {},
+    }),
+  )
+  expect(html).toContain('No casting metal')
+  expect(html).not.toContain('Ready to cast')
 })
