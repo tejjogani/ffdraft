@@ -13,6 +13,26 @@ beforeAll(async () => {
 }, BOOT_TIMEOUT)
 afterAll(() => server.dispose())
 
+it('retries a new-project submission without duplicating the named template', async () => {
+  const folder = await api.call('collections.create', { name: 'Commissions' })
+  const payload = {
+    requestId: 'new-project-retry',
+    title: 'Matched pair',
+    collectionId: folder.id,
+    templateId: 'solitaire',
+  }
+  const [first, second] = await Promise.all([
+    api.call('pieces.create', payload),
+    api.call('pieces.create', payload),
+  ])
+  expect(second.id).toBe(first.id)
+  expect(first).toMatchObject({ title: 'Matched pair', collectionId: folder.id, stage: 'design' })
+  expect(await api.call('pieces.list', { collectionId: folder.id })).toHaveLength(1)
+  expect(
+    (await api.call('pieces.create', { ...payload, requestId: 'separate-draft' })).id,
+  ).not.toBe(first.id)
+})
+
 describe('session & organisation', () => {
   it('returns the local user, their org and capabilities', async () => {
     const s = await api.call('session.get', {})

@@ -27,7 +27,7 @@ import { chooseDirection, proposeDirections, removeDirection, toDirection } from
 import { AppError, badRequest, conflict, forbidden } from '../errors'
 import { addIntakeAssets, confirmIntake, startIntake } from '../home-intake'
 import { estimateSpec, openAsCad, takeToCad } from '../ideas'
-import { createId } from '../ids'
+import { createId, requestedPieceId } from '../ids'
 import { ensure, ensureAll, getCollection, getPiece } from '../lookups'
 import { openPieceFile } from '../pavefile/open'
 import { savePieceFile } from '../pavefile/save'
@@ -158,12 +158,13 @@ function startingPoint(input: { templateId?: string; spec?: PieceSpec; kind?: Pi
 async function insertPiece(
   ctx: Ctx,
   values: Omit<typeof t.piece.$inferInsert, 'orgId' | 'id' | 'createdBy'>,
+  requestPieceId?: string,
 ) {
-  const row = await ctx.repo.pieces.insert({
-    id: createId('pc'),
-    createdBy: ctx.user.id,
-    ...values,
-  })
+  const data = { ...values, id: requestPieceId ?? createId('pc'), createdBy: ctx.user.id }
+  const row = requestPieceId
+    ? await ctx.repo.pieces.insertIfAbsent(data)
+    : await ctx.repo.pieces.insert(data)
+  if (!row) return toPiece(ctx, await getPiece(ctx, data.id))
   refreshFacts(ctx, row.id, row.version, row.design)
   publish(ctx, { type: 'piece.updated', pieceId: row.id })
   return toPiece(ctx, row)
@@ -238,18 +239,27 @@ export const pieces: HandlerGroup<'pieces'> = {
   },
 
   'pieces.create': async (ctx, input) => {
+    const id = input.requestId && requestedPieceId(ctx.orgId, ctx.user.id, input.requestId, 'create')
+    if (id) {
+      const existing = await ctx.repo.pieces.first(eq(t.piece.id, id))
+      if (existing) return toPiece(ctx, existing)
+    }
     await ensure(getCollection, ctx, input.collectionId)
     const start = startingPoint(input)
-    return insertPiece(ctx, {
-      title: input.title ?? start.spec?.title ?? 'Untitled piece',
-      kind: start.design.kind,
-      stage: start.stage,
-      brief: input.brief ?? '',
-      spec: start.spec,
-      design: start.design,
-      collectionId: input.collectionId ?? null,
-      origin: input.origin ? await toOrigin(ctx, input.origin, null) : null,
-    })
+    return insertPiece(
+      ctx,
+      {
+        title: input.title ?? start.spec?.title ?? 'Untitled piece',
+        kind: start.design.kind,
+        stage: start.stage,
+        brief: input.brief ?? '',
+        spec: start.spec,
+        design: start.design,
+        collectionId: input.collectionId ?? null,
+        origin: input.origin ? await toOrigin(ctx, input.origin, null) : null,
+      },
+      id,
+    )
   },
 
   'pieces.startIntake': startIntake,
