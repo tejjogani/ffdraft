@@ -1,5 +1,6 @@
 import { RenderSceneSchema } from '@pave/schema'
-import { InstancedMesh, Mesh, Vector3 } from 'three'
+import { InstancedMesh, Mesh, PerspectiveCamera, Scene, ShadowMaterial, Vector3 } from 'three'
+import { Reflector } from 'three/addons/objects/Reflector.js'
 import { describe, expect, it } from 'vitest'
 import { paveBar, solitaireRing } from '../../fixtures'
 import { cameraPose } from '../camera'
@@ -8,6 +9,7 @@ import { buildRigScene, captureFloor, sparkleUniforms } from './environment'
 import { evaluationToThree } from './evaluation'
 import { GemMaterial } from './gem'
 import { toThreePoint, toThreeQuat, zUpGroup } from './space'
+import { applyResolvedScene } from './stage'
 
 const resolved = (look: 'studio-soft' | 'black-acrylic' | 'editorial-warm' = 'studio-soft') =>
   resolveScene(RenderSceneSchema.parse({ look }), solitaireRing())
@@ -86,5 +88,29 @@ describe('environment', () => {
     expect(a.positions).toHaveLength(r.rig.sparkles.length)
     expect(a.positions[0]!.distanceTo(b.positions[0]!)).toBeGreaterThan(1)
     expect(a.radiance[0]!.x).toBeGreaterThan(0)
+  })
+
+  it('previews White gloss with a reflector, contact shadow and diffuse floor bounce', () => {
+    const white = resolveScene(RenderSceneSchema.parse({ ground: 'white-gloss' }), solitaireRing())
+    const floor = captureFloor(white)
+    expect(floor?.kind).toBe('emitter')
+    if (floor?.kind === 'emitter') expect(Math.min(...floor.radiance)).toBeGreaterThan(0)
+
+    const scene = new Scene()
+    const controller = applyResolvedScene(scene, new PerspectiveCamera(), white)
+    let reflector: Reflector | undefined
+    let shadow = false
+    scene.traverse((object) => {
+      if (object instanceof Reflector) reflector = object
+      if (object instanceof Mesh && object.material instanceof ShadowMaterial) shadow = true
+    })
+    expect(reflector).toBeDefined()
+    expect(shadow).toBe(true)
+
+    let disposed = 0
+    const material = reflector?.material
+    if (material && !Array.isArray(material)) material.addEventListener('dispose', () => disposed++)
+    controller.dispose()
+    expect(disposed).toBe(1)
   })
 })

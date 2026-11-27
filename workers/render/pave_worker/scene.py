@@ -245,6 +245,11 @@ def build_ground(g: Ground, center: Vec3) -> list[bpy.types.Object]:
         reflected_floor.visible_camera = False
         reflected_floor.data.materials.append(material)
         return [camera_floor, reflected_floor]
+    if kind == "white-gloss":
+        # The pale floor receives the softboxes so it shows both contact shadow and reflection.
+        obj = _plane("white-gloss", g["z"], g["size"], (center[0], center[1]))
+        obj.data.materials.append(_principled("white-gloss", g["color"], g["roughness"], g["ior"]))
+        return [obj]
     # Sweep: extrude the [depth, height] profile across its width, facing the camera.
     hw = g["width"] * MM / 2
     profile = g["profile"]
