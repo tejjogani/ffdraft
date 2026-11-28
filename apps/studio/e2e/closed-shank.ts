@@ -19,13 +19,13 @@ try {
     method: N,
     data: CommandInput<N>,
   ): Promise<CommandOutput<N>> {
-    const res = await page.request.post(base + '/api/rpc/' + method, { data })
+    const res = await page.request.post(`${base}/api/rpc/${method}`, { data })
     assert.ok(res.ok(), await res.text())
     return res.json()
   }
   const { id } = await rpc('pieces.create', { kind: 'ring', title: 'Closed shank guide test' })
   const button = (name: string) => page.getByRole('button', { name, exact: true })
-  await page.goto(base + '/pieces/' + id + '/design', { waitUntil: 'domcontentloaded' })
+  await page.goto(`${base}/pieces/${id}/design`, { waitUntil: 'domcontentloaded' })
   await button('Import model').click()
   const importer = page.getByRole('dialog', { name: 'Import model' })
   await importer
@@ -49,7 +49,7 @@ try {
       .getAttribute('aria-controls')
     assert.ok(list)
     await page
-      .locator('[id=' + JSON.stringify(list) + ']')
+      .locator(`[id=${JSON.stringify(list)}]`)
       .getByRole('option', { name: new RegExp(name) })
       .click()
   }
