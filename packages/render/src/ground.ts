@@ -9,7 +9,7 @@ import {
   type Look,
   WHITE_GLOSS_IOR,
 } from './looks'
-import type { Vec3 } from './math'
+import { orbitDirection, type Vec3 } from './math'
 import type { ResolvedGround } from './types'
 
 /** Sweep proportions in piece radii: floor toward the camera, a cove, then the wall. */
@@ -35,7 +35,8 @@ export function resolveGround(
   radius: number,
   cameraAzimuth: number,
 ): ResolvedGround {
-  const kind: GroundKind = choice === 'look' ? look.ground.kind : choice
+  const graded = choice === 'white-gloss-graded'
+  const kind: GroundKind = graded ? 'white-gloss' : choice === 'look' ? look.ground.kind : choice
   const spec = look.ground.kind === kind ? look.ground : DEFAULT_GROUNDS[kind]
   switch (kind) {
     case 'none':
@@ -54,7 +55,8 @@ export function resolveGround(
         roughness: spec.roughness,
       }
     case 'reflective':
-    case 'white-gloss':
+    case 'white-gloss': {
+      const [x, y] = orbitDirection(cameraAzimuth + 90, 0)
       return {
         kind,
         z: floorZ,
@@ -62,7 +64,11 @@ export function resolveGround(
         color: spec.color,
         roughness: spec.roughness,
         ior: kind === 'white-gloss' ? WHITE_GLOSS_IOR : ACRYLIC_IOR,
+        ...(graded && {
+          reflectionGrade: { axis: [x, y], halfWidth: radius * 0.22, low: 0.08, high: 1.14 },
+        }),
       }
+    }
   }
 }
 

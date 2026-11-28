@@ -21,11 +21,12 @@ import {
   ShaderMaterial,
   SphereGeometry,
   type Texture,
+  Vector2,
   Vector3,
   type WebGLRenderer,
 } from 'three'
 import type { Rgb } from '../color'
-import type { ResolvedRig, ResolvedScene } from '../types'
+import type { FloorReflectionGrade, ResolvedRig, ResolvedScene } from '../types'
 import type { SparkleUniforms } from './gem'
 import { toThreePoint, zUpGroup } from './space'
 
@@ -92,7 +93,7 @@ function diffuseFloorRadiance({ ambient, panels, pivot }: ResolvedRig, z: number
  * mirrored copy of the rig dimmed by Fresnel reflectance at grazing view.
  */
 export type CaptureFloor =
-  | { kind: 'emitter'; z: number; radiance: [number, number, number] }
+  | { kind: 'emitter'; z: number; radiance: Rgb; reflectionGrade?: FloorReflectionGrade }
   | { kind: 'mirror'; z: number; reflectance: number }
 
 /** Schlick reflectance of a dielectric at 75° incidence. */
@@ -106,8 +107,43 @@ export function captureFloor(resolved: ResolvedScene): CaptureFloor | undefined 
   if (g.kind === 'reflective')
     return { kind: 'mirror', z: g.z, reflectance: grazingReflectance(g.ior) }
   if (g.kind === 'sweep' || g.kind === 'white-gloss')
-    return { kind: 'emitter', z: g.z, radiance: diffuseFloorRadiance(resolved.rig, g.z, g.color) }
+    return {
+      kind: 'emitter',
+      z: g.z,
+      radiance: diffuseFloorRadiance(resolved.rig, g.z, g.color),
+      ...(g.kind === 'white-gloss' && g.reflectionGrade && { reflectionGrade: g.reflectionGrade }),
+    }
   return undefined
+}
+
+function gradedFloor(radiance: Rgb, { axis, halfWidth, low, high }: FloorReflectionGrade) {
+  return new ShaderMaterial({
+    toneMapped: false,
+    uniforms: {
+      radiance: { value: new Vector3(...radiance) },
+      axis: { value: new Vector2(...axis) },
+      halfWidth: { value: halfWidth },
+      low: { value: low },
+      high: { value: high },
+    },
+    vertexShader: /* glsl */ `
+      varying vec2 floorPosition;
+      void main() {
+        floorPosition = position.xy;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`,
+    fragmentShader: /* glsl */ `
+      uniform vec3 radiance;
+      uniform vec2 axis;
+      uniform float halfWidth;
+      uniform float low;
+      uniform float high;
+      varying vec2 floorPosition;
+      void main() {
+        float grade = smoothstep(-halfWidth, halfWidth, dot(floorPosition, axis));
+        gl_FragColor = vec4(radiance * mix(low, high, grade), 1.0);
+      }`,
+  })
 }
 
 function rigGroup(rig: ResolvedRig, scale = 1): Group {
@@ -156,8 +192,11 @@ export function buildRigScene(rig: ResolvedRig, radius: number, floor?: CaptureF
   if (floor?.kind === 'emitter') {
     const plane = new Mesh(
       new PlaneGeometry(radius * 200, radius * 200),
-      new MeshBasicMaterial({ color: new Color(...floor.radiance), toneMapped: false }),
+      floor.reflectionGrade
+        ? gradedFloor(floor.radiance, floor.reflectionGrade)
+        : new MeshBasicMaterial({ color: new Color(...floor.radiance), toneMapped: false }),
     )
+    if (floor.reflectionGrade) plane.name = 'graded-floor'
     plane.position.set(rig.pivot[0], rig.pivot[1], floor.z)
     stage.add(plane)
   }

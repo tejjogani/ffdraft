@@ -48,6 +48,7 @@ const GROUNDS = [
   { value: 'sweep', label: 'Seamless paper' },
   { value: 'reflective', label: 'Black acrylic' },
   { value: 'white-gloss', label: 'White gloss' },
+  { value: 'white-gloss-graded', label: 'White gloss, graded reflection' },
 ] as const satisfies ReadonlyArray<{ value: RenderScene['ground']; label: string }>
 
 /** A slider that shows its value while dragged and reports once on release. */
@@ -275,6 +276,12 @@ export function ShotInspector({
           onChange={(ground) => onChange({ ground })}
           options={GROUNDS.map((g) => ({ value: g.value, label: `Ground: ${g.label}` }))}
         />
+        {scene.ground === 'white-gloss-graded' && (
+          <p className="text-2xs text-fg-subtle">
+            The browser approximates this reflection. Render in Blender to judge the gradient on
+            polished metal.
+          </p>
+        )}
       </Section>
 
       <Section title="Metal">

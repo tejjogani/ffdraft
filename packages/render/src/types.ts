@@ -68,6 +68,15 @@ export interface ResolvedRig {
   ambient: { zenith: Rgb; horizon: Rgb; nadir: Rgb }
 }
 
+/** A smooth tone change across the floor seen by glossy surfaces. */
+export interface FloorReflectionGrade {
+  /** Unit XY direction toward the bright side, relative to the floor's centre. */
+  axis: [number, number]
+  halfWidth: number
+  low: number
+  high: number
+}
+
 export type ResolvedGround =
   | { kind: 'none' }
   | { kind: 'shadow'; z: number; size: number }
@@ -90,6 +99,7 @@ export type ResolvedGround =
       color: Rgb
       roughness: number
       ior: number
+      reflectionGrade?: FloorReflectionGrade
     }
 
 export type Ease = 'linear' | 'easeIn' | 'easeOut' | 'easeInOut'

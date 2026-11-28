@@ -299,6 +299,26 @@ describe('resolveScene', () => {
     expect(base.ground.kind).toBe('shadow')
   })
 
+  it('adds a camera-relative reflection grade only when the shot selects it', () => {
+    const input: RenderSceneInput = {
+      camera: { preset: 'custom', position: [0, -80, 40], target: [0, 0, 20] },
+    }
+    const white = resolveScene(scene({ ...input, ground: 'white-gloss' }), ring)
+    const graded = resolveScene(scene({ ...input, ground: 'white-gloss-graded' }), ring)
+    expect(graded).toEqual({
+      ...white,
+      ground: {
+        ...white.ground,
+        reflectionGrade: {
+          axis: [1, expect.closeTo(0)],
+          halfWidth: expect.closeTo(graded.subject.radius * 0.22),
+          low: 0.08,
+          high: 1.14,
+        },
+      },
+    })
+  })
+
   it('preserves an explicitly composed black acrylic camera', () => {
     const camera = {
       preset: 'custom' as const,

@@ -16,7 +16,20 @@ from pathlib import Path
 import bpy
 from mathutils import Matrix, Quaternion
 
-from .job import MM, Ambient, Animation, Camera, Ground, Keyframe, Panel, Rig, Scene, Sparkle, Vec3
+from .job import (
+    MM,
+    Ambient,
+    Animation,
+    Camera,
+    FloorReflectionGrade,
+    Ground,
+    Keyframe,
+    Panel,
+    Rig,
+    Scene,
+    Sparkle,
+    Vec3,
+)
 from .materials import build_materials
 
 
@@ -226,6 +239,38 @@ def _plane(name: str, z: float, size: float, center: tuple[float, float]) -> bpy
     return obj
 
 
+def _grade_floor(material: bpy.types.Material, grade: FloorReflectionGrade, base_color: Vec3) -> None:
+    """Change the floor albedo for glossy rays while keeping the direct view of the floor pale."""
+    tree = material.node_tree
+    position = tree.nodes.new("ShaderNodeTexCoord")
+    across = tree.nodes.new("ShaderNodeVectorMath")
+    across.operation = "DOT_PRODUCT"
+    across.inputs[1].default_value = (*grade["axis"], 0.0)
+    tree.links.new(position.outputs["Object"], across.inputs[0])
+
+    ramp = tree.nodes.new("ShaderNodeMapRange")
+    ramp.interpolation_type = "SMOOTHSTEP"
+    ramp.inputs["From Min"].default_value = -grade["halfWidth"] * MM
+    ramp.inputs["From Max"].default_value = grade["halfWidth"] * MM
+    ramp.inputs["To Min"].default_value = grade["low"] - 1.0
+    ramp.inputs["To Max"].default_value = grade["high"] - 1.0
+    tree.links.new(across.outputs["Value"], ramp.inputs["Value"])
+
+    path = tree.nodes.new("ShaderNodeLightPath")
+    scale = tree.nodes.new("ShaderNodeMath")
+    scale.operation = "MULTIPLY_ADD"
+    scale.inputs[2].default_value = 1.0
+    tree.links.new(ramp.outputs["Result"], scale.inputs[0])
+    tree.links.new(path.outputs["Is Glossy Ray"], scale.inputs[1])
+
+    color = tree.nodes.new("ShaderNodeVectorMath")
+    color.operation = "SCALE"
+    color.inputs[0].default_value = base_color
+    tree.links.new(scale.outputs[0], color.inputs["Scale"])
+    bsdf = tree.nodes["Principled BSDF"]
+    tree.links.new(color.outputs["Vector"], bsdf.inputs["Base Color"])
+
+
 def build_ground(g: Ground, center: Vec3) -> list[bpy.types.Object]:
     kind = g["kind"]
     if kind == "none":
@@ -253,7 +298,10 @@ def build_ground(g: Ground, center: Vec3) -> list[bpy.types.Object]:
     if kind == "white-gloss":
         # The pale floor receives the softboxes so it shows both contact shadow and reflection.
         obj = _plane("white-gloss", g["z"], g["size"], (center[0], center[1]))
-        obj.data.materials.append(_principled("white-gloss", g["color"], g["roughness"], g["ior"]))
+        material = _principled("white-gloss", g["color"], g["roughness"], g["ior"])
+        if grade := g.get("reflectionGrade"):
+            _grade_floor(material, grade, g["color"])
+        obj.data.materials.append(material)
         return [obj]
     # Sweep: extrude the [depth, height] profile across its width, facing the camera.
     hw = g["width"] * MM / 2
