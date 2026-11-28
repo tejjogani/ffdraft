@@ -142,6 +142,14 @@ class Project:
         self._record_write(result)
         return result
 
+    def stone_instances(
+        self, feature_id: str, *, offset: int = 0, limit: int = 30,
+    ) -> JsonObject:
+        """Read positions and edit keys for one page of stones in a row, halo or pavé."""
+        return self._cad_rpc(
+            "design.stoneInstances", nodeId=feature_id, offset=offset, limit=limit,
+        )
+
     def rhino_edges(
         self, feature_id: str, *, offset: int = 0, limit: int = 30,
         edge_index: int | None = None,

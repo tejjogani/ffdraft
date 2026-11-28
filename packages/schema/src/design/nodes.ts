@@ -329,12 +329,23 @@ export const Setting = z
   })
   .meta({ title: 'Setting', description: 'The head that holds one stone.' })
 
+/** Opaque identity of a generated girdle placement, supplied by the kernel. */
+export const StonePlacementId = z.string().regex(/^s[0-9a-z]{1,11}$/)
+export const MAX_STONE_OFFSET_MM = 1000
+const offsetAxis = z.number().min(-MAX_STONE_OFFSET_MM).max(MAX_STONE_OFFSET_MM)
+export const StoneOffsetMm = z.tuple([offsetAxis, offsetAxis, offsetAxis])
+const stoneOffsetsMm = z.record(StonePlacementId, StoneOffsetMm).optional().meta({
+  description:
+    'Displace one generated stone in model X, Y, Z, in mm from its generated position. Use design.stoneInstances to get a placementId, then patch {"stoneOffsetsMm":{"<placementId>":[0.1,0,0]}}. Use null for a placement key to reset it. Seats and shared metal stay in their generated positions. An offset is dormant when its generated placement is absent.',
+})
+
 export const Halo = z
   .object({
     ...base,
     kind: z.literal('halo'),
     ...metal,
     ...stone,
+    stoneOffsetsMm,
     around: ref('Around', ['gem']),
     head: ref('Head', ['setting'], {
       advanced: true,
@@ -366,6 +377,7 @@ export const GemRow = z
     ...base,
     kind: z.literal('gemRow'),
     ...stone,
+    stoneOffsetsMm,
     host: ref('On band', ['ringShank']),
     setting: choice('Setting', ['pave', 'channel', 'sharedProng', 'bar', 'flush'], 'pave', {
       labels: { pave: 'Pavé', sharedProng: 'Shared prong' },
@@ -404,6 +416,7 @@ export const Pave = z
     ...base,
     kind: z.literal('pave'),
     ...stone,
+    stoneOffsetsMm,
     host: ref('Covers', BODY_KINDS),
     region: z
       .discriminatedUnion('type', [
@@ -1041,6 +1054,10 @@ export type Node = z.infer<typeof NodeSchema>
 /** What callers may pass when creating a node: defaults are optional. */
 export type NodeInput = z.input<typeof NodeSchema>
 export type NodeOf<K extends NodeKind> = Extract<Node, { kind: K }>
+
+export function isGeneratedStoneArray(node: Node): node is NodeOf<'gemRow' | 'halo' | 'pave'> {
+  return node.kind === 'gemRow' || node.kind === 'halo' || node.kind === 'pave'
+}
 export type NodeInputOf<K extends NodeKind> = Extract<NodeInput, { kind: K }>
 
 /** An editable loft or rail sweep evaluated as a surface. */

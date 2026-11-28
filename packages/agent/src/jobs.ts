@@ -101,6 +101,7 @@ export const JOB_RECIPES: Record<JobStage, JobRecipe> = {
           'design.inspectMount',
           'design.planImportRoles',
           'design.meshComponents',
+          'design.stoneInstances',
           'match.traceOutline',
           'freeform.analyze',
         ],

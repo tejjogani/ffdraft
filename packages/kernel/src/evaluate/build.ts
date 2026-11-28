@@ -2,6 +2,7 @@
 import {
   importRoleOf,
   importSourceRole,
+  isGeneratedStoneArray,
   isImportReference,
   type Node,
   nodeRefs,
@@ -16,8 +17,10 @@ import {
   type NodeStatus,
   type Quality,
   type Solid,
+  type Stone,
 } from '../core'
 import {
+  add,
   composeTransform,
   IDENTITY,
   type Mat4,
@@ -29,6 +32,7 @@ import { isRuntimeFault } from '../runtime/index'
 import { meshVolume } from '../solid/meshing'
 import { isClosedByConstruction, surfaceDefectsOf, withSolidScope } from '../solid/solid'
 import type { AssetResolver, Detail, Diagnostic } from '../types'
+import { hashString } from './hash'
 
 export interface BuildEnvironment {
   detail: Detail
@@ -48,11 +52,73 @@ const matrixOf = (node: Node): Mat4 =>
 
 type Placed = Required<Omit<FeatureOutput, 'data'>> & { data: unknown }
 
+function stonePlacementId({ frame, dims, cut, setting }: Stone): string {
+  const pose = [...frame.origin, ...frame.x, ...frame.z, dims.width, dims.length, dims.depth]
+  // The nominal seat determines identity. Tiny rounding differences between evaluations
+  // preserve it, while a different stone taking over the old list index gets a new key.
+  return `s${hashString(`${cut}|${setting}|${pose.map((v) => Math.round(v * 1e6)).join(',')}`)}`
+}
+
 /** The builder's output moved by the node's own transform. */
-function place(out: FeatureOutput, matrix: Mat4): Placed {
+function place(out: FeatureOutput, matrix: Mat4, node: Node, diagnostics: Diagnostic[]): Placed {
   const still = matrix === IDENTITY
   const move = (solid: Solid) => (still ? solid : solid.transformed(matrix))
   const s = uniformScaleOf(matrix)
+  const generated = isGeneratedStoneArray(node)
+  const offsets = generated ? node.stoneOffsetsMm : undefined
+  const nominal = out.stones ?? []
+  const keys = generated ? nominal.map(stonePlacementId) : []
+  const unique = new Set<string>()
+  const ambiguous = new Set<string>()
+  for (const key of keys) {
+    if (unique.has(key)) ambiguous.add(key)
+    else unique.add(key)
+  }
+  const applied = new Set<string>()
+  const stones = nominal.map((stone, i) => {
+    const placed = still
+      ? stone
+      : {
+          ...stone,
+          frame: transformFrame(matrix, stone.frame),
+          dims: {
+            length: stone.dims.length * s,
+            width: stone.dims.width * s,
+            depth: stone.dims.depth * s,
+          },
+        }
+    const placementId = keys[i]
+    if (!placementId || ambiguous.has(placementId)) return placed
+    const offset = offsets?.[placementId]
+    if (!offset) return { ...placed, placementId }
+    applied.add(placementId)
+    if (offset.every((v) => v === 0)) return { ...placed, placementId }
+    // Only the stone is displaced. The cutters, beads and shared metal below use the
+    // untouched generated geometry. Apply after transforms so XYZ stays in model mm.
+    return {
+      ...placed,
+      placementId,
+      frame: { ...placed.frame, origin: add(placed.frame.origin, offset) },
+    }
+  })
+  if (offsets) {
+    const moved = [...applied].filter((key) => offsets[key]!.some((v) => v !== 0))
+    if (moved.length)
+      diagnostics.push({
+        level: 'warning',
+        code: 'stone.offsetSeating',
+        nodeId: node.id,
+        message: `“${labelOf(node)}” has ${moved.length} manually displaced ${moved.length === 1 ? 'stone' : 'stones'}. Seats and shared metal stay in their generated positions. Check the fit before making.`,
+      })
+    const missing = Object.keys(offsets).filter((key) => !applied.has(key)).length
+    if (missing)
+      diagnostics.push({
+        level: 'info',
+        code: 'stone.offsetDormant',
+        nodeId: node.id,
+        message: `“${labelOf(node)}” has ${missing} saved ${missing === 1 ? 'offset' : 'offsets'} for placements absent from its current layout.`,
+      })
+  }
   return {
     sheets: (out.sheets ?? []).map((b) => ({ ...b, solid: move(b.solid) })),
     bodies: (out.bodies ?? []).map((b) => ({
@@ -63,19 +129,7 @@ function place(out: FeatureOutput, matrix: Mat4): Placed {
           nativeImport: { ...b.nativeImport, matrix: multiply(matrix, b.nativeImport.matrix) },
         }),
     })),
-    stones: (out.stones ?? []).map((st) =>
-      still
-        ? st
-        : {
-            ...st,
-            frame: transformFrame(matrix, st.frame),
-            dims: {
-              length: st.dims.length * s,
-              width: st.dims.width * s,
-              depth: st.dims.depth * s,
-            },
-          },
-    ),
+    stones,
     cuts: (out.cuts ?? []).map((c) => ({ ...c, solid: move(c.solid) })),
     additions: (out.additions ?? []).map((a) => ({ ...a, solid: move(a.solid) })),
     frames: Object.fromEntries(
@@ -281,6 +335,8 @@ export async function buildNode(
       const out = place(
         await (feature.build as (n: Node, c: BuildContext) => FeatureOutput)(node, ctx),
         matrix,
+        node,
+        diagnostics,
       )
       checkGeometry(out, env)
       return out

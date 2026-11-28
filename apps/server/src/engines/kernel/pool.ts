@@ -52,6 +52,7 @@ export interface KernelPoolOptions {
 
 const DEFAULT_TIMEOUT_MS: Record<TaskKind, number> = {
   evaluate: 120_000,
+  stoneInstances: 120_000,
   export: 300_000,
   renderInput: 300_000,
   subject: 120_000,
@@ -63,6 +64,7 @@ const DEFAULT_TIMEOUT_MS: Record<TaskKind, number> = {
 
 const VERB: Record<TaskKind, string> = {
   evaluate: 'evaluate this design',
+  stoneInstances: 'inspect these stone placements',
   export: 'export this design',
   renderInput: 'prepare this design for rendering',
   subject: 'measure this design for framing',
@@ -74,6 +76,7 @@ const VERB: Record<TaskKind, string> = {
 /** Queue order: lower first. Anything above 0 is heavy and may not take the last free worker. */
 const RANK: Record<TaskKind, number> = {
   evaluate: 0,
+  stoneInstances: 0,
   picture: 0,
   export: 1,
   renderInput: 1,

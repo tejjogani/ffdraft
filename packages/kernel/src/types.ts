@@ -88,6 +88,8 @@ export interface StoneInstance {
   /** `${nodeId}:${index}` — stable as long as the layout parameters are unchanged. */
   id: string
   nodeId: string
+  /** Stable edit key for this nominal array placement, independent of its ordinal. */
+  placementId?: string
   cut: GemCutId
   stone: GemMaterialId
   dims: GemDims

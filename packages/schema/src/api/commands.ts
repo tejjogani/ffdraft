@@ -29,7 +29,13 @@ import {
   PieceIntakeSchema,
 } from '../design/intake'
 import { StoneChangeSchema, StoneTargetSchema } from '../design/intents'
-import { MountCage, NODE_KINDS, StoneSourcing } from '../design/nodes'
+import {
+  MountCage,
+  NODE_KINDS,
+  StoneOffsetMm,
+  StonePlacementId,
+  StoneSourcing,
+} from '../design/nodes'
 import { NurbsDefinition } from '../design/nurbs'
 import { PhotoReadSchema } from '../design/photo-read'
 import { PieceSpecSchema } from '../design/spec'
@@ -1059,6 +1065,31 @@ export const commands = {
     tool: true,
     input: z.object({ pieceId: id, detail: z.enum(['draft', 'production']).default('draft') }),
     output: EvaluationSummarySchema,
+  }),
+  'design.stoneInstances': def({
+    description:
+      'Read a page of individual generated stones on a gemRow, halo or pavé. Offset is a zero-based list index; number is the one-based label in CAD. girdleMm is the current model XYZ and offsetMm is its displacement from the generated position. Use the returned placementId and version with design.apply to update stoneOffsetsMm. A null placementId means the placement has no unique edit key.',
+    kind: 'query',
+    tool: true,
+    input: z.object({
+      pieceId: id,
+      nodeId: id,
+      offset: componentId.default(0),
+      limit: z.number().int().min(1).max(100).default(30),
+    }),
+    output: z.object({
+      version: componentId,
+      stoneCount: componentId,
+      stones: z.array(
+        z.object({
+          id,
+          number: z.number().int().positive(),
+          placementId: StonePlacementId.nullable(),
+          girdleMm: meshPoint,
+          offsetMm: StoneOffsetMm,
+        }),
+      ),
+    }),
   }),
   'design.export': def({
     description:

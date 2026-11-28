@@ -351,9 +351,20 @@ function Workspace({
             empty: 'Add a solid body or stone to render.',
           }[availability]
   const partRevisions = useRef(new Map<string, string>())
+  const stonePlacements = useRef({ pieceId, keys: new Map<string, string | undefined>() })
   useEffect(() => {
     if (!evaluation || stale) return
-    const stones = new Set(evaluation.stones.map((s) => s.id))
+    const previousStones = stonePlacements.current
+    const keys = new Map(evaluation.stones.map((s) => [s.id, s.placementId]))
+    stonePlacements.current = { pieceId, keys }
+    const stones = new Set(keys.keys())
+    if (previousStones.pieceId === pieceId) {
+      // A smaller or repacked array can give a different stone the same display ordinal.
+      // Clear selection and view-only masks for those ordinals before they can edit another stone.
+      for (const [id, placement] of previousStones.keys) {
+        if (keys.has(id) && keys.get(id) !== placement) stones.delete(id)
+      }
+    }
     const parts = [...evaluation.parts, ...(evaluation.referenceParts ?? [])]
     const revisions = new Map(parts.map((part) => [part.id, part.rev]))
     const previous = partRevisions.current
@@ -370,7 +381,7 @@ function Workspace({
         )
       },
     )
-  }, [view, evaluation, stale])
+  }, [view, evaluation, stale, pieceId])
   const check = useProductionCheck(
     pieceId,
     settled,
@@ -515,8 +526,8 @@ function Workspace({
   // What is selected here goes along when the assistant is opened with mod+j.
   useEffect(() => {
     const set = useAssistant.getState().setLiveSelection
-    set(selection.length ? { pieceId, nodeIds: [...selection] } : null)
-  }, [selection, pieceId])
+    set(selection.length ? { pieceId, nodeIds: stone && !stale ? [stone] : [...selection] } : null)
+  }, [selection, pieceId, stone, stale])
   useEffect(() => () => useAssistant.getState().setLiveSelection(null), [])
 
   // ── Actions ──────────────────────────────────────────────────────────────────────────────
@@ -1173,6 +1184,7 @@ function Workspace({
       design={view}
       session={session}
       evaluation={evaluation}
+      staleEvaluation={stale}
       prior={run?.prior ?? null}
       readOnly={readOnly}
       onDelete={requestDelete}

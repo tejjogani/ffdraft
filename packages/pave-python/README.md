@@ -68,6 +68,23 @@ project.make_wire(
 )
 ```
 
+## Move one generated stone
+
+Read the stone row, halo or pavé feature by ID. Use its returned placement ID and design version to save an XYZ displacement in model millimetres from the generated girdle position. The stone moves independently and its seat and shared metal stay at their generated positions. An offset goes dormant if regeneration removes that placement.
+
+```python
+page = project.stone_instances("shoulder-row", offset=1, limit=1)
+key = page["stones"][0]["placementId"]
+if key:
+    project.apply(
+        [{"t": "update", "id": "shoulder-row", "patch": {"stoneOffsetsMm": {key: [0.1, 0, 0.05]}}}],
+        "Move shoulder stone 2",
+        base_version=page["version"],
+    )
+```
+
+To reset the stone, read the current version and set that placement's value to `None` in the patch.
+
 ## Thicken a modeling surface
 
 Use an uncapped loft or rail sweep as the source. The resulting solid updates when its source curves change. A negative thickness builds on the opposite side.

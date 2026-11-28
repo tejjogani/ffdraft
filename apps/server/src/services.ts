@@ -183,6 +183,12 @@ export interface GeometryService extends Service {
     opts: { detail: 'draft' | 'production' } & GeometryCall,
     sctx: ServiceContext,
   ): Promise<EvaluationSummary>
+  stoneInstances?(
+    design: Design,
+    opts: Pick<CommandParsedInput<'design.stoneInstances'>, 'nodeId' | 'offset' | 'limit'> &
+      GeometryCall,
+    sctx: ServiceContext,
+  ): Promise<Omit<CommandOutput<'design.stoneInstances'>, 'version'>>
   export(
     design: Design,
     opts: { format: ExportFormat; stones: boolean } & GeometryCall,

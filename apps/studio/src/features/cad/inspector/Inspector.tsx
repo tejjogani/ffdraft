@@ -6,6 +6,7 @@ import type { Evaluation } from '@pave/kernel'
 import {
   customMountPartIssue,
   type Design,
+  isGeneratedStoneArray,
   isImportReference,
   isRhinoRoleBody,
   type NodeOf,
@@ -37,6 +38,7 @@ import { RhinoFaceBorders } from '../curves/RhinoFaceBorders'
 import { isSectionFeature, type SectionFeature, sectionCurveOptions } from '../curves/section-model'
 import { KIND_ICON } from '../kindIcon'
 import { type ImportedMesh, isImportedMesh } from '../mesh-edit/model'
+import { setField } from '../ops'
 import { isProfileNode, type ProfileNode, profileSize } from '../profiles/profile'
 import { RhinoEndFaceTool } from '../rhino/RhinoEndFaceTool'
 import { rhinoRoleLabel } from '../rhino/RhinoRoleReview'
@@ -44,12 +46,14 @@ import { useWorkspace } from '../state/workspace'
 import { FieldEditContext, useNodeEdit } from './edit'
 import { FieldControl } from './FieldControl'
 import { inspectorModel } from './model'
+import { StoneDisplacement } from './widgets/stone-displacement'
 
 export interface InspectorProps {
   pieceId: string
   design: Design
   session: DesignSession | null
   evaluation: Evaluation | null
+  staleEvaluation: boolean
   /** The assistant's latest run: values before it, by node and field. */
   prior: Record<string, Record<string, unknown>> | null
   readOnly: boolean
@@ -73,6 +77,7 @@ export function Inspector({
   design,
   session,
   evaluation,
+  staleEvaluation,
   prior,
   readOnly,
   onDelete,
@@ -132,7 +137,10 @@ export function Inspector({
   const includeLabel = isImportReference(node)
     ? 'Include source in Rhino export'
     : 'Count in weight and export'
-  const picked = stone ? evaluation?.stones.find((s) => s.id === stone) : undefined
+  const picked = stone
+    ? evaluation?.stones.find((s) => s.id === stone && s.nodeId === node.id)
+    : undefined
+  const placementId = picked?.placementId
   const prongTips = evaluation?.prongTips?.filter((tip) => tip.nodeId === node.id)
   return (
     <FieldEditContext
@@ -210,6 +218,18 @@ export function Inspector({
         {/* Keyed by feature: another feature's form opens at its top, not where this one was scrolled. */}
         <ScrollArea key={node.id} className="flex-1">
           <div className="flex flex-col pb-6">
+            {placementId && isGeneratedStoneArray(node) && (
+              <StoneDisplacement
+                key={`${node.id}/${placementId}`}
+                saved={node.stoneOffsetsMm?.[placementId]}
+                disabled={edit.readOnly || staleEvaluation}
+                onSave={(value) =>
+                  session?.commit([setField(node.id, ['stoneOffsetsMm', placementId], value)], {
+                    label: value ? 'Displace selected stone' : 'Reset selected stone position',
+                  })
+                }
+              />
+            )}
             {node.kind === 'nurbsCurve' && (
               <NurbsControls
                 key={`${pieceId}/${node.id}`}

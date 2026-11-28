@@ -117,6 +117,11 @@ export const TOOL_CHIPS = {
     running: 'Reading mesh points and faces',
     done: 'Read mesh points and faces',
   },
+  'design.stoneInstances': {
+    quiet: true,
+    running: 'Reading individual stone placements',
+    done: 'Read individual stone placements',
+  },
   'design.history': { quiet: true, running: 'Reading the history', done: 'Read the history' },
   'design.revert': {
     running: 'Undoing',
