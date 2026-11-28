@@ -68,6 +68,10 @@ describe('the node reference', () => {
     expect(NODE_REFERENCE).not.toMatch(/widget|advanced|refKinds|\bstep\b/)
   })
 
+  it('describes the original name of a Rhino object, including an unnamed one', () => {
+    expect(NODE_REFERENCE).toContain('rhinoObjectName: string | null')
+  })
+
   it('is stable (snapshot)', () => {
     expect(NODE_REFERENCE).toMatchSnapshot()
   })
