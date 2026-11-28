@@ -137,6 +137,11 @@ export const TOOL_CHIPS = {
       return what ? `Changed the ${stones} to ${what}` : `Changed the ${stones}`
     },
   },
+  'sourcing.search': { running: 'Searching Diaex for this stone', done: 'Checked Diaex inventory' },
+  'sourcing.stone': {
+    running: 'Checking the diamond listing',
+    done: 'Checked the diamond listing',
+  },
   'design.evaluate': {
     quiet: true,
     running: 'Checking weights and manufacturability',

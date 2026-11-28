@@ -47,7 +47,7 @@ folders (a folder can hold folders, one level deep), and each shows what every s
 | Connecting Claude Code to Pavé over MCP | Planned, not built |
 | **Moodboards** | Create a shared moodboard and import selected references into a project design. |
 | On model | Create a reusable synthetic model card, approve it for shoots, then choose **Use model** in a project. Shot setup saves to this browser. The shipped server supports planning these shots. Generating photographs requires an on-model imaging service implementation. |
-| Diamond sourcing | Search Diaex using CAD measurements. Imported diamond bodies can open size-filtered Diaex listings before assigning production roles. In-app recommendations require the partner search service. |
+| Diamond sourcing | Search Diaex using CAD measurements. Choose **Search inventory** to compare available public listings inside the project. Confirmed single stones can preview and apply a measured replacement. |
 | Desktop app | Not built yet. Pavé runs in your browser from a local server |
 
 ## Install

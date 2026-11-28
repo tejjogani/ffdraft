@@ -1077,6 +1077,7 @@ export const commands = {
 
   // ── Sourcing ──────────────────────────────────────────────────────────────────────────────
   'sourcing.search': def({
+    tool: true,
     description:
       'Browse Diaex for a single gemstone or imported Rhino diamond, or look up a public stone ID.',
     kind: 'query',
@@ -1086,6 +1087,10 @@ export const commands = {
       color: z.string().trim().min(1).max(32).optional(),
       sku: DiaexStoneId.optional(),
       searchCut: z.enum(DIAEX_CUT_IDS).optional(),
+      publicBrowse: z
+        .boolean()
+        .optional()
+        .describe('Search the signed-out public Diaex catalogue when the user asks for inventory.'),
     }),
     output: z.object({
       candidates: z.array(SourcedDiamondSchema),
@@ -1094,10 +1099,16 @@ export const commands = {
     }),
   }),
   'sourcing.stone': def({
+    tool: true,
     description:
       'Recheck an exact Diaex diamond against the piece’s current stone before applying its measurements.',
     kind: 'query',
-    input: z.object({ pieceId: id, nodeId: id, sku: DiaexStoneId }),
+    input: z.object({
+      pieceId: id,
+      nodeId: id,
+      sku: DiaexStoneId,
+      publicBrowse: z.boolean().optional(),
+    }),
     output: SourcedDiamondSchema,
   }),
 

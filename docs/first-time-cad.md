@@ -68,7 +68,7 @@ Choose Stone for a gemstone. Confirm the species, cut, width, length, depth and 
 
 ## Find diamonds for an imported piece
 
-Open **Sourcing** and pick the diamond under **Stone in CAD**. Pavé measures that body in millimetres and looks for available stones near its length and width. Change **Search cut** or **Color grade** to explore alternatives. **Browse Diaex** opens the size-filtered search on Diaex. Browsing leaves the design as drawn.
+Open **Sourcing** and pick the diamond under **Stone in CAD**. Pavé measures that body in millimetres and looks for available stones near its length and width. Change **Search cut** or **Color grade** to explore alternatives. **Search inventory** lists available diamonds in Pavé. Compare length, width and depth with the CAD dimensions. Paste a public Diaex ID to check a specific stone. **Browse Diaex** opens the same filters on the marketplace. Browsing leaves the design as drawn.
 
 ## Fit a sourced stone to an imported setting
 

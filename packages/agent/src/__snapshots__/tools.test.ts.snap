@@ -2,7 +2,7 @@
 
 exports[`tool schemas > is sorted and stable (snapshot) 1`] = `
 {
-  "hash": "18d01bf6e484f2",
+  "hash": "02e17ae9fd3799",
   "tools": [
     "boards_create mutation",
     "boards_delete mutation confirm strict",
@@ -77,6 +77,8 @@ exports[`tool schemas > is sorted and stable (snapshot) 1`] = `
     "shots_estimate query",
     "shots_get query strict",
     "shots_list query",
+    "sourcing_search query",
+    "sourcing_stone query",
     "ui_context query client",
     "ui_navigate mutation client",
     "viewport_capture query client",

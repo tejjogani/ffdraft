@@ -152,10 +152,10 @@ async function importedCadTarget(
   throw badRequest('The retained Rhino mesh does not have usable stone dimensions for Diaex.')
 }
 
-function searchLink(target: Target, browse = DIAEX_BROWSE): string {
+function browseFilters(target: Target) {
   const { length_mm, width_mm, tol_minus_mm, tol_plus_mm } = target.seat
   const stoneTypes = { natural: ['Natural'], lab: ['CVD', 'HPHT'], any: undefined }
-  const filters = {
+  return {
     shapes: [target.shape],
     stone_types: stoneTypes[target.origin],
     colors: target.colors,
@@ -169,7 +169,9 @@ function searchLink(target: Target, browse = DIAEX_BROWSE): string {
     max_width_mm: roundMm(width_mm + tol_plus_mm),
     availability: ['available'],
   }
-  return `${browse}?f=${encodeURIComponent(JSON.stringify(filters))}`
+}
+function searchLink(target: Target, browse = DIAEX_BROWSE): string {
+  return `${browse}?f=${encodeURIComponent(JSON.stringify(browseFilters(target)))}`
 }
 
 function browseUrl(address: string): URL | undefined {
@@ -280,8 +282,14 @@ function unavailable(details: BrowseDetails): AppError {
   )
 }
 
-async function requestInventory(ctx: Ctx, path: string, details: BrowseDetails, body?: unknown) {
-  if (!ctx.diaexPartnerApiUrl)
+async function requestInventory(
+  ctx: Ctx,
+  path: string,
+  details: BrowseDetails,
+  body?: unknown,
+  api = ctx.diaexPartnerApiUrl,
+) {
+  if (!api)
     throw new AppError(
       'not_configured',
       'Diaex inventory is not connected. Open Diaex to browse.',
@@ -289,7 +297,7 @@ async function requestInventory(ctx: Ctx, path: string, details: BrowseDetails, 
     )
   const timeout = AbortSignal.timeout(8_000)
   try {
-    const res = await fetch(`${ctx.diaexPartnerApiUrl.replace(/\/$/, '')}${path}`, {
+    const res = await fetch(`${api.replace(/\/$/, '')}${path}`, {
       method: body ? 'POST' : 'GET',
       headers: {
         Accept: 'application/json',
@@ -307,14 +315,92 @@ async function requestInventory(ctx: Ctx, path: string, details: BrowseDetails, 
   }
 }
 
+// Public Browse and the partner API have distinct signed-out response contracts.
+const PublicReply = z.object({
+  access: SignedOutAccess.omit({ prices_hidden_reason: true }),
+  items: z.array(z.unknown()).max(100),
+})
+const PublicStone = z.object({
+  id: DiaexStoneId,
+  shape_group: z.string(),
+  stone_type: z.string().nullable(),
+  length_mm: z.number(),
+  width_mm: z.number(),
+  height_mm: z.number(),
+  carat: z.number(),
+  availability: z.literal('available'),
+  color: z.string().nullable(),
+  clarity: z.string().nullable(),
+  fancy_color: z.string().nullable(),
+  report_no: z.string().nullable(),
+})
+async function publicInventory(ctx: Ctx, target: Target, details: BrowseDetails, sku?: string) {
+  const request = sku
+    ? { public_ids: [sku] }
+    : { filters: browseFilters(target), sort: 'carat_asc', limit: 100 }
+  const { ok, data } = await requestInventory(
+    ctx,
+    sku ? '/stones/batch' : '/search',
+    details,
+    request,
+    'https://thediaex.com/api',
+  )
+  const reply = PublicReply.safeParse(data)
+  if (!ok || !reply.success) throw unavailable(details)
+  if (sku && !reply.data.items.length)
+    throw new AppError('not_found', 'That stone is no longer listed on Diaex.', details)
+  const found = new Map<string, SourcedDiamond>()
+  for (const item of reply.data.items) {
+    const parsed = PublicStone.safeParse(item)
+    if (!parsed.success) continue
+    const stone = parsed.data
+    const type = stone.stone_type?.toUpperCase()
+    const hueWords = stone.fancy_color
+      ?.toUpperCase()
+      .split(/[^A-Z]+/)
+      .filter(Boolean)
+    const hue = hueWords && diaexHue(hueWords.at(-1) ?? '')
+    const candidate = usableDiamond(
+      {
+        ...stone,
+        url: `${DIAEX_BROWSE}?stone=${encodeURIComponent(stone.id)}`,
+        origin: type === 'NATURAL' ? 'natural' : type === 'CVD' || type === 'HPHT' ? 'lab' : null,
+        measurements: {
+          length_mm: Math.max(stone.length_mm, stone.width_mm),
+          width_mm: Math.min(stone.length_mm, stone.width_mm),
+          height_mm: stone.height_mm,
+        },
+        fancy_hue: hue || null,
+        certificate: { report_no: stone.report_no },
+      },
+      target,
+      sku,
+    )
+    if (candidate && (sku || matchesSearch(candidate, target))) found.set(candidate.sku, candidate)
+  }
+  if (sku && !found.size)
+    throw conflict(
+      'Diaex could not confirm this stone is available with suitable dimensions and cut.',
+      details,
+    )
+  const distance = (s: SourcedDiamond) =>
+    Math.hypot(s.measured.length - target.seat.length_mm, s.measured.width - target.seat.width_mm)
+  return [...found.values()]
+    .sort((a, b) => distance(a) - distance(b) || a.sku.localeCompare(b.sku))
+    .slice(0, LIMIT)
+}
+
 async function exactStone(
   ctx: Ctx,
   target: Target,
   sku: string,
   details: BrowseDetails,
+  publicBrowse?: boolean,
 ): Promise<SourcedDiamond> {
   // URL parsers collapse dot-only path segments even if the dots are encoded.
   if (sku === '.' || sku === '..') throw badRequest('Enter a Diaex public stone ID.')
+  if (!ctx.diaexPartnerApiUrl && publicBrowse)
+    return (await publicInventory(ctx, target, details, sku))[0]!
   const id = encodeURIComponent(sku).replace(/\./g, '%2E')
   const { status, ok, data } = await requestInventory(ctx, `/stones/${id}`, details)
   if (!ok) {
@@ -335,7 +421,7 @@ async function exactStone(
 }
 
 export const sourcing: HandlerGroup<'sourcing'> = {
-  'sourcing.search': async (ctx, { pieceId, nodeId, color, sku, searchCut }) => {
+  'sourcing.search': async (ctx, { pieceId, nodeId, color, sku, searchCut, publicBrowse }) => {
     const { design } = await getPiece(ctx, pieceId)
     const node = design.nodes[nodeId]
     const requestedColor = sku ? undefined : color
@@ -358,7 +444,10 @@ export const sourcing: HandlerGroup<'sourcing'> = {
       )
     }
     const details = { searchUrl: searchLink(target), ...(cadTarget && { cadTarget }) }
-    if (sku) return { candidates: [await exactStone(ctx, target, sku, details)], ...details }
+    if (sku)
+      return { candidates: [await exactStone(ctx, target, sku, details, publicBrowse)], ...details }
+    if (!ctx.diaexPartnerApiUrl && publicBrowse)
+      return { candidates: await publicInventory(ctx, target, details), ...details }
 
     const ref = randomUUID()
     const { ok, data } = await requestInventory(ctx, '/stones/search', details, {
@@ -385,9 +474,9 @@ export const sourcing: HandlerGroup<'sourcing'> = {
       searchUrl: searchLink(target, `${browse.origin}/browse`),
     }
   },
-  'sourcing.stone': async (ctx, { pieceId, nodeId, sku }) => {
+  'sourcing.stone': async (ctx, { pieceId, nodeId, sku, publicBrowse }) => {
     const { design } = await getPiece(ctx, pieceId)
     const target = measuredGemTarget(design.nodes[nodeId])
-    return exactStone(ctx, target, sku, { searchUrl: searchLink(target) })
+    return exactStone(ctx, target, sku, { searchUrl: searchLink(target) }, publicBrowse)
   },
 }
