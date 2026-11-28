@@ -60,6 +60,7 @@ interface RhinoSourceObject extends RhinoObjectLabel {
 }
 
 export interface RhinoMeshObject extends RhinoSourceObject {
+  objectName?: string | null
   /** Binary STL in Rhino's world coordinates, converted to millimetres with Z up. */
   bytes: Uint8Array<ArrayBuffer>
   bounds: Bounds
@@ -651,6 +652,7 @@ export async function readRhino3dm(
           }
           result.push({
             name,
+            objectName: objectName || null,
             layer,
             bytes: writeStl(meshes, 'Pave STL from Rhino .3dm, millimetres'),
             bounds: meshBounds(meshes),

@@ -1,6 +1,9 @@
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { writeStl } from '@pave/kernel/mesh-stl'
+import type { RhinoContext } from '@pave/schema'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { putAsset } from './assets/assets'
 import { BOOT_TIMEOUT, type Client, signUp, type TestServer, testServer } from './test/harness'
 
 const access = {
@@ -9,7 +12,7 @@ const access = {
   markup: false,
   prices_hidden_reason: 'signed_out',
 }
-const diaexBrowse = 'https://console.thediaex.com/browse'
+const diaexBrowse = 'https://thediaex.com/browse'
 const bestId = 'T-RD.01/1'
 const inventoryStone = (id = bestId) => ({
   id,
@@ -172,7 +175,7 @@ describe('Diaex inventory RPCs', () => {
       candidate,
       { ...candidate, sku: 'T-RD-02', url: `${diaexBrowse}?stone=T-RD-02`, certificate: undefined },
     ])
-    expect(new URL(result.searchUrl).origin).toBe('https://console.thediaex.com')
+    expect(new URL(result.searchUrl).origin).toBe('https://thediaex.com')
     expect(requests).toEqual([
       {
         method: 'POST',
@@ -284,7 +287,7 @@ describe('Diaex inventory RPCs', () => {
       'unsafe link',
       {
         ...inventoryStone(),
-        url: 'https://console.thediaex.com.example.test/browse?stone=T-RD.01%2F1',
+        url: 'https://thediaex.com.example.test/browse?stone=T-RD.01%2F1',
       },
     ],
   ])('rejects exact lookups with %s', async (_reason, stone) => {
@@ -345,6 +348,255 @@ describe('Diaex inventory RPCs', () => {
       status: 400,
     })
     expect(await owner.fail('sourcing.stone', { ...gem(), sku: 'x'.repeat(65) })).toMatchObject({
+      status: 400,
+    })
+    expect(requests).toEqual([])
+  })
+})
+
+const facetedBody = (tilt: number) => {
+  const ring = [
+    [-1, -2, 0],
+    [1, -2, 0],
+    [1, 2, 0],
+    [-1, 2, 0],
+    [-0.95, -1.95, 0.4],
+    [0.95, -1.95, 0.4],
+    [0.95, 1.95, 0.4],
+    [-0.95, 1.95, 0.4],
+    [0, 0, -1],
+  ]
+  const faces = [4, 5, 6, 4, 6, 7]
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4
+    faces.push(i, j, 4 + i, j, 4 + j, 4 + i, j, i, 8)
+  }
+  const c = Math.cos(tilt)
+  const s = Math.sin(tilt)
+  const positions = Float32Array.from(
+    ring.flatMap(([x, y, z]) => [x! + 16, c * y! - s * z! + 5, s * y! + c * z! - 3]),
+  )
+  return writeStl([{ positions, indices: Uint32Array.from(faces) }], 'Imported Rhino facet')
+}
+
+async function importedTarget({
+  name = 'HBR Diamond_Emerald',
+  rhinoObjectName = name,
+  tilt = 0.6,
+  assetOwner = owner,
+  stullerMaterial,
+  legacy = false,
+}: {
+  name?: string
+  rhinoObjectName?: string | null
+  tilt?: number
+  assetOwner?: Client
+  stullerMaterial?: RhinoContext['stullerMaterial']
+  legacy?: boolean
+} = {}) {
+  const session = await assetOwner.call('session.get', {})
+  const ctx = await server.runtime.context({ userId: session.user.id, orgId: session.activeOrgId })
+  const asset = await putAsset(ctx, {
+    bytes: facetedBody(tilt),
+    name: 'Retained source.stl',
+  })
+  const piece = await owner.call('pieces.create', { title: 'Imported jewelry' })
+  const nodeId = 'rhino-diamond'
+  await owner.call('design.apply', {
+    pieceId: piece.id,
+    label: 'Import from Rhino',
+    ops: [
+      {
+        t: 'add',
+        node: {
+          id: nodeId,
+          name,
+          kind: 'meshBody',
+          keepSourcePlacement: true,
+          ...(!legacy && { importRole: 'unassigned' }),
+          source: {
+            type: 'asset',
+            assetId: asset.id,
+            rhinoLayer: 'CAD',
+            ...(!legacy && { rhinoObjectName }),
+            rhinoContext: { groups: [], placements: [], material: 'Diamond', stullerMaterial },
+          },
+        },
+      },
+    ],
+  })
+  return { pieceId: piece.id, nodeId }
+}
+
+describe('read-only Diaex browsing for imported CAD', () => {
+  it('uses the table-aligned retained mesh and source cut without modifying the design', async () => {
+    const target = await importedTarget({
+      name: 'Renamed by designer',
+      rhinoObjectName: 'HBR Diamond_Emerald',
+    })
+    const before = await owner.call('pieces.get', { id: target.pieceId })
+    answer = (req) => ({
+      body: signedOutSearch(req, [
+        {
+          ...inventoryStone(),
+          shape_group: 'emerald',
+          measurements: { length_mm: 4.01, width_mm: 2, height_mm: 1.4 },
+        },
+        {
+          ...inventoryStone('wrong-shape'),
+          measurements: { length_mm: 4.01, width_mm: 2, height_mm: 1.4 },
+        },
+      ]),
+    })
+    const result = await owner.call('sourcing.search', target)
+    expect(result.cadTarget).toEqual({ cut: 'emerald', length: 4, width: 2, depth: 1.4 })
+    expect(result.candidates.map(({ sku }) => sku)).toEqual([bestId])
+    expect(requests[0]?.body.requirement).toMatchObject({
+      shape: 'emerald',
+      origin: 'any',
+      seat: { length_mm: 4, width_mm: 2, tol_minus_mm: 0.3, tol_plus_mm: 0.3 },
+    })
+    expect(await owner.call('pieces.get', { id: target.pieceId })).toEqual(before)
+  })
+
+  it('uses the legacy leaf name and never guesses a cut from a block or layer label', async () => {
+    const target = await importedTarget({ name: 'Oval assembly / HBR Diamond_Round', legacy: true })
+    answer = (req) => ({ body: signedOutSearch(req, []) })
+    expect((await owner.call('sourcing.search', target)).cadTarget?.cut).toBe('round')
+
+    const unnamed = await importedTarget({ name: 'Part 1 (Round)', rhinoObjectName: null })
+    const legacyUnnamed = await importedTarget({ name: 'Part 1 (Oval)', legacy: true })
+    for (const source of [unnamed, legacyUnnamed])
+      expect(await owner.fail('sourcing.search', source)).toMatchObject({ status: 400 })
+    expect(requests).toHaveLength(1)
+  })
+
+  it('supports public IDs for browsing while preventing native fit verification on a source mesh', async () => {
+    const target = await importedTarget()
+    answer = () => ({
+      body: { access, stone: { ...inventoryStone(), shape_group: 'emerald' } },
+    })
+    const browsed = await owner.call('sourcing.search', { ...target, sku: bestId, color: 'G' })
+    expect(browsed.candidates).toHaveLength(1)
+    expect(browsed.cadTarget).toEqual({ cut: 'emerald', length: 4, width: 2, depth: 1.4 })
+    expect(await owner.fail('sourcing.stone', { ...target, sku: bestId })).toMatchObject({
+      status: 400,
+    })
+    expect(requests.map(({ method }) => method)).toEqual(['GET'])
+  })
+
+  it('requires an explicit cut for ambiguous names and preserves CAD measurements in fallback errors', async () => {
+    const target = await importedTarget({ name: 'Round or Oval' })
+    expect(await owner.fail('sourcing.search', target)).toMatchObject({ status: 400 })
+    expect(requests).toHaveLength(0)
+    answer = () => ({ status: 503, body: { detail: 'private provider error' } })
+    const failure = await owner.fail('sourcing.search', {
+      ...target,
+      searchCut: 'oval',
+      color: 'Pink',
+    })
+    expect(failure).toMatchObject({
+      status: 503,
+      error: { cadTarget: { cut: 'oval', length: 4, width: 2, depth: 1.4 } },
+    })
+    const link = new URL(failure.error.searchUrl as string)
+    expect(JSON.parse(link.searchParams.get('f')!)).toMatchObject({
+      shapes: ['oval'],
+      fancy_hues: ['Pink'],
+      min_length_mm: 3.7,
+      max_length_mm: 4.3,
+      min_width_mm: 1.7,
+      max_width_mm: 2.3,
+    })
+  })
+
+  it('includes measured filters when the partner API is unconfigured', async () => {
+    const target = await importedTarget()
+    const { config } = server.runtime
+    const apiUrl = config.diaexPartnerApiUrl
+    config.diaexPartnerApiUrl = null
+    try {
+      const failure = await owner.fail('sourcing.search', target)
+      expect(failure).toMatchObject({
+        status: 501,
+        error: {
+          code: 'not_configured',
+          cadTarget: { cut: 'emerald', length: 4, width: 2, depth: 1.4 },
+        },
+      })
+      const link = new URL(failure.error.searchUrl as string)
+      expect(link.origin + link.pathname).toBe(diaexBrowse)
+      expect(JSON.parse(link.searchParams.get('f')!)).toMatchObject({
+        shapes: ['emerald'],
+        min_length_mm: 3.7,
+        max_length_mm: 4.3,
+      })
+    } finally {
+      config.diaexPartnerApiUrl = apiUrl
+    }
+    expect(requests).toEqual([])
+  })
+
+  it('uses current vertex edits and uniform scale without changing dimensions under a rigid placement', async () => {
+    const target = await importedTarget({ tilt: 0 })
+    const { assetId, vertices } = await owner.call('design.meshComponents', { ...target, limit: 9 })
+    const tip = vertices.find(({ xyz }) => xyz[2] === -4)!
+    await owner.call('design.apply', {
+      pieceId: target.pieceId,
+      label: 'Reshape and place the imported stone',
+      ops: [
+        {
+          t: 'update',
+          id: target.nodeId,
+          patch: {
+            meshEdits: { assetId, vertices: { [tip.id]: [16, 5, -4.6] } },
+            transform: { position: [100, 10, 25], rotation: [120, 40, 72], scale: 1.5 },
+          },
+        },
+      ],
+    })
+    answer = (req) => ({ body: signedOutSearch(req, []) })
+    const result = await owner.call('sourcing.search', target)
+    expect(result.cadTarget).toEqual({ cut: 'emerald', length: 6, width: 3, depth: 3 })
+  })
+
+  it('rejects hidden, unsupported deformations and cross-organization data before asking Diaex', async () => {
+    const target = await importedTarget()
+    expect(await outsider.fail('sourcing.search', target)).toMatchObject({ status: 404 })
+    const foreignAssetTarget = await importedTarget({ assetOwner: outsider })
+    expect(await owner.fail('sourcing.search', foreignAssetTarget)).toMatchObject({ status: 404 })
+    for (const patch of [{ visible: false }, { visible: true, smooth: 1 }]) {
+      await owner.call('design.apply', {
+        pieceId: target.pieceId,
+        label: 'Edit source',
+        ops: [{ t: 'update', id: target.nodeId, patch }],
+      })
+      expect(await owner.fail('sourcing.search', target)).toMatchObject({ status: 400 })
+    }
+    expect(requests).toEqual([])
+  })
+
+  it('uses the supplier family before the display material and skips unsuitable stones', async () => {
+    for (const stullerMaterial of [
+      { stoneFamily: 'Tourmaline' },
+      { metal: '18K Yellow Gold' },
+      { stoneFamily: 'Diamond', stoneColor: 'Black' },
+    ]) {
+      const target = await importedTarget({ stullerMaterial })
+      expect(await owner.fail('sourcing.search', target)).toMatchObject({ status: 400 })
+    }
+    expect(requests).toEqual([])
+
+    const fancy = await importedTarget({
+      stullerMaterial: { stoneFamily: 'Diamond', stoneColor: 'Pink' },
+    })
+    answer = (req) => ({ body: signedOutSearch(req, []) })
+    await owner.call('sourcing.search', fancy)
+    expect(requests[0]?.body.requirement).toMatchObject({ fancy_hues: ['Pink'] })
+  })
+
+  it('refuses a search cut override on a measured native gem', async () => {
+    expect(await owner.fail('sourcing.search', { ...gem(), searchCut: 'oval' })).toMatchObject({
       status: 400,
     })
     expect(requests).toEqual([])

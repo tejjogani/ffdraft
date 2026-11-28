@@ -18,6 +18,7 @@ export type StlUnit = keyof typeof STL_UNITS
 
 export interface ModelPart {
   name: string
+  objectName?: string | null
   layer: string | null
   bounds: Bounds
   bytes: Uint8Array<ArrayBuffer>

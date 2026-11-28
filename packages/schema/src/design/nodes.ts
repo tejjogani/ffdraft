@@ -531,6 +531,8 @@ export const MeshBody = z
           type: z.literal('asset'),
           assetId: z.string().meta({ title: 'Mesh', widget: 'asset' }),
           rhinoLayer: z.string().optional(),
+          /** The original object name, including null for an unnamed source. */
+          rhinoObjectName: z.string().max(256).nullable().optional(),
           rhinoContext: RhinoContext.optional(),
           nativeAssetId: z.string().optional(),
           /** The paired mesh id keeps a replacement mesh from exporting an older surface. */

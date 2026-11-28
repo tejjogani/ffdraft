@@ -17,6 +17,7 @@
     "./rhino-edges": "./src/import/rhino-edges.ts",
     "./rhino-face-borders": "./src/import/rhino-face-borders.ts",
     "./rhino-import": "./src/import/rhino.ts",
+    "./rhino-role-measurements": "./src/import/role-measurements.ts",
     "./walls": "./src/dfm/wallProbe.ts"
   },
   "scripts": {
@@ -30,9 +31,11 @@
     "opentype.js": "^2.0.0",
     "replicad": "^1.2.1",
     "replicad-opencascadejs": "^1.2.1",
-    "rhino3dm": "^8.35.0"
+    "rhino3dm": "^8.35.0",
+    "three": "0.187.0"
   },
   "devDependencies": {
+    "@types/three": "0.187.0",
     "vite": "^8.3.8",
     "zod": "^4.6.7"
   }
