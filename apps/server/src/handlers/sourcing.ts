@@ -138,7 +138,8 @@ async function importedCadTarget(
     throw badRequest('The retained Rhino mesh could not be measured for Diaex search.')
   }
   if (measured) {
-    // The automatic table frame makes dimensions invariant under translation and rotation.
+    // Unassigned sources cannot be consumed by groups, patterns or booleans in the evaluator.
+    // Their own translation and rotation preserve dimensions in the automatic table frame.
     const scale = node.transform?.scale ?? 1
     const parsed = SourcingCadTargetSchema.safeParse({
       cut,

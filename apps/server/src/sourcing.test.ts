@@ -434,6 +434,21 @@ describe('read-only Diaex browsing for imported CAD', () => {
       name: 'Renamed by designer',
       rhinoObjectName: 'HBR Diamond_Emerald',
     })
+    await owner.call('design.apply', {
+      pieceId: target.pieceId,
+      label: 'Group imported parts',
+      ops: [
+        {
+          t: 'add',
+          node: {
+            id: 'scaled-group',
+            kind: 'group',
+            children: [target.nodeId],
+            transform: { position: [10, 4, 3], rotation: [0, 0, 0], scale: 2 },
+          },
+        },
+      ],
+    })
     const before = await owner.call('pieces.get', { id: target.pieceId })
     answer = (req) => ({
       body: signedOutSearch(req, [
