@@ -19,7 +19,7 @@ import {
   rhinoRoleLinks,
   sourceMaterialLabel,
 } from '@pave/schema'
-import { Button, Chip, Dialog, Input, Select } from '@pave/ui'
+import { Button, Chip, Dialog, type DialogProps, Input, Select } from '@pave/ui'
 import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { assetUrl } from '../../../lib/assets'
@@ -213,6 +213,7 @@ const formatted = (values: readonly number[]) =>
 export function RhinoRoleReview({
   design,
   initialId,
+  finalFocus,
   onSelect,
   onClose,
   onSave,
@@ -220,6 +221,7 @@ export function RhinoRoleReview({
 }: {
   design: Design
   initialId?: string
+  finalFocus?: DialogProps['finalFocus']
   onSelect: (body: ImportedMesh) => void
   onClose: () => void
   onSave: (choices: ImportedRoleChoice[]) => void
@@ -261,6 +263,7 @@ export function RhinoRoleReview({
   return (
     <Dialog
       open
+      finalFocus={finalFocus}
       onOpenChange={(open) => !open && onClose()}
       initialFocus={filterRef}
       title="Review materials"

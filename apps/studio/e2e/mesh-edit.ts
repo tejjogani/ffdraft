@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { parseStl } from '../../../packages/kernel/src/mesh/parse/stl'
 import { boundsOfPositions } from '../../../packages/kernel/src/solid/meshing'
+import { holdInspectorClose } from './inspector-focus'
 
 const base = process.argv[2]
 if (!base) throw Error('Pass the URL of a disposable local server.')
@@ -179,15 +180,22 @@ try {
   assert.equal((await atVersion(4)).meshEdits, undefined)
 
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.getByRole('button', { name: 'Inspector', exact: true }).click()
+  const inspector = page.getByRole('button', { name: 'Inspector', exact: true })
+  const finishInspectorClose = await holdInspectorClose(page)
+  await inspector.click()
   await page.getByRole('button', { name: 'Edit mesh', exact: true }).click()
   await picker.waitFor()
   const mobile = await dialog.boundingBox()
   assert.ok(mobile && mobile.x >= 0 && mobile.x + mobile.width <= 390)
-  await dialog.getByLabel('Vertex ID', { exact: true }).fill('4')
+  const vertexId = dialog.getByLabel('Vertex ID', { exact: true })
+  await vertexId.focus()
+  await finishInspectorClose()
+  await page.keyboard.insertText('4')
+  assert.equal(await vertexId.inputValue(), '4', 'The mesh editor must keep keyboard focus')
   await button('Select vertex').click()
   await dialog.getByText('X 10 · Y 30 · Z 9 mm', { exact: true }).waitFor()
   await button('Cancel').click()
+  await inspector.and(page.locator(':focus')).waitFor()
 
   console.log(
     'Passed viewport vertex, edge and face picking, preview, cancel, save, reopen, undo, version fencing and the mobile inspector.',

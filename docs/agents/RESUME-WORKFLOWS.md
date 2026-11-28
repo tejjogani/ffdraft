@@ -1,5 +1,17 @@
 # Resume the November 26 Pavé workflows
 
+## November 28 jeweler trial
+
+Use the [ten bench jobs](../jeweler-trial.md) on a duplicate of the jeweler’s project. Record the first confusing click or the first visible difference from the source. The [implementation](https://github.com/tejjogani/ffdraft/pull/99) and [platform regression checks](https://github.com/tejjogani/ffdraft/pull/100) are on the Pavé branch.
+
+| Area | Verified | Still to check |
+| --- | --- | --- |
+| CAD | Imported shank guides produced a closed two-rail solid of 376.99 mm³. The Inspector and project API agreed on XYZ displacement for one generated stone through save, reopen, Undo and reset. | Inspect seat clearance after moving a stone. General surface editing and SubD remain in the [coverage ledger](../research/cad-feature-evidence.md). |
+| Renders | A saved circular pose wraps the imported linked bracelet for a shot. A fixed-camera Cycles comparison exercised the graded white floor on a polished shank. | Have the jeweler judge band reflections, mount shape, gemstones and framing alongside their published-quality render. |
+| Diaex | A measured imported diamond returned 24 live listings at trial time. A separate solitaire accepted an available replacement, and Undo restored its CAD. | Verify the stone and mount association before refitting an imported assembly. Inventory changes between searches. |
+| On model | A real transparent Cycles take produced a full-resolution local layout export. Provider success, refusal, cancellation and provenance ran against a test adapter. | A live AI shoot and its jewelry fidelity remain open. The available API key failed authentication before the paid request. |
+| Project AI | The scripted reference-to-CAD benchmark exercised the CAD fitter and produced a Blender take. | Connect a valid Claude credential for a live reference reconstruction and compare the result with the jeweler’s design. |
+
 ## Mac-first CAD trial and automation
 
 The primary hands-on trial is on Apple silicon Mac. Windows x64 is a key market and has its own verification lane. The local designer can use the CAD builder, guide and manual edits without a Claude key. The [first-time guide](../first-time-cad.md) supplies the in-app steps. The [command roadmap](../plans/cad-command-api.md) lists Rhino, MatrixGold, Blender and CadQuery references, the public API contract and the next geometry milestones.
@@ -30,7 +42,7 @@ Use **Copy face borders** on an eligible retained face to create independent out
 
 For a handmade mounting, select its separate imported bodies and choose **Edit handmade mount**. The assistant uses `design.inspectMount` to measure the original placed parts and `design.editMount` to apply one reviewed cage, alloy or stone link. Python exposes `inspect_mount` and `edit_mount`. Verify the returned native edges and holes in per-part mode, the evaluated triangles for a continuous bend, and the independent casting result for overlapping alloys. Arbitrary nonlinear changes to native trimmed surfaces and recovery of third-party construction history remain open. [First-time CAD guide](../first-time-cad.md#reshape-a-handmade-setting) · [Exchange test](../../apps/server/src/handmade-mount-exchange.test.ts)
 
-For the next modeling work, handle seam-separated physical borders on periodic faces, with explicit tests for singular trims and geometry gaps. Open one- and two-rail sweeps now retain rail and section dependencies. A closed two-rail shank and individually movable generated pavé stones remain open acceptance cases. In the exchange lane, distinguish exact imported surfaces from faceted or omitted STEP output with independent readback. The [acceptance cases](../plans/cad-command-api.md#implementation-order) name the required measurements, and the [coverage ledger](../research/cad-feature-evidence.md) tracks the remaining Rhino and jewelry families.
+For the next modeling work, handle seam-separated physical borders on periodic faces, with explicit tests for singular trims and geometry gaps. Open one- and two-rail sweeps now retain rail and section dependencies. The closed two-rail shank and per-stone movement cases now run in the jeweler trial. In the exchange lane, distinguish exact imported surfaces from faceted or omitted STEP output with independent readback. The [acceptance cases](../plans/cad-command-api.md#implementation-order) name the required measurements, and the [coverage ledger](../research/cad-feature-evidence.md) tracks the remaining Rhino and jewelry families.
 
 
 **Start with the project menu.** Opening a piece should give the jeweler direct access to its Designs, CAD, Model, Renders and other areas. A reference saved in one area should be available where the jeweler needs it next. Design → CAD → Render describes a journey the assistant can carry out. The designer can enter the project anywhere.
@@ -135,8 +147,8 @@ The assistant carries the active project ID on each project turn. In the project
 | Project organization | PRs #7, #10, #12, #16 and #23 cover project switching, folders, compact filled tool cards and a readable spec. | Use Back, switch projects within CAD, and return to each project’s tool menu. |
 | References and Home | PRs #13, #18–20 and #24 cover Google/Pinterest links, moodboard imports, full-screen discovery and persistent confirmed measurements and selected artwork. | Open Home, attach a logo, confirm any missing chain and material choices, select a concept and reopen from Projects. |
 | Editable CAD | PR #21 adds closed profiles and extrusion. PR #22 traces supported flat artwork into editable solids, including holes. | Draw a profile or trace a flat reference, verify the millimetre dimensions, then reopen the file. Organic multi-view reconstruction is a separate operation. |
-| Sourcing | PRs #8, #9, #14 and #17 cover inventory candidates, filters, measured stone changes, setting refit, matching inspector carats and Undo. | Local supplier fixtures verify the swap. A live partner inventory search still requires a supported provider and access. |
-| On model | PR #15 covers model selection, approvals and per-project shot preparation. | Completing a photograph requires implementing and registering an on-model provider, then verifying a generated shot. |
+| Sourcing | PRs #8, #9, #14 and #17 cover inventory candidates, filters, measured stone changes, setting refit, matching inspector carats and Undo. | Supplier fixtures verify the swap in CI. The November 28 trial also verified a live public search and a solitaire refit. |
+| On model | PR #15 covers model selection, approvals and per-project shot preparation. | The reference-capable image provider and keyless local photo layout are implemented. A successful live AI shoot still needs a valid image credential. |
 | Modeling and rendering research | The freeform CAD plan records the remaining Rhino operations, including associative sweeps and export readback. | Real trackpad input and blinded comparisons against jewelry photographs remain outstanding. |
 
 Use disposable data directories for browser walks that create projects. The user's running Studio is for trying the product. Browser evidence from a scripted assistant verifies handoffs and tool calls. Real Claude design generation, finished on-model photographs and photographic realism require their respective live checks.

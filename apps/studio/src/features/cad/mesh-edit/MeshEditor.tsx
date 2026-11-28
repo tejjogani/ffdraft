@@ -1,5 +1,5 @@
 import { MeshVertexEdits, nodeTitle } from '@pave/schema'
-import { Button, Dialog, Input, Spinner } from '@pave/ui'
+import { Button, Dialog, type DialogProps, Input, Spinner } from '@pave/ui'
 import { useEffect, useId, useRef, useState } from 'react'
 import { assetUrl } from '../../../lib/assets'
 import {
@@ -124,11 +124,13 @@ function MeshViewport({ mesh, view, kind, selected, preview, canPick, onPick }: 
 export function MeshEditor({
   node,
   stale,
+  finalFocus,
   onClose,
   onSave,
 }: {
   node: ImportedMesh
   stale: boolean
+  finalFocus?: DialogProps['finalFocus']
   onClose(): void
   onSave(positions: VertexPositions, component: ComponentKind): void
 }) {
@@ -184,6 +186,7 @@ export function MeshEditor({
   return (
     <Dialog
       open
+      finalFocus={finalFocus}
       onOpenChange={(open) => !open && onClose()}
       title="Edit mesh"
       description={nodeTitle(node)}

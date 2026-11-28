@@ -1,5 +1,5 @@
 import type { Design } from '@pave/schema'
-import { Button, Checkbox, Dialog, IconButton, Select } from '@pave/ui'
+import { Button, Checkbox, Dialog, type DialogProps, IconButton, Select } from '@pave/ui'
 import { ArrowDown, ArrowUp, ArrowUpDown, Plus, X } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import {
@@ -15,6 +15,7 @@ export function SectionFeatureDialog({
   tool,
   initial,
   editing,
+  finalFocus,
   onClose,
   onSave,
 }: {
@@ -22,6 +23,7 @@ export function SectionFeatureDialog({
   tool: SectionTool
   initial: SectionDraft
   editing: boolean
+  finalFocus?: DialogProps['finalFocus']
   onClose(): void
   onSave(draft: SectionDraft, signal: AbortSignal): Promise<void>
 }) {
@@ -78,6 +80,7 @@ export function SectionFeatureDialog({
   return (
     <Dialog
       open
+      finalFocus={finalFocus}
       title={editing ? `Edit ${tool.title.toLowerCase()}` : tool.title}
       description={description}
       onOpenChange={(open) => !open && close()}

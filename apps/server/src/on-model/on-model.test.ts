@@ -3,6 +3,7 @@ import sharp from 'sharp'
 import { afterAll, beforeAll, expect, it } from 'vitest'
 import { putAsset } from '../assets/assets'
 import { createImageGen } from '../imagegen'
+import { serviceContext } from '../service-context'
 import {
   BOOT_TIMEOUT,
   type Client,
@@ -14,10 +15,10 @@ import {
 
 const fake = fakeProvider({ size: 96 })
 const generate = fake.generate
-let heldRequest: AbortSignal | undefined
+let onCancellationRequest: ((signal: AbortSignal | undefined) => void) | undefined
 fake.generate = async (call) => {
   if (call.prompt.includes('Hold for cancellation')) {
-    heldRequest = call.signal
+    onCancellationRequest?.(call.signal)
     await sleep(30_000, call.signal)
   }
   return generate(call)
@@ -85,7 +86,9 @@ it('requires a finished still from the current CAD version before sending image 
   expect(fake.calls).toHaveLength(calls)
 })
 
-it('conditions a shot on the CAD render and generated portrait, saves the image, and records provenance', async () => {
+it('conditions a shot on the CAD render and generated portrait, saves the image, and records provenance', async ({
+  signal,
+}) => {
   const piece = await api.call('pieces.create', { templateId: 'solitaire' })
   const { take, bytes } = await completeTake(piece.id, '#003366')
   const { id } = await draft()
@@ -101,11 +104,11 @@ it('conditions a shot on the CAD render and generated portrait, saves the image,
   expect(await api.call('shots.estimate', input)).toMatchObject({ usd: 0.01, provider: 'fake' })
   const [submitted] = await api.call('shots.create', input)
 
-  await expect
-    .poll(async () => (await api.call('shots.get', { id: submitted!.id })).status)
-    .toBe('done')
+  const ctx = await server.runtime.context(server.runtime.local!)
+  expect(await serviceContext(ctx).jobSettled('shot', submitted!.id, signal)).toBe('done')
   const shot = await api.call('shots.get', { id: submitted!.id })
   expect(shot).toMatchObject({
+    status: 'done',
     sourceVersion: piece.version,
     modelVersion: model.version,
     stale: false,
@@ -135,7 +138,6 @@ it('conditions a shot on the CAD render and generated portrait, saves the image,
     height: 96,
   })
   expect(await api.fail('shots.export', { id: shot.id })).toMatchObject({ status: 409 })
-  const ctx = await server.runtime.context(server.runtime.local!)
   expect(await ctx.repo.usage.many()).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
@@ -153,13 +155,16 @@ it('cancels a live image request and leaves no delivered result', async () => {
   await completeTake(piece.id, '#995522')
   const { id } = await draft()
   await api.call('models.update', { id, status: 'approved' })
+  const cancellationRequest = new Promise<AbortSignal | undefined>((resolve) => {
+    onCancellationRequest = resolve
+  })
   const [shot] = await api.call('shots.create', {
     modelId: id,
     pieceId: piece.id,
     placement: 'hand',
     direction: 'Hold for cancellation',
   })
-  await expect.poll(() => !!heldRequest).toBe(true)
+  const heldRequest = await cancellationRequest
   expect(await api.call('shots.cancel', { id: shot!.id })).toMatchObject({
     status: 'canceled',
     assetId: null,
@@ -168,7 +173,7 @@ it('cancels a live image request and leaves no delivered result', async () => {
   expect(heldRequest?.aborted).toBe(true)
 })
 
-it('records a provider refusal as a failed shot with no picture', async () => {
+it('records a provider refusal as a failed shot with no picture', async ({ signal }) => {
   const piece = await api.call('pieces.create', { templateId: 'solitaire' })
   await completeTake(piece.id, '#997722')
   const { id } = await draft()
@@ -179,13 +184,13 @@ it('records a provider refusal as a failed shot with no picture', async () => {
     placement: 'hand',
     direction: '[fake:block 1]',
   })
-  await expect
-    .poll(async () => api.call('shots.get', { id: shot!.id }))
-    .toMatchObject({
-      status: 'failed',
-      assetId: null,
-      error: expect.stringMatching(/withheld this image/i),
-    })
+  const ctx = await server.runtime.context(server.runtime.local!)
+  expect(await serviceContext(ctx).jobSettled('shot', shot!.id, signal)).toBe('failed')
+  expect(await api.call('shots.get', { id: shot!.id })).toMatchObject({
+    status: 'failed',
+    assetId: null,
+    error: expect.stringMatching(/withheld this image/i),
+  })
 })
 
 it('refuses a shot that exceeds the workspace budget before writing a job', async () => {

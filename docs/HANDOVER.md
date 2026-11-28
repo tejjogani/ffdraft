@@ -1,5 +1,7 @@
 # Handover: where Pavé stands and how to pick it up
 
+**November 28 jeweler trial.** Start with the [ten bench jobs](jeweler-trial.md) and the [verified workflows and remaining checks](agents/RESUME-WORKFLOWS.md#november-28-jeweler-trial). Duplicate the project before testing. The founder plans to review the results with a jeweler.
+
 **Current assignments and review.** The [workstream board](agents/BOARD.md) records reproduced defects, integration dependencies and the acceptance check for each proposed assignment.
 
 **Mac-first CAD trial.** The [current controls, platform checks and remaining CAD work](agents/RESUME-WORKFLOWS.md#mac-first-cad-trial-and-automation) cover the designer, Claude and Python workflows.
@@ -17,11 +19,11 @@ Pavé is an AI-native jewelry design suite. **One AI assistant carries a piece t
 - **CAD to Render** (an AI job): the AI proposes shots and a look, renders with Blender, critiques each take with its own vision, re-renders what falls short, and hands over a set.
 - **Monitoring**: a job panel shows the plan, live progress, cost and time; Pause, Resume, Stop and Take over (a manual edit pauses the job; Resume replans). Outputs wait for review: accept, change by hand or by chat, or re-run a step.
 
-**Pricing** (decided 24 Nov; not built yet, it is step 7 of the assistant build): the free plan includes the CAD software in full, including the AI jobs with the user's own Claude key. Blender renders and Rhino (.3dm) and STEP exports are paid, with 5 of each free per calendar month (planned: numbers in one config file). STL, 3MF, OBJ and GLB exports are always free. Planned: no checkout at first, and `PAVE_PLAN=pro` in `apps/server/.env` to switch plans for testing.
+**Pricing direction, November 28.** Keep the cost low for the jeweler. Retail prices and plan allowances remain open. The November 24 entry in the decision log records the earlier proposal. Local photo layout uses the browser, and an AI shoot displays a provider estimate before generation.
 
 **AI models** (decided 24 Nov): three tiers the user picks per conversation, each pointable at any allow-listed model in Settings: **Power** = Claude Fable 5.2, **Standard** (default) = Claude Opus 5.5, **Light** = Claude Sonnet 5.5 (or Haiku 5.5). The user pastes the API key in Settings, AI (stored on the server only, never sent back to the browser); `ANTHROPIC_API_KEY` in `apps/server/.env` also works and wins.
 
-**The founder will not test until the whole journey works** (design, then CAD, then Blender render, as monitored AI jobs). Until then, the only thing to test by hand is the CAD workspace at commit `e5d18f2`.
+**Current trial scope.** Nine bench jobs can be tried without an AI credential. The tenth uses an image provider. The full reference-image-to-CAD workflow still needs a live Claude run and a jeweler’s comparison against the original design.
 
 **The Design stage, as the founder defines it (25 Nov):** an image-based ideation space, never 3D. A pin board per piece: AI image generations (four at a time; the harness understands the request, enhances the prompt for jewelry and applies guardrails), reference search, pasted links and images from Pinterest or Google, uploads and sketch sheets, sketches made in the app, and 3D models as view-only inspiration. From a picked image: "Take to CAD" (size questions and an estimate first, then CAD built from the image), or "Start CAD" with the board linked or not; a 3D model can also be opened as CAD. Parametric "directions" live in the CAD stage as optional variants. (Assistant build steps 17 and 18.)
 
@@ -101,6 +103,7 @@ The founder can run a second Claude Code session on his own laptop with another 
 | 24 Nov | Free plan includes all CAD; renders and Rhino/STEP exports paid with 5 free a month each; STL and other mesh formats always free |
 | 24 Nov | With only a Claude key, design directions are real parametric pieces, not generated concept images; image concepts need a separate image model later |
 | 24 Nov | Rhino-class modeling from scratch is wanted, with a clean Notion-meets-modern look and glass on chrome only |
+| 28 Nov | Keep the price low for users. Set commercial rates and allowances later. |
 | earlier | Pavé customers' designs and CAD are never visible to Diaex staff; Diaex lists diamonds only; Diaex Buy is closed and takes no payment |
 
 ## 7. Rules every session must keep

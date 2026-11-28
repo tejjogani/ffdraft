@@ -19,7 +19,7 @@ import {
   sameJson,
   stoneDims,
 } from '@pave/schema'
-import { Button, Dialog, Input, Select, Spinner } from '@pave/ui'
+import { Button, Dialog, type DialogProps, Input, Select, Spinner } from '@pave/ui'
 import { RotateCcw, Undo2 } from 'lucide-react'
 import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { hasGap } from '../../../lib/design-session/core'
@@ -123,6 +123,7 @@ export function MountEditor({
   baseVersion,
   session,
   isCurrent,
+  finalFocus,
   onClose,
 }: {
   pieceId: string
@@ -131,6 +132,7 @@ export function MountEditor({
   baseVersion: number
   session: DesignSession
   isCurrent(): boolean
+  finalFocus?: DialogProps['finalFocus']
   onClose(): void
 }) {
   const parts = useMemo(
@@ -411,6 +413,7 @@ export function MountEditor({
   return (
     <Dialog
       open
+      finalFocus={finalFocus}
       onOpenChange={(open) => {
         if (!open && !active.current) onClose()
       }}

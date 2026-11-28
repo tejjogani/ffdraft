@@ -8,9 +8,13 @@ on:
       - install.ps1
       - scripts/install.mjs
       - apps/server/src/engines/**
+      - apps/server/src/handlers/sourcing.ts
       - apps/studio/e2e/**
+      - apps/studio/public/examples/shank-guides.3dm
       - apps/studio/src/features/cad/**
+      - apps/studio/src/features/models/**
       - apps/studio/src/features/render/**
+      - apps/studio/src/features/sourcing/**
       - packages/kernel/**
       - packages/pave-python/**
       - packages/schema/**
@@ -143,6 +147,18 @@ jobs:
             }
             Test-PaveStage 'Build linked loft and sweep features in Chromium' {
               pnpm exec tsx apps/studio/e2e/section-modeling.ts $env:PAVE_TEST_URL
+            }
+            Test-PaveStage 'Build and export a closed shank in Chromium' {
+              pnpm exec tsx apps/studio/e2e/closed-shank.ts $env:PAVE_TEST_URL
+            }
+            Test-PaveStage 'Displace and reset an individual stone in Chromium' {
+              pnpm exec tsx apps/studio/e2e/stone-displacement.ts $env:PAVE_TEST_URL
+            }
+            Test-PaveStage 'Fit and replace a diamond from fixture inventory in Chromium' {
+              pnpm exec tsx apps/studio/e2e/sourced-diamond.ts $env:PAVE_TEST_URL
+            }
+            Test-PaveStage 'Lay out and download a private photo in Chromium' {
+              pnpm exec tsx apps/studio/e2e/local-photo.ts $env:PAVE_TEST_URL
             }
             Test-PaveStage 'Install and verify managed Blender through Studio' {
               pnpm exec tsx apps/studio/e2e/first-render-install.ts $env:PAVE_TEST_URL (Join-Path $logs 'first-render.png')
