@@ -66,6 +66,7 @@ jobs:
           $env:PAVE_DATA_DIR = Join-Path $env:RUNNER_TEMP 'Pave Windows data'
           $env:PAVE_TEST_URL = "http://127.0.0.1:$env:PORT"
           $logs = Join-Path $env:RUNNER_TEMP 'pave-windows-logs'
+          $env:PAVE_BROWSER_ARTIFACTS = Join-Path $logs 'browser-failures'
           New-Item -ItemType Directory -Path $logs | Out-Null
           $stdout = Join-Path $logs 'install.stdout.log'
           $stderr = Join-Path $logs 'install.stderr.log'
