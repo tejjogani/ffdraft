@@ -7,6 +7,7 @@ import { delimiter } from 'node:path'
 import { setTimeout } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { makeCappedPrismFixture } from '../../../packages/kernel/test-fixtures/capped-prism'
+import { watchBrowserFailure } from './browser-failure'
 
 const { chromium, webkit } = createRequire(import.meta.url)(
   'playwright',
@@ -17,8 +18,10 @@ const browser =
   process.env.PAVE_TEST_BROWSER === 'webkit'
     ? await webkit.launch()
     : await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })
+let captureFailure: Awaited<ReturnType<typeof watchBrowserFailure>>
 try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } })
+  captureFailure = await watchBrowserFailure(page, 'rhino-edge')
   page.setDefaultTimeout(12000)
   const rpc = async (n: string, data: object) => {
     const r = await page.request.post(base + '/api/rpc/' + n, { data })
@@ -130,6 +133,9 @@ try {
   console.log(
     'Copied a native Rhino edge, checked its exact curve, source provenance, undo/redo and editable control points after reopening.',
   )
+} catch (error) {
+  await captureFailure?.(error)
+  throw error
 } finally {
   await browser.close()
 }

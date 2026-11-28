@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import type { Piece } from '@pave/schema'
+import { watchBrowserFailure } from './browser-failure'
 import { holdInspectorClose } from './inspector-focus'
 
 const base = process.argv[2]
@@ -36,9 +37,11 @@ f 3 8 7
 f 4 1 5
 f 4 5 8`
 
+let captureFailure: Awaited<ReturnType<typeof watchBrowserFailure>>
 try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } })
   const page = await context.newPage()
+  captureFailure = await watchBrowserFailure(page, 'handmade-mount')
   page.setDefaultTimeout(20_000)
   const rpc = async (name: string, data: object) => {
     const response = await page.request.post(`${base}/api/rpc/${name}`, { data })
@@ -296,6 +299,9 @@ try {
   console.log(
     'Passed multi-body mount search and picking, cage drag, millimetre offsets, refit, restore, Undo, version guard and mobile controls.',
   )
+} catch (error) {
+  await captureFailure?.(error)
+  throw error
 } finally {
   await browser.close()
 }
