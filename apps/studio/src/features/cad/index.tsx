@@ -289,6 +289,7 @@ function Workspace({
     pieceId: string
     node: ImportedMesh
     version: number
+    openedFromInspectorSheet: boolean
   } | null>(null)
   // A draft can only be used in the project and access level where it was opened.
   // biome-ignore lint/correctness/useExhaustiveDependencies: each transition clears the editor
@@ -417,6 +418,10 @@ function Workspace({
   const [sheet, setSheet] = useState<'outliner' | 'inspector' | null>(null)
   const inspectorTrigger = useRef<HTMLButtonElement>(null)
   const inspectorReturn = useRef<HTMLElement | null>(null)
+  const inspectorFocusTarget = () =>
+    inspectorReturn.current?.isConnected
+      ? inspectorReturn.current
+      : (inspectorTrigger.current ?? true)
   const openInspector = (trigger: HTMLElement | null) => {
     inspectorReturn.current = trigger
     setSheet('inspector')
@@ -698,7 +703,12 @@ function Workspace({
       return
     }
     setSheet(null)
-    setMeshEditor({ pieceId, node: current, version: state.version })
+    setMeshEditor({
+      pieceId,
+      node: current,
+      version: state.version,
+      openedFromInspectorSheet: sheet === 'inspector',
+    })
   }
 
   const editMount = (ids: string[]) => {
@@ -1548,11 +1558,7 @@ function Workspace({
           onOpenChange={(o) =>
             setSheet((current) => (o ? 'inspector' : current === 'inspector' ? null : current))
           }
-          finalFocus={() =>
-            inspectorReturn.current?.isConnected
-              ? inspectorReturn.current
-              : (inspectorTrigger.current ?? true)
-          }
+          finalFocus={() => (meshEditor?.openedFromInspectorSheet ? false : inspectorFocusTarget())}
           title="Inspector"
           side="right"
         >
@@ -1651,6 +1657,7 @@ function Workspace({
           key={`${pieceId}/${meshEditor.node.id}`}
           node={meshEditor.node}
           stale={version !== meshEditor.version || save?.status !== 'saved' || syncing}
+          finalFocus={meshEditor.openedFromInspectorSheet ? inspectorFocusTarget : undefined}
           onClose={() => setMeshEditor(null)}
           onSave={saveMesh}
         />
