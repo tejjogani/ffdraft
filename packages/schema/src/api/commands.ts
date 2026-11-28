@@ -1121,7 +1121,9 @@ export const commands = {
       publicBrowse: z
         .boolean()
         .optional()
-        .describe('Search the signed-out public Diaex catalogue when the user asks for inventory.'),
+        .describe(
+          'True searches signed-out Diaex inventory. False returns only local CAD measurements and the browse link. Omit to use a configured partner.',
+        ),
     }),
     output: z.object({
       candidates: z.array(SourcedDiamondSchema),

@@ -444,6 +444,7 @@ export const sourcing: HandlerGroup<'sourcing'> = {
       )
     }
     const details = { searchUrl: searchLink(target), ...(cadTarget && { cadTarget }) }
+    if (publicBrowse === false) return { candidates: [], ...details }
     if (sku)
       return { candidates: [await exactStone(ctx, target, sku, details, publicBrowse)], ...details }
     if (!ctx.diaexPartnerApiUrl && publicBrowse)

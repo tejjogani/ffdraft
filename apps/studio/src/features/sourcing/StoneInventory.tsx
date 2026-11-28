@@ -324,18 +324,18 @@ export function StoneInventory({
           <ArrowUpRight className="size-3.5" aria-hidden />
         </a>
       )}
-      {search.isError &&
-        (searchCut && cadTarget && search.error.code === 'not_configured' ? (
-          <p className="mt-2 text-xs text-fg-muted">
-            Choose Search inventory to compare current listings here.
-          </p>
-        ) : (
-          <InlineError message={search.error.message} />
-        ))}
-      {search.isFetching && <Skeleton aria-label="Searching Diaex" className="mt-4 h-10 w-full" />}
+      {search.isError && <InlineError message={search.error.message} />}
+      {search.isFetching && (
+        <Skeleton
+          aria-label={submitted.publicBrowse ? 'Searching Diaex' : 'Measuring stone'}
+          className="mt-4 h-10 w-full"
+        />
+      )}
       {search.isSuccess && !search.isFetching && candidates.length === 0 && (
         <p role="status" className="mt-4 text-sm text-fg-muted">
-          No available diamonds match this search.
+          {submitted.publicBrowse
+            ? 'No available diamonds match this search.'
+            : 'Choose Search inventory to compare available diamonds at these dimensions.'}
         </p>
       )}
       {candidates.length > 0 && (

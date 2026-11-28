@@ -609,6 +609,14 @@ describe('read-only Diaex browsing for imported CAD', () => {
     })
   })
 
+  it('shows local measurements before a jeweler requests inventory, including with a partner configured', async () => {
+    const target = await importedTarget()
+    const result = await owner.call('sourcing.search', { ...target, publicBrowse: false })
+    expect(result.cadTarget).toEqual({ cut: 'emerald', length: 4, width: 2, depth: 1.4 })
+    expect(result.candidates).toEqual([])
+    expect(requests).toEqual([])
+  })
+
   it('includes measured filters when the partner API is unconfigured', async () => {
     const target = await importedTarget()
     const { config } = server.runtime
