@@ -1,7 +1,16 @@
 import { IMAGE_ASPECTS, type ImageAspect, type ModelShot, type Piece } from '@pave/schema'
-import { Button, controlClass, Field, IconButton, InlineError, Skeleton, Textarea } from '@pave/ui'
+import {
+  Button,
+  buttonClass,
+  controlClass,
+  Field,
+  IconButton,
+  InlineError,
+  Skeleton,
+  Textarea,
+} from '@pave/ui'
 import { Link } from '@tanstack/react-router'
-import { Camera, Images, X } from 'lucide-react'
+import { Camera, Download, Images, X } from 'lucide-react'
 import { useId, useRef, useState } from 'react'
 import { Column, PageHeader, PageTitle } from '../../components/Page'
 import { assetUrl } from '../../lib/assets'
@@ -312,11 +321,29 @@ function Shoot({ piece }: { piece: Piece }) {
                   Image generation
                 </h3>
                 <p className="mt-0.5 text-xs text-fg-muted">
-                  {!capable
-                    ? 'Image generation is unavailable on this server.'
-                    : canEstimate
-                      ? 'Review the estimated cost before generating an image.'
-                      : 'Select an approved model to estimate an image.'}
+                  {!capable ? (
+                    <>
+                      Choose a reference-capable image model in{' '}
+                      <Link to="/settings/ai" className="underline underline-offset-2">
+                        Settings › AI
+                      </Link>
+                      .
+                    </>
+                  ) : canEstimate ? (
+                    <>
+                      This uses the latest finished still of the current CAD. Save one in{' '}
+                      <Link
+                        to="/pieces/$id/render"
+                        params={{ id: piece.id }}
+                        className="underline underline-offset-2"
+                      >
+                        Render
+                      </Link>
+                      .
+                    </>
+                  ) : (
+                    'Select an approved model to estimate an image.'
+                  )}
                 </p>
               </div>
             </div>
@@ -373,25 +400,97 @@ function Shoot({ piece }: { piece: Piece }) {
         ) : (
           <div className="grid gap-3 sm:grid-cols-2">
             {shots.data.map((shot) => (
-              <article key={shot.id} className="rounded-xl border border-line p-3">
-                {shot.assetId && (
-                  <img
-                    className="mb-2 max-h-64 rounded-md"
-                    src={assetUrl(shot.assetId, 480)}
-                    alt={shot.direction || 'On-model photograph'}
-                  />
-                )}
-                <strong className="text-sm">
-                  <span className="capitalize">{shot.placement}</span> · {shot.status}
-                </strong>
-                {shot.stale && <p>Made from an earlier version</p>}
-                {shot.error && <p>{shot.error}</p>}
-                {shot.check && <p>{shot.check.notes}</p>}
-              </article>
+              <Photograph key={shot.id} shot={shot} />
             ))}
           </div>
         )}
       </section>
     </div>
+  )
+}
+
+function Photograph({ shot }: { shot: ModelShot }) {
+  const cancel = useRpcMutation('shots.cancel')
+  const verified = useRpcMutation('shots.export')
+  const active = shot.status === 'queued' || shot.status === 'running'
+  const progress =
+    shot.stage === 'references'
+      ? 'Reading the CAD render…'
+      : shot.stage === 'generate'
+        ? 'Generating photograph…'
+        : shot.stage === 'label'
+          ? 'Preparing preview…'
+          : shot.stage === 'verify'
+            ? 'Checking the design…'
+            : 'Waiting to start…'
+  return (
+    <article className="grid content-start gap-2 rounded-xl border border-line p-3">
+      {shot.assetId && (
+        <img
+          className="max-h-64 rounded-md object-contain object-left"
+          src={assetUrl(shot.assetId, 480)}
+          alt={shot.direction || 'On-model photograph'}
+        />
+      )}
+      <strong className="text-sm">
+        <span className="capitalize">{shot.placement}</span>
+        {' · '}
+        {shot.provenance?.disclosure ?? shot.status}
+      </strong>
+      {active && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
+          <span role="status">{progress}</span>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={cancel.isPending}
+            onClick={() => cancel.mutate({ id: shot.id })}
+          >
+            Cancel shot
+          </Button>
+        </div>
+      )}
+      {shot.stale && <p className="text-xs text-fg-muted">Made from an earlier version.</p>}
+      {shot.error && <InlineError message={shot.error} className="py-0" />}
+      {shot.check ? (
+        <p className="text-xs text-fg-muted">{shot.check.notes}</p>
+      ) : shot.status === 'done' && shot.fidelity === 'concept' ? (
+        <p className="text-xs text-fg-muted">For visual review. Jewelry fidelity is unverified.</p>
+      ) : null}
+      {shot.status === 'done' && shot.assetId && (
+        <div className="flex flex-wrap gap-2">
+          <a
+            href={assetUrl(shot.assetId)}
+            download={`pave-on-model-${shot.id}`}
+            className={buttonClass({ size: 'sm' })}
+          >
+            <Download aria-hidden className="size-4" />
+            Download preview
+          </a>
+          {shot.check?.passed && (
+            <Button
+              icon={Download}
+              size="sm"
+              disabled={verified.isPending}
+              onClick={() =>
+                verified.mutate(
+                  { id: shot.id },
+                  {
+                    onSuccess: (asset) => {
+                      const link = document.createElement('a')
+                      link.href = assetUrl(asset.id)
+                      link.download = asset.name
+                      link.click()
+                    },
+                  },
+                )
+              }
+            >
+              Export verified image
+            </Button>
+          )}
+        </div>
+      )}
+    </article>
   )
 }

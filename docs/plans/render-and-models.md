@@ -1,6 +1,17 @@
 # Render studio, brand models and on-model imagery
 
-Build brief: the judged synthesis of two independent design proposals.
+This build brief describes the proposed full pipeline.
+
+## Trial implementation
+
+The On-model studio uses the latest finished still for the current CAD version without material
+overrides. It sends that image and the approved fictional model card to a reference-capable
+provider from Settings → AI. An optional generated headshot can help preserve the model’s
+appearance across shoots. The trial uses image references for identity and does not train a LoRA.
+
+Finished photographs are AI concepts. The Studio stores and visibly labels the image and lets
+you download it for visual review. The preview records the provider, model, CAD render and
+any portrait references used. A verified export still requires a separate CAD fidelity check.
 
 ## 1. Experience
 

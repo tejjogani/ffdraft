@@ -2,6 +2,7 @@
  * Image generation, put together: the provider family from `@pave/ideation`, the keys (.env or
  * Settings, AI) and the setup service that registers `imageGen` while a key exists. The pipeline
  * itself (brief, generate, check) is ./pipeline, called by the `references.*` handlers.
+ * On-model concepts share this provider configuration, with reference-capable models only.
  *
  *   const images = createImageGen(runtime, { env })   // compose.ts
  *   createImageGen(runtime, { env: { PAVE_IMAGE_GEN: 'fake' } })   // tests: the fake provider
@@ -10,6 +11,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fakeProvider, type ImageProvider, imageProviders } from '@pave/ideation'
 import { type ImageProviderId, KEYED_IMAGE_PROVIDERS, type KeyedImageProvider } from '@pave/schema'
+import { OnModelImpl } from '../on-model'
 import type { Runtime } from '../runtime'
 import type { Services } from '../services'
 import { ImageKeyStore } from './keys'
@@ -35,7 +37,7 @@ export function fakeImagesFromEnv(env: Readonly<Record<string, string | undefine
 export function createImageGen(
   runtime: Runtime,
   opts: ImageGenOptions = {},
-): { services: Pick<Services, 'imageSetup'>; impl: ImageGenImpl } {
+): { services: Pick<Services, 'imageSetup' | 'onModel'>; impl: ImageGenImpl } {
   const env = opts.env ?? process.env
   const fake = fakeImagesFromEnv(env)
   if (fake)
@@ -61,7 +63,7 @@ export function createImageGen(
   ) as Record<KeyedImageProvider, readonly string[]>
   const keys = new ImageKeyStore(runtime, envNames, env)
   const impl = new ImageGenImpl({ runtime, keys, providers, fake })
-  return { services: { imageSetup: impl }, impl }
+  return { services: { imageSetup: impl, onModel: new OnModelImpl(runtime, impl) }, impl }
 }
 
 function picturesIn(dir: string): { bytes: Uint8Array; mime: string }[] {

@@ -2003,7 +2003,7 @@ export const commands = {
   }),
   'shots.create': def({
     description:
-      'Create on-model images of a piece worn by an approved brand model (`count` images, one shot each). Uses renders of the real CAD as references and checks each result against the design; results are concepts, labelled as AI. Costs money.',
+      'Create on-model images of a piece worn by an approved brand model (`count` images, one shot each). Uses a finished still render of the current CAD as the jewelry reference. Results are labeled AI concepts for visual review. Costs money.',
     kind: 'mutation',
     tool: { confirm: true },
     input: onModelShot,

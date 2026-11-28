@@ -41,8 +41,9 @@ export function compose(env: NodeJS.ProcessEnv = process.env): CreateAppOptions 
     services: (runtime) => {
       // ── Assistant: Claude with the key from .env or Settings, AI; registered while a key exists.
       assistant = createAssistant(runtime, { env })
-      // ── Image generation: the provider keys from .env or Settings, AI; `imageGen` is
-      //    registered while one exists. Claude (the assistant's key) writes and checks.
+      // ── Image generation: provider keys from .env or Settings, AI. The design-board pipeline
+      //    uses Claude for writing and checks. On-model concepts use the same provider settings
+      //    with a finished CAD still and an approved synthetic model.
       const images = createImageGen(runtime, { env })
       return { ...servicesFromEnv(env, runtime), ...assistant.services, ...images.services }
     },
