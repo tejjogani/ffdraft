@@ -28,7 +28,7 @@ Review the skipped objects before choosing Import. Select the new parts in Featu
 
 Click a stone on the ring, even a single diamond in a pavé row. Choose Hide stone to see its seat or Isolate stone to zoom in on it. The same actions work on a metal part. Exit isolation returns to your earlier view. Show all brings back hidden items. The saved piece, metal weight and exports keep their geometry.
 
-To move a single imported diamond in CAD, select its body in **Features**. Open **Inspector → Fine-tune → Transform → Position**, enter an X, Y or Z offset in millimetres and press Enter. On an imported body, X = 0 is its original placement. In a generated pavé row, Position moves the entire row.
+To move a single imported diamond in CAD, select its body in **Features**. Open **Inspector → Fine-tune → Transform → Position**, enter an X, Y or Z offset in millimetres and press Enter. On an imported body, X = 0 is its original placement. For a generated row, halo or pavé, select the individual stone, open **Stone displacement**, type X, Y or Z in mm, and choose **Apply displacement**. **Reset position** removes its offset. The seat and shared metal stay in place, so inspect the fit before production. The feature’s Transform control moves the entire row.
 
 Drag the zoom slider at the lower left of the 3D view for a close-up, or use its minus and plus buttons. With the slider focused, use the arrow keys for small steps. To fit the whole piece again, clear the selection and choose Fit to view in the toolbar.
 
