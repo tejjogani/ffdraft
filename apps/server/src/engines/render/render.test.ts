@@ -101,10 +101,43 @@ describe.skipIf(!blender.available)('Blender render queue', () => {
     // The same request for the same version is answered from the cache, without Blender.
     const again = await api.call('renders.create', {
       pieceId: piece.id,
-      scene: small('preview', 256),
+      scene: {
+        ...small('preview', 256),
+        output: { ...small('preview', 256).output, device: 'auto' },
+      },
     })
     const cached = await until(() => api.call('renders.get', { id: again.id }), settled)
     expect(cached).toMatchObject({ status: 'done', assetIds: job.assetIds, seconds: 0 })
+    expect(cached.scene.output.device).toBe('auto')
+    expect(cached.requestedScene.output.device).toBe('auto')
+    expect(job.scene.output.device).toBeUndefined()
+  })
+
+  it('renders the queued CPU preference after the saved shot switches back to Auto', async () => {
+    const piece = await api.call('pieces.create', { templateId: 'solitaire' })
+    const settings = small('preview', 256)
+    const shot = await api.call('scenes.create', {
+      pieceId: piece.id,
+      title: 'CPU recovery',
+      scene: { ...settings, output: { ...settings.output, device: 'cpu' } },
+    })
+    const queued = await api.call('renders.create', { pieceId: piece.id, sceneId: shot.id })
+    expect(queued.requestedScene.output.device).toBe('cpu')
+    const updated = await api.call('scenes.update', {
+      id: shot.id,
+      patch: { output: { device: 'auto' } },
+    })
+    expect(updated.scene.output.device).toBe('auto')
+    const job = await until(() => api.call('renders.get', { id: queued.id }), settled)
+    expect(job).toMatchObject({
+      status: 'done',
+      device: 'CPU',
+      scene: { output: { device: 'cpu' } },
+      requestedScene: { output: { device: 'cpu' } },
+    })
+    expect(job.assetIds).toHaveLength(1)
+    expect(job.seconds).toBeGreaterThan(0)
+    expect((await api.call('pieces.get', { id: piece.id })).version).toBe(piece.version)
   })
 
   it('kills Blender when a render is canceled', async () => {

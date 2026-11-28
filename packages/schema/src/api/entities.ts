@@ -624,6 +624,10 @@ export const RenderSceneSchema = z.object({
         .enum(['preview', 'standard', 'final'])
         .default('standard')
         .meta({ title: 'Quality' }),
+      device: z.enum(['auto', 'cpu']).optional().meta({
+        title: 'Render device',
+        description: 'Blender only. Auto uses the host setting. CPU runs this take on the CPU.',
+      }),
     })
     .default({ width: 2000, height: 2000, quality: 'standard' })
     .meta({ title: 'Size', group: 'Size' }),

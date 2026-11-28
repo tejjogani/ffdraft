@@ -327,7 +327,7 @@ export function ShotInspector({
         )}
       </Section>
 
-      <Section title="Size">
+      <Section title="Output">
         <Segmented
           size="sm"
           aria-label="Shape"
@@ -368,9 +368,22 @@ export function ShotInspector({
             label: QUALITY_LABELS[q],
           }))}
         />
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-xs text-fg-muted">Render device</span>
+          <Segmented
+            aria-label="Render device"
+            value={scene.output.device ?? 'auto'}
+            disabled={disabled}
+            onChange={(device) => onChange({ output: { device } })}
+            options={[
+              { value: 'auto', label: 'Automatic' },
+              { value: 'cpu', label: 'CPU' },
+            ]}
+          />
+        </div>
         <p className="text-xs text-fg-muted">
           {engine === 'browser'
-            ? 'Without Blender, takes are drawn in the browser at preview quality, in seconds.'
+            ? 'Browser takes use preview quality. The render device applies to Blender takes.'
             : estimate
               ? `A take: ${machineTime(estimate.seconds)} of this computer’s time${
                   estimate.basis === 'typical' ? ' (a first guess until it has rendered here)' : ''

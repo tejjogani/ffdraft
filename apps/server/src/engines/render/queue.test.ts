@@ -109,6 +109,20 @@ it('does not reuse an ordinary take for a neutral imported CAD preview', () => {
   )
 })
 
+it('shares the automatic device cache and gives forced CPU renders their own key', () => {
+  const take = job('take')
+  const key = cacheKeyOf(take, '5.3.0')
+  const withDevice = (device: 'auto' | 'cpu') => ({
+    ...take,
+    requestedScene: RenderSceneSchema.parse({
+      ...take.requestedScene,
+      output: { ...take.requestedScene.output, device },
+    }),
+  })
+  expect(cacheKeyOf(withDevice('auto'), '5.3.0')).toBe(key)
+  expect(cacheKeyOf(withDevice('cpu'), '5.3.0')).not.toBe(key)
+})
+
 const piece = { id: 'pce', version: 1, design: {} } as Parameters<
   ReturnType<typeof createRenderQueue>['submit']
 >[1]

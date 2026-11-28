@@ -79,7 +79,7 @@ def run(job_path: Path) -> dict[str, object]:
     progress(0.0)
 
     groups = build_scene(scene, Path(job["glb"]))
-    device = select_device()
+    device = select_device(job.get("device"))
     animation = scene["animation"]
     configure(scene["output"], scene["color"], animated=animation is not None)
     progress(0.05)

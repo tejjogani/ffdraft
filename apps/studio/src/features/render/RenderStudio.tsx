@@ -198,6 +198,10 @@ export function RenderStudio({ pieceId, shotId }: { pieceId: string; shotId?: st
   const takes = useMemo(() => (shot ? takesOf(shot, s.takes) : []), [shot, s.takes])
   const activeTake = takes.find(isLive)
   const latestTake = takes[0]
+  const stoppedBlenderTake =
+    latestTake?.engine === 'blender' &&
+    (latestTake.status === 'failed' || latestTake.status === 'canceled')
+  const cpuSelected = shot?.scene.output.device === 'cpu'
   const blockedReason = readOnly
     ? 'You have view-only access.'
     : shot && canRenderGeometry(shot.scene) && !validPose(shot.scene)
@@ -207,11 +211,13 @@ export function RenderStudio({ pieceId, shotId }: { pieceId: string; shotId?: st
     !submittingRender && !activeTake && latestTake?.status === 'done' && latestTake.assetIds.length
       ? latestTake
       : null
+  const lastTakeStatus = takeStatus(latestTake)
   const renderStatus = submittingRender
     ? 'Starting render…'
     : activeTake
       ? takeStatus(activeTake)
-      : blockedReason || takeStatus(latestTake)
+      : blockedReason ||
+        (stoppedBlenderTake && cpuSelected ? `${lastTakeStatus} · CPU selected` : lastTakeStatus)
   const launchableShots = renderableShots.filter(
     (candidate) => !takesOf(candidate, s.takes).some(isLive),
   )
@@ -493,6 +499,15 @@ export function RenderStudio({ pieceId, shotId }: { pieceId: string; shotId?: st
                 <span role="status" className="text-xs text-fg-muted empty:sr-only">
                   {renderStatus}
                 </span>
+                {canLaunch && stoppedBlenderTake && !cpuSelected && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => adjustShot({ output: { device: 'cpu' } })}
+                  >
+                    Use CPU
+                  </Button>
+                )}
                 {readyTake && readyTake.id !== viewing && (
                   <Button size="sm" variant="ghost" onClick={() => actions.open(readyTake)}>
                     View take
@@ -781,6 +796,7 @@ export function RenderStudio({ pieceId, shotId }: { pieceId: string; shotId?: st
             <ShotInspector
               scene={shot.scene}
               engine={predictedEngine}
+              disabled={readOnly}
               estimate={
                 canRender && estimate.data
                   ? { seconds: perTake ?? 0, basis: estimate.data.basis }

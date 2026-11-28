@@ -280,6 +280,8 @@ export interface BlenderRenderResult {
 
 export interface RenderWithBlenderOptions extends Omit<RuntimeOptions, 'env' | 'platform'> {
   resolved: ResolvedScene
+  /** Auto follows the host's Cycles configuration. An explicit CPU request applies to this job. */
+  device?: 'auto' | 'cpu'
   glb: Uint8Array
   outDir: string
   onProgress?: (progress: number) => void
@@ -313,7 +315,15 @@ export async function renderWithBlender(
   const glbPath = join(outDir, 'piece.glb')
   const jobPath = join(outDir, 'job.json')
   await writeFile(glbPath, options.glb)
-  await writeFile(jobPath, JSON.stringify({ scene: options.resolved, glb: glbPath, outDir }))
+  await writeFile(
+    jobPath,
+    JSON.stringify({
+      scene: options.resolved,
+      glb: glbPath,
+      outDir,
+      ...(options.device === 'cpu' && { device: 'cpu' }),
+    }),
+  )
   // Cancelled while the job files were written: do not start Blender for it.
   options.signal?.throwIfAborted()
 

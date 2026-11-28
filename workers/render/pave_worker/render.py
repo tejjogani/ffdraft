@@ -13,6 +13,7 @@ import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Literal
 
 import bpy
 import numpy as np
@@ -24,15 +25,15 @@ from .job import Background, ColorSettings, Output
 Progress = Callable[[float], None]
 
 _VIEW = {"agx": "AgX", "neutral": "Khronos PBR Neutral"}
-def select_device() -> str:
+def select_device(requested: Literal["cpu"] | None = None) -> str:
     """Best available Cycles device: a GPU backend if one has devices, else CPU.
 
     On a Mac that is Metal on the Apple GPU (see devices.py for the order elsewhere).
-    `PAVE_CYCLES_DEVICE=CPU` (or a backend name) overrides the probe.
+    A job can request CPU. Otherwise `PAVE_CYCLES_DEVICE=CPU` (or a backend name) overrides the probe.
     """
     scene = bpy.context.scene
     forced = os.environ.get("PAVE_CYCLES_DEVICE", "").upper()
-    if forced == "CPU":
+    if requested == "cpu" or forced == "CPU":
         scene.cycles.device = "CPU"
         return "CPU"
     prefs = bpy.context.preferences.addons["cycles"].preferences
