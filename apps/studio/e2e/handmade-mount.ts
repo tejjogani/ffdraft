@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import type { Piece } from '@pave/schema'
+import { holdInspectorClose } from './inspector-focus'
 
 const base = process.argv[2]
 if (!base) throw Error('Pass the URL of a disposable local server.')
@@ -254,15 +255,43 @@ try {
   await button('Cancel').click()
 
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.getByRole('button', { name: 'Inspector', exact: true }).click()
+  const inspector = page.getByRole('button', { name: 'Inspector', exact: true })
+  const finishInspectorClose = await holdInspectorClose(page)
+  await inspector.click()
   await open()
   await viewport.waitFor()
   const mobile = await dialog.boundingBox()
   assert.ok(mobile && mobile.x >= 0 && mobile.x + mobile.width <= 390)
+  await search.focus()
+  await finishInspectorClose()
+  await page.keyboard.insertText('Group100')
+  assert.equal(await search.inputValue(), 'Group100', 'The mount editor must keep keyboard focus')
   await option('Cage handles', 'All corners')
   await z.fill('0.5')
   await z.press('Enter')
   await button('Cancel').click()
+  await inspector.and(page.locator(':focus')).waitFor()
+
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await page.locator('[data-node="right"]').click()
+  await page.setViewportSize({ width: 390, height: 844 })
+  const finishReviewHandoff = await holdInspectorClose(page)
+  await inspector.click()
+  const inspectorSheet = page.getByRole('dialog', { name: 'Inspector' })
+  await inspectorSheet.getByRole('button', { name: 'Review materials', exact: true }).click()
+  const review = page.getByRole('dialog', { name: 'Review materials' })
+  const filter = review.getByRole('searchbox', { name: 'Filter Rhino bodies' })
+  await filter.and(page.locator(':focus')).waitFor()
+  await finishReviewHandoff()
+  await page.keyboard.insertText('Workshop')
+  assert.equal(
+    await filter.inputValue(),
+    'Workshop',
+    'The material review must keep keyboard focus',
+  )
+  await review.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await inspector.and(page.locator(':focus')).waitFor()
+
   assert.equal((await getPiece()).version, before.version + 5)
   console.log(
     'Passed multi-body mount search and picking, cage drag, millimetre offsets, refit, restore, Undo, version guard and mobile controls.',

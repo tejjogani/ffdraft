@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { parseStl } from '../../../packages/kernel/src/mesh/parse/stl'
 import { boundsOfPositions } from '../../../packages/kernel/src/solid/meshing'
+import { holdInspectorClose } from './inspector-focus'
 
 const base = process.argv[2]
 if (!base) throw Error('Pass the URL of a disposable local server.')
@@ -180,16 +181,7 @@ try {
 
   await page.setViewportSize({ width: 390, height: 844 })
   const inspector = page.getByRole('button', { name: 'Inspector', exact: true })
-  const inspectorSheet = page.locator('[role="dialog"]:has([data-region="inspector"])')
-  // Control when the Inspector unmounts so we can test typing across the focus handoff.
-  await page.addStyleTag({
-    content: `
-      @keyframes inspector-exit { from { opacity: 1; } to { opacity: 0; } }
-      [role="dialog"]:has([data-region="inspector"])[data-ending-style] {
-        animation: inspector-exit 1s paused;
-      }
-    `,
-  })
+  const finishInspectorClose = await holdInspectorClose(page)
   await inspector.click()
   await page.getByRole('button', { name: 'Edit mesh', exact: true }).click()
   await picker.waitFor()
@@ -197,13 +189,7 @@ try {
   assert.ok(mobile && mobile.x >= 0 && mobile.x + mobile.width <= 390)
   const vertexId = dialog.getByLabel('Vertex ID', { exact: true })
   await vertexId.focus()
-  const finishedAnimations = await inspectorSheet.evaluate((element) => {
-    const animations = element.getAnimations()
-    for (const animation of animations) animation.finish()
-    return animations.length
-  })
-  assert.ok(finishedAnimations, 'The Inspector sheet is still closing')
-  await inspectorSheet.waitFor({ state: 'detached' })
+  await finishInspectorClose()
   await page.keyboard.insertText('4')
   assert.equal(await vertexId.inputValue(), '4', 'The mesh editor must keep keyboard focus')
   await button('Select vertex').click()

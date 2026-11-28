@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { setTimeout } from 'node:timers/promises'
 import type { EvaluationSummary, NodeInput, Piece } from '@pave/schema'
+import { holdInspectorClose } from './inspector-focus'
 
 const base = process.argv[2]
 assert.ok(base, 'Pass the URL of a disposable local server.')
@@ -147,6 +148,27 @@ try {
     else assert.ok(Math.abs(volume - 80) < 0.01)
     await page.reload()
     await page.locator('[data-node="' + output.id + '"]').click()
+    if (title === 'Loft') {
+      await page.setViewportSize({ width: 390, height: 844 })
+      const inspector = button('Inspector')
+      const finishInspectorClose = await holdInspectorClose(page)
+      await inspector.click()
+      await button('Edit loft').click()
+      const editDialog = page.getByRole('dialog', { name: 'Edit loft' })
+      const control = editDialog.getByRole('combobox', { name: 'Section 1', exact: true })
+      await control.focus()
+      await finishInspectorClose()
+      assert.ok(
+        await control.evaluate((element) => element === document.activeElement),
+        'The section editor must keep keyboard focus',
+      )
+      await page.keyboard.press('Space')
+      await page.getByRole('listbox').waitFor()
+      await page.keyboard.press('Escape')
+      await editDialog.getByRole('button', { name: 'Cancel' }).click()
+      await inspector.and(page.locator(':focus')).waitFor()
+      await page.setViewportSize({ width: 1440, height: 960 })
+    }
     await button(title === 'Loft' ? 'Edit loft' : 'Edit sweep').click()
     await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click()
     console.log(title, id, volume.toFixed(3) + ' mm³')

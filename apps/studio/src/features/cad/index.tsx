@@ -37,6 +37,7 @@ import {
   Button,
   type ContextMenuHandle,
   Dialog,
+  type DialogProps,
   IconButton,
   Sheet,
   Skeleton,
@@ -282,6 +283,7 @@ function Workspace({
     orgId?: string
     design: Design
     initialId?: string
+    finalFocus?: DialogProps['finalFocus']
   } | null>(null)
   // biome-ignore lint/correctness/useExhaustiveDependencies: drop a review draft after leaving its project or access level
   useEffect(() => setRhinoReview(null), [pieceId, org?.id, readOnly])
@@ -289,7 +291,7 @@ function Workspace({
     pieceId: string
     node: ImportedMesh
     version: number
-    openedFromInspectorSheet: boolean
+    finalFocus?: DialogProps['finalFocus']
   } | null>(null)
   // A draft can only be used in the project and access level where it was opened.
   // biome-ignore lint/correctness/useExhaustiveDependencies: each transition clears the editor
@@ -300,6 +302,7 @@ function Workspace({
     design: Design
     ids: string[]
     version: number
+    finalFocus?: DialogProps['finalFocus']
   } | null>(null)
   // biome-ignore lint/correctness/useExhaustiveDependencies: clear drafts at project and permission transitions
   useEffect(() => setMountEditor(null), [pieceId, org?.id, readOnly])
@@ -403,6 +406,7 @@ function Workspace({
     tool: SectionTool
     initial: SectionDraft
     original?: SectionFeature
+    finalFocus?: DialogProps['finalFocus']
   } | null>(null)
   const [curve, setCurve] = useState<{ original?: NodeOf<'curve'> } | null>(null)
   const [confirm, setConfirm] = useState<{ ids: string[]; dependents: string[] } | null>(null)
@@ -422,6 +426,12 @@ function Workspace({
     inspectorReturn.current?.isConnected
       ? inspectorReturn.current
       : (inspectorTrigger.current ?? true)
+  const focusAfterEditor = sheet === 'inspector' ? inspectorFocusTarget : undefined
+  const inspectorHandedOffFocus =
+    meshEditor?.finalFocus ||
+    mountEditor?.finalFocus ||
+    rhinoReview?.finalFocus ||
+    sectionEditor?.finalFocus
   const openInspector = (trigger: HTMLElement | null) => {
     inspectorReturn.current = trigger
     setSheet('inspector')
@@ -566,6 +576,7 @@ function Workspace({
       tool,
       initial: initialSectionDraft(session.get().view, tool, ws().selection, original),
       original,
+      finalFocus: focusAfterEditor,
     })
   }
 
@@ -600,7 +611,7 @@ function Workspace({
   }
 
   const openRhinoRoleReview = useCallback(
-    (id?: string) => {
+    (id?: string, finalFocus?: DialogProps['finalFocus']) => {
       if (!session || readOnly) return
       const design = session.get().view
       const { selection } = ws()
@@ -614,7 +625,7 @@ function Workspace({
           ? selected.importSourceId
           : selected?.id
       setSheet(null)
-      setRhinoReview({ pieceId, orgId: org?.id, design, initialId })
+      setRhinoReview({ pieceId, orgId: org?.id, design, initialId, finalFocus })
     },
     [org?.id, pieceId, readOnly, session],
   )
@@ -707,7 +718,7 @@ function Workspace({
       pieceId,
       node: current,
       version: state.version,
-      openedFromInspectorSheet: sheet === 'inspector',
+      finalFocus: focusAfterEditor,
     })
   }
 
@@ -730,6 +741,7 @@ function Workspace({
       design: state.confirmed,
       ids: selected,
       version: state.version,
+      finalFocus: focusAfterEditor,
     })
   }
 
@@ -1200,7 +1212,7 @@ function Workspace({
       onDelete={requestDelete}
       onEditMesh={editMesh}
       onEditMount={editMount}
-      onReviewRhinoRole={openRhinoRoleReview}
+      onReviewRhinoRole={(id) => openRhinoRoleReview(id, focusAfterEditor)}
       onEditProfile={(original) => setProfile({ original })}
       onLocateProng={(at) => {
         setSheet(null)
@@ -1558,7 +1570,7 @@ function Workspace({
           onOpenChange={(o) =>
             setSheet((current) => (o ? 'inspector' : current === 'inspector' ? null : current))
           }
-          finalFocus={() => (meshEditor?.openedFromInspectorSheet ? false : inspectorFocusTarget())}
+          finalFocus={() => (inspectorHandedOffFocus ? false : inspectorFocusTarget())}
           title="Inspector"
           side="right"
         >
@@ -1609,6 +1621,7 @@ function Workspace({
           tool={sectionEditor.tool}
           initial={sectionEditor.initial}
           editing={!!sectionEditor.original}
+          finalFocus={sectionEditor.finalFocus}
           onClose={() => setSectionEditor(null)}
           onSave={async (draft, signal) => {
             const current = session.get().view
@@ -1649,6 +1662,7 @@ function Workspace({
             baseVersion={mountEditor.version}
             session={session}
             isCurrent={isCurrent}
+            finalFocus={mountEditor.finalFocus}
             onClose={() => setMountEditor(null)}
           />
         )}
@@ -1657,7 +1671,7 @@ function Workspace({
           key={`${pieceId}/${meshEditor.node.id}`}
           node={meshEditor.node}
           stale={version !== meshEditor.version || save?.status !== 'saved' || syncing}
-          finalFocus={meshEditor.openedFromInspectorSheet ? inspectorFocusTarget : undefined}
+          finalFocus={meshEditor.finalFocus}
           onClose={() => setMeshEditor(null)}
           onSave={saveMesh}
         />
@@ -1670,6 +1684,7 @@ function Workspace({
             key={pieceId}
             design={rhinoReview.design}
             initialId={rhinoReview.initialId}
+            finalFocus={rhinoReview.finalFocus}
             onClose={() => setRhinoReview(null)}
             onSelect={(body) => selectRhinoRoleBody(body.id, session.get().view)}
             onSave={confirmRhinoRoles}
