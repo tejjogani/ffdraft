@@ -1,13 +1,24 @@
 import type {
   CommandInput,
   CommandOutput,
+  DiaexCutId,
   GemDims,
   NodeOf,
   SourcedDiamond,
   StoneChange,
 } from '@pave/schema'
-import { stoneDims } from '@pave/schema'
-import { Button, Chip, controlClass, Field, InlineError, Input, Skeleton, toast } from '@pave/ui'
+import { SourcingCadTargetSchema, stoneDims } from '@pave/schema'
+import {
+  Button,
+  buttonClass,
+  Chip,
+  controlClass,
+  Field,
+  InlineError,
+  Input,
+  Skeleton,
+  toast,
+} from '@pave/ui'
 import { ArrowUpRight } from 'lucide-react'
 import { type FormEvent, useState } from 'react'
 import { carats, num } from '../../lib/format'
@@ -29,7 +40,7 @@ const HUES = [
   'Gray',
   'Violet',
 ]
-const DIAEX_BROWSE = 'https://console.thediaex.com/browse'
+const DIAEX_BROWSE = 'https://thediaex.com/browse'
 
 export const dimensions = ({ length, width, depth }: GemDims) =>
   `${num(length)} × ${num(width)} × ${num(depth)} mm`
@@ -100,13 +111,15 @@ export function StoneInventory({
   version,
   diamond,
   canFit,
+  searchCut,
   onFit,
 }: {
   pieceId: string
   version: number
-  diamond: NodeOf<'gem'>
+  diamond: NodeOf<'gem' | 'meshBody'>
+  searchCut?: DiaexCutId
   canFit: boolean
-  onFit(): void
+  onFit?(): void
 }) {
   const nodeId = diamond.id
   const [submitted, setSubmitted] = useState<
@@ -122,7 +135,7 @@ export function StoneInventory({
 
   const search = useRpc(
     'sourcing.search',
-    { pieceId, nodeId, ...submitted },
+    { pieceId, nodeId, ...(searchCut && { searchCut }), ...submitted },
     {
       retry: false,
       staleTime: 0,
@@ -133,6 +146,9 @@ export function StoneInventory({
   const revert = useRpcMutation('design.revert')
   const browse =
     diaexBrowseLink(search.error?.details.searchUrl ?? search.data?.searchUrl)?.href ?? DIAEX_BROWSE
+  const cadTarget =
+    search.data?.cadTarget ??
+    SourcingCadTargetSchema.safeParse(search.error?.details.cadTarget).data
   const locked = Boolean(busy || search.isFetching)
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -218,7 +234,7 @@ export function StoneInventory({
           },
         })
       }
-      onFit()
+      onFit?.()
     } catch (error) {
       if (error instanceof RpcError && typeof error.details.currentVersion === 'number') {
         setPreview(null)
@@ -231,7 +247,19 @@ export function StoneInventory({
 
   const candidates = search.isSuccess ? search.data.candidates : []
   return (
-    <div className="mt-4 rounded-lg border border-line bg-bg-subtle px-3 py-4 sm:px-4">
+    <div
+      className={
+        searchCut
+          ? 'mt-4 border-t border-line pt-4'
+          : 'mt-4 rounded-lg border border-line bg-bg-subtle px-3 py-4 sm:px-4'
+      }
+    >
+      {cadTarget && (
+        <p className="mb-3 text-sm text-fg">
+          CAD measurements <span className="font-medium tabular">{dimensions(cadTarget)}</span>
+          <span className="ml-2 text-xs text-fg-muted">Length × width × depth</span>
+        </p>
+      )}
       <form
         onSubmit={submit}
         className="grid items-end gap-3 sm:grid-cols-[minmax(8rem,1fr)_minmax(10rem,2fr)_auto]"
@@ -245,7 +273,7 @@ export function StoneInventory({
               disabled={locked}
               className={controlClass}
             >
-              <option value="">Use design color</option>
+              <option value="">{searchCut ? 'Any color' : 'Use design color'}</option>
               <optgroup label="White diamond">
                 {COLORS.map((grade) => (
                   <option key={grade}>{grade}</option>
@@ -275,16 +303,29 @@ export function StoneInventory({
           Search inventory
         </Button>
       </form>
-      <a
-        href={browse}
-        target="_blank"
-        rel="noreferrer"
-        className="mt-3 inline-flex items-center gap-1 text-sm text-fg-muted underline decoration-line-strong underline-offset-2 hover:text-fg"
-      >
-        Browse Diaex
-        <ArrowUpRight className="size-3.5" aria-hidden />
-      </a>
-      {search.isError && <InlineError message={search.error.message} />}
+      {(!searchCut || (cadTarget && !search.isFetching)) && (
+        <a
+          href={browse}
+          target="_blank"
+          rel="noreferrer"
+          className={
+            searchCut
+              ? `${buttonClass({ size: 'sm', variant: 'primary' })} mt-3`
+              : 'mt-3 inline-flex items-center gap-1 text-sm text-fg-muted underline decoration-line-strong underline-offset-2 hover:text-fg'
+          }
+        >
+          Browse Diaex
+          <ArrowUpRight className="size-3.5" aria-hidden />
+        </a>
+      )}
+      {search.isError &&
+        (searchCut && cadTarget && search.error.code === 'not_configured' ? (
+          <p className="mt-2 text-xs text-fg-muted">
+            Browse Diaex opens current listings with these size filters.
+          </p>
+        ) : (
+          <InlineError message={search.error.message} />
+        ))}
       {search.isFetching && <Skeleton aria-label="Searching Diaex" className="mt-4 h-10 w-full" />}
       {search.isSuccess && !search.isFetching && candidates.length === 0 && (
         <p role="status" className="mt-4 text-sm text-fg-muted">
@@ -356,7 +397,7 @@ export function StoneInventory({
                         {reviewNotice}
                       </p>
                     )}
-                    {canFit && preview && (
+                    {canFit && diamond.kind === 'gem' && preview && (
                       <Preview
                         plan={preview}
                         original={stoneDims(diamond)}

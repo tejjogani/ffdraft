@@ -223,8 +223,10 @@ function useToastOffset(px: number) {
 export function PieceDesign({
   pieceId,
   openRoleReview = false,
+  reviewBody,
 }: {
   pieceId: string
+  reviewBody?: string
   openRoleReview?: boolean
 }) {
   const piece = useRpc('pieces.get', { id: pieceId })
@@ -246,10 +248,25 @@ export function PieceDesign({
       </div>
     )
   if (!piece.data) return null
-  return <Workspace key={piece.data.id} piece={piece.data} openRoleReview={openRoleReview} />
+  return (
+    <Workspace
+      key={piece.data.id}
+      piece={piece.data}
+      openRoleReview={openRoleReview}
+      reviewBody={reviewBody}
+    />
+  )
 }
 
-function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: boolean }) {
+function Workspace({
+  piece,
+  openRoleReview,
+  reviewBody,
+}: {
+  piece: Piece
+  openRoleReview: boolean
+  reviewBody?: string
+}) {
   const pieceId = piece.id
   const session = useDesignSession(piece)
   const auth = useSession()
@@ -592,7 +609,12 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
       const node = view.nodes[id]
       return isRhinoRoleBody(node) && node.visible !== false && importRoleOf(node) === 'unassigned'
     })
-    openRhinoRoleReview(firstUnassigned)
+    const requested = reviewBody ? view.nodes[reviewBody] : undefined
+    openRhinoRoleReview(
+      isRhinoRoleBody(requested) && requested.visible && importRoleOf(requested) === 'unassigned'
+        ? requested.id
+        : firstUnassigned,
+    )
     void navigate({
       to: '/pieces/$id/design',
       params: { id: pieceId },
@@ -604,6 +626,7 @@ function Workspace({ piece, openRoleReview }: { piece: Piece; openRoleReview: bo
     navigate,
     openRhinoRoleReview,
     openRoleReview,
+    reviewBody,
     pieceId,
     readOnly,
     session,

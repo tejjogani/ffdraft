@@ -1,6 +1,12 @@
 import {
+  type Design,
+  DIAEX_CUT_IDS,
+  type DiaexCutId,
   GEM_CUTS,
   GEM_MATERIALS,
+  importedDiamondCut,
+  importRoleOf,
+  isRhinoRoleBody,
   type Node,
   type NodeOf,
   nodeTitle,
@@ -24,6 +30,7 @@ import { Column, PageHeader, PageTitle } from '../../components/Page'
 import { mm } from '../../lib/format'
 import { useRpc } from '../../lib/query'
 import { activeOrg, useSession } from '../../lib/session'
+import { pendingImportedDiamonds } from './imported-diamonds'
 import { diaexBrowseLink } from './links'
 import { dimensions, StoneInventory } from './StoneInventory'
 
@@ -103,12 +110,32 @@ export function PieceSourcing({ pieceId }: { pieceId: string }) {
   if (!design || !piece.data) return <Skeleton className="h-16 w-full" />
   const stones = design.order.map((id) => design.nodes[id]).filter(isDiamond)
 
-  if (!stones.length)
+  const pending = pendingImportedDiamonds(design)
+  const hasUnassigned = design.order.some((id) => {
+    const body = design.nodes[id]
+    return isRhinoRoleBody(body) && body.visible && importRoleOf(body) === 'unassigned'
+  })
+  const review = canFit ? (
+    <Link
+      to="/pieces/$id/design"
+      params={{ id: pieceId }}
+      search={{ review: 'rhino-roles' }}
+      className={buttonClass({ variant: 'secondary', size: 'sm' })}
+    >
+      Review materials
+    </Link>
+  ) : null
+
+  if (!stones.length && !pending.length)
     return (
       <EmptyState
-        title="No diamonds to source"
-        description="Add a diamond in Design to find listings for it."
-        action={openCad}
+        title={hasUnassigned ? 'Imported materials need review' : 'No diamonds to source'}
+        description={
+          hasUnassigned
+            ? 'Confirm which imported parts are diamonds in CAD to find matching stones.'
+            : 'Add a diamond in project CAD to find matching stones.'
+        }
+        action={(hasUnassigned && review) || openCad}
       />
     )
 
@@ -116,8 +143,18 @@ export function PieceSourcing({ pieceId }: { pieceId: string }) {
     <section aria-label="Project diamonds" className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-base font-medium text-fg">Project diamonds</h2>
-        {openCad}
+        {stones.length > 0 && openCad}
       </div>
+      {pending.length > 0 && (
+        <ImportedDiamondSearch
+          key={pieceId}
+          ids={pending}
+          design={design}
+          pieceId={pieceId}
+          version={piece.data.version}
+          canFit={canFit}
+        />
+      )}
       <ul className="divide-y divide-line border-y border-line">
         {stones.map((node) => {
           const isOpen = active === node.id
@@ -189,6 +226,100 @@ export function PieceSourcing({ pieceId }: { pieceId: string }) {
           )
         })}
       </ul>
+    </section>
+  )
+}
+
+function ImportedDiamondSearch({
+  ids,
+  design,
+  pieceId,
+  version,
+  canFit,
+}: {
+  ids: string[]
+  design: Design
+  pieceId: string
+  version: number
+  canFit: boolean
+}) {
+  const [selectedId, setSelectedId] = useState('')
+  const [cutOverride, setCutOverride] = useState<DiaexCutId | ''>('')
+  const id = ids.includes(selectedId) ? selectedId : ids[0]!
+  const body = design.nodes[id]
+  if (!isRhinoRoleBody(body)) return null
+  const cut = cutOverride || importedDiamondCut(body)
+  return (
+    <section
+      aria-label="Imported diamonds"
+      className="rounded-lg border border-line bg-bg-subtle p-4"
+    >
+      <h3 className="text-sm font-medium text-fg">
+        {ids.length} imported {ids.length === 1 ? 'diamond' : 'diamonds'}
+      </h3>
+      <p className="mb-3 mt-1 text-sm text-fg-muted">
+        Find available diamonds using the dimensions of a stone in your CAD.
+      </p>
+      <div className="flex flex-wrap items-end gap-3">
+        <Field label="Stone in CAD" className="min-w-0 max-w-full flex-auto">
+          {(fieldId) => (
+            <select
+              id={fieldId}
+              className={controlClass}
+              value={id}
+              onChange={(e) => {
+                setSelectedId(e.target.value)
+                setCutOverride('')
+              }}
+            >
+              {ids.map((item, index) => (
+                <option key={item} value={item}>
+                  {index + 1}. {nodeTitle(design.nodes[item]!)}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+        <Field label="Search cut" className="min-w-32">
+          {(fieldId) => (
+            <select
+              id={fieldId}
+              className={controlClass}
+              value={cut ?? ''}
+              onChange={(e) => setCutOverride(e.target.value as DiaexCutId)}
+            >
+              {!cut && <option value="">Choose a cut</option>}
+              {DIAEX_CUT_IDS.map((value) => (
+                <option key={value} value={value}>
+                  {GEM_CUTS[value].label}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+      </div>
+      {cut && (
+        <>
+          <StoneInventory
+            key={JSON.stringify([id, cut, version])}
+            pieceId={pieceId}
+            version={version}
+            diamond={body}
+            searchCut={cut}
+            canFit={false}
+          />
+          {canFit && (
+            <Link
+              to="/pieces/$id/design"
+              params={{ id: pieceId }}
+              search={{ review: 'rhino-roles', reviewBody: id }}
+              className="mt-3 inline-block text-sm text-fg-muted underline decoration-line-strong underline-offset-2"
+            >
+              Set up this stone for a CAD replacement
+            </Link>
+          )}
+        </>
+      )}
     </section>
   )
 }

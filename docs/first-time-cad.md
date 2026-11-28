@@ -28,6 +28,8 @@ Review the skipped objects before choosing Import. Select the new parts in Featu
 
 Click a stone on the ring, even a single diamond in a pavé row. Choose Hide stone to see its seat or Isolate stone to zoom in on it. The same actions work on a metal part. Exit isolation returns to your earlier view. Show all brings back hidden items. The saved piece, metal weight and exports keep their geometry.
 
+To move a single imported diamond in CAD, select its body in **Features**. Open **Inspector → Fine-tune → Transform → Position**, enter an X, Y or Z offset in millimetres and press Enter. On an imported body, X = 0 is its original placement. In a generated pavé row, Position moves the entire row.
+
 Drag the zoom slider at the lower left of the 3D view for a close-up, or use its minus and plus buttons. With the slider focused, use the arrow keys for small steps. To fit the whole piece again, clear the selection and choose Fit to view in the toolbar.
 
 Open Construction curves in Features to browse the guides. On an imported Rhino assembly, the eye beside the group shows or hides them together. Imported assemblies open at a three-quarter angle. Drag on the model to orbit it. Use Views to switch between the studio and dark backdrops.
@@ -39,7 +41,8 @@ For a product image, open Renders and choose a shot. Under Look, choose Studio w
 1. Open **Renders** in the project. Choose **Add view**, then **Hero**, **Front**, **Top**, **Detail** or **Copy current**. Name the view and choose **Add view** to save it.
 2. For a straight, articulated import, choose **Ring pose → Circular band** to arrange the links in a loop for this view. Its diameter follows the source length. Choose **As imported** for a straight layout. Each view saves its own pose. CAD, casting measurements and exports keep the original geometry.
 3. Choose **Expand preview** in the viewfinder for more screen space. Press Escape to return. Drag to orbit, Shift-drag to pan and use the wheel or pinch to zoom. Under **Look**, choose your lighting. For a soft floor reflection choose **White gloss** under Ground. The view saves your camera and settings.
-4. Press **Render** for one image or **Render all** for the saved set. A shot is the saved setup. A take is a finished image or movie. Choose a motion on the shot to make a moving take. The toolbar shows progress and offers **View take** when the render finishes. Supported local Mac and Windows installations prepare Blender on the first render.
+4. To compare lighting at the same angle, use **Add view → Copy current** and name the copy. Try **Studio white** for a catalog shot or **More looks… → Daylight** for a window-lit photo. Under **Light**, adjust **Light direction** and **Brightness**. On smaller screens the settings sit below the takes. Use **Browser preview** to compare the looks quickly.
+5. Press **Render** for one image or **Render all** for the saved set. A shot is the saved setup. A take is a finished image or movie. Choose a motion on the shot to make a moving take. The toolbar shows progress and offers **View take** when the render finishes. Supported local Mac and Windows installations prepare Blender on the first render.
 
 If a Blender take stalls on your graphics processor, cancel the take. Under **Output → Render device**, choose **CPU** and press **Render** again. You can also choose **Use CPU** beside a canceled or failed Blender take. This keeps the angle, output size and pose for that view. Choose **Automatic** to let Blender pick the device again.
 
@@ -62,6 +65,10 @@ Choose Review materials in CAD or Renders. The source material labels help ident
 Select a part and check its source layer, group and appearance. Choose Metal and an alloy for anything the caster should weigh. Choose Reference for a display stand, an unused copy or a guide solid. Use the eye in Features to hide a reference while working.
 
 Choose Stone for a gemstone. Confirm the species, cut, width, length, depth and girdle position. Check the orientation on a tilted or asymmetric stone. For repeated stones, expand the matches and tick only the ones used in the piece. A matching loose copy can sit beside a finished ring. Choose Confirm role to record one undoable decision.
+
+## Find diamonds for an imported piece
+
+Open **Sourcing** and pick the diamond under **Stone in CAD**. Pavé measures that body in millimetres and looks for available stones near its length and width. Change **Search cut** or **Color grade** to explore alternatives. **Browse Diaex** opens the size-filtered search on Diaex. Browsing leaves the design as drawn.
 
 ## Fit a sourced stone to an imported setting
 
