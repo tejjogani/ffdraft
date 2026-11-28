@@ -717,7 +717,11 @@ export function RenderStudio({ pieceId, shotId }: { pieceId: string; shotId?: st
               baseAvailability !== 'failed' && (
                 <span className="glass absolute bottom-3 left-3 rounded-md px-2 py-1 text-2xs whitespace-nowrap text-fg-muted">
                   Viewfinder ·{' '}
-                  {browser ? 'takes draw in the browser' : 'takes render exactly this in Blender'}
+                  {shot.scene.ground === 'white-gloss-graded'
+                    ? 'approximate floor reflection'
+                    : browser
+                      ? 'takes draw in the browser'
+                      : 'takes render exactly this in Blender'}
                 </span>
               )}
           </div>

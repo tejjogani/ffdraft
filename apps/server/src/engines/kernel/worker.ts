@@ -99,6 +99,24 @@ async function run(
       const evaluation = await kernel.evaluate(task.design, { detail: task.detail, assets, signal })
       return { result: summarize(evaluation), transfer: [] }
     }
+    case 'stoneInstances': {
+      const { design, nodeId, offset, limit } = task
+      const evaluation = await kernel.evaluate(design, { detail: 'draft', assets, signal })
+      const node = design.nodes[nodeId]
+      const offsets = node && 'stoneOffsetsMm' in node ? node.stoneOffsetsMm : undefined
+      const instances = evaluation.stones.filter((stone) => stone.nodeId === nodeId)
+      const stones: TaskResults['stoneInstances']['stones'] = instances
+        .slice(offset, offset + limit)
+        .map(({ id, matrix, placementId }, i) => ({
+          id,
+          number: offset + i + 1,
+          placementId: placementId ?? null,
+          girdleMm: [matrix[12]!, matrix[13]!, matrix[14]!],
+          offsetMm: (placementId && offsets?.[placementId]) || [0, 0, 0],
+        }))
+      const result: TaskResults['stoneInstances'] = { stoneCount: instances.length, stones }
+      return { result, transfer: [] }
+    }
     case 'export': {
       const exported = await kernel.export(task.design, task.format, {
         stones: task.stones,

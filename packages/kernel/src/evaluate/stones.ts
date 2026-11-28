@@ -1,5 +1,5 @@
 /** Turns placed stones into public, instanced `StoneInstance`s and the stone report. */
-import { type Design, fittedCarat } from '@pave/schema'
+import { type Design, fittedCarat, isGeneratedStoneArray } from '@pave/schema'
 import type { NodeResult, SceneStone } from '../core'
 import { gemUnit } from '../gems/index'
 import { frameMatrix } from '../geometry/vec'
@@ -32,6 +32,9 @@ export function instanceStones(
         instance: {
           id: `${result.id}:${index}`,
           nodeId: result.id,
+          ...(node && stone.placementId && isGeneratedStoneArray(node)
+            ? { placementId: stone.placementId }
+            : {}),
           cut: stone.cut,
           stone: stone.stone,
           dims: stone.dims,

@@ -35,7 +35,7 @@ export interface Config {
    * the plan belongs to the organisation, and when unset or not a plan's name.
    */
   plan: PlanName | null
-  /** Signed-out Diaex Partner API base. Unset disables requests to Diaex. */
+  /** Signed-out Diaex Partner API base. An explicit inventory search can use public Browse when unset. */
   diaexPartnerApiUrl: string | null
 }
 

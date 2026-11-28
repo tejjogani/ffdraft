@@ -183,6 +183,21 @@ describe('environment', () => {
     controller.dispose()
     expect(disposed).toBe(1)
   })
+
+  it('uses the resolved grade in the browser’s diffuse floor approximation', () => {
+    const graded = resolveScene(
+      RenderSceneSchema.parse({ ground: 'white-gloss-graded' }),
+      solitaireRing(),
+    )
+    if (graded.ground.kind !== 'white-gloss') throw new Error('Expected a white gloss floor')
+    const capture = captureFloor(graded)
+    expect(capture).toMatchObject({
+      kind: 'emitter',
+      reflectionGrade: graded.ground.reflectionGrade,
+    })
+    const rig = buildRigScene(graded.rig, graded.subject.radius, capture)
+    expect(rig.getObjectByName('graded-floor')).toBeInstanceOf(Mesh)
+  })
 })
 
 describe('render stage disposal', () => {

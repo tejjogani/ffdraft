@@ -1,5 +1,6 @@
 import { effectiveRole } from '../auth/roles'
 import type { Ctx } from '../context'
+import { serviceContext } from '../service-context'
 import type { HandlerGroup } from './types'
 
 /** The deployment's capabilities, with the assistant only where this organisation has a key. */
@@ -10,6 +11,8 @@ async function capabilities(ctx: Ctx) {
   // Image keys belong to one organisation too.
   const imageGen = ctx.services.optional('imageGen')
   caps.imageGeneration = imageGen ? imageGen.available(ctx.orgId) : []
+  const onModel = ctx.services.optional('onModel')
+  if (onModel?.available) caps.onModel = await onModel.available(serviceContext(ctx))
   return caps
 }
 

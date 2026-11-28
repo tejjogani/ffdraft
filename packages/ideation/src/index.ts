@@ -1,5 +1,5 @@
 /**
- * The image provider family for the design board and, later, on-model imaging: one shape
+ * The image provider family for the design board and on-model imaging: one shape
  * (`ImageProvider`), the three keyed providers and the test fake. The server picks one per board
  * and passes the key per call; nothing here reads the environment.
  */

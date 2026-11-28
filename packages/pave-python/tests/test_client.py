@@ -80,6 +80,28 @@ class StudioTest(unittest.TestCase):
         project.features["head"]["kind"] = "bad"
         self.assertEqual(project.features["head"]["kind"], "setting")
 
+    def test_read_generated_stone_placements_for_a_guarded_edit(self):
+        project = self.project()
+        self.reply({
+            "version": 3,
+            "stoneCount": 4,
+            "stones": [{
+                "id": "row:1", "number": 2, "placementId": "sabc",
+                "girdleMm": [1, 2, 3], "offsetMm": [0, 0, 0],
+            }],
+        })
+        placements = project.stone_instances("row", offset=1, limit=1)
+        self.assertEqual(self.request("design.stoneInstances"), {
+            "pieceId": "ring", "nodeId": "row", "offset": 1, "limit": 1,
+        })
+        key = placements["stones"][0]["placementId"]
+        ops = [{"t": "update", "id": "row", "patch": {"stoneOffsetsMm": {key: [0, 0, 0.25]}}}]
+        self.reply({"version": 4, "change": {"id": "move", "seq": 4}})
+        project.apply(ops, "Lift stone 2", base_version=placements["version"])
+        sent = self.request("design.apply")
+        self.assertEqual(sent["baseVersion"], 3)
+        self.assertEqual(sent["ops"], ops)
+
     def test_measured_stone_fit_can_be_previewed_and_committed(self):
         project = self.project()
         fit = {

@@ -204,6 +204,8 @@ export interface Body extends MetalSpec {
 
 /** A placed gem. The evaluator derives the public `StoneInstance` (id, carat, matrix) from it. */
 export interface Stone {
+  /** Independent edit key for this stone's generated placement, when there is one. */
+  placementId?: string
   cut: GemCutId
   stone: GemMaterialId
   /** Actual size in mm (the measured dimensions when the stone has been sourced). */

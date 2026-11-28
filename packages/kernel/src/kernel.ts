@@ -236,6 +236,13 @@ export function createKernel(): LocalKernel {
               ...missingNotes(evaluated, options),
               ...invalid,
               ...errorNotes(evaluated),
+              ...evaluated.evaluation.diagnostics
+                .filter(
+                  (d) =>
+                    d.code === 'stone.offsetSeating' &&
+                    (!options.only || options.only.includes(d.nodeId!)),
+                )
+                .map((d) => d.message),
             ],
           }
         },

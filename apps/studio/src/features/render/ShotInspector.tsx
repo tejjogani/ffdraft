@@ -18,8 +18,8 @@ import {
   QUALITY_LABELS,
   SIZE_PRESETS,
 } from '@pave/render'
-import { METAL_IDS, type RenderScene } from '@pave/schema'
-import { cn, Segmented, Select, Slider, Switch } from '@pave/ui'
+import { METAL_IDS, type RenderScene, SHOT_LIGHT_MAX, SHOT_LIGHT_PANELS } from '@pave/schema'
+import { Button, cn, Segmented, Select, Slider, Switch } from '@pave/ui'
 import { type ReactNode, useEffect, useState } from 'react'
 import { metalLabel, metalSwatch } from '../../lib/domain'
 
@@ -48,6 +48,7 @@ const GROUNDS = [
   { value: 'sweep', label: 'Seamless paper' },
   { value: 'reflective', label: 'Black acrylic' },
   { value: 'white-gloss', label: 'White gloss' },
+  { value: 'white-gloss-graded', label: 'White gloss, graded reflection' },
 ] as const satisfies ReadonlyArray<{ value: RenderScene['ground']; label: string }>
 
 /** A slider that shows its value while dragged and reports once on release. */
@@ -65,6 +66,7 @@ function LiveSlider({
   min: number
   max: number
   step: number
+  disabled?: boolean
 }) {
   const [v, setV] = useState(value)
   useEffect(() => setV(value), [value])
@@ -106,6 +108,8 @@ export function ShotInspector({
   const more = LOOK_CHOICES.slice(3)
   const metal = scene.overrides['*']?.material ?? null
   const locked = scene.camera.locked === true
+  const panelIntensities: Readonly<Record<string, number | undefined>> =
+    scene.panelIntensities?.[scene.look] ?? {}
   const size =
     SIZE_PRESETS.find((p) => p.width === scene.output.width && p.height === scene.output.height)
       ?.key ?? 'custom'
@@ -228,6 +232,39 @@ export function ShotInspector({
           format={(v) => `${Math.round(v)}°`}
           onCommit={(rotation) => onChange({ environment: { rotation } })}
         />
+        <details>
+          <summary className="cursor-pointer py-1 text-xs font-medium text-fg-muted">
+            Studio lights
+          </summary>
+          <div className="flex flex-col gap-2 pt-1">
+            {Object.entries(SHOT_LIGHT_PANELS[scene.look]).map(([id, label]) => (
+              <LiveSlider
+                key={`${scene.look}:${id}`}
+                label={label}
+                value={panelIntensities[id] ?? 1}
+                min={0}
+                max={SHOT_LIGHT_MAX}
+                step={0.05}
+                disabled={disabled}
+                format={(v) => `${Math.round(v * 100)}%`}
+                onCommit={(intensity) =>
+                  onChange({ panelIntensities: { [scene.look]: { [id]: intensity } } })
+                }
+              />
+            ))}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="self-start text-xs"
+              disabled={
+                disabled || !Object.values(panelIntensities).some((intensity) => intensity !== 1)
+              }
+              onClick={() => onChange({ panelIntensities: { [scene.look]: null } })}
+            >
+              Reset studio lights
+            </Button>
+          </div>
+        </details>
         <Select
           value={scene.environment.background === 'color' ? 'look' : scene.environment.background}
           onChange={(background) => onChange({ environment: { background } })}
@@ -239,6 +276,12 @@ export function ShotInspector({
           onChange={(ground) => onChange({ ground })}
           options={GROUNDS.map((g) => ({ value: g.value, label: `Ground: ${g.label}` }))}
         />
+        {scene.ground === 'white-gloss-graded' && (
+          <p className="text-2xs text-fg-subtle">
+            The browser approximates this reflection. Render in Blender to judge the gradient on
+            polished metal.
+          </p>
+        )}
       </Section>
 
       <Section title="Metal">

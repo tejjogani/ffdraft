@@ -6,12 +6,13 @@ import {
   PLATING_IDS,
   type RenderSceneInput,
   RenderSceneSchema,
+  SHOT_LIGHT_PANELS,
 } from '@pave/schema'
 import { describe, expect, it } from 'vitest'
 import { paveBar, solitaireRing } from '../fixtures'
 import { ease, sampleTrack } from './animation'
 import { cameraBasis, cameraPose, viewTangents } from './camera'
-import { LOOK_IDS } from './looks'
+import { LOOK_IDS, LOOKS } from './looks'
 import { gemMaterial, metalKey, metalMaterial } from './materials'
 import { dot, rotate, sub, type Vec3 } from './math'
 import { resolveScene } from './resolve'
@@ -110,6 +111,47 @@ describe('resolveScene', () => {
       expect(r.rig.panels.length).toBeGreaterThan(0)
       expect(r.rig.sparkles.length).toBeGreaterThan(0)
     }
+  })
+
+  it('offers exactly the emitting panels in each look and keeps the normal rig at 100%', () => {
+    for (const look of LOOK_IDS) {
+      const panelIds = LOOKS[look].panels.filter(({ radiance }) => radiance > 0).map(({ id }) => id)
+      expect(Object.keys(SHOT_LIGHT_PANELS[look])).toEqual(panelIds)
+      const panelIntensities = { [look]: Object.fromEntries(panelIds.map((id) => [id, 1])) }
+      expect(resolveScene(scene({ look, panelIntensities }), ring)).toEqual(
+        resolveScene(scene({ look }), ring),
+      )
+    }
+  })
+
+  it('adjusts only the selected look’s emitting panels and treats zero as off', () => {
+    const input = scene({
+      look: 'catalog-white',
+      environment: { intensity: 1.5, rotation: 70 },
+      panelIntensities: { 'catalog-white': { left: 0, right: 1.5 }, 'studio-soft': { top: 0 } },
+    })
+    const base = resolveScene({ ...input, panelIntensities: undefined }, ring)
+    const adjusted = resolveScene(input, ring)
+    const right = base.rig.panels.find((panel) => panel.id === 'right')!
+    const adjustedRight = adjusted.rig.panels.find((panel) => panel.id === 'right')!
+    for (const [i, channel] of right.radiance.entries()) {
+      expect(adjustedRight.radiance[i]).toBeCloseTo(channel * 1.5)
+    }
+    expect(adjusted).toEqual({
+      ...base,
+      rig: {
+        ...base.rig,
+        panels: base.rig.panels
+          .filter((panel) => panel.id !== 'left')
+          .map((panel) =>
+            panel.id === 'right' ? { ...right, radiance: adjustedRight.radiance } : panel,
+          ),
+      },
+    })
+    const soft = resolveScene({ ...input, look: 'studio-soft' }, ring)
+    expect(soft.rig.panels.map((panel) => panel.id)).toEqual(
+      LOOKS['studio-soft'].panels.map((panel) => panel.id).filter((id) => id !== 'top'),
+    )
   })
 
   it('frames the silhouette inside the 55–75 % fill band, centred', () => {
@@ -255,6 +297,26 @@ describe('resolveScene', () => {
     })
     expect(white.camera).toEqual(base.camera)
     expect(base.ground.kind).toBe('shadow')
+  })
+
+  it('adds a camera-relative reflection grade only when the shot selects it', () => {
+    const input: RenderSceneInput = {
+      camera: { preset: 'custom', position: [0, -80, 40], target: [0, 0, 20] },
+    }
+    const white = resolveScene(scene({ ...input, ground: 'white-gloss' }), ring)
+    const graded = resolveScene(scene({ ...input, ground: 'white-gloss-graded' }), ring)
+    expect(graded).toEqual({
+      ...white,
+      ground: {
+        ...white.ground,
+        reflectionGrade: {
+          axis: [1, expect.closeTo(0)],
+          halfWidth: expect.closeTo(graded.subject.radius * 0.22),
+          low: 0.08,
+          high: 1.14,
+        },
+      },
+    })
   })
 
   it('preserves an explicitly composed black acrylic camera', () => {

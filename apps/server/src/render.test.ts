@@ -140,6 +140,52 @@ describe('saved shots and takes', () => {
     expect((await api.call('pieces.get', { id: piece.id })).version).toBe(piece.version)
   })
 
+  it('round trips independent light levels through saved shots and rejects unavailable panels', async () => {
+    const piece = await api.call('pieces.create', { templateId: 'halo' })
+    const shot = await api.call('scenes.create', {
+      pieceId: piece.id,
+      title: 'Catalog ring',
+      scene: {
+        look: 'catalog-white',
+        camera: { preset: 'hero', locked: true },
+        panelIntensities: { 'catalog-white': { left: 0.6 } },
+      },
+    })
+    const copy = await api.call('scenes.create', {
+      pieceId: piece.id,
+      title: 'Catalog comparison',
+      scene: shot.scene,
+    })
+    const adjusted = await api.call('scenes.update', {
+      id: copy.id,
+      patch: { panelIntensities: { 'catalog-white': { right: 0 }, 'studio-soft': { top: 1.5 } } },
+    })
+    expect(adjusted.scene.panelIntensities).toEqual({
+      'catalog-white': { left: 0.6, right: 0 },
+      'studio-soft': { top: 1.5 },
+    })
+    expect(adjusted.scene.camera).toEqual(shot.scene.camera)
+    for (const invalid of [{ right: 2.1 }, { right: -0.1 }, { 'lens-flag': 2 }, { rim: 1 }]) {
+      expect(
+        (
+          await api.fail('scenes.update', {
+            id: copy.id,
+            patch: { panelIntensities: { 'catalog-white': invalid } },
+          })
+        ).status,
+      ).toBe(400)
+    }
+    const reset = await api.call('scenes.update', {
+      id: copy.id,
+      patch: { panelIntensities: { 'catalog-white': null } },
+    })
+    expect(reset.scene.panelIntensities).toEqual({ 'studio-soft': { top: 1.5 } })
+    const restored = await api.call('scenes.revert', { id: copy.id })
+    expect(restored.scene.scene).toEqual(adjusted.scene)
+    expect(await api.call('scenes.list', { pieceId: piece.id })).toEqual([shot, restored.scene])
+    expect((await api.call('pieces.get', { id: piece.id })).version).toBe(piece.version)
+  })
+
   it('returns the imported preview settings with camera suggestions, including without a kernel', async () => {
     const { id: pieceId } = await api.call('pieces.create', { kind: 'ring' })
     const query = { pieceId, includeUnassignedRhino: true }

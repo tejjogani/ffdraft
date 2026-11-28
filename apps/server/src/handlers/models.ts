@@ -144,7 +144,8 @@ export const models: HandlerGroup<'models' | 'shots'> = {
   },
 
   'models.generatePortraits': async (ctx, { id, views }) => {
-    const model = toBrandModel(await getModel(ctx, id))
+    const original = await getModel(ctx, id)
+    const model = toBrandModel(original)
     if (model.status === 'approved')
       throw conflict(
         'Approved models keep their portraits; set the model back to draft to regenerate',
@@ -157,8 +158,25 @@ export const models: HandlerGroup<'models' | 'shots'> = {
     const fresh: BrandModel['portraits'] = []
     for (const { view, file } of generated.portraits)
       fresh.push({ view, assetId: (await putAsset(ctx, { ...file, kind: 'image' })).id })
-    const kept = model.portraits.filter((p) => !fresh.some((f) => f.view === p.view))
-    return updateModel(ctx, id, { portraits: [...kept, ...fresh], recipe: generated.recipe })
+    // A new headshot defines a fresh identity. Other views must be conditioned on that headshot.
+    const kept = fresh.some((p) => p.view === 'face')
+      ? []
+      : model.portraits.filter((p) => !fresh.some((f) => f.view === p.view))
+    const [row] = await ctx.repo.models.update(
+      and(
+        eq(t.brandModel.id, id),
+        eq(t.brandModel.status, 'draft'),
+        eq(t.brandModel.version, original.version),
+        eq(t.brandModel.card, original.card),
+        eq(t.brandModel.portraits, original.portraits),
+      )!,
+      { portraits: [...kept, ...fresh], recipe: generated.recipe, updatedAt: new Date() },
+    )
+    if (!row)
+      throw conflict(
+        'This model changed while the portraits were being made. Review its card and try again.',
+      )
+    return toBrandModel(row)
   },
 
   'models.delete': async (ctx, { id }) => {

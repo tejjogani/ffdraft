@@ -16,8 +16,8 @@
  *    `ImageGenProvider` shape) lives in `packages/ideation`, owned by the ideate workstream.
  *    `imageGen` and `onModel` are both built on it; there is no second client in the server.
  *  - Vision: the render workstream's vision provider is registered as `vision` and implements
- *    {@link VisionService.describe} for freeform. The on-model fidelity judge and the screening
- *    of card and direction text for real names are internal to `onModel`, not part of `vision`.
+ *    {@link VisionService.describe} for freeform. The shipped on-model service produces labelled
+ *    concepts of attested synthetic adults. Verified exports require a separate CAD fidelity check.
  *  - Attestation: the server refuses export, image-to-3D and production of a piece that needs
  *    one; a client-side export must check `originNeedsAttestation(piece.origin)` itself first.
  *  - Restart recovery: `Runtime.recover()` runs once at boot and hands every unfinished job and
@@ -84,6 +84,8 @@ export interface ServiceContext {
   readonly userId: string
   readonly actor: Actor
   readonly localRenderInstall?: boolean
+  /** Signal for a generation awaited by this request. Background jobs use their own. */
+  readonly signal?: AbortSignal
   recordUsage(event: NewUsage): Promise<void>
   putAsset(file: NewAsset): Promise<Asset>
   /** Reads an asset of the caller's org; rejects with 404 for anything else. */
@@ -183,6 +185,12 @@ export interface GeometryService extends Service {
     opts: { detail: 'draft' | 'production' } & GeometryCall,
     sctx: ServiceContext,
   ): Promise<EvaluationSummary>
+  stoneInstances?(
+    design: Design,
+    opts: Pick<CommandParsedInput<'design.stoneInstances'>, 'nodeId' | 'offset' | 'limit'> &
+      GeometryCall,
+    sctx: ServiceContext,
+  ): Promise<Omit<CommandOutput<'design.stoneInstances'>, 'version'>>
   export(
     design: Design,
     opts: { format: ExportFormat; stones: boolean } & GeometryCall,
@@ -370,6 +378,8 @@ export type ModelShotPatch = Partial<
 >
 
 export interface OnModelService extends Service {
+  /** Provider IDs usable for this organisation and its current image configuration. */
+  available?(sctx: ServiceContext): Promise<string[]>
   /** Generates portrait views; the face first, the others conditioned on the kept face. */
   portraits(
     model: BrandModel,
@@ -391,9 +401,9 @@ export interface OnModelService extends Service {
     sctx: ServiceContext,
   ): Promise<Estimate>
   /**
-   * Accept a queued shot and return promptly; report stages through `handle`. Queue CAD
-   * references with `sctx.invoke('renders.create', { purpose: 'reference', … })` and wait with
-   * `sctx.jobSettled`. Fail closed: a shot that does not match the design is `failed`.
+   * Accept a queued shot and return promptly; report stages through `handle`. Ground concepts
+   * in CAD renders from the shot's source version and record their provenance. A shot may
+   * export only after a real fidelity check has passed.
    */
   submitShot(
     shot: ModelShot,

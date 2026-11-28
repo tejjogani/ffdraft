@@ -123,8 +123,8 @@ export function StoneInventory({
 }) {
   const nodeId = diamond.id
   const [submitted, setSubmitted] = useState<
-    Pick<CommandInput<'sourcing.search'>, 'color' | 'sku'>
-  >({})
+    Pick<CommandInput<'sourcing.search'>, 'color' | 'sku' | 'publicBrowse'>
+  >({ publicBrowse: !searchCut })
   const [color, setColor] = useState('')
   const [entry, setEntry] = useState('')
   const [activeSku, setActiveSku] = useState<string | null>(null)
@@ -165,8 +165,9 @@ export function StoneInventory({
       return
     }
     const next = sku ? { sku } : color ? { color } : {}
-    if (next.sku === submitted.sku && next.color === submitted.color) void search.refetch()
-    else setSubmitted(next)
+    if (submitted.publicBrowse && next.sku === submitted.sku && next.color === submitted.color)
+      void search.refetch()
+    else setSubmitted({ ...next, publicBrowse: true })
   }
 
   async function previewStone(stone: SourcedDiamond) {
@@ -205,7 +206,12 @@ export function StoneInventory({
     setActionError('')
     setReviewNotice('')
     try {
-      const current = await rpc.call('sourcing.stone', { pieceId, nodeId, sku: preview.stone.sku })
+      const current = await rpc.call('sourcing.stone', {
+        pieceId,
+        nodeId,
+        sku: preview.stone.sku,
+        publicBrowse: true,
+      })
       if (changedListing(preview.stone, current)) {
         setPreview(null)
         await previewStone(current)
@@ -310,7 +316,7 @@ export function StoneInventory({
           rel="noreferrer"
           className={
             searchCut
-              ? `${buttonClass({ size: 'sm', variant: 'primary' })} mt-3`
+              ? `${buttonClass({ size: 'sm', variant: 'secondary' })} mt-3`
               : 'mt-3 inline-flex items-center gap-1 text-sm text-fg-muted underline decoration-line-strong underline-offset-2 hover:text-fg'
           }
         >
@@ -318,18 +324,18 @@ export function StoneInventory({
           <ArrowUpRight className="size-3.5" aria-hidden />
         </a>
       )}
-      {search.isError &&
-        (searchCut && cadTarget && search.error.code === 'not_configured' ? (
-          <p className="mt-2 text-xs text-fg-muted">
-            Browse Diaex opens current listings with these size filters.
-          </p>
-        ) : (
-          <InlineError message={search.error.message} />
-        ))}
-      {search.isFetching && <Skeleton aria-label="Searching Diaex" className="mt-4 h-10 w-full" />}
+      {search.isError && <InlineError message={search.error.message} />}
+      {search.isFetching && (
+        <Skeleton
+          aria-label={submitted.publicBrowse ? 'Searching Diaex' : 'Measuring stone'}
+          className="mt-4 h-10 w-full"
+        />
+      )}
       {search.isSuccess && !search.isFetching && candidates.length === 0 && (
         <p role="status" className="mt-4 text-sm text-fg-muted">
-          No available diamonds match this search.
+          {submitted.publicBrowse
+            ? 'No available diamonds match this search.'
+            : 'Choose Search inventory to compare available diamonds at these dimensions.'}
         </p>
       )}
       {candidates.length > 0 && (

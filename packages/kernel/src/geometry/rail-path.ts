@@ -66,7 +66,7 @@ export function reverseRail(path: RailPath): RailPath {
   }
 }
 
-export const railTangent = (path: RailPath, t: number): Vec3 =>
+export const railTangent = (path: Pick<RailPath, 'at'>, t: number): Vec3 =>
   normalize(sub(path.at(t + 1e-6), path.at(t - 1e-6)))
 
 /** Project a point known to lie on the rail, then refine the nearest sampled span. */

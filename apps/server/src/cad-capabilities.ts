@@ -32,10 +32,10 @@ const operations: Record<string, Operation> = {
     tools: [],
   },
   moveGeneratedStone: {
-    status: 'unavailable',
+    status: 'limited',
     detail:
-      'Generated halo, row and pavé instances can be hidden or isolated in Studio. Their individual positions cannot be moved, pinned or deleted through a rebuild.',
-    tools: [],
+      'Translate an individual generated halo, stone row or pavé stone in model XYZ millimetres. Read its placementId and version, then update stoneOffsetsMm on the array feature. Seats and shared metal stay at their generated positions, so check fit before making. A saved offset goes dormant while its generated placement is absent.',
+    tools: ['design.stoneInstances', 'design.apply', 'design.evaluate'],
   },
   trimSurface: {
     status: 'unavailable',

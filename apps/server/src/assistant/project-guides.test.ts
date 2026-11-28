@@ -304,8 +304,8 @@ it('checks modeling support in this project and rejects an invented placement ed
   const availability = await api.call('design.capabilities', lookup)
   expect(availability).toMatchObject({
     version: ring.version,
-    status: 'unavailable',
-    tools: [],
+    status: 'limited',
+    tools: ['design.stoneInstances', 'design.apply', 'design.evaluate'],
   })
   expect(availability.projectKinds).toContain('gemRow')
   const loft = await api.call('design.capabilities', { pieceId: ring.id, operation: 'Loft' })
@@ -345,9 +345,7 @@ it('checks modeling support in this project and rejects an invented placement ed
     },
     {
       content: [
-        text(
-          'The generated row supports width and spacing. Individual permanent offsets are unavailable.',
-        ),
+        text('I need the fourth stone’s current placement ID before I can save the offset.'),
       ],
     },
   )

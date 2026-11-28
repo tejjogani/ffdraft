@@ -69,6 +69,13 @@ class Background(TypedDict):
     bottom: NotRequired[Rgb]
 
 
+class FloorReflectionGrade(TypedDict):
+    axis: tuple[float, float]
+    halfWidth: float
+    low: float
+    high: float
+
+
 class Ground(TypedDict):
     kind: Literal["none", "shadow", "sweep", "reflective", "white-gloss"]
     z: NotRequired[float]
@@ -80,6 +87,7 @@ class Ground(TypedDict):
     color: NotRequired[Rgb]
     roughness: NotRequired[float]
     ior: NotRequired[float]
+    reflectionGrade: NotRequired[FloorReflectionGrade]
 
 
 class Relief(TypedDict):

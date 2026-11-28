@@ -21,6 +21,9 @@ export function createGeometry(pool: KernelPool): GeometryService {
     evaluate: (design, { detail, ...call }, sctx) =>
       pool.run({ kind: 'evaluate', design, detail }, poolOptions(sctx, call)),
 
+    stoneInstances: (design, { nodeId, offset, limit, ...call }, sctx) =>
+      pool.run({ kind: 'stoneInstances', design, nodeId, offset, limit }, poolOptions(sctx, call)),
+
     async export(design, { format, stones, ...call }, sctx) {
       const result = await pool.run(
         { kind: 'export', design, format, stones },

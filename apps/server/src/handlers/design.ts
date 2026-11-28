@@ -4,6 +4,7 @@ import {
   type EvaluationSummary,
   IntentError,
   type IntentResult,
+  isGeneratedStoneArray,
   isModelImportAdd,
   MAX_DESIGN_CHANGE_OPS,
   NODE_SCHEMAS,
@@ -21,7 +22,7 @@ import { putAsset } from '../assets/assets'
 import { cadCapabilities } from '../cad-capabilities'
 import * as t from '../db/schema'
 import { commitChange, FACTS_DETAIL, storeFacts, toStoredChange } from '../design'
-import { AppError, badRequest, conflict, notFound } from '../errors'
+import { AppError, badRequest, conflict, NotConfiguredError, notFound } from '../errors'
 import { getPiece } from '../lookups'
 import { editableMesh } from '../mesh-components'
 import { exportClaim, withClaim } from '../plans'
@@ -519,6 +520,25 @@ export const design: HandlerGroup<'design'> = {
     // Facts come from one detail level only, so a draft answer never overwrites production facts.
     if (input.detail === FACTS_DETAIL) await storeFacts(ctx, piece.id, piece.version, summary)
     return summary
+  },
+
+  'design.stoneInstances': async (ctx, { pieceId, nodeId, offset, limit }) => {
+    const piece = await getPiece(ctx, pieceId)
+    if (!Object.hasOwn(piece.design.nodes, nodeId)) throw notFound('Feature', nodeId)
+    if (!isGeneratedStoneArray(piece.design.nodes[nodeId]!))
+      throw badRequest('Choose a stone row, halo or pavé feature.')
+    const geometry = ctx.services.get('geometry')
+    if (!geometry.stoneInstances)
+      throw new NotConfiguredError(
+        'geometry',
+        'This server cannot inspect generated stone placements.',
+      )
+    const page = await geometry.stoneInstances(
+      piece.design,
+      { pieceId, nodeId, offset, limit },
+      serviceContext(ctx),
+    )
+    return { version: piece.version, ...page }
   },
 
   'design.export': async (ctx, input) => {

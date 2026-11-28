@@ -1,9 +1,12 @@
 import { ADULT_AGE_RANGES, type BrandModel } from '@pave/schema'
 import { Button, controlClass, Field, InlineError, Input, Textarea } from '@pave/ui'
+import { Link } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { assetUrl } from '../../lib/assets'
-import { useRpcMutation } from '../../lib/query'
+import { usd } from '../../lib/format'
+import { useRpc, useRpcMutation } from '../../lib/query'
+import { useSession } from '../../lib/session'
 
 export function NewModel({
   onCreated,
@@ -150,6 +153,14 @@ export function NewModel({
 export function ModelDetails({ model, onUse }: { model: BrandModel; onUse?: () => void }) {
   const update = useRpcMutation('models.update', { meta: { silent: true } })
   const approved = model.status === 'approved'
+  const capable = useSession().capabilities.onModel.length > 0
+  const [reviewPortrait, setReviewPortrait] = useState(false)
+  const portraitInput = { id: model.id, views: ['face' as const] }
+  const estimate = useRpc('models.estimatePortraits', portraitInput, {
+    enabled: capable && !approved && reviewPortrait,
+  })
+  const portrait = useRpcMutation('models.generatePortraits', { meta: { silent: true } })
+  const hasFace = model.portraits.some((p) => p.view === 'face')
   return (
     <article className="grid min-w-0 gap-3 rounded-xl border border-line p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -173,25 +184,82 @@ export function ModelDetails({ model, onUse }: { model: BrandModel; onUse?: () =
         </div>
       )}
       {approved ? (
-        onUse && (
-          <Button variant="primary" className="justify-self-start" onClick={onUse}>
-            Use model
-          </Button>
-        )
+        <div className="flex flex-wrap gap-2">
+          {onUse && (
+            <Button variant="primary" onClick={onUse}>
+              Use model
+            </Button>
+          )}
+          {!onUse && (
+            <Button
+              variant="secondary"
+              disabled={update.isPending}
+              onClick={() => update.mutate({ id: model.id, status: 'draft' })}
+            >
+              Reopen as draft
+            </Button>
+          )}
+        </div>
       ) : (
         <div className="grid gap-2">
-          <p className="text-xs text-fg-muted">Approve this card to use the model in a shot.</p>
+          <p className="text-xs text-fg-muted">
+            An optional headshot helps keep the model’s appearance consistent across photographs.
+            Approve this card when it’s ready to use in shoots.
+          </p>
+          {capable ? (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
+              {reviewPortrait ? (
+                estimate.isFetching ? (
+                  <span role="status">Estimating headshot…</span>
+                ) : estimate.isError ? (
+                  <InlineError
+                    message={estimate.error.message}
+                    onRetry={() => void estimate.refetch()}
+                  />
+                ) : estimate.data ? (
+                  <>
+                    <span>
+                      Estimated {usd(estimate.data.usd)} · {estimate.data.seconds} seconds
+                    </span>
+                    <Button
+                      size="sm"
+                      disabled={portrait.isPending || update.isPending}
+                      onClick={() =>
+                        portrait.mutate(portraitInput, {
+                          onSuccess: () => setReviewPortrait(false),
+                        })
+                      }
+                    >
+                      {portrait.isPending ? 'Generating headshot…' : 'Generate headshot'}
+                    </Button>
+                  </>
+                ) : null
+              ) : (
+                <Button size="sm" onClick={() => setReviewPortrait(true)}>
+                  {hasFace ? 'Estimate new headshot' : 'Estimate headshot'}
+                </Button>
+              )}
+            </div>
+          ) : (
+            <Link
+              to="/settings/ai"
+              className="justify-self-start text-xs underline underline-offset-2"
+            >
+              Set up AI image generation
+            </Link>
+          )}
+          {portrait.isError && <InlineError message={portrait.error.message} className="py-0" />}
           <Button
             variant="primary"
             className="justify-self-start"
-            disabled={update.isPending}
+            disabled={update.isPending || portrait.isPending}
             onClick={() => update.mutate({ id: model.id, status: 'approved' })}
           >
             {update.isPending ? 'Approving…' : 'Approve for shoots'}
           </Button>
-          {update.isError && <InlineError message={update.error.message} className="py-0" />}
         </div>
       )}
+      {update.isError && <InlineError message={update.error.message} className="py-0" />}
     </article>
   )
 }

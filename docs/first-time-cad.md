@@ -28,7 +28,7 @@ Review the skipped objects before choosing Import. Select the new parts in Featu
 
 Click a stone on the ring, even a single diamond in a pavé row. Choose Hide stone to see its seat or Isolate stone to zoom in on it. The same actions work on a metal part. Exit isolation returns to your earlier view. Show all brings back hidden items. The saved piece, metal weight and exports keep their geometry.
 
-To move a single imported diamond in CAD, select its body in **Features**. Open **Inspector → Fine-tune → Transform → Position**, enter an X, Y or Z offset in millimetres and press Enter. On an imported body, X = 0 is its original placement. In a generated pavé row, Position moves the entire row.
+To move a single imported diamond in CAD, select its body in **Features**. Open **Inspector → Fine-tune → Transform → Position**, enter an X, Y or Z offset in millimetres and press Enter. On an imported body, X = 0 is its original placement. For a generated row, halo or pavé, select the individual stone, open **Stone displacement**, type X, Y or Z in mm, and choose **Apply displacement**. **Reset position** removes its offset. The seat and shared metal stay in place, so inspect the fit before production. The feature’s Transform control moves the entire row.
 
 Drag the zoom slider at the lower left of the 3D view for a close-up, or use its minus and plus buttons. With the slider focused, use the arrow keys for small steps. To fit the whole piece again, clear the selection and choose Fit to view in the toolbar.
 
@@ -41,7 +41,7 @@ For a product image, open Renders and choose a shot. Under Look, choose Studio w
 1. Open **Renders** in the project. Choose **Add view**, then **Hero**, **Front**, **Top**, **Detail** or **Copy current**. Name the view and choose **Add view** to save it.
 2. For a straight, articulated import, choose **Ring pose → Circular band** to arrange the links in a loop for this view. Its diameter follows the source length. Choose **As imported** for a straight layout. Each view saves its own pose. CAD, casting measurements and exports keep the original geometry.
 3. Choose **Expand preview** in the viewfinder for more screen space. Press Escape to return. Drag to orbit, Shift-drag to pan and use the wheel or pinch to zoom. Under **Look**, choose your lighting. For a soft floor reflection choose **White gloss** under Ground. The view saves your camera and settings.
-4. To compare lighting at the same angle, use **Add view → Copy current** and name the copy. Try **Studio white** for a catalog shot or **More looks… → Daylight** for a window-lit photo. Under **Light**, adjust **Light direction** and **Brightness**. On smaller screens the settings sit below the takes. Use **Browser preview** to compare the looks quickly.
+4. To compare lighting at the same angle, use **Add view → Copy current** and name the copy. Try **Studio white** for a catalog shot or **More looks… → Daylight** for a window-lit photo. Under **Light**, adjust **Light direction**, **Brightness** or the individual panels in **Studio lights**. For more definition inside a polished band, try **Ground → White gloss, graded reflection** and compare the Blender takes. On smaller screens the settings sit below the takes. Use **Browser preview** to compare the looks quickly.
 5. Press **Render** for one image or **Render all** for the saved set. A shot is the saved setup. A take is a finished image or movie. Choose a motion on the shot to make a moving take. The toolbar shows progress and offers **View take** when the render finishes. Supported local Mac and Windows installations prepare Blender on the first render.
 
 If a Blender take stalls on your graphics processor, cancel the take. Under **Output → Render device**, choose **CPU** and press **Render** again. You can also choose **Use CPU** beside a canceled or failed Blender take. This keeps the angle, output size and pose for that view. Choose **Automatic** to let Blender pick the device again.
@@ -68,7 +68,7 @@ Choose Stone for a gemstone. Confirm the species, cut, width, length, depth and 
 
 ## Find diamonds for an imported piece
 
-Open **Sourcing** and pick the diamond under **Stone in CAD**. Pavé measures that body in millimetres and looks for available stones near its length and width. Change **Search cut** or **Color grade** to explore alternatives. **Browse Diaex** opens the size-filtered search on Diaex. Browsing leaves the design as drawn.
+Open **Sourcing** and pick the diamond under **Stone in CAD**. Pavé measures that body in millimetres and looks for available stones near its length and width. Change **Search cut** or **Color grade** to explore alternatives. **Search inventory** lists available diamonds in Pavé. Compare length, width and depth with the CAD dimensions. Paste a public Diaex ID to check a specific stone. **Browse Diaex** opens the same filters on the marketplace. Browsing leaves the design as drawn.
 
 ## Fit a sourced stone to an imported setting
 
@@ -174,7 +174,9 @@ Choose Surface to leave the ends open. A surface has measurable area, appears in
 
 ## Follow a rail
 
-Use Sweep 1 rail for a shoulder that follows one guide. Place the cross section at the start of the rail in its intended orientation. Use Sweep 2 rails when a second guide should control the opposite side. For two rails, use open guide curves and place the profiles so each touches both rails. Choose rails first, then profiles in order. Edit sweep changes the linked curves. Edit points changes the shape of a source.
+Use Sweep 1 rail for a shoulder that follows one guide. Place the cross section at the start of the rail in its intended orientation. Use Sweep 2 rails when a second guide should control the opposite side. For a shoulder, use two open guides. For a continuous band, use two closed guides and place each section so it touches each guide at one point. Choose **Solid** with a closed section to fill the metal. An open section with **Surface** makes a sheet. Choose rails first, then profiles in order. Edit sweep changes the linked curves. Edit points changes the shape of a source.
+
+Try [three practice guides](../../apps/studio/public/examples/shank-guides.3dm) in an empty project. In **Import model**, enable **Include editable curves**. Open **Add feature → Sweep 2 rails**. Choose **Inner rail**, **Outer rail**, and **Band section**, then **Solid → Create feature**. The result has an 18 mm bore, 22 mm outside diameter and 3 mm height.
 
 ## Render your CAD
 

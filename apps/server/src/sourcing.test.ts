@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { writeStl } from '@pave/kernel/mesh-stl'
 import type { RhinoContext } from '@pave/schema'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { putAsset } from './assets/assets'
 import { BOOT_TIMEOUT, type Client, signUp, type TestServer, testServer } from './test/harness'
 
@@ -199,6 +199,90 @@ describe('Diaex inventory RPCs', () => {
         },
       },
     ])
+  })
+
+  it('searches signed-out public inventory on request, ranks by CAD fit and rechecks the exact stone', async () => {
+    const configured = server.runtime.config.diaexPartnerApiUrl
+    const originalFetch = globalThis.fetch
+    const publicAccess = { level: 'signed_out', prices: false, markup: false }
+    const base = {
+      id: bestId,
+      shape_group: 'round',
+      length_mm: 6.44,
+      width_mm: 6.43,
+      height_mm: 4.0,
+      stone_type: 'CVD',
+      availability: 'available',
+      carat: 1.05,
+      color: 'FANCY',
+      clarity: 'VS1',
+      fancy_color: 'FANCY VIVID YELLOW',
+      report_no: null,
+      price: 1234,
+    }
+    let items = [
+      { ...base, id: 'second', length_mm: 6.59 },
+      base,
+      base,
+      { ...base, id: 'out', width_mm: 4 },
+      { ...base, id: 'held', availability: 'on_hold' },
+    ]
+    let accessLevel = 'signed_out'
+    const calls: { path: string; body: Record<string, unknown> }[] = []
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      if (!String(url).startsWith('https://thediaex.com/')) return originalFetch(url, init)
+      const headers = new Headers(init?.headers)
+      expect(headers.has('cookie') || headers.has('authorization')).toBe(false)
+      expect(init?.redirect).toBe('error')
+      calls.push({ path: new URL(String(url)).pathname, body: JSON.parse(String(init?.body)) })
+      return Response.json({ items, missing: [], access: { ...publicAccess, level: accessLevel } })
+    })
+    try {
+      server.runtime.config.diaexPartnerApiUrl = null
+      expect(await owner.fail('sourcing.search', gem())).toMatchObject({
+        error: { code: 'not_configured' },
+      })
+      expect(
+        await outsider.fail('sourcing.search', { ...gem(), publicBrowse: true }),
+      ).toMatchObject({ status: 404 })
+      expect(calls).toHaveLength(0)
+      const result = await owner.call('sourcing.search', {
+        ...gem(),
+        color: 'Yellow',
+        publicBrowse: true,
+      })
+      expect(result.candidates.map((s) => s.sku)).toEqual([bestId, 'second'])
+      expect(result.candidates[0]).toMatchObject({
+        origin: 'lab',
+        fancyHue: 'Yellow',
+        measured: { length: 6.44, width: 6.43, depth: 4 },
+      })
+      expect(result.candidates[0]).not.toHaveProperty('price')
+      expect(calls[0]).toMatchObject({
+        path: '/api/search',
+        body: { filters: JSON.parse(new URL(result.searchUrl).searchParams.get('f')!) },
+      })
+      items = [base]
+      expect(
+        await owner.call('sourcing.stone', { ...gem(), sku: bestId, publicBrowse: true }),
+      ).toEqual(result.candidates[0])
+      expect(calls[1]).toEqual({ path: '/api/stones/batch', body: { public_ids: [bestId] } })
+      items = [{ ...base, availability: 'on_hold' }]
+      expect(
+        await owner.fail('sourcing.stone', { ...gem(), sku: bestId, publicBrowse: true }),
+      ).toMatchObject({ status: 409 })
+      items = []
+      expect(
+        await owner.fail('sourcing.stone', { ...gem(), sku: bestId, publicBrowse: true }),
+      ).toMatchObject({ status: 404 })
+      accessLevel = 'linked'
+      expect(await owner.fail('sourcing.search', { ...gem(), publicBrowse: true })).toMatchObject({
+        status: 503,
+      })
+    } finally {
+      server.runtime.config.diaexPartnerApiUrl = configured
+      fetcher.mockRestore()
+    }
   })
 
   it('uses saved grades and a certificate requirement unless a new color is requested', async () => {
@@ -523,6 +607,14 @@ describe('read-only Diaex browsing for imported CAD', () => {
       min_width_mm: 1.7,
       max_width_mm: 2.3,
     })
+  })
+
+  it('shows local measurements before a jeweler requests inventory, including with a partner configured', async () => {
+    const target = await importedTarget()
+    const result = await owner.call('sourcing.search', { ...target, publicBrowse: false })
+    expect(result.cadTarget).toEqual({ cut: 'emerald', length: 4, width: 2, depth: 1.4 })
+    expect(result.candidates).toEqual([])
+    expect(requests).toEqual([])
   })
 
   it('includes measured filters when the partner API is unconfigured', async () => {

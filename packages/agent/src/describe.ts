@@ -117,6 +117,11 @@ export const TOOL_CHIPS = {
     running: 'Reading mesh points and faces',
     done: 'Read mesh points and faces',
   },
+  'design.stoneInstances': {
+    quiet: true,
+    running: 'Reading individual stone placements',
+    done: 'Read individual stone placements',
+  },
   'design.history': { quiet: true, running: 'Reading the history', done: 'Read the history' },
   'design.revert': {
     running: 'Undoing',
@@ -136,6 +141,11 @@ export const TOOL_CHIPS = {
         .join(' ')
       return what ? `Changed the ${stones} to ${what}` : `Changed the ${stones}`
     },
+  },
+  'sourcing.search': { running: 'Searching Diaex for this stone', done: 'Checked Diaex inventory' },
+  'sourcing.stone': {
+    running: 'Checking the diamond listing',
+    done: 'Checked the diamond listing',
   },
   'design.evaluate': {
     quiet: true,

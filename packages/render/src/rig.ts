@@ -68,13 +68,18 @@ export function resolveRig(
   target: Vec3,
   radius: number,
   camera: CameraAngles,
+  panelIntensities?: Readonly<Record<string, number | undefined>>,
 ): ResolvedRig {
   const k = environment.intensity
   const ambient = tint(look.ambient.kelvin)
   return {
     pivot: target,
     rotation: environment.rotation,
-    panels: look.panels.map((p) => panel(p, target, radius, camera, k)),
+    panels: look.panels.flatMap((p) => {
+      const intensity = panelIntensities?.[p.id] ?? 1
+      // Removing a switched-off emitter lets other lights shine through its former space.
+      return intensity === 0 ? [] : [panel(p, target, radius, camera, k * intensity)]
+    }),
     sparkles: sparkles(look, target, radius, camera.azimuth, sparkleAmount * k),
     ambient: {
       zenith: mulRgb(ambient, look.ambient.zenith * k),

@@ -6,6 +6,7 @@ CAD, render, on-model, sourcing, production package.
 This page is how to run it on your own computer. How it is built is in
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
+- [Ten jobs to try at the jeweler’s bench](docs/jeweler-trial.md)
 - [What works today](#what-works-today)
 - [Install](#install)
 - [Start it](#start-it)
@@ -46,8 +47,8 @@ folders (a folder can hold folders, one level deep), and each shows what every s
 | Production package: spec sheet, drawings, files, stone list, cost estimate, checks, as a zip | Works [from a script](#using-it-from-scripts); its screen is not built yet |
 | Connecting Claude Code to Pavé over MCP | Planned, not built |
 | **Moodboards** | Create a shared moodboard and import selected references into a project design. |
-| On model | Create a reusable synthetic model card, approve it for shoots, then choose **Use model** in a project. Shot setup saves to this browser. The shipped server supports planning these shots. Generating photographs requires an on-model imaging service implementation. |
-| Diamond sourcing | Search Diaex using CAD measurements. Imported diamond bodies can open size-filtered Diaex listings before assigning production roles. In-app recommendations require the partner search service. |
+| On model | Place a transparent CAD still on your own photo and download it locally, free of provider fees. For a fictional model, create a reusable card, approve it for shoots, then choose **Use model** in a project. For an AI shoot, connect a reference-capable image provider, render the current CAD and review the estimate before generating a downloadable concept. Jewelry fidelity needs visual review. |
+| Diamond sourcing | Search Diaex using CAD measurements. Choose **Search inventory** to compare available public listings inside the project. Confirmed single stones can preview and apply a measured replacement. |
 | Desktop app | Not built yet. Pavé runs in your browser from a local server |
 
 ## Install

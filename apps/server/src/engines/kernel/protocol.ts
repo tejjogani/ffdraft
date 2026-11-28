@@ -5,7 +5,14 @@
 import type { ExportFormat, ExportResult } from '@pave/kernel/types'
 import type { Camera as MatchCamera, PhotoFitOutcome, ViewSeed } from '@pave/match'
 import type { Manifest, PieceInfo, ProductionOptions, RenderImage } from '@pave/production'
-import type { Design, EvaluationSummary, PieceSpec, RenderScene, View } from '@pave/schema'
+import type {
+  CommandOutput,
+  Design,
+  EvaluationSummary,
+  PieceSpec,
+  RenderScene,
+  View,
+} from '@pave/schema'
 import type { RenderSubject } from '../../services'
 
 /** What the package builder needs besides the design; the worker evaluates it itself. */
@@ -19,6 +26,7 @@ export interface PackageBuild {
 
 export type KernelTask =
   | { kind: 'evaluate'; design: Design; detail: 'draft' | 'production' }
+  | { kind: 'stoneInstances'; design: Design; nodeId: string; offset: number; limit: number }
   | { kind: 'export'; design: Design; format: ExportFormat; stones: boolean }
   | {
       kind: 'renderInput'
@@ -75,6 +83,7 @@ export type TaskKind = KernelTask['kind']
 
 export interface TaskResults {
   evaluate: EvaluationSummary
+  stoneInstances: Omit<CommandOutput<'design.stoneInstances'>, 'version'>
   export: ExportResult
   renderInput: { glb: Uint8Array; subject: RenderSubject }
   subject: RenderSubject

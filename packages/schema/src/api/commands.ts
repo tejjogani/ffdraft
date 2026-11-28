@@ -29,7 +29,13 @@ import {
   PieceIntakeSchema,
 } from '../design/intake'
 import { StoneChangeSchema, StoneTargetSchema } from '../design/intents'
-import { MountCage, NODE_KINDS, StoneSourcing } from '../design/nodes'
+import {
+  MountCage,
+  NODE_KINDS,
+  StoneOffsetMm,
+  StonePlacementId,
+  StoneSourcing,
+} from '../design/nodes'
 import { NurbsDefinition } from '../design/nurbs'
 import { PhotoReadSchema } from '../design/photo-read'
 import { PieceSpecSchema } from '../design/spec'
@@ -1060,6 +1066,31 @@ export const commands = {
     input: z.object({ pieceId: id, detail: z.enum(['draft', 'production']).default('draft') }),
     output: EvaluationSummarySchema,
   }),
+  'design.stoneInstances': def({
+    description:
+      'Read a page of individual generated stones on a gemRow, halo or pavé. Offset is a zero-based list index; number is the one-based label in CAD. girdleMm is the current model XYZ and offsetMm is its displacement from the generated position. Use the returned placementId and version with design.apply to update stoneOffsetsMm. A null placementId means the placement has no unique edit key.',
+    kind: 'query',
+    tool: true,
+    input: z.object({
+      pieceId: id,
+      nodeId: id,
+      offset: componentId.default(0),
+      limit: z.number().int().min(1).max(100).default(30),
+    }),
+    output: z.object({
+      version: componentId,
+      stoneCount: componentId,
+      stones: z.array(
+        z.object({
+          id,
+          number: z.number().int().positive(),
+          placementId: StonePlacementId.nullable(),
+          girdleMm: meshPoint,
+          offsetMm: StoneOffsetMm,
+        }),
+      ),
+    }),
+  }),
   'design.export': def({
     description:
       'Export the CAD as STL, STEP, 3DM, GLB, OBJ or 3MF. Returns a downloadable asset. STEP and 3DM count against the plan’s monthly allowance of CAD exports (plan_limit, 402, once it is used up); STL, 3MF, OBJ and GLB are never counted. A piece made from someone’s artwork needs a person’s attestation first (409 otherwise).',
@@ -1077,6 +1108,7 @@ export const commands = {
 
   // ── Sourcing ──────────────────────────────────────────────────────────────────────────────
   'sourcing.search': def({
+    tool: true,
     description:
       'Browse Diaex for a single gemstone or imported Rhino diamond, or look up a public stone ID.',
     kind: 'query',
@@ -1086,6 +1118,12 @@ export const commands = {
       color: z.string().trim().min(1).max(32).optional(),
       sku: DiaexStoneId.optional(),
       searchCut: z.enum(DIAEX_CUT_IDS).optional(),
+      publicBrowse: z
+        .boolean()
+        .optional()
+        .describe(
+          'True searches signed-out Diaex inventory. False returns only local CAD measurements and the browse link. Omit to use a configured partner.',
+        ),
     }),
     output: z.object({
       candidates: z.array(SourcedDiamondSchema),
@@ -1094,10 +1132,16 @@ export const commands = {
     }),
   }),
   'sourcing.stone': def({
+    tool: true,
     description:
       'Recheck an exact Diaex diamond against the piece’s current stone before applying its measurements.',
     kind: 'query',
-    input: z.object({ pieceId: id, nodeId: id, sku: DiaexStoneId }),
+    input: z.object({
+      pieceId: id,
+      nodeId: id,
+      sku: DiaexStoneId,
+      publicBrowse: z.boolean().optional(),
+    }),
     output: SourcedDiamondSchema,
   }),
 
@@ -1627,7 +1671,7 @@ export const commands = {
   }),
   'scenes.update': def({
     description:
-      'Adjust a saved shot. `patch` is a JSON merge patch on its scene (e.g. {"camera":{"focalLength":105}}); the result is re-validated, and the viewfinder shows the change before any render time is spent. To preview unassigned Rhino bodies in this shot, set `includeUnassignedRhino: true` with `importedBodyLook: "source"` for source materials or `"clay"` for neutral clay. Each change can be undone (scenes.revert). To move the camera, set {"camera":{"preset":"custom","position":[x,y,z],"target":[x,y,z]}} in the piece\'s millimetres (Z up, the front faces −Y; the result names the current pose) and optionally `roll` in degrees; keep the target to orbit, move both to pan. A shot whose camera is `locked` cannot be moved until a person unlocks it.',
+      'Adjust a saved shot. `patch` is a JSON merge patch on its scene (e.g. {"camera":{"focalLength":105}}); the result is re-validated, and the viewfinder shows the change before any render time is spent. For one studio light, set a multiplier under `panelIntensities` for the current look, e.g. {"panelIntensities":{"catalog-white":{"left":0.5}}}; 0 switches it off, 1 restores its normal level and 2 doubles it. Set a look entry to null to reset its panels. To preview unassigned Rhino bodies in this shot, set `includeUnassignedRhino: true` with `importedBodyLook: "source"` for source materials or `"clay"` for neutral clay. Each change can be undone (scenes.revert). To move the camera, set {"camera":{"preset":"custom","position":[x,y,z],"target":[x,y,z]}} in the piece\'s millimetres (Z up, the front faces −Y; the result names the current pose) and optionally `roll` in degrees; keep the target to orbit, move both to pan. A shot whose camera is `locked` cannot be moved until a person unlocks it.',
     kind: 'mutation',
     tool: true,
     input: z.object({
@@ -1961,7 +2005,7 @@ export const commands = {
   }),
   'shots.create': def({
     description:
-      'Create on-model images of a piece worn by an approved brand model (`count` images, one shot each). Uses renders of the real CAD as references and checks each result against the design; results are concepts, labelled as AI. Costs money.',
+      'Create on-model images of a piece worn by an approved brand model (`count` images, one shot each). Uses a finished still render of the current CAD as the jewelry reference. Results are labeled AI concepts for visual review. Costs money.',
     kind: 'mutation',
     tool: { confirm: true },
     input: onModelShot,

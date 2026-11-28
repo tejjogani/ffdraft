@@ -10,6 +10,7 @@ import { PieceSpecSchema } from '../design/spec'
 import { GEM_MATERIAL_IDS } from '../domain/gems'
 import { FINISH_IDS, METAL_IDS, PLATING_IDS } from '../domain/metals'
 import { IMAGE_PROVIDERS } from '../images/imagegen'
+import { ShotLightLevelsSchema } from './shot-lights'
 
 const id = z.string()
 const iso = z.string()
@@ -542,14 +543,15 @@ export const RenderSceneSchema = z.object({
     })
     .default({ rotation: 0, intensity: 1, background: 'look' })
     .meta({ title: 'Environment', group: 'Light direction' }),
+  panelIntensities: ShotLightLevelsSchema,
   ground: z
-    .enum(['look', 'none', 'shadow', 'sweep', 'reflective', 'white-gloss'])
+    .enum(['look', 'none', 'shadow', 'sweep', 'reflective', 'white-gloss', 'white-gloss-graded'])
     .default('look')
     .meta({
       title: 'Ground',
       group: 'Backdrop',
       description:
-        'shadow = soft contact shadow only; sweep = seamless paper; reflective = black acrylic; white-gloss = pale floor with a soft reflection.',
+        'shadow = soft contact shadow only; sweep = seamless paper; reflective = black acrylic; white-gloss = pale floor with a soft reflection; white-gloss-graded = pale floor that reflects a light-to-dark gradient into polished metal.',
     }),
   /** Extra small hard lights that pull fire out of diamonds. */
   sparkle: z.number().min(0).max(1).default(0.4).meta({
