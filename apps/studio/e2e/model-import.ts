@@ -94,7 +94,10 @@ try {
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 } })
   const page = await context.newPage()
   const rpc = async (name: string, data: object) => {
-    const response = await page.request.post(`${base}/api/rpc/${name}`, { data })
+    const response = await page.request.post(`${base}/api/rpc/${name}`, {
+      data,
+      maxRetries: name === 'pieces.get' ? 1 : 0,
+    })
     assert.ok(response.ok(), `${name}: ${response.status()} ${await response.text()}`)
     return response.json()
   }

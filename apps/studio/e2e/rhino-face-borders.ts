@@ -18,7 +18,10 @@ try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } })
   page.setDefaultTimeout(12_000)
   const rpc = async <T>(name: string, data: object): Promise<T> => {
-    const response = await page.request.post(`${base}/api/rpc/${name}`, { data })
+    const response = await page.request.post(`${base}/api/rpc/${name}`, {
+      data,
+      maxRetries: name === 'pieces.get' ? 1 : 0,
+    })
     assert.ok(response.ok(), `${name}: HTTP ${response.status()}`)
     return response.json()
   }
