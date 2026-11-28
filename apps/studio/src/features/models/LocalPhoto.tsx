@@ -187,8 +187,8 @@ function PhotoLayout({ piece }: { piece: PhotoPiece }) {
           Photo layout
         </h2>
         <p className="mt-1 text-sm text-fg-muted">
-          Place a render of your jewelry on a hand, wrist, neck, or ear photo. This layout is free
-          to make and your photo stays on this device.
+          Place a render of your jewelry on a hand, wrist, neck, or ear photo. Your photo stays on
+          this device.
         </p>
       </header>
       <div className="grid min-w-0 gap-5 @min-[42rem]:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
