@@ -17,6 +17,7 @@ import { assetUrl } from '../../lib/assets'
 import { usd } from '../../lib/format'
 import { useRpc, useRpcMutation } from '../../lib/query'
 import { useSession } from '../../lib/session'
+import { LocalPhoto } from './LocalPhoto'
 import { ModelDetails, NewModel } from './ModelCards'
 
 export function ModelsPage() {
@@ -158,9 +159,10 @@ function Shoot({ piece }: { piece: Piece }) {
       <header>
         <h1 className="studio-title">On-model studio</h1>
         <p className="mt-1 text-sm wrap-anywhere text-fg-muted">
-          Plan how {piece.title || 'this piece'} will be worn and photographed.
+          Photograph {piece.title || 'this piece'} on a hand, wrist, neck or ear.
         </p>
       </header>
+      <LocalPhoto piece={piece} />
       <div className="grid items-start gap-7 @min-[42rem]:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
         <section
           aria-labelledby={modelHeadingId}
