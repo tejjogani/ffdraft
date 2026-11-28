@@ -3,12 +3,13 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import type { CommandInput, CommandName, CommandOutput } from '@pave/schema'
-import type { BrowserType } from 'playwright'
 
 const base = process.argv[2]
 if (!base) throw new Error('Pass a disposable server URL.')
-const { chromium }: { chromium: BrowserType } = createRequire(import.meta.url)('playwright')
-const browser = await chromium.launch()
+const { chromium, webkit } = createRequire(import.meta.url)(
+  'playwright',
+) as typeof import('playwright')
+const browser = await (process.env.PAVE_TEST_BROWSER === 'webkit' ? webkit : chromium).launch()
 try {
   const page = await browser.newPage({
     viewport: { width: 1450, height: 900 },

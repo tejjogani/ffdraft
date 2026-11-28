@@ -125,6 +125,10 @@ jobs:
           pnpm exec tsx apps/studio/e2e/nurbs-controls.ts "$PAVE_TEST_URL"
           pnpm exec tsx apps/studio/e2e/section-modeling.ts "$PAVE_TEST_URL"
           pnpm exec tsx apps/studio/e2e/mesh-edit.ts "$PAVE_TEST_URL"
+          pnpm exec tsx apps/studio/e2e/closed-shank.ts "$PAVE_TEST_URL"
+          pnpm exec tsx apps/studio/e2e/stone-displacement.ts "$PAVE_TEST_URL"
+          pnpm exec tsx apps/studio/e2e/sourced-diamond.ts "$PAVE_TEST_URL"
+          pnpm exec tsx apps/studio/e2e/local-photo.ts "$PAVE_TEST_URL"
 
           if [[ "$INSTALL_BLENDER" == true ]]; then
             pnpm exec tsx apps/studio/e2e/first-render-install.ts "$PAVE_TEST_URL" "$logs/first-render.png"

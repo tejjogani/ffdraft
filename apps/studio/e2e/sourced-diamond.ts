@@ -4,10 +4,12 @@ import { mkdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 
-const { chromium } = createRequire(import.meta.url)('playwright') as typeof import('playwright')
+const { chromium, webkit } = createRequire(import.meta.url)(
+  'playwright',
+) as typeof import('playwright')
 const base = process.argv[2]
 if (!base) throw Error('Pass a disposable server URL')
-const browser = await chromium.launch()
+const browser = await (process.env.PAVE_TEST_BROWSER === 'webkit' ? webkit : chromium).launch()
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } })
   page.setDefaultTimeout(15000)
