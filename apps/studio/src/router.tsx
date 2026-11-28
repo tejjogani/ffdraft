@@ -124,14 +124,23 @@ const pieceTab = (
 const designRoute = createRoute({
   getParentRoute: () => pieceRoute,
   path: 'design',
-  validateSearch: (s: Record<string, unknown>): { review?: 'rhino-roles' } =>
-    s.review === 'rhino-roles' ? { review: s.review } : {},
+  validateSearch: (s: Record<string, unknown>): { review?: 'rhino-roles'; reviewBody?: string } =>
+    s.review === 'rhino-roles'
+      ? {
+          review: s.review,
+          reviewBody: typeof s.reviewBody === 'string' ? s.reviewBody : undefined,
+        }
+      : {},
   component: function DesignTab() {
     const { id } = designRoute.useParams()
-    const { review } = designRoute.useSearch()
+    const { review, reviewBody } = designRoute.useSearch()
     return (
       <PieceTab bleed pieceId={id}>
-        <PieceDesign pieceId={id} openRoleReview={review === 'rhino-roles'} />
+        <PieceDesign
+          pieceId={id}
+          openRoleReview={review === 'rhino-roles'}
+          reviewBody={reviewBody}
+        />
       </PieceTab>
     )
   },

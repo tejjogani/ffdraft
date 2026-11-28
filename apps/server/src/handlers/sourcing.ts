@@ -1,15 +1,32 @@
 import { randomUUID } from 'node:crypto'
-import { DiaexStoneId, type SourcedDiamond, SourcedDiamondSchema, stoneDims } from '@pave/schema'
+import { measureRhinoRoleBody } from '@pave/kernel/rhino-role-measurements'
+import {
+  DIAEX_DIAMOND_MATERIALS,
+  type DiaexCutId,
+  DiaexStoneId,
+  type GemMaterialId,
+  importedDiamondCut,
+  importedDiamondSpecies,
+  isRhinoRoleBody,
+  type Node,
+  type NodeOf,
+  type SourcedDiamond,
+  SourcedDiamondSchema,
+  type SourcingCadTarget,
+  SourcingCadTargetSchema,
+  type StoneQuality,
+  stoneDims,
+} from '@pave/schema'
 import { z } from 'zod'
+import { readAsset } from '../assets/assets'
 import type { Ctx } from '../context'
 import { AppError, badRequest, conflict } from '../errors'
 import { getPiece } from '../lookups'
 import type { HandlerGroup } from './types'
 
-const DIAEX_BROWSE = 'https://console.thediaex.com/browse'
+const DIAEX_BROWSE = 'https://thediaex.com/browse'
 const SIZE_WINDOW_MM = 0.3
 const LIMIT = 24
-const STOCKED_DIAMONDS = ['diamond', 'diamond-lab', 'diamond-yellow', 'diamond-pink']
 const CERTIFYING_LABS = ['GIA', 'IGI', 'GCAL', 'HRD', 'SGL']
 const HUES = [
   'Yellow',
@@ -51,20 +68,20 @@ function colorFilters(
   }
 }
 
-async function targetStone(ctx: Ctx, pieceId: string, nodeId: string, color?: string) {
-  const { design } = await getPiece(ctx, pieceId)
-  const node = design.nodes[nodeId]
-  if (node?.kind !== 'gem') throw badRequest('Choose a single gemstone to search Diaex.')
-  if (!STOCKED_DIAMONDS.includes(node.stone) || node.cut === 'cabochon')
-    throw badRequest('Diaex does not list diamonds for this stone material or cut.')
-
+function searchTarget(
+  shape: DiaexCutId,
+  stone: GemMaterialId,
+  length: number,
+  width: number,
+  color?: string,
+  quality?: StoneQuality,
+) {
   const defaultHue =
-    node.stone === 'diamond-yellow' ? 'Yellow' : node.stone === 'diamond-pink' ? 'Pink' : undefined
-  const origin = node.stone === 'diamond-lab' ? 'lab' : (node.quality?.origin ?? 'any')
-  const { length, width } = stoneDims(node)
-  const clarities = names(node.quality?.clarities)
+    stone === 'diamond-yellow' ? 'Yellow' : stone === 'diamond-pink' ? 'Pink' : undefined
+  const origin = stone === 'diamond-lab' ? 'lab' : (quality?.origin ?? 'any')
+  const clarities = names(quality?.clarities)
   return {
-    shape: node.cut,
+    shape,
     origin,
     seat: {
       length_mm: roundMm(Math.max(length, width)),
@@ -72,13 +89,68 @@ async function targetStone(ctx: Ctx, pieceId: string, nodeId: string, color?: st
       tol_minus_mm: SIZE_WINDOW_MM,
       tol_plus_mm: SIZE_WINDOW_MM,
     },
-    ...colorFilters(color, node.quality?.colors, defaultHue),
+    ...colorFilters(color, quality?.colors, defaultHue),
     ...(clarities.length ? { clarities } : {}),
-    ...(node.quality?.certified ? { certificate: { required: true } } : {}),
+    ...(quality?.certified ? { certificate: { required: true } } : {}),
   }
 }
 
-type Target = Awaited<ReturnType<typeof targetStone>>
+type Target = ReturnType<typeof searchTarget>
+
+function measuredGemTarget(node: Node | undefined, color?: string): Target {
+  if (node?.kind !== 'gem') throw badRequest('Choose a single gemstone to search Diaex.')
+  if (!DIAEX_DIAMOND_MATERIALS.includes(node.stone) || node.cut === 'cabochon')
+    throw badRequest('Diaex does not list diamonds for this stone material or cut.')
+  const { length, width } = stoneDims(node)
+  return searchTarget(node.cut, node.stone, length, width, color, node.quality)
+}
+
+async function importedCadTarget(
+  ctx: Ctx,
+  node: NodeOf<'meshBody'> & { source: Extract<NodeOf<'meshBody'>['source'], { type: 'asset' }> },
+  searchCut?: DiaexCutId,
+): Promise<SourcingCadTarget> {
+  const cut = searchCut ?? importedDiamondCut(node)
+  if (!cut) throw badRequest('Choose the cut to search Diaex for this imported diamond.')
+  const { assetId, nativeMeshAssetId } = node.source
+  if (
+    !node.keepSourcePlacement ||
+    (nativeMeshAssetId !== undefined && nativeMeshAssetId !== assetId) ||
+    node.mountCage ||
+    node.mountFit ||
+    node.flatBack ||
+    node.hollow ||
+    node.smooth ||
+    node.detail !== 1
+  )
+    throw badRequest(
+      'Diaex needs a retained Rhino stone mesh at its measured size. This part has been reshaped or replaced.',
+    )
+
+  const { asset, bytes } = await readAsset(ctx, assetId)
+  ctx.signal?.throwIfAborted()
+  if (asset.kind !== 'mesh' || asset.mime !== 'model/stl')
+    throw badRequest('A retained Rhino stone mesh is required for Diaex search.')
+  let measured: ReturnType<typeof measureRhinoRoleBody>
+  try {
+    measured = measureRhinoRoleBody(bytes, cut, { edits: node.meshEdits?.vertices })
+  } catch {
+    throw badRequest('The retained Rhino mesh could not be measured for Diaex search.')
+  }
+  if (measured) {
+    // Unassigned sources cannot be consumed by groups, patterns or booleans in the evaluator.
+    // Their own translation and rotation preserve dimensions in the automatic table frame.
+    const scale = node.transform?.scale ?? 1
+    const parsed = SourcingCadTargetSchema.safeParse({
+      cut,
+      length: roundMm(measured.length * scale),
+      width: roundMm(measured.width * scale),
+      depth: roundMm(measured.depth * scale),
+    })
+    if (parsed.success) return parsed.data
+  }
+  throw badRequest('The retained Rhino mesh does not have usable stone dimensions for Diaex.')
+}
 
 function searchLink(target: Target, browse = DIAEX_BROWSE): string {
   const { length_mm, width_mm, tol_minus_mm, tol_plus_mm } = target.seat
@@ -198,22 +270,22 @@ function matchesSearch(stone: SourcedDiamond, target: Target): boolean {
   )
 }
 
-function unavailable(searchUrl: string): AppError {
+type BrowseDetails = { searchUrl: string; cadTarget?: SourcingCadTarget }
+
+function unavailable(details: BrowseDetails): AppError {
   return new AppError(
     'provider_unavailable',
     'Diaex inventory is unavailable in Pavé right now. Open Diaex to browse.',
-    { searchUrl },
+    details,
   )
 }
 
-async function requestInventory(ctx: Ctx, path: string, searchUrl: string, body?: unknown) {
+async function requestInventory(ctx: Ctx, path: string, details: BrowseDetails, body?: unknown) {
   if (!ctx.diaexPartnerApiUrl)
     throw new AppError(
       'not_configured',
       'Diaex inventory is not connected. Open Diaex to browse.',
-      {
-        searchUrl,
-      },
+      details,
     )
   const timeout = AbortSignal.timeout(8_000)
   try {
@@ -231,7 +303,7 @@ async function requestInventory(ctx: Ctx, path: string, searchUrl: string, body?
     const data: unknown = await res.json()
     return { status: res.status, ok: res.ok, data }
   } catch {
-    throw unavailable(searchUrl)
+    throw unavailable(details)
   }
 }
 
@@ -239,48 +311,66 @@ async function exactStone(
   ctx: Ctx,
   target: Target,
   sku: string,
-  searchUrl: string,
+  details: BrowseDetails,
 ): Promise<SourcedDiamond> {
   // URL parsers collapse dot-only path segments even if the dots are encoded.
   if (sku === '.' || sku === '..') throw badRequest('Enter a Diaex public stone ID.')
   const id = encodeURIComponent(sku).replace(/\./g, '%2E')
-  const { status, ok, data } = await requestInventory(ctx, `/stones/${id}`, searchUrl)
+  const { status, ok, data } = await requestInventory(ctx, `/stones/${id}`, details)
   if (!ok) {
     const error = PartnerError.safeParse(data)
     if (status === 404 && error.data?.error.code === 'stone_unavailable')
-      throw new AppError('not_found', 'That stone is no longer listed on Diaex.', { searchUrl })
-    throw unavailable(searchUrl)
+      throw new AppError('not_found', 'That stone is no longer listed on Diaex.', details)
+    throw unavailable(details)
   }
   const reply = StoneDetailReply.safeParse(data)
-  if (!reply.success) throw unavailable(searchUrl)
+  if (!reply.success) throw unavailable(details)
   const diamond = usableDiamond(reply.data.stone, target, sku)
   if (!diamond)
     throw conflict(
       'Diaex did not confirm an available stone with this ID and usable dimensions for this design.',
-      {
-        searchUrl,
-      },
+      details,
     )
   return diamond
 }
 
 export const sourcing: HandlerGroup<'sourcing'> = {
-  'sourcing.search': async (ctx, { pieceId, nodeId, color, sku }) => {
-    const target = await targetStone(ctx, pieceId, nodeId, sku ? undefined : color)
-    const searchUrl = searchLink(target)
-    if (sku) return { candidates: [await exactStone(ctx, target, sku, searchUrl)], searchUrl }
+  'sourcing.search': async (ctx, { pieceId, nodeId, color, sku, searchCut }) => {
+    const { design } = await getPiece(ctx, pieceId)
+    const node = design.nodes[nodeId]
+    const requestedColor = sku ? undefined : color
+    let target: Target
+    let cadTarget: SourcingCadTarget | undefined
+    if (node?.kind === 'gem') {
+      if (searchCut) throw badRequest('The design already specifies the cut for this gemstone.')
+      target = measuredGemTarget(node, requestedColor)
+    } else {
+      const species = importedDiamondSpecies(node)
+      if (!species || !isRhinoRoleBody(node))
+        throw badRequest('Choose a single gemstone or visible Rhino diamond to search Diaex.')
+      cadTarget = await importedCadTarget(ctx, node, searchCut)
+      target = searchTarget(
+        cadTarget.cut,
+        species,
+        cadTarget.length,
+        cadTarget.width,
+        requestedColor,
+      )
+    }
+    const details = { searchUrl: searchLink(target), ...(cadTarget && { cadTarget }) }
+    if (sku) return { candidates: [await exactStone(ctx, target, sku, details)], ...details }
 
     const ref = randomUUID()
-    const { ok, data } = await requestInventory(ctx, '/stones/search', searchUrl, {
+    const { ok, data } = await requestInventory(ctx, '/stones/search', details, {
       requirement: { ref, kind: 'single', quantity: 1, gem: 'diamond', ...target },
       sort: 'fit',
       limit: LIMIT,
     })
-    if (!ok) throw unavailable(searchUrl)
+    if (!ok) throw unavailable(details)
     const reply = SearchReply.safeParse(data)
-    if (!reply.success || reply.data.ref !== ref) throw unavailable(searchUrl)
+    if (!reply.success || reply.data.ref !== ref) throw unavailable(details)
     const browse = browseUrl(reply.data.search_url)
-    if (!browse) throw unavailable(searchUrl)
+    if (!browse) throw unavailable(details)
 
     const candidates = new Map<string, SourcedDiamond>()
     for (const row of reply.data.candidates) {
@@ -291,11 +381,13 @@ export const sourcing: HandlerGroup<'sourcing'> = {
     }
     return {
       candidates: [...candidates.values()],
+      ...details,
       searchUrl: searchLink(target, `${browse.origin}/browse`),
     }
   },
   'sourcing.stone': async (ctx, { pieceId, nodeId, sku }) => {
-    const target = await targetStone(ctx, pieceId, nodeId)
-    return exactStone(ctx, target, sku, searchLink(target))
+    const { design } = await getPiece(ctx, pieceId)
+    const target = measuredGemTarget(design.nodes[nodeId])
+    return exactStone(ctx, target, sku, { searchUrl: searchLink(target) })
   },
 }

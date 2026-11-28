@@ -72,6 +72,7 @@ const SHARED_OBJECTS: Record<string, string> = {
 }
 
 function typeOf(js: Js): string {
+  if (js.anyOf?.some((option) => option.type === 'null')) return js.anyOf.map(typeOf).join(' | ')
   if (js.enum) {
     const shared = sharedName(js.enum)
     return shared ? `<${shared}>` : js.enum.join(' | ')
@@ -91,8 +92,9 @@ function typeOf(js: Js): string {
       const range = lo !== null && hi !== null ? ` ${lo}–${hi}${unit}` : unit
       return `${js.type === 'integer' ? 'integer' : 'number'}${range}`
     }
+    case 'null':
     case 'boolean':
-      return 'boolean'
+      return js.type
     case 'string':
       return 'string'
     case 'array': {

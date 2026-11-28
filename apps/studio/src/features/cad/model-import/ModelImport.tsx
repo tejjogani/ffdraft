@@ -186,6 +186,10 @@ export function ModelImport({
               type: 'asset',
               assetId,
               ...(part.layer && { rhinoLayer: part.layer }),
+              ...(part.objectName !== undefined && {
+                rhinoObjectName:
+                  part.objectName?.slice(0, 256).replace(/[\uD800-\uDBFF]$/, '') ?? null,
+              }),
               ...(part.rhinoContext && { rhinoContext: part.rhinoContext }),
               ...(native &&
                 nativeAssetId && {

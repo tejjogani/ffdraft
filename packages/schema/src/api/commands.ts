@@ -22,6 +22,7 @@ import {
 } from '../design/design'
 import { DirectionSchema, MIX_PARTS } from '../design/directions'
 import { ImportedRoleChoiceSchema } from '../design/import-roles'
+import { DIAEX_CUT_IDS } from '../design/imported-diamonds'
 import {
   IntakeDetailsSchema,
   IntakeSelectionInputSchema,
@@ -168,6 +169,11 @@ export const SourcedDiamondSchema = StoneSourcing.pick({ certificate: true }).ex
   carat: z.number().positive(),
 })
 export type SourcedDiamond = z.infer<typeof SourcedDiamondSchema>
+
+export const SourcingCadTargetSchema = StoneSourcing.shape.measured.unwrap().extend({
+  cut: z.enum(DIAEX_CUT_IDS),
+})
+export type SourcingCadTarget = z.infer<typeof SourcingCadTargetSchema>
 
 /** Which model each assistant tier runs on; null = the tier's default. */
 const tierModels = z.object({
@@ -1072,17 +1078,19 @@ export const commands = {
   // ── Sourcing ──────────────────────────────────────────────────────────────────────────────
   'sourcing.search': def({
     description:
-      'Find available Diaex diamonds near a single stone’s size, or look up its exact public ID.',
+      'Browse Diaex for a single gemstone or imported Rhino diamond, or look up a public stone ID.',
     kind: 'query',
     input: z.object({
       pieceId: id,
       nodeId: id,
       color: z.string().trim().min(1).max(32).optional(),
       sku: DiaexStoneId.optional(),
+      searchCut: z.enum(DIAEX_CUT_IDS).optional(),
     }),
     output: z.object({
       candidates: z.array(SourcedDiamondSchema),
       searchUrl: z.url({ protocol: /^https$/ }),
+      cadTarget: SourcingCadTargetSchema.optional(),
     }),
   }),
   'sourcing.stone': def({
