@@ -1,8 +1,8 @@
 import { type NodeOf, type NurbsControlPoint, pointFromCurvePlane } from '@pave/schema'
-import { assembleWire, makeLine, type Shape3D, type Wire } from 'replicad'
+import { assembleWire, makeLine, makeSolid, type Shape3D, Shell, type Wire } from 'replicad'
 import { type BuildContext, runtime } from '../core'
 import { type ClosestHit, TriangleBvh } from '../mesh/bvh'
-import { scoped, tessellateShape, wrapShape } from '../solid/occt'
+import { scoped, shapeVolume, tessellateShape, wrapShape } from '../solid/occt'
 import {
   type CurveInput,
   crossRail,
@@ -110,8 +110,8 @@ function guideFrame(p: Vec3, q: Vec3, normal: Vec3): Frame {
 
 function profileStation(
   profile: OriginalProfile,
-  primary: RailPath,
-  secondary: RailPath,
+  primary: Pick<RailPath, 'at'>,
+  secondary: Pick<RailPath, 'at'>,
   t: number,
   s: number,
 ): ProfileStation {
@@ -215,6 +215,96 @@ function verifyFollowing(shape: Shape3D, inputs: Array<{ path: RailPath; label: 
   }
 }
 
+/** Start each loop at its first contact. Match the travel direction even if the guide seams differ. */
+const wrap = (t: number) => t - Math.floor(t)
+function closedSweep(
+  primary: RailPath,
+  secondary: RailPath,
+  contacts: { t: number; s: number }[],
+  sections: SweepCurve[],
+  capped: boolean,
+  track: BuildContext['track'],
+): Shape3D {
+  const first = contacts[0]!
+  const direction =
+    dot(railTangent(primary, first.t), railTangent(secondary, first.s)) >= 0 ? 1 : -1
+  const loop = (path: RailPath, start: number, sign: number): Pick<RailPath, 'at'> => ({
+    at: (t) => path.at(wrap(start + sign * t)),
+  })
+  const p = loop(primary, first.t, 1)
+  const q = loop(secondary, first.s, direction)
+  const profiles = sections.map((section, i) => {
+    const hit = contacts[i]!
+    return profileStation(
+      originalProfile(section),
+      p,
+      q,
+      wrap(hit.t - first.t),
+      wrap(direction * (hit.s - first.s)),
+    )
+  })
+  const closed = sections[0]!.closed
+  const anchors = profiles.map((profile, i) =>
+    i ? alignProfile(profiles[0]!, profile, closed) : profile,
+  )
+  anchors.push({ ...anchors[0]!, t: 1, s: 1 })
+  const { oc } = runtime()
+  return scoped((own) => {
+    const sewing = own(new oc.BRepBuilderAPI_Sewing(1e-5, true, true, true, false))
+    // Separate lofts share their end wires. Sewing closes the circumference without interior caps.
+    for (let i = 0; i + 1 < anchors.length; i++) {
+      const a = anchors[i]!
+      const b = anchors[i + 1]!
+      if (b.t - a.t < END_EPSILON || b.s - a.s < END_EPSILON)
+        throw new Error('Select the sections in order around both closed guides.')
+      const spans = Math.ceil((b.t - a.t) * 4)
+      const steps = 8
+      let boundary: Wire | undefined
+      for (let span = 0; span < spans; span++) {
+        const loft = own(new oc.BRepOffsetAPI_ThruSections(false, false, 1e-6))
+        loft.SetMutableInput(false)
+        loft.CheckCompatibility(false)
+        for (let j = 0; j <= steps; j++) {
+          if (j === 0 && boundary) {
+            loft.AddWire(boundary.wrapped)
+            continue
+          }
+          const fraction = (span + j / steps) / spans
+          const t = lerp(a.t, b.t, fraction)
+          const s = lerp(a.s, b.s, fraction)
+          const origin = p.at(t)
+          const side = q.at(s)
+          const normal = normalize(add(railTangent(p, t), lerp3(a.tilt, b.tilt, fraction)))
+          const station = {
+            t,
+            s,
+            frame: guideFrame(origin, side, normal),
+            width: distance(origin, side),
+          }
+          boundary = makeSection(station, a, b, closed, track)
+          loft.AddWire(boundary.wrapped)
+        }
+        loft.Build()
+        if (!loft.IsDone()) throw new Error('The sections could not follow the closed guides.')
+        sewing.Add(own(loft.Shape()))
+      }
+    }
+    sewing.Perform()
+    const shell = wrapShape<Shape3D>(sewing.SewedShape())
+    if (!(shell instanceof Shell)) {
+      shell.delete()
+      throw new Error('The closed sweep did not join into one shell.')
+    }
+    if (!capped) return shell
+    own(shell)
+    if (!oc.BRep_Tool.IsClosed(shell.wrapped)) throw new Error('The shank has an open seam.')
+    const solid = makeSolid([shell])
+    if (shapeVolume(solid) > 0) return solid
+    own(solid)
+    return wrapShape<Shape3D>(solid.wrapped.Reversed())
+  })
+}
+
 /** Section planes follow guide 1 and meet guide 2; the span between guides scales each profile. */
 export function twoRailSweep(
   rails: readonly [SweepCurve, SweepCurve],
@@ -222,14 +312,18 @@ export function twoRailSweep(
   capped: boolean,
   track: BuildContext['track'],
 ): Shape3D {
-  if (rails.some((rail) => rail.closed))
-    throw new Error('A two-rail sweep currently needs two open rails.')
+  if (rails[0].closed !== rails[1].closed)
+    throw new Error('Choose two open guides or two closed guides for a ring.')
   let primary = railPath(rails[0].source)
   let secondary = railPath(rails[1].source)
   const contacts = sections.map((section) => ({
     t: contact(rails[0], section, primary, 'first'),
     s: contact(rails[1], section, secondary, 'second'),
   }))
+  if (rails[0].closed) {
+    const shape = closedSweep(primary, secondary, contacts, sections, capped, track)
+    return checkedSweep(shape, primary, secondary, sections)
+  }
   if (contacts[0]!.t > contacts.at(-1)!.t) {
     primary = reverseRail(primary)
     for (const p of contacts) p.t = 1 - p.t
@@ -321,6 +415,15 @@ export function twoRailSweep(
     if (!builder.IsDone()) throw new Error('The matched sections could not form a sweep surface.')
     return wrapShape<Shape3D>(builder.Shape())
   })
+  return checkedSweep(shape, primary, secondary, sections)
+}
+
+function checkedSweep(
+  shape: Shape3D,
+  primary: RailPath,
+  secondary: RailPath,
+  sections: SweepCurve[],
+): Shape3D {
   try {
     verifyFollowing(shape, [
       { path: primary, label: 'the first rail' },

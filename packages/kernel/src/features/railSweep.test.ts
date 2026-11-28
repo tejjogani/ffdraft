@@ -70,7 +70,100 @@ function distanceToBody(
   return Math.sqrt(hit.d2)
 }
 
+const circle = (id: string, r: number): NodeInputOf<'nurbsCurve'> => ({
+  id,
+  kind: 'nurbsCurve',
+  degree: 2,
+  knots: [0, 0, 1, 1, 2, 2, 3, 3, 4, 4],
+  controlPoints: [
+    [r, 0, 0, 1],
+    [r, 0, r, Math.SQRT1_2],
+    [0, 0, r, 1],
+    [-r, 0, r, Math.SQRT1_2],
+    [-r, 0, 0, 1],
+    [-r, 0, -r, Math.SQRT1_2],
+    [0, 0, -r, 1],
+    [r, 0, -r, Math.SQRT1_2],
+    [r, 0, 0, 1],
+  ],
+})
+
 describe('rail sweep', () => {
+  it('makes a watertight shank between two closed circular rails and exports its native solid', async () => {
+    const design = designFrom('ring', [
+      circle('inner', 9),
+      circle('outer', 11),
+      profile('section', 0, 9, 2, 3),
+      sweep(['inner', 'outer'], ['section']),
+    ])
+    const body = (await swept(design)).bodies[0]!
+    const topo = edgeTopology(body.solid.triangles())
+    expect(topo.open).toBe(0)
+    expect(topo.inconsistent).toBe(0)
+    const volume = Math.PI * (11 ** 2 - 9 ** 2) * 3
+    expect(body.solid.volume()).toBeCloseTo(volume, 0)
+    const saved = await kernel.export(design, 'step')
+    const reopened = (await importSTEP(new Blob([saved.bytes.slice()]))) as Shape3D
+    try {
+      expect(measureVolume(reopened)).toBeCloseTo(volume, 0)
+    } finally {
+      reopened.delete()
+    }
+  })
+
+  it('changes width with a bowed outer guide and preserves a second, taller shank section', async () => {
+    const ellipse = circle('outer', 11)
+    ellipse.controlPoints = ellipse.controlPoints.map(([x, y, z, w]) => [x, y, (-z * 12) / 11, w])
+    const second = profile('opposite', 0, -9, -2, 4)
+    const design = designFrom('ring', [
+      circle('inner', 9),
+      ellipse,
+      profile('start', 0, 9, 2, 2),
+      second,
+      sweep(['inner', 'outer'], ['start', 'opposite']),
+    ])
+    const body = (await swept(design)).bodies[0]!
+    for (const point of [
+      [0, 0, 12],
+      [-11, 4, 0],
+      [9, 2, 0],
+      [0, 0, -9],
+    ] as [number, number, number][])
+      expect(distanceToBody(body, point)).toBeLessThan(0.01)
+    const topology = edgeTopology(body.solid.triangles())
+    expect(topology.open).toBe(0)
+    expect(topology.inconsistent).toBe(0)
+    const startingVolume = body.solid.volume()
+    const changed = applyOps(design, [
+      {
+        t: 'update',
+        id: 'opposite',
+        patch: { controlPoints: profile('opposite', 0, -9, -2, 3).controlPoints },
+      },
+    ]).design
+    expect((await swept(changed)).bodies[0]!.solid.volume()).toBeLessThan(startingVolume)
+  })
+
+  it('makes a closed-loop sheet from open sections and rejects a mixed pair of guides', async () => {
+    const design = designFrom('ring', [
+      circle('inner', 9),
+      circle('outer', 11),
+      rail('bridge', [9, 0, 0, 1], [11, 0, 0, 1]),
+      sweep(['inner', 'outer'], ['bridge'], false),
+    ])
+    const result = await swept(design)
+    expect(result.sheets![0]!.solid.area()).toBeCloseTo(Math.PI * (11 ** 2 - 9 ** 2), 0)
+    const mixed = designFrom('ring', [
+      circle('inner', 9),
+      side,
+      base,
+      sweep(['inner', 'side'], ['base']),
+    ])
+    expect((await kernel.scene(mixed)).nodes.get('sweep')?.diagnostics[0]?.message).toContain(
+      'two closed guides',
+    )
+  })
+
   it('carries a closed located section over the full first rail and caps a native solid', async () => {
     const design = designFrom('other', [
       centre,

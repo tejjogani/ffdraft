@@ -174,7 +174,9 @@ Choose Surface to leave the ends open. A surface has measurable area, appears in
 
 ## Follow a rail
 
-Use Sweep 1 rail for a shoulder that follows one guide. Place the cross section at the start of the rail in its intended orientation. Use Sweep 2 rails when a second guide should control the opposite side. For two rails, use open guide curves and place the profiles so each touches both rails. Choose rails first, then profiles in order. Edit sweep changes the linked curves. Edit points changes the shape of a source.
+Use Sweep 1 rail for a shoulder that follows one guide. Place the cross section at the start of the rail in its intended orientation. Use Sweep 2 rails when a second guide should control the opposite side. For a shoulder, use two open guides. For a continuous band, use two closed guides and place each section so it touches each guide at one point. Choose **Solid** with a closed section to fill the metal. An open section with **Surface** makes a sheet. Choose rails first, then profiles in order. Edit sweep changes the linked curves. Edit points changes the shape of a source.
+
+Try [three practice guides](../../apps/studio/public/examples/shank-guides.3dm) in an empty project. In **Import model**, enable **Include editable curves**. Open **Add feature → Sweep 2 rails**. Choose **Inner rail**, **Outer rail**, and **Band section**, then **Solid → Create feature**. The result has an 18 mm bore, 22 mm outside diameter and 3 mm height.
 
 ## Render your CAD
 

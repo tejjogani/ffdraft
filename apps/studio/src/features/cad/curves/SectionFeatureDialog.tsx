@@ -74,7 +74,7 @@ export function SectionFeatureDialog({
       ? 'Choose sections in the order the loft should pass through them.'
       : tool.id === 'sweep1'
         ? 'Choose the guide curve, then the sections in order along it.'
-        : 'Choose two guide curves, then the sections in order along them. Each section must meet both rails.'
+        : 'Choose two open guides or two closed guides for a band. Pick sections in order, each touching both guides.'
   return (
     <Dialog
       open
