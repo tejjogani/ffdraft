@@ -10,6 +10,7 @@ import { PieceSpecSchema } from '../design/spec'
 import { GEM_MATERIAL_IDS } from '../domain/gems'
 import { FINISH_IDS, METAL_IDS, PLATING_IDS } from '../domain/metals'
 import { IMAGE_PROVIDERS } from '../images/imagegen'
+import { ShotLightLevelsSchema } from './shot-lights'
 
 const id = z.string()
 const iso = z.string()
@@ -542,6 +543,7 @@ export const RenderSceneSchema = z.object({
     })
     .default({ rotation: 0, intensity: 1, background: 'look' })
     .meta({ title: 'Environment', group: 'Light direction' }),
+  panelIntensities: ShotLightLevelsSchema,
   ground: z
     .enum(['look', 'none', 'shadow', 'sweep', 'reflective', 'white-gloss'])
     .default('look')

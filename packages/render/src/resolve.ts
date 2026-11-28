@@ -87,7 +87,15 @@ export function resolveScene(scene: RenderScene, input: Evaluation | SceneSubjec
   const camera = resolveCamera(scene.camera, subject, output.width / output.height, frameReflection)
   if (scene.animation?.type === 'rack-focus') camera.fStop ??= RACK_FOCUS_FSTOP
 
-  const rig = resolveRig(look, scene.environment, scene.sparkle, camera.target, radius, camera)
+  const rig = resolveRig(
+    look,
+    scene.environment,
+    scene.sparkle,
+    camera.target,
+    radius,
+    camera,
+    scene.panelIntensities?.[scene.look],
+  )
   const floorZ = subject.bounds.min[2]
 
   return {
